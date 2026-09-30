@@ -94,14 +94,85 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
 </style>
 </head>
 <body>
-<div class="header">
-  <div class="logo">⚡ VynorAI Admin</div>
-  <div class="header-right">
-    <input class="secret-input" type="password" id="adminSecret" placeholder="Admin Secret Key" value="vynorai_admin_2026"/>
-    <button class="btn btn-primary" onclick="loadAll()">Connect</button>
+<!-- ── ADMIN AUTHENTICATION GATE (Restricted Access) ──────────────────── -->
+<div id="adminLoginGate" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:10;background:radial-gradient(circle at 50% 20%, rgba(124,92,252,0.12) 0%, transparent 60%), var(--bg);">
+  <div style="max-width:440px;width:100%;background:var(--card);border:1px solid rgba(124,92,252,0.3);border-radius:22px;padding:2.8rem 2.2rem;box-shadow:0 24px 70px rgba(0,0,0,0.85),0 0 50px rgba(124,92,252,0.12);backdrop-filter:blur(24px);">
+    <div style="text-align:center;margin-bottom:2.2rem;">
+      <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent3));display:inline-flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:1.2rem;box-shadow:0 0 32px rgba(124,92,252,0.45);">
+        🛡️
+      </div>
+      <h2 style="font-size:1.6rem;font-weight:800;color:#fff;letter-spacing:-0.5px;">VynorAI Control Center</h2>
+      <p style="color:var(--muted);font-size:0.85rem;margin-top:6px;">Restricted Super Admin & Staff Portal</p>
+    </div>
+
+    <div id="loginError" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:var(--danger);padding:11px 14px;border-radius:10px;font-size:0.82rem;margin-bottom:1.2rem;align-items:center;gap:8px;">
+      <span>⚠️</span> <span id="loginErrorText">Access Denied: Invalid Admin Secret Key.</span>
+    </div>
+
+    <form onsubmit="handleAdminLogin(event)">
+      <div style="margin-bottom:1.4rem;">
+        <label style="display:block;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.5rem;font-weight:600;">
+          Admin Access Secret Key
+        </label>
+        <div style="position:relative;">
+          <input 
+            type="password" 
+            id="adminSecretInput" 
+            placeholder="Enter your admin secret key..." 
+            autocomplete="current-password"
+            required
+            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:13px 44px 13px 14px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:0.92rem;outline:none;transition:border-color 0.2s;"
+            onfocus="this.style.borderColor='var(--accent)'"
+            onblur="this.style.borderColor='var(--border)'"
+          />
+          <button 
+            type="button" 
+            onclick="toggleAdminSecretVisibility()" 
+            style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px;"
+            id="eyeBtn"
+            title="Toggle visibility"
+          >
+            👁️
+          </button>
+        </div>
+      </div>
+
+      <button 
+        type="submit" 
+        id="loginSubmitBtn"
+        class="btn btn-primary" 
+        style="width:100%;padding:13px;font-size:0.95rem;font-weight:700;border-radius:10px;box-shadow:0 4px 24px rgba(124,92,252,0.35);cursor:pointer;"
+      >
+        Authenticate & Unlock Portal →
+      </button>
+    </form>
+
+    <div style="margin-top:1.8rem;padding-top:1.4rem;border-top:1px solid var(--border);text-align:center;">
+      <p style="font-size:0.75rem;color:var(--muted);line-height:1.5;">
+        🔒 Zero-Trust Perimeter. All authentication attempts and IP addresses are recorded in security audit logs.
+      </p>
+      <a href="https://vynor.lk" style="display:inline-block;margin-top:12px;font-size:0.8rem;color:var(--muted);text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--accent2)'" onmouseout="this.style.color='var(--muted)'">
+        ← Back to Vynor.lk Main Website
+      </a>
+    </div>
   </div>
 </div>
-<div class="layout">
+
+<!-- ── AUTHENTICATED ADMIN HEADER ───────────────────────────────────── -->
+<div class="header" id="adminHeader" style="display:none;">
+  <div class="logo">⚡ VynorAI Operations Center</div>
+  <div class="header-right">
+    <span class="badge" style="background:rgba(6,214,160,0.15);color:var(--accent3);display:flex;align-items:center;gap:6px;padding:.4rem .8rem;font-size:.78rem;">
+      <span class="status-dot on" style="margin:0"></span> Active Session: Super Admin
+    </span>
+    <button class="btn btn-ghost" onclick="adminLogout()" style="padding:.4rem .9rem;font-size:.8rem;border-color:rgba(239,68,68,0.3);color:#ef4444;display:flex;align-items:center;gap:6px;">
+      🚪 Sign Out
+    </button>
+  </div>
+</div>
+
+<!-- ── AUTHENTICATED ADMIN LAYOUT ───────────────────────────────────── -->
+<div class="layout" id="adminLayout" style="display:none;">
   <nav class="sidebar">
     <div class="nav-item active" onclick="showPage('overview')" id="nav-overview">
       <span class="nav-icon">📊</span>Overview
@@ -423,7 +494,77 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
 
 <script>
 const API = '';
-let S = () => document.getElementById('adminSecret').value;
+let currentAdminSecret = sessionStorage.getItem('vynor_admin_secret') || '';
+let S = () => currentAdminSecret;
+
+function toggleAdminSecretVisibility() {
+  const inp = document.getElementById('adminSecretInput');
+  const btn = document.getElementById('eyeBtn');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.innerText = '🙈';
+  } else {
+    inp.type = 'password';
+    btn.innerText = '👁️';
+  }
+}
+
+async function handleAdminLogin(e) {
+  if (e) e.preventDefault();
+  const inp = document.getElementById('adminSecretInput');
+  const errBox = document.getElementById('loginError');
+  const errText = document.getElementById('loginErrorText');
+  const btn = document.getElementById('loginSubmitBtn');
+  const secret = inp.value.trim();
+
+  if (!secret) return;
+
+  btn.disabled = true;
+  btn.innerText = 'Verifying Secret...';
+  errBox.style.display = 'none';
+
+  try {
+    const res = await fetch(API + '/admin/health', {
+      headers: { 'x-admin-secret': secret }
+    });
+
+    if (!res.ok) {
+      errText.innerText = 'Access Denied: Invalid Admin Secret Key.';
+      errBox.style.display = 'flex';
+      btn.disabled = false;
+      btn.innerText = 'Authenticate & Unlock Portal →';
+      return;
+    }
+
+    // Success! Save secret to sessionStorage
+    currentAdminSecret = secret;
+    sessionStorage.setItem('vynor_admin_secret', secret);
+
+    // Reveal Dashboard
+    document.getElementById('adminLoginGate').style.display = 'none';
+    document.getElementById('adminHeader').style.display = 'flex';
+    document.getElementById('adminLayout').style.display = 'grid';
+
+    loadAll();
+    showToast('Admin session authenticated');
+  } catch (err) {
+    errText.innerText = 'Connection error: ' + err.message;
+    errBox.style.display = 'flex';
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Authenticate & Unlock Portal →';
+  }
+}
+
+function adminLogout() {
+  sessionStorage.removeItem('vynor_admin_secret');
+  currentAdminSecret = '';
+  document.getElementById('adminLayout').style.display = 'none';
+  document.getElementById('adminHeader').style.display = 'none';
+  document.getElementById('adminLoginGate').style.display = 'flex';
+  document.getElementById('adminSecretInput').value = '';
+  showToast('Logged out of Admin Portal');
+}
 
 async function api(method, path, body) {
   try {
@@ -432,6 +573,11 @@ async function api(method, path, body) {
       headers: { 'x-admin-secret': S(), 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
+    if (r.status === 401) {
+      showToast('Admin session expired or unauthorized', 'err');
+      adminLogout();
+      return null;
+    }
     return await r.json();
   } catch(e) { showToast('Connection error: ' + e.message, 'err'); return null; }
 }
@@ -883,8 +1029,30 @@ async function clearCache(type) {
   }
 }
 
-// Init
-window.onload = () => loadOverview();
+// Session check on load
+window.onload = async () => {
+  const saved = sessionStorage.getItem('vynor_admin_secret');
+  if (saved) {
+    currentAdminSecret = saved;
+    try {
+      const res = await fetch(API + '/admin/health', {
+        headers: { 'x-admin-secret': saved }
+      });
+      if (res.ok) {
+        document.getElementById('adminLoginGate').style.display = 'none';
+        document.getElementById('adminHeader').style.display = 'flex';
+        document.getElementById('adminLayout').style.display = 'grid';
+        loadOverview();
+        return;
+      }
+    } catch (_) {}
+    sessionStorage.removeItem('vynor_admin_secret');
+  }
+  // Not logged in: show Login Gate
+  document.getElementById('adminLoginGate').style.display = 'flex';
+  document.getElementById('adminHeader').style.display = 'none';
+  document.getElementById('adminLayout').style.display = 'none';
+};
 </script>
 </body>
 </html>

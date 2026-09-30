@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -212,6 +212,7 @@
         var data = await res.json();
         if (!res.ok) throw new Error(data.error || data.message || 'Authentication failed.');
         localStorage.setItem('vynorai_token', data.token);
+        localStorage.setItem('vynor_jwt', data.token);
         showSuccessCard(data);
       } catch(err) { showError(err.message || 'Network error. Please try again.'); }
       finally { setLoading(false); }

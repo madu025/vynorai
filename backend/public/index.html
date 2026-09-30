@@ -441,35 +441,16 @@
 
   <div class="container">
 
-    <!-- Auth View (Login / Register) -->
-    <div id="auth-section">
+    <!-- Landing Hero View (Shown for unauthenticated users) -->
+    <div id="landing-hero-section">
       <div class="hero">
         <div class="badge">🇱🇰 PayHere Enabled • Sri Lanka & Global</div>
         <h1>Elevate Your Code with <span>VynorAI</span></h1>
         <p>Unlock state-of-the-art AI pair programming directly inside VS Code with unlimited Claude 3.7 & GPT-4o access.</p>
-      </div>
-
-      <div class="glass-card auth-box">
-        <div class="auth-tabs">
-          <button class="auth-tab-btn active" id="tab-login-btn" onclick="switchAuthTab('login')">Sign In</button>
-          <button class="auth-tab-btn" id="tab-reg-btn" onclick="switchAuthTab('register')">Create Account</button>
+        <div style="margin-top: 32px; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+          <a href="/login.html" class="btn btn-primary" style="width: auto; padding: 14px 36px; font-size: 16px; text-decoration: none;">Sign In / Get Started &rarr;</a>
+          <a href="#pricing-preview" class="btn btn-secondary" onclick="document.getElementById('pricing-preview').scrollIntoView({behavior:'smooth'})" style="width: auto; padding: 14px 28px; font-size: 16px; text-decoration: none;">View Pricing</a>
         </div>
-
-        <form id="auth-form" onsubmit="handleAuth(event)">
-          <div class="form-group hidden" id="name-group">
-            <label>Full Name</label>
-            <input type="text" id="name-input" class="form-control" placeholder="John Doe">
-          </div>
-          <div class="form-group">
-            <label>Email Address</label>
-            <input type="email" id="email-input" class="form-control" required placeholder="developer@example.com">
-          </div>
-          <div class="form-group">
-            <label>Password</label>
-            <input type="password" id="password-input" class="form-control" required placeholder="••••••••">
-          </div>
-          <button type="submit" class="btn btn-primary" id="auth-submit-btn">Sign In to VynorAI</button>
-        </form>
       </div>
     </div>
 
@@ -547,7 +528,7 @@
       </div>
 
       <!-- Pricing Plans (PayHere Checkout) -->
-      <div style="margin-top: 56px;">
+      <div id="pricing-preview" style="margin-top: 56px;">
         <div style="text-align: center; max-width: 700px; margin: 0 auto 36px auto;">
           <h2 style="font-size: 32px; font-weight: 800; letter-spacing: -0.5px;">Choose Your VynorAI Plan</h2>
           <p style="color: var(--text-muted); margin-top: 8px; font-size: 16px;">
@@ -648,52 +629,20 @@
   <form id="payhere-checkout-form" method="post" action="https://sandbox.payhere.lk/pay/checkout" class="hidden"></form>
 
   <script>
-    let currentAuthMode = 'login';
     let currentUser = null;
 
-    function switchAuthTab(mode) {
-      currentAuthMode = mode;
-      document.getElementById('tab-login-btn').classList.toggle('active', mode === 'login');
-      document.getElementById('tab-reg-btn').classList.toggle('active', mode === 'register');
-      document.getElementById('name-group').classList.toggle('hidden', mode === 'login');
-      document.getElementById('auth-submit-btn').innerText = mode === 'login' ? 'Sign In to VynorAI' : 'Create VynorAI Account';
-    }
-
-    async function handleAuth(e) {
-      e.preventDefault();
-      const email = document.getElementById('email-input').value;
-      const password = document.getElementById('password-input').value;
-      const name = document.getElementById('name-input').value;
-
-      const endpoint = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-      const payload = currentAuthMode === 'login' ? { email, password } : { email, password, name };
-
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-          alert(data.error || 'Authentication failed');
-          return;
-        }
-
-        localStorage.setItem('vynor_jwt', data.token);
-        loadDashboard();
-      } catch (err) {
-        alert('Server connection error. Ensure backend is running.');
-      }
-    }
-
     async function loadDashboard() {
-      const token = localStorage.getItem('vynor_jwt');
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      const heroSection = document.getElementById('landing-hero-section');
+      const dashSection = document.getElementById('dashboard-section');
+      const headerUser = document.getElementById('header-user');
+      const headerSignIn = document.getElementById('header-signin-btn');
+
       if (!token) {
-        document.getElementById('auth-section').classList.remove('hidden');
-        document.getElementById('dashboard-section').classList.add('hidden');
-        document.getElementById('header-user').classList.add('hidden');
+        if (heroSection) heroSection.classList.remove('hidden');
+        if (dashSection) dashSection.classList.add('hidden');
+        if (headerUser) headerUser.classList.add('hidden');
+        if (headerSignIn) headerSignIn.classList.remove('hidden');
         return;
       }
 
@@ -705,14 +654,16 @@
 
         if (!res.ok) {
           localStorage.removeItem('vynor_jwt');
+          localStorage.removeItem('vynorai_token');
           loadDashboard();
           return;
         }
 
         currentUser = data.user;
-        document.getElementById('auth-section').classList.add('hidden');
-        document.getElementById('dashboard-section').classList.remove('hidden');
-        document.getElementById('header-user').classList.remove('hidden');
+        if (heroSection) heroSection.classList.add('hidden');
+        if (dashSection) dashSection.classList.remove('hidden');
+        if (headerUser) headerUser.classList.remove('hidden');
+        if (headerSignIn) headerSignIn.classList.add('hidden');
 
         document.getElementById('user-display-name').innerText = currentUser.name || currentUser.email;
         document.getElementById('api-key-text').innerText = currentUser.apiKey;
@@ -767,9 +718,9 @@
     }
 
     async function initiatePayhere(plan) {
-      const token = localStorage.getItem('vynor_jwt');
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
       if (!token) {
-        alert('Please login first');
+        window.location.href = '/login.html';
         return;
       }
 
@@ -809,7 +760,7 @@
     }
 
     async function devTestActivate(plan = 'pro') {
-      const token = localStorage.getItem('vynor_jwt');
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
       const res = await fetch('/api/payment/test-activate', {
         method: 'POST',
         headers: { 
@@ -825,6 +776,7 @@
 
     function logout() {
       localStorage.removeItem('vynor_jwt');
+      localStorage.removeItem('vynorai_token');
       loadDashboard();
     }
 

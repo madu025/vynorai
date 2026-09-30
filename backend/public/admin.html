@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -106,6 +106,9 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item active" onclick="showPage('overview')" id="nav-overview">
       <span class="nav-icon">📊</span>Overview
     </div>
+    <div class="nav-item" onclick="showPage('users')" id="nav-users">
+      <span class="nav-icon">👥</span>Users & Subs
+    </div>
     <div class="nav-item" onclick="showPage('plans')" id="nav-plans">
       <span class="nav-icon">📦</span>Plans & Pricing
     </div>
@@ -131,6 +134,35 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       <div class="panel">
         <div class="panel-header"><div class="panel-title">⚡ Circuit Breakers</div><button class="btn btn-ghost" onclick="loadOverview()">↻ Refresh</button></div>
         <div class="panel-body" id="circuitTable"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- USERS & SUBSCRIPTIONS -->
+    <div class="page" id="page-users">
+      <h1>Users & Subscriptions</h1>
+      <p class="subtitle">Monitor registered customer accounts, active plans, and token usage</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+        <input id="userSearchInp" oninput="filterUsersTable()" placeholder="Search by email or name..." style="max-width:320px;padding:.5rem 1rem;"/>
+        <button class="btn btn-ghost" onclick="loadUsers()">↻ Refresh Users</button>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">👥 Registered Accounts (<span id="userCount">0</span>)</div></div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>API Key</th>
+                <th>Plan Status</th>
+                <th>Tokens Used</th>
+                <th>Registered</th>
+              </tr>
+            </thead>
+            <tbody id="userTableBody">
+              <tr><td colspan="5" class="loading">Loading user records...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -290,9 +322,55 @@ function showPage(id) {
   document.getElementById('page-' + id).classList.add('active');
   document.getElementById('nav-' + id).classList.add('active');
   if (id === 'overview') loadOverview();
-  if (id === 'plans')   loadPlans();
-  if (id === 'models')  loadModels();
-  if (id === 'system')  loadSystem();
+  if (id === 'users')    loadUsers();
+  if (id === 'plans')    loadPlans();
+  if (id === 'models')   loadModels();
+  if (id === 'system')   loadSystem();
+}
+
+let allUsersData = [];
+
+async function loadUsers() {
+  const data = await api('GET', '/admin/users');
+  if (!data) return;
+  allUsersData = data.users || [];
+  const el = document.getElementById('userCount');
+  if (el) el.innerText = allUsersData.length;
+  renderUsersTable(allUsersData);
+}
+
+function renderUsersTable(users) {
+  const tbody = document.getElementById('userTableBody');
+  if (!tbody) return;
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">No registered users found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => {
+    const isSub = u.subscription_status === 'active';
+    const planBadge = isSub ? `<span class="badge badge-pro">${(u.plan_name||'pro').toUpperCase()}</span>` : '<span class="badge badge-free">FREE</span>';
+    const used = (u.used_tokens || 0).toLocaleString();
+    const max = (u.max_tokens || 50000).toLocaleString();
+    const date = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
+    return `
+      <tr>
+        <td><strong>${u.name || 'Developer'}</strong><br/><span style="font-size:.78rem;color:var(--muted)">${u.email}</span></td>
+        <td><code style="font-size:.75rem;color:var(--muted)">${u.api_key ? u.api_key.slice(0, 16) + '...' : '—'}</code></td>
+        <td>${planBadge}</td>
+        <td>${used} / ${max}</td>
+        <td style="font-size:.8rem;color:var(--muted)">${date}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterUsersTable() {
+  const q = (document.getElementById('userSearchInp')?.value || '').toLowerCase().trim();
+  const filtered = allUsersData.filter(u => 
+    (u.email && u.email.toLowerCase().includes(q)) || 
+    (u.name && u.name.toLowerCase().includes(q))
+  );
+  renderUsersTable(filtered);
 }
 
 function loadAll() { loadOverview(); }

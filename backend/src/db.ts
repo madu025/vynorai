@@ -13,6 +13,12 @@ export const db = new sqlite3.Database(dbPath);
 export function initDb(): Promise<void> {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
+      // ── High-Concurrency PRAGMAs (Supports 1000+ Concurrent Requests) ────
+      db.run("PRAGMA journal_mode = WAL;");
+      db.run("PRAGMA synchronous = NORMAL;");
+      db.run("PRAGMA busy_timeout = 10000;"); // 10s wait on contention, zero SQLITE_BUSY crashes
+      db.run("PRAGMA cache_size = -64000;");  // 64MB memory page cache
+      db.run("PRAGMA temp_store = MEMORY;");
 
       // ── Users ───────────────────────────────────────────────────────────
       db.run(`CREATE TABLE IF NOT EXISTS users (

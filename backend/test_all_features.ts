@@ -128,6 +128,19 @@ async function runTests() {
   const tamperedBlock1Hash = computeAuditHash(genesisHash, { userId: "u1", tokens: 999999, ts: 1000 }); // Hacker edited tokens!
   assert(tamperedBlock1Hash !== block1Hash, "Tampered tokens immediately break the cryptographic hash");
 
+  // ── TEST 6: 100-Template Compound Scaffold Registry ────────────────────────
+  console.log("\n📚 6. TESTING 100-TEMPLATE COMPOUND SCAFFOLD REGISTRY...");
+  const { getScaffoldCatalog, resolveCompoundScaffold } = await import("./src/services/scaffoldRegistry.js");
+  const catalog = getScaffoldCatalog();
+  assert(catalog.domains.length === 11, "All 11 enterprise domains represented", `Found ${catalog.domains.length} domains`);
+  assert(catalog.count >= 60, "Catalog contains 60+ pre-mapped production templates", `Found ${catalog.count} templates`);
+
+  const paymentPkg = resolveCompoundScaffold("payment.payhere_checkout");
+  assert(!!paymentPkg, "Resolved compound package 'payment.payhere_checkout'");
+  assert(paymentPkg?.files.length === 2, "Payment package contains multiple files (service + route)");
+  assert(paymentPkg?.securityChecklist.length === 3, "Contains mandatory security checklist");
+  assert(paymentPkg?.tests.length === 1, "Contains automated unit test suite");
+
   console.log("\n=================================================");
   console.log(`🏁 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log("=================================================");

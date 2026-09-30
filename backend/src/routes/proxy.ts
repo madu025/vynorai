@@ -313,12 +313,30 @@ proxyRouter.get("/templates", requireValidSubscriber, async (req: Request, res: 
 
 // ─── GET /v1/templates/:id (Fetch Exact 0-Token Scaffold Code) ───────────────
 proxyRouter.get("/templates/:id", requireValidSubscriber, async (req: Request, res: Response) => {
+  const templateId = String(req.params.id);
   const { GOLDEN_TEMPLATES } = await import("../services/templateVault.js");
-  const template = GOLDEN_TEMPLATES.find((t) => t.id === req.params.id);
+  const template = GOLDEN_TEMPLATES.find((t) => t.id === templateId);
   if (!template) {
-    return res.status(404).json({ error: { message: `Template '${req.params.id}' not found.` } });
+    return res.status(404).json({ error: { message: `Template '${templateId}' not found.` } });
   }
   res.json(template);
+});
+
+// ─── GET /v1/scaffolds/catalog (Lightweight 100-Scaffold Manifest) ────────────
+proxyRouter.get("/scaffolds/catalog", requireValidSubscriber, async (req: Request, res: Response) => {
+  const { getScaffoldCatalog } = await import("../services/scaffoldRegistry.js");
+  res.json(getScaffoldCatalog());
+});
+
+// ─── GET /v1/scaffolds/:id (Resolve Full Multi-File Compound Package) ─────────
+proxyRouter.get("/scaffolds/:id", requireValidSubscriber, async (req: Request, res: Response) => {
+  const scaffoldId = String(req.params.id);
+  const { resolveCompoundScaffold } = await import("../services/scaffoldRegistry.js");
+  const pkg = resolveCompoundScaffold(scaffoldId);
+  if (!pkg) {
+    return res.status(404).json({ error: { message: `Compound scaffold '${scaffoldId}' not found in registry.` } });
+  }
+  res.json(pkg);
 });
 
 

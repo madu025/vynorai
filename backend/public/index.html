@@ -443,15 +443,182 @@
 
     <!-- Landing Hero View (Shown for unauthenticated users) -->
     <div id="landing-hero-section">
-      <div class="hero">
-        <div class="badge">🇱🇰 PayHere Enabled • Sri Lanka & Global</div>
-        <h1>Elevate Your Code with <span>VynorAI</span></h1>
-        <p>Unlock state-of-the-art AI pair programming directly inside VS Code with unlimited Claude 3.7 & GPT-4o access.</p>
-        <div style="margin-top: 32px; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
-          <a href="/login.html" class="btn btn-primary" style="width: auto; padding: 14px 36px; font-size: 16px; text-decoration: none;">Sign In / Get Started &rarr;</a>
-          <a href="#pricing-preview" class="btn btn-secondary" onclick="document.getElementById('pricing-preview').scrollIntoView({behavior:'smooth'})" style="width: auto; padding: 14px 28px; font-size: 16px; text-decoration: none;">View Pricing</a>
+
+      <!-- ── Hero ─────────────────────────────────────────────────────── -->
+      <div class="hero" style="padding-top: 16px; margin-bottom: 80px;">
+        <div class="badge">🇱🇰 Built for Sri Lanka &amp; Global Developers • PayHere Enabled</div>
+        <h1>Your AI Pair Programmer,<br><span>Without the Subscription Trap</span></h1>
+        <p style="max-width: 680px; font-size: 19px; line-height: 1.7;">
+          VynorAI brings unlimited AI coding power — DeepSeek, Qwen, Llama — straight into VS Code. 
+          Pay in Sri Lankan Rupees. Cancel anytime. No USD credit card needed.
+        </p>
+        <div style="margin-top: 36px; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+          <a href="/login.html" class="btn btn-primary" style="width: auto; padding: 15px 40px; font-size: 17px; text-decoration: none; box-shadow: 0 0 40px rgba(0,229,255,0.4);">
+            🚀 Start Free — No Credit Card
+          </a>
+          <a href="#features-section" onclick="document.getElementById('features-section').scrollIntoView({behavior:'smooth'}); return false;" class="btn btn-secondary" style="width: auto; padding: 15px 28px; font-size: 16px; text-decoration: none;">
+            See How It Works ↓
+          </a>
+        </div>
+        <!-- Trust badges -->
+        <div style="margin-top: 32px; display: flex; justify-content: center; gap: 28px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
+          <span>✅ 50,000 Free Tokens to Start</span>
+          <span>✅ VS Code Extension Ready</span>
+          <span>✅ LKR Payments via PayHere</span>
+          <span>✅ Works on Windows, Mac, Linux</span>
         </div>
       </div>
+
+      <!-- ── Why VynorAI section ─────────────────────────────────────── -->
+      <div id="features-section" style="margin-bottom: 90px;">
+        <div style="text-align: center; margin-bottom: 48px;">
+          <div class="badge">⚡ Why Developers Choose VynorAI</div>
+          <h2 style="font-size: 36px; font-weight: 800; margin-top: 12px; letter-spacing: -0.5px;">Everything You Need, Nothing You Don't</h2>
+          <p style="color: var(--text-muted); margin-top: 10px; font-size: 16px;">Built for real developers — local and global — with zero compromise on quality.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+
+          <div class="glass-card" style="padding: 28px; border-top: 2px solid var(--primary);">
+            <div style="font-size: 36px; margin-bottom: 14px;">🧠</div>
+            <h3 style="font-size: 18px; margin-bottom: 8px;">State-of-the-Art Open Models</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7;">Access DeepSeek R1, DeepSeek V3, Qwen 2.5 Coder 32B, Llama 3.3 70B and more — the same models powering top AI tools globally, at a fraction of the price.</p>
+          </div>
+
+          <div class="glass-card" style="padding: 28px; border-top: 2px solid var(--primary);">
+            <div style="font-size: 36px; margin-bottom: 14px;">💰</div>
+            <h3 style="font-size: 18px; margin-bottom: 8px;">Pay in Sri Lankan Rupees</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7;">No USD credit card headaches. Pay via PayHere using any card, Genie, EzCash, Frimi, or bank transfer — starting from just <strong style="color:var(--primary)">LKR 1,500/month</strong>.</p>
+          </div>
+
+          <div class="glass-card" style="padding: 28px; border-top: 2px solid var(--primary);">
+            <div style="font-size: 36px; margin-bottom: 14px;">🔌</div>
+            <h3 style="font-size: 18px; margin-bottom: 8px;">Plug-and-Play VS Code</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7;">Works inside your existing VS Code. Just install, paste your VynorAI token, and start coding with AI instantly — no complicated setup or config files.</p>
+          </div>
+
+          <div class="glass-card" style="padding: 28px; border-top: 2px solid var(--accent);">
+            <div style="font-size: 36px; margin-bottom: 14px;">⚡</div>
+            <h3 style="font-size: 18px; margin-bottom: 8px;">Real-Time Tab Autocomplete</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7;">Inline AI suggestions as you type — like GitHub Copilot's ghost text, but powered by DeepSeek Coder V2 with vastly more context and precision.</p>
+          </div>
+
+          <div class="glass-card" style="padding: 28px; border-top: 2px solid var(--accent);">
+            <div style="font-size: 36px; margin-bottom: 14px;">🤖</div>
+            <h3 style="font-size: 18px; margin-bottom: 8px;">Full Agent Mode</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7;">Automatically apply edits, refactor entire files, and run multi-step plans — VynorAI Pro acts as a true autonomous coding agent in your workspace.</p>
+          </div>
+
+          <div class="glass-card" style="padding: 28px; border-top: 2px solid var(--accent);">
+            <div style="font-size: 36px; margin-bottom: 14px;">🔒</div>
+            <h3 style="font-size: 18px; margin-bottom: 8px;">Privacy-First Architecture</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7;">Your code only flows through OpenRouter's encrypted API gateway — never stored, never trained on. Your work stays yours, always.</p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Comparison Table ───────────────────────────────────────── -->
+      <div style="margin-bottom: 90px;">
+        <div style="text-align: center; margin-bottom: 40px;">
+          <div class="badge">🆚 How VynorAI Compares</div>
+          <h2 style="font-size: 34px; font-weight: 800; margin-top: 12px; letter-spacing: -0.5px;">The Smarter Alternative</h2>
+          <p style="color: var(--text-muted); margin-top: 10px; font-size: 15px;">Why developers in Sri Lanka are switching from Copilot, Cursor and Codeium.</p>
+        </div>
+
+        <div class="glass-card" style="padding: 0; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <thead>
+              <tr style="background: rgba(0,229,255,0.08); border-bottom: 1px solid var(--border);">
+                <th style="padding: 16px 20px; text-align: left; color: var(--text-muted); font-weight: 600;">Feature</th>
+                <th style="padding: 16px 20px; text-align: center; color: var(--primary); font-weight: 700;">VynorAI</th>
+                <th style="padding: 16px 20px; text-align: center; color: var(--text-muted); font-weight: 600;">GitHub Copilot</th>
+                <th style="padding: 16px 20px; text-align: center; color: var(--text-muted); font-weight: 600;">Cursor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 14px 20px; color: var(--text-muted);">Pay in LKR (Sri Lanka)</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--success); font-size: 18px;">✅</td>
+                <td style="padding: 14px 20px; text-align: center; color: #ff5252; font-size: 18px;">❌</td>
+                <td style="padding: 14px 20px; text-align: center; color: #ff5252; font-size: 18px;">❌</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 14px 20px; color: var(--text-muted);">DeepSeek R1 (Reasoning AI)</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--success); font-size: 18px;">✅</td>
+                <td style="padding: 14px 20px; text-align: center; color: #ff5252; font-size: 18px;">❌</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--warning); font-size: 13px;">Paid Add-on</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 14px 20px; color: var(--text-muted);">Free Trial (No Credit Card)</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--success); font-size: 18px;">✅</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--warning); font-size: 13px;">30 days only</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--warning); font-size: 13px;">Limited</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 14px 20px; color: var(--text-muted);">Monthly Token Quota (Starter)</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--primary); font-weight: 700;">15M tokens</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--text-muted);">Unlimited*</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--text-muted);">500 fast req</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--border);">
+                <td style="padding: 14px 20px; color: var(--text-muted);">Starting Price</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--primary); font-weight: 700;">රු. 1,500/mo</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--text-muted);">~LKR 3,200/mo</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--text-muted);">~LKR 5,500/mo</td>
+              </tr>
+              <tr>
+                <td style="padding: 14px 20px; color: var(--text-muted);">Works in VS Code</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--success); font-size: 18px;">✅</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--success); font-size: 18px;">✅</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--warning); font-size: 13px;">Own editor</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── How it Works ───────────────────────────────────────────── -->
+      <div style="margin-bottom: 90px;">
+        <div style="text-align: center; margin-bottom: 48px;">
+          <div class="badge">🛠️ Get Started in 3 Steps</div>
+          <h2 style="font-size: 34px; font-weight: 800; margin-top: 12px; letter-spacing: -0.5px;">Up and Running in Under 5 Minutes</h2>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; max-width: 900px; margin: 0 auto;">
+
+          <div style="text-align: center; padding: 32px 24px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--primary-gradient); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; color: #000; margin: 0 auto 18px auto; box-shadow: 0 0 30px rgba(0,229,255,0.4);">1</div>
+            <h3 style="font-size: 17px; margin-bottom: 8px;">Create Free Account</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.6;">Sign up with your email at <strong>vynor.lk/login</strong>. No credit card, no commitments. Get 50,000 free tokens instantly.</p>
+          </div>
+
+          <div style="text-align: center; padding: 32px 24px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--primary-gradient); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; color: #000; margin: 0 auto 18px auto; box-shadow: 0 0 30px rgba(0,229,255,0.4);">2</div>
+            <h3 style="font-size: 17px; margin-bottom: 8px;">Copy Your API Token</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.6;">After login, your personal VynorAI token appears on the dashboard. One click to copy it.</p>
+          </div>
+
+          <div style="text-align: center; padding: 32px 24px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--primary-gradient); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; color: #000; margin: 0 auto 18px auto; box-shadow: 0 0 30px rgba(0,229,255,0.4);">3</div>
+            <h3 style="font-size: 17px; margin-bottom: 8px;">Paste in VS Code</h3>
+            <p style="color: var(--text-muted); font-size: 14px; line-height: 1.6;">Install the VynorAI extension, paste your token in settings, and start coding with AI autocomplete + chat in seconds.</p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Final CTA ─────────────────────────────────────────────── -->
+      <div style="text-align: center; margin-bottom: 80px; padding: 60px 32px; background: linear-gradient(135deg, rgba(0,229,255,0.06) 0%, rgba(176,38,255,0.06) 100%); border: 1px solid rgba(0,229,255,0.15); border-radius: 24px;">
+        <h2 style="font-size: 36px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 12px;">Ready to Code Smarter?</h2>
+        <p style="color: var(--text-muted); font-size: 17px; max-width: 520px; margin: 0 auto 32px auto; line-height: 1.6;">
+          Join developers across Sri Lanka using AI to build faster and ship better code every day.
+        </p>
+        <a href="/login.html" class="btn btn-primary" style="width: auto; display: inline-block; padding: 16px 48px; font-size: 18px; text-decoration: none; box-shadow: 0 0 50px rgba(0,229,255,0.35);">
+          🚀 Start Free Today →
+        </a>
+        <p style="color: var(--text-muted); font-size: 13px; margin-top: 16px;">50,000 free tokens • No credit card • Cancel anytime</p>
+      </div>
+
     </div>
 
     <!-- User Dashboard View -->

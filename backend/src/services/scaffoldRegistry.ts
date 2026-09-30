@@ -323,3 +323,177 @@ describe("${item.title}", () => {
       };
   }
 }
+
+// ─── COMPOSITE MULTI-TEMPLATE PROJECT BLUEPRINTS (E-COMMERCE, SAAS, FINTECH) ──
+export interface BlueprintStage {
+  stageNumber: number;
+  stageName: string;
+  description: string;
+  scaffoldIds: string[];
+}
+
+export interface ProjectBlueprint {
+  id: string;
+  name: string;
+  description: string;
+  keywords: string[];
+  stages: BlueprintStage[];
+}
+
+export const PROJECT_BLUEPRINTS: ProjectBlueprint[] = [
+  {
+    id: "ecommerce",
+    name: "Full-Stack E-Commerce Platform",
+    description: "Production-ready e-commerce store with product catalog, cart, PayHere LKR checkout, customer auth, and order emails.",
+    keywords: ["ecommerce", "e-commerce", "online store", "shop", "shopping cart", "sell products", "pos", "store"],
+    stages: [
+      {
+        stageNumber: 1,
+        stageName: "Core Environment & Database Config",
+        description: "Set up type-safe .env validation, database connection pool, and CORS headers.",
+        scaffoldIds: ["config.env", "config.database", "config.cors"],
+      },
+      {
+        stageNumber: 2,
+        stageName: "Database Models (Users, Products, Orders)",
+        description: "Create relational tables with indexes, foreign keys, and soft deletes for products and orders.",
+        scaffoldIds: ["db.users_model", "db.migration", "db.soft_delete"],
+      },
+      {
+        stageNumber: 3,
+        stageName: "Customer Authentication & Security",
+        description: "Secure customer registration, login with bcrypt password hashing, and rate-limiting against brute force.",
+        scaffoldIds: ["auth.registration", "auth.login", "security.rate_limiting", "security.headers"],
+      },
+      {
+        stageNumber: 4,
+        stageName: "Products Catalog & Cart APIs",
+        description: "CRUD API routes for products with keyset pagination, category filtering, and full-text search.",
+        scaffoldIds: ["api.crud_routes", "db.pagination", "db.search"],
+      },
+      {
+        stageNumber: 5,
+        stageName: "Payment Gateway & Webhook (PayHere / Stripe)",
+        description: "Generate MD5 checkout payment hash, handle IPN webhook callbacks, and generate order invoices.",
+        scaffoldIds: ["payment.payhere_checkout", "payment.payhere_webhook", "payment.invoice_record"],
+      },
+      {
+        stageNumber: 6,
+        stageName: "Product Images & Storage",
+        description: "Presigned direct S3/R2 upload URLs and Sharp WebP image compression.",
+        scaffoldIds: ["storage.s3_adapter", "storage.image_optimize"],
+      },
+      {
+        stageNumber: 7,
+        stageName: "Order Notification & Automated Smoke Test",
+        description: "Order confirmation email dispatch and automated production smoke test.",
+        scaffoldIds: ["comm.email_sender", "comm.welcome_email", "testing.smoke_test"],
+      },
+    ],
+  },
+  {
+    id: "saas_platform",
+    name: "Multi-Tenant B2B SaaS Platform",
+    description: "Enterprise SaaS starter with organizations, team invitations, RBAC, tier limits, and subscription billing.",
+    keywords: ["saas", "multi-tenant", "b2b", "subscription platform", "workspace app"],
+    stages: [
+      {
+        stageNumber: 1,
+        stageName: "Configuration & Multi-Tenant Isolation",
+        description: "Tenant resolution middleware and structured JSON logging.",
+        scaffoldIds: ["config.env", "saas.org_workspace", "saas.multi_tenancy"],
+      },
+      {
+        stageNumber: 2,
+        stageName: "Authentication & Role-Based Access Control",
+        description: "JWT access tokens, refresh token rotation, and hierarchical RBAC (Owner, Admin, Member).",
+        scaffoldIds: ["auth.jwt", "auth.refresh_token", "security.rbac", "security.admin_guard"],
+      },
+      {
+        stageNumber: 3,
+        stageName: "Team Members & Invitations",
+        description: "Secure invitation tokens, email invites, and team management.",
+        scaffoldIds: ["saas.team_members", "saas.invitations", "comm.email_sender"],
+      },
+      {
+        stageNumber: 4,
+        stageName: "Subscription Plans & Quota Limits",
+        description: "Plan tiers (Starter, Pro, Ultra), usage metering, and quota enforcement.",
+        scaffoldIds: ["saas.subscription_plan", "saas.usage_limits", "saas.usage_tracking"],
+      },
+      {
+        stageNumber: 5,
+        stageName: "Billing & Automated Testing",
+        description: "Subscription checkout, webhook handling, and comprehensive unit tests.",
+        scaffoldIds: ["payment.payhere_checkout", "payment.payhere_webhook", "testing.unit_test"],
+      },
+    ],
+  },
+  {
+    id: "fintech_banking",
+    name: "High-Security FinTech & Banking Backend",
+    description: "Zero-trust banking service with Merkle audit trails, strict rate-limiting, and idempotency.",
+    keywords: ["fintech", "banking", "finance", "wallet", "ledger", "money transfer"],
+    stages: [
+      {
+        stageNumber: 1,
+        stageName: "Zero-Trust Security & API Keys",
+        description: "Strict API key authentication and Helmet security headers.",
+        scaffoldIds: ["security.api_keys", "security.headers", "security.sanitization"],
+      },
+      {
+        stageNumber: 2,
+        stageName: "Immutable Blockchain Merkle Audit Chain",
+        description: "Cryptographically linked SHA-256 audit logs proving zero tampering.",
+        scaffoldIds: ["security.audit_log", "db.transactions"],
+      },
+      {
+        stageNumber: 3,
+        stageName: "Authentication & Argon2 Passwords",
+        description: "Stateful session guard, password reset flow, and brute-force lockouts.",
+        scaffoldIds: ["auth.password_hash", "auth.session", "security.rate_limiting"],
+      },
+      {
+        stageNumber: 4,
+        stageName: "Payment Webhooks & Reconciliation",
+        description: "Idempotent payment webhook processing and distributed Redis lock.",
+        scaffoldIds: ["payment.payhere_webhook", "infra.distributed_lock", "testing.api_integration"],
+      },
+    ],
+  },
+];
+
+export function detectProjectBlueprint(query: string): ProjectBlueprint | null {
+  if (!query || typeof query !== "string") return null;
+  const q = query.toLowerCase();
+
+  for (const bp of PROJECT_BLUEPRINTS) {
+    if (bp.keywords.some((kw) => q.includes(kw))) {
+      return bp;
+    }
+  }
+  return null;
+}
+
+export function formatBlueprintPlan(bp: ProjectBlueprint): string {
+  const lines: string[] = [
+    `# 🏗️ VynorAI Architectural Blueprint: **${bp.name}**`,
+    `> **SaaS Composite Solution Plan** • Assembling ${bp.stages.length} production stages using pre-compiled, zero-hallucination golden templates.\n`,
+    `### 📋 Executive Summary:`,
+    `${bp.description}\n`,
+    `### 🚀 Multi-Stage Implementation Roadmap:\n`,
+  ];
+
+  for (const st of bp.stages) {
+    lines.push(`#### Stage ${st.stageNumber}: **${st.stageName}**`);
+    lines.push(`* *Goal:* ${st.description}`);
+    lines.push(`* *Pre-Compiled Templates Utilized:* \`${st.scaffoldIds.join("`, `")}\``);
+    lines.push("");
+  }
+
+  lines.push("---");
+  lines.push("💡 **Ready to build!** Say *'Proceed with Stage 1'* or specify which stage you want to generate first, and VynorAI will deliver each verified, production-ready module without burning unnecessary AI tokens.");
+
+  return lines.join("\n");
+}
+

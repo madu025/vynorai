@@ -12,6 +12,7 @@ import { enrichWithRAG } from "./ragEngine.js";
 import { enrichWithWeb } from "./webSearch.js";
 import { enrichWithMemory } from "./memoryEngine.js";
 import { detectTemplateIntent, formatTemplateContext, checkInstantTemplateMatch } from "./templateVault.js";
+import { detectProjectBlueprint, formatBlueprintPlan } from "./scaffoldRegistry.js";
 
 export interface AuthenticatedUser {
   id: string;
@@ -147,6 +148,46 @@ export async function handleChatCompletions(
         created: Math.floor(Date.now() / 1000),
         model: "vynorai-golden-vault",
         choices: [{ index: 0, message: { role: "assistant", content: instantMatch.responseMarkdown }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      });
+    }
+  }
+
+  // ── 1c. Composite Project Blueprint Direct Delivery (E-Commerce, SaaS, FinTech) ──
+  const blueprintMatch = detectProjectBlueprint(rawQuery);
+  if (blueprintMatch) {
+    console.log(`[VynorAI 🏗️ BLUEPRINT MATCH] ${blueprintMatch.id} | query="${rawQuery.slice(0, 40)}"`);
+    res.setHeader("X-VynorAI-Blueprint", blueprintMatch.id);
+    const planMarkdown = formatBlueprintPlan(blueprintMatch);
+
+    const chunk = {
+      id: "blueprint-" + uuidv4(),
+      object: "chat.completion.chunk",
+      created: Math.floor(Date.now() / 1000),
+      model: "vynorai-blueprint-architect",
+      choices: [
+        {
+          index: 0,
+          delta: { role: "assistant", content: planMarkdown },
+          finish_reason: "stop",
+        },
+      ],
+    };
+
+    if (stream) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      res.write("data: [DONE]\n\n");
+      return res.end();
+    } else {
+      return res.json({
+        id: "blueprint-" + uuidv4(),
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: "vynorai-blueprint-architect",
+        choices: [{ index: 0, message: { role: "assistant", content: planMarkdown }, finish_reason: "stop" }],
         usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
       });
     }

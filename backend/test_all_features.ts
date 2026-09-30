@@ -141,6 +141,22 @@ async function runTests() {
   assert(paymentPkg?.securityChecklist.length === 3, "Contains mandatory security checklist");
   assert(paymentPkg?.tests.length === 1, "Contains automated unit test suite");
 
+  // ── TEST 7: Composite Project Blueprints (E-Commerce & SaaS) ──────────────
+  console.log("\n🏗️ 7. TESTING COMPOSITE PROJECT BLUEPRINTS & STAGE PLANNER...");
+  const { detectProjectBlueprint, formatBlueprintPlan } = await import("./src/services/scaffoldRegistry.js");
+  const ecomBp = detectProjectBlueprint("Mata ecommerce web ekak hadala denna");
+  assert(!!ecomBp, "Detected E-Commerce Blueprint from natural user request");
+  assert(ecomBp?.id === "ecommerce", "Blueprint ID is 'ecommerce'");
+  assert(ecomBp?.stages.length === 7, "E-Commerce roadmap contains 7 production stages", `Stages: ${ecomBp?.stages.length}`);
+  
+  const formattedPlan = formatBlueprintPlan(ecomBp!);
+  assert(formattedPlan.includes("Full-Stack E-Commerce Platform"), "Plan contains platform name");
+  assert(formattedPlan.includes("Stage 1: **Core Environment & Database Config**"), "Plan outlines Stage 1");
+  assert(formattedPlan.includes("payment.payhere_checkout"), "Stage 5 includes PayHere LKR checkout template");
+
+  const saasBp = detectProjectBlueprint("Build a multi-tenant B2B SaaS platform");
+  assert(!!saasBp && saasBp.id === "saas_platform", "Detected B2B SaaS blueprint with team & subscriptions");
+
   console.log("\n=================================================");
   console.log(`🏁 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log("=================================================");

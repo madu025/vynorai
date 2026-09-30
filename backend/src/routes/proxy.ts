@@ -4,6 +4,9 @@ import { quotaGuard } from "../services/quotaGuard.js";
 import { MODEL_ALIASES, DEFAULT_CHAT_MODEL, DEFAULT_AUTOCOMPLETE } from "../config.js";
 import { resolveModelId } from "../config.js";
 import { getAllModels, canPlanUseModel, resolveModel } from "../services/modelRegistry.js";
+import { sanitizePayload } from "../services/secretSanitizer.js";
+import { handleFimAutocomplete } from "../services/fimEngine.js";
+import { handleQuickFix } from "../services/quickFixEngine.js";
 
 export const proxyRouter = Router();
 
@@ -117,7 +120,15 @@ proxyRouter.post(
         });
       }
 
-      await handleChatCompletions(user, req.body, res);
+      // ── Privacy Shield & In-Flight Secret Sanitizer ─────────────────────────
+      const { sanitized, scrubbedCount, scrubbedTypes } = sanitizePayload(req.body);
+      res.setHeader("X-VynorAI-Privacy-Shield", "Active");
+      if (scrubbedCount > 0) {
+        res.setHeader("X-VynorAI-Scrubbed-Secrets", String(scrubbedCount));
+        console.log(`[Privacy Shield 🛡️] Scrubbed ${scrubbedCount} secret(s) (${scrubbedTypes.join(", ")}) for ${user.email}`);
+      }
+
+      await handleChatCompletions(user, sanitized, res);
     } catch (err: any) {
       console.error("[VynorAI] Proxy error:", err.message);
       if (!res.headersSent)
@@ -126,28 +137,38 @@ proxyRouter.post(
   }
 );
 
-// ─── POST /v1/completions (legacy autocomplete) ───────────────────────────────
+// ─── POST /v1/fim/completions (Ultra-Fast Inline Tab Autocomplete) ────────────
 proxyRouter.post(
-  "/completions",
+  "/fim/completions",
   requireValidSubscriber,
   proxyRateLimiter,
   quotaGuard,
   async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      const body = {
-        ...req.body,
-        model: req.body.model || DEFAULT_AUTOCOMPLETE,
-        messages: [
-          { role: "system", content: "You are an expert code completion engine. Return ONLY the completion, no explanation." },
-          { role: "user", content: req.body.prompt || "" },
-        ],
-      };
-      await handleChatCompletions(user, body, res);
+      await handleFimAutocomplete(user, req.body, res);
     } catch (err: any) {
-      console.error("[VynorAI] Completions error:", err.message);
+      console.error("[VynorAI] FIM Autocomplete error:", err.message);
       if (!res.headersSent)
-        res.status(500).json({ error: { message: "Internal proxy error: " + err.message } });
+        res.status(500).json({ error: { message: "FIM Autocomplete error: " + err.message } });
+    }
+  }
+);
+
+// ─── POST /v1/agent/fix-error (Terminal Compiler & Stack Trace Quick-Fix) ──────
+proxyRouter.post(
+  "/agent/fix-error",
+  requireValidSubscriber,
+  proxyRateLimiter,
+  quotaGuard,
+  async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      await handleQuickFix(user, req.body, res);
+    } catch (err: any) {
+      console.error("[VynorAI] QuickFix error:", err.message);
+      if (!res.headersSent)
+        res.status(500).json({ error: { message: "QuickFix error: " + err.message } });
     }
   }
 );

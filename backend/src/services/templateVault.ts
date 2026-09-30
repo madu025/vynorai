@@ -11,11 +11,19 @@ import {
   validateTemplateSecurity,
 } from "./vault/validator.js";
 import { scoreTemplateMatch } from "./vault/scorer.js";
+import { computeTemplateChecksum } from "./vault/integrityAudit.js";
 
-// Re-export types and validators for external modules
+// Re-export all vault sub-engines for external consumption
 export * from "./vault/types.js";
 export * from "./vault/validator.js";
 export * from "./vault/scorer.js";
+export * from "./vault/intentClassifier.js";
+export * from "./vault/projectScanner.js";
+export * from "./vault/composer.js";
+export * from "./vault/patchEngine.js";
+export * from "./vault/idempotency.js";
+export * from "./vault/integrityAudit.js";
+export * from "./vault/databaseGuardrails.js";
 
 /**
  * VynorAI Unified Golden Template & Scaffold Vault (v2.2 Enterprise)
@@ -950,6 +958,30 @@ model Subscription {
     usageSnippet: `npx prisma db push`
   }
 ];
+
+// Ensure 20-point enterprise fields (checksum, timestamps, riskLevel, dependencies, envVariables)
+for (const t of GOLDEN_TEMPLATES) {
+  if (!t.createdAt) t.createdAt = "2026-09-30T12:00:00Z";
+  if (!t.updatedAt) t.updatedAt = "2026-09-30T12:00:00Z";
+  if (!t.riskLevel) {
+    t.riskLevel = t.category === "payments" || t.category === "auth" ? "high" : "low";
+  }
+  if (!t.envVariables) {
+    t.envVariables = (t.requiredEnv || []).map((name) => ({
+      name,
+      required: true,
+      secret: name.includes("SECRET") || name.includes("KEY"),
+    }));
+  }
+  if (!t.dependencies || t.dependencies.length === 0) {
+    t.dependencies = [];
+  } else if (typeof t.dependencies[0] === "string") {
+    t.dependencies = (t.dependencies as any[]).map((d) => (typeof d === "string" ? { name: d, version: "^1.0.0" } : d));
+  }
+  if (!t.checksum) {
+    t.checksum = computeTemplateChecksum(t);
+  }
+}
 
 /**
  * Detect if a user's prompt matches any Golden Template using

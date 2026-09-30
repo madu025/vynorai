@@ -318,6 +318,159 @@ async function runTests() {
   }
   assert(allTemplatesSecure, "All 9 Golden Templates pass zero-fallback secret & modern CSP security checks");
 
+  // ── TEST 10: 4-Tier Intent Router & Confidence Classification ─────────────
+  console.log("\n🚦 10. TESTING 4-TIER INTENT ROUTER & CONFIDENCE CLASSIFICATION...");
+  const { classifyIntentAndRoute } = await import("./src/services/templateVault.js");
+
+  const tier1 = classifyIntentAndRoute("PayHere payment add කරන්න", GOLDEN_TEMPLATES);
+  assert(tier1.tier === "DIRECT_EXECUTE" && tier1.confidence >= 0.90, "Confidence >= 0.90 -> DIRECT_EXECUTE tier (PayHere)", `Confidence: ${tier1.confidence}`);
+  assert(tier1.template?.id === "payhere-lkr-gateway", "Target template is payhere-lkr-gateway");
+
+  const tier2 = classifyIntentAndRoute("nic date of birth check", GOLDEN_TEMPLATES);
+  assert(tier2.tier === "VALIDATE_AND_EXECUTE" || tier2.tier === "DIRECT_EXECUTE", "Intent matched for SL NIC date of birth");
+
+  const tier4 = classifyIntentAndRoute("Write me a poem about the sunrise in Kandy", GOLDEN_TEMPLATES);
+  assert(tier4.tier === "FALLBACK_LLM" && tier4.confidence < 0.50, "Unmatched creative prompt -> FALLBACK_LLM tier (< 0.50)");
+
+  // ── TEST 11: Project Context Scanner ──────────────────────────────────────
+  console.log("\n🔍 11. TESTING PROJECT CONTEXT SCANNER...");
+  const { scanProjectFiles } = await import("./src/services/templateVault.js");
+  const scannedContext = scanProjectFiles([
+    {
+      path: "package.json",
+      content: JSON.stringify({
+        dependencies: { next: "^15.4.0", "@prisma/client": "^5.0.0", pg: "^8.11.0" },
+        devDependencies: { typescript: "^5.3.0" },
+        engines: { node: ">=20.0.0" }
+      })
+    },
+    {
+      path: "prisma/schema.prisma",
+      content: 'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}'
+    },
+    {
+      path: ".env",
+      content: "DATABASE_URL=postgresql://localhost:5432/db\nJWT_SECRET=supersecret\n"
+    }
+  ]);
+
+  assert(scannedContext.framework === "nextjs" && scannedContext.frameworkVersion?.startsWith("15"), "Detected Next.js 15 framework");
+  assert(scannedContext.language === "typescript", "Detected TypeScript language");
+  assert(scannedContext.orm === "prisma", "Detected Prisma ORM");
+  assert(scannedContext.database === "postgresql", "Detected PostgreSQL database");
+  assert(scannedContext.existingEnvKeys?.includes("DATABASE_URL"), "Extracted DATABASE_URL from .env");
+
+  // ── TEST 12: Template Dependency Graph Composer ───────────────────────────
+  console.log("\n🧩 12. TESTING TEMPLATE COMPOSER & DEPENDENCY GRAPH (DAG)...");
+  const { composeTemplatePipeline } = await import("./src/services/templateVault.js");
+  const composed = composeTemplatePipeline("payhere-lkr-gateway", GOLDEN_TEMPLATES);
+  assert(composed.rootTemplateId === "payhere-lkr-gateway", "Root template identified");
+  assert(composed.files.length >= 1, "Composed multi-file package from pipeline");
+  assert(composed.dependencies.length >= 1, "Aggregated production dependencies");
+
+  // ── TEST 13: AST Patch Engine & Protected Section Guard ───────────────────
+  console.log("\n🩹 13. TESTING AST PATCH ENGINE & DO_NOT_MODIFY GUARDS...");
+  const { applyFilePatches } = await import("./src/services/templateVault.js");
+  const initialFiles = {
+    "app/api/payhere/route.ts": `// @vynor:protected(signature_verification)\nfunction verifySignature() { return true; }\nexport default function handler() {}`
+  };
+
+  // Safe patch
+  const safePatch = applyFilePatches(initialFiles, [
+    {
+      file: "app/api/payhere/route.ts",
+      type: "ADD_IMPORT",
+      targetAnchor: "",
+      payload: "import crypto from 'crypto';"
+    }
+  ]);
+  assert(safePatch.success && safePatch.modifiedFiles.includes("app/api/payhere/route.ts"), "Safely applied ADD_IMPORT to target file");
+
+  // Violating patch on DO_NOT_MODIFY section
+  const hackPatch = applyFilePatches(initialFiles, [
+    {
+      file: "app/api/payhere/route.ts",
+      type: "REPLACE_BLOCK",
+      targetAnchor: "signature_verification",
+      payload: "signature_verification_hacked"
+    }
+  ], ["signature_verification"]);
+  assert(!hackPatch.success && hackPatch.errors.some(e => e.includes("SECURITY VIOLATION")), "DO_NOT_MODIFY guard blocked tampering of signature_verification");
+
+  // ── TEST 14: Idempotency & Snapshot Rollback Manager ───────────────────────
+  console.log("\n⏪ 14. TESTING IDEMPOTENCY & SNAPSHOT ROLLBACK MANAGER...");
+  const { createProjectSnapshot, restoreProjectSnapshot, isTemplateInstalled } = await import("./src/services/templateVault.js");
+
+  const projectState = {
+    "services/payhere_lkr_gateway.ts": `// @vynor:template(payhere-lkr-gateway)\nexport const config = {};`
+  };
+  const installCheck = isTemplateInstalled("payhere-lkr-gateway", projectState);
+  assert(installCheck.installed === true, "Idempotency engine detected already-installed template");
+
+  const snapId = createProjectSnapshot({ "file.ts": "original code" });
+  const restored = restoreProjectSnapshot(snapId);
+  assert(restored?.["file.ts"] === "original code", "Restored exact snapshot state on rollback");
+
+  // ── TEST 15: Checksum Integrity & Audit Ledger ─────────────────────────────
+  console.log("\n🔏 15. TESTING CRYPTOGRAPHIC CHECKSUMS & AUDIT LEDGER...");
+  const { computeTemplateChecksum, verifyTemplateIntegrity, logVaultAudit, getAuditTrail } = await import("./src/services/templateVault.js");
+
+  const testT = GOLDEN_TEMPLATES[0];
+  const checksum = computeTemplateChecksum(testT);
+  assert(checksum.length === 64, "Generated valid 64-char SHA-256 template checksum");
+  const integrity = verifyTemplateIntegrity(testT);
+  assert(integrity.valid, "Template integrity verified against stored cryptographic hash");
+
+  const auditEntry = logVaultAudit({
+    templateId: testT.id,
+    version: testT.version,
+    action: "INSTALL",
+    status: "PASSED",
+    riskLevel: testT.riskLevel || "low",
+    project: "vynor-ecom-client",
+    checksum
+  });
+  assert(auditEntry.id.startsWith("audit_"), "Logged audit trail entry");
+  assert(getAuditTrail(testT.id).length >= 1, "Retrieved audit trail history for template");
+
+  // ── TEST 16: 50 Database Vibe-Coding Guardrails ───────────────────────────
+  console.log("\n🛡️ 16. TESTING 50 DATABASE VIBE-CODING GUARDRAILS...");
+  const { validateDatabaseSchema } = await import("./src/services/vault/databaseGuardrails.js");
+
+  // Case 1: Bad Vibe-Coded SQL with money FLOAT, missing PK, destructive drop, and SQLi
+  const badSQL = `
+    DROP TABLE IF EXISTS old_users;
+    CREATE TABLE orders (
+      order_id VARCHAR(36),
+      total_amount FLOAT,
+      user_id VARCHAR(36)
+    );
+    const query = \`SELECT * FROM users WHERE id = '\${userId}'\`;
+  `;
+  const badReport = validateDatabaseSchema(badSQL, { isMultiTenant: true });
+  assert(!badReport.passed, "Bad vibe-coded database schema correctly failed validation");
+  assert(badReport.violations.some(v => v.code === "DESTRUCTIVE_MIGRATION"), "Caught DESTRUCTIVE_MIGRATION (DROP TABLE)");
+  assert(badReport.violations.some(v => v.code === "MONEY_FLOATING_POINT_PRECISION"), "Caught MONEY_FLOATING_POINT_PRECISION (FLOAT amount)");
+  assert(badReport.violations.some(v => v.code === "MISSING_PRIMARY_KEY"), "Caught MISSING_PRIMARY_KEY");
+  assert(badReport.violations.some(v => v.code === "RAW_SQL_INJECTION_RISK"), "Caught RAW_SQL_INJECTION_RISK in template query");
+
+  // Case 2: Enterprise Production-Grade SQL
+  const goodSQL = `
+    CREATE TABLE orders (
+      id VARCHAR(36) PRIMARY KEY,
+      tenant_id VARCHAR(36) NOT NULL,
+      total_amount DECIMAL(12,2) NOT NULL,
+      user_id VARCHAR(36) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX idx_orders_user_id ON orders(user_id);
+    CREATE INDEX idx_orders_tenant ON orders(tenant_id);
+  `;
+  const goodReport = validateDatabaseSchema(goodSQL, { isMultiTenant: true });
+  assert(goodReport.passed, "Enterprise production-grade database schema passed all 50 guardrails with 0 critical violations");
+
   console.log("\n=================================================");
   console.log(`🏁 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log("=================================================");

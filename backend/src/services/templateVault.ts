@@ -24,6 +24,12 @@ export * from "./vault/patchEngine.js";
 export * from "./vault/idempotency.js";
 export * from "./vault/integrityAudit.js";
 export * from "./vault/databaseGuardrails.js";
+export * from "./vault/rules/engine.js";
+export * from "./vault/validators/engine.js";
+export * from "./vault/tools/engine.js";
+export * from "./vault/workflows/engine.js";
+export * from "./vault/orchestrator.js";
+export * from "./vault/registry/index.js";
 
 /**
  * VynorAI Unified Golden Template & Scaffold Vault (v2.2 Enterprise)

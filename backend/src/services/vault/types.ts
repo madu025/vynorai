@@ -217,3 +217,60 @@ export interface CompatibilityResult {
   reasons: string[];
   warnings: string[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5-LAYER LOCAL ENGINEERING SYSTEM SPECIFICATION (Templates, Rules, Validators, Workflows, Tools)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface EngineeringRule {
+  id: string;
+  category: "database" | "security" | "typescript" | "api" | "auth" | "architecture";
+  description: string;
+  severity: "ERROR" | "WARN";
+  enforce: (context: { code?: string; schema?: string; files?: Record<string, string>; env?: Record<string, any> }) => { passed: boolean; message?: string; suggestion?: string };
+}
+
+export interface ValidatorReport {
+  validatorId: string;
+  category: "security" | "database" | "code" | "compatibility";
+  passed: boolean;
+  errors: string[];
+  warnings: string[];
+  suggestions: string[];
+}
+
+export interface WorkflowStep {
+  id: string;
+  name: string;
+  layer: "RULE" | "TOOL" | "TEMPLATE" | "VALIDATOR" | "TEST";
+  action: string;
+  execute: (state: any) => Promise<{ success: boolean; details?: any; error?: string }>;
+}
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: "payment" | "database" | "auth" | "api" | "feature";
+  triggerIntents: string[];
+  steps: {
+    id: string;
+    name: string;
+    layer: "RULE" | "TOOL" | "TEMPLATE" | "VALIDATOR" | "TEST";
+    action: string;
+  }[];
+}
+
+export interface WorkflowExecutionResult {
+  workflowId: string;
+  success: boolean;
+  completedSteps: string[];
+  failedStep?: string;
+  generatedFiles: { path: string; description: string }[];
+  validatorReports: ValidatorReport[];
+  diffs: { file: string; diff: string }[];
+  errors: string[];
+  userApprovalRequired: boolean;
+  riskLevel: RiskLevel;
+}
+

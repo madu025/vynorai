@@ -471,6 +471,71 @@ async function runTests() {
   const goodReport = validateDatabaseSchema(goodSQL, { isMultiTenant: true });
   assert(goodReport.passed, "Enterprise production-grade database schema passed all 50 guardrails with 0 critical violations");
 
+  // ── TEST 17: 5-Layer Local Engineering Architecture ────────────────────────
+  console.log("\n🏗️ 17. TESTING 5-LAYER LOCAL ENGINEERING SYSTEM (Templates, Rules, Validators, Workflows, Tools)...");
+  const {
+    VYNOR_REGISTRY,
+    RULES_REGISTRY,
+    evaluateRules,
+    WORKFLOW_REGISTRY,
+    executeWorkflow,
+    runUnifiedValidators,
+    validateSecurity,
+    ExecutionTools,
+    executeVynorEngine,
+  } = await import("./src/services/templateVault.js");
+
+  // 1. Layer 1: Templates Registry
+  assert(VYNOR_REGISTRY.templates.count() >= 5, `Layer 1: Templates registry initialized with ${VYNOR_REGISTRY.templates.count()} templates`);
+  const payhereT = VYNOR_REGISTRY.templates.get("payhere-lkr-gateway");
+  assert(payhereT !== undefined, "Layer 1: Retrieved payhere-lkr-gateway golden template");
+
+  // 2. Layer 2: Rules Registry & Rejection of Money FLOAT
+  assert(VYNOR_REGISTRY.rules.count() >= 5, `Layer 2: Rules registry active with ${VYNOR_REGISTRY.rules.count()} engineering rules`);
+  const ruleReject = evaluateRules({
+    schema: "CREATE TABLE payments ( id VARCHAR(36), amount FLOAT );",
+  });
+  assert(!ruleReject.passed, "Layer 2: Local Rule Engine rejected FLOAT for financial column");
+  assert(ruleReject.violations.some((v: any) => v.ruleId === "db.never_use_float_for_money"), "Layer 2: Correctly matched 'never_use_float_for_money' rule violation");
+  assert(ruleReject.violations[0].suggestion?.includes("DECIMAL"), "Layer 2: Provided deterministic suggestion: DECIMAL(12,2)");
+
+  // 3. Layer 3: Validators Layer & Targeted Surgical Error Reporting
+  const secReport = validateSecurity('const secret = process.env.API_KEY || "change_this_in_production";');
+  assert(!secReport.passed, "Layer 3: Security validator detected insecure fallback secret");
+  assert(secReport.suggestions.length > 0, "Layer 3: Emitted targeted fix suggestions without needing full project context");
+
+  // 4. Layer 4: Workflows Engine
+  assert(WORKFLOW_REGISTRY["add-payment"] !== undefined, "Layer 4: 'add-payment' workflow registered");
+  assert(WORKFLOW_REGISTRY["add-database-table"] !== undefined, "Layer 4: 'add-database-table' workflow registered");
+  assert(WORKFLOW_REGISTRY["add-database-table"].steps.length === 12, "Layer 4: 'add-database-table' workflow has all 12 deterministic engineering steps");
+
+  // 5. Layer 5: Execution Tools (Filesystem, Database, Git diff, Testing)
+  const layer5Files: Record<string, string> = {
+    "src/index.ts": 'console.log("Hello Vynor");\n',
+  };
+  const updatedFiles = ExecutionTools.filesystem.writeFile(layer5Files, "src/config.ts", 'export const PORT = 3000;\n');
+  assert(updatedFiles["src/config.ts"] !== undefined, "Layer 5: Tool filesystem.writeFile executed");
+  const diffStr = ExecutionTools.git.computeDiff(layer5Files["src/index.ts"], 'console.log("Hello Vynor AI");\n');
+  assert(diffStr.includes("+ console.log(\"Hello Vynor AI\");"), "Layer 5: Tool git.computeDiff generated unified diff");
+
+  // 6. Master Orchestrator: Zero-Token Pipeline for 'PayHere payment add කරන්න'
+  const orchResult = await executeVynorEngine("PayHere payment add කරන්න", layer5Files, {
+    schemaSQL: goodSQL,
+  });
+  assert(orchResult.status === "SUCCESS", `Master Orchestrator completed with status SUCCESS: ${orchResult.message}`);
+  assert(orchResult.tokensConsumed === 0, "Master Orchestrator executed with exactly 0 LLM tokens!");
+  assert(orchResult.workflowId === "add-payment", "Master Orchestrator auto-selected 'add-payment' workflow");
+  assert(orchResult.diffs.length > 0, "Master Orchestrator generated file diffs ready for human approval");
+  assert(orchResult.userApprovalRequired === true, "Master Orchestrator gated high-risk financial workflow behind human approval");
+
+  // 7. Master Orchestrator: Surgical Pinpoint Repair on Schema Violation
+  const orchFailed = await executeVynorEngine("Orders table add කරන්න", layer5Files, {
+    schemaSQL: "CREATE TABLE bad_orders ( id VARCHAR(36), price FLOAT );",
+  });
+  assert(orchFailed.status === "VALIDATION_FAILED", "Master Orchestrator intercepted schema rule failure");
+  assert(orchFailed.surgicalFeedbackForLLM !== undefined, "Master Orchestrator generated pinpoint surgical feedback for AI repair");
+  assert(orchFailed.surgicalFeedbackForLLM!.violations.some((v: string) => v.includes("never_use_float_for_money")), "Surgical feedback pinpointed exact money rule violation");
+
   console.log("\n=================================================");
   console.log(`🏁 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log("=================================================");

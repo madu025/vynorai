@@ -76,6 +76,20 @@ export const INTENT_REGISTRY: IntentDefinition[] = [
     confidenceThreshold: 0.8,
   },
   {
+    id: "database.create_table",
+    patterns: [
+      "table add කරන්න",
+      "orders table add කරන්න",
+      "database table add කරන්න",
+      "table add",
+      "create table",
+      "database migration schema",
+      "prisma production schema",
+    ],
+    templateId: "prisma-production-schema",
+    confidenceThreshold: 0.75,
+  },
+  {
     id: "database.users_schema",
     patterns: [
       "users table sql schema",

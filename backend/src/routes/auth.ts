@@ -28,13 +28,47 @@ export async function requireAuth(req: Request, res: Response, next: Function) {
   }
 }
 
-// Register
-authRouter.post("/register", async (req: Request, res: Response) => {
+import { authRateLimiter } from "../middleware/security.js";
+
+// Helper to verify Cloudflare Turnstile token if configured
+async function verifyTurnstileToken(token?: string, remoteIp?: string): Promise<boolean> {
+  const secretKey = process.env.TURNSTILE_SECRET_KEY;
+  // If not configured in environment, allow to pass smoothly (doesn't break existing dev/prod)
+  if (!secretKey) return true;
+  if (!token) return false;
+
   try {
-    const { email, password, name } = req.body;
+    const formData = new URLSearchParams();
+    formData.append("secret", secretKey);
+    formData.append("response", token);
+    if (remoteIp) formData.append("remoteip", remoteIp);
+
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: formData,
+    });
+    const outcome = await res.json() as { success: boolean };
+    return outcome.success === true;
+  } catch (err) {
+    console.error("[Turnstile] Verification failed with error:", err);
+    return false;
+  }
+}
+
+// Register
+authRouter.post("/register", authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email, password, name, turnstileToken } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    // Verify Turnstile bot protection if token/secret present
+    const clientIp = req.headers["cf-connecting-ip"] as string || req.ip;
+    const isHuman = await verifyTurnstileToken(turnstileToken, clientIp);
+    if (!isHuman) {
+      return res.status(400).json({ error: "Security check failed. Please verify you are human." });
     }
 
     const existingUser = await dbGet("SELECT id FROM users WHERE email = ?", [email.toLowerCase().trim()]);
@@ -69,8 +103,8 @@ authRouter.post("/register", async (req: Request, res: Response) => {
   }
 });
 
-// Login
-authRouter.post("/login", async (req: Request, res: Response) => {
+// Login (with Rate Limiting against Brute-Force)
+authRouter.post("/login", authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 

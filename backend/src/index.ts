@@ -11,9 +11,12 @@ import { proxyRouter } from "./routes/proxy.js";
 import { adminRouter } from "./routes/admin.js";
 import { memoryRouter } from "./routes/memory.js";
 
+import { securityHeadersMiddleware } from "./middleware/security.js";
+
 // ─── Main API App (Port: config.port) ─────────────────────────────────────────
 const app = express();
 
+app.use(securityHeadersMiddleware);
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -47,6 +50,7 @@ const adminApp = express();
 
 // Restrict admin CORS to same-origin / configured admin origin only
 const adminOrigin = process.env.ADMIN_ORIGIN || false; // false = same-origin only
+adminApp.use(securityHeadersMiddleware);
 adminApp.use(cors({
   origin: adminOrigin,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

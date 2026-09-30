@@ -145,6 +145,10 @@
               <button type="button" class="eye-btn" id="eye-toggle" onclick="togglePassword()">Show</button>
             </div>
           </div>
+          <div class="field" id="turnstile-field" style="display:none; margin-top: 12px; margin-bottom: 8px;">
+            <!-- Cloudflare Turnstile bot verification widget container -->
+            <div id="turnstile-container" class="cf-turnstile" data-sitekey="0x4AAAAAAAxxxxSAMPLE" data-theme="dark" style="margin: 0 auto;"></div>
+          </div>
           <a href="#" class="forgot-link" id="forgot-link" onclick="handleForgot(event)">Forgot password?</a>
           <button type="submit" class="submit-btn" id="submit-btn">
             <span id="btn-label">Sign In to VynorAI</span>
@@ -174,6 +178,8 @@
       document.getElementById('auth-subtitle').textContent = isReg ? 'Start with 50,000 free tokens - no credit card needed' : 'Sign in to continue to VynorAI';
       document.getElementById('btn-label').textContent = isReg ? 'Create Free Account' : 'Sign In to VynorAI';
       document.getElementById('forgot-link').style.display = isReg ? 'none' : '';
+      var turnstileField = document.getElementById('turnstile-field');
+      if (turnstileField) turnstileField.style.display = isReg ? 'block' : 'none';
       document.getElementById('inp-password').autocomplete = isReg ? 'new-password' : 'current-password';
       clearAlerts();
     }

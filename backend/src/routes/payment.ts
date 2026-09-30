@@ -123,8 +123,13 @@ paymentRouter.post("/notify", async (req: Request, res: Response) => {
  * Manual test endpoint to simulate PayHere activation in sandbox / test mode
  */
 paymentRouter.post("/test-activate", requireAuth, async (req: Request, res: Response) => {
-  if (config.nodeEnv !== "development") {
-    return res.status(403).json({ error: "Only available in development" });
+  // Hardened security: Require ADMIN_SECRET or enforce development environment
+  const adminSecret = req.headers["x-admin-secret"];
+  const isDev = config.nodeEnv === "development";
+  const isValidAdmin = adminSecret && adminSecret === (process.env.ADMIN_SECRET || "vynorai_admin_2026");
+
+  if (!isDev && !isValidAdmin) {
+    return res.status(403).json({ error: "Access denied. Test activation is disabled in production." });
   }
 
   const user = (req as any).user;

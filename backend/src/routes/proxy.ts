@@ -84,10 +84,13 @@ proxyRouter.get("/models", async (req: Request, res: Response) => {
   }
 });
 
+import { proxyRateLimiter } from "../middleware/security.js";
+
 // ─── POST /v1/chat/completions ────────────────────────────────────────────────
 proxyRouter.post(
   "/chat/completions",
   requireValidSubscriber,
+  proxyRateLimiter,
   quotaGuard,
   async (req: Request, res: Response) => {
     try {
@@ -126,6 +129,7 @@ proxyRouter.post(
 proxyRouter.post(
   "/completions",
   requireValidSubscriber,
+  proxyRateLimiter,
   quotaGuard,
   async (req: Request, res: Response) => {
     try {

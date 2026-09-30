@@ -175,7 +175,7 @@ adminRouter.post("/users/:userId/grant-subscription", requireAdmin, async (req: 
   const durationDays = parseInt(days) || 30;
   const validUntil = new Date(Date.now() + durationDays * 86400000).toISOString();
   const planConfig = (PLANS as any)[plan];
-  const maxTokens = planConfig?.monthlyTokens || 15000000;
+  const maxTokens = planConfig?.monthlyTokens || 8_000_000;
 
   // Deactivate any currently active subscriptions for this user
   await dbRun("UPDATE subscriptions SET status = 'cancelled' WHERE user_id = ? AND status = 'active'", [userId]);

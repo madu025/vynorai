@@ -157,8 +157,17 @@ export async function handleChatCompletions(
     saveToCache(cacheKey, allChunks);
   }
 
+  // Extract exact provider usage if returned in stream / response
+  let realPromptTokens = 0;
+  let realCompletionTokens = 0;
+  for (const c of allChunks) {
+    if (c?.usage) {
+      if (typeof c.usage.prompt_tokens === "number") realPromptTokens = c.usage.prompt_tokens;
+      if (typeof c.usage.completion_tokens === "number") realCompletionTokens = c.usage.completion_tokens;
+    }
+  }
+
   const estimatedTokens = estimateInputTokens(messages);
-  // Estimate output tokens based on returned chunks
   let outputChars = 0;
   for (const c of allChunks) {
     if (typeof c === "string") outputChars += c.length;
@@ -166,12 +175,15 @@ export async function handleChatCompletions(
     else if (c?.choices?.[0]?.message?.content) outputChars += c.choices[0].message.content.length;
   }
   const estimatedOutputTokens = Math.max(1, Math.ceil(outputChars / 4));
-  const totalTokens = estimatedTokens + estimatedOutputTokens;
+
+  const finalInputTokens = realPromptTokens > 0 ? realPromptTokens : estimatedTokens;
+  const finalOutputTokens = realCompletionTokens > 0 ? realCompletionTokens : estimatedOutputTokens;
+  const totalTokens = finalInputTokens + finalOutputTokens;
 
   // Insert granular log
   dbRun(
     "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, ?, ?, 0)",
-    [uuidv4(), user.id, model, estimatedTokens, estimatedOutputTokens, totalTokens]
+    [uuidv4(), user.id, model, finalInputTokens, finalOutputTokens, totalTokens]
   ).catch(console.error);
 
   // Increment monthly ledger atomically

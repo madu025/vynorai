@@ -872,9 +872,9 @@
             <p style="color: var(--text-muted); font-size: 13px;">Test out VynorAI coding capabilities.</p>
 
             <ul class="feature-list">
-              <li><b>50,000</b> Tokens/month</li>
-              <li>50 Fast Requests/month</li>
-              <li>DeepSeek V3 Code Engine</li>
+              <li><b>100,000</b> Tokens/month (100K)</li>
+              <li>100 Fast Requests/month</li>
+              <li>DeepSeek V3 & Qwen 32B Code Engine</li>
               <li>Basic Slash Commands (/fix, /explain)</li>
               <li>Standard Latency Queue</li>
             </ul>
@@ -882,62 +882,62 @@
             <button class="btn btn-secondary" disabled style="opacity: 0.7; cursor: default;">Current Tier</button>
           </div>
 
-          <!-- 2. Starter Plan (LKR 1,500) -->
+          <!-- 2. Starter Plan (LKR 1,850) -->
           <div class="glass-card pricing-card">
             <span class="plan-badge" style="background: #00e5ff; color: #000;">Best Starter</span>
             <h3>Starter</h3>
-            <div class="price">රු. 1,500 <span>/ month</span></div>
+            <div class="price">රු. 1,850 <span>/ month</span></div>
             <p style="color: var(--text-muted); font-size: 13px;">Perfect for freelancers & everyday coding.</p>
 
             <ul class="feature-list">
-              <li><b>15,000,000</b> Tokens/month (15M)</li>
-              <li>5,000 Agent Requests/month</li>
-              <li><b>DeepSeek V3 + Qwen 2.5 Coder 32B</b></li>
+              <li><b>8,000,000</b> Tokens/month (8M)</li>
+              <li>2,500 Fast Coding Requests/month</li>
+              <li><b>Qwen 2.5 Coder 32B + DeepSeek V3</b></li>
               <li>Real-time Tab Autocomplete (FIM)</li>
               <li>All 9 Slash Commands</li>
               <li>Smart Caching (0-Token repeats)</li>
             </ul>
 
-            <button class="btn btn-primary" onclick="initiatePayhere('starter')">Get Starter • රු. 1,500</button>
+            <button class="btn btn-primary" onclick="initiatePayhere('starter')">Get Starter • රු. 1,850</button>
           </div>
 
-          <!-- 3. Pro Plan (LKR 3,500) -->
+          <!-- 3. Pro Plan (LKR 3,850) -->
           <div class="glass-card pricing-card featured">
             <span class="plan-badge">Most Popular</span>
             <h3>Pro</h3>
-            <div class="price">රු. 3,500 <span>/ month</span></div>
+            <div class="price">රු. 3,850 <span>/ month</span></div>
             <p style="color: var(--text-muted); font-size: 13px;">For professional developers & heavy codebases.</p>
 
             <ul class="feature-list">
-              <li><b>50,000,000</b> Tokens/month (50M)</li>
-              <li>20,000 Agent Requests/month</li>
+              <li><b>25,000,000</b> Tokens/month (25M)</li>
+              <li>7,500 High-Speed Requests/month</li>
               <li><b>DeepSeek R1 (Reasoning) + DeepSeek V3</b></li>
+              <li>Llama 3.3 70B + Gemini 2.5 Flash</li>
               <li>Full Agent Mode (Auto-apply edits)</li>
-              <li>Priority Routing (Fastest queue)</li>
+              <li>Priority Fast-Track Queue</li>
               <li>Full Codebase Semantic Indexing</li>
-              <li>Continuous Workspace Auto-healing</li>
             </ul>
 
-            <button class="btn btn-primary" onclick="initiatePayhere('pro')">Get Pro • රු. 3,500</button>
+            <button class="btn btn-primary" onclick="initiatePayhere('pro')">Get Pro • රු. 3,850</button>
           </div>
 
-          <!-- 4. Ultra Plan (LKR 7,500) -->
+          <!-- 4. Ultra Plan (LKR 7,900) -->
           <div class="glass-card pricing-card">
             <span class="plan-badge" style="background: var(--accent); color: #fff;">Power User</span>
             <h3>Ultra</h3>
-            <div class="price">රු. 7,500 <span>/ month</span></div>
+            <div class="price">රු. 7,900 <span>/ month</span></div>
             <p style="color: var(--text-muted); font-size: 13px;">For startup founders, agencies & power coders.</p>
 
             <ul class="feature-list">
-              <li><b>150,000,000</b> Tokens/month (150M)</li>
-              <li>99,999 High-speed Requests</li>
-              <li>All Premier Open Models (Llama 3.3 70B)</li>
-              <li>Ultra-low Latency Dedicated Channel</li>
+              <li><b>60,000,000</b> Tokens/month (60M)</li>
+              <li>20,000 Agent Requests/month</li>
+              <li>All Premier Models (Qwen 72B, DeepSeek R1, Llama 70B)</li>
+              <li>Dedicated Low-Latency Pipeline</li>
               <li>Multi-device Support (Up to 3 devices)</li>
-              <li>Team Priority Support</li>
+              <li>VIP Priority Support</li>
             </ul>
 
-            <button class="btn btn-secondary" onclick="initiatePayhere('ultra')" style="border: 1px solid var(--accent); color: #fff;">Get Ultra • රු. 7,500</button>
+            <button class="btn btn-secondary" onclick="initiatePayhere('ultra')" style="border: 1px solid var(--accent); color: #fff;">Get Ultra • රු. 7,900</button>
           </div>
         </div>
       </div>
@@ -1115,10 +1115,10 @@
         const monthly = data.monthlyUsage;
 
         const planNames = {
-          starter: 'Starter Plan (15M Tokens)',
-          pro: 'Pro Plan (50M Tokens)',
-          ultra: 'Ultra Plan (150M Tokens)',
-          free: 'Free Trial (50K Tokens)'
+          starter: 'Starter Plan (8M Tokens)',
+          pro: 'Pro Plan (25M Tokens)',
+          ultra: 'Ultra Plan (60M Tokens)',
+          free: 'Free Trial (100K Tokens)'
         };
 
         if (sub && sub.status === 'active') {
@@ -1443,16 +1443,16 @@
     let _pendingPlan = null;
     const PLAN_INFO = {
       starter: {
-        name: 'Starter Plan', price: 'රු. 1,500 / month', badge: 'Best Starter',
-        features: ['15M Tokens/month','5,000 Agent Requests','DeepSeek V3 + Qwen 2.5 Coder 32B','Real-time Tab Autocomplete','All 9 Slash Commands','Smart Caching']
+        name: 'Starter Plan', price: 'රු. 1,850 / month', badge: 'Best Starter',
+        features: ['8M Tokens/month','2,500 Fast Coding Requests','Qwen 2.5 Coder 32B + DeepSeek V3','Real-time Tab Autocomplete (FIM)','All 9 Slash Commands','Smart 0-Token Caching']
       },
       pro: {
-        name: 'Pro Plan', price: 'රු. 3,500 / month', badge: 'Most Popular',
-        features: ['50M Tokens/month','20,000 Agent Requests','DeepSeek R1 (Reasoning) + DeepSeek V3','Full Agent Mode','Priority Routing (Fastest queue)','Full Codebase Semantic Indexing']
+        name: 'Pro Plan', price: 'රු. 3,850 / month', badge: 'Most Popular',
+        features: ['25M Tokens/month','7,500 High-Speed Requests','DeepSeek R1 (Reasoning) + DeepSeek V3','Llama 3.3 70B + Gemini 2.5 Flash','Full Agent Mode','Priority Fast-Track Queue']
       },
       ultra: {
-        name: 'Ultra Plan', price: 'රු. 7,500 / month', badge: 'Power User',
-        features: ['150M Tokens/month','99,999 High-speed Requests','All Premier Open Models (Llama 3.3 70B)','Ultra-low Latency Dedicated Channel','Multi-device Support (Up to 3 devices)','Team Priority Support']
+        name: 'Ultra Plan', price: 'රු. 7,900 / month', badge: 'Power User',
+        features: ['60M Tokens/month','20,000 Agent Requests','All Premier Models (Qwen 72B, DeepSeek R1, Llama 70B)','Dedicated Low-Latency Pipeline','Multi-device Support (Up to 3 devices)','VIP Priority Support']
       }
     };
 

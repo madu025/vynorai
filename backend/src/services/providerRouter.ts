@@ -129,9 +129,11 @@ function buildAnthropicPayload(body: any, resolvedModel: string): any {
 
 function buildOpenAIPayload(body: any, resolvedModel: string): any {
   const { messages = [], ...rest } = body;
+  const isStream = body.stream !== false;
   return {
     ...rest,
     model: resolvedModel,
+    ...(isStream ? { stream_options: { include_usage: true } } : {}),
     messages: messages.map((msg: any) => ({
       ...msg,
       content: typeof msg.content === "string" ? compressCodeSnippet(msg.content) : msg.content,

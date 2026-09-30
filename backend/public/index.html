@@ -780,8 +780,18 @@
       loadDashboard();
     }
 
-    // Auto-check on load
-    window.addEventListener('DOMContentLoaded', loadDashboard);
+    // Auto-check on load & handle PayHere return status
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDashboard();
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('payment') === 'success') {
+        alert('🎉 Payment Successful! Your VynorAI plan is now active.');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (urlParams.get('payment') === 'cancel') {
+        alert('Payment was cancelled. You can try again at any time.');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    });
   </script>
 
 </body>

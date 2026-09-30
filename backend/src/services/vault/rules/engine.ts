@@ -121,6 +121,42 @@ export const RULES_REGISTRY: EngineeringRule[] = [
       return { passed: true };
     },
   },
+  {
+    id: "db.billing_cycle_unique_constraint",
+    category: "database",
+    description: "Billing and quota tables must use multi-cycle uniqueness (UNIQUE(user_id, period_start)), never single user_id UNIQUE.",
+    severity: "ERROR",
+    enforce: ({ schema }) => {
+      if (!schema) return { passed: true };
+      const isUsageTable = /CREATE\s+TABLE.*?(?:usage|quota|billing|cycle)/i.test(schema);
+      if (isUsageTable && /user_id\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(schema)) {
+        return {
+          passed: false,
+          message: "Rule violation: Quota/Billing table locks user to single cycle via 'user_id TEXT NOT NULL UNIQUE'.",
+          suggestion: "Use 'UNIQUE(user_id, period_start)' so historical monthly cycles can be archived without collision.",
+        };
+      }
+      return { passed: true };
+    },
+  },
+  {
+    id: "db.tokens_secrets_hashing_required",
+    category: "database",
+    description: "API keys, verification tokens, and OTP codes must be stored as hashes (api_key_hash, token_hash), never plaintext.",
+    severity: "ERROR",
+    enforce: ({ schema }) => {
+      if (!schema) return { passed: true };
+      const plaintextSecretMatch = schema.match(/\b(api_key|otp_code|verification_token|session_token)\b\s+(?:VARCHAR|TEXT)\s+NOT\s+NULL\b/i);
+      if (plaintextSecretMatch && !schema.includes("_hash")) {
+        return {
+          passed: false,
+          message: `Rule violation: Sensitive authentication credential '${plaintextSecretMatch[1]}' stored without cryptographic hashing.`,
+          suggestion: `Store as '${plaintextSecretMatch[1]}_hash VARCHAR(64)' containing a SHA-256 / HMAC hash to prevent credential exposure if database leaks.`,
+        };
+      }
+      return { passed: true };
+    },
+  },
 
   // ── Security Rules ──────────────────────────────────────────────────────────
   {

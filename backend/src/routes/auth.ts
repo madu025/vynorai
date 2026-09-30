@@ -104,8 +104,8 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
     const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
     await dbRun(
-      "INSERT INTO email_verifications (id, user_id, email, otp_code, otp_hash, token, token_hash, attempts, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
-      [uuidv4(), userId, email.toLowerCase().trim(), otpCode, otpHash, verifyToken, tokenHash, expiresAt]
+      "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, attempts, expires_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+      [uuidv4(), userId, email.toLowerCase().trim(), otpHash, tokenHash, expiresAt]
     );
 
     // Send verification email in background
@@ -273,10 +273,13 @@ authRouter.post("/send-verification", requireAuth, async (req: Request, res: Res
     const verifyToken = uuidv4().replace(/-/g, "");
     const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
+    const otpHash = crypto.createHash("sha256").update(otpCode).digest("hex");
+    const tokenHash = crypto.createHash("sha256").update(verifyToken).digest("hex");
+
     await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [user.id]);
     await dbRun(
-      "INSERT INTO email_verifications (id, user_id, email, otp_code, token, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [uuidv4(), user.id, user.email, otpCode, verifyToken, expiresAt]
+      "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, attempts, expires_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+      [uuidv4(), user.id, user.email, otpHash, tokenHash, expiresAt]
     );
 
     sendVerificationEmail(user.email, user.name || "", otpCode, verifyToken).catch(console.error);
@@ -288,7 +291,7 @@ authRouter.post("/send-verification", requireAuth, async (req: Request, res: Res
   }
 });
 
-// Verify Email with OTP
+// Verify Email with OTP (Hash-Only Verification & Attempt Limiter)
 authRouter.post("/verify-email", requireAuth, async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { otp } = req.body;
@@ -302,9 +305,9 @@ authRouter.post("/verify-email", requireAuth, async (req: Request, res: Response
     const inputOtpHash = crypto.createHash("sha256").update(otp.trim()).digest("hex");
     const record = await dbGet<any>(
       `SELECT * FROM email_verifications
-       WHERE user_id = ? AND (otp_hash = ? OR otp_code = ?) AND expires_at > ?
+       WHERE user_id = ? AND otp_hash = ? AND expires_at > ?
        ORDER BY created_at DESC LIMIT 1`,
-      [user.id, inputOtpHash, otp.trim(), new Date().toISOString()]
+      [user.id, inputOtpHash, new Date().toISOString()]
     );
 
     if (!record) {
@@ -325,7 +328,7 @@ authRouter.post("/verify-email", requireAuth, async (req: Request, res: Response
       severity: "INFO",
       actor: user.email,
       target: user.id,
-      details: "Email address verified via 6-digit OTP",
+      details: "Email address verified via 6-digit OTP hash",
       ipAddress: clientIp,
     });
 
@@ -336,15 +339,16 @@ authRouter.post("/verify-email", requireAuth, async (req: Request, res: Response
   }
 });
 
-// Verify Email via URL Link
+// Verify Email via URL Link (Hash-Only Verification)
 authRouter.get("/verify-email", async (req: Request, res: Response) => {
   const token = req.query.token as string;
   if (!token) return res.status(400).send("Verification token is required.");
 
   try {
+    const inputTokenHash = crypto.createHash("sha256").update(token.trim()).digest("hex");
     const record = await dbGet<any>(
-      `SELECT * FROM email_verifications WHERE token = ? AND expires_at > ? LIMIT 1`,
-      [token, new Date().toISOString()]
+      `SELECT * FROM email_verifications WHERE token_hash = ? AND expires_at > ? LIMIT 1`,
+      [inputTokenHash, new Date().toISOString()]
     );
 
     if (!record) {

@@ -82,9 +82,9 @@ export async function incrementMonthlyUsage(
   userId: string,
   tokensUsed: number,
   requestsUsed: number = 1
-): Promise<void> {
+): Promise<{ success: boolean; changes: number }> {
   const todayStr = new Date().toISOString().slice(0, 10);
-  await dbRun(
+  const result = await dbRun(
     `UPDATE monthly_usage 
      SET used_tokens = used_tokens + ?, 
          used_requests = used_requests + ?, 
@@ -92,6 +92,44 @@ export async function incrementMonthlyUsage(
      WHERE user_id = ? AND period_end >= ?`,
     [tokensUsed, requestsUsed, userId, todayStr]
   );
+  return { success: result.changes > 0, changes: result.changes };
+}
+
+/**
+ * Atomic quota verification & consumption.
+ * Eliminates race conditions during concurrent API bursts by combining quota check
+ * and token increment into a single atomic SQLite statement:
+ *   UPDATE monthly_usage
+ *   SET used_tokens = used_tokens + ?
+ *   WHERE user_id = ? AND period_end >= ? AND (max_tokens = 0 OR used_tokens + ? <= max_tokens);
+ */
+export async function tryConsumeQuotaAtomic(
+  userId: string,
+  tokensToConsume: number,
+  requestsToConsume: number = 1
+): Promise<{ allowed: boolean; reason?: string }> {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Ensure active billing cycle exists
+  await getOrInitMonthlyUsage(userId);
+
+  // Perform atomic check and update
+  const result = await dbRun(
+    `UPDATE monthly_usage 
+     SET used_tokens = used_tokens + ?, 
+         used_requests = used_requests + ?, 
+         updated_at = CURRENT_TIMESTAMP 
+     WHERE user_id = ? 
+       AND period_end >= ?
+       AND (max_tokens = 0 OR used_tokens + ? <= max_tokens)`,
+    [tokensToConsume, requestsToConsume, userId, todayStr, tokensToConsume]
+  );
+
+  if (result.changes === 0) {
+    return { allowed: false, reason: "Monthly token limit exceeded." };
+  }
+
+  return { allowed: true };
 }
 
 /**

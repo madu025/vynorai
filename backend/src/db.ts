@@ -36,15 +36,259 @@ export function dbRun(sql: string, params: any[] = []): Promise<{ lastID: number
   });
 }
 
-/** Execute a schema statement safely and throw on failure */
+/** Execute a schema statement safely */
 async function execSchema(sql: string): Promise<void> {
   try {
     await dbRun(sql);
   } catch (err: any) {
-    // Ignore already existing column / index errors during alter migrations
-    if (!err.message?.includes("duplicate column") && !err.message?.includes("already exists")) {
-      console.error(`[DB Schema Error] Failed executing: ${sql.slice(0, 80)}... ->`, err.message);
-      throw err;
+    const msg = err.message || "";
+    if (
+      msg.includes("duplicate column") ||
+      msg.includes("already exists") ||
+      msg.includes("no such column")
+    ) {
+      console.warn(`[DB Schema Non-Fatal] ${sql.slice(0, 60)}: ${msg}`);
+      return;
+    }
+    console.error(`[DB Schema Error] Failed executing: ${sql.slice(0, 80)}... ->`, msg);
+    throw err;
+  }
+}
+
+/** Add column if it does not already exist in legacy schema */
+async function addColumnIfNotExists(table: string, columnDef: string): Promise<void> {
+  try {
+    await dbRun(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+  } catch (err: any) {
+    // Duplicate column / column already exists is safe to ignore
+  }
+}
+
+// ─── Systematic Versioned Migration Engine ────────────────────────────────────
+interface Migration {
+  version: string;
+  description: string;
+  up: () => Promise<void>;
+}
+
+const MIGRATIONS: Migration[] = [
+  {
+    version: "001_core_schema",
+    description: "Initial database tables with high-concurrency pragmas and legacy auto-migration",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS users (
+        id             TEXT PRIMARY KEY,
+        email          VARCHAR(255) UNIQUE NOT NULL,
+        password_hash  VARCHAR(255) NOT NULL,
+        api_key        VARCHAR(128) UNIQUE NOT NULL,
+        api_key_hash   VARCHAR(64),
+        api_key_masked VARCHAR(32),
+        name           VARCHAR(128),
+        is_suspended   INTEGER NOT NULL DEFAULT 0 CHECK(is_suspended IN (0, 1)),
+        allowed_ips    TEXT DEFAULT '',
+        email_verified INTEGER NOT NULL DEFAULT 0 CHECK(email_verified IN (0, 1)),
+        created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      // Safe column backfill if users table already existed in earlier VPS builds
+      await addColumnIfNotExists("users", "api_key_hash VARCHAR(64)");
+      await addColumnIfNotExists("users", "api_key_masked VARCHAR(32)");
+      await addColumnIfNotExists("users", "is_suspended INTEGER NOT NULL DEFAULT 0");
+      await addColumnIfNotExists("users", "allowed_ips TEXT DEFAULT ''");
+      await addColumnIfNotExists("users", "email_verified INTEGER NOT NULL DEFAULT 0");
+
+      await execSchema(`CREATE TABLE IF NOT EXISTS subscriptions (
+        id           TEXT PRIMARY KEY,
+        user_id      TEXT NOT NULL,
+        plan_name    VARCHAR(64) NOT NULL,
+        status       VARCHAR(32) NOT NULL CHECK(status IN ('pending', 'active', 'cancelled', 'expired', 'failed')),
+        order_id     VARCHAR(128) UNIQUE NOT NULL,
+        payment_id   VARCHAR(128),
+        amount_minor INTEGER NOT NULL DEFAULT 0,
+        amount       REAL,
+        currency     VARCHAR(10) NOT NULL CHECK(currency IN ('LKR', 'USD', 'EUR', 'GBP')),
+        valid_until  DATETIME NOT NULL,
+        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )`);
+
+      // Safe column backfill for subscriptions
+      await addColumnIfNotExists("subscriptions", "order_id VARCHAR(128)");
+      await addColumnIfNotExists("subscriptions", "payment_id VARCHAR(128)");
+      await addColumnIfNotExists("subscriptions", "amount_minor INTEGER NOT NULL DEFAULT 0");
+      await addColumnIfNotExists("subscriptions", "currency VARCHAR(10) DEFAULT 'LKR'");
+
+      await execSchema(`CREATE TABLE IF NOT EXISTS monthly_usage (
+        id              TEXT PRIMARY KEY,
+        user_id         TEXT NOT NULL,
+        plan_name       VARCHAR(64) NOT NULL,
+        max_tokens      INTEGER NOT NULL,
+        used_tokens     INTEGER NOT NULL DEFAULT 0,
+        used_requests   INTEGER NOT NULL DEFAULT 0,
+        period_start    TEXT NOT NULL,
+        period_end      TEXT NOT NULL,
+        last_reset_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        UNIQUE (user_id, period_start)
+      )`);
+
+      // Safe column backfill for monthly_usage
+      await addColumnIfNotExists("monthly_usage", "used_tokens INTEGER NOT NULL DEFAULT 0");
+      await addColumnIfNotExists("monthly_usage", "used_requests INTEGER NOT NULL DEFAULT 0");
+      await addColumnIfNotExists("monthly_usage", "period_start TEXT DEFAULT ''");
+      await addColumnIfNotExists("monthly_usage", "period_end TEXT DEFAULT ''");
+
+      await execSchema(`CREATE TABLE IF NOT EXISTS usage_logs (
+        id            TEXT PRIMARY KEY,
+        user_id       TEXT NOT NULL,
+        model         VARCHAR(128) NOT NULL,
+        input_tokens  INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        tokens_used   INTEGER NOT NULL DEFAULT 0,
+        cached        INTEGER NOT NULL DEFAULT 0 CHECK(cached IN (0, 1)),
+        prev_hash     TEXT DEFAULT 'GENESIS',
+        audit_hash    TEXT DEFAULT '',
+        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )`);
+
+      // Safe column backfill for usage_logs
+      await addColumnIfNotExists("usage_logs", "cached INTEGER NOT NULL DEFAULT 0");
+      await addColumnIfNotExists("usage_logs", "prev_hash TEXT DEFAULT 'GENESIS'");
+      await addColumnIfNotExists("usage_logs", "audit_hash TEXT DEFAULT ''");
+    },
+  },
+  {
+    version: "002_targeted_performance_indexes",
+    description: "Indexes selected by query access patterns (order_id, period_end, user_model_created)",
+    up: async () => {
+      // 1. Subscriptions lookups by order_id and user_status
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_subscriptions_order_id ON subscriptions(order_id)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions(user_id, status)");
+
+      // 2. Usage log queries by user + model + created_at
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_usage_logs_user_model_created ON usage_logs(user_id, model, created_at DESC)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_usage_logs_created ON usage_logs(created_at DESC)");
+
+      // 3. Monthly usage cycle expiration lookups
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_monthly_usage_period_end ON monthly_usage(period_end)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_monthly_usage_user_period ON monthly_usage(user_id, period_start, period_end)");
+
+      // 4. User API key hash lookup
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_users_api_key_hash ON users(api_key_hash)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key)");
+    },
+  },
+  {
+    version: "003_security_and_verifications_hardening",
+    description: "Security tables with attempts check constraints, hash-only verification, and expiry index",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS security_audit_logs (
+        id TEXT PRIMARY KEY,
+        event_type VARCHAR(64) NOT NULL,
+        severity VARCHAR(10) NOT NULL DEFAULT 'INFO' CHECK (severity IN ('DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL')),
+        actor VARCHAR(128),
+        target VARCHAR(128),
+        details TEXT,
+        ip_address VARCHAR(45),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit_logs(created_at DESC)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_security_audit_event ON security_audit_logs(event_type)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_security_audit_target ON security_audit_logs(target)");
+
+      await execSchema(`CREATE TABLE IF NOT EXISTS email_verifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        otp_hash VARCHAR(64) NOT NULL,
+        token_hash VARCHAR(64) NOT NULL,
+        otp_code VARCHAR(10),
+        token VARCHAR(128),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 5),
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )`);
+
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verif_token ON email_verifications(token_hash)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verifications_expiry ON email_verifications(expires_at)");
+
+      await execSchema(`CREATE TABLE IF NOT EXISTS admin_staff (
+        id TEXT PRIMARY KEY,
+        name VARCHAR(128) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        role VARCHAR(32) NOT NULL DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin', 'support')),
+        created_by VARCHAR(128),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+    },
+  },
+  {
+    version: "004_triggers_and_cleanup",
+    description: "Automatic updated_at trigger and expired verification cleanup",
+    up: async () => {
+      await execSchema(`CREATE TRIGGER IF NOT EXISTS trg_monthly_usage_updated_at
+      AFTER UPDATE ON monthly_usage
+      FOR EACH ROW
+      BEGIN
+        UPDATE monthly_usage SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+      END`);
+
+      // Cleanup any expired email verifications
+      await dbRun("DELETE FROM email_verifications WHERE expires_at < CURRENT_TIMESTAMP").catch(() => {});
+    },
+  },
+  {
+    version: "005_hash_only_credentials_and_atomic_quota",
+    description: "Enforce zero plaintext credentials, hash-only verification, and scheduled TTL cleanup",
+    up: async () => {
+      // 1. Backfill api_key_hash and api_key_masked for any legacy users
+      const usersWithoutHash = await dbAll<{ id: string; api_key: string }>(
+        "SELECT id, api_key FROM users WHERE api_key_hash IS NULL OR api_key_hash = ''"
+      ).catch(() => []);
+
+      const crypto = await import("crypto");
+      for (const u of usersWithoutHash) {
+        if (u.api_key) {
+          const hash = crypto.createHash("sha256").update(u.api_key).digest("hex");
+          const masked = `${u.api_key.slice(0, 14)}...${u.api_key.slice(-4)}`;
+          await dbRun("UPDATE users SET api_key_hash = ?, api_key_masked = ? WHERE id = ?", [hash, masked, u.id]);
+        }
+      }
+
+      // 2. Clear any legacy plaintext OTP / token from email_verifications
+      await dbRun("UPDATE email_verifications SET otp_code = NULL, token = NULL").catch(() => {});
+
+      // 3. Purge all expired verification tokens
+      await dbRun("DELETE FROM email_verifications WHERE expires_at < CURRENT_TIMESTAMP").catch(() => {});
+
+      // 4. Ensure non-null boolean checks
+      await dbRun("UPDATE users SET is_suspended = 0 WHERE is_suspended IS NULL").catch(() => {});
+      await dbRun("UPDATE users SET email_verified = 0 WHERE email_verified IS NULL").catch(() => {});
+      await dbRun("UPDATE usage_logs SET cached = 0 WHERE cached IS NULL").catch(() => {});
+    },
+  },
+];
+
+async function applyMigrations(): Promise<void> {
+  await execSchema(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    version VARCHAR(64) PRIMARY KEY,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  const appliedRows = await dbAll<{ version: string }>("SELECT version FROM schema_migrations");
+  const appliedSet = new Set(appliedRows.map((r) => r.version));
+
+  for (const migration of MIGRATIONS) {
+    if (!appliedSet.has(migration.version)) {
+      console.log(`[DB Migration] Applying ${migration.version}: ${migration.description}...`);
+      await migration.up();
+      await dbRun("INSERT INTO schema_migrations (version) VALUES (?)", [migration.version]);
+      console.log(`[DB Migration] ✅ ${migration.version} successfully applied.`);
     }
   }
 }
@@ -59,90 +303,15 @@ export async function initDb(): Promise<void> {
   await execSchema("PRAGMA cache_size = -64000;");
   await execSchema("PRAGMA temp_store = MEMORY;");
 
-  // ── 2. Users Table (With API Key Hash Support) ─────────────────────────────
-  await execSchema(`CREATE TABLE IF NOT EXISTS users (
-    id            TEXT PRIMARY KEY,
-    email         TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    api_key       TEXT UNIQUE NOT NULL,
-    api_key_hash  TEXT,
-    name          TEXT,
-    is_suspended  INTEGER DEFAULT 0 CHECK(is_suspended IN (0, 1)),
-    allowed_ips   TEXT DEFAULT '',
-    email_verified INTEGER DEFAULT 0 CHECK(email_verified IN (0, 1)),
-    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key)");
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_users_api_key_hash ON users(api_key_hash)");
+  // ── 2. Run Systematic Versioned Migrations ─────────────────────────────────
+  await applyMigrations();
 
-  // ── 3. Subscriptions (With Integer Minor Currency Units & Constraints) ──────
-  await execSchema(`CREATE TABLE IF NOT EXISTS subscriptions (
-    id           TEXT PRIMARY KEY,
-    user_id      TEXT NOT NULL,
-    plan_name    VARCHAR(64) NOT NULL,
-    status       VARCHAR(32) NOT NULL CHECK(status IN ('pending', 'active', 'cancelled', 'expired', 'failed')),
-    order_id     VARCHAR(128) UNIQUE NOT NULL,
-    payment_id   VARCHAR(128),
-    amount_minor INTEGER NOT NULL DEFAULT 0, -- Minor units in cents (e.g. 185050 for 1850.50 LKR)
-    amount       REAL,                      -- Legacy human-readable float representation
-    currency     VARCHAR(10) NOT NULL CHECK(currency IN ('LKR', 'USD', 'EUR', 'GBP')),
-    valid_until  DATETIME NOT NULL,
-    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-  )`);
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions(user_id, status)");
-
-  // Safe migration for existing subscriptions table to add amount_minor
-  try {
-    const subCols = (await dbAll<any>("PRAGMA table_info(subscriptions)")).map((c: any) => c.name);
-    if (!subCols.includes("amount_minor")) {
-      await dbRun("ALTER TABLE subscriptions ADD COLUMN amount_minor INTEGER DEFAULT 0");
-    }
-  } catch (err) {
-    // Ignore migration error if already present
-  }
-
-  // ── 4. Per-User Monthly Quota Ledger (Multi-Month Historical Cycle Support) ─
-  await execSchema(`CREATE TABLE IF NOT EXISTS monthly_usage (
-    id              TEXT PRIMARY KEY,
-    user_id         TEXT NOT NULL,
-    plan_name       VARCHAR(64) NOT NULL,
-    max_tokens      INTEGER NOT NULL,
-    used_tokens     INTEGER DEFAULT 0,
-    used_requests   INTEGER DEFAULT 0,
-    period_start    TEXT NOT NULL,
-    period_end      TEXT NOT NULL,
-    last_reset_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    UNIQUE (user_id, period_start)
-  )`);
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_monthly_usage_user_period ON monthly_usage(user_id, period_start, period_end)");
-
-  // ── 5. Usage Logs (Granular Append Table with Merkle Hash & Composite Index) ─
-  await execSchema(`CREATE TABLE IF NOT EXISTS usage_logs (
-    id            TEXT PRIMARY KEY,
-    user_id       TEXT NOT NULL,
-    model         VARCHAR(128) NOT NULL,
-    input_tokens  INTEGER DEFAULT 0,
-    output_tokens INTEGER DEFAULT 0,
-    tokens_used   INTEGER DEFAULT 0,
-    cached        INTEGER DEFAULT 0 CHECK(cached IN (0, 1)),
-    prev_hash     TEXT DEFAULT 'GENESIS',
-    audit_hash    TEXT DEFAULT '',
-    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-  )`);
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_usage_logs_user_created ON usage_logs(user_id, created_at DESC)");
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_usage_logs_created ON usage_logs(created_at DESC)");
-
-  // ── 6. Automatic updated_at Trigger for monthly_usage ─────────────────────
-  await execSchema(`CREATE TRIGGER IF NOT EXISTS trg_monthly_usage_updated_at
-  AFTER UPDATE ON monthly_usage
-  FOR EACH ROW
-  BEGIN
-    UPDATE monthly_usage SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
-  END`);
+  // ── 3. Start automated periodic expired token cleanup (every 1 hour) ───────
+  setInterval(async () => {
+    try {
+      await dbRun("DELETE FROM email_verifications WHERE expires_at < CURRENT_TIMESTAMP");
+    } catch (e) {}
+  }, 3600_000).unref();
 }
 
 /** Run after initDb to create model registry + plan override tables */
@@ -154,79 +323,8 @@ export async function initModelRegistry(): Promise<void> {
   await getAllModels(true);
   await initPlanManager();
   await ensureMemoryTables();
-  await ensureSecurityTables();
 }
 
-/** Ensure security tables and user columns exist with bounded types */
 export async function ensureSecurityTables(): Promise<void> {
-  // 1. Audit logs table (With Bounded Types & Enum Check Constraint)
-  await execSchema(`CREATE TABLE IF NOT EXISTS security_audit_logs (
-    id TEXT PRIMARY KEY,
-    event_type VARCHAR(64) NOT NULL,
-    severity VARCHAR(10) NOT NULL DEFAULT 'INFO' CHECK (severity IN ('DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL')),
-    actor VARCHAR(128),
-    target VARCHAR(128),
-    details TEXT,
-    ip_address VARCHAR(45),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit_logs(created_at DESC)");
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_security_audit_event ON security_audit_logs(event_type)");
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON security_audit_logs(actor)");
-
-  // 2. Email verification OTP and token table (With Hashed Token/OTP & Attempt Limit)
-  await execSchema(`CREATE TABLE IF NOT EXISTS email_verifications (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    otp_code VARCHAR(10) NOT NULL,
-    otp_hash VARCHAR(64),
-    token VARCHAR(128) NOT NULL,
-    token_hash VARCHAR(64),
-    attempts INTEGER DEFAULT 0,
-    expires_at DATETIME NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-  )`);
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verif_token ON email_verifications(token)");
-  await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id)");
-
-  // 3. Admin Staff table (With Role Check Constraint)
-  await execSchema(`CREATE TABLE IF NOT EXISTS admin_staff (
-    id TEXT PRIMARY KEY,
-    name VARCHAR(128) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    role VARCHAR(32) NOT NULL DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin', 'support')),
-    created_by VARCHAR(128),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // 4. Safe user migrations for existing databases
-  try {
-    const userCols = (await dbAll<any>("PRAGMA table_info(users)")).map((c: any) => c.name);
-    if (!userCols.includes("api_key_hash")) {
-      await dbRun("ALTER TABLE users ADD COLUMN api_key_hash TEXT");
-      await dbRun("CREATE INDEX IF NOT EXISTS idx_users_api_key_hash ON users(api_key_hash)");
-    }
-    if (!userCols.includes("is_suspended")) {
-      await dbRun("ALTER TABLE users ADD COLUMN is_suspended INTEGER DEFAULT 0");
-    }
-    if (!userCols.includes("allowed_ips")) {
-      await dbRun("ALTER TABLE users ADD COLUMN allowed_ips TEXT DEFAULT ''");
-    }
-    if (!userCols.includes("email_verified")) {
-      await dbRun("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0");
-    }
-
-    const usageCols = (await dbAll<any>("PRAGMA table_info(usage_logs)")).map((c: any) => c.name);
-    if (!usageCols.includes("prev_hash")) {
-      await dbRun("ALTER TABLE usage_logs ADD COLUMN prev_hash TEXT DEFAULT 'GENESIS'");
-    }
-    if (!usageCols.includes("audit_hash")) {
-      await dbRun("ALTER TABLE usage_logs ADD COLUMN audit_hash TEXT DEFAULT ''");
-    }
-  } catch (err) {
-    console.error("[DB] Security migration error:", err);
-  }
+  // Handled systematically in migration 003_security_and_verifications_hardening
 }

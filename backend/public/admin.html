@@ -1,0 +1,463 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>VynorAI Admin Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a27;--border:#2a2a3d;
+  --accent:#7c5cfc;--accent2:#a78bfa;--accent3:#06d6a0;
+  --warn:#f59e0b;--danger:#ef4444;--success:#10b981;
+  --text:#e2e8f0;--muted:#64748b;--card:#13131f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+.header{background:linear-gradient(135deg,#0a0a1a 0%,#1a0a3a 100%);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:64px;position:sticky;top:0;z-index:100;backdrop-filter:blur(20px)}
+.logo{font-size:1.3rem;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header-right{display:flex;gap:1rem;align-items:center}
+.secret-input{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.4rem .8rem;color:var(--text);font-size:.8rem;width:220px;font-family:'JetBrains Mono',monospace}
+.btn{padding:.5rem 1.2rem;border-radius:8px;border:none;cursor:pointer;font-size:.85rem;font-weight:600;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#a855f7);color:#fff}
+.btn-primary:hover{opacity:.85;transform:translateY(-1px)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{opacity:.85}
+.btn-success{background:var(--success);color:#fff}
+.btn-success:hover{opacity:.85}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 64px)}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:1.5rem 0}
+.nav-item{display:flex;align-items:center;gap:.75rem;padding:.7rem 1.5rem;cursor:pointer;color:var(--muted);font-size:.9rem;font-weight:500;transition:all .2s;border-left:3px solid transparent}
+.nav-item:hover{color:var(--text);background:var(--bg3)}
+.nav-item.active{color:var(--accent2);background:rgba(124,92,252,.08);border-left-color:var(--accent)}
+.nav-icon{font-size:1.1rem;width:20px;text-align:center}
+.main{padding:2rem;overflow-y:auto}
+.page{display:none}.page.active{display:block}
+h1{font-size:1.6rem;font-weight:700;margin-bottom:.5rem}
+.subtitle{color:var(--muted);font-size:.9rem;margin-bottom:2rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-bottom:2rem}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.2rem;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent3))}
+.stat-label{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem}
+.stat-value{font-size:1.8rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-value.green{color:var(--success)}
+.stat-value.purple{color:var(--accent2)}
+.stat-value.amber{color:var(--warn)}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:1.5rem}
+.panel-header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.panel-title{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:.5rem}
+.panel-body{padding:1.5rem}
+.plan-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.2rem}
+.plan-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1.3rem;transition:border-color .2s}
+.plan-card:hover{border-color:var(--accent)}
+.plan-name{font-size:1rem;font-weight:700;margin-bottom:.3rem;display:flex;align-items:center;gap:.5rem}
+.badge{padding:.2rem .6rem;border-radius:20px;font-size:.7rem;font-weight:600}
+.badge-free{background:rgba(100,116,139,.2);color:var(--muted)}
+.badge-starter{background:rgba(6,214,160,.15);color:var(--accent3)}
+.badge-pro{background:rgba(124,92,252,.2);color:var(--accent2)}
+.badge-ultra{background:rgba(245,158,11,.15);color:var(--warn)}
+.plan-price{font-size:1.5rem;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--accent2);margin:.5rem 0}
+.plan-meta{font-size:.8rem;color:var(--muted);line-height:1.6}
+.plan-actions{margin-top:1rem;display:flex;gap:.5rem}
+.field-group{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:1rem}
+label{font-size:.8rem;color:var(--muted);display:block;margin-bottom:.3rem}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.5rem .8rem;color:var(--text);font-size:.85rem;font-family:'Inter',sans-serif;transition:border-color .2s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;font-size:.8rem}
+.form-row{margin-bottom:1rem}
+.model-table{width:100%;border-collapse:collapse}
+.model-table th{text-align:left;padding:.6rem 1rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border)}
+.model-table td{padding:.7rem 1rem;font-size:.85rem;border-bottom:1px solid rgba(42,42,61,.5)}
+.model-table tr:hover td{background:rgba(124,92,252,.04)}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:.4rem}
+.status-dot.on{background:var(--success);box-shadow:0 0 6px var(--success)}
+.status-dot.off{background:var(--muted)}
+.tag{padding:.15rem .5rem;border-radius:4px;font-size:.7rem;font-weight:600;background:rgba(124,92,252,.15);color:var(--accent2)}
+.alert{padding:.8rem 1.2rem;border-radius:8px;font-size:.85rem;margin-bottom:1rem;display:flex;align-items:center;gap:.6rem}
+.alert-success{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:var(--success)}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--danger)}
+.alert-info{background:rgba(124,92,252,.1);border:1px solid rgba(124,92,252,.3);color:var(--accent2)}
+#toast{position:fixed;bottom:2rem;right:2rem;z-index:999;display:flex;flex-direction:column;gap:.5rem}
+.toast{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:.9rem 1.3rem;font-size:.85rem;animation:slideIn .3s ease;max-width:320px;display:flex;align-items:center;gap:.7rem}
+.toast.ok{border-left:3px solid var(--success)}
+.toast.err{border-left:3px solid var(--danger)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.divider{height:1px;background:var(--border);margin:1.5rem 0}
+.loading{color:var(--muted);text-align:center;padding:3rem;font-size:.9rem}
+.ctx-bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:.4rem}
+.ctx-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent3));transition:width .5s ease}
+.rag-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:.8rem}
+.rag-card code{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--accent2)}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">⚡ VynorAI Admin</div>
+  <div class="header-right">
+    <input class="secret-input" type="password" id="adminSecret" placeholder="Admin Secret Key" value="vynorai_admin_2026"/>
+    <button class="btn btn-primary" onclick="loadAll()">Connect</button>
+  </div>
+</div>
+<div class="layout">
+  <nav class="sidebar">
+    <div class="nav-item active" onclick="showPage('overview')" id="nav-overview">
+      <span class="nav-icon">📊</span>Overview
+    </div>
+    <div class="nav-item" onclick="showPage('plans')" id="nav-plans">
+      <span class="nav-icon">📦</span>Plans & Pricing
+    </div>
+    <div class="nav-item" onclick="showPage('models')" id="nav-models">
+      <span class="nav-icon">🤖</span>Model Registry
+    </div>
+    <div class="nav-item" onclick="showPage('rag')" id="nav-rag">
+      <span class="nav-icon">🔍</span>Smart RAG
+    </div>
+    <div class="nav-item" onclick="showPage('system')" id="nav-system">
+      <span class="nav-icon">⚙️</span>System
+    </div>
+  </nav>
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <div class="page active" id="page-overview">
+      <h1>Overview</h1>
+      <p class="subtitle">Real-time system health and usage stats</p>
+      <div class="cards" id="overviewCards">
+        <div class="loading">Loading stats...</div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">⚡ Circuit Breakers</div><button class="btn btn-ghost" onclick="loadOverview()">↻ Refresh</button></div>
+        <div class="panel-body" id="circuitTable"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- PLANS -->
+    <div class="page" id="page-plans">
+      <h1>Plans & Pricing</h1>
+      <p class="subtitle">Edit plan prices, token limits, and features live — no restart needed</p>
+      <div class="alert alert-info">💡 Changes apply within 30 seconds automatically. Click "Save" to update.</div>
+      <div class="plan-grid" id="planGrid"><div class="loading">Loading plans...</div></div>
+    </div>
+
+    <!-- MODELS -->
+    <div class="page" id="page-models">
+      <h1>Model Registry</h1>
+      <p class="subtitle">Add, update, or disable models instantly — zero restart</p>
+      <div style="display:flex;gap:1rem;margin-bottom:1.5rem">
+        <button class="btn btn-primary" onclick="showAddModel()">+ Add Model</button>
+        <button class="btn btn-ghost" onclick="loadModels()">↻ Refresh</button>
+      </div>
+      <div id="addModelForm" style="display:none" class="panel">
+        <div class="panel-header"><div class="panel-title">➕ Add / Update Model</div></div>
+        <div class="panel-body">
+          <div class="field-group">
+            <div><label>Alias ID</label><input id="m_id" placeholder="gemini-2.5-pro"/></div>
+            <div><label>OpenRouter ID</label><input id="m_openrouter" placeholder="google/gemini-2.5-pro"/></div>
+          </div>
+          <div class="field-group">
+            <div><label>Display Name</label><input id="m_name" placeholder="Gemini 2.5 Pro (256k)"/></div>
+            <div><label>Context Window (tokens)</label><input id="m_ctx" type="number" placeholder="256000"/></div>
+          </div>
+          <div class="field-group">
+            <div><label>Min Plan</label>
+              <select id="m_plan"><option value="free">Free</option><option value="starter">Starter</option><option value="pro">Pro</option><option value="ultra">Ultra</option></select>
+            </div>
+            <div><label>Enabled</label>
+              <select id="m_enabled"><option value="1">✅ Enabled</option><option value="0">❌ Disabled</option></select>
+            </div>
+          </div>
+          <div class="field-group">
+            <div><label>Default Chat?</label><select id="m_default_chat"><option value="0">No</option><option value="1">Yes</option></select></div>
+            <div><label>Default Autocomplete?</label><select id="m_default_ac"><option value="0">No</option><option value="1">Yes</option></select></div>
+          </div>
+          <button class="btn btn-primary" onclick="saveModel()">Save Model</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('addModelForm').style.display='none'" style="margin-left:.5rem">Cancel</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🤖 Registered Models</div></div>
+        <div class="panel-body" style="padding:0">
+          <table class="model-table" id="modelTable">
+            <thead><tr><th>Status</th><th>Alias</th><th>OpenRouter ID</th><th>Context</th><th>Min Plan</th><th>Actions</th></tr></thead>
+            <tbody id="modelBody"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RAG -->
+    <div class="page" id="page-rag">
+      <h1>Smart RAG Engine</h1>
+      <p class="subtitle">TF-IDF based code retrieval — inject only relevant chunks per query</p>
+      <div class="cards">
+        <div class="stat-card">
+          <div class="stat-label">Strategy</div>
+          <div class="stat-value purple" style="font-size:1rem">TF-IDF + Exact Bonus</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Max Chunks (Ultra)</div>
+          <div class="stat-value green">8</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Chunk Size</div>
+          <div class="stat-value amber">80 lines</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Token Reduction</div>
+          <div class="stat-value green">~85-97%</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🔬 RAG Context Limits per Plan</div></div>
+        <div class="panel-body">
+          <table class="model-table">
+            <thead><tr><th>Plan</th><th>Context Window</th><th>Top-K Chunks</th><th>Msg Cap</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge badge-free">Free</span></td><td>32k tokens</td><td>3 chunks</td><td>8k/msg</td></tr>
+              <tr><td><span class="badge badge-starter">Starter</span></td><td>32k tokens</td><td>5 chunks</td><td>8k/msg</td></tr>
+              <tr><td><span class="badge badge-pro">Pro</span></td><td>128k tokens</td><td>6 chunks</td><td>32k/msg</td></tr>
+              <tr><td><span class="badge badge-ultra">Ultra</span></td><td>256k tokens</td><td>8 chunks</td><td>64k/msg</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🧪 RAG Pipeline</div></div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;text-align:center;font-size:.8rem">
+            <div class="rag-card"><div style="font-size:1.5rem">📄</div><div style="margin-top:.4rem;font-weight:600">Extract Files</div><code>regex code blocks</code></div>
+            <div class="rag-card"><div style="font-size:1.5rem">✂️</div><div style="margin-top:.4rem;font-weight:600">Chunk</div><code>fn/class/80-line</code></div>
+            <div class="rag-card"><div style="font-size:1.5rem">📊</div><div style="margin-top:.4rem;font-weight:600">TF-IDF Score</div><code>+exact bonus</code></div>
+            <div class="rag-card"><div style="font-size:1.5rem">🏆</div><div style="margin-top:.4rem;font-weight:600">Top-K</div><code>plan-based K</code></div>
+            <div class="rag-card"><div style="font-size:1.5rem">💉</div><div style="margin-top:.4rem;font-weight:600">Inject</div><code>system msg</code></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SYSTEM -->
+    <div class="page" id="page-system">
+      <h1>System</h1>
+      <p class="subtitle">Cache management and system controls</p>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🗄️ Cache Controls</div></div>
+        <div class="panel-body" style="display:flex;gap:1rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="clearCache('models')">Clear Model Cache</button>
+          <button class="btn btn-ghost" onclick="clearCache('plans')">Clear Plan Cache</button>
+          <button class="btn btn-danger" onclick="clearCache('all')">Clear All Caches</button>
+        </div>
+      </div>
+      <div class="panel" id="systemHealth">
+        <div class="panel-header"><div class="panel-title">🏥 System Health</div><button class="btn btn-ghost" onclick="loadSystem()">↻ Refresh</button></div>
+        <div class="panel-body" id="systemHealthBody"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+<div id="toast"></div>
+
+<script>
+const API = '';
+let S = () => document.getElementById('adminSecret').value;
+
+async function api(method, path, body) {
+  try {
+    const r = await fetch(API + path, {
+      method,
+      headers: { 'x-admin-secret': S(), 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return await r.json();
+  } catch(e) { showToast('Connection error: ' + e.message, 'err'); return null; }
+}
+
+function showToast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  const d = document.createElement('div');
+  d.className = `toast ${type}`;
+  d.innerHTML = (type==='ok' ? '✅ ' : '❌ ') + msg;
+  t.appendChild(d);
+  setTimeout(() => d.remove(), 4000);
+}
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.getElementById('nav-' + id).classList.add('active');
+  if (id === 'overview') loadOverview();
+  if (id === 'plans')   loadPlans();
+  if (id === 'models')  loadModels();
+  if (id === 'system')  loadSystem();
+}
+
+function loadAll() { loadOverview(); }
+
+async function loadOverview() {
+  const [stats, health] = await Promise.all([
+    api('GET', '/admin/stats'),
+    api('GET', '/admin/health'),
+  ]);
+  if (!stats || !health) return;
+
+  document.getElementById('overviewCards').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value purple">${stats.totalUsers}</div></div>
+    <div class="stat-card"><div class="stat-label">Active (24h)</div><div class="stat-value green">${stats.activeUsers24h}</div></div>
+    <div class="stat-card"><div class="stat-label">Active Providers</div><div class="stat-value amber">${health.activeProviders?.length ?? 0}</div></div>
+    <div class="stat-card"><div class="stat-label">Models Available</div><div class="stat-value purple">${health.supportedModels ?? '—'}</div></div>
+  `;
+
+  const cb = health.circuitBreakers ?? [];
+  document.getElementById('circuitTable').innerHTML = cb.length === 0
+    ? '<p class="loading">No circuit breaker data</p>'
+    : `<table class="model-table"><thead><tr><th>Provider</th><th>State</th><th>Uptime</th><th>Avg Latency</th><th>Failures</th><th>Action</th></tr></thead><tbody>
+    ${cb.map(c => `<tr>
+      <td><strong>${c.provider}</strong></td>
+      <td><span class="status-dot ${c.state==='CLOSED'?'on':'off'}"></span>${c.state}</td>
+      <td>${c.uptimePct ?? 100}%</td>
+      <td>${c.avgLatencyMs ?? '—'}ms</td>
+      <td>${c.failures ?? 0}</td>
+      <td><button class="btn btn-ghost" style="padding:.3rem .7rem;font-size:.75rem" onclick="resetCircuit('${c.provider}')">Reset</button></td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function resetCircuit(provider) {
+  const r = await api('POST', `/admin/circuit/${provider}/reset`);
+  if (r?.ok) { showToast(`Circuit "${provider}" reset`); loadOverview(); }
+  else showToast('Failed', 'err');
+}
+
+async function loadPlans() {
+  const data = await api('GET', '/admin/plans');
+  if (!data) return;
+  const plans = Object.entries(data.plans).filter(([id]) => !id.includes('_'));
+  const BADGE = { free:'badge-free', starter:'badge-starter', pro:'badge-pro', ultra:'badge-ultra' };
+
+  document.getElementById('planGrid').innerHTML = plans.map(([id, p]) => `
+    <div class="plan-card" id="plan-card-${id}">
+      <div class="plan-name"><span class="badge ${BADGE[id]||'badge-free'}">${id.toUpperCase()}</span>${p.displayName}</div>
+      <div class="plan-price">LKR ${p.priceLKR.toLocaleString()}</div>
+      <div class="plan-meta">
+        Tokens: <strong>${(p.monthlyTokens/1e6).toFixed(1)}M</strong><br>
+        Requests: <strong>${p.monthlyRequests.toLocaleString()}</strong><br>
+        USD: <strong>$${p.priceUSD}</strong>
+      </div>
+      <div class="divider"></div>
+      <div class="form-row"><label>Price (LKR)</label><input id="pl_${id}_price_lkr" type="number" value="${p.priceLKR}"/></div>
+      <div class="form-row"><label>Price (USD)</label><input id="pl_${id}_price_usd" type="number" step="0.01" value="${p.priceUSD}"/></div>
+      <div class="form-row"><label>Monthly Tokens</label><input id="pl_${id}_tokens" type="number" value="${p.monthlyTokens}"/></div>
+      <div class="form-row"><label>Monthly Requests</label><input id="pl_${id}_reqs" type="number" value="${p.monthlyRequests}"/></div>
+      <div class="form-row"><label>Features (one per line)</label><textarea id="pl_${id}_features">${(p.features||[]).join('\n')}</textarea></div>
+      <div class="plan-actions">
+        <button class="btn btn-primary" onclick="savePlan('${id}')">💾 Save</button>
+        <button class="btn btn-ghost" onclick="resetPlan('${id}')">↩ Reset</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function savePlan(id) {
+  const fields = {
+    price_lkr:        parseFloat(document.getElementById(`pl_${id}_price_lkr`).value),
+    price_usd:        parseFloat(document.getElementById(`pl_${id}_price_usd`).value),
+    monthly_tokens:   parseInt(document.getElementById(`pl_${id}_tokens`).value),
+    monthly_requests: parseInt(document.getElementById(`pl_${id}_reqs`).value),
+    features:         document.getElementById(`pl_${id}_features`).value.split('\n').filter(Boolean),
+  };
+  const r = await api('PATCH', `/admin/plans/${id}`, fields);
+  if (r?.ok) showToast(`Plan "${id}" saved — live within 30s`);
+  else showToast(r?.error || 'Failed', 'err');
+}
+
+async function resetPlan(id) {
+  if (!confirm(`Reset "${id}" plan to hardcoded defaults?`)) return;
+  const r = await api('DELETE', `/admin/plans/${id}/override`);
+  if (r?.ok) { showToast(`Plan "${id}" reset`); loadPlans(); }
+  else showToast('Failed', 'err');
+}
+
+async function loadModels() {
+  const data = await api('GET', '/admin/models');
+  if (!data) return;
+  const BADGE = { free:'badge-free', starter:'badge-starter', pro:'badge-pro', ultra:'badge-ultra' };
+  const ctx = k => k >= 200000 ? '256k' : k >= 128000 ? '128k' : k >= 64000 ? '64k' : '32k';
+
+  document.getElementById('modelBody').innerHTML = data.models.map(m => `
+    <tr>
+      <td><span class="status-dot ${m.enabled?'on':'off'}"></span></td>
+      <td><strong>${m.id}</strong>${m.is_default_chat?'<span class="tag" style="margin-left:.4rem">CHAT</span>':''}${m.is_default_autocomplete?'<span class="tag" style="margin-left:.3rem">AUTO</span>':''}</td>
+      <td><code style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--muted)">${m.openrouter_id}</code></td>
+      <td><span class="tag">${ctx(m.context_window)}</span></td>
+      <td><span class="badge ${BADGE[m.min_plan]||'badge-free'}">${m.min_plan}</span></td>
+      <td style="display:flex;gap:.4rem">
+        ${m.enabled
+          ? `<button class="btn btn-danger" style="padding:.3rem .6rem;font-size:.75rem" onclick="toggleModel('${m.id}','disable')">Disable</button>`
+          : `<button class="btn btn-success" style="padding:.3rem .6rem;font-size:.75rem" onclick="toggleModel('${m.id}','enable')">Enable</button>`}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function toggleModel(id, action) {
+  const r = await api('POST', `/admin/models/${id}/${action}`);
+  if (r?.ok) { showToast(r.message); loadModels(); }
+  else showToast('Failed', 'err');
+}
+
+function showAddModel() {
+  const f = document.getElementById('addModelForm');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveModel() {
+  const body = {
+    id:               document.getElementById('m_id').value.trim(),
+    openrouter_id:    document.getElementById('m_openrouter').value.trim(),
+    display_name:     document.getElementById('m_name').value.trim(),
+    context_window:   parseInt(document.getElementById('m_ctx').value),
+    min_plan:         document.getElementById('m_plan').value,
+    enabled:          document.getElementById('m_enabled').value === '1',
+    is_default_chat:  document.getElementById('m_default_chat').value === '1',
+    is_default_autocomplete: document.getElementById('m_default_ac').value === '1',
+  };
+  if (!body.id || !body.openrouter_id || !body.display_name) { showToast('Fill all required fields','err'); return; }
+  const r = await api('PUT', '/admin/models', body);
+  if (r?.ok) { showToast(r.message); loadModels(); document.getElementById('addModelForm').style.display='none'; }
+  else showToast(r?.error || 'Failed', 'err');
+}
+
+async function loadSystem() {
+  const h = await api('GET', '/admin/health');
+  if (!h) return;
+  document.getElementById('systemHealthBody').innerHTML = `
+    <div class="cards" style="margin:0">
+      <div class="stat-card"><div class="stat-label">Version</div><div class="stat-value purple" style="font-size:1.1rem">${h.version}</div></div>
+      <div class="stat-card"><div class="stat-label">Active Providers</div><div class="stat-value green">${(h.activeProviders||[]).join(', ')}</div></div>
+      <div class="stat-card"><div class="stat-label">Models</div><div class="stat-value amber">${h.supportedModels}</div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="alert alert-info">Server: <strong>${h.timestamp}</strong></div>
+  `;
+}
+
+async function clearCache(type) {
+  if (type === 'all') {
+    await api('POST', '/admin/models/cache/clear');
+    await api('POST', '/admin/plans/cache/clear');
+    showToast('All caches cleared');
+  } else {
+    const r = await api('POST', `/admin/${type}/cache/clear`);
+    if (r?.ok) showToast(r.message); else showToast('Failed','err');
+  }
+}
+
+// Init
+window.onload = () => loadOverview();
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+name: VynorAI Continue Upstream Sync
+
+on:
+  schedule:
+    # Runs every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  sync:
+    name: Sync Upstream Continue Updates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout VynorAI Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add Upstream Remote and Fetch
+        run: |
+          git remote add upstream https://github.com/continuedev/continue.git || true
+          git fetch upstream main
+
+      - name: Create or Update Sync Branch
+        id: sync_branch
+        run: |
+          BRANCH_NAME="sync/upstream-continue"
+          git checkout -B $BRANCH_NAME
+          
+          # Attempt merge without auto-committing
+          if git merge upstream/main --no-commit --no-ff; then
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            git commit -m "chore: sync latest Continue upstream updates" || true
+            git push origin $BRANCH_NAME --force
+          else
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            echo "::warning ::Merge conflicts detected during upstream sync. Manual review required."
+          fi
+
+      - name: Create Pull Request
+        if: steps.sync_branch.outputs.has_conflicts == 'false'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: sync/upstream-continue
+          base: main
+          title: "🔄 [Automated] Sync Latest Continue Upstream Updates"
+          body: |
+            ### 🚀 Automated Upstream Sync
+            This PR pulls in the latest updates and bug fixes from `continuedev/continue:main`.
+
+            - [ ] Test build: `npm run build`
+            - [ ] Verify VynorAI Backend compatibility: `cd backend && npm run build`
+            - [ ] Test VS Code Extension packaging
+            - [ ] Merge to `main`
+          labels: |
+            dependencies
+            upstream-sync

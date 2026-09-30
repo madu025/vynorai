@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VynorAI - Premium AI Coding Assistant | Subscriptions & Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090b10;
+      --card-bg: rgba(18, 22, 34, 0.75);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(0, 229, 255, 0.3);
+      --primary: #00e5ff;
+      --primary-gradient: linear-gradient(135deg, #00e5ff 0%, #b026ff 100%);
+      --accent: #b026ff;
+      --text: #f0f4f8;
+      --text-muted: #8e9bb0;
+      --success: #00e676;
+      --warning: #ffab00;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Ambient Background Glow */
+    body::before {
+      content: "";
+      position: fixed;
+      top: -20%;
+      left: 20%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(0, 229, 255, 0.12) 0%, transparent 70%);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      bottom: -20%;
+      right: 10%;
+      width: 700px;
+      height: 700px;
+      background: radial-gradient(circle, rgba(176, 38, 255, 0.12) 0%, transparent 70%);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 8%;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+      background: rgba(9, 11, 16, 0.6);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--primary-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 22px;
+      color: #000;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+    }
+
+    .brand-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-name span {
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .container {
+      max-width: 1320px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      padding: 6px 14px;
+      border-radius: 50px;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: 46px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1px;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 span {
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Glass Cards */
+    .glass-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+    }
+
+    .glass-card:hover {
+      border-color: var(--border-glow);
+    }
+
+    /* Auth Forms */
+    .auth-box {
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    .auth-tabs {
+      display: flex;
+      margin-bottom: 24px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px;
+      border-radius: 12px;
+    }
+
+    .auth-tab-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .auth-tab-btn.active {
+      background: var(--card-bg);
+      color: var(--text);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 14px 16px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--primary-gradient);
+      color: #000;
+      box-shadow: 0 0 24px rgba(0, 229, 255, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 32px rgba(0, 229, 255, 0.5);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    /* Dashboard View */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 30px;
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .token-box {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px dashed rgba(0, 229, 255, 0.3);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 16px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--primary);
+      word-break: break-all;
+    }
+
+    .copy-btn {
+      background: rgba(0, 229, 255, 0.15);
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      margin-left: 10px;
+    }
+
+    .copy-btn:hover {
+      background: var(--primary);
+      color: #000;
+    }
+
+    /* Pricing Plans: 4 Columns horizontal side-by-side */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-top: 32px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 1180px) {
+      .pricing-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .pricing-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .pricing-card {
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+    }
+
+    .pricing-card.featured {
+
+      border: 1px solid var(--primary);
+      box-shadow: 0 0 30px rgba(0, 229, 255, 0.2);
+    }
+
+    .plan-badge {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: var(--primary-gradient);
+      color: #000;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 50px;
+      text-transform: uppercase;
+    }
+
+    .price {
+      font-size: 38px;
+      font-weight: 800;
+      margin: 16px 0 8px 0;
+    }
+
+    .price span {
+      font-size: 15px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .feature-list {
+      list-style: none;
+      margin: 24px 0;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .feature-list li::before {
+      content: "✓";
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-active {
+      background: rgba(0, 230, 118, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(0, 230, 118, 0.3);
+    }
+
+    .status-inactive {
+      background: rgba(255, 171, 0, 0.15);
+      color: var(--warning);
+      border: 1px solid rgba(255, 171, 0, 0.3);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a href="#" class="brand">
+      <div class="brand-logo">V</div>
+      <div class="brand-name">Vynor<span>AI</span></div>
+    </a>
+    <div id="header-user" class="hidden">
+      <button class="btn btn-secondary" onclick="logout()" style="width: auto; padding: 8px 16px;">Logout</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Auth View (Login / Register) -->
+    <div id="auth-section">
+      <div class="hero">
+        <div class="badge">🇱🇰 PayHere Enabled • Sri Lanka & Global</div>
+        <h1>Elevate Your Code with <span>VynorAI</span></h1>
+        <p>Unlock state-of-the-art AI pair programming directly inside VS Code with unlimited Claude 3.7 & GPT-4o access.</p>
+      </div>
+
+      <div class="glass-card auth-box">
+        <div class="auth-tabs">
+          <button class="auth-tab-btn active" id="tab-login-btn" onclick="switchAuthTab('login')">Sign In</button>
+          <button class="auth-tab-btn" id="tab-reg-btn" onclick="switchAuthTab('register')">Create Account</button>
+        </div>
+
+        <form id="auth-form" onsubmit="handleAuth(event)">
+          <div class="form-group hidden" id="name-group">
+            <label>Full Name</label>
+            <input type="text" id="name-input" class="form-control" placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="email-input" class="form-control" required placeholder="developer@example.com">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="password-input" class="form-control" required placeholder="••••••••">
+          </div>
+          <button type="submit" class="btn btn-primary" id="auth-submit-btn">Sign In to VynorAI</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- User Dashboard View -->
+    <div id="dashboard-section" class="hidden">
+      <div class="hero" style="text-align: left; margin-bottom: 24px;">
+        <h1>Welcome, <span id="user-display-name">Developer</span>!</h1>
+        <p>Manage your PayHere subscription and grab your VS Code access token below.</p>
+      </div>
+
+      <!-- Subscription Status & Token Usage Grid -->
+      <div class="dashboard-grid">
+        <!-- Token & VS Code Connection -->
+        <div class="glass-card">
+          <h3>🔑 Your VynorAI License Token</h3>
+          <p style="color: var(--text-muted); font-size: 14px; margin-top: 6px;">
+            Copy this token and use it inside your VynorAI VS Code Extension.
+          </p>
+
+          <div class="token-box">
+            <span id="api-key-text">Loading token...</span>
+            <button class="copy-btn" onclick="copyToken()">Copy Token</button>
+          </div>
+
+          <div style="margin-top: 20px;">
+            <h4>💡 How to connect in VS Code:</h4>
+            <ol style="color: var(--text-muted); font-size: 13px; margin: 10px 0 0 20px; line-height: 1.6;">
+              <li>Install the <b>VynorAI</b> extension in VS Code.</li>
+              <li>Click the VynorAI icon on the sidebar.</li>
+              <li>When prompted or in settings, paste your token:
+                <pre style="background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; margin-top: 6px; color: var(--primary);">apiKey: "vynor_live_..."</pre>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Subscription Status & Live Monthly Meter -->
+        <div class="glass-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Active Subscription</h3>
+            <span id="sub-status-pill" class="status-pill status-inactive">Free Tier</span>
+          </div>
+
+          <div style="margin: 20px 0;">
+            <p style="color: var(--text-muted); font-size: 14px;">Current Plan:</p>
+            <h2 id="sub-plan-name" style="color: var(--text); margin-top: 4px;">Free Trial</h2>
+            <p id="sub-expiry-date" style="color: var(--text-muted); font-size: 13px; margin-top: 4px;"></p>
+          </div>
+
+          <!-- Monthly Token Quota Meter -->
+          <div style="margin-top: 18px; background: rgba(0,0,0,0.3); padding: 14px; border-radius: 12px; border: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
+              <span>Monthly Token Quota:</span>
+              <strong id="tokens-meter-text">0 / 50,000</strong>
+            </div>
+            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+              <div id="tokens-meter-bar" style="height: 100%; width: 0%; background: var(--primary-gradient); transition: width 0.4s ease;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+              <span id="requests-counter">0 requests used</span>
+              <span id="cycle-end-text">Cycle resets: 30 days</span>
+            </div>
+          </div>
+
+          <div id="no-sub-alert" style="background: rgba(255, 171, 0, 0.1); border: 1px solid rgba(255, 171, 0, 0.3); padding: 12px; border-radius: 10px; font-size: 13px; color: #ffca28; margin-top: 16px;">
+            ⚡ You are currently on the Free Trial. Upgrade below for high-throughput coding models with millions of tokens!
+          </div>
+
+          <!-- Dev test activate button for easy verification -->
+          <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="devTestActivate('starter')" style="font-size: 12px; padding: 8px 12px; width: auto;">Simulate Starter (LKR 1,500)</button>
+            <button class="btn btn-secondary" onclick="devTestActivate('pro')" style="font-size: 12px; padding: 8px 12px; width: auto;">Simulate Pro (LKR 3,500)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing Plans (PayHere Checkout) -->
+      <div style="margin-top: 56px;">
+        <div style="text-align: center; max-width: 700px; margin: 0 auto 36px auto;">
+          <h2 style="font-size: 32px; font-weight: 800; letter-spacing: -0.5px;">Choose Your VynorAI Plan</h2>
+          <p style="color: var(--text-muted); margin-top: 8px; font-size: 16px;">
+            Optimized strictly for world-class <b>Open Coding Models</b> (DeepSeek V3, DeepSeek R1, Qwen 2.5 Coder, Llama 3.3).
+            Maximum throughput, zero latency overhead, instant PayHere activation.
+          </p>
+          <div style="display: flex; justify-content: center; gap: 16px; margin-top: 14px; font-size: 13px; color: var(--primary);">
+            <span>🔒 PayHere Verified</span>
+            <span>⚡ Credit/Debit Card</span>
+            <span>📱 Genie / EzCash / Frimi</span>
+            <span>🏦 Sampath Vishwa</span>
+          </div>
+        </div>
+
+        <div class="pricing-grid">
+          <!-- 1. Free Trial -->
+          <div class="glass-card pricing-card">
+            <span class="plan-badge" style="background: rgba(255,255,255,0.1); color: var(--text-muted);">Trial</span>
+            <h3>Free Trial</h3>
+            <div class="price">රු. 0 <span>/ month</span></div>
+            <p style="color: var(--text-muted); font-size: 13px;">Test out VynorAI coding capabilities.</p>
+
+            <ul class="feature-list">
+              <li><b>50,000</b> Tokens/month</li>
+              <li>50 Fast Requests/month</li>
+              <li>DeepSeek V3 Code Engine</li>
+              <li>Basic Slash Commands (/fix, /explain)</li>
+              <li>Standard Latency Queue</li>
+            </ul>
+
+            <button class="btn btn-secondary" disabled style="opacity: 0.7; cursor: default;">Current Tier</button>
+          </div>
+
+          <!-- 2. Starter Plan (LKR 1,500) -->
+          <div class="glass-card pricing-card">
+            <span class="plan-badge" style="background: #00e5ff; color: #000;">Best Starter</span>
+            <h3>Starter</h3>
+            <div class="price">රු. 1,500 <span>/ month</span></div>
+            <p style="color: var(--text-muted); font-size: 13px;">Perfect for freelancers & everyday coding.</p>
+
+            <ul class="feature-list">
+              <li><b>15,000,000</b> Tokens/month (15M)</li>
+              <li>5,000 Agent Requests/month</li>
+              <li><b>DeepSeek V3 + Qwen 2.5 Coder 32B</b></li>
+              <li>Real-time Tab Autocomplete (FIM)</li>
+              <li>All 9 Slash Commands</li>
+              <li>Smart Caching (0-Token repeats)</li>
+            </ul>
+
+            <button class="btn btn-primary" onclick="initiatePayhere('starter')">Get Starter • රු. 1,500</button>
+          </div>
+
+          <!-- 3. Pro Plan (LKR 3,500) -->
+          <div class="glass-card pricing-card featured">
+            <span class="plan-badge">Most Popular</span>
+            <h3>Pro</h3>
+            <div class="price">රු. 3,500 <span>/ month</span></div>
+            <p style="color: var(--text-muted); font-size: 13px;">For professional developers & heavy codebases.</p>
+
+            <ul class="feature-list">
+              <li><b>50,000,000</b> Tokens/month (50M)</li>
+              <li>20,000 Agent Requests/month</li>
+              <li><b>DeepSeek R1 (Reasoning) + DeepSeek V3</b></li>
+              <li>Full Agent Mode (Auto-apply edits)</li>
+              <li>Priority Routing (Fastest queue)</li>
+              <li>Full Codebase Semantic Indexing</li>
+              <li>Continuous Workspace Auto-healing</li>
+            </ul>
+
+            <button class="btn btn-primary" onclick="initiatePayhere('pro')">Get Pro • රු. 3,500</button>
+          </div>
+
+          <!-- 4. Ultra Plan (LKR 7,500) -->
+          <div class="glass-card pricing-card">
+            <span class="plan-badge" style="background: var(--accent); color: #fff;">Power User</span>
+            <h3>Ultra</h3>
+            <div class="price">රු. 7,500 <span>/ month</span></div>
+            <p style="color: var(--text-muted); font-size: 13px;">For startup founders, agencies & power coders.</p>
+
+            <ul class="feature-list">
+              <li><b>150,000,000</b> Tokens/month (150M)</li>
+              <li>99,999 High-speed Requests</li>
+              <li>All Premier Open Models (Llama 3.3 70B)</li>
+              <li>Ultra-low Latency Dedicated Channel</li>
+              <li>Multi-device Support (Up to 3 devices)</li>
+              <li>Team Priority Support</li>
+            </ul>
+
+            <button class="btn btn-secondary" onclick="initiatePayhere('ultra')" style="border: 1px solid var(--accent); color: #fff;">Get Ultra • රු. 7,500</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Hidden Form for PayHere Automatic POST -->
+  <form id="payhere-checkout-form" method="post" action="https://sandbox.payhere.lk/pay/checkout" class="hidden"></form>
+
+  <script>
+    let currentAuthMode = 'login';
+    let currentUser = null;
+
+    function switchAuthTab(mode) {
+      currentAuthMode = mode;
+      document.getElementById('tab-login-btn').classList.toggle('active', mode === 'login');
+      document.getElementById('tab-reg-btn').classList.toggle('active', mode === 'register');
+      document.getElementById('name-group').classList.toggle('hidden', mode === 'login');
+      document.getElementById('auth-submit-btn').innerText = mode === 'login' ? 'Sign In to VynorAI' : 'Create VynorAI Account';
+    }
+
+    async function handleAuth(e) {
+      e.preventDefault();
+      const email = document.getElementById('email-input').value;
+      const password = document.getElementById('password-input').value;
+      const name = document.getElementById('name-input').value;
+
+      const endpoint = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const payload = currentAuthMode === 'login' ? { email, password } : { email, password, name };
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert(data.error || 'Authentication failed');
+          return;
+        }
+
+        localStorage.setItem('vynor_jwt', data.token);
+        loadDashboard();
+      } catch (err) {
+        alert('Server connection error. Ensure backend is running.');
+      }
+    }
+
+    async function loadDashboard() {
+      const token = localStorage.getItem('vynor_jwt');
+      if (!token) {
+        document.getElementById('auth-section').classList.remove('hidden');
+        document.getElementById('dashboard-section').classList.add('hidden');
+        document.getElementById('header-user').classList.add('hidden');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          localStorage.removeItem('vynor_jwt');
+          loadDashboard();
+          return;
+        }
+
+        currentUser = data.user;
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('dashboard-section').classList.remove('hidden');
+        document.getElementById('header-user').classList.remove('hidden');
+
+        document.getElementById('user-display-name').innerText = currentUser.name || currentUser.email;
+        document.getElementById('api-key-text').innerText = currentUser.apiKey;
+
+        const sub = data.subscription;
+        const pill = document.getElementById('sub-status-pill');
+        const alertBox = document.getElementById('no-sub-alert');
+        const monthly = data.monthlyUsage;
+
+        const planNames = {
+          starter: 'Starter Plan (15M Tokens)',
+          pro: 'Pro Plan (50M Tokens)',
+          ultra: 'Ultra Plan (150M Tokens)',
+          free: 'Free Trial (50K Tokens)'
+        };
+
+        if (sub && sub.status === 'active') {
+          pill.className = 'status-pill status-active';
+          pill.innerText = 'Active Subscriber';
+          document.getElementById('sub-plan-name').innerText = planNames[sub.plan_name] || sub.plan_name;
+          document.getElementById('sub-expiry-date').innerText = 'Valid until: ' + new Date(sub.valid_until).toLocaleDateString();
+          alertBox.classList.add('hidden');
+        } else {
+          pill.className = 'status-pill status-inactive';
+          pill.innerText = 'Free Tier';
+          document.getElementById('sub-plan-name').innerText = 'Free Trial';
+          document.getElementById('sub-expiry-date').innerText = '';
+          alertBox.classList.remove('hidden');
+        }
+
+        // Update Monthly Tokens Progress Bar
+        if (monthly) {
+          const used = monthly.used_tokens || 0;
+          const max = monthly.max_tokens || 50000;
+          const pct = Math.min(100, Math.round((used / max) * 100));
+          document.getElementById('tokens-meter-text').innerText = `${used.toLocaleString()} / ${max.toLocaleString()} tokens (${pct}%)`;
+          document.getElementById('tokens-meter-bar').style.width = `${pct}%`;
+          document.getElementById('requests-counter').innerText = `${(monthly.used_requests || 0).toLocaleString()} requests used`;
+          if (monthly.period_end) {
+            document.getElementById('cycle-end-text').innerText = `Cycle ends: ${monthly.period_end}`;
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function copyToken() {
+      const token = document.getElementById('api-key-text').innerText;
+      navigator.clipboard.writeText(token);
+      alert('VynorAI Token copied to clipboard! Paste it into VS Code.');
+    }
+
+    async function initiatePayhere(plan) {
+      const token = localStorage.getItem('vynor_jwt');
+      if (!token) {
+        alert('Please login first');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/payment/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ plan })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert(data.error || 'Failed to initialize PayHere checkout');
+          return;
+        }
+
+        // Dynamically build and submit PayHere checkout form
+        const form = document.getElementById('payhere-checkout-form');
+        form.action = data.checkoutUrl;
+        form.innerHTML = '';
+
+        for (const [key, val] of Object.entries(data.params)) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = key;
+          input.value = val;
+          form.appendChild(input);
+        }
+
+        form.submit();
+      } catch (err) {
+        alert('Payment initiation failed. Please try again.');
+      }
+    }
+
+    async function devTestActivate(plan = 'pro') {
+      const token = localStorage.getItem('vynor_jwt');
+      const res = await fetch('/api/payment/test-activate', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ plan })
+      });
+      const data = await res.json();
+      alert(data.message || 'Activated!');
+      loadDashboard();
+    }
+
+    function logout() {
+      localStorage.removeItem('vynor_jwt');
+      loadDashboard();
+    }
+
+    // Auto-check on load
+    window.addEventListener('DOMContentLoaded', loadDashboard);
+  </script>
+
+</body>
+</html>

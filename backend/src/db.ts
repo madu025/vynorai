@@ -86,7 +86,7 @@ export async function initModelRegistry(): Promise<void> {
   await ensureSecurityTables();
 }
 
-/** Ensure security tables and user columns (suspension, allowed IPs) exist */
+/** Ensure security tables and user columns (suspension, allowed IPs, email verification, admin staff) exist */
 export async function ensureSecurityTables(): Promise<void> {
   // 1. Audit logs table
   await dbRun(`CREATE TABLE IF NOT EXISTS security_audit_logs (
@@ -100,7 +100,28 @@ export async function ensureSecurityTables(): Promise<void> {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // 2. Add is_suspended & allowed_ips to users table safely
+  // 2. Email verification OTP and token table
+  await dbRun(`CREATE TABLE IF NOT EXISTS email_verifications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    otp_code TEXT NOT NULL,
+    token TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 3. Admin Staff table (Only authorized team members added by Super Admin)
+  await dbRun(`CREATE TABLE IF NOT EXISTS admin_staff (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    role TEXT NOT NULL DEFAULT 'admin', -- 'super_admin' | 'admin' | 'support'
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 4. Safe user column migrations
   try {
     const userCols = (await dbAll<any>("PRAGMA table_info(users)")).map((c: any) => c.name);
     if (!userCols.includes("is_suspended")) {
@@ -108,6 +129,9 @@ export async function ensureSecurityTables(): Promise<void> {
     }
     if (!userCols.includes("allowed_ips")) {
       await dbRun("ALTER TABLE users ADD COLUMN allowed_ips TEXT DEFAULT ''");
+    }
+    if (!userCols.includes("email_verified")) {
+      await dbRun("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0");
     }
   } catch (err) {
     console.error("[DB] Security migration error:", err);

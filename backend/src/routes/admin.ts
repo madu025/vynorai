@@ -99,12 +99,13 @@ import { logSecurityEvent, getRecentSecurityEvents } from "../services/securityA
 
 /**
  * GET /admin/users
- * List all users with active subscription plan, suspension status, and token usage
+ * List all users with active subscription plan, suspension status, email verification, and token usage
  */
 adminRouter.get("/users", requireAdmin, async (_req: Request, res: Response) => {
   const users = await dbAll<any>(`
     SELECT u.id, u.email, u.name, u.api_key, u.created_at,
            COALESCE(u.is_suspended, 0) as is_suspended, u.allowed_ips,
+           COALESCE(u.email_verified, 0) as email_verified,
            s.plan_name, s.status as subscription_status, s.valid_until,
            m.used_tokens, m.used_requests, m.max_tokens
     FROM users u
@@ -130,6 +131,199 @@ adminRouter.get("/subscriptions", requireAdmin, async (_req: Request, res: Respo
     LIMIT 100
   `);
   res.json({ subscriptions: subs, count: subs.length });
+});
+
+/**
+ * POST /admin/users/:userId/verify-email
+ * Super Admin manual email verification (e.g., customer support)
+ */
+adminRouter.post("/users/:userId/verify-email", requireAdmin, async (req: Request, res: Response) => {
+  const userId = req.params["userId"] as string;
+  const user = await dbGet<any>("SELECT email FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  await dbRun("UPDATE users SET email_verified = 1 WHERE id = ?", [userId]);
+  await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [userId]);
+
+  await logSecurityEvent({
+    eventType: "ADMIN_MANUAL_EMAIL_VERIFIED",
+    severity: "INFO",
+    actor: "ADMIN",
+    target: user.email,
+    details: `Admin manually verified email for ${user.email}`,
+  });
+
+  res.json({ ok: true, message: `Email verified for ${user.email}` });
+});
+
+/**
+ * POST /admin/users/:userId/grant-subscription
+ * Manually grant a subscription (for bank transfers, cash payments, or agency partners)
+ */
+adminRouter.post("/users/:userId/grant-subscription", requireAdmin, async (req: Request, res: Response) => {
+  const userId = req.params["userId"] as string;
+  const { plan = "starter", days = 30 } = req.body;
+
+  const validPlans = ["starter", "pro", "ultra"];
+  if (!validPlans.includes(plan)) {
+    return res.status(400).json({ error: `Invalid plan. Must be one of: ${validPlans.join(", ")}` });
+  }
+
+  const user = await dbGet<any>("SELECT id, email, name FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const durationDays = parseInt(days) || 30;
+  const validUntil = new Date(Date.now() + durationDays * 86400000).toISOString();
+  const planConfig = (PLANS as any)[plan];
+  const maxTokens = planConfig?.monthlyTokens || 15000000;
+
+  // Deactivate any currently active subscriptions for this user
+  await dbRun("UPDATE subscriptions SET status = 'cancelled' WHERE user_id = ? AND status = 'active'", [userId]);
+
+  // Insert newly granted subscription
+  const subId = uuidv4();
+  const orderId = `MANUAL_GRANT_${Date.now()}_${userId.slice(0, 6)}`;
+  await dbRun(
+    `INSERT INTO subscriptions (id, user_id, plan_name, status, order_id, payment_id, amount, currency, valid_until)
+     VALUES (?, ?, ?, 'active', ?, 'ADMIN_MANUAL_GRANT', ?, 'LKR', ?)`,
+    [subId, userId, plan, orderId, planConfig?.priceLKR || 0, validUntil]
+  );
+
+  // Initialize or update monthly usage
+  const existingUsage = await dbGet<any>("SELECT id FROM monthly_usage WHERE user_id = ?", [userId]);
+  const periodStart = new Date().toISOString().slice(0, 10);
+  const periodEnd = new Date(Date.now() + durationDays * 86400000).toISOString().slice(0, 10);
+
+  if (existingUsage) {
+    await dbRun(
+      `UPDATE monthly_usage SET plan_name = ?, max_tokens = ?, period_start = ?, period_end = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ?`,
+      [plan, maxTokens, periodStart, periodEnd, userId]
+    );
+  } else {
+    await dbRun(
+      `INSERT INTO monthly_usage (id, user_id, plan_name, max_tokens, used_tokens, used_requests, period_start, period_end)
+       VALUES (?, ?, ?, ?, 0, 0, ?, ?)`,
+      [uuidv4(), userId, plan, maxTokens, periodStart, periodEnd]
+    );
+  }
+
+  await logSecurityEvent({
+    eventType: "ADMIN_GRANT_SUBSCRIPTION",
+    severity: "WARN",
+    actor: "ADMIN",
+    target: user.email,
+    details: `Admin granted ${plan.toUpperCase()} plan for ${durationDays} days to ${user.email}`,
+  });
+
+  res.json({
+    ok: true,
+    plan,
+    validUntil,
+    maxTokens,
+    message: `Successfully granted ${plan.toUpperCase()} plan to ${user.email} until ${new Date(validUntil).toLocaleDateString()}`,
+  });
+});
+
+/**
+ * POST /admin/users/:userId/add-tokens
+ * Add extra bonus or purchased top-up tokens to a user's monthly quota
+ */
+adminRouter.post("/users/:userId/add-tokens", requireAdmin, async (req: Request, res: Response) => {
+  const userId = req.params["userId"] as string;
+  const { tokens } = req.body;
+  const amt = parseInt(tokens);
+  if (isNaN(amt) || amt <= 0) {
+    return res.status(400).json({ error: "Invalid token amount. Must be a positive integer." });
+  }
+
+  const user = await dbGet<any>("SELECT email FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const usage = await dbGet<any>("SELECT id FROM monthly_usage WHERE user_id = ?", [userId]);
+  if (usage) {
+    await dbRun("UPDATE monthly_usage SET max_tokens = max_tokens + ? WHERE user_id = ?", [amt, userId]);
+  } else {
+    const periodStart = new Date().toISOString().slice(0, 10);
+    const periodEnd = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    await dbRun(
+      "INSERT INTO monthly_usage (id, user_id, plan_name, max_tokens, used_tokens, used_requests, period_start, period_end) VALUES (?, ?, 'free', ?, 0, 0, ?, ?)",
+      [uuidv4(), userId, 50000 + amt, periodStart, periodEnd]
+    );
+  }
+
+  await logSecurityEvent({
+    eventType: "ADMIN_TOKEN_TOPUP",
+    severity: "INFO",
+    actor: "ADMIN",
+    target: user.email,
+    details: `Admin added +${amt.toLocaleString()} tokens to ${user.email}`,
+  });
+
+  res.json({ ok: true, message: `Added +${amt.toLocaleString()} tokens to ${user.email}` });
+});
+
+/**
+ * GET /admin/staff
+ * List authorized admin staff and team members
+ */
+adminRouter.get("/staff", requireAdmin, async (_req: Request, res: Response) => {
+  const staff = await dbAll<any>("SELECT id, name, email, role, created_by, created_at FROM admin_staff ORDER BY created_at ASC");
+  res.json({ staff, count: staff.length });
+});
+
+/**
+ * POST /admin/staff
+ * Super Admin adds a new authorized staff member (No public registration)
+ */
+adminRouter.post("/staff", requireAdmin, async (req: Request, res: Response) => {
+  const { name, email, role = "admin" } = req.body;
+  if (!name || !email) {
+    return res.status(400).json({ error: "Name and email are required" });
+  }
+
+  const existing = await dbGet<any>("SELECT id FROM admin_staff WHERE email = ?", [email.toLowerCase().trim()]);
+  if (existing) {
+    return res.status(400).json({ error: "A staff member with this email already exists" });
+  }
+
+  const id = uuidv4();
+  await dbRun(
+    "INSERT INTO admin_staff (id, name, email, role, created_by) VALUES (?, ?, ?, ?, 'SUPER_ADMIN')",
+    [id, name.trim(), email.toLowerCase().trim(), role]
+  );
+
+  await logSecurityEvent({
+    eventType: "ADMIN_STAFF_ADDED",
+    severity: "WARN",
+    actor: "ADMIN",
+    target: email,
+    details: `New staff member ${name} (${email}) added with role: ${role}`,
+  });
+
+  res.json({ ok: true, message: `Staff member ${name} successfully added` });
+});
+
+/**
+ * DELETE /admin/staff/:staffId
+ * Super Admin revokes staff member access
+ */
+adminRouter.delete("/staff/:staffId", requireAdmin, async (req: Request, res: Response) => {
+  const staffId = req.params["staffId"] as string;
+  const staff = await dbGet<any>("SELECT name, email FROM admin_staff WHERE id = ?", [staffId]);
+  if (!staff) return res.status(404).json({ error: "Staff member not found" });
+
+  await dbRun("DELETE FROM admin_staff WHERE id = ?", [staffId]);
+
+  await logSecurityEvent({
+    eventType: "ADMIN_STAFF_REMOVED",
+    severity: "WARN",
+    actor: "ADMIN",
+    target: staff.email,
+    details: `Staff member ${staff.email} revoked`,
+  });
+
+  res.json({ ok: true, message: `Staff member ${staff.name} (${staff.email}) revoked` });
 });
 
 /**

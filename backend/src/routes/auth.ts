@@ -8,6 +8,7 @@ import { config } from "../config.js";
 export const authRouter = Router();
 
 import { logSecurityEvent, getUserSecurityEvents } from "../services/securityAudit.js";
+import { sendVerificationEmail } from "../services/emailService.js";
 
 // Middleware to authenticate JWT
 export async function requireAuth(req: Request, res: Response, next: Function) {
@@ -20,7 +21,7 @@ export async function requireAuth(req: Request, res: Response, next: Function) {
   try {
     const payload = jwt.verify(token, config.jwtSecret) as { userId: string; email: string };
     const user = await dbGet<any>(
-      "SELECT id, email, name, api_key, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE id = ?",
+      "SELECT id, email, name, api_key, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE id = ?",
       [payload.userId]
     );
     if (!user) {
@@ -89,16 +90,31 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
     const apiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
 
     await dbRun(
-      "INSERT INTO users (id, email, password_hash, api_key, name) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO users (id, email, password_hash, api_key, name, email_verified) VALUES (?, ?, ?, ?, ?, 0)",
       [userId, email.toLowerCase().trim(), passwordHash, apiKey, name || ""]
     );
+
+    // Generate 6-digit OTP and verification token
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verifyToken = uuidv4().replace(/-/g, "");
+    const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+
+    await dbRun(
+      "INSERT INTO email_verifications (id, user_id, email, otp_code, token, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [uuidv4(), userId, email.toLowerCase().trim(), otpCode, verifyToken, expiresAt]
+    );
+
+    // Send verification email in background
+    sendVerificationEmail(email.toLowerCase().trim(), name || "", otpCode, verifyToken).catch(err => {
+      console.error("[Email] Verification email send failure:", err);
+    });
 
     await logSecurityEvent({
       eventType: "AUTH_REGISTER",
       severity: "INFO",
       actor: email.toLowerCase().trim(),
       target: userId,
-      details: "New account registered successfully",
+      details: "New account registered. Verification OTP dispatched.",
       ipAddress: clientIp,
     });
 
@@ -112,6 +128,7 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
         email,
         name,
         apiKey,
+        emailVerified: false,
       },
     });
   } catch (err: any) {
@@ -224,6 +241,7 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
         apiKey: user.api_key,
         allowedIps: user.allowed_ips || "",
         isSuspended: false,
+        emailVerified: user.email_verified === 1,
       },
       subscription: subscription || null,
       monthlyUsage: monthlyUsage || null,
@@ -236,6 +254,106 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Profile error:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Resend Verification Email (or OTP)
+authRouter.post("/send-verification", requireAuth, async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  try {
+    if (user.email_verified === 1) {
+      return res.json({ success: true, message: "Email is already verified." });
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verifyToken = uuidv4().replace(/-/g, "");
+    const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+
+    await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [user.id]);
+    await dbRun(
+      "INSERT INTO email_verifications (id, user_id, email, otp_code, token, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+      [uuidv4(), user.id, user.email, otpCode, verifyToken, expiresAt]
+    );
+
+    sendVerificationEmail(user.email, user.name || "", otpCode, verifyToken).catch(console.error);
+
+    res.json({ success: true, message: `Verification code sent to ${user.email}.` });
+  } catch (err: any) {
+    console.error("Send verification error:", err);
+    res.status(500).json({ error: "Failed to send verification email" });
+  }
+});
+
+// Verify Email with OTP
+authRouter.post("/verify-email", requireAuth, async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const { otp } = req.body;
+  const clientIp = (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
+
+  if (!otp || typeof otp !== "string" || otp.trim().length !== 6) {
+    return res.status(400).json({ error: "A valid 6-digit verification code is required." });
+  }
+
+  try {
+    const record = await dbGet<any>(
+      `SELECT * FROM email_verifications
+       WHERE user_id = ? AND otp_code = ? AND expires_at > ?
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id, otp.trim(), new Date().toISOString()]
+    );
+
+    if (!record) {
+      return res.status(400).json({ error: "Invalid or expired verification code." });
+    }
+
+    await dbRun("UPDATE users SET email_verified = 1 WHERE id = ?", [user.id]);
+    await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [user.id]);
+
+    await logSecurityEvent({
+      eventType: "EMAIL_VERIFIED",
+      severity: "INFO",
+      actor: user.email,
+      target: user.id,
+      details: "Email address verified via 6-digit OTP",
+      ipAddress: clientIp,
+    });
+
+    res.json({ success: true, message: "Email successfully verified!" });
+  } catch (err: any) {
+    console.error("Verify email error:", err);
+    res.status(500).json({ error: "Verification failed." });
+  }
+});
+
+// Verify Email via URL Link
+authRouter.get("/verify-email", async (req: Request, res: Response) => {
+  const token = req.query.token as string;
+  if (!token) return res.status(400).send("Verification token is required.");
+
+  try {
+    const record = await dbGet<any>(
+      `SELECT * FROM email_verifications WHERE token = ? AND expires_at > ? LIMIT 1`,
+      [token, new Date().toISOString()]
+    );
+
+    if (!record) {
+      return res.status(400).send("Invalid or expired verification link. Please request a new code.");
+    }
+
+    await dbRun("UPDATE users SET email_verified = 1 WHERE id = ?", [record.user_id]);
+    await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [record.user_id]);
+
+    await logSecurityEvent({
+      eventType: "EMAIL_VERIFIED",
+      severity: "INFO",
+      actor: record.email,
+      target: record.user_id,
+      details: "Email address verified via one-click link",
+    });
+
+    res.redirect("/index.html?emailVerified=true");
+  } catch (err) {
+    res.status(500).send("Error verifying email.");
   }
 });
 

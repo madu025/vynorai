@@ -704,6 +704,23 @@
         <p>Manage your PayHere subscription and grab your VS Code access token below.</p>
       </div>
 
+      <!-- Unverified Email Alert Banner -->
+      <div id="email-verify-banner" class="hidden" style="margin-bottom: 24px; background: linear-gradient(135deg, rgba(255,171,0,0.15) 0%, rgba(255,87,34,0.12) 100%); border: 1px solid rgba(255,171,0,0.4); border-radius: 14px; padding: 16px 20px; display: none; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="font-size: 28px;">✉️</div>
+          <div>
+            <div style="font-size: 15px; font-weight: 700; color: #ffca28;">Please Verify Your Email Address</div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">
+              A 6-digit confirmation code was sent to <strong id="verify-banner-email" style="color:var(--text)"></strong>. Verify to secure your account and recover tokens anytime.
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="btn btn-secondary" onclick="resendVerificationOtp(this)" style="font-size: 13px; padding: 8px 16px;">Resend Code</button>
+          <button class="btn btn-primary" onclick="openVerifyEmailModal()" style="font-size: 13px; padding: 8px 18px; background: linear-gradient(135deg, #ffab00, #ff6d00); color: #000; font-weight: 700;">Enter 6-Digit Code →</button>
+        </div>
+      </div>
+
       <!-- Subscription Status & Token Usage Grid -->
       <!-- Subscription Status & Token Usage Grid -->
       <div class="dashboard-grid">
@@ -1003,6 +1020,33 @@
     </div>
   </div>
 
+  <!-- ── Verify Email OTP Modal ──────────────────────────────────────── -->
+  <div id="verify-email-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:999; backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+    <div class="glass-card" style="max-width:440px; width:90%; padding:32px; position:relative; border:1px solid rgba(0,229,255,0.3); animation: fadeInUp 0.25s ease;">
+      <button onclick="closeVerifyEmailModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+      <div style="text-align:center; margin-bottom:18px;">
+        <div style="font-size:42px; margin-bottom:8px;">📧</div>
+        <h3 style="font-size:22px; font-weight:700;">Verify Your Email</h3>
+        <p style="color:var(--text-muted); font-size:13px; margin-top:4px;">Enter the 6-digit verification code sent to your inbox.</p>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:8px; text-align:center; text-transform:uppercase; letter-spacing:1px; font-weight:600;">6-Digit OTP Code</label>
+        <input id="verify-otp-input" type="text" maxlength="6" placeholder="123456" style="width:100%; background:rgba(0,0,0,0.4); border:2px solid rgba(0,229,255,0.3); border-radius:12px; padding:14px; color:var(--primary); font-size:28px; text-align:center; letter-spacing:8px; font-family:'JetBrains Mono',monospace; outline:none;" oninput="this.value = this.value.replace(/[^0-9]/g, '')"/>
+      </div>
+
+      <div id="verify-otp-error" style="color:#ef4444; font-size:13px; text-align:center; margin-bottom:14px; display:none;"></div>
+      <div id="verify-otp-success" style="color:#00e676; font-size:13px; text-align:center; margin-bottom:14px; display:none;"></div>
+
+      <button class="btn btn-primary" id="btn-submit-otp" onclick="submitVerifyEmailOtp()" style="width:100%; padding:13px; font-size:15px; margin-bottom:12px;">Verify Code & Activate</button>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text-muted); margin-top:12px;">
+        <span>Didn't get the code?</span>
+        <a href="javascript:void(0)" onclick="resendVerificationOtp(this)" style="color:var(--primary); text-decoration:underline;">Resend Code</a>
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentUser = null;
 
@@ -1045,6 +1089,21 @@
         if (headerSignIn) headerSignIn.classList.add('hidden');
 
         document.getElementById('user-display-name').innerText = currentUser.name || currentUser.email;
+
+        // Email Verification Status Banner
+        const vBanner = document.getElementById('email-verify-banner');
+        if (vBanner) {
+          if (currentUser.emailVerified === false) {
+            vBanner.classList.remove('hidden');
+            vBanner.style.display = 'flex';
+            const vEmail = document.getElementById('verify-banner-email');
+            if (vEmail) vEmail.innerText = currentUser.email;
+          } else {
+            vBanner.classList.add('hidden');
+            vBanner.style.display = 'none';
+          }
+        }
+
         if (document.getElementById('user-allowed-ips')) {
           document.getElementById('user-allowed-ips').value = currentUser.allowedIps || '';
         }
@@ -1292,6 +1351,95 @@
       }
     }
 
+    function openVerifyEmailModal() {
+      document.getElementById('verify-otp-input').value = '';
+      document.getElementById('verify-otp-error').style.display = 'none';
+      document.getElementById('verify-otp-success').style.display = 'none';
+      document.getElementById('verify-email-modal-overlay').style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('verify-otp-input').focus(), 100);
+    }
+
+    function closeVerifyEmailModal() {
+      document.getElementById('verify-email-modal-overlay').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+
+    async function submitVerifyEmailOtp() {
+      const otp = document.getElementById('verify-otp-input').value.trim();
+      const errBox = document.getElementById('verify-otp-error');
+      const succBox = document.getElementById('verify-otp-success');
+      const btn = document.getElementById('btn-submit-otp');
+      errBox.style.display = 'none';
+      succBox.style.display = 'none';
+
+      if (!otp || otp.length !== 6) {
+        errBox.innerText = 'Please enter a valid 6-digit code.';
+        errBox.style.display = 'block';
+        return;
+      }
+
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      btn.disabled = true;
+      btn.innerText = 'Verifying...';
+
+      try {
+        const res = await fetch('/api/auth/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ otp })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          succBox.innerText = '✅ ' + (data.message || 'Email successfully verified!');
+          succBox.style.display = 'block';
+          if (currentUser) currentUser.emailVerified = true;
+          setTimeout(() => {
+            closeVerifyEmailModal();
+            loadDashboard();
+          }, 1200);
+        } else {
+          errBox.innerText = data.error || 'Invalid or expired OTP code.';
+          errBox.style.display = 'block';
+        }
+      } catch (err) {
+        errBox.innerText = 'Network error verifying code.';
+        errBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Verify Code & Activate';
+      }
+    }
+
+    async function resendVerificationOtp(btn) {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      let origText = 'Resend Code';
+      if (btn) {
+        btn.disabled = true;
+        origText = btn.innerText;
+        btn.innerText = 'Sending...';
+      }
+      try {
+        const res = await fetch('/api/auth/send-verification', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert('📨 ' + (data.message || 'Verification code resent to your email!'));
+        } else {
+          alert(data.error || 'Failed to resend code');
+        }
+      } catch (err) {
+        alert('Error resending verification code');
+      } finally {
+        if (btn) {
+          btn.innerText = 'Sent ✓';
+          setTimeout(() => { btn.disabled = false; btn.innerText = origText; }, 5000);
+        }
+      }
+    }
+
     let _pendingPlan = null;
     const PLAN_INFO = {
       starter: {
@@ -1397,12 +1545,24 @@
     document.getElementById('security-logs-modal-overlay').addEventListener('click', function(e) {
       if (e.target === this) closeSecurityLogsModal();
     });
+    document.getElementById('verify-email-modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeVerifyEmailModal();
+    });
 
     // Auto-check on load & handle PayHere return status
     window.addEventListener('DOMContentLoaded', () => {
       loadDashboard();
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('payment') === 'success') {
+      if (urlParams.get('emailVerified') === 'true') {
+        setTimeout(() => {
+          const banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(0,230,118,0.2);border:1px solid rgba(0,230,118,0.5);color:#00e676;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:600;z-index:9999;backdrop-filter:blur(10px);box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+          banner.innerHTML = '🎉 Email verified successfully! Your account is fully active.';
+          document.body.appendChild(banner);
+          setTimeout(() => banner.remove(), 7000);
+        }, 300);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (urlParams.get('payment') === 'success') {
         // Show success banner
         setTimeout(() => {
           const banner = document.createElement('div');

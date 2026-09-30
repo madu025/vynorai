@@ -112,6 +112,9 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item" onclick="showPage('users')" id="nav-users">
       <span class="nav-icon">👥</span>Users & Subs
     </div>
+    <div class="nav-item" onclick="showPage('staff')" id="nav-staff">
+      <span class="nav-icon">🔑</span>Staff & Admins
+    </div>
     <div class="nav-item" onclick="showPage('plans')" id="nav-plans">
       <span class="nav-icon">📦</span>Plans & Pricing
     </div>
@@ -207,7 +210,7 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <!-- USERS & SUBSCRIPTIONS -->
     <div class="page" id="page-users">
       <h1>Users & Subscriptions</h1>
-      <p class="subtitle">Monitor registered customer accounts, active plans, and token usage</p>
+      <p class="subtitle">Monitor customer accounts, grant manual subscriptions (Bank transfers), and top-up tokens</p>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
         <input id="userSearchInp" oninput="filterUsersTable()" placeholder="Search by email or name..." style="max-width:320px;padding:.5rem 1rem;"/>
         <button class="btn btn-ghost" onclick="loadUsers()">↻ Refresh Users</button>
@@ -224,11 +227,68 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
                 <th>Plan</th>
                 <th>Tokens Used</th>
                 <th>IP Access</th>
-                <th>Actions</th>
+                <th>Operations</th>
               </tr>
             </thead>
             <tbody id="userTableBody">
               <tr><td colspan="7" class="loading">Loading user records...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- STAFF & TEAM MEMBERS (NO PUBLIC REGISTRATION) -->
+    <div class="page" id="page-staff">
+      <h1>🔑 Authorized Admin Staff</h1>
+      <p class="subtitle">Private team access control — public registration is permanently disabled</p>
+      
+      <div class="alert alert-info">
+        🛡️ <b>Security Policy:</b> Only the Super Admin can grant dashboard access. Team members can inspect users and manage support tickets, but cannot alter master AI keys.
+      </div>
+
+      <div style="display:flex;gap:1rem;margin-bottom:1.5rem">
+        <button class="btn btn-primary" onclick="showAddStaffModal()">+ Add Staff Member</button>
+        <button class="btn btn-ghost" onclick="loadStaff()">↻ Refresh</button>
+      </div>
+
+      <div id="addStaffBox" style="display:none;" class="panel">
+        <div class="panel-header"><div class="panel-title">➕ Add Authorized Staff Member</div></div>
+        <div class="panel-body">
+          <div class="field-group">
+            <div><label>Full Name</label><input id="st_name" placeholder="Kamal Perera"/></div>
+            <div><label>Work Email</label><input id="st_email" type="email" placeholder="kamal@vynor.lk"/></div>
+          </div>
+          <div class="field-group">
+            <div>
+              <label>Role</label>
+              <select id="st_role">
+                <option value="admin">Admin (Full Operational Access)</option>
+                <option value="support">Support Agent (Read-only + Key Roll + Email Verify)</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="submitAddStaff()">Add Team Member</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('addStaffBox').style.display='none'" style="margin-left:.5rem">Cancel</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">👥 Authorized Team Members (<span id="staffCount">0</span>)</div></div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Added By</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="staffTableBody">
+              <tr><td colspan="6" class="loading">Loading staff list...</td></tr>
             </tbody>
           </table>
         </div>
@@ -393,6 +453,7 @@ function showPage(id) {
   if (id === 'overview') loadOverview();
   if (id === 'security') loadSecurity();
   if (id === 'users')    loadUsers();
+  if (id === 'staff')    loadStaff();
   if (id === 'plans')    loadPlans();
   if (id === 'models')   loadModels();
   if (id === 'system')   loadSystem();
@@ -425,23 +486,83 @@ function renderUsersTable(users) {
       ? '<span class="badge badge-suspended" style="background:rgba(239,68,68,0.2);color:#ef4444;">⛔ SUSPENDED</span>' 
       : '<span class="badge badge-starter">✅ ACTIVE</span>';
     const ipAccess = u.allowed_ips ? `<code style="font-size:.72rem;color:var(--accent2);">${u.allowed_ips}</code>` : '<span style="color:var(--muted);font-size:.75rem">🌐 Global</span>';
+    const emailStatus = u.email_verified 
+      ? '<span style="font-size:.72rem;color:var(--success);font-weight:600;">✅ Verified</span>' 
+      : `<span style="font-size:.72rem;color:var(--warn);font-weight:600;">⚠️ Unverified</span> <button class="btn btn-ghost" style="padding:1px 6px;font-size:.68rem;margin-left:4px;" onclick="adminVerifyEmail('${u.id}','${u.email}')">Verify</button>`;
+
     return `
       <tr>
-        <td><strong>${u.name || 'Developer'}</strong><br/><span style="font-size:.78rem;color:var(--muted)">${u.email}</span></td>
+        <td>
+          <strong>${u.name || 'Developer'}</strong><br/>
+          <span style="font-size:.78rem;color:var(--muted)">${u.email}</span><br/>
+          ${emailStatus}
+        </td>
         <td><code style="font-size:.75rem;color:var(--muted)">${u.api_key ? u.api_key.slice(0, 16) + '...' : '—'}</code></td>
         <td>${statusBadge}</td>
         <td>${planBadge}</td>
         <td>${used} / ${max}</td>
         <td>${ipAccess}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;margin-right:.3rem;" onclick="adminRotateKey('${u.id}', '${u.email}')">🔄 Roll</button>
-          <button class="btn ${u.is_suspended ? 'btn-success' : 'btn-danger'}" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminToggleSuspend('${u.id}', '${u.email}', ${u.is_suspended})">
-            ${u.is_suspended ? 'Reactivate' : 'Suspend'}
-          </button>
+          <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
+            <button class="btn btn-primary" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminGrantPlan('${u.id}', '${u.email}')" title="Grant subscription (Bank Transfer)">🎁 Plan</button>
+            <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminAddTokens('${u.id}', '${u.email}')" title="Top-up bonus tokens">⚡ +Tokens</button>
+            <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminRotateKey('${u.id}', '${u.email}')" title="Force rotate key">🔄 Roll</button>
+            <button class="btn ${u.is_suspended ? 'btn-success' : 'btn-danger'}" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminToggleSuspend('${u.id}', '${u.email}', ${u.is_suspended})">
+              ${u.is_suspended ? 'Reactivate' : 'Suspend'}
+            </button>
+          </div>
         </td>
       </tr>
     `;
   }).join('');
+}
+
+async function adminVerifyEmail(userId, email) {
+  if (!confirm(`Manually verify email address for ${email}?`)) return;
+  const res = await api('POST', `/admin/users/${userId}/verify-email`);
+  if (res?.ok) {
+    showToast(`Email verified for ${email}`);
+    loadUsers();
+  } else {
+    showToast(res?.error || 'Failed to verify email', 'err');
+  }
+}
+
+async function adminGrantPlan(userId, email) {
+  const plan = prompt(`Grant subscription to ${email}:\nEnter 'starter', 'pro', or 'ultra':`, 'pro');
+  if (!plan) return;
+  const p = plan.toLowerCase().trim();
+  if (!['starter', 'pro', 'ultra'].includes(p)) {
+    alert("Invalid plan. Must be 'starter', 'pro', or 'ultra'");
+    return;
+  }
+  const days = prompt(`Subscription duration in days (default 30):`, '30');
+  const d = parseInt(days) || 30;
+
+  const res = await api('POST', `/admin/users/${userId}/grant-subscription`, { plan: p, days: d });
+  if (res?.ok) {
+    showToast(res.message);
+    loadUsers();
+  } else {
+    showToast(res?.error || 'Failed to grant plan', 'err');
+  }
+}
+
+async function adminAddTokens(userId, email) {
+  const tokens = prompt(`Add bonus tokens to ${email}:\n(e.g. 500000 or 1000000):`, '500000');
+  if (!tokens) return;
+  const amt = parseInt(tokens);
+  if (isNaN(amt) || amt <= 0) {
+    alert("Please enter a valid positive number");
+    return;
+  }
+  const res = await api('POST', `/admin/users/${userId}/add-tokens`, { tokens: amt });
+  if (res?.ok) {
+    showToast(res.message);
+    loadUsers();
+  } else {
+    showToast(res?.error || 'Failed to add tokens', 'err');
+  }
 }
 
 async function adminRotateKey(userId, email) {
@@ -464,6 +585,72 @@ async function adminToggleSuspend(userId, email, isSuspended) {
     loadUsers();
   } else {
     showToast(`Failed to ${action} user`, 'err');
+  }
+}
+
+// Staff & Team Management (Super Admin Exclusive)
+async function loadStaff() {
+  const data = await api('GET', '/admin/staff');
+  if (!data) return;
+  const staff = data.staff || [];
+  const el = document.getElementById('staffCount');
+  if (el) el.innerText = staff.length;
+
+  const tbody = document.getElementById('staffTableBody');
+  if (!tbody) return;
+  if (staff.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No additional staff members added yet. Super Admin is active via secret key.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = staff.map(s => `
+    <tr>
+      <td><strong>${s.name}</strong></td>
+      <td><span style="font-size:.82rem;color:var(--muted);">${s.email}</span></td>
+      <td><span class="badge ${s.role==='super_admin'?'badge-ultra':'badge-pro'}">${(s.role||'admin').toUpperCase()}</span></td>
+      <td style="font-size:.8rem;color:var(--muted);">${s.created_by || 'Owner'}</td>
+      <td style="font-size:.8rem;color:var(--muted);">${s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
+      <td>
+        <button class="btn btn-danger" style="padding:.25rem .6rem;font-size:.72rem;" onclick="removeStaff('${s.id}', '${s.name}')">Revoke</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function showAddStaffModal() {
+  const box = document.getElementById('addStaffBox');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+async function submitAddStaff() {
+  const name = document.getElementById('st_name').value.trim();
+  const email = document.getElementById('st_email').value.trim();
+  const role = document.getElementById('st_role').value;
+
+  if (!name || !email) {
+    showToast('Name and email are required', 'err');
+    return;
+  }
+
+  const res = await api('POST', '/admin/staff', { name, email, role });
+  if (res?.ok) {
+    showToast(res.message);
+    document.getElementById('addStaffBox').style.display = 'none';
+    document.getElementById('st_name').value = '';
+    document.getElementById('st_email').value = '';
+    loadStaff();
+  } else {
+    showToast(res?.error || 'Failed to add staff member', 'err');
+  }
+}
+
+async function removeStaff(staffId, name) {
+  if (!confirm(`Revoke dashboard access for staff member ${name}?`)) return;
+  const res = await api('DELETE', `/admin/staff/${staffId}`);
+  if (res?.ok) {
+    showToast(res.message);
+    loadStaff();
+  } else {
+    showToast(res?.error || 'Failed to revoke access', 'err');
   }
 }
 

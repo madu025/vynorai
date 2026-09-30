@@ -57,6 +57,7 @@ import { getLocalStorage, setLocalStorage } from "../../util/localStorage";
 import { EmptyChatBody } from "./EmptyChatBody";
 import { ExploreDialogWatcher } from "./ExploreDialogWatcher";
 import { useAutoScroll } from "./useAutoScroll";
+import { VynorQuotaBar } from "../../components/VynorQuotaBar";
 
 // Helper function to find the index of the latest conversation summary
 function findLatestSummaryIndex(history: ChatHistoryItem[]): number {
@@ -420,6 +421,9 @@ export function Chat() {
           }
           inputId={MAIN_EDITOR_INPUT_ID}
         />
+
+        {/* VynorAI Live Token Remaining & Quota Progress Bar */}
+        <VynorQuotaBar />
 
         <div
           style={{

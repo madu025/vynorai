@@ -7,6 +7,7 @@ import { isUnsupportedPlatform } from "../util/util";
 import { GlobalContext } from "core/util/GlobalContext";
 import { VsCodeContinueApi } from "./api";
 import setupInlineTips from "./InlineTipManager";
+import { setupVynorAuth } from "../util/vynorAuth";
 
 export async function activateExtension(context: vscode.ExtensionContext) {
   const platformCheck = isUnsupportedPlatform();
@@ -30,6 +31,9 @@ export async function activateExtension(context: vscode.ExtensionContext) {
 
   // Register commands and providers
   setupInlineTips(context);
+
+  // Initialize VynorAI OAuth Browser Confirmation & Quota Status Bar
+  setupVynorAuth(context);
 
   const vscodeExtension = new VsCodeExtension(context);
 

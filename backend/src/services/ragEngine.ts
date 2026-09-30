@@ -124,8 +124,11 @@ export function chunkCode(filename: string, content: string): CodeChunk[] {
       const chunkLines = lines.slice(chunkStart, end);
 
       if (chunkLines.length >= CHUNK_MIN_LINES) {
-        // Extract name from first boundary line
-        const nameMatch = lines[chunkStart]?.match(/(?:function|class|def|const|let|var|interface|type)\s+(\w+)/);
+        // Extract name from first boundary line (TS, Python, Java, C#, C++, Go, PHP, Rust)
+        const nameMatch =
+          lines[chunkStart]?.match(/(?:function|class|def|func|fn|const|let|var|interface|type|struct)\s+(\w+)/) ||
+          lines[chunkStart]?.match(/\b(?:void|int|string|bool|boolean|async|public|private|protected)\s+(?:[\w<>\[\]]+\s+)?(\w+)\s*\(/) ||
+          lines[chunkStart]?.match(/(\w+)\s*\([^)]*\)\s*[:{]/);
         chunks.push({
           id:        `${filename}:${chunkStart}`,
           filename,

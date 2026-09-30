@@ -548,7 +548,19 @@ export function checkInstantTemplateMatch(query: string): { matched: boolean; te
   const slashMatch = q.match(/^\/(template|scaffold|golden)\s+([a-zA-Z0-9_-]+)/i);
   if (slashMatch) {
     const requestedId = slashMatch[2].toLowerCase();
-    const t = GOLDEN_TEMPLATES.find((item) => item.id.toLowerCase() === requestedId || item.id.toLowerCase().includes(requestedId));
+    const reqClean = requestedId.replace(/[-_]/g, " ");
+    const t = GOLDEN_TEMPLATES.find((item) => {
+      const idClean = item.id.toLowerCase().replace(/[-_]/g, " ");
+      return (
+        item.id.toLowerCase() === requestedId ||
+        idClean.includes(reqClean) ||
+        reqClean.includes(idClean) ||
+        item.keywords.some((kw) => {
+          const kwClean = kw.toLowerCase().replace(/[-_]/g, " ");
+          return kwClean === reqClean || kwClean.includes(reqClean) || reqClean.includes(kwClean);
+        })
+      );
+    });
     if (t) {
       return {
         matched: true,

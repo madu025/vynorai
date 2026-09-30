@@ -1,31 +1,105 @@
-import express from "express";
 import cors from "cors";
+import express, { NextFunction, Request, Response } from "express";
+import fs from "fs";
 import path from "path";
 import { config, MODEL_ALIASES } from "./config.js";
 import { initDb, initModelRegistry } from "./db.js";
-import { initCacheTable } from "./services/cacheEngine.js";
-import { startHealthMonitor } from "./services/healthMonitor.js";
+import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
+import { memoryRouter } from "./routes/memory.js";
 import { paymentRouter } from "./routes/payment.js";
 import { proxyRouter } from "./routes/proxy.js";
-import { adminRouter } from "./routes/admin.js";
-import { memoryRouter } from "./routes/memory.js";
+import { initCacheTable } from "./services/cacheEngine.js";
+import { startHealthMonitor } from "./services/healthMonitor.js";
 
 import { securityHeadersMiddleware } from "./middleware/security.js";
 
+const PUBLIC_DIR = path.resolve(process.cwd(), "public");
+const LOGIN_PAGE = path.join(PUBLIC_DIR, "login.html");
+const ADMIN_PAGE = path.join(PUBLIC_DIR, "admin.html");
+
+// Clean-URL paths that must all serve the customer login/register page
+const LOGIN_PATHS = [
+  "/login",
+  "/login/",
+  "/login.html",
+  "/signin",
+  "/signin/",
+  "/register",
+  "/register/",
+  "/signup",
+  "/signup/",
+];
+
+// Only allow deep-link callbacks back into VS Code (prevents open redirects)
+const ALLOWED_CALLBACK_PREFIXES = [
+  "vscode://",
+  "vscode-insiders://",
+  "vscodium://",
+];
+
+function isAllowedCallback(cb: unknown): boolean {
+  return (
+    typeof cb === "string" &&
+    cb.length < 2048 &&
+    ALLOWED_CALLBACK_PREFIXES.some((p) => cb.toLowerCase().startsWith(p))
+  );
+}
+
+// Shared handler: serves login.html for /login?source=vscode&callback=vscode://...
+function serveLoginPage(req: Request, res: Response) {
+  // Drop an untrusted callback instead of passing it on to the page
+  if (
+    req.query.callback !== undefined &&
+    !isAllowedCallback(req.query.callback)
+  ) {
+    const params = new URLSearchParams(req.query as Record<string, string>);
+    params.delete("callback");
+    const qs = params.toString();
+    return res.redirect(302, `/login${qs ? `?${qs}` : ""}`);
+  }
+
+  if (!fs.existsSync(LOGIN_PAGE)) {
+    console.error(`[Login] Missing file: ${LOGIN_PAGE} (cwd=${process.cwd()})`);
+    return res
+      .status(500)
+      .type("text/plain")
+      .send(
+        "Login page is temporarily unavailable. Please contact support@vynor.lk",
+      );
+  }
+
+  res.setHeader("Cache-Control", "no-store");
+  res.sendFile(LOGIN_PAGE);
+}
+
 // ─── Main API App (Port: config.port) ─────────────────────────────────────────
 const app = express();
+
+// Running behind nginx / Cloudflare: needed for correct req.ip + rate limiting
+app.set("trust proxy", 1);
 
 app.use(securityHeadersMiddleware);
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.resolve(process.cwd(), "public"), { extensions: ["html"] }));
 
-// Serve login page for clean URLs and VS Code extension OAuth / callback flow
-app.get(["/login", "/signin", "/register", "/signup"], (_req, res) => {
-  res.sendFile(path.resolve(process.cwd(), "public", "login.html"));
+// Login routes MUST be registered before static / 404 handling
+app.get(LOGIN_PATHS, serveLoginPage);
+
+// If request arrives on admin.vynor.lk, serve admin.html directly
+app.use((req, res, next) => {
+  const host = (req.headers.host || "").toLowerCase();
+  if (
+    host.startsWith("admin.") &&
+    (req.path === "/" || req.path === "/admin")
+  ) {
+    return res.sendFile(ADMIN_PAGE);
+  }
+  next();
 });
+
+app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 
 // Public health check — no auth required
 app.get("/health", (_req, res) => {
@@ -38,56 +112,87 @@ app.get("/health", (_req, res) => {
     service: "VynorAI Cloud API",
     version: "2.0.0",
     payhereEnv: config.payhere.env,
-    activeProviders: activeProviders.length ? activeProviders : ["ollama (local)"],
+    activeProviders: activeProviders.length
+      ? activeProviders
+      : ["ollama (local)"],
     supportedModels: Object.keys(MODEL_ALIASES).length,
-    features: ["multi-provider-routing", "circuit-breaker", "l1-l2-cache", "anthropic-prompt-caching", "agentic-tools", "quota-guard"],
+    features: [
+      "multi-provider-routing",
+      "circuit-breaker",
+      "l1-l2-cache",
+      "anthropic-prompt-caching",
+      "agentic-tools",
+      "quota-guard",
+    ],
     timestamp: new Date().toISOString(),
   });
 });
 
-app.use("/api/auth",    authRouter);
+app.use("/api/auth", authRouter);
 app.use("/api/payment", paymentRouter);
-app.use("/v1",          proxyRouter);
-app.use("/v1/memory",   memoryRouter);
-
-// Customer portal host-check: if request arrives on admin.vynor.lk, serve admin.html directly
-app.use((req, res, next) => {
-  const host = (req.headers.host || "").toLowerCase();
-  if (host.startsWith("admin.") && (req.path === "/" || req.path === "/admin")) {
-    return res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
-  }
-  next();
-});
+// More specific mount first so the generic /v1 router can't swallow it
+app.use("/v1/memory", memoryRouter);
+app.use("/v1", proxyRouter);
 
 // Customer portal /admin redirect to dedicated admin portal
 app.get("/admin", (_req, res) => {
   res.redirect("https://admin.vynor.lk");
 });
 
+// 404 fallback (JSON for API paths, plain text for pages)
+app.use((req: Request, res: Response) => {
+  if (req.path.startsWith("/api/") || req.path.startsWith("/v1")) {
+    return res.status(404).json({ error: "Not found", path: req.path });
+  }
+  res.status(404).type("text/plain").send("Page not found");
+});
+
+// Error handler
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error(`[Error] ${req.method} ${req.originalUrl}:`, err);
+  if (res.headersSent) return;
+  if (req.path.startsWith("/api/") || req.path.startsWith("/v1")) {
+    return res
+      .status(err?.status || 500)
+      .json({ error: "Internal server error" });
+  }
+  res
+    .status(err?.status || 500)
+    .type("text/plain")
+    .send("Something went wrong");
+});
+
 // ─── Admin App (Separate Port: config.adminPort) ───────────────────────────────
 const adminApp = express();
+adminApp.set("trust proxy", 1);
 
 // Restrict admin CORS to same-origin / configured admin origin only
 const adminOrigin = process.env.ADMIN_ORIGIN || false; // false = same-origin only
 adminApp.use(securityHeadersMiddleware);
-adminApp.use(cors({
-  origin: adminOrigin,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-}));
+adminApp.use(
+  cors({
+    origin: adminOrigin,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  }),
+);
 adminApp.use(express.json({ limit: "2mb" }));
 adminApp.use(express.urlencoded({ extended: true }));
 
-// Root routes for admin portal (https://admin.vynor.lk/)
-adminApp.get("/", (_req, res) => {
-  res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
+// Safety net: if customer login URLs ever reach the admin port
+// (e.g. wrong proxy target), send them to the customer portal instead of 404.
+adminApp.get(LOGIN_PATHS, (req, res) => {
+  const qIndex = req.originalUrl.indexOf("?");
+  const qs = qIndex >= 0 ? req.originalUrl.substring(qIndex) : "";
+  res.redirect(302, `https://vynor.lk/login${qs}`);
 });
 
-adminApp.get("/admin", (_req, res) => {
-  res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
+// Root routes for admin portal (https://admin.vynor.lk/)
+adminApp.get(["/", "/admin"], (_req, res) => {
+  res.sendFile(ADMIN_PAGE);
 });
 
 // Serve admin static UI without serving index.html on root
-adminApp.use(express.static(path.resolve(process.cwd(), "public"), { index: false }));
+adminApp.use(express.static(PUBLIC_DIR, { index: false }));
 
 // Mount all admin API routes at /admin
 adminApp.use("/admin", adminRouter);
@@ -102,8 +207,29 @@ adminApp.get("/health", (_req, res) => {
   });
 });
 
+adminApp.use((req: Request, res: Response) => {
+  if (req.path.startsWith("/admin")) {
+    return res.status(404).json({ error: "Not found", path: req.path });
+  }
+  res.status(404).type("text/plain").send("Page not found");
+});
+
+adminApp.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error(`[AdminError] ${req.method} ${req.originalUrl}:`, err);
+  if (res.headersSent) return;
+  res.status(err?.status || 500).json({ error: "Internal server error" });
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 async function start() {
+  // Fail loudly at boot if the static pages are missing
+  for (const f of [LOGIN_PAGE, ADMIN_PAGE]) {
+    if (!fs.existsSync(f))
+      console.warn(
+        `[Boot] WARNING: missing static file ${f} (cwd=${process.cwd()})`,
+      );
+  }
+
   await initDb();
   await initCacheTable();
   await initModelRegistry();
@@ -122,6 +248,7 @@ async function start() {
 ║         ⚡ VynorAI Cloud API v2.0 Running!               ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Dashboard  → http://localhost:${config.port}                     ║
+║  Login      → http://localhost:${config.port}/login               ║
 ║  AI Gateway → http://localhost:${config.port}/v1                  ║
 ║  Health     → http://localhost:${config.port}/health              ║
 ╠══════════════════════════════════════════════════════════╣
@@ -152,7 +279,9 @@ async function start() {
 
   // Graceful shutdown — closes both servers cleanly
   const gracefulShutdown = (signal: string) => {
-    console.log(`\n[${signal}] Signal received. Commencing graceful shutdown...`);
+    console.log(
+      `\n[${signal}] Signal received. Commencing graceful shutdown...`,
+    );
 
     let closed = 0;
     const onClose = () => {
@@ -173,7 +302,7 @@ async function start() {
   };
 
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-  process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 }
 
 start().catch((err) => {

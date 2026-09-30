@@ -297,4 +297,29 @@ proxyRouter.get("/security/merkle-verify", requireValidSubscriber, async (req: R
   }
 });
 
+// ─── GET /v1/templates (List All Pre-Vetted Golden Templates) ─────────────────
+proxyRouter.get("/templates", requireValidSubscriber, async (req: Request, res: Response) => {
+  const { GOLDEN_TEMPLATES } = await import("../services/templateVault.js");
+  const list = GOLDEN_TEMPLATES.map((t) => ({
+    id: t.id,
+    category: t.category,
+    title: t.title,
+    description: t.description,
+    languages: t.languages,
+    keywords: t.keywords,
+  }));
+  res.json({ object: "list", data: list });
+});
+
+// ─── GET /v1/templates/:id (Fetch Exact 0-Token Scaffold Code) ───────────────
+proxyRouter.get("/templates/:id", requireValidSubscriber, async (req: Request, res: Response) => {
+  const { GOLDEN_TEMPLATES } = await import("../services/templateVault.js");
+  const template = GOLDEN_TEMPLATES.find((t) => t.id === req.params.id);
+  if (!template) {
+    return res.status(404).json({ error: { message: `Template '${req.params.id}' not found.` } });
+  }
+  res.json(template);
+});
+
+
 

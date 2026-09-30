@@ -11,6 +11,7 @@ import { applyHybridContext } from "./hybridContext.js";
 import { enrichWithRAG } from "./ragEngine.js";
 import { enrichWithWeb } from "./webSearch.js";
 import { enrichWithMemory } from "./memoryEngine.js";
+import { detectTemplateIntent, formatTemplateContext } from "./templateVault.js";
 
 export interface AuthenticatedUser {
   id: string;
@@ -136,8 +137,32 @@ export async function handleChatCompletions(
     res.setHeader("X-VynorAI-RAG-Saved",   String(rag.savedTokens));
   }
 
+  // ── 2c-2. Golden Scaffold & Template Vault (0-Token Deterministic Injection) ────
+  const lastUserMsg = [...(ragBody.messages || [])].reverse().find((m: any) => m.role === "user");
+  const lastQuery = typeof lastUserMsg?.content === "string"
+    ? lastUserMsg.content
+    : Array.isArray(lastUserMsg?.content) ? lastUserMsg.content.map((p: any) => p.text ?? "").join("") : "";
+  const scaffold = detectTemplateIntent(lastQuery);
+  let scaffoldBody = ragBody;
+  if (scaffold) {
+    res.setHeader("X-VynorAI-Scaffold-Match", scaffold.id);
+    res.setHeader("X-VynorAI-Scaffold-Saved", "80%");
+    const scaffoldContext = formatTemplateContext(scaffold);
+    const systemIdx = (scaffoldBody.messages || []).findIndex((m: any) => m.role === "system");
+    const updatedMessages = [...(scaffoldBody.messages || [])];
+    if (systemIdx >= 0) {
+      updatedMessages[systemIdx] = {
+        ...updatedMessages[systemIdx],
+        content: updatedMessages[systemIdx].content + "\n\n" + scaffoldContext,
+      };
+    } else {
+      updatedMessages.unshift({ role: "system", content: scaffoldContext });
+    }
+    scaffoldBody = { ...scaffoldBody, messages: updatedMessages };
+  }
+
   // ── 2d. Hybrid Context: plan-aware trim + compress ────────────────────────
-  const { body: optimised, result: ctxResult } = applyHybridContext(ragBody, planId);
+  const { body: optimised, result: ctxResult } = applyHybridContext(scaffoldBody, planId);
   if (ctxResult.savedTokens > 0) {
     res.setHeader("X-VynorAI-Saved-Tokens",  String(ctxResult.savedTokens));
     res.setHeader("X-VynorAI-Ctx-Strategy",  ctxResult.strategy.join(","));

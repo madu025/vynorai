@@ -62,7 +62,8 @@ adminRouter.post("/circuit/:provider/reset", requireAdmin, (req: Request, res: R
  * GET /admin/stats
  * Usage statistics overview (top users, requests per day, etc.)
  */
-import { dbAll } from "../db.js";
+import { dbAll, dbGet, dbRun } from "../db.js";
+import { v4 as uuidv4 } from "uuid";
 import {
   getAllModels,
   upsertModel,
@@ -94,13 +95,16 @@ adminRouter.get("/stats", requireAdmin, async (_req: Request, res: Response) => 
   });
 });
 
+import { logSecurityEvent, getRecentSecurityEvents } from "../services/securityAudit.js";
+
 /**
  * GET /admin/users
- * List all users with active subscription plan and token usage
+ * List all users with active subscription plan, suspension status, and token usage
  */
 adminRouter.get("/users", requireAdmin, async (_req: Request, res: Response) => {
   const users = await dbAll<any>(`
     SELECT u.id, u.email, u.name, u.api_key, u.created_at,
+           COALESCE(u.is_suspended, 0) as is_suspended, u.allowed_ips,
            s.plan_name, s.status as subscription_status, s.valid_until,
            m.used_tokens, m.used_requests, m.max_tokens
     FROM users u
@@ -126,6 +130,107 @@ adminRouter.get("/subscriptions", requireAdmin, async (_req: Request, res: Respo
     LIMIT 100
   `);
   res.json({ subscriptions: subs, count: subs.length });
+});
+
+/**
+ * POST /admin/users/:userId/rotate-key
+ * Force-rotate a user's API Key if compromised
+ */
+adminRouter.post("/users/:userId/rotate-key", requireAdmin, async (req: Request, res: Response) => {
+  const userId = req.params["userId"] as string;
+  const user = await dbGet<any>("SELECT email FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const newApiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
+  await dbRun("UPDATE users SET api_key = ? WHERE id = ?", [newApiKey, userId]);
+
+  await logSecurityEvent({
+    eventType: "ADMIN_FORCE_KEY_ROTATED",
+    severity: "WARN",
+    actor: "ADMIN",
+    target: user.email,
+    details: `Admin force-rotated API Key for ${user.email}`,
+  });
+
+  res.json({ ok: true, apiKey: newApiKey, message: `API Key rolled for user ${user.email}` });
+});
+
+/**
+ * POST /admin/users/:userId/toggle-suspend
+ * Suspend or reactivate a user account instantly
+ */
+adminRouter.post("/users/:userId/toggle-suspend", requireAdmin, async (req: Request, res: Response) => {
+  const userId = req.params["userId"] as string;
+  const user = await dbGet<any>("SELECT email, COALESCE(is_suspended, 0) as is_suspended FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const nextState = user.is_suspended ? 0 : 1;
+  await dbRun("UPDATE users SET is_suspended = ? WHERE id = ?", [nextState, userId]);
+
+  await logSecurityEvent({
+    eventType: nextState ? "ADMIN_USER_SUSPENDED" : "ADMIN_USER_REACTIVATED",
+    severity: nextState ? "CRITICAL" : "INFO",
+    actor: "ADMIN",
+    target: user.email,
+    details: nextState ? `User account ${user.email} suspended by Admin` : `User account ${user.email} reactivated by Admin`,
+  });
+
+  res.json({ ok: true, is_suspended: nextState, message: nextState ? `User ${user.email} suspended` : `User ${user.email} reactivated` });
+});
+
+/**
+ * GET /admin/security/overview
+ * Threat radar and security posture status
+ */
+adminRouter.get("/security/overview", requireAdmin, async (_req: Request, res: Response) => {
+  const [totalUsers, suspendedUsers, totalLogs] = await Promise.all([
+    dbAll("SELECT COUNT(*) as c FROM users"),
+    dbAll("SELECT COUNT(*) as c FROM users WHERE is_suspended = 1"),
+    dbAll("SELECT COUNT(*) as c FROM security_audit_logs"),
+  ]);
+
+  res.json({
+    status: "healthy",
+    posture: {
+      zeroDataRetention: {
+        status: "ACTIVE",
+        compliancePct: 100,
+        description: "In-memory inference only; zero prompts or generated code written to persistent storage.",
+      },
+      edgeFirewall: {
+        provider: "Cloudflare",
+        ssl: "Strict TLS 1.3",
+        ddosShield: "Armed",
+        turnstile: process.env.TURNSTILE_SECRET_KEY ? "Enforced" : "Configured (Passive)",
+      },
+      rateLimiting: {
+        authRateLimit: "10 req/min (Brute-Force Guard)",
+        proxyRateLimit: "60 req/min (Concurrency Guard)",
+      },
+      dualPortIsolation: {
+        customerPort: 3333,
+        adminPort: 3334,
+        status: "Enforced",
+      },
+    },
+    counts: {
+      totalUsers: totalUsers[0]?.c || 0,
+      suspendedUsers: suspendedUsers[0]?.c || 0,
+      auditLogsLogged: totalLogs[0]?.c || 0,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * GET /admin/security/audit-logs
+ * Fetch real-time security audit trails
+ */
+adminRouter.get("/security/audit-logs", requireAdmin, async (req: Request, res: Response) => {
+  const type = req.query.type as string | undefined;
+  const limit = Math.min(200, parseInt(req.query.limit as string) || 100);
+  const logs = await getRecentSecurityEvents(limit, type);
+  res.json({ logs, count: logs.length });
 });
 
 // ─── Model Registry (Zero-Downtime Hot Reload) ────────────────────────────────

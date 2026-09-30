@@ -21,15 +21,28 @@ export interface AuthenticatedUser {
   validUntil?: string;
 }
 
-export async function authenticateApiKey(authHeader?: string): Promise<AuthenticatedUser | null> {
+export async function authenticateApiKey(authHeader?: string, clientIp?: string): Promise<AuthenticatedUser | null> {
   if (!authHeader?.startsWith("Bearer ")) return null;
   const apiKey = authHeader.replace("Bearer ", "").trim();
 
   const user = await dbGet<any>(
-    "SELECT id, email, name, api_key as apiKey FROM users WHERE api_key = ?",
+    "SELECT id, email, name, api_key as apiKey, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE api_key = ?",
     [apiKey]
   );
   if (!user) return null;
+  if (user.is_suspended === 1) {
+    console.warn(`[Security] Blocked request from suspended user: ${user.email}`);
+    return null;
+  }
+
+  // Check IP whitelisting if configured (OpenAI Codex / Kimi Enterprise feature)
+  if (user.allowed_ips && user.allowed_ips.trim() && clientIp) {
+    const allowed = user.allowed_ips.split(",").map((s: string) => s.trim());
+    if (!allowed.includes("*") && !allowed.includes(clientIp)) {
+      console.warn(`[Security] IP ${clientIp} not in allowed_ips for user ${user.email}`);
+      return null;
+    }
+  }
 
   const now = new Date().toISOString();
   const subscription = await dbGet<any>(

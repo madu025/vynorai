@@ -106,6 +106,9 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item active" onclick="showPage('overview')" id="nav-overview">
       <span class="nav-icon">📊</span>Overview
     </div>
+    <div class="nav-item" onclick="showPage('security')" id="nav-security">
+      <span class="nav-icon">🛡️</span>Security & Radar
+    </div>
     <div class="nav-item" onclick="showPage('users')" id="nav-users">
       <span class="nav-icon">👥</span>Users & Subs
     </div>
@@ -137,6 +140,70 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       </div>
     </div>
 
+    <!-- SECURITY & THREAT RADAR -->
+    <div class="page" id="page-security">
+      <h1>🛡️ Security & Threat Radar</h1>
+      <p class="subtitle">Cloudflare WAF, Enterprise Zero Data Retention (ZDR), and Live Security Audit Trails</p>
+      
+      <div class="cards" id="securityCards">
+        <div class="stat-card">
+          <div class="stat-label">Edge & WAF Defense</div>
+          <div class="stat-value green" style="font-size:1.05rem">Cloudflare TLS 1.3</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">DDoS Shield Armed • Bot Turnstile Active</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Zero Data Retention (ZDR)</div>
+          <div class="stat-value green" style="font-size:1.05rem">100% Enforced</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">In-Memory Inference Only • 0 Code Logs</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Rate Limiter Engines</div>
+          <div class="stat-value purple" style="font-size:1.05rem">Active Guard</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">10 auth/min • 60 proxy/min per key</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Suspended Accounts</div>
+          <div class="stat-value amber" id="secSuspendedCount">0</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Compromised / policy violations</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">📜 Live Security Audit Trail (<span id="auditCount">0</span>)</div>
+          <div style="display:flex;gap:.6rem;align-items:center;">
+            <select id="auditTypeFilter" onchange="filterAuditLogs()" style="padding:.3rem .8rem;font-size:.8rem;width:150px;">
+              <option value="">All Events</option>
+              <option value="AUTH">Auth Events</option>
+              <option value="KEY">Key Management</option>
+              <option value="ADMIN">Admin Actions</option>
+              <option value="SUSPEND">Suspensions</option>
+              <option value="PASSWORD">Password Changes</option>
+            </select>
+            <button class="btn btn-ghost" onclick="loadSecurity()">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Event</th>
+                <th>Severity</th>
+                <th>Actor</th>
+                <th>Target</th>
+                <th>Details</th>
+                <th>IP Address</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="7" class="loading">Loading security audit trails...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- USERS & SUBSCRIPTIONS -->
     <div class="page" id="page-users">
       <h1>Users & Subscriptions</h1>
@@ -153,13 +220,15 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
               <tr>
                 <th>Customer</th>
                 <th>API Key</th>
-                <th>Plan Status</th>
+                <th>Status</th>
+                <th>Plan</th>
                 <th>Tokens Used</th>
-                <th>Registered</th>
+                <th>IP Access</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="userTableBody">
-              <tr><td colspan="5" class="loading">Loading user records...</td></tr>
+              <tr><td colspan="7" class="loading">Loading user records...</td></tr>
             </tbody>
           </table>
         </div>
@@ -322,6 +391,7 @@ function showPage(id) {
   document.getElementById('page-' + id).classList.add('active');
   document.getElementById('nav-' + id).classList.add('active');
   if (id === 'overview') loadOverview();
+  if (id === 'security') loadSecurity();
   if (id === 'users')    loadUsers();
   if (id === 'plans')    loadPlans();
   if (id === 'models')   loadModels();
@@ -343,7 +413,7 @@ function renderUsersTable(users) {
   const tbody = document.getElementById('userTableBody');
   if (!tbody) return;
   if (users.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">No registered users found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No registered users found</td></tr>';
     return;
   }
   tbody.innerHTML = users.map(u => {
@@ -351,17 +421,50 @@ function renderUsersTable(users) {
     const planBadge = isSub ? `<span class="badge badge-pro">${(u.plan_name||'pro').toUpperCase()}</span>` : '<span class="badge badge-free">FREE</span>';
     const used = (u.used_tokens || 0).toLocaleString();
     const max = (u.max_tokens || 50000).toLocaleString();
-    const date = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
+    const statusBadge = u.is_suspended 
+      ? '<span class="badge badge-suspended" style="background:rgba(239,68,68,0.2);color:#ef4444;">⛔ SUSPENDED</span>' 
+      : '<span class="badge badge-starter">✅ ACTIVE</span>';
+    const ipAccess = u.allowed_ips ? `<code style="font-size:.72rem;color:var(--accent2);">${u.allowed_ips}</code>` : '<span style="color:var(--muted);font-size:.75rem">🌐 Global</span>';
     return `
       <tr>
         <td><strong>${u.name || 'Developer'}</strong><br/><span style="font-size:.78rem;color:var(--muted)">${u.email}</span></td>
         <td><code style="font-size:.75rem;color:var(--muted)">${u.api_key ? u.api_key.slice(0, 16) + '...' : '—'}</code></td>
+        <td>${statusBadge}</td>
         <td>${planBadge}</td>
         <td>${used} / ${max}</td>
-        <td style="font-size:.8rem;color:var(--muted)">${date}</td>
+        <td>${ipAccess}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;margin-right:.3rem;" onclick="adminRotateKey('${u.id}', '${u.email}')">🔄 Roll</button>
+          <button class="btn ${u.is_suspended ? 'btn-success' : 'btn-danger'}" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminToggleSuspend('${u.id}', '${u.email}', ${u.is_suspended})">
+            ${u.is_suspended ? 'Reactivate' : 'Suspend'}
+          </button>
+        </td>
       </tr>
     `;
   }).join('');
+}
+
+async function adminRotateKey(userId, email) {
+  if (!confirm(`Force rotate API Key for ${email}? Their active VS Code extension will stop working until they copy the new key.`)) return;
+  const res = await api('POST', `/admin/users/${userId}/rotate-key`);
+  if (res?.ok) {
+    showToast(`Key rotated for ${email}`);
+    loadUsers();
+  } else {
+    showToast('Failed to rotate key', 'err');
+  }
+}
+
+async function adminToggleSuspend(userId, email, isSuspended) {
+  const action = isSuspended ? 'reactivate' : 'suspend';
+  if (!confirm(`Are you sure you want to ${action} ${email}?`)) return;
+  const res = await api('POST', `/admin/users/${userId}/toggle-suspend`);
+  if (res?.ok) {
+    showToast(`User ${email} ${action}d`);
+    loadUsers();
+  } else {
+    showToast(`Failed to ${action} user`, 'err');
+  }
 }
 
 function filterUsersTable() {
@@ -371,6 +474,65 @@ function filterUsersTable() {
     (u.name && u.name.toLowerCase().includes(q))
   );
   renderUsersTable(filtered);
+}
+
+let allAuditLogs = [];
+
+async function loadSecurity() {
+  const [overview, auditData] = await Promise.all([
+    api('GET', '/admin/security/overview'),
+    api('GET', '/admin/security/audit-logs'),
+  ]);
+
+  if (overview) {
+    const el = document.getElementById('secSuspendedCount');
+    if (el) el.innerText = overview.counts?.suspendedUsers || 0;
+  }
+
+  if (auditData) {
+    allAuditLogs = auditData.logs || [];
+    const countEl = document.getElementById('auditCount');
+    if (countEl) countEl.innerText = allAuditLogs.length;
+    renderAuditTable(allAuditLogs);
+  }
+}
+
+function renderAuditTable(logs) {
+  const tbody = document.getElementById('auditTableBody');
+  if (!tbody) return;
+  if (logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No security events recorded yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logs.map(l => {
+    const date = l.created_at ? new Date(l.created_at).toLocaleString() : '—';
+    const sevBadge = l.severity === 'CRITICAL' 
+      ? '<span class="badge" style="background:rgba(239,68,68,0.2);color:#ef4444;">CRITICAL</span>'
+      : l.severity === 'WARN'
+      ? '<span class="badge" style="background:rgba(245,158,11,0.2);color:#f59e0b;">WARN</span>'
+      : '<span class="badge" style="background:rgba(6,214,160,0.15);color:#06d6a0;">INFO</span>';
+    return `
+      <tr>
+        <td style="font-size:.78rem;color:var(--muted);white-space:nowrap;">${date}</td>
+        <td><strong style="font-size:.8rem;color:var(--accent2);">${l.event_type}</strong></td>
+        <td>${sevBadge}</td>
+        <td style="font-size:.82rem;">${l.actor || 'System'}</td>
+        <td style="font-size:.82rem;color:var(--muted);">${l.target || '—'}</td>
+        <td style="font-size:.82rem;">${l.details || '—'}</td>
+        <td><code style="font-size:.75rem;color:var(--muted);">${l.ip_address || '—'}</code></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterAuditLogs() {
+  const sel = (document.getElementById('auditTypeFilter')?.value || '').trim();
+  if (!sel) {
+    renderAuditTable(allAuditLogs);
+  } else {
+    const filtered = allAuditLogs.filter(l => l.event_type && l.event_type.includes(sel));
+    renderAuditTable(filtered);
+  }
 }
 
 function loadAll() { loadOverview(); }

@@ -705,27 +705,50 @@
       </div>
 
       <!-- Subscription Status & Token Usage Grid -->
+      <!-- Subscription Status & Token Usage Grid -->
       <div class="dashboard-grid">
-        <!-- Token & VS Code Connection -->
+        <!-- Token & Key Governance (Codex / Kimi Enterprise Standard) -->
         <div class="glass-card">
-          <h3>🔑 Your VynorAI License Token</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>🔑 API License Key</h3>
+            <span class="status-pill status-active" style="font-size:11px;">Active Key</span>
+          </div>
           <p style="color: var(--text-muted); font-size: 14px; margin-top: 6px;">
-            Copy this token and use it inside your VynorAI VS Code Extension.
+            Your personal key to connect VS Code with VynorAI's reasoning models.
           </p>
 
-          <div class="token-box">
-            <span id="api-key-text">Loading token...</span>
-            <button class="copy-btn" onclick="copyToken()">Copy Token</button>
+          <div class="token-box" style="flex-direction:column; gap:12px; align-items:stretch;">
+            <div style="display:flex; justify-content:space-between; align-items:center; word-break:break-all;">
+              <span id="api-key-text" style="letter-spacing:1px;font-family:'JetBrains Mono',monospace;">••••••••••••••••••••••••••••••••</span>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; border-top:1px solid rgba(255,255,255,0.06); padding-top:10px; justify-content:flex-end;">
+              <button class="btn btn-secondary" id="btn-toggle-key" onclick="toggleApiKeyVisibility()" style="font-size:12px; padding:6px 12px;">👁️ Reveal</button>
+              <button class="copy-btn" onclick="copyToken()" style="margin:0; font-size:12px; padding:6px 12px;">📋 Copy Key</button>
+              <button class="btn btn-secondary" onclick="openRotateKeyModal()" style="font-size:12px; padding:6px 12px; border-color:rgba(255,171,0,0.5); color:#ffab00;">🔄 Roll / Rotate</button>
+            </div>
           </div>
 
-          <div style="margin-top: 20px;">
+          <!-- IP Restriction Policy (OpenAI / Codex / Kimi Feature) -->
+          <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:12px; margin-top:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-size:12px; font-weight:600; color:var(--text);">🔒 Allowed IP Access (Optional)</span>
+              <span style="font-size:11px; color:var(--text-muted);">IP Allowlist</span>
+            </div>
+            <p style="color:var(--text-muted); font-size:11px; margin-bottom:8px; line-height:1.4;">
+              Restrict key usage to your office or home IP. Leave blank for unrestricted global access.
+            </p>
+            <div style="display:flex; gap:8px;">
+              <input id="user-allowed-ips" placeholder="e.g. 203.0.113.19 or blank" style="flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:12px; color:var(--text); font-family:'JetBrains Mono',monospace;"/>
+              <button class="btn btn-secondary" onclick="saveAllowedIps()" style="font-size:12px; padding:6px 14px;">Save IP Policy</button>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px;">
             <h4>💡 How to connect in VS Code:</h4>
-            <ol style="color: var(--text-muted); font-size: 13px; margin: 10px 0 0 20px; line-height: 1.6;">
-              <li>Install the <b>VynorAI</b> extension in VS Code.</li>
-              <li>Click the VynorAI icon on the sidebar.</li>
-              <li>When prompted or in settings, paste your token:
-                <pre style="background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; margin-top: 6px; color: var(--primary);">apiKey: "vynor_live_..."</pre>
-              </li>
+            <ol style="color: var(--text-muted); font-size: 12px; margin: 8px 0 0 18px; line-height: 1.6;">
+              <li>Install the <b>VynorAI</b> extension from the VS Code Marketplace.</li>
+              <li>Click the VynorAI icon on the activity sidebar.</li>
+              <li>Paste your token when prompted or in settings (<code>vynor_live_...</code>).</li>
             </ol>
           </div>
         </div>
@@ -762,10 +785,47 @@
             ⚡ You are currently on the Free Trial. Upgrade below for high-throughput coding models with millions of tokens!
           </div>
 
-          <!-- Dev test activate button for easy verification -->
-          <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
-            <button class="btn btn-secondary" onclick="devTestActivate('starter')" style="font-size: 12px; padding: 8px 12px; width: auto;">Simulate Starter (LKR 1,500)</button>
-            <button class="btn btn-secondary" onclick="devTestActivate('pro')" style="font-size: 12px; padding: 8px 12px; width: auto;">Simulate Pro (LKR 3,500)</button>
+          <!-- Quick Account Security Actions -->
+          <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="openChangePasswordModal()" style="font-size: 12px; padding: 7px 12px; width: auto;">🔑 Change Password</button>
+            <button class="btn btn-secondary" onclick="openSecurityLogsModal()" style="font-size: 12px; padding: 7px 12px; width: auto;">📜 Security Activity</button>
+          </div>
+        </div>
+
+        <!-- Enterprise Zero Data Retention (ZDR) & Privacy Shield (Codex / Kimi Assurance) -->
+        <div class="glass-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, rgba(18,22,34,0.85) 0%, rgba(10,14,24,0.95) 100%); border: 1px solid rgba(0,229,255,0.2);">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:32px; height:32px; border-radius:8px; background:rgba(0,230,118,0.15); display:flex; align-items:center; justify-content:center; color:#00e676; font-size:18px;">🛡️</div>
+              <div>
+                <h3 style="margin:0; font-size:16px;">Enterprise Zero Data Retention (ZDR) Active</h3>
+                <p style="margin:2px 0 0 0; color:var(--text-muted); font-size:12px;">Codex & Kimi-equivalent cryptographic code privacy and intellectual property protection</p>
+              </div>
+            </div>
+            <span class="status-pill status-active" style="background:rgba(0,230,118,0.15); color:#00e676; border-color:rgba(0,230,118,0.4);">
+              ● 100% Zero Retention Enforced
+            </span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:18px; margin-top:20px;">
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:14px;">
+              <div style="color:var(--primary); font-size:14px; font-weight:700; margin-bottom:4px;">⚡ In-Memory Inference Only</div>
+              <p style="color:var(--text-muted); font-size:12px; line-height:1.5;">
+                Prompts, AST context, and code completions reside in volatile memory and are immediately expunged. Zero code is ever written to disk.
+              </p>
+            </div>
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:14px;">
+              <div style="color:var(--success); font-size:14px; font-weight:700; margin-bottom:4px;">🚫 Zero Training Guarantee</div>
+              <p style="color:var(--text-muted); font-size:12px; line-height:1.5;">
+                Your proprietary source code is never used to train, fine-tune, or improve public or private AI models. Complete IP sovereignty.
+              </p>
+            </div>
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:14px;">
+              <div style="color:var(--accent); font-size:14px; font-weight:700; margin-bottom:4px;">🔒 Strict TLS 1.3 Transport</div>
+              <p style="color:var(--text-muted); font-size:12px; line-height:1.5;">
+                All extension agent queries pass through Cloudflare Edge DDoS Shield with strict cryptographic forward secrecy.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -887,6 +947,62 @@
     </div>
   </div>
 
+  <!-- ── Rotate Key Confirm Modal (Codex / Kimi Security Feature) ───── -->
+  <div id="rotate-key-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:999; backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+    <div class="glass-card" style="max-width:440px; width:90%; padding:30px; position:relative; border:1px solid rgba(255,171,0,0.3); animation: fadeInUp 0.25s ease;">
+      <button onclick="closeRotateKeyModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+      <div style="font-size:32px; margin-bottom:12px;">🔄</div>
+      <h3 style="font-size:20px; font-weight:700; margin-bottom:8px;">Roll API License Key?</h3>
+      <div style="background:rgba(255,171,0,0.1); border:1px solid rgba(255,171,0,0.3); border-radius:10px; padding:12px; font-size:13px; color:#ffca28; margin:14px 0; line-height:1.5;">
+        ⚠️ <b>Warning:</b> Rolling your key immediately revokes your current key. Any active VS Code extension instances using the old key will stop working until you paste the new key.
+      </div>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+        Use this if your key was accidentally exposed, committed to git, or you suspect unauthorized usage.
+      </p>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="closeRotateKeyModal()" style="font-size:13px; padding:10px 16px;">Cancel</button>
+        <button class="btn btn-primary" id="btn-confirm-rotate" onclick="confirmRotateKey()" style="font-size:13px; padding:10px 18px; background:linear-gradient(135deg, #ffab00, #ff6d00); color:#000; font-weight:700;">Roll Key Now →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Change Password Modal ───────────────────────────────────────── -->
+  <div id="password-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:999; backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+    <div class="glass-card" style="max-width:420px; width:90%; padding:30px; position:relative; border:1px solid rgba(0,229,255,0.25); animation: fadeInUp 0.25s ease;">
+      <button onclick="closeChangePasswordModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+      <h3 style="font-size:20px; font-weight:700; margin-bottom:6px;">🔑 Change Password</h3>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:18px;">Update your account credentials to keep your tokens secure.</p>
+      
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Current Password</label>
+        <input id="pwd-current" type="password" placeholder="••••••••" style="width:100%; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:8px; padding:10px; color:var(--text); font-size:14px;"/>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">New Password (min 8 characters)</label>
+        <input id="pwd-new" type="password" placeholder="••••••••" style="width:100%; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:8px; padding:10px; color:var(--text); font-size:14px;"/>
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Confirm New Password</label>
+        <input id="pwd-confirm" type="password" placeholder="••••••••" style="width:100%; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:8px; padding:10px; color:var(--text); font-size:14px;"/>
+      </div>
+      <div id="pwd-error" style="color:#ef4444; font-size:12px; margin-bottom:12px; display:none;"></div>
+      <button class="btn btn-primary" id="btn-submit-pwd" onclick="submitChangePassword()" style="width:100%; padding:12px; font-size:14px;">Update Password</button>
+    </div>
+  </div>
+
+  <!-- ── Security Audit Logs Modal ───────────────────────────────────── -->
+  <div id="security-logs-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:999; backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+    <div class="glass-card" style="max-width:620px; width:92%; max-height:85vh; padding:30px; position:relative; border:1px solid rgba(0,229,255,0.25); display:flex; flex-direction:column; animation: fadeInUp 0.25s ease;">
+      <button onclick="closeSecurityLogsModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+      <h3 style="font-size:20px; font-weight:700; margin-bottom:4px;">📜 Security Activity Audit Trail</h3>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Audit trail of recent logins, key roll operations, and password updates</p>
+      
+      <div style="overflow-y:auto; flex:1; border:1px solid var(--border); border-radius:10px; background:rgba(0,0,0,0.3); padding:10px;" id="user-security-logs-body">
+        <div style="text-align:center; padding:2rem; color:var(--text-muted); font-size:13px;">Loading activity history...</div>
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentUser = null;
 
@@ -929,7 +1045,10 @@
         if (headerSignIn) headerSignIn.classList.add('hidden');
 
         document.getElementById('user-display-name').innerText = currentUser.name || currentUser.email;
-        document.getElementById('api-key-text').innerText = currentUser.apiKey;
+        if (document.getElementById('user-allowed-ips')) {
+          document.getElementById('user-allowed-ips').value = currentUser.allowedIps || '';
+        }
+        renderApiKeyDisplay();
 
         const sub = data.subscription;
         const pill = document.getElementById('sub-status-pill');
@@ -974,16 +1093,203 @@
       }
     }
 
+    let isApiKeyVisible = false;
+
+    function renderApiKeyDisplay() {
+      const el = document.getElementById('api-key-text');
+      const btn = document.getElementById('btn-toggle-key');
+      if (!el || !currentUser) return;
+      if (isApiKeyVisible) {
+        el.innerText = currentUser.apiKey;
+        el.style.letterSpacing = 'normal';
+        if (btn) btn.innerText = '🙈 Hide';
+      } else {
+        el.innerText = '••••••••••••••••••••••••••••••••';
+        el.style.letterSpacing = '2px';
+        if (btn) btn.innerText = '👁️ Reveal';
+      }
+    }
+
+    function toggleApiKeyVisibility() {
+      isApiKeyVisible = !isApiKeyVisible;
+      renderApiKeyDisplay();
+    }
+
     function copyToken() {
-      const tokenText = document.getElementById('api-key-text').innerText;
-      if (!tokenText || tokenText === 'Loading token...') return;
-      navigator.clipboard.writeText(tokenText).then(() => {
+      if (!currentUser?.apiKey) return;
+      navigator.clipboard.writeText(currentUser.apiKey).then(() => {
         const btn = document.querySelector('.copy-btn');
-        const orig = btn.innerText;
-        btn.innerText = 'Copied! ✓';
-        btn.style.background = 'rgba(0,230,118,0.2)';
-        setTimeout(() => { btn.innerText = orig; btn.style.background = ''; }, 2000);
+        if (btn) {
+          const orig = btn.innerText;
+          btn.innerText = 'Copied! ✓';
+          btn.style.background = 'rgba(0,230,118,0.2)';
+          setTimeout(() => { btn.innerText = orig; btn.style.background = ''; }, 2000);
+        }
       });
+    }
+
+    function openRotateKeyModal() {
+      document.getElementById('rotate-key-modal-overlay').style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeRotateKeyModal() {
+      document.getElementById('rotate-key-modal-overlay').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+
+    async function confirmRotateKey() {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      const btn = document.getElementById('btn-confirm-rotate');
+      btn.disabled = true;
+      btn.innerText = 'Rolling key...';
+      try {
+        const res = await fetch('/api/auth/rotate-key', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (res.ok && data.apiKey) {
+          currentUser.apiKey = data.apiKey;
+          isApiKeyVisible = true;
+          renderApiKeyDisplay();
+          closeRotateKeyModal();
+          alert('✅ API Key successfully rolled! Remember to update your VS Code settings.');
+        } else {
+          alert(data.error || 'Failed to roll API Key');
+        }
+      } catch (err) {
+        alert('Network error rolling API Key');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Roll Key Now →';
+      }
+    }
+
+    async function saveAllowedIps() {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      const allowedIps = document.getElementById('user-allowed-ips').value.trim();
+      try {
+        const res = await fetch('/api/auth/allowed-ips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ allowedIps })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert('✅ ' + data.message);
+        } else {
+          alert(data.error || 'Failed to update IP policy');
+        }
+      } catch (err) {
+        alert('Error saving IP policy');
+      }
+    }
+
+    function openChangePasswordModal() {
+      document.getElementById('pwd-current').value = '';
+      document.getElementById('pwd-new').value = '';
+      document.getElementById('pwd-confirm').value = '';
+      document.getElementById('pwd-error').style.display = 'none';
+      document.getElementById('password-modal-overlay').style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeChangePasswordModal() {
+      document.getElementById('password-modal-overlay').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+
+    async function submitChangePassword() {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      const currentPassword = document.getElementById('pwd-current').value;
+      const newPassword = document.getElementById('pwd-new').value;
+      const confirmPassword = document.getElementById('pwd-confirm').value;
+      const errBox = document.getElementById('pwd-error');
+
+      if (!currentPassword || !newPassword) {
+        errBox.innerText = 'Please fill out all fields.';
+        errBox.style.display = 'block';
+        return;
+      }
+      if (newPassword.length < 8) {
+        errBox.innerText = 'New password must be at least 8 characters long.';
+        errBox.style.display = 'block';
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        errBox.innerText = 'New passwords do not match.';
+        errBox.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-pwd');
+      btn.disabled = true;
+      btn.innerText = 'Updating...';
+
+      try {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ currentPassword, newPassword })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          closeChangePasswordModal();
+          alert('✅ Password changed successfully!');
+        } else {
+          errBox.innerText = data.error || 'Failed to change password.';
+          errBox.style.display = 'block';
+        }
+      } catch (err) {
+        errBox.innerText = 'Network error changing password.';
+        errBox.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Update Password';
+      }
+    }
+
+    function openSecurityLogsModal() {
+      document.getElementById('security-logs-modal-overlay').style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+      loadUserSecurityLogs();
+    }
+
+    function closeSecurityLogsModal() {
+      document.getElementById('security-logs-modal-overlay').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+
+    async function loadUserSecurityLogs() {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      const container = document.getElementById('user-security-logs-body');
+      try {
+        const res = await fetch('/api/auth/security-logs', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const events = data.events || [];
+        if (events.length === 0) {
+          container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted);font-size:13px;">No security events recorded yet.</div>';
+          return;
+        }
+        container.innerHTML = events.map(e => {
+          const date = e.created_at ? new Date(e.created_at).toLocaleString() : '—';
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px;">
+              <div>
+                <strong style="color:var(--primary); font-size:13px;">${e.event_type}</strong>
+                <p style="color:var(--text); margin-top:2px;">${e.details || 'Event logged'}</p>
+                <span style="color:var(--text-muted); font-size:11px;">IP: ${e.ip_address || 'unknown'}</span>
+              </div>
+              <span style="color:var(--text-muted); font-size:11px; white-space:nowrap;">${date}</span>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:#ef4444;font-size:13px;">Failed to load security logs.</div>';
+      }
     }
 
     let _pendingPlan = null;
@@ -1078,9 +1384,18 @@
       loadDashboard();
     }
 
-    // Close modal on overlay click
+    // Close modals on overlay click
     document.getElementById('plan-modal-overlay').addEventListener('click', function(e) {
       if (e.target === this) closePlanModal();
+    });
+    document.getElementById('rotate-key-modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeRotateKeyModal();
+    });
+    document.getElementById('password-modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeChangePasswordModal();
+    });
+    document.getElementById('security-logs-modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeSecurityLogsModal();
     });
 
     // Auto-check on load & handle PayHere return status

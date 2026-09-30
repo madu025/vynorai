@@ -9,12 +9,13 @@ export const proxyRouter = Router();
 
 // ─── Auth + Subscription Middleware ──────────────────────────────────────────
 async function requireValidSubscriber(req: Request, res: Response, next: NextFunction) {
-  const user = await authenticateApiKey(req.headers.authorization);
+  const clientIp = (req.headers["cf-connecting-ip"] as string) || (req.headers["x-forwarded-for"] as string)?.split(",")[0].trim() || req.ip;
+  const user = await authenticateApiKey(req.headers.authorization, clientIp);
 
   if (!user) {
     return res.status(401).json({
       error: {
-        message: "Invalid or missing VynorAI API Key. Provide: Authorization: Bearer vynor_live_...",
+        message: "Invalid, expired, or suspended VynorAI API Key. Provide: Authorization: Bearer vynor_live_...",
         type: "invalid_request_error",
         code: "invalid_api_key",
       },

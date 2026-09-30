@@ -7,6 +7,8 @@ import { config } from "../config.js";
 
 export const authRouter = Router();
 
+import { logSecurityEvent, getUserSecurityEvents } from "../services/securityAudit.js";
+
 // Middleware to authenticate JWT
 export async function requireAuth(req: Request, res: Response, next: Function) {
   const authHeader = req.headers.authorization;
@@ -17,9 +19,15 @@ export async function requireAuth(req: Request, res: Response, next: Function) {
   const token = authHeader.replace("Bearer ", "");
   try {
     const payload = jwt.verify(token, config.jwtSecret) as { userId: string; email: string };
-    const user = await dbGet("SELECT id, email, name, api_key FROM users WHERE id = ?", [payload.userId]);
+    const user = await dbGet<any>(
+      "SELECT id, email, name, api_key, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE id = ?",
+      [payload.userId]
+    );
     if (!user) {
       return res.status(401).json({ error: "User not found" });
+    }
+    if (user.is_suspended === 1) {
+      return res.status(403).json({ error: "Your account has been suspended for security violations. Contact security@vynor.lk" });
     }
     (req as any).user = user;
     next();
@@ -65,7 +73,7 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
     }
 
     // Verify Turnstile bot protection if token/secret present
-    const clientIp = req.headers["cf-connecting-ip"] as string || req.ip;
+    const clientIp = (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
     const isHuman = await verifyTurnstileToken(turnstileToken, clientIp);
     if (!isHuman) {
       return res.status(400).json({ error: "Security check failed. Please verify you are human." });
@@ -85,6 +93,15 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
       [userId, email.toLowerCase().trim(), passwordHash, apiKey, name || ""]
     );
 
+    await logSecurityEvent({
+      eventType: "AUTH_REGISTER",
+      severity: "INFO",
+      actor: email.toLowerCase().trim(),
+      target: userId,
+      details: "New account registered successfully",
+      ipAddress: clientIp,
+    });
+
     const token = jwt.sign({ userId, email }, config.jwtSecret, { expiresIn: "30d" });
 
     res.json({
@@ -103,8 +120,9 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
   }
 });
 
-// Login (with Rate Limiting against Brute-Force)
+// Login (with Rate Limiting against Brute-Force & Suspension check)
 authRouter.post("/login", authRateLimiter, async (req: Request, res: Response) => {
+  const clientIp = (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
   try {
     const { email, password } = req.body;
 
@@ -114,13 +132,48 @@ authRouter.post("/login", authRateLimiter, async (req: Request, res: Response) =
 
     const user = await dbGet<any>("SELECT * FROM users WHERE email = ?", [email.toLowerCase().trim()]);
     if (!user) {
+      await logSecurityEvent({
+        eventType: "AUTH_LOGIN_FAILED",
+        severity: "WARN",
+        actor: email.toLowerCase().trim(),
+        details: "Non-existent user email login attempt",
+        ipAddress: clientIp,
+      });
       return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    // Check account suspension
+    if (user.is_suspended === 1) {
+      await logSecurityEvent({
+        eventType: "AUTH_LOGIN_BLOCKED_SUSPENDED",
+        severity: "CRITICAL",
+        actor: user.email,
+        details: "Login blocked for suspended account",
+        ipAddress: clientIp,
+      });
+      return res.status(403).json({ error: "Your account has been suspended for security policy violations. Contact security@vynor.lk" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      await logSecurityEvent({
+        eventType: "AUTH_LOGIN_FAILED",
+        severity: "WARN",
+        actor: user.email,
+        details: "Incorrect password entered",
+        ipAddress: clientIp,
+      });
       return res.status(401).json({ error: "Invalid email or password" });
     }
+
+    await logSecurityEvent({
+      eventType: "AUTH_LOGIN_SUCCESS",
+      severity: "INFO",
+      actor: user.email,
+      target: user.id,
+      details: "User authenticated successfully",
+      ipAddress: clientIp,
+    });
 
     const token = jwt.sign({ userId: user.id, email: user.email }, config.jwtSecret, { expiresIn: "30d" });
 
@@ -140,7 +193,7 @@ authRouter.post("/login", authRateLimiter, async (req: Request, res: Response) =
   }
 });
 
-// Get current user profile + active subscription
+// Get current user profile + active subscription + security status
 authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
@@ -153,7 +206,6 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
       [user.id, now]
     );
 
-    const planId = subscription?.plan_name || "free";
     const monthlyUsage = await dbGet<any>(
       "SELECT * FROM monthly_usage WHERE user_id = ?",
       [user.id]
@@ -170,6 +222,8 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
         email: user.email,
         name: user.name,
         apiKey: user.api_key,
+        allowedIps: user.allowed_ips || "",
+        isSuspended: false,
       },
       subscription: subscription || null,
       monthlyUsage: monthlyUsage || null,
@@ -180,8 +234,123 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
-
     console.error("Profile error:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Rotate API Key (Key lifecycle management like OpenAI/Kimi/Codex)
+authRouter.post("/rotate-key", requireAuth, async (req: Request, res: Response) => {
+  const clientIp = (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
+  try {
+    const user = (req as any).user;
+    const newApiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
+
+    await dbRun("UPDATE users SET api_key = ? WHERE id = ?", [newApiKey, user.id]);
+
+    await logSecurityEvent({
+      eventType: "KEY_ROTATED",
+      severity: "INFO",
+      actor: user.email,
+      target: user.id,
+      details: "User rotated their API Key. Previous key immediately revoked.",
+      ipAddress: clientIp,
+    });
+
+    res.json({
+      success: true,
+      apiKey: newApiKey,
+      message: "API Key rolled successfully. Previous key revoked immediately. Please update your VS Code extension settings.",
+    });
+  } catch (err: any) {
+    console.error("Rotate key error:", err);
+    res.status(500).json({ error: "Failed to rotate API Key" });
+  }
+});
+
+// Set Allowed IPs (OpenAI/Kimi-style IP Whitelisting)
+authRouter.post("/allowed-ips", requireAuth, async (req: Request, res: Response) => {
+  const clientIp = (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
+  try {
+    const user = (req as any).user;
+    const { allowedIps } = req.body;
+
+    const sanitized = typeof allowedIps === "string" ? allowedIps.trim() : "";
+    await dbRun("UPDATE users SET allowed_ips = ? WHERE id = ?", [sanitized, user.id]);
+
+    await logSecurityEvent({
+      eventType: "IP_RESTRICTIONS_UPDATED",
+      severity: "INFO",
+      actor: user.email,
+      target: user.id,
+      details: sanitized ? `Allowed IPs restricted to: ${sanitized}` : "Allowed IPs restriction cleared (global access)",
+      ipAddress: clientIp,
+    });
+
+    res.json({
+      success: true,
+      allowedIps: sanitized,
+      message: sanitized ? `API access restricted to: ${sanitized}` : "IP restriction removed. Key accessible anywhere.",
+    });
+  } catch (err: any) {
+    console.error("Allowed IPs update error:", err);
+    res.status(500).json({ error: "Failed to update IP restrictions" });
+  }
+});
+
+// Get User's Personal Security Events & Audit Trail
+authRouter.get("/security-logs", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const events = await getUserSecurityEvents(user.email, 15);
+    res.json({ events });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to fetch security logs" });
+  }
+});
+
+// Change Password
+authRouter.post("/change-password", requireAuth, async (req: Request, res: Response) => {
+  const clientIp = (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
+  try {
+    const user = (req as any).user;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Current password and new password are required" });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "New password must be at least 8 characters" });
+    }
+
+    const dbUser = await dbGet<any>("SELECT password_hash FROM users WHERE id = ?", [user.id]);
+    const isMatch = await bcrypt.compare(currentPassword, dbUser.password_hash);
+    if (!isMatch) {
+      await logSecurityEvent({
+        eventType: "PASSWORD_CHANGE_FAILED",
+        severity: "WARN",
+        actor: user.email,
+        details: "Failed password change: current password incorrect",
+        ipAddress: clientIp,
+      });
+      return res.status(400).json({ error: "Incorrect current password" });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await dbRun("UPDATE users SET password_hash = ? WHERE id = ?", [newHash, user.id]);
+
+    await logSecurityEvent({
+      eventType: "PASSWORD_CHANGED",
+      severity: "INFO",
+      actor: user.email,
+      target: user.id,
+      details: "User password changed successfully",
+      ipAddress: clientIp,
+    });
+
+    res.json({ success: true, message: "Password updated successfully" });
+  } catch (err: any) {
+    console.error("Change password error:", err);
+    res.status(500).json({ error: "Failed to change password" });
   }
 });

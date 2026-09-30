@@ -83,6 +83,35 @@ export async function initModelRegistry(): Promise<void> {
   await getAllModels(true);
   await initPlanManager();
   await ensureMemoryTables();
+  await ensureSecurityTables();
+}
+
+/** Ensure security tables and user columns (suspension, allowed IPs) exist */
+export async function ensureSecurityTables(): Promise<void> {
+  // 1. Audit logs table
+  await dbRun(`CREATE TABLE IF NOT EXISTS security_audit_logs (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'INFO',
+    actor TEXT,
+    target TEXT,
+    details TEXT,
+    ip_address TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 2. Add is_suspended & allowed_ips to users table safely
+  try {
+    const userCols = (await dbAll<any>("PRAGMA table_info(users)")).map((c: any) => c.name);
+    if (!userCols.includes("is_suspended")) {
+      await dbRun("ALTER TABLE users ADD COLUMN is_suspended INTEGER DEFAULT 0");
+    }
+    if (!userCols.includes("allowed_ips")) {
+      await dbRun("ALTER TABLE users ADD COLUMN allowed_ips TEXT DEFAULT ''");
+    }
+  } catch (err) {
+    console.error("[DB] Security migration error:", err);
+  }
 }
 
 // ─── Query Helpers ────────────────────────────────────────────────────────────

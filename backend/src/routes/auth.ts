@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -88,20 +89,23 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
     const userId = uuidv4();
     const passwordHash = await bcrypt.hash(password, 10);
     const apiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
+    const apiKeyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
 
     await dbRun(
-      "INSERT INTO users (id, email, password_hash, api_key, name, email_verified) VALUES (?, ?, ?, ?, ?, 0)",
-      [userId, email.toLowerCase().trim(), passwordHash, apiKey, name || ""]
+      "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, name, email_verified) VALUES (?, ?, ?, ?, ?, ?, 0)",
+      [userId, email.toLowerCase().trim(), passwordHash, apiKey, apiKeyHash, name || ""]
     );
 
-    // Generate 6-digit OTP and verification token
+    // Generate 6-digit OTP and verification token with SHA-256 hashes
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const verifyToken = uuidv4().replace(/-/g, "");
+    const otpHash = crypto.createHash("sha256").update(otpCode).digest("hex");
+    const tokenHash = crypto.createHash("sha256").update(verifyToken).digest("hex");
     const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
     await dbRun(
-      "INSERT INTO email_verifications (id, user_id, email, otp_code, token, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [uuidv4(), userId, email.toLowerCase().trim(), otpCode, verifyToken, expiresAt]
+      "INSERT INTO email_verifications (id, user_id, email, otp_code, otp_hash, token, token_hash, attempts, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+      [uuidv4(), userId, email.toLowerCase().trim(), otpCode, otpHash, verifyToken, tokenHash, expiresAt]
     );
 
     // Send verification email in background
@@ -295,15 +299,22 @@ authRouter.post("/verify-email", requireAuth, async (req: Request, res: Response
   }
 
   try {
+    const inputOtpHash = crypto.createHash("sha256").update(otp.trim()).digest("hex");
     const record = await dbGet<any>(
       `SELECT * FROM email_verifications
-       WHERE user_id = ? AND otp_code = ? AND expires_at > ?
+       WHERE user_id = ? AND (otp_hash = ? OR otp_code = ?) AND expires_at > ?
        ORDER BY created_at DESC LIMIT 1`,
-      [user.id, otp.trim(), new Date().toISOString()]
+      [user.id, inputOtpHash, otp.trim(), new Date().toISOString()]
     );
 
     if (!record) {
+      await dbRun("UPDATE email_verifications SET attempts = attempts + 1 WHERE user_id = ?", [user.id]);
       return res.status(400).json({ error: "Invalid or expired verification code." });
+    }
+
+    if (record.attempts >= 5) {
+      await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [user.id]);
+      return res.status(400).json({ error: "Too many failed attempts. Please request a new verification code." });
     }
 
     await dbRun("UPDATE users SET email_verified = 1 WHERE id = ?", [user.id]);
@@ -363,8 +374,9 @@ authRouter.post("/rotate-key", requireAuth, async (req: Request, res: Response) 
   try {
     const user = (req as any).user;
     const newApiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
+    const newApiKeyHash = crypto.createHash("sha256").update(newApiKey).digest("hex");
 
-    await dbRun("UPDATE users SET api_key = ? WHERE id = ?", [newApiKey, user.id]);
+    await dbRun("UPDATE users SET api_key = ?, api_key_hash = ? WHERE id = ?", [newApiKey, newApiKeyHash, user.id]);
 
     await logSecurityEvent({
       eventType: "KEY_ROTATED",

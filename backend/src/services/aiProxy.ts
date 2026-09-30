@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Response } from "express";
 import { dbGet, dbRun } from "../db.js";
 import { v4 as uuidv4 } from "uuid";
@@ -54,11 +55,20 @@ export async function authenticateApiKey(authHeader?: string, clientIp?: string)
     return cached.user;
   }
 
+  // Compute cryptographic SHA-256 hash
+  const apiKeyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
+
   const user = await dbGet<any>(
-    "SELECT id, email, name, api_key as apiKey, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE api_key = ?",
-    [apiKey]
+    "SELECT id, email, name, api_key as apiKey, api_key_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE api_key_hash = ? OR api_key = ?",
+    [apiKeyHash, apiKey]
   );
   if (!user) return null;
+
+  // Auto-backfill SHA-256 hash for legacy keys
+  if (!user.api_key_hash) {
+    dbRun("UPDATE users SET api_key_hash = ? WHERE id = ?", [apiKeyHash, user.id]).catch(() => {});
+  }
+
   if (user.is_suspended === 1) {
     console.warn(`[Security] Blocked request from suspended user: ${user.email}`);
     return null;

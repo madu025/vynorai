@@ -29,11 +29,12 @@ paymentRouter.post("/checkout", requireAuth, async (req: Request, res: Response)
     const durationDays = 30;
     const tempValidUntil = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
+    const amountMinor = Math.round(planConfig.priceLKR * 100);
     await dbRun(
       `INSERT INTO subscriptions 
-       (id, user_id, plan_name, status, order_id, amount, currency, valid_until) 
-       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)`,
-      [subscriptionId, user.id, planConfig.id, orderId, planConfig.priceLKR, "LKR", tempValidUntil]
+       (id, user_id, plan_name, status, order_id, amount_minor, amount, currency, valid_until) 
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, 'LKR', ?)`,
+      [subscriptionId, user.id, planConfig.id, orderId, amountMinor, planConfig.priceLKR, tempValidUntil]
     );
 
     res.json({
@@ -140,11 +141,12 @@ paymentRouter.post("/test-activate", requireAuth, async (req: Request, res: Resp
   const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const orderId = `test_${Date.now()}`;
 
+  const amountMinor = Math.round(planDef.priceLKR * 100);
   await dbRun(
     `INSERT INTO subscriptions 
-     (id, user_id, plan_name, status, order_id, payment_id, amount, currency, valid_until) 
-     VALUES (?, ?, ?, 'active', ?, 'test_pay_id', ?, 'LKR', ?)`,
-    [subscriptionId, user.id, planDef.id, orderId, planDef.priceLKR, validUntil]
+     (id, user_id, plan_name, status, order_id, payment_id, amount_minor, amount, currency, valid_until) 
+     VALUES (?, ?, ?, 'active', ?, 'test_pay_id', ?, ?, 'LKR', ?)`,
+    [subscriptionId, user.id, planDef.id, orderId, amountMinor, planDef.priceLKR, validUntil]
   );
 
   // Initialize or upgrade monthly quota ledger

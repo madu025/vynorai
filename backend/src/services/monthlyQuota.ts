@@ -24,15 +24,16 @@ export async function getOrInitMonthlyUsage(userId: string, planName: string = "
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
 
+  // Look for the currently active billing cycle
   let row = await dbGet<MonthlyUsageRow>(
-    "SELECT * FROM monthly_usage WHERE user_id = ?",
-    [userId]
+    "SELECT * FROM monthly_usage WHERE user_id = ? AND period_end >= ? ORDER BY period_end DESC LIMIT 1",
+    [userId, todayStr]
   );
 
   const planDef: PlanDefinition = getPlan(planName);
 
   if (!row) {
-    // First time initializing
+    // New billing cycle initialization
     const id = uuidv4();
     const periodStart = todayStr;
     const periodEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -59,33 +60,13 @@ export async function getOrInitMonthlyUsage(userId: string, planName: string = "
     };
   }
 
-  // Check if billing period expired -> auto reset for new 30-day cycle
-  if (todayStr > row.period_end) {
-    const periodStart = todayStr;
-    const periodEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const periodEnd = periodEndDate.toISOString().slice(0, 10);
-
-    await dbRun(
-      `UPDATE monthly_usage 
-       SET plan_name = ?, max_tokens = ?, used_tokens = 0, used_requests = 0,
-           period_start = ?, period_end = ?, last_reset_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = ?`,
-      [planDef.id, planDef.monthlyTokens, periodStart, periodEnd, userId]
-    );
-
-    row.plan_name = planDef.id;
-    row.max_tokens = planDef.monthlyTokens;
-    row.used_tokens = 0;
-    row.used_requests = 0;
-    row.period_start = periodStart;
-    row.period_end = periodEnd;
-  } else if (row.plan_name !== planDef.id) {
-    // Plan changed (e.g. upgraded) mid-cycle
+  // If plan changed mid-cycle (e.g. upgraded)
+  if (row.plan_name !== planDef.id) {
     await dbRun(
       `UPDATE monthly_usage 
        SET plan_name = ?, max_tokens = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = ?`,
-      [planDef.id, planDef.monthlyTokens, userId]
+       WHERE id = ?`,
+      [planDef.id, planDef.monthlyTokens, row.id]
     );
     row.plan_name = planDef.id;
     row.max_tokens = planDef.monthlyTokens;
@@ -95,20 +76,21 @@ export async function getOrInitMonthlyUsage(userId: string, planName: string = "
 }
 
 /**
- * Increment usage atomically after completion.
+ * Increment usage atomically for the current active billing cycle.
  */
 export async function incrementMonthlyUsage(
   userId: string,
   tokensUsed: number,
   requestsUsed: number = 1
 ): Promise<void> {
+  const todayStr = new Date().toISOString().slice(0, 10);
   await dbRun(
     `UPDATE monthly_usage 
      SET used_tokens = used_tokens + ?, 
          used_requests = used_requests + ?, 
          updated_at = CURRENT_TIMESTAMP 
-     WHERE user_id = ?`,
-    [tokensUsed, requestsUsed, userId]
+     WHERE user_id = ? AND period_end >= ?`,
+    [tokensUsed, requestsUsed, userId, todayStr]
   );
 }
 

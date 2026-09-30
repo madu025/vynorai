@@ -251,6 +251,73 @@ async function runTests() {
   }, merchantSecret);
   assert(!ipnTampered.isValidSignature && !ipnTampered.isPaid, "Tampered amount caught by signature verifier");
 
+  // ── TEST 9: Multi-Token Weighted Scoring Engine & Validation Pipeline ─────
+  console.log("\n⚖️ 9. TESTING WEIGHTED SCORING ENGINE & ENTERPRISE VALIDATION...");
+  const {
+    scoreTemplateMatch,
+    validateTemplateConfig,
+    validateTemplateCompatibility,
+    validateTemplateSecurity,
+    detectTemplateIntentWithScore
+  } = await import("./src/services/templateVault.js");
+
+  // 9.1 Multi-Token Weighted Scoring
+  const payhereQueryScored = detectTemplateIntentWithScore("PayHere add කරන්න. merchant ID එක config එකෙන් ගන්න.");
+  assert(payhereQueryScored.confidence === "HIGH", "High confidence match for PayHere Natural Language Request", `Score: ${payhereQueryScored.score}`);
+  assert(payhereQueryScored.template?.id === "payhere-lkr-gateway", "Matched 'payhere-lkr-gateway' over generic payments");
+  assert(payhereQueryScored.score >= 35, `Score is >= 35 (Actual: ${payhereQueryScored.score})`);
+
+  const nicScored = detectTemplateIntentWithScore("How to validate Sri Lanka NIC and calculate date of birth?");
+  assert(nicScored.confidence === "HIGH" && nicScored.template?.id === "sl-nic-parser", "High confidence match for SL NIC parser with DOB");
+
+  const genericIrrelevant = detectTemplateIntentWithScore("Can you help me design a weather forecast graphic?");
+  assert(genericIrrelevant.template === null && genericIrrelevant.confidence === "NONE", "Irrelevant query safely routed away from templates (confidence: NONE)");
+
+  // 9.2 Config Validation Layer
+  const payhereTemplate = GOLDEN_TEMPLATES.find(t => t.id === "payhere-lkr-gateway")!;
+  const invalidConfigCheck = validateTemplateConfig(payhereTemplate, { merchantId: "12345" }, {});
+  assert(!invalidConfigCheck.isValid, "Config validation fails when required secret or env is missing");
+  assert(invalidConfigCheck.missingParams.includes("merchantSecret"), "Identified missing required config parameter: merchantSecret");
+
+  const validConfigCheck = validateTemplateConfig(payhereTemplate, {
+    merchantId: "12345",
+    merchantSecret: "sec_998877",
+    currency: "LKR"
+  }, {
+    PAYHERE_MERCHANT_ID: "12345",
+    PAYHERE_MERCHANT_SECRET: "sec_998877",
+    PAYHERE_CURRENCY: "LKR"
+  });
+  assert(validConfigCheck.isValid, "Config validation passes with all required parameters and env variables");
+
+  // 9.3 Compatibility Validation Layer
+  const nextjsTemplate = GOLDEN_TEMPLATES.find(t => t.id === "nextjs-app-auth")!;
+  const compatibleNext15 = validateTemplateCompatibility(nextjsTemplate, {
+    framework: "nextjs",
+    frameworkVersion: "15.4.0",
+    nodeVersion: "20.10.0"
+  });
+  assert(compatibleNext15.isCompatible, "Next.js 15.4 is compatible with nextjs-app-auth template");
+
+  const incompatibleNext12 = validateTemplateCompatibility(nextjsTemplate, {
+    framework: "nextjs",
+    frameworkVersion: "12.2.0",
+    nodeVersion: "16.0.0"
+  });
+  assert(!incompatibleNext12.isCompatible, "Incompatible Next.js 12 flagged and prevented from injection");
+  assert(incompatibleNext12.reasons.some(r => r.includes("Next.js version mismatch")), "Explains Next.js version mismatch in reasons");
+
+  // 9.4 Security Layer Verification Across All Vault Templates
+  let allTemplatesSecure = true;
+  for (const t of GOLDEN_TEMPLATES) {
+    const sec = validateTemplateSecurity(t);
+    if (!sec.passed) {
+      allTemplatesSecure = false;
+      console.error(`Security vulnerability in ${t.id}:`, sec.securityIssues);
+    }
+  }
+  assert(allTemplatesSecure, "All 9 Golden Templates pass zero-fallback secret & modern CSP security checks");
+
   console.log("\n=================================================");
   console.log(`🏁 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log("=================================================");

@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 dotenv.config();
 
 export type ProviderID = "openrouter" | "openai" | "anthropic" | "deepseek" | "gemini" | "groq" | "ollama";
@@ -208,6 +208,7 @@ export const DEFAULT_AUTOCOMPLETE = "deepseek/deepseek-coder-v2";
 // ─── Full Config ───────────────────────────────────────────────────────────────
 export const config = {
   port:      parseInt(process.env.PORT || "3000", 10),
+  adminPort: parseInt(process.env.ADMIN_PORT || String((parseInt(process.env.PORT || "3000", 10) + 1)), 10),
   nodeEnv:   process.env.NODE_ENV || "development",
   baseUrl:   process.env.BASE_URL || "http://localhost:3000",
   jwtSecret: process.env.JWT_SECRET || "vynorai_default_secret_2026",

@@ -25,7 +25,8 @@ FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=3333
+ENV ADMIN_PORT=3334
 
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
@@ -38,7 +39,9 @@ RUN mkdir -p /app/data && chown -R node:node /app
 
 USER node
 
-EXPOSE 3000
+# API port + Admin Portal port
+EXPOSE 3333
+EXPOSE 3334
 
 VOLUME ["/app/data"]
 

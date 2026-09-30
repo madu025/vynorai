@@ -11,22 +11,15 @@ import { proxyRouter } from "./routes/proxy.js";
 import { adminRouter } from "./routes/admin.js";
 import { memoryRouter } from "./routes/memory.js";
 
+// ─── Main API App (Port: config.port) ─────────────────────────────────────────
 const app = express();
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.resolve(process.cwd(), "public")));
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
-app.use("/api/auth",    authRouter);
-app.use("/api/payment", paymentRouter);
-app.use("/v1",          proxyRouter);
-app.use("/v1/memory",   memoryRouter);
-app.use("/admin",       adminRouter);
-
-// ─── Public Health Check ──────────────────────────────────────────────────────
+// Public health check — no auth required
 app.get("/health", (_req, res) => {
   const activeProviders = Object.entries(config.aiKeys)
     .filter(([k, v]) => k !== "ollama" && v)
@@ -44,11 +37,44 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.use("/api/auth",    authRouter);
+app.use("/api/payment", paymentRouter);
+app.use("/v1",          proxyRouter);
+app.use("/v1/memory",   memoryRouter);
+
+// ─── Admin App (Separate Port: config.adminPort) ───────────────────────────────
+const adminApp = express();
+
+// Restrict admin CORS to same-origin / configured admin origin only
+const adminOrigin = process.env.ADMIN_ORIGIN || false; // false = same-origin only
+adminApp.use(cors({
+  origin: adminOrigin,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+}));
+adminApp.use(express.json({ limit: "2mb" }));
+adminApp.use(express.urlencoded({ extended: true }));
+
+// Serve admin static UI from public/admin/
+adminApp.use(express.static(path.resolve(process.cwd(), "public", "admin")));
+
+// Mount all admin API routes at /admin
+adminApp.use("/admin", adminRouter);
+
+// Admin health (no auth — just confirms admin server is alive)
+adminApp.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "VynorAI Admin Portal",
+    version: "2.0.0",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 async function start() {
   await initDb();
   await initCacheTable();
-  await initModelRegistry();  // seeds model_registry table (zero-downtime hot reload)
+  await initModelRegistry();
 
   const activeKeys = Object.entries(config.aiKeys)
     .filter(([k, v]) => k !== "ollama" && v)
@@ -57,6 +83,7 @@ async function start() {
   // Start background health monitor (probes providers every 60s)
   startHealthMonitor(60_000);
 
+  // ── Main API server ──────────────────────────────────────────────────────────
   const server = app.listen(config.port, () => {
     console.log(`
 ╔══════════════════════════════════════════════════════════╗
@@ -64,7 +91,6 @@ async function start() {
 ╠══════════════════════════════════════════════════════════╣
 ║  Dashboard  → http://localhost:${config.port}                     ║
 ║  AI Gateway → http://localhost:${config.port}/v1                  ║
-║  Admin      → http://localhost:${config.port}/admin/health        ║
 ║  Health     → http://localhost:${config.port}/health              ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Env:      ${config.nodeEnv.padEnd(15)} PayHere: ${config.payhere.env.padEnd(12)}  ║
@@ -74,21 +100,40 @@ async function start() {
 ╚══════════════════════════════════════════════════════════╝
     `);
 
-    // Signal to process managers (like PM2) that the server is ready to accept connections
-    if (typeof process.send === "function") {
-      process.send("ready");
-    }
+    if (typeof process.send === "function") process.send("ready");
   });
 
-  // Graceful shutdown handling for zero-downtime reloads
+  // ── Admin server (separate port) ─────────────────────────────────────────────
+  const adminServer = adminApp.listen(config.adminPort, () => {
+    console.log(`
+╔══════════════════════════════════════════════════════════╗
+║         🔐 VynorAI Admin Portal Running!                 ║
+╠══════════════════════════════════════════════════════════╣
+║  Admin UI   → http://localhost:${config.adminPort}                    ║
+║  Admin API  → http://localhost:${config.adminPort}/admin/health       ║
+╠══════════════════════════════════════════════════════════╣
+║  Secured by: ADMIN_SECRET header (X-Admin-Secret)        ║
+║  CORS origin: ${String(adminOrigin || "same-origin").padEnd(42)} ║
+╚══════════════════════════════════════════════════════════╝
+    `);
+  });
+
+  // Graceful shutdown — closes both servers cleanly
   const gracefulShutdown = (signal: string) => {
     console.log(`\n[${signal}] Signal received. Commencing graceful shutdown...`);
-    server.close(() => {
-      console.log("HTTP server closed. Exiting process safely.");
-      process.exit(0);
-    });
 
-    // Force exit if connections take too long to close
+    let closed = 0;
+    const onClose = () => {
+      closed++;
+      if (closed === 2) {
+        console.log("Both servers closed. Exiting safely.");
+        process.exit(0);
+      }
+    };
+
+    server.close(onClose);
+    adminServer.close(onClose);
+
     setTimeout(() => {
       console.error("Forced process termination after 8s timeout.");
       process.exit(1);
@@ -96,11 +141,10 @@ async function start() {
   };
 
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
 }
 
 start().catch((err) => {
   console.error("Fatal startup error:", err);
   process.exit(1);
 });
-

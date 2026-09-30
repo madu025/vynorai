@@ -9,6 +9,9 @@ module.exports = {
       max_memory_restart: "1G",
       env: {
         NODE_ENV: "production",
+        PORT: process.env.PORT || "3333",
+        ADMIN_PORT: process.env.ADMIN_PORT || "3334",
+        // ADMIN_SECRET must be set in Coolify environment variables — do NOT hardcode here
       },
       kill_timeout: 8000,
       wait_ready: true,

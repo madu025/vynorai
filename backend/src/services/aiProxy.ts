@@ -6,6 +6,7 @@ import { VYNORAI_AGENT_TOOLS, VYNORAI_AGENT_SYSTEM_PROMPT } from "./agentEngine.
 import { dispatchToProvider } from "./providerRouter.js";
 import { estimateInputTokens } from "./quotaGuard.js";
 import { DEFAULT_CHAT_MODEL } from "../config.js";
+import { generateZKUserId } from "./zkShield.js";
 import { applyHybridContext } from "./hybridContext.js";
 import { enrichWithRAG } from "./ragEngine.js";
 import { enrichWithWeb } from "./webSearch.js";
@@ -106,10 +107,15 @@ export async function handleChatCompletions(
   }
 
   // ── 2. Enrich with Agent Tools + System Prompt (if not already set) ─────────
+  const zkUserId = generateZKUserId(user.id);
+  res.setHeader("X-VynorAI-ZK-Shield", "Active");
+  res.setHeader("X-VynorAI-ZK-Surrogate", zkUserId);
+
   const enriched = {
     ...body,
     model,
     stream,
+    user: zkUserId,
     tools: body.tools ?? VYNORAI_AGENT_TOOLS,
     system: body.system ?? VYNORAI_AGENT_SYSTEM_PROMPT,
   };

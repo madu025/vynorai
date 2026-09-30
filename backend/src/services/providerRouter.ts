@@ -39,8 +39,9 @@ function buildEndpoints(): Partial<Record<ProviderID, EndpointInfo>> {
       headers: {
         Authorization: `Bearer ${k.openrouter}`,
         "HTTP-Referer": "https://vynorai.com",
-        "X-Title": "VynorAI",
+        "X-Title": "VynorAI Enterprise",
         "Content-Type": "application/json",
+        "X-Data-Retention": "zero",
       },
       isAnthropic: false,
       isOllama: false,

@@ -11,7 +11,13 @@ import { applyHybridContext } from "./hybridContext.js";
 import { enrichWithRAG } from "./ragEngine.js";
 import { enrichWithWeb } from "./webSearch.js";
 import { enrichWithMemory } from "./memoryEngine.js";
-import { detectTemplateIntent, formatTemplateContext, checkInstantTemplateMatch } from "./templateVault.js";
+import {
+  detectTemplateIntent,
+  formatTemplateContext,
+  checkInstantTemplateMatch,
+  executeVynorEngine,
+  formatOrchestrationToMarkdown,
+} from "./templateVault.js";
 import { detectProjectBlueprint, formatBlueprintPlan } from "./scaffoldRegistry.js";
 
 export interface AuthenticatedUser {
@@ -107,13 +113,56 @@ export async function handleChatCompletions(
     }
   }
 
-  // ── 1b. Deterministic Golden Template Direct Delivery (0 Tokens & 0 Hallucination) ──
+  // ── 1b. 5-Layer Deterministic Local Engineering Engine (0 Tokens & 100% Deterministic) ──
   const lastUserMsgEarly = [...(messages || [])].reverse().find((m: any) => m.role === "user");
   const rawQuery = typeof lastUserMsgEarly?.content === "string"
     ? lastUserMsgEarly.content
     : Array.isArray(lastUserMsgEarly?.content) ? lastUserMsgEarly.content.map((p: any) => p.text ?? "").join("") : "";
-  const instantMatch = checkInstantTemplateMatch(rawQuery);
 
+  if (rawQuery) {
+    const engineResult = await executeVynorEngine(rawQuery, {});
+    if (engineResult.status === "SUCCESS" || engineResult.status === "VALIDATION_FAILED") {
+      const responseMarkdown = formatOrchestrationToMarkdown(engineResult);
+      console.log(`[VynorAI ⚡ 5-LAYER ENGINE] 0 tokens | status=${engineResult.status} | workflow=${engineResult.workflowId}`);
+      res.setHeader("X-VynorAI-Engine", "5-LAYER-LOCAL");
+      res.setHeader("X-VynorAI-Workflow", engineResult.workflowId || "none");
+      res.setHeader("X-VynorAI-Tokens-Saved", "100%");
+
+      const chunk = {
+        id: "vynor-" + uuidv4(),
+        object: "chat.completion.chunk",
+        created: Math.floor(Date.now() / 1000),
+        model: "vynorai-local-engine",
+        choices: [
+          {
+            index: 0,
+            delta: { role: "assistant", content: responseMarkdown },
+            finish_reason: "stop",
+          },
+        ],
+      };
+
+      if (stream) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      } else {
+        return res.json({
+          id: "vynor-" + uuidv4(),
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: "vynorai-local-engine",
+          choices: [{ index: 0, message: { role: "assistant", content: responseMarkdown }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        });
+      }
+    }
+  }
+
+  const instantMatch = checkInstantTemplateMatch(rawQuery);
   if (instantMatch.matched && instantMatch.responseMarkdown) {
     console.log(`[VynorAI ⚡ INSTANT GOLDEN SCAFFOLD] 0 tokens | template=${instantMatch.template?.id}`);
     res.setHeader("X-VynorAI-Scaffold", "INSTANT_VAULT_HIT");

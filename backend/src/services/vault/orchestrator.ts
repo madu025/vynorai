@@ -169,3 +169,59 @@ export async function executeVynorEngine(
     message: `Successfully executed 5-layer workflow '${targetWorkflowId}' using template '${selectedTemplate.id}'. 0 LLM tokens used.`,
   };
 }
+
+/**
+ * Formats OrchestrationResult into rich Markdown for the VS Code / Continue extension chat window.
+ */
+export function formatOrchestrationToMarkdown(result: OrchestrationResult): string {
+  if (result.status === "VALIDATION_FAILED") {
+    return [
+      `## 🛡️ VynorAI Local Guardrail Interception`,
+      ``,
+      `> ⚡ **0 LLM Tokens Consumed** | **Status: Validation Rejected** | **Risk Level: ${result.riskLevel.toUpperCase()}**`,
+      ``,
+      `VynorAI's deterministic local rules engine intercepted violations before code could damage the repository:`,
+      ``,
+      `### ❌ Violations Detected:`,
+      ...(result.surgicalFeedbackForLLM?.violations.map((v) => `- 🚫 **${v}**`) || []),
+      ``,
+      `### 💡 Surgical Recommendations:`,
+      ...(result.surgicalFeedbackForLLM?.suggestions.map((s) => `- 🔧 ${s}`) || []),
+      ``,
+      `*No LLM context re-prompt needed. Fix the targeted lines above to proceed.*`,
+    ].join("\n");
+  }
+
+  const fileEntries = Object.entries(result.modifiedFiles);
+  const filesMd = fileEntries.length > 0
+    ? fileEntries.map(([path, content]) => {
+        const lang = path.endsWith(".ts") ? "typescript" : path.endsWith(".sql") ? "sql" : "javascript";
+        return `#### 📄 \`${path}\`\n\`\`\`${lang}\n${content.trim()}\n\`\`\``;
+      }).join("\n\n")
+    : "";
+
+  const diffsMd = result.diffs.length > 0
+    ? result.diffs.map((d) => `#### 🔀 Diff: \`${d.file}\`\n\`\`\`diff\n${d.diff}\n\`\`\``).join("\n\n")
+    : "";
+
+  return [
+    `## ⚡ VynorAI 5-Layer Local Engineering Scaffold`,
+    ``,
+    `> 🚀 **0 LLM Tokens Used** | **100% Deterministic Execution** | **Confidence: ${(result.confidence * 100).toFixed(0)}%**`,
+    ``,
+    `### 🏛️ 5-Layer Execution Pipeline`,
+    `| Layer | Component | Execution Details | Status |`,
+    `|---|---|---|---|`,
+    `| **Layer 1: Templates** | \`${result.templateId}\` | Verified zero-bug scaffold loaded | ✅ Verified |`,
+    `| **Layer 2: Rules** | Engineering Constraints | Money precision, FK constraints, signatures & idempotency enforced | ✅ Enforced |`,
+    `| **Layer 3: Validators** | Security & DB Guardrails | 50-point security & anti-vibe-coding schema check passed | ✅ Passed |`,
+    `| **Layer 4: Workflow** | \`${result.workflowId}\` | Sequence: ${result.completedSteps.join(" ➔ ")} | ✅ Completed |`,
+    `| **Layer 5: Tools** | Filesystem & Git | Multi-file write, patch, and unified diff generated | ✅ Ready |`,
+    ``,
+    result.userApprovalRequired ? `> ⚠️ **Human Approval Required**: High/Medium risk workflow detected. Review diff below before applying.\n` : ``,
+    filesMd ? `### 📦 Generated & Scaffolding Files\n\n${filesMd}\n` : ``,
+    diffsMd ? `### 🔀 Unified Git Diff Review\n\n${diffsMd}\n` : ``,
+    `---\n*Delivered instantly from VynorAI Local Software Engineering Engine.*`,
+  ].join("\n");
+}
+

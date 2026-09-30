@@ -1,4 +1,4 @@
-﻿/**
+/**
  * VynorAI Smart RAG Engine
  * ─────────────────────────────────────────────────────────────────────────────
  * Retrieval-Augmented Generation for code context.
@@ -50,12 +50,16 @@ export function chunkCode(filename: string, content: string): CodeChunk[] {
   const chunks: CodeChunk[] = [];
 
   // Detect language from extension
-  const ext = filename.split(".").pop() ?? "";
-  const isTSJS = ["ts", "tsx", "js", "jsx", "mts", "mjs"].includes(ext);
-  const isPython = ext === "py";
+  const ext = (filename.split(".").pop() ?? "").toLowerCase();
+  const isTSJS = ["ts", "tsx", "js", "jsx", "mts", "mjs", "cjs"].includes(ext);
+  const isPython = ["py", "pyw"].includes(ext);
   const isRust = ext === "rs";
+  const isGo = ext === "go";
+  const isJavaFamily = ["java", "kt", "swift", "cs", "cpp", "c", "h", "hpp"].includes(ext);
+  const isPHP = ext === "php";
+  const isRuby = ext === "rb";
 
-  // Boundary patterns
+  // Boundary patterns for semantic code mapping
   const boundaries: RegExp[] = [];
   if (isTSJS || isRust) {
     boundaries.push(
@@ -65,7 +69,31 @@ export function chunkCode(filename: string, content: string): CodeChunk[] {
       /^\s*(public|private|protected|static)?\s*(async\s+)?\w+\s*\([^)]*\)\s*[:{]/,
       /^(export\s+)?interface\s+\w+/,
       /^(export\s+)?type\s+\w+\s*=/,
+      /^(pub\s+)?(fn|struct|impl|enum|trait)\s+\w+/
     );
+  }
+  if (isGo) {
+    boundaries.push(
+      /^func\s+(\([^)]+\)\s+)?\w+/,
+      /^type\s+\w+\s+(struct|interface)/
+    );
+  }
+  if (isJavaFamily) {
+    boundaries.push(
+      /^\s*(public|private|protected|internal|abstract|static|final|override|\w+)\s+[\w<>\[\],\s]+\s+\w+\s*\([^)]*\)\s*[{;]?/,
+      /^\s*(public|private|protected)?\s*(class|interface|enum|record|struct)\s+\w+/,
+      /^(fun|func)\s+\w+/
+    );
+  }
+  if (isPHP) {
+    boundaries.push(
+      /^\s*(public|private|protected|static)?\s*function\s+\w+/,
+      /^(abstract\s+)?class\s+\w+/,
+      /^(interface|trait)\s+\w+/
+    );
+  }
+  if (isRuby) {
+    boundaries.push(/^def\s+\w+/, /^class\s+\w+/, /^module\s+\w+/);
   }
   if (isPython) {
     boundaries.push(
@@ -75,7 +103,7 @@ export function chunkCode(filename: string, content: string): CodeChunk[] {
     );
   }
 
-  // Always split at comment blocks too
+  // Split at major documentation block headers
   boundaries.push(/^\/\*[\*-]+/, /^#{3,}/);
 
   if (boundaries.length === 0) {

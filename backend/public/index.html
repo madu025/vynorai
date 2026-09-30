@@ -426,14 +426,18 @@
 <body>
 
   <header>
-    <a href="#" class="brand">
+    <a href="/" class="brand">
       <div class="brand-logo">V</div>
       <div class="brand-name">Vynor<span>AI</span></div>
     </a>
-    <div id="header-user" class="hidden">
-      <button class="btn btn-secondary" onclick="logout()" style="width: auto; padding: 8px 16px;">Logout</button>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <div id="header-user" class="hidden">
+        <button class="btn btn-secondary" onclick="logout()" style="width: auto; padding: 8px 16px;">Logout</button>
+      </div>
+      <a href="/login.html" id="header-signin-btn" class="btn btn-primary" style="width:auto;padding:10px 22px;font-size:14px;text-decoration:none;">Sign In</a>
     </div>
   </header>
+
 
   <div class="container">
 

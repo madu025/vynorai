@@ -45,6 +45,11 @@ app.use("/api/payment", paymentRouter);
 app.use("/v1",          proxyRouter);
 app.use("/v1/memory",   memoryRouter);
 
+// Customer portal /admin redirect to dedicated admin portal
+app.get("/admin", (_req, res) => {
+  res.redirect("https://admin.vynor.lk");
+});
+
 // ─── Admin App (Separate Port: config.adminPort) ───────────────────────────────
 const adminApp = express();
 
@@ -58,8 +63,17 @@ adminApp.use(cors({
 adminApp.use(express.json({ limit: "2mb" }));
 adminApp.use(express.urlencoded({ extended: true }));
 
-// Serve admin static UI from public/admin/
-adminApp.use(express.static(path.resolve(process.cwd(), "public", "admin")));
+// Serve admin static UI
+adminApp.use(express.static(path.resolve(process.cwd(), "public")));
+
+// Root route for admin portal (https://admin.vynor.lk/)
+adminApp.get("/", (_req, res) => {
+  res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
+});
+
+adminApp.get("/admin", (_req, res) => {
+  res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
+});
 
 // Mount all admin API routes at /admin
 adminApp.use("/admin", adminRouter);

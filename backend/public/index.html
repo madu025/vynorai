@@ -510,7 +510,7 @@
       <div id="header-user" class="hidden">
         <button class="btn btn-secondary" onclick="logout()" style="width: auto; padding: 8px 16px;">Logout</button>
       </div>
-      <a href="/login.html" id="header-signin-btn" class="btn btn-primary" style="width:auto;padding:10px 22px;font-size:14px;text-decoration:none;">Sign In</a>
+      <a href="/login.html?mode=signin" id="header-signin-btn" class="btn btn-primary" style="width:auto;padding:10px 22px;font-size:14px;text-decoration:none;">Sign In</a>
     </div>
   </header>
 
@@ -529,7 +529,7 @@
           Pay in Sri Lankan Rupees. Cancel anytime. No USD credit card needed.
         </p>
         <div style="margin-top: 36px; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
-          <a href="/login.html" class="btn btn-primary" style="width: auto; padding: 15px 40px; font-size: 17px; text-decoration: none; box-shadow: 0 0 40px rgba(0,229,255,0.4);">
+          <a href="/login.html?mode=register" class="btn btn-primary" style="width: auto; padding: 15px 40px; font-size: 17px; text-decoration: none; box-shadow: 0 0 40px rgba(0,229,255,0.4);">
             🚀 Start Free — No Credit Card
           </a>
           <a href="#features-section" onclick="document.getElementById('features-section').scrollIntoView({behavior:'smooth'}); return false;" class="btn btn-secondary" style="width: auto; padding: 15px 28px; font-size: 16px; text-decoration: none;">
@@ -689,7 +689,7 @@
         <p style="color: var(--text-muted); font-size: 17px; max-width: 520px; margin: 0 auto 32px auto; line-height: 1.6;">
           Join developers across Sri Lanka using AI to build faster and ship better code every day.
         </p>
-        <a href="/login.html" class="btn btn-primary" style="width: auto; display: inline-block; padding: 16px 48px; font-size: 18px; text-decoration: none; box-shadow: 0 0 50px rgba(0,229,255,0.35);">
+        <a href="/login.html?mode=register" class="btn btn-primary" style="width: auto; display: inline-block; padding: 16px 48px; font-size: 18px; text-decoration: none; box-shadow: 0 0 50px rgba(0,229,255,0.35);">
           🚀 Start Free Today →
         </a>
         <p style="color: var(--text-muted); font-size: 13px; margin-top: 16px;">50,000 free tokens • No credit card • Cancel anytime</p>
@@ -912,9 +912,13 @@
         const data = await res.json();
 
         if (!res.ok) {
-          localStorage.removeItem('vynor_jwt');
-          localStorage.removeItem('vynorai_token');
-          loadDashboard();
+          if (res.status === 401) {
+            localStorage.removeItem('vynor_jwt');
+            localStorage.removeItem('vynorai_token');
+            loadDashboard();
+            return;
+          }
+          console.warn('Dashboard fetch response:', res.status);
           return;
         }
 
@@ -1088,10 +1092,19 @@
         setTimeout(() => {
           const banner = document.createElement('div');
           banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:#00e676;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:600;z-index:9999;backdrop-filter:blur(10px);';
-          banner.innerHTML = '🎉 Payment Successful! Your plan is now active. Check your dashboard below.';
+          banner.innerHTML = '🎉 Payment Successful! Your plan is now active. Refreshing dashboard...';
           document.body.appendChild(banner);
-          setTimeout(() => banner.remove(), 6000);
+          setTimeout(() => banner.remove(), 7000);
         }, 500);
+
+        // Poll 3 times (every 2.5s) to guarantee PayHere IPN webhook has registered
+        let pollCount = 0;
+        const poller = setInterval(() => {
+          pollCount++;
+          loadDashboard();
+          if (pollCount >= 4) clearInterval(poller);
+        }, 2500);
+
         window.history.replaceState({}, document.title, window.location.pathname);
       } else if (urlParams.get('payment') === 'cancel') {
         setTimeout(() => {

@@ -165,6 +165,14 @@
     const API = '';
     let mode = 'signin';
     document.addEventListener('DOMContentLoaded', function() {
+      var params = new URLSearchParams(window.location.search);
+      var reqMode = params.get('mode') || params.get('tab');
+      if (reqMode === 'register' || reqMode === 'signup') {
+        switchTab('register');
+      } else {
+        switchTab('signin');
+      }
+
       var token = localStorage.getItem('vynorai_token') || localStorage.getItem('vynor_jwt');
       if (token) verifyAndRedirect(token);
     });
@@ -208,7 +216,15 @@
         var body = mode === 'signin' ? { email: email, password: password } : { email: email, password: password, name: name || email.split('@')[0] };
         var res = await fetch(API + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         var data = await res.json();
-        if (!res.ok) throw new Error(data.error || data.message || 'Authentication failed.');
+        if (!res.ok) {
+          var msg = data.error || data.message || 'Authentication failed.';
+          if (msg.includes('Invalid email or password')) {
+            msg = "Invalid email or password. Don't have an account yet? Click 'Create Account' above to sign up free!";
+          } else if (msg.includes('Email already registered')) {
+            msg = "This email is already registered! Please click 'Sign In' to log into your account.";
+          }
+          throw new Error(msg);
+        }
         localStorage.setItem('vynorai_token', data.token);
         localStorage.setItem('vynor_jwt', data.token);
         // Redirect to dashboard — token shown there
@@ -219,10 +235,12 @@
     async function verifyAndRedirect(token) {
       try {
         var res = await fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
-        if (!res.ok) { localStorage.removeItem('vynorai_token'); localStorage.removeItem('vynor_jwt'); return; }
-        // Already logged in — go straight to dashboard
-        window.location.href = '/';
-      } catch(_) { localStorage.removeItem('vynorai_token'); localStorage.removeItem('vynor_jwt'); }
+        if (res.status === 401) { localStorage.removeItem('vynorai_token'); localStorage.removeItem('vynor_jwt'); return; }
+        if (res.ok) {
+          // Already logged in — go straight to dashboard
+          window.location.href = '/';
+        }
+      } catch(_) { /* keep token during temporary network glitches */ }
     }
     function showSuccessCard(data) {
       document.getElementById('auth-card').style.display = 'none';

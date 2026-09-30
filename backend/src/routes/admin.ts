@@ -94,6 +94,40 @@ adminRouter.get("/stats", requireAdmin, async (_req: Request, res: Response) => 
   });
 });
 
+/**
+ * GET /admin/users
+ * List all users with active subscription plan and token usage
+ */
+adminRouter.get("/users", requireAdmin, async (_req: Request, res: Response) => {
+  const users = await dbAll<any>(`
+    SELECT u.id, u.email, u.name, u.api_key, u.created_at,
+           s.plan_name, s.status as subscription_status, s.valid_until,
+           m.used_tokens, m.used_requests, m.max_tokens
+    FROM users u
+    LEFT JOIN subscriptions s ON u.id = s.user_id AND s.status = 'active'
+    LEFT JOIN monthly_usage m ON u.id = m.user_id
+    GROUP BY u.id
+    ORDER BY u.created_at DESC
+    LIMIT 100
+  `);
+  res.json({ users, count: users.length });
+});
+
+/**
+ * GET /admin/subscriptions
+ * List all subscription transactions and PayHere payments
+ */
+adminRouter.get("/subscriptions", requireAdmin, async (_req: Request, res: Response) => {
+  const subs = await dbAll<any>(`
+    SELECT s.*, u.email, u.name
+    FROM subscriptions s
+    JOIN users u ON s.user_id = u.id
+    ORDER BY s.created_at DESC
+    LIMIT 100
+  `);
+  res.json({ subscriptions: subs, count: subs.length });
+});
+
 // ─── Model Registry (Zero-Downtime Hot Reload) ────────────────────────────────
 
 /**

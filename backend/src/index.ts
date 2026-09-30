@@ -45,6 +45,15 @@ app.use("/api/payment", paymentRouter);
 app.use("/v1",          proxyRouter);
 app.use("/v1/memory",   memoryRouter);
 
+// Customer portal host-check: if request arrives on admin.vynor.lk, serve admin.html directly
+app.use((req, res, next) => {
+  const host = (req.headers.host || "").toLowerCase();
+  if (host.startsWith("admin.") && (req.path === "/" || req.path === "/admin")) {
+    return res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
+  }
+  next();
+});
+
 // Customer portal /admin redirect to dedicated admin portal
 app.get("/admin", (_req, res) => {
   res.redirect("https://admin.vynor.lk");
@@ -63,10 +72,7 @@ adminApp.use(cors({
 adminApp.use(express.json({ limit: "2mb" }));
 adminApp.use(express.urlencoded({ extended: true }));
 
-// Serve admin static UI
-adminApp.use(express.static(path.resolve(process.cwd(), "public")));
-
-// Root route for admin portal (https://admin.vynor.lk/)
+// Root routes for admin portal (https://admin.vynor.lk/)
 adminApp.get("/", (_req, res) => {
   res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
 });
@@ -74,6 +80,9 @@ adminApp.get("/", (_req, res) => {
 adminApp.get("/admin", (_req, res) => {
   res.sendFile(path.resolve(process.cwd(), "public", "admin.html"));
 });
+
+// Serve admin static UI without serving index.html on root
+adminApp.use(express.static(path.resolve(process.cwd(), "public"), { index: false }));
 
 // Mount all admin API routes at /admin
 adminApp.use("/admin", adminRouter);

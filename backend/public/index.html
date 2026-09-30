@@ -795,6 +795,22 @@
   <!-- Hidden Form for PayHere Automatic POST -->
   <form id="payhere-checkout-form" method="post" action="https://sandbox.payhere.lk/pay/checkout" class="hidden"></form>
 
+  <!-- ── Plan Confirm Modal ─────────────────────────────────────────── -->
+  <div id="plan-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:999; backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+    <div class="glass-card" id="plan-modal-box" style="max-width:480px; width:90%; padding:36px; position:relative; border:1px solid rgba(0,229,255,0.25); animation: fadeInUp 0.25s ease;">
+      <button onclick="closePlanModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+      <div id="plan-modal-badge" class="plan-badge" style="margin-bottom:16px; display:inline-block;"></div>
+      <h2 id="plan-modal-name" style="font-size:26px;font-weight:800;margin-bottom:4px;"></h2>
+      <div id="plan-modal-price" style="font-size:32px;font-weight:700;color:var(--primary);margin-bottom:16px;"></div>
+      <ul id="plan-modal-features" style="list-style:none;padding:0;margin-bottom:24px;display:flex;flex-direction:column;gap:8px;"></ul>
+      <div style="background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.15);border-radius:12px;padding:14px;margin-bottom:20px;font-size:13px;color:var(--text-muted);">
+        🔒 Secure payment via <strong style="color:var(--primary)">PayHere</strong> — Card, Genie, EzCash, Frimi, Bank Transfer accepted.
+      </div>
+      <button id="plan-modal-confirm-btn" class="btn btn-primary" style="font-size:16px;padding:14px;" onclick="confirmPayhere()">Proceed to Payment →</button>
+      <p style="text-align:center;color:var(--text-muted);font-size:12px;margin-top:12px;">Cancel anytime. Subscription is monthly.</p>
+    </div>
+  </div>
+
   <script>
     let currentUser = null;
 
@@ -879,50 +895,85 @@
     }
 
     function copyToken() {
-      const token = document.getElementById('api-key-text').innerText;
-      navigator.clipboard.writeText(token);
-      alert('VynorAI Token copied to clipboard! Paste it into VS Code.');
+      const tokenText = document.getElementById('api-key-text').innerText;
+      if (!tokenText || tokenText === 'Loading token...') return;
+      navigator.clipboard.writeText(tokenText).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        const orig = btn.innerText;
+        btn.innerText = 'Copied! ✓';
+        btn.style.background = 'rgba(0,230,118,0.2)';
+        setTimeout(() => { btn.innerText = orig; btn.style.background = ''; }, 2000);
+      });
     }
 
-    async function initiatePayhere(plan) {
-      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
-      if (!token) {
-        window.location.href = '/login.html';
-        return;
+    let _pendingPlan = null;
+    const PLAN_INFO = {
+      starter: {
+        name: 'Starter Plan', price: 'රු. 1,500 / month', badge: 'Best Starter',
+        features: ['15M Tokens/month','5,000 Agent Requests','DeepSeek V3 + Qwen 2.5 Coder 32B','Real-time Tab Autocomplete','All 9 Slash Commands','Smart Caching']
+      },
+      pro: {
+        name: 'Pro Plan', price: 'රු. 3,500 / month', badge: 'Most Popular',
+        features: ['50M Tokens/month','20,000 Agent Requests','DeepSeek R1 (Reasoning) + DeepSeek V3','Full Agent Mode','Priority Routing (Fastest queue)','Full Codebase Semantic Indexing']
+      },
+      ultra: {
+        name: 'Ultra Plan', price: 'රු. 7,500 / month', badge: 'Power User',
+        features: ['150M Tokens/month','99,999 High-speed Requests','All Premier Open Models (Llama 3.3 70B)','Ultra-low Latency Dedicated Channel','Multi-device Support (Up to 3 devices)','Team Priority Support']
       }
+    };
 
+    function initiatePayhere(plan) {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      if (!token) { window.location.href = '/login.html'; return; }
+      const info = PLAN_INFO[plan];
+      if (!info) return;
+      _pendingPlan = plan;
+      document.getElementById('plan-modal-badge').innerText = info.badge;
+      document.getElementById('plan-modal-name').innerText = info.name;
+      document.getElementById('plan-modal-price').innerText = info.price;
+      const ul = document.getElementById('plan-modal-features');
+      ul.innerHTML = info.features.map(f => `<li style="display:flex;align-items:center;gap:8px;font-size:14px;"><span style="color:var(--success);font-size:16px;">✓</span>${f}</li>`).join('');
+      document.getElementById('plan-modal-confirm-btn').innerText = `Proceed to Payment • ${info.price.split('/')[0].trim()} →`;
+      const overlay = document.getElementById('plan-modal-overlay');
+      overlay.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closePlanModal() {
+      document.getElementById('plan-modal-overlay').style.display = 'none';
+      document.body.style.overflow = '';
+      _pendingPlan = null;
+    }
+
+    async function confirmPayhere() {
+      if (!_pendingPlan) return;
+      const plan = _pendingPlan;
+      const btn = document.getElementById('plan-modal-confirm-btn');
+      btn.disabled = true;
+      btn.innerText = 'Preparing checkout...';
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
       try {
         const res = await fetch('/api/payment/checkout', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ plan })
         });
         const data = await res.json();
-
-        if (!res.ok) {
-          alert(data.error || 'Failed to initialize PayHere checkout');
-          return;
-        }
-
-        // Dynamically build and submit PayHere checkout form
+        if (!res.ok) { alert(data.error || 'Failed to initialize PayHere checkout'); btn.disabled = false; return; }
+        closePlanModal();
         const form = document.getElementById('payhere-checkout-form');
         form.action = data.checkoutUrl;
         form.innerHTML = '';
-
         for (const [key, val] of Object.entries(data.params)) {
           const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = key;
-          input.value = val;
+          input.type = 'hidden'; input.name = key; input.value = val;
           form.appendChild(input);
         }
-
         form.submit();
       } catch (err) {
         alert('Payment initiation failed. Please try again.');
+        btn.disabled = false;
+        btn.innerText = `Proceed to Payment →`;
       }
     }
 
@@ -947,15 +998,33 @@
       loadDashboard();
     }
 
+    // Close modal on overlay click
+    document.getElementById('plan-modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closePlanModal();
+    });
+
     // Auto-check on load & handle PayHere return status
     window.addEventListener('DOMContentLoaded', () => {
       loadDashboard();
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('payment') === 'success') {
-        alert('🎉 Payment Successful! Your VynorAI plan is now active.');
+        // Show success banner
+        setTimeout(() => {
+          const banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(0,230,118,0.15);border:1px solid rgba(0,230,118,0.4);color:#00e676;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:600;z-index:9999;backdrop-filter:blur(10px);';
+          banner.innerHTML = '🎉 Payment Successful! Your plan is now active. Check your dashboard below.';
+          document.body.appendChild(banner);
+          setTimeout(() => banner.remove(), 6000);
+        }, 500);
         window.history.replaceState({}, document.title, window.location.pathname);
       } else if (urlParams.get('payment') === 'cancel') {
-        alert('Payment was cancelled. You can try again at any time.');
+        setTimeout(() => {
+          const banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:rgba(255,171,0,0.15);border:1px solid rgba(255,171,0,0.4);color:#ffab00;padding:14px 28px;border-radius:12px;font-size:15px;font-weight:600;z-index:9999;backdrop-filter:blur(10px);';
+          banner.innerHTML = '⚠️ Payment cancelled. Select a plan below to try again.';
+          document.body.appendChild(banner);
+          setTimeout(() => banner.remove(), 5000);
+        }, 300);
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     });

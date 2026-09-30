@@ -153,15 +153,7 @@
         <div class="switch-link" id="switch-link">Don't have an account? <a onclick="switchTab('register')">Create one free</a></div>
         <div class="terms-note">By continuing you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</div>
       </div>
-      <div class="auth-card success-view" id="success-card">
-        <div class="success-icon">Success</div>
-        <h2>You're in!</h2>
-        <p id="success-msg">You've successfully signed into VynorAI. Copy your API token below to connect VS Code.</p>
-        <div class="token-display" id="token-display">Loading token...</div>
-        <button class="copy-token-btn" onclick="copyToken()">Copy API Token</button>
-        <button class="goto-dashboard-btn" onclick="window.location.href='/'">Go to Dashboard</button>
-        <div class="switch-link" style="margin-top:16px;"><a onclick="logout()">Sign out</a></div>
-      </div>
+      <!-- success-card hidden — redirect to dashboard instead -->
       <div class="rp-footer"><a href="/">Back to homepage</a> | <a href="/admin">Admin Portal</a></div>
     </main>
   </div>
@@ -169,8 +161,8 @@
     const API = '';
     let mode = 'signin';
     document.addEventListener('DOMContentLoaded', function() {
-      var token = localStorage.getItem('vynorai_token');
-      if (token) verifyAndShowDashboard(token);
+      var token = localStorage.getItem('vynorai_token') || localStorage.getItem('vynor_jwt');
+      if (token) verifyAndRedirect(token);
     });
     function switchTab(newMode) {
       mode = newMode;
@@ -213,17 +205,18 @@
         if (!res.ok) throw new Error(data.error || data.message || 'Authentication failed.');
         localStorage.setItem('vynorai_token', data.token);
         localStorage.setItem('vynor_jwt', data.token);
-        showSuccessCard(data);
+        // Redirect to dashboard — token shown there
+        window.location.href = '/';
       } catch(err) { showError(err.message || 'Network error. Please try again.'); }
       finally { setLoading(false); }
     }
-    async function verifyAndShowDashboard(token) {
+    async function verifyAndRedirect(token) {
       try {
         var res = await fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
-        if (!res.ok) { localStorage.removeItem('vynorai_token'); return; }
-        var data = await res.json();
-        showSuccessCard(Object.assign({}, data, { token: token }));
-      } catch(_) { localStorage.removeItem('vynorai_token'); }
+        if (!res.ok) { localStorage.removeItem('vynorai_token'); localStorage.removeItem('vynor_jwt'); return; }
+        // Already logged in — go straight to dashboard
+        window.location.href = '/';
+      } catch(_) { localStorage.removeItem('vynorai_token'); localStorage.removeItem('vynor_jwt'); }
     }
     function showSuccessCard(data) {
       document.getElementById('auth-card').style.display = 'none';

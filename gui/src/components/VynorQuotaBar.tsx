@@ -1,6 +1,8 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useContext } from "react";
 import styled from "styled-components";
 import { ArrowTopRightOnSquareIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { IdeMessengerContext } from "../context/IdeMessenger";
+import { useAppSelector } from "../redux/hooks";
 
 const VYNOR_API_URL = "https://vynor.lk";
 
@@ -160,6 +162,40 @@ const LoginButton = styled.button`
 `;
 
 export function VynorQuotaBar() {
+  const ideMessenger = useContext(IdeMessengerContext);
+  const config = useAppSelector((store) => store.config.config);
+
+  const resolveToken = useCallback(() => {
+    const local =
+      localStorage.getItem("vynorai_token") ||
+      localStorage.getItem("vynor_jwt") ||
+      localStorage.getItem("vynorai_api_key");
+    if (local) return local;
+
+    const chatModel = config?.selectedModelByRole?.chat;
+    if (
+      chatModel?.apiKey &&
+      (chatModel.apiBase?.includes("vynor") ||
+        chatModel.title?.includes("Vynor") ||
+        (chatModel as any).provider === "vynorai")
+    ) {
+      return chatModel.apiKey;
+    }
+
+    const allChatModels = config?.modelsByRole?.chat || [];
+    for (const m of allChatModels) {
+      if (
+        m.apiKey &&
+        (m.apiBase?.includes("vynor") ||
+          m.title?.includes("Vynor") ||
+          (m as any).provider === "vynorai")
+      ) {
+        return m.apiKey;
+      }
+    }
+    return "";
+  }, [config]);
+
   const [quota, setQuota] = useState<QuotaState>(() => {
     try {
       const cached = localStorage.getItem("vynorai_cached_quota");
@@ -172,7 +208,11 @@ export function VynorQuotaBar() {
       remainingTokens: 100_000,
       percentageUsed: 0,
       periodEnd: "",
-      isLoggedIn: !!(localStorage.getItem("vynorai_token") || localStorage.getItem("vynor_jwt")),
+      isLoggedIn: !!(
+        localStorage.getItem("vynorai_token") ||
+        localStorage.getItem("vynor_jwt") ||
+        localStorage.getItem("vynorai_api_key")
+      ),
       email: "",
     };
   });
@@ -181,7 +221,7 @@ export function VynorQuotaBar() {
   const fetchQuota = useCallback(async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("vynorai_token") || localStorage.getItem("vynor_jwt");
+      const token = resolveToken();
       if (!token) {
         setQuota((prev) => ({ ...prev, isLoggedIn: false }));
         setLoading(false);
@@ -198,6 +238,7 @@ export function VynorQuotaBar() {
         if (res.status === 401) {
           localStorage.removeItem("vynorai_token");
           localStorage.removeItem("vynor_jwt");
+          localStorage.removeItem("vynorai_api_key");
           localStorage.removeItem("vynorai_cached_quota");
         }
         setQuota((prev) => ({ ...prev, isLoggedIn: false }));
@@ -231,7 +272,7 @@ export function VynorQuotaBar() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [resolveToken]);
 
   useEffect(() => {
     fetchQuota();
@@ -241,10 +282,22 @@ export function VynorQuotaBar() {
   }, [fetchQuota]);
 
   const handleBrowserLogin = () => {
-    window.open(
-      `${VYNOR_API_URL}/login?source=vscode&callback=vscode://vynorai.vynorai/auth`,
-      "_blank"
-    );
+    const loginUrl = `${VYNOR_API_URL}/login?source=vscode&callback=vscode://vynorai.vynorai/auth`;
+    if (ideMessenger?.post) {
+      ideMessenger.post("openUrl", loginUrl);
+    } else {
+      window.open(loginUrl, "_blank");
+    }
+  };
+
+  const handleUpgrade = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const upgradeUrl = `${VYNOR_API_URL}/#pricing`;
+    if (ideMessenger?.post) {
+      ideMessenger.post("openUrl", upgradeUrl);
+    } else {
+      window.open(upgradeUrl, "_blank");
+    }
   };
 
   const isWarning = quota.percentageUsed >= 80;
@@ -309,7 +362,7 @@ export function VynorQuotaBar() {
               }}
             />
           </button>
-          <ActionLink href={`${VYNOR_API_URL}/#pricing`} target="_blank">
+          <ActionLink href="#" onClick={handleUpgrade}>
             Upgrade Plan <ArrowTopRightOnSquareIcon style={{ width: 10, height: 10 }} />
           </ActionLink>
         </div>

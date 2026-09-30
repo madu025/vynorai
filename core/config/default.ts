@@ -15,8 +15,8 @@ import { ConfigYaml } from "@continuedev/config-yaml";
  */
 
 const VYNORAI_API_BASE =
-  process.env.VYNORAI_API_BASE || "https://api.vynorai.com/v1/";
-// Local dev: set VYNORAI_API_BASE=http://localhost:3000/v1/ in your shell
+  process.env.VYNORAI_API_BASE || "https://vynor.lk/v1";
+// Production: https://vynor.lk/v1 | Local dev: http://localhost:3333/v1
 
 export const defaultConfig: ConfigYaml = {
   name: "VynorAI Coding Agent",

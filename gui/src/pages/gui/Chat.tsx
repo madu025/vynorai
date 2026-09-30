@@ -389,7 +389,6 @@ export function Chat() {
         ref={stepsDivRef}
         className={`pt-[8px] ${showScrollbar ? "thin-scrollbar" : "no-scrollbar"} ${history.length > 0 ? "min-h-0 flex-1 overflow-y-scroll" : "shrink-0"}`}
       >
-        <DeprecationBanner dismissable={true} />
         {highlights}
         {history
           .filter((item) => item.message.role !== "system")
@@ -446,7 +445,6 @@ export function Chat() {
             </div>
           </div>
           <FatalErrorIndicator />
-          {!hasDismissedExploreDialog && <ExploreDialogWatcher />}
           {history.length === 0 && (
             <EmptyChatBody showOnboardingCard={onboardingCard.show} />
           )}

@@ -160,22 +160,27 @@ const LoginButton = styled.button`
 `;
 
 export function VynorQuotaBar() {
-  const [quota, setQuota] = useState<QuotaState>({
-    planName: "FREE",
-    maxTokens: 100_000,
-    usedTokens: 0,
-    remainingTokens: 100_000,
-    percentageUsed: 0,
-    periodEnd: "",
-    isLoggedIn: false,
-    email: "",
+  const [quota, setQuota] = useState<QuotaState>(() => {
+    try {
+      const cached = localStorage.getItem("vynorai_cached_quota");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return {
+      planName: "FREE",
+      maxTokens: 100_000,
+      usedTokens: 0,
+      remainingTokens: 100_000,
+      percentageUsed: 0,
+      periodEnd: "",
+      isLoggedIn: !!(localStorage.getItem("vynorai_token") || localStorage.getItem("vynor_jwt")),
+      email: "",
+    };
   });
   const [loading, setLoading] = useState(false);
 
   const fetchQuota = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Check if token or apiKey exists in localStorage
       const token = localStorage.getItem("vynorai_token") || localStorage.getItem("vynor_jwt");
       if (!token) {
         setQuota((prev) => ({ ...prev, isLoggedIn: false }));
@@ -190,6 +195,11 @@ export function VynorQuotaBar() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("vynorai_token");
+          localStorage.removeItem("vynor_jwt");
+          localStorage.removeItem("vynorai_cached_quota");
+        }
         setQuota((prev) => ({ ...prev, isLoggedIn: false }));
         return;
       }
@@ -201,7 +211,7 @@ export function VynorQuotaBar() {
       const remaining = Math.max(0, max - used);
       const percent = Math.min(100, Math.round((used / max) * 100));
 
-      setQuota({
+      const newQuota: QuotaState = {
         planName: (monthly.plan_name || "FREE").toUpperCase(),
         maxTokens: max,
         usedTokens: used,
@@ -210,7 +220,12 @@ export function VynorQuotaBar() {
         periodEnd: monthly.period_end || "",
         isLoggedIn: true,
         email: data.user?.email || "",
-      });
+      };
+
+      setQuota(newQuota);
+      try {
+        localStorage.setItem("vynorai_cached_quota", JSON.stringify(newQuota));
+      } catch (e) {}
     } catch (e) {
       // Silent catch on network blip
     } finally {

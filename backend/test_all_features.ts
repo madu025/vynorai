@@ -157,6 +157,100 @@ async function runTests() {
   const saasBp = detectProjectBlueprint("Build a multi-tenant B2B SaaS platform");
   assert(!!saasBp && saasBp.id === "saas_platform", "Detected B2B SaaS blueprint with team & subscriptions");
 
+  // ── TEST 8: Deep Edge-Case Verification for Upgraded VPS Templates ─────────
+  console.log("\n🧪 8. TESTING DEEP REAL-WORLD EDGE CASES IN VPS TEMPLATES...");
+  const { normalizeSLPhone, parseSLNIC, generatePayHereHash, verifyPayHereWebhook } = await import("./src/services/templateVault.js");
+
+  // 8.1 Sri Lanka Mobile & Landline Validator Edge Cases
+  const phoneDialog = normalizeSLPhone("077 123 4567");
+  assert(phoneDialog.isValid && phoneDialog.type === "MOBILE" && phoneDialog.operator === "Dialog" && phoneDialog.canReceiveSMS, "Dialog mobile parsed (077 123 4567)");
+  assert(phoneDialog.e164 === "+94771234567", "Normalized to E.164 (+94771234567)");
+
+  const phoneMobitel = normalizeSLPhone("+94 71 999 8888");
+  assert(phoneMobitel.isValid && phoneMobitel.operator === "Mobitel", "Mobitel parsed (+94 71 999 8888)");
+
+  const phoneHutch = normalizeSLPhone("0094781234567");
+  assert(phoneHutch.isValid && phoneHutch.operator === "Hutch", "Hutch parsed with 0094 prefix");
+
+  const phoneAirtel = normalizeSLPhone("0751112233");
+  assert(phoneAirtel.isValid && phoneAirtel.operator === "Airtel", "Airtel parsed (0751112233)");
+
+  const phoneLandline = normalizeSLPhone("011 234 5678");
+  assert(phoneLandline.isValid && phoneLandline.type === "LANDLINE" && phoneLandline.area === "Colombo" && !phoneLandline.canReceiveSMS, "Colombo Landline parsed (cannot receive SMS)");
+
+  const phoneKandy = normalizeSLPhone("+94 81 223 4567");
+  assert(phoneKandy.isValid && phoneKandy.type === "LANDLINE" && phoneKandy.area === "Kandy", "Kandy Landline parsed");
+
+  const phoneInvalid = normalizeSLPhone("077123"); // Too short
+  assert(!phoneInvalid.isValid, "Rejected invalid short phone (077123)");
+
+  // 8.2 Sri Lanka Dual-Standard NIC Parser Edge Cases
+  const nicOldMale = parseSLNIC("851234567V");
+  assert(nicOldMale.isValid && nicOldMale.format === "OLD" && nicOldMale.birthYear === 1985 && nicOldMale.gender === "MALE", "Old Male NIC parsed (851234567V)");
+  assert(nicOldMale.monthName === "May" && nicOldMale.dateOfBirth === "1985-05-02", "Exact DOB calculated (1985-05-02)");
+  assert(nicOldMale.age >= 38, `Accurate age calculated (${nicOldMale.age})`);
+  assert(nicOldMale.isVoter === true, "Voter status confirmed for 'V'");
+  assert(nicOldMale.newFormatEquivalent === "198512304567", "Converted to 12-digit equivalent format");
+
+  const nicOldFemale = parseSLNIC("926234567X");
+  assert(nicOldFemale.isValid && nicOldFemale.gender === "FEMALE" && nicOldFemale.dayOfYear === 123, "Old Female NIC day offset adjusted (623 -> 123)");
+  assert(nicOldFemale.isVoter === false, "Alien/ineligible voter status confirmed for 'X'");
+
+  const nicNew = parseSLNIC("200115501234");
+  assert(nicNew.isValid && nicNew.format === "NEW" && nicNew.birthYear === 2001 && nicNew.gender === "MALE", "New 12-digit NIC parsed (200115501234)");
+
+  const nicInvalidDay = parseSLNIC("900004567V"); // Day of year 0 is invalid
+  assert(!nicInvalidDay.isValid, "NIC with day 0 correctly rejected");
+
+  const nicInvalidRange = parseSLNIC("959994567V"); // 999 - 500 = 499 > 366
+  assert(!nicInvalidRange.isValid, "NIC with day > 366 correctly rejected");
+
+  // 8.3 PayHere Gateway Hash & IPN Status Code Validation
+  const merchantSecret = "4XXSuperSecret123";
+  const hash = generatePayHereHash("123456", "ORDER_99", 1500, "LKR", merchantSecret);
+  assert(hash.length === 32, "Generated valid 32-character PayHere checkout MD5 hash");
+
+  // Calculate matching signature for IPN
+  const crypto = await import("crypto");
+  const hashedSecret = crypto.createHash("md5").update(merchantSecret).digest("hex").toUpperCase();
+  const validSigSuccess = crypto.createHash("md5").update("123456" + "ORDER_99" + "1500.00" + "LKR" + "2" + hashedSecret).digest("hex").toUpperCase();
+  
+  const ipnSuccess = verifyPayHereWebhook({
+    merchant_id: "123456",
+    order_id: "ORDER_99",
+    payment_id: "PAY_112233",
+    payhere_amount: "1500.00",
+    payhere_currency: "LKR",
+    status_code: "2",
+    md5sig: validSigSuccess
+  }, merchantSecret);
+  assert(ipnSuccess.isValidSignature && ipnSuccess.isPaid && ipnSuccess.status === "SUCCESS", "PayHere IPN verified as PAID for status_code 2");
+
+  // Canceled payment with valid signature (Customer clicked Cancel)
+  const validSigCanceled = crypto.createHash("md5").update("123456" + "ORDER_99" + "1500.00" + "LKR" + "-1" + hashedSecret).digest("hex").toUpperCase();
+  const ipnCanceled = verifyPayHereWebhook({
+    merchant_id: "123456",
+    order_id: "ORDER_99",
+    payment_id: "PAY_112233",
+    payhere_amount: "1500.00",
+    payhere_currency: "LKR",
+    status_code: "-1",
+    md5sig: validSigCanceled
+  }, merchantSecret);
+  assert(ipnCanceled.isValidSignature && !ipnCanceled.isPaid && ipnCanceled.status === "CANCELED", "PayHere Canceled IPN correctly recognized as NOT PAID");
+
+  // Tampered payment (Hacker tried to lower amount)
+  const ipnTampered = verifyPayHereWebhook({
+    merchant_id: "123456",
+    order_id: "ORDER_99",
+    payment_id: "PAY_112233",
+    payhere_amount: "1.00", // Tampered!
+    payhere_currency: "LKR",
+    status_code: "2",
+    md5sig: validSigSuccess
+  }, merchantSecret);
+  assert(!ipnTampered.isValidSignature && !ipnTampered.isPaid, "Tampered amount caught by signature verifier");
+
   console.log("\n=================================================");
   console.log(`🏁 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
   console.log("=================================================");

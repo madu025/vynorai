@@ -238,12 +238,16 @@ export function generatePaymentSignature(payload: PaymentPayload, secret: string
   return crypto.createHash("md5").update(raw).digest("hex").toUpperCase();
 }
 
-export function verifyWebhookSignature(body: Record<string, any>, secret: string): boolean {
+export function verifyWebhookSignature(body: Record<string, any>, secret: string): { isValidSignature: boolean; isPaid: boolean; statusCode: number } {
   const { merchant_id, order_id, payhere_amount, payhere_currency, status_code, md5sig } = body;
-  if (!merchant_id || !order_id || !md5sig) return false;
+  if (!merchant_id || !order_id || !md5sig || status_code === undefined) {
+    return { isValidSignature: false, isPaid: false, statusCode: -99 };
+  }
   const hashedSecret = crypto.createHash("md5").update(secret).digest("hex").toUpperCase();
   const check = crypto.createHash("md5").update(merchant_id + order_id + payhere_amount + payhere_currency + status_code + hashedSecret).digest("hex").toUpperCase();
-  return check === md5sig;
+  const isValidSignature = check === md5sig;
+  const isPaid = isValidSignature && parseInt(status_code, 10) === 2;
+  return { isValidSignature, isPaid, statusCode: parseInt(status_code, 10) };
 }`,
           },
           {
@@ -256,12 +260,14 @@ export const paymentRouter = Router();
 
 paymentRouter.post("/webhook", async (req: Request, res: Response) => {
   const secret = process.env.PAYMENT_MERCHANT_SECRET || "";
-  const isValid = verifyWebhookSignature(req.body, secret);
-  if (!isValid) return res.status(400).send("INVALID_SIGNATURE");
+  const result = verifyWebhookSignature(req.body, secret);
+  if (!result.isValidSignature) return res.status(400).send("INVALID_SIGNATURE");
   
-  if (req.body.status_code === "2") {
-    // Payment Successful -> Activate Subscription in Database
-    console.log(\`[Payment] Order \${req.body.order_id} verified successfully\`);
+  if (result.isPaid) {
+    // Payment Successful (status_code === 2) -> Activate Subscription / Fulfill Order
+    console.log(\`[Payment] Order \${req.body.order_id} verified and marked as PAID\`);
+  } else {
+    console.log(\`[Payment] Order \${req.body.order_id} event received with non-success code \${result.statusCode}\`);
   }
   res.status(200).send("OK");
 });`,

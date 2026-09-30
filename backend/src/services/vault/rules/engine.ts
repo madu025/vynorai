@@ -82,6 +82,45 @@ export const RULES_REGISTRY: EngineeringRule[] = [
       return { passed: true };
     },
   },
+  {
+    id: "db.unbounded_text_type_prohibited",
+    category: "database",
+    description: "Status, role, IP address, severity, and code fields must use bounded VARCHAR(n) or Enum CHECK, never unbounded TEXT.",
+    severity: "ERROR",
+    enforce: ({ schema }) => {
+      if (!schema) return { passed: true };
+      const textMatch = schema.match(/\b([a-zA-Z0-9_]*(?:status|role|severity|ip_address|phone|country_code|otp_code)[a-zA-Z0-9_]*)\b\s+TEXT\b/i);
+      if (textMatch) {
+        return {
+          passed: false,
+          message: `Rule violation: Categorical/bounded column '${textMatch[1]}' uses unbounded type 'TEXT'.`,
+          suggestion: `Use bounded VARCHAR(n) (e.g. VARCHAR(45) for IP, VARCHAR(20) for status/severity) or Enum CHECK constraints to prevent B-tree memory bloat.`,
+        };
+      }
+      return { passed: true };
+    },
+  },
+  {
+    id: "db.audit_logs_indexing_required",
+    category: "database",
+    description: "High-volume append/audit tables (audit_logs, usage_logs, events) must define an INDEX on created_at / timestamp.",
+    severity: "ERROR",
+    enforce: ({ schema }) => {
+      if (!schema) return { passed: true };
+      const auditTableMatch = schema.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_"`]*(?:audit|usage|log|history|event|metric)[a-zA-Z0-9_"`]*)/i);
+      if (auditTableMatch) {
+        const tblName = auditTableMatch[1].replace(/[`"']/g, "");
+        if (!/CREATE\s+INDEX.*?ON.*?(?:created_at|timestamp)/i.test(schema)) {
+          return {
+            passed: false,
+            message: `Rule violation: High-volume audit/log table '${tblName}' has no INDEX on 'created_at'.`,
+            suggestion: `Add 'CREATE INDEX idx_${tblName}_created ON ${tblName}(created_at DESC);' to prevent full-table disk/RAM scans during queries.`,
+          };
+        }
+      }
+      return { passed: true };
+    },
+  },
 
   // ── Security Rules ──────────────────────────────────────────────────────────
   {

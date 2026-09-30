@@ -72,7 +72,13 @@ export function initDb(): Promise<void> {
         cached        INTEGER DEFAULT 0,   -- 1 = served from cache (0 tokens billed)
         created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
-      )`, (err) => {
+      )`);
+
+      // ── High-Performance Concurrency Indexes (Eliminates Table Scans & RAM Spikes) ──
+      db.run(`CREATE INDEX IF NOT EXISTS idx_usage_logs_user_created ON usage_logs(user_id, created_at DESC)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_usage_logs_created ON usage_logs(created_at DESC)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions(user_id, status)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key)`, (err) => {
         if (err) return reject(err);
         resolve();
       });
@@ -94,36 +100,43 @@ export async function initModelRegistry(): Promise<void> {
 
 /** Ensure security tables and user columns (suspension, allowed IPs, email verification, admin staff) exist */
 export async function ensureSecurityTables(): Promise<void> {
-  // 1. Audit logs table
+  // 1. Audit logs table (With Bounded Types & Enum Check Constraint)
   await dbRun(`CREATE TABLE IF NOT EXISTS security_audit_logs (
     id TEXT PRIMARY KEY,
-    event_type TEXT NOT NULL,
-    severity TEXT NOT NULL DEFAULT 'INFO',
-    actor TEXT,
-    target TEXT,
+    event_type VARCHAR(64) NOT NULL,
+    severity VARCHAR(10) NOT NULL DEFAULT 'INFO' CHECK (severity IN ('DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL')),
+    actor VARCHAR(128),
+    target VARCHAR(128),
     details TEXT,
-    ip_address TEXT,
+    ip_address VARCHAR(45),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Indexes on security audit logs (Fast lookup by time, event, actor without full table scan)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit_logs(created_at DESC)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_security_audit_event ON security_audit_logs(event_type)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON security_audit_logs(actor)`);
 
   // 2. Email verification OTP and token table
   await dbRun(`CREATE TABLE IF NOT EXISTS email_verifications (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
-    email TEXT NOT NULL,
-    otp_code TEXT NOT NULL,
-    token TEXT NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    token VARCHAR(128) NOT NULL,
     expires_at DATETIME NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_email_verif_token ON email_verifications(token)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id)`);
 
   // 3. Admin Staff table (Only authorized team members added by Super Admin)
   await dbRun(`CREATE TABLE IF NOT EXISTS admin_staff (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    role TEXT NOT NULL DEFAULT 'admin', -- 'super_admin' | 'admin' | 'support'
-    created_by TEXT,
+    name VARCHAR(128) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    role VARCHAR(32) NOT NULL DEFAULT 'admin', -- 'super_admin' | 'admin' | 'support'
+    created_by VARCHAR(128),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 

@@ -86,6 +86,19 @@ export function validateDatabaseSchema(
       });
     }
 
+    // 4. Unbounded TEXT bloat check on bounded categories (IP, status, severity, phone, role)
+    const textBloatMatch = line.match(/\b([a-zA-Z0-9_]*(?:status|role|severity|ip_address|phone|country_code|otp_code)[a-zA-Z0-9_]*)\b\s+TEXT\b/i);
+    if (textBloatMatch) {
+      violations.push({
+        code: "UNBOUNDED_TEXT_BLOAT",
+        category: "PERFORMANCE",
+        severity: "HIGH",
+        message: `Categorical/bounded column '${textBloatMatch[1]}' uses unbounded 'TEXT' at line ${lineNum}`,
+        line: lineNum,
+        recommendation: `Change from unbounded TEXT to bounded VARCHAR(n) (e.g. VARCHAR(45) for IP, VARCHAR(20) for status/severity) or Enum to reduce memory and B-tree cache overhead.`,
+      });
+    }
+
     // Track SQL CREATE TABLE
     const createTableMatch = line.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z0-9_"`]+)/i);
     if (createTableMatch) {

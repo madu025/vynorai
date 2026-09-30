@@ -141,6 +141,12 @@ authRouter.post("/register", authRateLimiter, async (req: Request, res: Response
   }
 });
 
+// Redirect GET /api/auth/login requests to UI login page preserving query params
+authRouter.get("/login", (req: Request, res: Response) => {
+  const query = req.url.includes("?") ? req.url.substring(req.url.indexOf("?")) : "";
+  res.redirect(`/login${query}`);
+});
+
 // Login (with Rate Limiting against Brute-Force & Suspension check)
 authRouter.post("/login", authRateLimiter, async (req: Request, res: Response) => {
   const clientIp = (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";

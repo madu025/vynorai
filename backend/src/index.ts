@@ -20,7 +20,12 @@ app.use(securityHeadersMiddleware);
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.resolve(process.cwd(), "public")));
+app.use(express.static(path.resolve(process.cwd(), "public"), { extensions: ["html"] }));
+
+// Serve login page for clean URLs and VS Code extension OAuth / callback flow
+app.get(["/login", "/signin", "/register", "/signup"], (_req, res) => {
+  res.sendFile(path.resolve(process.cwd(), "public", "login.html"));
+});
 
 // Public health check — no auth required
 app.get("/health", (_req, res) => {

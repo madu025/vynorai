@@ -207,20 +207,47 @@ function exactBonus(query: string, content: string): number {
 
 // ─── Retrieval ────────────────────────────────────────────────────────────────
 
+export interface ProjectSymbol {
+  name: string;
+  type: "function" | "class" | "module" | "block";
+  filename: string;
+  startLine: number;
+}
+
+export interface ProjectMap {
+  userId: string;
+  projectRoot: string;
+  fileCount: number;
+  chunkCount: number;
+  symbolCount: number;
+  languages: string[];
+  symbols: Record<string, ProjectSymbol>;
+  updatedAt: number;
+}
+
 export function retrieveTopChunks(
   query: string,
   chunks: CodeChunk[],
-  topK = TOP_K
+  topK = TOP_K,
+  projectMap?: ProjectMap | null
 ): CodeChunk[] {
   if (chunks.length === 0) return [];
 
   const qTokens = tokenize(query);
-  const scored  = chunks.map((chunk) => ({
-    ...chunk,
-    score:
-      tfidf(qTokens, tokenize(chunk.content)) +
-      exactBonus(query, chunk.content),
-  }));
+  const scored  = chunks.map((chunk) => {
+    let symbolBonus = 0;
+    const chunkNameLower = chunk.name.toLowerCase();
+    if (qTokens.some((t) => chunkNameLower.includes(t) || t.includes(chunkNameLower))) {
+      symbolBonus = 0.45;
+    }
+    return {
+      ...chunk,
+      score:
+        tfidf(qTokens, tokenize(chunk.content)) +
+        exactBonus(query, chunk.content) +
+        symbolBonus,
+    };
+  });
 
   return scored
     .filter((c) => c.score > 0)
@@ -228,8 +255,9 @@ export function retrieveTopChunks(
     .slice(0, topK);
 }
 
-// ─── Session-level chunk index (keyed by API key hash + filename) ─────────────
+// ─── Session-level chunk index (keyed by user ID + filename) ─────────────
 const _index: Map<string, CodeChunk[]> = new Map();
+const _projectMaps: Map<string, ProjectMap> = new Map();
 
 function sessionKey(userId: string, filename: string): string {
   return `${userId}::${filename}`;
@@ -239,6 +267,59 @@ export function indexFileForUser(userId: string, filename: string, content: stri
   const chunks = chunkCode(filename, content);
   _index.set(sessionKey(userId, filename), chunks);
   return chunks.length;
+}
+
+/**
+ * Universal Project Indexer: Maps an entire workspace/project (regardless of language)
+ * into a structured semantic symbol tree & chunk index.
+ */
+export function indexProjectFiles(
+  userId: string,
+  projectRoot: string,
+  files: Array<{ path: string; content: string }>
+): ProjectMap {
+  const languagesSet = new Set<string>();
+  const symbols: Record<string, ProjectSymbol> = {};
+  let totalChunks = 0;
+
+  for (const f of files) {
+    if (!f.path || typeof f.content !== "string") continue;
+    const ext = (f.path.split(".").pop() ?? "").toLowerCase();
+    if (ext) languagesSet.add(ext);
+
+    const chunks = chunkCode(f.path, f.content);
+    _index.set(sessionKey(userId, f.path), chunks);
+    totalChunks += chunks.length;
+
+    for (const chunk of chunks) {
+      if (chunk.name && chunk.name !== "module" && !chunk.name.startsWith("lines ")) {
+        symbols[chunk.name.toLowerCase()] = {
+          name: chunk.name,
+          type: chunk.type,
+          filename: chunk.filename,
+          startLine: chunk.startLine,
+        };
+      }
+    }
+  }
+
+  const pMap: ProjectMap = {
+    userId,
+    projectRoot: projectRoot || "workspace",
+    fileCount: files.length,
+    chunkCount: totalChunks,
+    symbolCount: Object.keys(symbols).length,
+    languages: Array.from(languagesSet),
+    symbols,
+    updatedAt: Date.now(),
+  };
+
+  _projectMaps.set(userId, pMap);
+  return pMap;
+}
+
+export function getProjectMap(userId: string): ProjectMap | null {
+  return _projectMaps.get(userId) || null;
 }
 
 export function getUserChunks(userId: string): CodeChunk[] {
@@ -253,6 +334,7 @@ export function clearUserIndex(userId: string): void {
   for (const k of _index.keys()) {
     if (k.startsWith(userId + "::")) _index.delete(k);
   }
+  _projectMaps.delete(userId);
 }
 
 // ─── Main pipeline integration point ─────────────────────────────────────────
@@ -306,7 +388,8 @@ export function enrichWithRAG(
   const allChunks = getUserChunks(userId);
   if (allChunks.length === 0) return { body, rag: null };
 
-  const topChunks  = retrieveTopChunks(query, allChunks, topK);
+  const pMap = getProjectMap(userId);
+  const topChunks  = retrieveTopChunks(query, allChunks, topK, pMap);
   if (topChunks.length === 0) return { body, rag: null };
 
   // ── Step 4: Build RAG context block ────────────────────────────────────────

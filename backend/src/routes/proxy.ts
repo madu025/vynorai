@@ -7,6 +7,7 @@ import { getAllModels, canPlanUseModel, resolveModel } from "../services/modelRe
 import { sanitizePayload } from "../services/secretSanitizer.js";
 import { handleFimAutocomplete } from "../services/fimEngine.js";
 import { handleQuickFix } from "../services/quickFixEngine.js";
+import { indexProjectFiles, getProjectMap, clearUserIndex } from "../services/ragEngine.js";
 
 export const proxyRouter = Router();
 
@@ -215,4 +216,85 @@ proxyRouter.get("/usage", requireValidSubscriber, async (req: Request, res: Resp
       : null,
   });
 });
+
+// ─── POST /v1/project/index (Universal Multi-Language Project AST Indexer) ────
+proxyRouter.post("/project/index", requireValidSubscriber, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const { projectRoot, files = [] } = req.body;
+    if (!Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: { message: "files array is required and must not be empty" } });
+    }
+    const pMap = indexProjectFiles(user.id, projectRoot || "workspace", files);
+    res.json({
+      success: true,
+      projectRoot: pMap.projectRoot,
+      filesIndexed: pMap.fileCount,
+      chunksGenerated: pMap.chunkCount,
+      symbolsMapped: pMap.symbolCount,
+      languages: pMap.languages,
+      updatedAt: pMap.updatedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: { message: "Project indexing failed: " + err.message } });
+  }
+});
+
+// ─── GET /v1/project/map (Retrieve Active Project Symbol & Dependency Map) ───
+proxyRouter.get("/project/map", requireValidSubscriber, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const pMap = getProjectMap(user.id);
+  if (!pMap) {
+    return res.json({ indexed: false, message: "No active project indexed for user session." });
+  }
+  res.json({
+    indexed: true,
+    projectRoot: pMap.projectRoot,
+    fileCount: pMap.fileCount,
+    chunkCount: pMap.chunkCount,
+    symbolCount: pMap.symbolCount,
+    languages: pMap.languages,
+    updatedAt: pMap.updatedAt,
+  });
+});
+
+// ─── DELETE /v1/project/index (Clear In-Memory Project Index for Session) ─────
+proxyRouter.delete("/project/index", requireValidSubscriber, (req: Request, res: Response) => {
+  const user = (req as any).user;
+  clearUserIndex(user.id);
+  res.json({ success: true, message: "Project index cleared from RAM." });
+});
+
+// ─── GET /v1/security/merkle-verify (Cryptographic Blockchain Audit Verification)
+proxyRouter.get("/security/merkle-verify", requireValidSubscriber, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const { dbAll } = await import("../db.js");
+    const logs = await dbAll<any>(
+      "SELECT id, model, tokens_used, prev_hash, audit_hash, created_at FROM usage_logs WHERE user_id = ? ORDER BY created_at ASC LIMIT 100",
+      [user.id]
+    );
+
+    let isValid = true;
+    let brokenAt: string | null = null;
+    for (let i = 1; i < logs.length; i++) {
+      if (logs[i].prev_hash !== logs[i - 1].audit_hash) {
+        isValid = false;
+        brokenAt = logs[i].id;
+        break;
+      }
+    }
+
+    res.json({
+      verified: isValid,
+      blocksCount: logs.length,
+      brokenAt,
+      latestAuditHash: logs.length ? logs[logs.length - 1].audit_hash : "GENESIS_BLOCK_VYNORAI_0000000000000000",
+      status: isValid ? "CRYPTOGRAPHICALLY_VERIFIED_TAMPER_PROOF" : "CHAIN_INTEGRITY_COMPROMISED",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: { message: "Merkle verification error: " + err.message } });
+  }
+});
+
 

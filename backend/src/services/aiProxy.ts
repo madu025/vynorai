@@ -6,7 +6,7 @@ import { VYNORAI_AGENT_TOOLS, VYNORAI_AGENT_SYSTEM_PROMPT } from "./agentEngine.
 import { dispatchToProvider } from "./providerRouter.js";
 import { estimateInputTokens } from "./quotaGuard.js";
 import { DEFAULT_CHAT_MODEL } from "../config.js";
-import { generateZKUserId } from "./zkShield.js";
+import { generateZKUserId, computeAuditHash } from "./zkShield.js";
 import { applyHybridContext } from "./hybridContext.js";
 import { enrichWithRAG } from "./ragEngine.js";
 import { enrichWithWeb } from "./webSearch.js";
@@ -186,11 +186,31 @@ export async function handleChatCompletions(
   const finalOutputTokens = realCompletionTokens > 0 ? realCompletionTokens : estimatedOutputTokens;
   const totalTokens = finalInputTokens + finalOutputTokens;
 
-  // Insert granular log
-  dbRun(
-    "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, ?, ?, 0)",
-    [uuidv4(), user.id, model, finalInputTokens, finalOutputTokens, totalTokens]
-  ).catch(console.error);
+  // Insert granular log with Blockchain Merkle Audit Chain
+  (async () => {
+    try {
+      const lastLog = await dbGet<any>(
+        "SELECT audit_hash FROM usage_logs WHERE user_id = ? AND audit_hash IS NOT NULL AND audit_hash != '' ORDER BY created_at DESC LIMIT 1",
+        [user.id]
+      );
+      const prevHash = lastLog?.audit_hash || "GENESIS_BLOCK_VYNORAI_0000000000000000";
+      const auditHash = computeAuditHash(prevHash, {
+        userId: user.id,
+        model,
+        finalInputTokens,
+        finalOutputTokens,
+        totalTokens,
+        timestamp: Date.now(),
+      });
+
+      await dbRun(
+        "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached, prev_hash, audit_hash) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+        [uuidv4(), user.id, model, finalInputTokens, finalOutputTokens, totalTokens, prevHash, auditHash]
+      );
+    } catch (err) {
+      console.error("[Merkle Audit] Failed to record audit log:", err);
+    }
+  })();
 
   // Increment monthly ledger atomically
   import("./monthlyQuota.js").then(({ incrementMonthlyUsage }) => {

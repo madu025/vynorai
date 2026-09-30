@@ -133,6 +133,15 @@ export async function ensureSecurityTables(): Promise<void> {
     if (!userCols.includes("email_verified")) {
       await dbRun("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0");
     }
+
+    // 5. Merkle Hash Audit Chain migration for usage_logs
+    const usageCols = (await dbAll<any>("PRAGMA table_info(usage_logs)")).map((c: any) => c.name);
+    if (!usageCols.includes("prev_hash")) {
+      await dbRun("ALTER TABLE usage_logs ADD COLUMN prev_hash TEXT DEFAULT 'GENESIS'");
+    }
+    if (!usageCols.includes("audit_hash")) {
+      await dbRun("ALTER TABLE usage_logs ADD COLUMN audit_hash TEXT DEFAULT ''");
+    }
   } catch (err) {
     console.error("[DB] Security migration error:", err);
   }

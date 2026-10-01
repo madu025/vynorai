@@ -16,6 +16,7 @@ import { RootState } from "../../../../redux/store";
 import { processEditorContent } from "./processEditorContent";
 import { renderSlashCommandPrompt } from "./renderSlashCommand";
 import { GetContextRequest } from "./types";
+import { getAutomaticProjectContext } from "./autoProjectContext";
 
 interface ResolveEditorContentInput {
   editorState: JSONContent;
@@ -131,7 +132,34 @@ async function gatherContextItems({
       query: def.query,
     }),
   );
-  const withDefaults = [...contextRequests, ...defaultRequests];
+  const state = getState();
+  const userMessageCount = state.session.history.filter(
+    (item) => item.message.role === "user",
+  ).length;
+  const automaticContext = getAutomaticProjectContext(
+    stripImages(parts),
+    userMessageCount,
+    modifiers.useCodebase ||
+      contextRequests.some((request) =>
+        ["codebase", "tree", "repo-map", "folder"].includes(request.provider),
+      ),
+  );
+  const automaticRequests: GetContextRequest[] = [
+    ...(automaticContext.tree ? [{ provider: "tree", query: "" }] : []),
+    ...(automaticContext.codebase
+      ? [
+          {
+            provider: "codebase",
+            query: automaticContext.codebaseQuery ?? stripImages(parts),
+          },
+        ]
+      : []),
+  ];
+  const withDefaults = [
+    ...contextRequests,
+    ...defaultRequests,
+    ...automaticRequests,
+  ];
   const deduplicatedInputs = withDefaults.reduce<GetContextRequest[]>(
     (acc, item) => {
       if (
@@ -145,7 +173,7 @@ async function gatherContextItems({
   );
   let contextItems: ContextItemWithId[] = [];
 
-  const isInAgentMode = getState().session.mode === "agent";
+  const isInAgentMode = state.session.mode === "agent";
 
   // Process context item attributes
   for (const item of deduplicatedInputs) {

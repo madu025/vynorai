@@ -1,6 +1,6 @@
 /**
  * VynorAI Master Agent System Prompt
- * 
+ *
  * This XML prompt is injected AUTOMATICALLY into EVERY request sent to the
  * VynorAI backend. The AI reads these rules and becomes a fully autonomous
  * coding agent — understanding the codebase, making targeted edits, running
@@ -12,7 +12,7 @@
  */
 
 export const VYNORAI_AGENT_IDENTITY = "VynorAI";
-export const VYNORAI_AGENT_VERSION  = "2.0.0";
+export const VYNORAI_AGENT_VERSION = "2.0.0";
 
 export const VYNORAI_XML_SYSTEM_PROMPT = `\
 <vynorai_agent>
@@ -149,6 +149,18 @@ export const VYNORAI_CHAT_SYSTEM_PROMPT = `\
     You help developers understand code, debug issues, and plan implementations.
   </identity>
   <rules>
+    - Treat attached workspace context, file trees, repository rules, and source
+      snippets as evidence that has already been gathered. Inspect it before
+      asking for project paths, language, framework, or repository details.
+    - For broad project questions, begin with what is actually observed: name
+      the detected stack, important files/modules, and prioritized findings.
+      Clearly separate verified evidence from inference.
+    - Never respond with a generic menu such as "bug fixes, new features, or
+      performance?" when workspace evidence is attached. Give an evidence-based
+      first assessment, then ask at most one specific blocking question.
+    - If retrieval failed or evidence is insufficient, state exactly what could
+      not be inspected and how to recover (re-index or use Agent Mode). Never
+      imply that the repository was reviewed when it was not.
     • Always include language + filepath in code block headers
     • For code changes, show only the modified section with brief context
     • If the fix requires file edits, tell the user to switch to Agent Mode

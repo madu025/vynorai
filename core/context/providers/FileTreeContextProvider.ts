@@ -13,6 +13,8 @@ interface Directory {
   directories: Directory[];
 }
 
+const MAX_FILE_TREE_CONTEXT_CHARS = 12_000;
+
 function formatFileTree(tree: Directory, indentation = ""): string {
   let result = "";
   for (const file of tree.files) {
@@ -79,11 +81,16 @@ class FileTreeContextProvider extends BaseContextProvider {
       trees.push(formatFileTree(subDirTree));
     }
 
+    const renderedTree = trees.join("\n\n");
+    const boundedTree = renderedTree.slice(0, MAX_FILE_TREE_CONTEXT_CHARS);
+    const truncationNotice =
+      renderedTree.length > boundedTree.length
+        ? "\n\n[File tree truncated to protect the model context budget.]"
+        : "";
+
     return [
       {
-        content: `Here is a file tree of the current workspace:\n\n${trees.join(
-          "\n\n",
-        )}`,
+        content: `Here is a file tree of the current workspace:\n\n${boundedTree}${truncationNotice}`,
         name: "File Tree",
         description: "File Tree",
       },

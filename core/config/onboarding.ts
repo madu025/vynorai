@@ -24,10 +24,10 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
     apiBase: VYNORAI_API_BASE,
     apiKey,
     roles: ["chat", "edit", "apply", "subagent"],
-    template: "none" as any,
+    template: "none",
     defaultCompletionOptions: { contextLength: 200000, maxTokens: 8192 },
     capabilities: ["tool_use", "image_input"],
-  },
+  } as OnboardingModel,
   {
     name: "VynorAI ⚡ DeepSeek V3",
     provider: "vynorai",
@@ -35,9 +35,9 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
     apiBase: VYNORAI_API_BASE,
     apiKey,
     roles: ["chat", "edit"],
-    template: "none" as any,
+    template: "none",
     defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192 },
-  },
+  } as OnboardingModel,
   {
     name: "VynorAI Code Completion",
     provider: "vynorai",
@@ -45,9 +45,9 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
     apiBase: VYNORAI_API_BASE,
     apiKey,
     roles: ["autocomplete"],
-    template: "none" as any,
+    template: "none",
     defaultCompletionOptions: { contextLength: 16000, maxTokens: 512 },
-  },
+  } as OnboardingModel,
 ];
 
 // These model definitions are inlined copies of the corresponding Continue Hub

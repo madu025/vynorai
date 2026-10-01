@@ -93,7 +93,13 @@ export async function retrieveContextItemsFromEmbeddings(
         },
       ];
     }
-    return [];
+    return [
+      {
+        ...INSTRUCTIONS_BASE_ITEM,
+        content:
+          "Automatic codebase retrieval returned no source snippets. Do not pretend the repository was inspected and do not answer with a generic requirements checklist. Use any attached file tree or current-file evidence, clearly identify the retrieval limitation, and recommend Agent Mode or re-indexing when deeper repository inspection is required.",
+      },
+    ];
   }
 
   return [

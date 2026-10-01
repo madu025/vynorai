@@ -374,6 +374,13 @@ const MIGRATIONS: Migration[] = [
       await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verifications_expiry ON email_verifications(expires_at)");
     },
   },
+  {
+    version: "011_monthly_usage_unique_period",
+    description: "Ensure unique index on monthly_usage(user_id, period_start) for conflict-safe inserts",
+    up: async () => {
+      await execSchema("CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_usage_user_period ON monthly_usage(user_id, period_start)");
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

@@ -127,7 +127,11 @@ void (async () => {
     rimrafSync(indexHtmlPath);
   }
   fs.copyFileSync("tmp_index.html", indexHtmlPath);
-  fs.unlinkSync("tmp_index.html");
+  try {
+    fs.unlinkSync("tmp_index.html");
+  } catch (e) {
+    // Non-fatal on Windows if antivirus or indexer holds temporary handle
+  }
 
   console.log("[info] Copied gui build to JetBrains extension");
 

@@ -229,6 +229,83 @@ export async function handleChatCompletions(
         latencyMs: Date.now() - requestStartedAt,
       }).catch((err) => console.error("[Economics] Local engine ledger failed:", err));
 
+      const clientRequestedTools = Array.isArray(body?.tools) && body.tools.length > 0;
+      const fileEntries = Object.entries(engineResult.modifiedFiles);
+
+      if (clientRequestedTools && fileEntries.length > 0) {
+        const toolCalls = fileEntries.map(([path, content], i) => ({
+          id: `call_${uuidv4().replace(/-/g, "").slice(0, 10)}_${i}`,
+          type: "function",
+          function: {
+            name: "createNewFile",
+            arguments: JSON.stringify({
+              filepath: path,
+              contents: content,
+            }),
+          },
+        }));
+
+        if (stream) {
+          res.setHeader("Content-Type", "text/event-stream");
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("Connection", "keep-alive");
+          const textChunk = {
+            id: "vynor-" + uuidv4(),
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: "vynorai-local-engine",
+            choices: [{
+              index: 0,
+              delta: { role: "assistant", content: `⚡ **VynorAI Autonomous Agent**: Creating ${fileEntries.length} verified files directly to your workspace...\n` },
+              finish_reason: null,
+            }],
+          };
+          res.write(`data: ${JSON.stringify(textChunk)}\n\n`);
+
+          for (let i = 0; i < toolCalls.length; i++) {
+            const tc = toolCalls[i];
+            const tcChunk = {
+              id: "vynor-" + uuidv4(),
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model: "vynorai-local-engine",
+              choices: [{
+                index: 0,
+                delta: {
+                  tool_calls: [{
+                    index: i,
+                    id: tc.id,
+                    type: "function",
+                    function: tc.function,
+                  }],
+                },
+                finish_reason: i === toolCalls.length - 1 ? "tool_calls" : null,
+              }],
+            };
+            res.write(`data: ${JSON.stringify(tcChunk)}\n\n`);
+          }
+          res.write("data: [DONE]\n\n");
+          return res.end();
+        } else {
+          return res.json({
+            id: "vynor-" + uuidv4(),
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1000),
+            model: "vynorai-local-engine",
+            choices: [{
+              index: 0,
+              message: {
+                role: "assistant",
+                content: `⚡ **VynorAI Autonomous Agent**: Creating ${fileEntries.length} verified files directly to your workspace...`,
+                tool_calls: toolCalls,
+              },
+              finish_reason: "tool_calls",
+            }],
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          });
+        }
+      }
+
       const chunk = {
         id: "vynor-" + uuidv4(),
         object: "chat.completion.chunk",

@@ -16,6 +16,10 @@ export const PROVIDER_TOOL_SUPPORT: Record<string, (model: string) => boolean> =
       if (lower.match(/^gpt-[4-9]/) || lower.match(/^o[1-9]/)) return true;
       return false;
     },
+    vynorai: (_model) => {
+      // VynorAI proxy supports OpenAI-compatible function calling & tools across all models
+      return true;
+    },
     openai: (model) => {
       const lower = model.toLowerCase();
       // https://platform.openai.com/docs/guides/function-calling#models-supporting-function-calling
@@ -490,6 +494,9 @@ export const PROVIDER_TOOL_SUPPORT: Record<string, (model: string) => boolean> =
 export function isRecommendedAgentModel(modelName: string): boolean {
   // AND behavior
   const recs: RegExp[][] = [
+    [/vynor/],
+    [/deepseek/],
+    [/qwen/],
     [/o[134]/],
     [/deepseek/, /r1|reasoner/],
     [/gemini/, /2\.5/, /pro/],

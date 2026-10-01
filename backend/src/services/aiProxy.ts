@@ -135,6 +135,18 @@ export async function handleChatCompletions(
   if (cached?.responseChunks?.length) {
     console.log(`[VynorAI ⚡ CACHE HIT] 0 tokens | key=${cacheKey.slice(0, 10)}…`);
     res.setHeader("X-VynorAI-Cache", "HIT");
+    res.setHeader("X-VynorAI-Tokens-Saved", "100%");
+
+    (async () => {
+      try {
+        const estimatedInput = estimateInputTokens(messages);
+        const savedTokens = Math.max(350, estimatedInput);
+        await dbRun(
+          "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
+          [uuidv4(), user.id, "slm-semantic-cache", savedTokens]
+        );
+      } catch (_) {}
+    })();
 
     if (stream) {
       res.setHeader("Content-Type", "text/event-stream");
@@ -162,6 +174,16 @@ export async function handleChatCompletions(
       res.setHeader("X-VynorAI-Engine", "5-LAYER-LOCAL");
       res.setHeader("X-VynorAI-Workflow", engineResult.workflowId || "none");
       res.setHeader("X-VynorAI-Tokens-Saved", "100%");
+
+      (async () => {
+        try {
+          const savedTokens = Math.max(650, Math.round(rawQuery.length / 2) + Math.round(responseMarkdown.length / 3));
+          await dbRun(
+            "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
+            [uuidv4(), user.id, "vynorai-slm-engine", savedTokens]
+          );
+        } catch (_) {}
+      })();
 
       const chunk = {
         id: "vynor-" + uuidv4(),
@@ -203,6 +225,16 @@ export async function handleChatCompletions(
     res.setHeader("X-VynorAI-Scaffold", "INSTANT_VAULT_HIT");
     res.setHeader("X-VynorAI-Scaffold-Match", instantMatch.template?.id || "matched");
     res.setHeader("X-VynorAI-Tokens-Saved", "100%");
+
+    (async () => {
+      try {
+        const savedTokens = Math.max(1200, Math.round((instantMatch.responseMarkdown?.length || 2000) / 3));
+        await dbRun(
+          "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
+          [uuidv4(), user.id, "vynorai-golden-scaffold", savedTokens]
+        );
+      } catch (_) {}
+    })();
 
     const chunk = {
       id: "scaffold-" + uuidv4(),

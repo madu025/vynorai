@@ -386,6 +386,21 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
       [user.id],
     );
 
+    const cacheStats = await dbGet<any>(
+      `SELECT COUNT(*) as cachedRequests, 
+              COALESCE(SUM(input_tokens), 0) as tokensSaved 
+       FROM usage_logs 
+       WHERE user_id = ? AND cached = 1`,
+      [user.id],
+    );
+
+    const tokensSaved = cacheStats?.tokensSaved || 0;
+    const cachedRequests = cacheStats?.cachedRequests || 0;
+    const chargedTokens = totalUsage?.totalTokens || 0;
+    const totalAttempted = chargedTokens + tokensSaved;
+    const savingPct = totalAttempted > 0 ? Math.round((tokensSaved / totalAttempted) * 100) : 0;
+    const estimatedLkrSaved = Math.round((tokensSaved / 1_000_000) * 220);
+
     res.json({
       user: {
         id: user.id,
@@ -402,6 +417,12 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
       usage: {
         requestCount: totalUsage?.requestCount || 0,
         totalTokens: totalUsage?.totalTokens || 0,
+      },
+      slmSavings: {
+        tokensSaved,
+        cachedRequests,
+        savingPercentage: savingPct,
+        estimatedLkrSaved,
       },
       modelUsage: modelUsage || [],
       dailyUsage: dailyUsage || [],

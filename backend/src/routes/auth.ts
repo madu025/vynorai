@@ -4,7 +4,7 @@ import { NextFunction, Request, Response, Router } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
-import { dbGet, dbRun } from "../db.js";
+import { dbAll, dbGet, dbRun } from "../db.js";
 import { authRateLimiter } from "../middleware/security.js";
 import { sendVerificationEmail } from "../services/emailService.js";
 import {
@@ -363,6 +363,29 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
       [user.id],
     );
 
+    const modelUsage = await dbAll<any>(
+      `SELECT model, 
+              COUNT(*) as requestCount, 
+              SUM(tokens_used) as totalTokens,
+              MAX(created_at) as lastUsed
+       FROM usage_logs 
+       WHERE user_id = ? 
+       GROUP BY model 
+       ORDER BY totalTokens DESC`,
+      [user.id],
+    );
+
+    const dailyUsage = await dbAll<any>(
+      `SELECT DATE(created_at) as date, 
+              COUNT(*) as requestCount, 
+              SUM(tokens_used) as totalTokens 
+       FROM usage_logs 
+       WHERE user_id = ? AND created_at >= date('now', '-7 days') 
+       GROUP BY DATE(created_at) 
+       ORDER BY date ASC`,
+      [user.id],
+    );
+
     res.json({
       user: {
         id: user.id,
@@ -380,6 +403,8 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
         requestCount: totalUsage?.requestCount || 0,
         totalTokens: totalUsage?.totalTokens || 0,
       },
+      modelUsage: modelUsage || [],
+      dailyUsage: dailyUsage || [],
     });
   } catch (err: any) {
     console.error("Profile error:", err);

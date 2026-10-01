@@ -809,6 +809,76 @@
           </div>
         </div>
 
+        <!-- Model-Wise Telemetry & Live Usage Analytics (Kimi / Claude / OpenAI Standard) -->
+        <div class="glass-card" style="grid-column: 1 / -1; margin-top: 6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:34px; height:34px; border-radius:10px; background:rgba(0,229,255,0.15); display:flex; align-items:center; justify-content:center; color:#00e5ff; font-size:18px;">📊</div>
+              <div>
+                <h3 style="margin:0; font-size:17px; font-weight:700;">Model-Wise Usage & Telemetry</h3>
+                <p style="margin:2px 0 0 0; color:var(--text-muted); font-size:13px;">Real-time consumption breakdown across all configured AI coding models</p>
+              </div>
+            </div>
+            <button class="btn btn-secondary" onclick="loadDashboard()" style="font-size:12px; padding:6px 14px; width:auto;">🔄 Refresh Telemetry</button>
+          </div>
+
+          <div id="model-usage-container" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px;">
+            <div style="text-align:center; padding:28px; color:var(--text-muted); grid-column:1/-1;">
+              Loading telemetry breakdown...
+            </div>
+          </div>
+
+          <!-- Weekly Activity Trend (Last 7 Days) -->
+          <div style="margin-top:24px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.06);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span style="font-size:13px; font-weight:600; color:var(--text);">📈 7-Day Activity Velocity</span>
+              <span id="daily-velocity-summary" style="font-size:12px; color:var(--text-muted);">Last 7 Days</span>
+            </div>
+            <div id="daily-bars-track" style="display:flex; align-items:flex-end; gap:10px; height:80px; padding:10px 14px; background:rgba(0,0,0,0.3); border-radius:10px; border:1px solid var(--border);">
+            </div>
+          </div>
+        </div>
+
+        <!-- Client IDE Ecosystem Support -->
+        <div class="glass-card" style="grid-column: 1 / -1; margin-top: 6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:34px; height:34px; border-radius:10px; background:rgba(176,38,255,0.15); display:flex; align-items:center; justify-content:center; color:#d070ff; font-size:18px;">💻</div>
+              <div>
+                <h3 style="margin:0; font-size:16px; font-weight:700;">Client IDE Ecosystem Integration</h3>
+                <p style="margin:2px 0 0 0; color:var(--text-muted); font-size:12px;">Unified coding intelligence active across your development environments</p>
+              </div>
+            </div>
+            <span class="status-pill status-active" style="background:rgba(0,229,255,0.15); color:#00e5ff; border-color:rgba(0,229,255,0.4);">
+              ⚡ Multi-IDE Bridge Ready
+            </span>
+          </div>
+
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-top:16px;">
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; align-items:center; gap:10px;">
+              <span style="font-size:22px;">🌌</span>
+              <div>
+                <div style="font-size:13px; font-weight:600; color:var(--text)">Antigravity IDE</div>
+                <div style="font-size:11px; color:#00e676">● Protocol + Ephemeral Loopback Ready</div>
+              </div>
+            </div>
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; align-items:center; gap:10px;">
+              <span style="font-size:22px;">⚡</span>
+              <div>
+                <div style="font-size:13px; font-weight:600; color:var(--text)">VS Code & Insiders</div>
+                <div style="font-size:11px; color:#00e676">● Marketplace & Extension Ready</div>
+              </div>
+            </div>
+            <div style="background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; align-items:center; gap:10px;">
+              <span style="font-size:22px;">🎯</span>
+              <div>
+                <div style="font-size:13px; font-weight:600; color:var(--text)">Cursor & Windsurf</div>
+                <div style="font-size:11px; color:#00e676">● Direct Deep Link Compatible</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Enterprise Zero Data Retention (ZDR) & Privacy Shield (Codex / Kimi Assurance) -->
         <div class="glass-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, rgba(18,22,34,0.85) 0%, rgba(10,14,24,0.95) 100%); border: 1px solid rgba(0,229,255,0.2);">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -938,6 +1008,23 @@
             </ul>
 
             <button class="btn btn-secondary" onclick="initiatePayhere('ultra')" style="border: 1px solid var(--accent); color: #fff;">Get Ultra • රු. 7,900</button>
+          </div>
+        </div>
+
+        <!-- Instant Quota Top-Up Booster -->
+        <div class="glass-card" style="margin-top: 28px; padding: 20px 24px; border: 1px solid rgba(0,229,255,0.3); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: linear-gradient(135deg, rgba(0,229,255,0.08) 0%, rgba(176,38,255,0.06) 100%);">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="font-size: 32px;">⚡</div>
+            <div>
+              <div style="font-size: 16px; font-weight: 700; color: #fff;">Need More Tokens Mid-Month? Instant Top-Up Pack</div>
+              <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">
+                Add <b>+5,000,000 Tokens (5M)</b> instantly to your active balance without changing your monthly subscription cycle.
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="font-size: 20px; font-weight: 800; color: var(--primary);">රු. 650 <span style="font-size: 12px; color: var(--text-muted); font-weight: 400;">one-time</span></div>
+            <button class="btn btn-primary" onclick="initiatePayhere('topup5m')" style="padding: 10px 20px; font-size: 14px; width: auto;">⚡ Top-Up 5M Tokens</button>
           </div>
         </div>
       </div>
@@ -1147,9 +1234,102 @@
             document.getElementById('cycle-end-text').innerText = `Cycle ends: ${monthly.period_end}`;
           }
         }
+
+        // Render Model-Wise Telemetry Breakdown & 7-Day Velocity
+        renderModelUsage(data.modelUsage || [], monthly?.used_tokens || 0);
+        renderDailyUsage(data.dailyUsage || []);
       } catch (err) {
         console.error(err);
       }
+    }
+
+    function renderModelUsage(models, totalUsed) {
+      const container = document.getElementById('model-usage-container');
+      if (!container) return;
+
+      if (!models || models.length === 0) {
+        container.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 24px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px dashed rgba(255,255,255,0.1);">
+            <div style="font-size: 24px; margin-bottom: 6px;">⚡</div>
+            <div style="font-size: 14px; font-weight: 600; color: var(--text);">No Model Usage Recorded Yet</div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+              Trigger inline code completions or prompts in your IDE to see real-time model breakdowns here.
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      const modelMeta = {
+        'deepseek-chat': { name: 'DeepSeek V3 (Coding)', color: '#00e5ff', icon: '⚡' },
+        'deepseek-v3': { name: 'DeepSeek V3 (Coding)', color: '#00e5ff', icon: '⚡' },
+        'deepseek/deepseek-chat-v3-0324': { name: 'DeepSeek V3 (Coding)', color: '#00e5ff', icon: '⚡' },
+        'deepseek-r1': { name: 'DeepSeek R1 (Reasoning)', color: '#b026ff', icon: '🧠' },
+        'deepseek/deepseek-r1': { name: 'DeepSeek R1 (Reasoning)', color: '#b026ff', icon: '🧠' },
+        'qwen-2.5-coder': { name: 'Qwen 2.5 Coder 32B', color: '#00e676', icon: '💻' },
+        'qwen/qwen-2.5-coder-32b-instruct': { name: 'Qwen 2.5 Coder 32B', color: '#00e676', icon: '💻' },
+        'deepseek-coder': { name: 'DeepSeek Coder FIM', color: '#ffab00', icon: '✍️' },
+        'deepseek/deepseek-coder-v2': { name: 'DeepSeek Coder FIM', color: '#ffab00', icon: '✍️' },
+        'meta-llama/llama-3.3-70b-instruct': { name: 'Llama 3.3 70B', color: '#ff4081', icon: '🦙' },
+        'anthropic/claude-3.7-sonnet': { name: 'Claude 3.7 Sonnet', color: '#ff6d00', icon: '✨' },
+      };
+
+      const safeTotal = totalUsed > 0 ? totalUsed : models.reduce((acc, m) => acc + (m.totalTokens || 0), 0) || 1;
+
+      container.innerHTML = models.map(m => {
+        const key = m.model || 'Unknown';
+        const meta = modelMeta[key] || { name: key, color: '#00e5ff', icon: '🤖' };
+        const tokens = m.totalTokens || 0;
+        const requests = m.requestCount || 0;
+        const pct = Math.min(100, Math.round((tokens / safeTotal) * 100));
+
+        return `
+          <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:16px;">${meta.icon}</span>
+                  <strong style="font-size:13px; color:var(--text);">${meta.name}</strong>
+                </div>
+                <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.06); color:${meta.color}; font-weight:700;">${pct}%</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+                <span>${tokens.toLocaleString()} tokens</span>
+                <span>${requests.toLocaleString()} reqs</span>
+              </div>
+            </div>
+            <div style="width:100%; height:6px; background:rgba(255,255,255,0.06); border-radius:4px; overflow:hidden;">
+              <div style="width:${pct}%; height:100%; background:${meta.color}; border-radius:4px; transition:width 0.4s ease;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderDailyUsage(dailyList) {
+      const track = document.getElementById('daily-bars-track');
+      const summary = document.getElementById('daily-velocity-summary');
+      if (!track) return;
+
+      if (!dailyList || dailyList.length === 0) {
+        track.innerHTML = '<div style="width:100%; text-align:center; font-size:12px; color:var(--text-muted);">No activity recorded in the past 7 days</div>';
+        return;
+      }
+
+      const maxTokens = Math.max(...dailyList.map(d => d.totalTokens || 0), 1000);
+      const totalWeekTokens = dailyList.reduce((acc, d) => acc + (d.totalTokens || 0), 0);
+      if (summary) summary.innerText = `${totalWeekTokens.toLocaleString()} tokens this week`;
+
+      track.innerHTML = dailyList.map(d => {
+        const heightPct = Math.max(10, Math.min(100, Math.round(((d.totalTokens || 0) / maxTokens) * 100)));
+        const dayLabel = d.date ? d.date.split('-').slice(1).join('/') : '';
+        return `
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;" title="${d.date}: ${(d.totalTokens || 0).toLocaleString()} tokens (${d.requestCount} requests)">
+            <div style="width:100%; max-width:24px; height:${heightPct}%; background:linear-gradient(180deg, #00e5ff 0%, #b026ff 100%); border-radius:4px 4px 0 0; min-height:6px;"></div>
+            <span style="font-size:10px; color:var(--text-muted); margin-top:4px;">${dayLabel}</span>
+          </div>
+        `;
+      }).join('');
     }
 
     let isApiKeyVisible = false;
@@ -1453,6 +1633,10 @@
       ultra: {
         name: 'Ultra Plan', price: 'රු. 7,900 / month', badge: 'Power User',
         features: ['60M Tokens/month','20,000 Agent Requests','All Premier Models (Qwen 72B, DeepSeek R1, Llama 70B)','Dedicated Low-Latency Pipeline','Multi-device Support (Up to 3 devices)','VIP Priority Support']
+      },
+      topup5m: {
+        name: 'Instant Top-Up Pack (+5M)', price: 'රු. 650 (one-time)', badge: 'Instant Boost',
+        features: ['+5,000,000 Tokens (5M) added instantly','1,500 Additional Fast Coding Requests','Works with your existing active plan','No expiration within active cycle','Instant PayHere Activation']
       }
     };
 

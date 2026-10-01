@@ -123,6 +123,17 @@ export const PLANS: Record<string, PlanDefinition> = {
     ],
     payhereItemId: "vynorai_ultra", upgradeUrl: "https://vynor.lk/#pricing",
   },
+  topup5m: {
+    id: "topup5m", displayName: "Top-Up Pack (5M)",
+    monthlyTokens: 5_000_000, monthlyRequests: 1_500,
+    priceLKR: 650, priceUSD: 2.10, discountPct: 0,
+    contextWindow: 128_000,
+    defaultChatModel: "deepseek/deepseek-chat-v3-0324",
+    defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
+    allowedModels: ["*"],
+    features: ["+5,000,000 Extra Tokens","1,500 Additional Requests","Instant Credit to Active Plan"],
+    payhereItemId: "vynorai_topup_5m", upgradeUrl: "https://vynor.lk/#pricing",
+  },
   pro_monthly: {
     id: "pro_monthly", displayName: "Pro Monthly",
     monthlyTokens: 25_000_000, monthlyRequests: 7_500,

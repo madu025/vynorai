@@ -104,10 +104,20 @@ paymentRouter.post("/notify", async (req: Request, res: Response) => {
         [payment_id, validUntil, order_id]
       );
 
-      // Re-initialize or upgrade the user's monthly quota ledger immediately
-      await getOrInitMonthlyUsage(userId, planDef.id);
-
-      console.log(`[PayHere IPN] Subscription activated for Order: ${order_id}, User: ${userId}, Plan: ${planDef.id}`);
+      if (planDef.id === "topup5m") {
+        // Increment existing quota ledger without altering subscription plan tier
+        await dbRun(
+          `UPDATE monthly_usage 
+           SET max_tokens = max_tokens + ?, max_requests = max_requests + ? 
+           WHERE user_id = ?`,
+          [planDef.monthlyTokens, planDef.monthlyRequests, userId]
+        );
+        console.log(`[PayHere IPN] Top-up credited: +${planDef.monthlyTokens} tokens for User: ${userId}`);
+      } else {
+        // Re-initialize or upgrade the user's monthly quota ledger immediately
+        await getOrInitMonthlyUsage(userId, planDef.id);
+        console.log(`[PayHere IPN] Subscription activated for Order: ${order_id}, User: ${userId}, Plan: ${planDef.id}`);
+      }
     } else {
       await dbRun("UPDATE subscriptions SET status = 'failed' WHERE order_id = ?", [order_id]);
       console.log(`[PayHere IPN] Payment failed or canceled for Order: ${order_id}`);

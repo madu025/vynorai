@@ -1082,16 +1082,37 @@ export function checkInstantTemplateMatch(
     }
   }
 
+  // 3. Fast In-Memory Database Index Match for Industry Boilerplates
+  try {
+    const { matchTemplateIndex, INDUSTRY_BOILERPLATES } = require("./vaultStore.js");
+    const indexMatch = matchTemplateIndex(q);
+    if (indexMatch) {
+      const template = INDUSTRY_BOILERPLATES.find((t: any) => t.id === indexMatch.id);
+      if (template) {
+        const { healTemplateForContext } = require("./vault/selfHealer.js");
+        const healed = healTemplateForContext(template, projectContext);
+        const adaptedTemplate = { ...template, code: healed.code };
+        return {
+          matched: true,
+          template: adaptedTemplate,
+          responseMarkdown: buildInstantMarkdown(adaptedTemplate, healed.corrections),
+          score: 0.95,
+        };
+      }
+    }
+  } catch (_) {}
+
   return { matched: false };
 }
 
-function buildInstantMarkdown(t: GoldenTemplate): string {
+function buildInstantMarkdown(t: GoldenTemplate, corrections: string[] = []): string {
   const mainLang = t.languages[0] || "typescript";
   const envNotice = t.requiredEnv.length > 0 ? `\n- **Required Environment Variables:** \`${t.requiredEnv.join("`, `")}\`` : "";
-  const depNotice = t.dependencies.length > 0 ? `\n- **Dependencies:** \`${t.dependencies.join("`, `")}\`` : "";
+  const depNotice = t.dependencies.length > 0 ? `\n- **Dependencies:** \`${t.dependencies.map((d: any) => typeof d === 'string' ? d : d.name).join("`, `")}\`` : "";
+  const selfHealNotice = corrections.length > 0 ? `\n> 🛡️ **Autonomous Self-Healing Active:** ${corrections.join("; ")}` : "";
 
   return `### ⚡ VynorAI Verified Golden Scaffold: **${t.title}** (v${t.version})
-> **Zero-Token Instant Delivery** • Security Level: \`${t.securityLevel.toUpperCase()}\` • Status: \`${t.status.toUpperCase()}\`
+> **Zero-Token Instant Delivery** • Security Level: \`${t.securityLevel.toUpperCase()}\` • Status: \`${t.status.toUpperCase()}\`${selfHealNotice}
 ${envNotice}${depNotice}
 
 \`\`\`${mainLang}

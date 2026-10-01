@@ -272,6 +272,8 @@ async function start() {
   await initDb();
   await initBillingDb();
   await initCacheTable();
+  const { initVaultStore } = await import("./services/vaultStore.js");
+  await initVaultStore();
   await initModelRegistry();
   await getRedis();
   const parity = await billingParity();

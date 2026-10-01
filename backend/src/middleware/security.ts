@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { incrementRateLimit } from "../services/redisStore.js";
 
 interface RateLimitRecord {
   count: number;
@@ -40,30 +41,41 @@ export function createRateLimiter(options: {
     },
   } = options;
 
-  return (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     const key = keyGenerator(req);
     const now = Date.now();
+    let count: number;
+    let resetSeconds: number;
 
-    let record = memoryStore.get(key);
-
-    if (!record || now > record.resetAt) {
-      record = {
-        count: 1,
-        resetAt: now + windowMs,
-      };
-      memoryStore.set(key, record);
-    } else {
-      record.count += 1;
+    try {
+      const distributed = await incrementRateLimit(key, windowMs);
+      if (distributed) {
+        count = distributed.count;
+        resetSeconds = Math.max(1, Math.ceil(distributed.ttlMs / 1000));
+      } else {
+        throw new Error("Redis unavailable");
+      }
+    } catch {
+      // Single-node fallback preserves availability. Production health exposes
+      // degraded Redis so operators do not mistake this for distributed safety.
+      let record = memoryStore.get(key);
+      if (!record || now > record.resetAt) {
+        record = { count: 1, resetAt: now + windowMs };
+        memoryStore.set(key, record);
+      } else {
+        record.count += 1;
+      }
+      count = record.count;
+      resetSeconds = Math.ceil((record.resetAt - now) / 1000);
     }
 
-    const remaining = Math.max(0, max - record.count);
-    const resetSeconds = Math.ceil((record.resetAt - now) / 1000);
+    const remaining = Math.max(0, max - count);
 
     res.setHeader("X-RateLimit-Limit", max);
     res.setHeader("X-RateLimit-Remaining", remaining);
     res.setHeader("X-RateLimit-Reset", resetSeconds);
 
-    if (record.count > max) {
+    if (count > max) {
       res.setHeader("Retry-After", resetSeconds);
       return res.status(429).json({
         error: {

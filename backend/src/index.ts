@@ -11,6 +11,7 @@ import { paymentRouter } from "./routes/payment.js";
 import { proxyRouter } from "./routes/proxy.js";
 import { initCacheTable } from "./services/cacheEngine.js";
 import { startHealthMonitor } from "./services/healthMonitor.js";
+import { getRedis, redisStatus } from "./services/redisStore.js";
 
 import { securityHeadersMiddleware } from "./middleware/security.js";
 
@@ -129,6 +130,7 @@ app.get("/health", (_req, res) => {
     .filter(([k, v]) => k !== "ollama" && v)
     .map(([k]) => k);
 
+  const redis = redisStatus();
   res.json({
     status: "ok",
     service: "VynorAI Cloud API",
@@ -138,6 +140,7 @@ app.get("/health", (_req, res) => {
       ? activeProviders
       : ["ollama (local)"],
     supportedModels: Object.keys(MODEL_ALIASES).length,
+    redis: { configured: redis.configured, ready: redis.ready },
     features: [
       "multi-provider-routing",
       "circuit-breaker",
@@ -266,6 +269,7 @@ async function start() {
   await initDb();
   await initCacheTable();
   await initModelRegistry();
+  await getRedis();
 
   const activeKeys = Object.entries(config.aiKeys)
     .filter(([k, v]) => k !== "ollama" && v)

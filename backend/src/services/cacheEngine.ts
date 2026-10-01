@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { dbGet, dbRun } from "../db.js";
 import { decryptCredential, encryptCredential, encryptionAtRestConfigured } from "./credentialVault.js";
+import { getDistributedCache, setDistributedCache } from "./redisStore.js";
 
 interface CacheEntry {
   responseChunks: any[];
@@ -10,6 +11,7 @@ interface CacheEntry {
 
 // In-Memory L1 Cache with LRU eviction (Fastest, 0ms latency)
 const L1_CACHE_MAX_ENTRIES = 500;
+const DISTRIBUTED_CACHE_TTL_SECONDS = 24 * 60 * 60;
 const l1Cache = new Map<string, CacheEntry>();
 
 /**
@@ -55,7 +57,22 @@ export async function getFromCache(cacheKey: string): Promise<CacheEntry | null>
     return entry;
   }
 
-  // 2. Check L2 Persistent SQLite Cache
+  // 2. Check encrypted distributed cache shared across API replicas.
+  if (encryptionAtRestConfigured()) {
+    try {
+      const encrypted = await getDistributedCache(cacheKey);
+      const plaintext = decryptCredential(encrypted);
+      if (plaintext) {
+        const entry: CacheEntry = { responseChunks: JSON.parse(plaintext), createdAt: Date.now() };
+        setL1Cache(cacheKey, entry);
+        return entry;
+      }
+    } catch (err) {
+      console.error("[CacheEngine] Redis read failed; using SQLite fallback:", err);
+    }
+  }
+
+  // 3. Check L2 Persistent SQLite Cache
   if (!encryptionAtRestConfigured()) return null;
   try {
     const row = await dbGet<any>(
@@ -101,6 +118,9 @@ export async function saveToCache(cacheKey: string, chunks: any[]): Promise<void
   const serialized = JSON.stringify(chunks);
   const encrypted = encryptCredential(serialized);
   if (!encrypted) return;
+  setDistributedCache(cacheKey, encrypted, DISTRIBUTED_CACHE_TTL_SECONDS).catch((err) => {
+    console.error("[CacheEngine] Redis write failed; SQLite copy retained:", err);
+  });
   dbRun(
     `INSERT OR REPLACE INTO cache_entries (cache_key, response_data, created_at) 
      VALUES (?, ?, CURRENT_TIMESTAMP)`,

@@ -30,7 +30,7 @@ export const defaultConfig: ConfigYaml = {
       provider: "vynorai",
       model: "deepseek/deepseek-chat-v3-0324",
       apiBase: VYNORAI_API_BASE,
-      roles: ["chat", "edit", "apply"],
+      roles: ["chat", "edit", "apply", "subagent"],
       defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192 },
       capabilities: ["tool_use"],
     },

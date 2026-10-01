@@ -223,6 +223,8 @@ export type ToCoreFromIdeOrWebviewProtocol = {
       messages: ChatMessage[];
       completionOptions: LLMFullCompletionOptions;
       title: string;
+      /** Selects an isolated configured model role. Defaults to chat. */
+      role?: "chat" | "subagent";
       messageOptions?: MessageOption;
       legacySlashCommandData?: {
         command: SlashCommandDescWithSource;

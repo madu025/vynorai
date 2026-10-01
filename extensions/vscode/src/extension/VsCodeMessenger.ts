@@ -18,6 +18,7 @@ import { stripImages } from "core/util/messageContent";
 import * as vscode from "vscode";
 
 import { ApplyManager } from "../apply";
+import { AgentCheckpointManager } from "../checkpoints/AgentCheckpointManager";
 import { VerticalDiffManager } from "../diff/vertical/manager";
 import { addCurrentSelectionToEdit } from "../quickEdit/AddCurrentSelection";
 import EditDecorationManager from "../quickEdit/EditDecorationManager";
@@ -82,6 +83,7 @@ export class VsCodeMessenger {
     private readonly context: vscode.ExtensionContext,
     private readonly vsCodeExtension: VsCodeExtension,
   ) {
+    const checkpointManager = new AgentCheckpointManager(context);
     /** WEBVIEW ONLY LISTENERS **/
     this.onWebview("showFile", (msg) => {
       this.ide.openFile(msg.data.filepath);
@@ -141,8 +143,19 @@ export class VsCodeMessenger {
         configHandler,
       );
 
+      const checkpointFilepath =
+        data.filepath ?? vscode.window.activeTextEditor?.document.uri.toString();
+      const checkpointId = checkpointFilepath
+        ? await checkpointManager.create(checkpointFilepath, "Agent apply")
+        : undefined;
       await applyManager.applyToFile(data);
+      await checkpointManager.finalize(checkpointId);
     });
+
+    this.onWebview("checkpoints/list", async () => checkpointManager.list());
+    this.onWebview("checkpoints/restore", async ({ data }) =>
+      checkpointManager.restore(data.id),
+    );
 
     this.onWebview("showTutorial", async (msg) => {
       await showTutorial(this.ide);
@@ -318,7 +331,12 @@ export class VsCodeMessenger {
       return ide.getWorkspaceDirs();
     });
     this.onWebviewOrCore("writeFile", async (msg) => {
-      return ide.writeFile(msg.data.path, msg.data.contents);
+      const checkpointId = await checkpointManager.create(
+        msg.data.path,
+        "Agent file write",
+      );
+      await ide.writeFile(msg.data.path, msg.data.contents);
+      await checkpointManager.finalize(checkpointId);
     });
     this.onWebviewOrCore("showVirtualFile", async (msg) => {
       return ide.showVirtualFile(msg.data.name, msg.data.content);

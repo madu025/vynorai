@@ -19,6 +19,7 @@ import {
   checkInstantTemplateMatch,
   executeVynorEngine,
   formatOrchestrationToMarkdown,
+  stripRulesAndPreamble,
 } from "./templateVault.js";
 import { detectProjectBlueprint, formatBlueprintPlan } from "./scaffoldRegistry.js";
 import { recordRequestEconomics } from "./costLedger.js";
@@ -199,9 +200,10 @@ export async function handleChatCompletions(
   const rawQuery = typeof lastUserMsgEarly?.content === "string"
     ? lastUserMsgEarly.content
     : Array.isArray(lastUserMsgEarly?.content) ? lastUserMsgEarly.content.map((p: any) => p.text ?? "").join("") : "";
+  const cleanPrompt = stripRulesAndPreamble(rawQuery).trim();
 
-  if (rawQuery) {
-    const engineResult = await executeVynorEngine(rawQuery, {});
+  if (cleanPrompt && !cleanPrompt.startsWith("/") && cleanPrompt.length > 3) {
+    const engineResult = await executeVynorEngine(cleanPrompt, {});
     if (engineResult.status === "SUCCESS" || engineResult.status === "VALIDATION_FAILED") {
       await settleQuotaReservation(quotaReservation, 0);
       const responseMarkdown = formatOrchestrationToMarkdown(engineResult);
@@ -340,7 +342,7 @@ export async function handleChatCompletions(
     }
   }
 
-  const instantMatch = checkInstantTemplateMatch(rawQuery);
+  const instantMatch = checkInstantTemplateMatch(cleanPrompt || rawQuery);
   if (instantMatch.matched && instantMatch.responseMarkdown) {
     await settleQuotaReservation(quotaReservation, 0);
     console.log(`[VynorAI ⚡ INSTANT GOLDEN SCAFFOLD] 0 tokens | template=${instantMatch.template?.id}`);
@@ -401,7 +403,7 @@ export async function handleChatCompletions(
   }
 
   // ── 1c. Composite Project Blueprint Direct Delivery (E-Commerce, SaaS, FinTech) ──
-  const blueprintMatch = detectProjectBlueprint(rawQuery);
+  const blueprintMatch = detectProjectBlueprint(cleanPrompt || rawQuery);
   if (blueprintMatch) {
     await settleQuotaReservation(quotaReservation, 0);
     console.log(`[VynorAI 🏗️ BLUEPRINT MATCH] ${blueprintMatch.id} | query="${rawQuery.slice(0, 40)}"`);

@@ -77,6 +77,8 @@ const DEFAULT_MOCK_CORE_RESPONSES: MockResponses = {
   "chatDescriber/describe": "Session summary",
   applyToFile: undefined,
   acceptDiff: undefined,
+  "checkpoints/list": [],
+  "checkpoints/restore": { restored: true },
   readFile: "File contents",
   "tools/call": {
     contextItems: [

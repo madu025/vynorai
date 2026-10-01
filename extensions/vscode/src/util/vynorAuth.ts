@@ -76,6 +76,11 @@ export async function applyVynorConfig(): Promise<boolean> {
           document.setIn(["models", index, "provider"], "vynorai");
           document.setIn(["models", index, "apiBase"], `${VYNORAI_PROD_URL}/`);
           document.setIn(["models", index, "apiKey"], VYNORAI_SECRET_REF);
+          const roles = Array.isArray(model.roles) ? model.roles : ["chat", "edit", "apply"];
+          document.setIn(
+            ["models", index, "roles"],
+            [...new Set([...roles, "subagent"])],
+          );
         }
       });
 
@@ -86,7 +91,7 @@ export async function applyVynorConfig(): Promise<boolean> {
           model: "deepseek/deepseek-chat-v3-0324",
           apiBase: `${VYNORAI_PROD_URL}/`,
           apiKey: VYNORAI_SECRET_REF,
-          roles: ["chat", "edit", "apply"],
+          roles: ["chat", "edit", "apply", "subagent"],
         });
       }
 
@@ -349,6 +354,28 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
         await applyVynorConfig();
       }
     }
+    // Auto-detect key from existing config.yaml or config.json
+    if (!savedKey) {
+      try {
+        const yamlPath = getConfigYamlPath();
+        if (fs.existsSync(yamlPath)) {
+          const content = fs.readFileSync(yamlPath, "utf-8");
+          const m = content.match(/vynor_live_[a-f0-9]{32}/i);
+          if (m) savedKey = m[0];
+        }
+        if (!savedKey) {
+          const jsonPath = getConfigJsonPath();
+          if (fs.existsSync(jsonPath)) {
+            const content = fs.readFileSync(jsonPath, "utf-8");
+            const m = content.match(/vynor_live_[a-f0-9]{32}/i);
+            if (m) savedKey = m[0];
+          }
+        }
+        if (savedKey) {
+          await secretStorage.store(VYNORAI_SECRET_NAME, savedKey);
+        }
+      } catch (_) {}
+    }
     if (!savedKey) {
       statusBar.text = "$(key) VynorAI: Log in";
       statusBar.tooltip = "Click to sign in with Vynor AI in browser";
@@ -461,4 +488,22 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
       void vscode.commands.executeCommand("continue.continueGUIView.focus");
     })
   );
+}
+
+export function getActiveVynorKeySync(): string {
+  try {
+    const yamlPath = getConfigYamlPath();
+    if (fs.existsSync(yamlPath)) {
+      const content = fs.readFileSync(yamlPath, "utf-8");
+      const m = content.match(/vynor_live_[a-f0-9]{32}/i);
+      if (m) return m[0];
+    }
+    const jsonPath = getConfigJsonPath();
+    if (fs.existsSync(jsonPath)) {
+      const content = fs.readFileSync(jsonPath, "utf-8");
+      const m = content.match(/vynor_live_[a-f0-9]{32}/i);
+      if (m) return m[0];
+    }
+  } catch (_) {}
+  return "";
 }

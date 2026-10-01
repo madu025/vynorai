@@ -29,6 +29,7 @@ export * from "./vault/validators/engine.js";
 export * from "./vault/tools/engine.js";
 export * from "./vault/workflows/engine.js";
 export * from "./vault/orchestrator.js";
+export * from "./vault/intentClassifier.js";
 export * from "./vault/registry/index.js";
 
 /**

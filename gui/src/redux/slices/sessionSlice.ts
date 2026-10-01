@@ -15,6 +15,7 @@ import {
   ContextItem,
   ContextItemWithId,
   FileSymbolMap,
+  InputModifiers,
   McpUiState,
   MessageModes,
   PromptLog,
@@ -38,6 +39,7 @@ import { type InlineErrorMessageType } from "../../components/mainInput/InlineEr
 import { toolCallCtxItemToCtxItemWithId } from "../../pages/gui/ToolCallDiv/utils";
 import { addToolCallDeltaToState, isEditTool } from "../../util/toolCallState";
 import { RootState } from "../store";
+import { ProjectMemory } from "../../util/projectMemory";
 import { streamResponseThunk } from "../thunks/streamResponse";
 import { findChatHistoryItemByToolCallId, findToolCallById } from "../util";
 
@@ -200,6 +202,24 @@ export type ChatHistoryItemWithMessageId = ChatHistoryItem & {
   message: ChatMessage & { id: string };
 };
 
+export type SubagentRun = {
+  id: string;
+  role: string;
+  status: "queued" | "researching" | "completed" | "failed" | "canceled";
+  summary?: string;
+  error?: string;
+  startedAt: number;
+};
+
+export type ExpertCouncilDepth = "off" | "smart" | "deep";
+
+export type QueuedInput = {
+  id: string;
+  editorState: JSONContent;
+  modifiers: InputModifiers;
+  createdAt: number;
+};
+
 type SessionState = {
   lastSessionId?: string;
   isSessionMetadataLoading: boolean;
@@ -212,6 +232,12 @@ type SessionState = {
   mainEditorContentTrigger?: JSONContent | undefined;
   symbols: FileSymbolMap;
   mode: MessageModes;
+  /** Optional for backward compatibility with persisted pre-Expert-Team sessions. */
+  expertTeamEnabled?: boolean;
+  expertCouncilDepth?: ExpertCouncilDepth;
+  projectMemories?: ProjectMemory[];
+  subagentRuns?: SubagentRun[];
+  queuedInputs?: QueuedInput[];
   isInEdit: boolean;
   codeBlockApplyStates: {
     states: ApplyState[];
@@ -235,6 +261,11 @@ export const INITIAL_SESSION_STATE: SessionState = {
   streamAborter: new AbortController(),
   symbols: {},
   mode: "agent",
+  expertTeamEnabled: false,
+  expertCouncilDepth: "smart",
+  projectMemories: [],
+  subagentRuns: [],
+  queuedInputs: [],
   isInEdit: false,
   codeBlockApplyStates: {
     states: [],
@@ -442,6 +473,7 @@ export const sessionSlice = createSlice({
       state.inlineErrorMessage = undefined;
       state.isPruned = false;
       state.contextPercentage = undefined;
+      state.subagentRuns = [];
     },
     deleteCompaction: (state, action: PayloadAction<number>) => {
       // Removes the conversation summary from the specified message
@@ -690,6 +722,7 @@ export const sessionSlice = createSlice({
       state.streamAborter = new AbortController();
 
       state.isStreaming = false;
+      state.queuedInputs = [];
       state.symbols = {};
 
       state.inlineErrorMessage = undefined;
@@ -960,6 +993,43 @@ export const sessionSlice = createSlice({
     setMode: (state, action: PayloadAction<MessageModes>) => {
       state.mode = action.payload;
     },
+    setExpertTeamEnabled: (state, action: PayloadAction<boolean>) => {
+      state.expertTeamEnabled = action.payload;
+      if (action.payload) {
+        state.mode = "agent";
+      }
+    },
+    setExpertCouncilDepth: (
+      state,
+      action: PayloadAction<ExpertCouncilDepth>,
+    ) => {
+      state.expertCouncilDepth = action.payload;
+    },
+    enqueueInput: (state, action: PayloadAction<QueuedInput>) => {
+      const queue = state.queuedInputs ?? [];
+      state.queuedInputs = [...queue, action.payload].slice(-10);
+    },
+    removeQueuedInput: (state, action: PayloadAction<string>) => {
+      state.queuedInputs = (state.queuedInputs ?? []).filter(
+        (item) => item.id !== action.payload,
+      );
+    },
+    clearQueuedInputs: (state) => {
+      state.queuedInputs = [];
+    },
+    setProjectMemories: (state, action: PayloadAction<ProjectMemory[]>) => {
+      state.projectMemories = action.payload;
+    },
+    setSubagentRuns: (state, action: PayloadAction<SubagentRun[]>) => {
+      state.subagentRuns = action.payload;
+    },
+    updateSubagentRun: (
+      state,
+      action: PayloadAction<Pick<SubagentRun, "id"> & Partial<SubagentRun>>,
+    ) => {
+      const run = state.subagentRuns?.find((item) => item.id === action.payload.id);
+      if (run) Object.assign(run, action.payload);
+    },
     setIsInEdit: (state, action: PayloadAction<boolean>) => {
       state.isInEdit = action.payload;
     },
@@ -1078,6 +1148,14 @@ export const {
   updateToolCallOutput,
   setProcessedToolCallArgs,
   setMode,
+  setExpertTeamEnabled,
+  setExpertCouncilDepth,
+  enqueueInput,
+  removeQueuedInput,
+  clearQueuedInputs,
+  setProjectMemories,
+  setSubagentRuns,
+  updateSubagentRun,
   setIsSessionMetadataLoading,
   setAllSessionMetadata,
   addSessionMetadata,

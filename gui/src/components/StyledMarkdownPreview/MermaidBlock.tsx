@@ -3,10 +3,6 @@ import {
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
 } from "@heroicons/react/24/outline";
-// @ts-ignore
-import Panzoom from "@panzoom/panzoom";
-// @ts-ignore
-import mermaid from "mermaid";
 import { useEffect, useRef, useState } from "react";
 import { useDebouncedEffect } from "../find/useDebounce";
 import { ToolTip } from "../gui/Tooltip";
@@ -61,16 +57,25 @@ const MERMAID_THEME_COLORS = {
   fillType7: "#4d8bf0",
 };
 
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: "loose",
-  theme: "dark",
-  themeVariables: {
-    ...MERMAID_THEME_COLORS,
-    fontSize: "14px",
-    fontFamily: "var(--vscode-font-family)",
-  },
-});
+let mermaidPromise: Promise<typeof import("mermaid")["default"]> | undefined;
+
+function loadMermaid() {
+  mermaidPromise ??= import("mermaid").then(({ default: mermaid }) => {
+    mermaid.initialize({
+      startOnLoad: false,
+      // Generated model output is untrusted. Strict mode sanitizes links/HTML.
+      securityLevel: "strict",
+      theme: "dark",
+      themeVariables: {
+        ...MERMAID_THEME_COLORS,
+        fontSize: "14px",
+        fontFamily: "var(--vscode-font-family)",
+      },
+    });
+    return mermaid;
+  });
+  return mermaidPromise;
+}
 
 export default function MermaidDiagram({ code }: { code: string }) {
   const mermaidRenderContainerRef = useRef<HTMLDivElement>(null);
@@ -94,6 +99,10 @@ export default function MermaidDiagram({ code }: { code: string }) {
       void (async () => {
         if (!mermaidRenderContainerRef.current) return;
         try {
+          const [mermaid, { default: Panzoom }] = await Promise.all([
+            loadMermaid(),
+            import("@panzoom/panzoom"),
+          ]);
           await mermaid.parse(code);
           const renderedSVG = await mermaid.render(diagramId, code);
           mermaidRenderContainerRef.current.innerHTML = renderedSVG.svg;

@@ -4,7 +4,11 @@ import {
   DEFAULT_CHAT_SYSTEM_MESSAGE,
   DEFAULT_PLAN_SYSTEM_MESSAGE,
 } from "core/llm/defaultSystemMessages";
-import { getBaseSystemMessage, NO_TOOL_WARNING } from "./getBaseSystemMessage";
+import {
+  getBaseSystemMessage,
+  NO_TOOL_WARNING,
+  VYNOR_EXPERT_TEAM_SYSTEM_MESSAGE,
+} from "./getBaseSystemMessage";
 
 test("getBaseSystemMessage should return the correct system message based on mode", () => {
   const mockModel = {
@@ -49,6 +53,33 @@ test("getBaseSystemMessage should return the correct system message based on mod
   // Test chat mode with default message and tools
   expect(getBaseSystemMessage("chat", {} as ModelDescription, [mockTool])).toBe(
     DEFAULT_CHAT_SYSTEM_MESSAGE,
+  );
+});
+
+test("expert team contract is opt-in and restricted to agent mode", () => {
+  const model = { baseAgentSystemMessage: "Agent" } as ModelDescription;
+  const tool = { function: { name: "read", parameters: {} } } as Tool;
+
+  expect(getBaseSystemMessage("agent", model, [tool], true)).toBe(
+    "Agent" + VYNOR_EXPERT_TEAM_SYSTEM_MESSAGE,
+  );
+  expect(getBaseSystemMessage("chat", model, [tool], true)).not.toContain(
+    "VYNOR EXPERT TEAM WORKFLOW",
+  );
+});
+
+test("expert team includes only explicitly supplied project memories", () => {
+  const model = { baseAgentSystemMessage: "Agent" } as ModelDescription;
+  const tool = { function: { name: "read", parameters: {} } } as Tool;
+  const result = getBaseSystemMessage("agent", model, [tool], true, [
+    { id: "1", text: "Use pnpm", createdAt: 1 },
+  ], ["Engineer", "QA"]);
+
+  expect(result).toContain("USER-APPROVED PROJECT MEMORY");
+  expect(result).toContain("Use pnpm");
+  expect(result).toContain("Engineer, QA");
+  expect(getBaseSystemMessage("agent", model, [tool], false)).not.toContain(
+    "USER-APPROVED PROJECT MEMORY",
   );
 });
 

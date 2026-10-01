@@ -296,7 +296,7 @@ function TipTapEditorInner(props: TipTapEditorProps) {
               }
             });
           }}
-          disabled={isStreaming}
+          disabled={isStreaming && !props.isMainInput}
         />
       </div>
 

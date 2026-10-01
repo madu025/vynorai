@@ -3,13 +3,17 @@ import {
   ChevronDownIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
+  UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { MessageModes } from "core";
 import { isRecommendedAgentModel } from "core/llm/toolSupport";
 import { useCallback, useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
 import { selectSelectedChatModel } from "../../redux/slices/configSlice";
-import { setMode } from "../../redux/slices/sessionSlice";
+import {
+  setExpertTeamEnabled,
+  setMode,
+} from "../../redux/slices/sessionSlice";
 import { getFontSize, getMetaKeyLabel } from "../../util";
 import { ToolTip } from "../gui/Tooltip";
 import { useMainEditor } from "../mainInput/TipTapEditor";
@@ -19,6 +23,9 @@ import { ModeIcon } from "./ModeIcon";
 export function ModeSelect() {
   const dispatch = useAppDispatch();
   const mode = useAppSelector((store) => store.session.mode);
+  const expertTeamEnabled = useAppSelector(
+    (store) => store.session.expertTeamEnabled,
+  );
   const selectedModel = useAppSelector(selectSelectedChatModel);
 
   const isGoodAtAgentMode = useMemo(() => {
@@ -34,6 +41,7 @@ export function ModeSelect() {
   }, []);
 
   const cycleMode = useCallback(() => {
+    dispatch(setExpertTeamEnabled(false));
     if (mode === "chat") {
       dispatch(setMode("plan"));
     } else if (mode === "plan") {
@@ -45,19 +53,26 @@ export function ModeSelect() {
     if (!document.activeElement?.classList?.contains("ProseMirror")) {
       mainEditor?.commands.focus();
     }
-  }, [mode, mainEditor]);
+  }, [dispatch, mode, mainEditor]);
 
   const selectMode = useCallback(
-    (newMode: MessageModes) => {
-      if (newMode === mode) {
+    (newMode: MessageModes | "expert") => {
+      if (newMode === "expert") {
+        dispatch(setExpertTeamEnabled(true));
+        mainEditor?.commands.focus();
         return;
       }
 
+      if (newMode === mode && !expertTeamEnabled) {
+        return;
+      }
+
+      dispatch(setExpertTeamEnabled(false));
       dispatch(setMode(newMode));
 
       mainEditor?.commands.focus();
     },
-    [mode, mainEditor],
+    [dispatch, expertTeamEnabled, mode, mainEditor],
   );
 
   useEffect(() => {
@@ -87,15 +102,25 @@ export function ModeSelect() {
   );
 
   return (
-    <Listbox value={mode} onChange={selectMode}>
+    <Listbox value={expertTeamEnabled ? "expert" : mode} onChange={selectMode}>
       <div className="relative">
         <ListboxButton
           data-testid="mode-select-button"
           className="xs:px-2 text-description bg-lightgray/20 gap-1 rounded-full border-none px-1.5 py-0.5 transition-colors duration-200 hover:brightness-110"
         >
-          <ModeIcon mode={mode} />
+          {expertTeamEnabled ? (
+            <UserGroupIcon className="h-3 w-3" />
+          ) : (
+            <ModeIcon mode={mode} />
+          )}
           <span className="hidden sm:block">
-            {mode === "chat" ? "Chat" : mode === "agent" ? "Agent" : "Plan"}
+            {expertTeamEnabled
+              ? "Expert Team"
+              : mode === "chat"
+                ? "Chat"
+                : mode === "agent"
+                  ? "Agent"
+                  : "Plan"}
           </span>
           <ChevronDownIcon
             className="h-2 w-2 flex-shrink-0"
@@ -161,6 +186,23 @@ export function ModeSelect() {
             {!isGoodAtAgentMode && notGreatAtAgent("Agent")}
             <CheckIcon
               className={`ml-auto h-3 w-3 ${mode === "agent" ? "" : "opacity-0"}`}
+            />
+          </ListboxOption>
+
+          <ListboxOption value="expert" className={"gap-1"}>
+            <div className="flex flex-row items-center gap-1.5">
+              <UserGroupIcon className="h-3 w-3 flex-shrink-0" />
+              <span>Expert Team</span>
+              <ToolTip
+                style={{ zIndex: 200001 }}
+                content="Project discovery, implementation, security and QA review passes"
+              >
+                <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
+              </ToolTip>
+            </div>
+            {!isGoodAtAgentMode && notGreatAtAgent("Expert Team")}
+            <CheckIcon
+              className={`ml-auto h-3 w-3 ${expertTeamEnabled ? "" : "opacity-0"}`}
             />
           </ListboxOption>
 

@@ -34,7 +34,10 @@ import {
 import {
   cancelToolCall,
   ChatHistoryItemWithMessageId,
+  enqueueInput,
   newSession,
+  QueuedInput,
+  removeQueuedInput,
   updateToolCallOutput,
 } from "../../redux/slices/sessionSlice";
 import { streamEditThunk } from "../../redux/thunks/edit";
@@ -58,6 +61,7 @@ import { EmptyChatBody } from "./EmptyChatBody";
 import { ExploreDialogWatcher } from "./ExploreDialogWatcher";
 import { useAutoScroll } from "./useAutoScroll";
 import { VynorQuotaBar } from "../../components/VynorQuotaBar";
+import { ExpertTeamPanel } from "../../components/AgentWorkspace/ExpertTeamPanel";
 
 // Helper function to find the index of the latest conversation summary
 function findLatestSummaryIndex(history: ChatHistoryItem[]): number {
@@ -83,6 +87,14 @@ const StepsDiv = styled.div`
 `;
 
 export const MAIN_EDITOR_INPUT_ID = "main-editor-input";
+
+function editorText(node: JSONContent): string {
+  return [node.text, ...(node.content ?? []).map(editorText)]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function fallbackRender({ error, resetErrorBoundary }: any) {
   // Call resetErrorBoundary() to reset the error boundary and retry the render.
@@ -118,6 +130,9 @@ export function Chat() {
   const stepsDivRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const history = useAppSelector((state) => state.session.history);
+  const queuedInputs = useAppSelector(
+    (state) => state.session.queuedInputs ?? [],
+  );
   const showChatScrollbar = useAppSelector(
     (state) => state.config.config.ui?.showChatScrollbar,
   );
@@ -229,6 +244,70 @@ export function Chat() {
       }
     },
     [dispatch, ideMessenger, reduxStore],
+  );
+
+  const submitOrQueue = useCallback(
+    (
+      editorState: JSONContent,
+      modifiers: InputModifiers,
+      editor?: Editor,
+    ) => {
+      if (reduxStore.getState().session.isStreaming) {
+        dispatch(
+          enqueueInput({
+            id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
+            editorState,
+            modifiers,
+            createdAt: Date.now(),
+          }),
+        );
+        editor?.commands.clearContent();
+        return;
+      }
+      sendInput(editorState, modifiers, undefined, editor);
+    },
+    [dispatch, reduxStore, sendInput],
+  );
+
+  const wasStreamingRef = useRef(false);
+  const startingQueuedInputRef = useRef(false);
+  useEffect(() => {
+    if (isStreaming) {
+      wasStreamingRef.current = true;
+      startingQueuedInputRef.current = false;
+      return;
+    }
+    if (
+      !wasStreamingRef.current ||
+      startingQueuedInputRef.current ||
+      queuedInputs.length === 0
+    ) {
+      return;
+    }
+
+    const snapshot = reduxStore.getState();
+    if (
+      selectPendingToolCalls(snapshot).length > 0 ||
+      selectDoneApplyStates(snapshot).some((item) => item.status !== "closed")
+    ) {
+      return;
+    }
+
+    const next = queuedInputs[0];
+    startingQueuedInputRef.current = true;
+    dispatch(removeQueuedInput(next.id));
+    sendInput(next.editorState, next.modifiers);
+  }, [dispatch, history, isStreaming, queuedInputs, reduxStore, sendInput]);
+
+  const runQueuedNow = useCallback(
+    async (input: QueuedInput) => {
+      dispatch(removeQueuedInput(input.id));
+      if (reduxStore.getState().session.isStreaming) {
+        await dispatch(cancelStream());
+      }
+      sendInput(input.editorState, input.modifiers);
+    },
+    [dispatch, reduxStore, sendInput],
   );
 
   useWebviewListener(
@@ -385,6 +464,8 @@ export function Chat() {
       {!!showSessionTabs && !isInEdit && <TabBar ref={tabsRef} />}
       {widget}
 
+      <ExpertTeamPanel />
+
       <StepsDiv
         ref={stepsDivRef}
         className={`pt-[8px] ${showScrollbar ? "thin-scrollbar" : "no-scrollbar"} ${history.length > 0 ? "min-h-0 flex-1 overflow-y-scroll" : "shrink-0"}`}
@@ -412,11 +493,46 @@ export function Chat() {
           ))}
       </StepsDiv>
       <div className={"relative shrink-0"}>
+        {queuedInputs.length > 0 && (
+          <div
+            aria-label="Queued prompts"
+            className="border-command-border bg-editor mx-2 mb-1 max-h-28 overflow-y-auto rounded-md border border-solid p-1.5"
+          >
+            <div className="text-description-muted mb-1 text-[10px]">
+              Queue · {queuedInputs.length}/10 · runs in order
+            </div>
+            {queuedInputs.map((input, index) => (
+              <div
+                key={input.id}
+                className="bg-lightgray/5 mb-1 flex min-w-0 items-center gap-1 rounded px-2 py-1 last:mb-0"
+              >
+                <span className="min-w-0 flex-1 truncate text-[10px]">
+                  {index + 1}. {editorText(input.editorState) || "Context prompt"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void runQueuedNow(input)}
+                  className="text-description hover:text-foreground cursor-pointer border-0 bg-transparent p-0 text-[9px]"
+                >
+                  Run now
+                </button>
+                <button
+                  type="button"
+                  aria-label="Remove queued prompt"
+                  onClick={() => dispatch(removeQueuedInput(input.id))}
+                  className="text-description-muted hover:text-error cursor-pointer border-0 bg-transparent p-0 text-[12px]"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <ContinueInputBox
           isMainInput
           isLastUserInput={false}
           onEnter={(editorState, modifiers, editor) =>
-            sendInput(editorState, modifiers, undefined, editor)
+            submitOrQueue(editorState, modifiers, editor)
           }
           inputId={MAIN_EDITOR_INPUT_ID}
         />

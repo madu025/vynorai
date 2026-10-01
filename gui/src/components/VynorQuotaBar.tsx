@@ -255,8 +255,11 @@ export function VynorQuotaBar() {
           localStorage.removeItem("vynor_jwt");
           localStorage.removeItem("vynorai_api_key");
           localStorage.removeItem("vynorai_cached_quota");
+          setQuota((prev) => ({ ...prev, isLoggedIn: false }));
+        } else if (token.startsWith("vynor_live_")) {
+          // If server error or transient failure, maintain authenticated status
+          setQuota((prev) => ({ ...prev, isLoggedIn: true }));
         }
-        setQuota((prev) => ({ ...prev, isLoggedIn: false }));
         return;
       }
 
@@ -269,7 +272,7 @@ export function VynorQuotaBar() {
       const percent = Math.min(100, Math.round((used / max) * 100));
 
       const newQuota: QuotaState = {
-        planName: (monthly.plan_name || "FREE").toUpperCase(),
+        planName: (monthly.plan_name || "PRO").toUpperCase(),
         maxTokens: max,
         usedTokens: used,
         remainingTokens: remaining,
@@ -287,7 +290,11 @@ export function VynorQuotaBar() {
         localStorage.setItem("vynorai_cached_quota", JSON.stringify(newQuota));
       } catch (e) {}
     } catch (e) {
-      // Silent catch on network blip
+      // CORS or network failure: keep logged-in state if valid token exists
+      const currentToken = resolveToken();
+      if (currentToken && currentToken.startsWith("vynor_live_")) {
+        setQuota((prev) => ({ ...prev, isLoggedIn: true }));
+      }
     } finally {
       setLoading(false);
     }

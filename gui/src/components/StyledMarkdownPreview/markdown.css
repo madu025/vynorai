@@ -193,6 +193,9 @@ body[data-color-mode*="light"] {
   --color-danger-fg: #cf222e;
 }
 .wmde-markdown {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   -webkit-text-size-adjust: 100%;
   font-family:
     -apple-system, "Segoe UI", Helvetica, Arial, sans-serif,
@@ -506,6 +509,8 @@ body[data-color-mode*="light"] {
   font-size: 12px;
 }
 .wmde-markdown pre {
+  max-width: 100%;
+  overflow-x: auto;
   margin-top: 0;
   margin-bottom: 0;
   font-family:

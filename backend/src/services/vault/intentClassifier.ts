@@ -141,6 +141,27 @@ export const INTENT_REGISTRY: IntentDefinition[] = [
  * - >= 0.50: ASK_CLARIFICATION (Ambiguous request: prompt user or small clarification)
  * - <  0.50: FALLBACK_LLM (Local deterministic engine cannot solve -> Route to LLM)
  */
+export function stripRulesAndPreamble(text: string): string {
+  if (!text || typeof text !== "string") return "";
+  let clean = text;
+  // Strip Markdown rules / YAML Frontmatter
+  clean = clean.replace(/---[\s\S]*?---/g, "");
+  // Strip rule headers and rule body
+  clean = clean.replace(/#+\s*(VynorAI\s+Core\s+Engineering\s+Rules|Engineering\s+Rules)[\s\S]*?(?=\n\n[^\n#-]|\n---|$)/gi, "");
+  clean = clean.replace(/<vynorai_agent[\s\S]*?<\/vynorai_agent>/gi, "");
+  clean = clean.replace(/<context>[\s\S]*?<\/context>/gi, "");
+  clean = clean.replace(/<system>[\s\S]*?<\/system>/gi, "");
+  clean = clean.replace(/^\s*-\s*When the user asks for[\s\S]*$/gmi, "");
+  return clean.trim();
+}
+
+/**
+ * 4-Tier Intent Router & Confidence Classifier:
+ * - >= 0.90: DIRECT_EXECUTE (Deterministic 0-token instant local generation)
+ * - >= 0.75: VALIDATE_AND_EXECUTE (Local template with schema & env validation)
+ * - >= 0.50: ASK_CLARIFICATION (Ambiguous request: prompt user or small clarification)
+ * - <  0.50: FALLBACK_LLM (Local deterministic engine cannot solve -> Route to LLM)
+ */
 export function classifyIntentAndRoute(
   query: string,
   templates: GoldenTemplate[],
@@ -157,7 +178,26 @@ export function classifyIntentAndRoute(
     };
   }
 
-  const qLower = query.trim().toLowerCase();
+  // Strip attached rules, system prompts, or preamble
+  const cleanQ = stripRulesAndPreamble(query) || query;
+  const qLower = cleanQ.trim().toLowerCase();
+
+  // Guard: Conversational greetings, tests, checks, or meta questions route to cloud LLM
+  const isConversationalOrMeta =
+    /^(hi|hello|hey|test|check|exte?nsion|kawda|mokakda|kohomada)\b/i.test(qLower) ||
+    /^(can you|please|oya|puluwanda|pulwunda)\s+(check|test|help)/i.test(qLower) ||
+    /exte?ion\s+(eka\s+)?che?c?k/i.test(qLower);
+
+  if (isConversationalOrMeta && !/^\/(template|scaffold|golden)/i.test(qLower)) {
+    return {
+      template: null,
+      intentId: null,
+      confidence: 0,
+      tier: "FALLBACK_LLM",
+      reasons: ["Conversational or meta extension query: routing to LLM."],
+      matchedKeywords: [],
+    };
+  }
 
   // 1. Direct Slash Command override (/template sl-phone, etc.)
   if (/^\/(template|scaffold|golden)\s+/i.test(qLower)) {
@@ -184,18 +224,20 @@ export function classifyIntentAndRoute(
       continue;
     }
 
-    // Check exact patterns
+    // Check exact patterns with word boundaries
     for (const pat of intent.patterns) {
       const patLower = pat.toLowerCase();
-      if (qLower.includes(patLower)) {
+      const escaped = patLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const wordBoundaryRegex = new RegExp(`\\b${escaped}\\b`, "i");
+      if (wordBoundaryRegex.test(qLower)) {
         intentScore = Math.max(intentScore, 0.95);
         matchedIntent = intent;
         break;
       }
       // Partial token overlap check
       const patWords = patLower.split(/\s+/).filter((w) => w.length > 2);
-      const matches = patWords.filter((w) => qLower.includes(w)).length;
-      if (matches >= 2 && matches / patWords.length >= 0.6) {
+      const matches = patWords.filter((w) => new RegExp(`\\b${w}\\b`, "i").test(qLower)).length;
+      if (matches >= 2 && matches / patWords.length >= 0.7) {
         const partialScore = 0.8 + (matches / patWords.length) * 0.15;
         if (partialScore > intentScore) {
           intentScore = partialScore;

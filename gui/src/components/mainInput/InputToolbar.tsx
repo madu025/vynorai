@@ -53,6 +53,7 @@ function InputToolbar(props: InputToolbarProps) {
   const defaultModel = useAppSelector(selectSelectedChatModel);
   const useActiveFile = useAppSelector(selectUseActiveFile);
   const isInEdit = useAppSelector((store) => store.session.isInEdit);
+  const isStreaming = useAppSelector((store) => store.session.isStreaming);
   const codeToEdit = useAppSelector((store) => store.editModeState.codeToEdit);
   const hasReasoningEnabled = useAppSelector(
     (store) => store.session.hasReasoningEnabled,
@@ -78,12 +79,12 @@ function InputToolbar(props: InputToolbarProps) {
     <>
       <div
         onClick={props.onClick}
-        className={`find-widget-skip bg-vsc-input-background flex select-none flex-row items-center justify-between gap-1 pt-1 ${props.hidden ? "pointer-events-none h-0 cursor-default opacity-0" : "pointer-events-auto mt-2 cursor-text opacity-100"}`}
+        className={`find-widget-skip bg-vsc-input-background flex min-w-0 select-none flex-row flex-wrap items-center justify-between gap-1 pt-1 ${props.hidden ? "pointer-events-none h-0 cursor-default opacity-0" : "pointer-events-auto mt-2 cursor-text opacity-100"}`}
         style={{
           fontSize: smallFont,
         }}
       >
-        <div className="xs:gap-1.5 flex flex-row items-center gap-1">
+        <div className="xs:gap-1.5 flex min-w-0 flex-row items-center gap-1">
           {!isInEdit && (
             <ToolTip place="top" content="Select Mode">
               <HoverItem className="!p-0">
@@ -169,7 +170,7 @@ function InputToolbar(props: InputToolbarProps) {
         </div>
 
         <div
-          className="text-description flex items-center gap-2 whitespace-nowrap"
+          className="text-description ml-auto flex min-w-0 items-center gap-2 whitespace-nowrap"
           style={{
             fontSize: tinyFont,
           }}
@@ -221,7 +222,10 @@ function InputToolbar(props: InputToolbarProps) {
               </span>
             </HoverItem>
           )}
-          <ToolTip place="top" content="Send (⏎)">
+          <ToolTip
+            place="top"
+            content={isStreaming && props.isMainInput ? "Queue prompt" : "Send (⏎)"}
+          >
             <Button
               variant={props.isMainInput ? "primary" : "secondary"}
               size="sm"
@@ -239,7 +243,9 @@ function InputToolbar(props: InputToolbarProps) {
               disabled={isEnterDisabled}
             >
               <span className="hidden md:inline">
-                ⏎ {props.toolbarOptions?.enterText ?? "Enter"}
+                ⏎ {isStreaming && props.isMainInput
+                  ? "Queue"
+                  : (props.toolbarOptions?.enterText ?? "Enter")}
               </span>
               <span className="md:hidden">⏎</span>
             </Button>

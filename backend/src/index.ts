@@ -102,6 +102,16 @@ app.use(cors({
   origin(origin, callback) {
     // Native IDE/CLI requests do not carry a browser Origin header.
     if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    // Allow VS Code / IDE webviews and local dev origins
+    if (
+      origin.startsWith("vscode-webview://") ||
+      origin.startsWith("vscode-file://") ||
+      origin.startsWith("http://localhost:") ||
+      origin.startsWith("https://localhost:") ||
+      origin.endsWith(".vynor.lk")
+    ) {
+      return callback(null, true);
+    }
     return callback(new Error("Origin not allowed"));
   },
 }));

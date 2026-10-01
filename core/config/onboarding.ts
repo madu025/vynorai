@@ -23,7 +23,7 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
     model: "anthropic/claude-sonnet-4-6",
     apiBase: VYNORAI_API_BASE,
     apiKey,
-    roles: ["chat", "edit", "apply"],
+    roles: ["chat", "edit", "apply", "subagent"],
     defaultCompletionOptions: { contextLength: 200000, maxTokens: 8192 },
     capabilities: ["tool_use", "image_input"],
   },
@@ -143,7 +143,7 @@ export function setupLocalConfig(config: ConfigYaml): ConfigYaml {
         name: LOCAL_ONBOARDING_CHAT_TITLE,
         provider: "ollama",
         model: LOCAL_ONBOARDING_CHAT_MODEL,
-        roles: ["chat", "edit", "apply"],
+        roles: ["chat", "edit", "apply", "subagent"],
       },
       {
         name: LOCAL_ONBOARDING_FIM_TITLE,

@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { getTheme } from "./util/getTheme";
 import { getExtensionVersion, getvsCodeUriScheme } from "./util/util";
 import { getExtensionUri, getNonce, getUniqueId } from "./util/vscode";
+import { getActiveVynorKeySync } from "./util/vynorAuth";
 import { VsCodeWebviewProtocol } from "./webviewProtocol";
 
 import type { FileEdit } from "core";
@@ -168,6 +169,7 @@ export class ContinueGUIWebviewViewProvider
         <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 
         <script nonce="${nonce}">localStorage.setItem("ide", '"vscode"')</script>
+        <script nonce="${nonce}">const _vk = ${serializeForInlineScript(getActiveVynorKeySync())}; if (_vk) { localStorage.setItem("vynorai_api_key", _vk); localStorage.setItem("vynorai_token", _vk); }</script>
         <script nonce="${nonce}">localStorage.setItem("vsCodeUriScheme", '"${getvsCodeUriScheme()}"')</script>
         <script nonce="${nonce}">localStorage.setItem("extensionVersion", '"${getExtensionVersion()}"')</script>
         <script nonce="${nonce}">window.windowId = ${serializeForInlineScript(this.windowId)}</script>

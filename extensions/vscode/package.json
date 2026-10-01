@@ -763,6 +763,7 @@
     "vectordb": "0.4.20",
     "vitest": "^3.1.4",
     "vscode-languageclient": "^8.0.2",
+    "vynorai": "file:",
     "ws": "^8.19.0",
     "yarn": "^1.22.21"
   },

@@ -233,9 +233,13 @@
         var callbackUrl = urlParams.get('callback');
         var apiKey = (data.user && data.user.apiKey) || data.apiKey || '';
 
-        // Handle VS Code browser authentication confirmation (like Antigravity / Cursor)
+        var ideParam = urlParams.get('ide') || '';
+        var schemeParam = urlParams.get('scheme') || '';
+
+        // Handle IDE browser authentication confirmation (Antigravity / Cursor / VS Code)
         if (source === 'vscode' || callbackUrl) {
-          var targetBase = callbackUrl || 'vscode://vynorai.vynorai/auth';
+          var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : 'vscode');
+          var targetBase = callbackUrl || (defaultScheme + '://vynorai.vynorai/auth');
           var redirectUri = targetBase + (targetBase.includes('?') ? '&' : '?') +
             'apiKey=' + encodeURIComponent(apiKey) +
             '&token=' + encodeURIComponent(data.token) +
@@ -255,26 +259,51 @@
       document.getElementById('auth-card').style.display = 'none';
       var card = document.getElementById('success-card');
       card.classList.add('show');
+
+      var urlParams = new URLSearchParams(window.location.search);
+      var ideName = urlParams.get('ide') || (redirectUri.startsWith('antigravity') ? 'Antigravity IDE' : (redirectUri.startsWith('cursor') ? 'Cursor' : 'VS Code'));
+
+      // 1. Ephemeral Localhost Handshake (Direct to IDE background server)
+      fetch('http://127.0.0.1:41403/auth?apiKey=' + encodeURIComponent(apiKey) + '&email=' + encodeURIComponent(email))
+        .then(function(res) {
+          if (res.ok) {
+            var statusEl = document.getElementById('handshake-status');
+            if (statusEl) {
+              statusEl.style.display = 'block';
+              statusEl.innerHTML = '✨ <strong>' + ideName + ' Connected!</strong> The extension is now active.';
+            }
+          }
+        })
+        .catch(function() {
+          // Local server optional; deep-link handles standard flow
+        });
+
       card.innerHTML = `
         <div class="success-icon" style="font-size: 54px; margin-bottom: 12px;">🚀</div>
-        <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Authorized for VS Code!</h2>
-        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px;">
-          Opening VS Code to activate your VynorAI Coding Assistant & Autopilot...
+        <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Authorized for ${ideName}!</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">
+          Opening <strong>${ideName}</strong> to activate your VynorAI Coding Assistant & Autopilot...
         </p>
-        <a href="${redirectUri}" class="submit-btn" style="text-decoration:none; margin-bottom: 12px; display:flex;">
-          ⚡ Open in VS Code
+        <div id="handshake-status" style="display:none; padding:8px 12px; margin-bottom:14px; background:rgba(0,229,255,0.12); border:1px solid rgba(0,229,255,0.3); border-radius:8px; font-size:13px; color:#00e5ff;"></div>
+        <a href="${redirectUri}" class="submit-btn" style="text-decoration:none; margin-bottom: 14px; display:flex; justify-content:center; align-items:center; gap:8px;">
+          ⚡ Open in ${ideName}
         </a>
-        <div class="token-display" id="token-display" style="margin-bottom: 12px;">${apiKey}</div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">
+          If your IDE didn't open automatically, your API Key is ready to paste:
+        </div>
+        <div class="token-display" id="token-display" style="margin-bottom: 12px; word-break:break-all;">${apiKey}</div>
         <button type="button" class="copy-token-btn" onclick="copyToken()">📋 Copy API Key</button>
         <p style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">
-          Connected as <strong>${email}</strong>. You can safely close this browser window after VS Code activates.
+          Connected as <strong>${email}</strong>. You can safely return to your IDE.
         </p>
       `;
 
       // Trigger automatic deep-link protocol redirect
       setTimeout(function() {
-        window.location.href = redirectUri;
-      }, 500);
+        try {
+          window.location.href = redirectUri;
+        } catch(_) {}
+      }, 300);
     }
     async function verifyAndRedirect(token) {
       try {
@@ -285,8 +314,11 @@
         if (res.status === 401) { localStorage.removeItem('vynorai_token'); localStorage.removeItem('vynor_jwt'); return; }
         if (res.ok) {
           var meData = await res.json();
+          var ideParam = urlParams.get('ide') || '';
+          var schemeParam = urlParams.get('scheme') || '';
           if (source === 'vscode' || callbackUrl) {
-            var targetBase = callbackUrl || 'vscode://vynorai.vynorai/auth';
+            var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : 'vscode');
+            var targetBase = callbackUrl || (defaultScheme + '://vynorai.vynorai/auth');
             var redirectUri = targetBase + (targetBase.includes('?') ? '&' : '?') +
               'apiKey=' + encodeURIComponent(meData.user.apiKey) +
               '&token=' + encodeURIComponent(token) +

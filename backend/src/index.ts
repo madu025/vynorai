@@ -31,19 +31,29 @@ const LOGIN_PATHS = [
   "/signup/",
 ];
 
-// Only allow deep-link callbacks back into VS Code (prevents open redirects)
+// Only allow deep-link callbacks back into IDEs (prevents open redirects)
 const ALLOWED_CALLBACK_PREFIXES = [
   "vscode://",
   "vscode-insiders://",
   "vscodium://",
+  "antigravity://",
+  "antigravity-ide://",
+  "cursor://",
+  "windsurf://",
+  "trae://",
+  "jetbrains://",
 ];
 
 function isAllowedCallback(cb: unknown): boolean {
-  return (
-    typeof cb === "string" &&
-    cb.length < 2048 &&
-    ALLOWED_CALLBACK_PREFIXES.some((p) => cb.toLowerCase().startsWith(p))
-  );
+  if (typeof cb !== "string" || cb.length > 2048) return false;
+  const lower = cb.toLowerCase();
+  if (
+    lower.includes("://vynorai.vynorai/auth") ||
+    lower.includes("://continue.continue/auth")
+  ) {
+    return true;
+  }
+  return ALLOWED_CALLBACK_PREFIXES.some((p) => lower.startsWith(p));
 }
 
 // Shared handler: serves login.html for /login?source=vscode&callback=vscode://...

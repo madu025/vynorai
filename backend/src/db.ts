@@ -346,6 +346,34 @@ const MIGRATIONS: Migration[] = [
       await addColumnIfNotExists("email_verifications", "attempts INTEGER NOT NULL DEFAULT 0");
     },
   },
+  {
+    version: "010_rebuild_email_verifications_schema",
+    description: "Rebuild email_verifications table to eliminate legacy non-null constraints on deprecated columns",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS email_verifications_v2 (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        otp_hash VARCHAR(64) NOT NULL,
+        token_hash VARCHAR(64) NOT NULL,
+        otp_code VARCHAR(10) DEFAULT '',
+        token VARCHAR(128) DEFAULT '',
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0 AND attempts <= 5),
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )`);
+      try {
+        await execSchema(`INSERT OR IGNORE INTO email_verifications_v2 (id, user_id, email, otp_hash, token_hash, otp_code, token, attempts, expires_at, created_at)
+          SELECT id, user_id, email, COALESCE(otp_hash, ''), COALESCE(token_hash, ''), '', '', COALESCE(attempts, 0), expires_at, created_at FROM email_verifications`);
+      } catch (_) {}
+      await execSchema("DROP TABLE IF EXISTS email_verifications");
+      await execSchema("ALTER TABLE email_verifications_v2 RENAME TO email_verifications");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verif_token ON email_verifications(token_hash)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_email_verifications_expiry ON email_verifications(expires_at)");
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

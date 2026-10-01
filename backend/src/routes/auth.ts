@@ -189,7 +189,7 @@ authRouter.post(
       const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
 
       await dbRun(
-        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, attempts, expires_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, otp_code, token, attempts, expires_at) VALUES (?, ?, ?, ?, ?, '', '', 0, ?)",
         [
           uuidv4(),
           userId,
@@ -493,7 +493,7 @@ authRouter.post(
         user.id,
       ]);
       await dbRun(
-        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, attempts, expires_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, otp_code, token, attempts, expires_at) VALUES (?, ?, ?, ?, ?, '', '', 0, ?)",
         [
           uuidv4(),
           user.id,

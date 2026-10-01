@@ -191,23 +191,23 @@ export async function executeWorkflow(
 
     // ── 2. TEMPLATE / TOOL LAYER ─────────────────────────────────────────────
     else if (step.layer === "TEMPLATE" || step.layer === "TOOL") {
-      // Apply generated files if any
-      if (context.generatedFiles && context.generatedFiles.length > 0) {
+      // Apply generated files only during scaffolding / apply steps
+      const isScaffoldStep =
+        step.id.includes("scaffold") ||
+        step.id.includes("apply") ||
+        (step.action === "tools.filesystem" && !step.id.includes("inspect"));
+
+      if (isScaffoldStep && context.generatedFiles && context.generatedFiles.length > 0) {
         for (const genFile of context.generatedFiles) {
-          const before = currentFiles[genFile.path] || "";
-          currentFiles = ExecutionTools.filesystem.writeFile(currentFiles, genFile.path, genFile.content);
-          const after = genFile.content;
-          diffs.push({
-            file: genFile.path,
-            diff: ExecutionTools.git.computeDiff(before, after),
-          });
+          if (!currentFiles[genFile.path] || currentFiles[genFile.path] !== genFile.content) {
+            currentFiles = ExecutionTools.filesystem.writeFile(currentFiles, genFile.path, genFile.content);
+          }
         }
       }
 
       // Apply patches if any
       if (context.patches && context.patches.length > 0) {
         for (const patch of context.patches) {
-          const before = currentFiles[patch.file] || "";
           const patchRes = ExecutionTools.filesystem.patchFile(currentFiles, patch);
           if (!patchRes.success) {
             errors.push(...patchRes.errors);
@@ -225,8 +225,22 @@ export async function executeWorkflow(
             };
           }
           currentFiles = { ...currentFiles };
-          for (const d of patchRes.diffs) {
-            diffs.push(d);
+        }
+      }
+
+      // Generate git diff ONLY on diff step
+      if (step.action === "git.diff" || step.id.includes("diff")) {
+        if (context.generatedFiles && context.generatedFiles.length > 0) {
+          for (const genFile of context.generatedFiles) {
+            const before = context.files[genFile.path] || "";
+            const after = genFile.content;
+            const diffText = ExecutionTools.git.computeDiff(before, after);
+            if (diffText && diffText !== "No changes") {
+              diffs.push({
+                file: genFile.path,
+                diff: diffText,
+              });
+            }
           }
         }
       }

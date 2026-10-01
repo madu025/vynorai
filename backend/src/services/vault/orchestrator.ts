@@ -195,7 +195,7 @@ export function formatOrchestrationToMarkdown(result: OrchestrationResult): stri
   const fileEntries = Object.entries(result.modifiedFiles);
   const filesMd = fileEntries.length > 0
     ? fileEntries.map(([path, content]) => {
-        const lang = path.endsWith(".ts") ? "typescript" : path.endsWith(".sql") ? "sql" : "javascript";
+        const lang = path.endsWith(".tsx") ? "tsx" : path.endsWith(".ts") ? "typescript" : path.endsWith(".sql") ? "sql" : path.endsWith(".json") ? "json" : "javascript";
         return `#### 📄 \`${path}\`\n\`\`\`${lang}\n${content.trim()}\n\`\`\``;
       }).join("\n\n")
     : "";

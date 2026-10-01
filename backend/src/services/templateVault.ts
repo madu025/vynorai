@@ -1039,20 +1039,47 @@ export function formatTemplateContext(t: GoldenTemplate): string {
  */
 export function checkInstantTemplateMatch(
   query: string,
-  projectContext?: { framework?: string; language?: string }
+  projectContext?: { framework?: string; language?: string; moduleSystem?: "commonjs" | "esm"; dependencies?: Record<string, string> },
+  errorTrace?: string
 ): { matched: boolean; template?: GoldenTemplate; responseMarkdown?: string; score?: number } {
   if (!query || typeof query !== "string") return { matched: false };
   const q = query.trim().toLowerCase();
 
+  // Autonomously detect module system, framework version, or error keywords directly from query
+  const detectedContext = { ...projectContext };
+  if (!detectedContext.moduleSystem) {
+    if (q.includes("commonjs") || q.includes("require") || q.includes("cjs")) {
+      detectedContext.moduleSystem = "commonjs";
+    } else if (q.includes("esm") || q.includes("import ") || q.includes("mjs")) {
+      detectedContext.moduleSystem = "esm";
+    }
+  }
+  if (!detectedContext.framework) {
+    if (q.includes("nextjs 15") || q.includes("next 15") || q.includes("react 19")) {
+      detectedContext.framework = "nextjs";
+      detectedContext.dependencies = { next: "15.0.0", react: "19.0.0" };
+    }
+  }
+
+  const detectedTrace = errorTrace || (
+    q.includes("error") || q.includes("is not defined") || q.includes("cannot find name") || q.includes("cannot find module")
+      ? query
+      : undefined
+  );
+
+  const { healTemplateForContext } = require("./vault/selfHealer.js");
+
   // 1. Direct slash command
   const slashMatch = q.match(/^\/(template|scaffold|golden)\s+([a-zA-Z0-9_-]+)/i);
   if (slashMatch) {
-    const scored = scoreTemplateMatch(q, GOLDEN_TEMPLATES, projectContext);
+    const scored = scoreTemplateMatch(q, GOLDEN_TEMPLATES, detectedContext);
     if (scored.template) {
+      const healed = healTemplateForContext(scored.template, detectedContext, detectedTrace);
+      const adaptedTemplate = { ...scored.template, code: healed.code };
       return {
         matched: true,
-        template: scored.template,
-        responseMarkdown: buildInstantMarkdown(scored.template),
+        template: adaptedTemplate,
+        responseMarkdown: buildInstantMarkdown(adaptedTemplate, healed.corrections),
         score: scored.score,
       };
     }
@@ -1071,12 +1098,14 @@ export function checkInstantTemplateMatch(
     q.startsWith("payhere hash");
 
   if (isDirectCodeRequest) {
-    const scored = scoreTemplateMatch(q, GOLDEN_TEMPLATES, projectContext);
+    const scored = scoreTemplateMatch(q, GOLDEN_TEMPLATES, detectedContext);
     if (scored.template && scored.confidence === "HIGH") {
+      const healed = healTemplateForContext(scored.template, detectedContext, detectedTrace);
+      const adaptedTemplate = { ...scored.template, code: healed.code };
       return {
         matched: true,
-        template: scored.template,
-        responseMarkdown: buildInstantMarkdown(scored.template),
+        template: adaptedTemplate,
+        responseMarkdown: buildInstantMarkdown(adaptedTemplate, healed.corrections),
         score: scored.score,
       };
     }
@@ -1089,8 +1118,7 @@ export function checkInstantTemplateMatch(
     if (indexMatch) {
       const template = INDUSTRY_BOILERPLATES.find((t: any) => t.id === indexMatch.id);
       if (template) {
-        const { healTemplateForContext } = require("./vault/selfHealer.js");
-        const healed = healTemplateForContext(template, projectContext);
+        const healed = healTemplateForContext(template, detectedContext, detectedTrace);
         const adaptedTemplate = { ...template, code: healed.code };
         return {
           matched: true,

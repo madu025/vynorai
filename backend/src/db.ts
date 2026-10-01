@@ -337,6 +337,15 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "009_email_verifications_missing_columns",
+    description: "Ensure otp_hash, token_hash, and attempts columns exist on email_verifications",
+    up: async () => {
+      await addColumnIfNotExists("email_verifications", "otp_hash VARCHAR(64)");
+      await addColumnIfNotExists("email_verifications", "token_hash VARCHAR(64)");
+      await addColumnIfNotExists("email_verifications", "attempts INTEGER NOT NULL DEFAULT 0");
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

@@ -1,6 +1,6 @@
 ---
 description: VynorAI Enterprise Coding & Architecture Standards
-alwaysApply: true
+alwaysApply: false
 ---
 
 # VynorAI Core Engineering Rules

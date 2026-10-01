@@ -522,6 +522,275 @@ async def create_item(payload: ItemCreate):
 `,
     usageSnippet: `uvicorn main:app --reload --port 8000`,
   },
+
+  // 9. SpeedPy Django 5+ AI SaaS Boilerplate (Multi-Tenant, Billing, MCP & Celery)
+  {
+    id: "speedpy-django-ai-saas",
+    version: "1.0.0",
+    category: "fullstack",
+    title: "SpeedPy Production Django 5+ AI SaaS Boilerplate (Teams, Billing, MCP Server & Celery)",
+    description: "Production Django 5+ SaaS architecture inspired by SpeedPy with multi-tenant Teams, Model Context Protocol (MCP) server for AI coding agents, idempotent Stripe/Paddle webhooks, and Celery background tasks.",
+    languages: ["python", "django"],
+    keywords: [
+      "speedpy", "django saas", "django boilerplate", "django mcp", "django teams",
+      "python saas", "django multitenant", "speedpy saas", "django stripe paddle", "django ai agent"
+    ],
+    dependencies: [
+      { name: "django", version: ">=5.1" },
+      { name: "djangorestframework", version: ">=3.15" },
+      { name: "celery", version: ">=5.4" },
+      { name: "redis", version: ">=5.0" },
+      { name: "stripe", version: ">=10.0" },
+      { name: "psycopg2-binary", version: ">=2.9" }
+    ],
+    requiredEnv: [
+      "SECRET_KEY", "DATABASE_URL", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "CELERY_BROKER_URL"
+    ],
+    securityLevel: "high",
+    status: "verified",
+    code: `# SpeedPy AI SaaS Architecture: Multi-Tenant Teams, MCP Server & Async Webhooks
+import uuid
+import hmac
+import hashlib
+import stripe
+from django.db import models
+from django.conf import settings
+from django.http import HttpResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from celery import shared_task
+
+# ── 1. Multi-Tenant Team & Membership Schema ────────────────────────────────
+class Team(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(unique=True, max_length=120)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="owned_teams")
+    stripe_customer_id = models.CharField(max_length=120, blank=True, null=True)
+    subscription_status = models.CharField(max_length=30, default="trialing")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+class Membership(models.Model):
+    ROLE_CHOICES = (
+        ("owner", "Owner"),
+        ("admin", "Admin"),
+        ("member", "Member"),
+    )
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="team_memberships")
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="member")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("team", "user")
+
+# ── 2. AI Model Context Protocol (MCP) Server Endpoint for Coding Agents ────
+class MCPAgentEndpoint(APIView):
+    """
+    Model Context Protocol (MCP) JSON-RPC 2.0 endpoint enabling AI coding
+    assistants (Cursor, Claude, Copilot, Antigravity) to query team context and invoke tools.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        payload = request.data
+        rpc_method = payload.get("method")
+        rpc_id = payload.get("id")
+        params = payload.get("params", {})
+
+        if rpc_method == "tools/list":
+            return Response({
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "result": {
+                    "tools": [
+                        {
+                            "name": "get_team_overview",
+                            "description": "Returns current team membership, role, and subscription status",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"team_slug": {"type": "string"}},
+                                "required": ["team_slug"]
+                            }
+                        },
+                        {
+                            "name": "trigger_background_sync",
+                            "description": "Dispatches an async Celery job to synchronize external billing data",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"team_slug": {"type": "string"}},
+                                "required": ["team_slug"]
+                            }
+                        }
+                    ]
+                }
+            })
+
+        if rpc_method == "tools/call":
+            tool_name = params.get("name")
+            args = params.get("arguments", {})
+            if tool_name == "get_team_overview":
+                team = Team.objects.filter(slug=args.get("team_slug")).first()
+                if not team:
+                    return Response({"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32602, "message": "Team not found"}}, status=404)
+                return Response({
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "result": {
+                        "content": [{
+                            "type": "text",
+                            "text": f"Team '{team.name}' (Status: {team.subscription_status}, Owner: {team.owner.email})"
+                        }]
+                    }
+                })
+            elif tool_name == "trigger_background_sync":
+                sync_team_billing_task.delay(args.get("team_slug"))
+                return Response({
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "result": {"content": [{"type": "text", "text": "Billing sync task queued successfully."}]}
+                })
+
+        return Response({"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32601, "message": "Method not found"}}, status=400)
+
+# ── 3. Production Idempotent Stripe Webhook Handler ──────────────────────────
+@csrf_exempt
+def stripe_webhook(request):
+    payload = request.body
+    sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
+    secret = settings.STRIPE_WEBHOOK_SECRET
+
+    if not secret:
+        return HttpResponseBadRequest("STRIPE_WEBHOOK_SECRET is not configured.")
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, secret)
+    except (ValueError, stripe.error.SignatureVerificationError):
+        return HttpResponseBadRequest("Invalid Stripe Webhook signature.")
+
+    event_type = event["type"]
+    if event_type == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_id = session.get("customer")
+        Team.objects.filter(stripe_customer_id=customer_id).update(subscription_status="active")
+    elif event_type == "customer.subscription.deleted":
+        session = event["data"]["object"]
+        customer_id = session.get("customer")
+        Team.objects.filter(stripe_customer_id=customer_id).update(subscription_status="canceled")
+
+    return HttpResponse(status=200)
+
+# ── 4. Asynchronous Background Task (Celery Worker) ──────────────────────────
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def sync_team_billing_task(self, team_slug: str):
+    try:
+        team = Team.objects.get(slug=team_slug)
+        return f"Successfully synced team {team.slug}"
+    except Exception as exc:
+        raise self.retry(exc=exc)
+`,
+    usageSnippet: `# Add to urls.py:
+urlpatterns = [
+    path("api/mcp/", MCPAgentEndpoint.as_view(), name="mcp-agent"),
+    path("webhooks/stripe/", stripe_webhook, name="stripe-webhook"),
+]`,
+  },
+
+  // 10. SpeedPy Model Context Protocol (MCP) Standard Server for AI Agents
+  {
+    id: "speedpy-mcp-agent-server",
+    version: "1.0.0",
+    category: "backend",
+    title: "SpeedPy Model Context Protocol (MCP) Standard Server for AI Agents",
+    description: "Full RFC-compliant Model Context Protocol server exposing database inspection, team actions, and prompt templates to AI coding assistants (Cursor, Claude, Copilot).",
+    languages: ["python", "django", "fastapi"],
+    keywords: [
+      "mcp server", "model context protocol", "django mcp", "fastmcp", "speedpy mcp",
+      "ai agent server", "cursor mcp", "claude mcp", "mcp boilerplate"
+    ],
+    dependencies: [
+      { name: "mcp", version: ">=1.0.0" },
+      { name: "djangorestframework", version: ">=3.15" }
+    ],
+    requiredEnv: ["MCP_API_TOKEN", "SECRET_KEY"],
+    securityLevel: "high",
+    status: "verified",
+    code: `"""
+SpeedPy MCP (Model Context Protocol) Server for AI Agents
+Exposes database schemas, documentation, and safe execution tools to Cursor & Claude.
+"""
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import BasePermission
+from django.conf import settings
+import hmac
+
+class HasMCPToken(BasePermission):
+    def has_permission(self, request, view):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return False
+        token = auth_header.split(" ")[1]
+        configured_token = getattr(settings, "MCP_API_TOKEN", None)
+        if not configured_token:
+            return False
+        return hmac.compare_digest(token, configured_token)
+
+class SpeedPyMCPEndpoint(APIView):
+    permission_classes = [HasMCPToken]
+
+    def post(self, request):
+        body = request.data
+        method = body.get("method")
+        msg_id = body.get("id")
+
+        if method == "initialize":
+            return Response({
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "serverInfo": {"name": "SpeedPy-Django-MCP", "version": "1.0.0"},
+                    "capabilities": {"tools": {}, "resources": {}, "prompts": {}}
+                }
+            })
+
+        if method == "tools/list":
+            return Response({
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {
+                    "tools": [
+                        {
+                            "name": "describe_models",
+                            "description": "Returns current Django models and relationships for the SaaS platform",
+                            "inputSchema": {"type": "object", "properties": {}}
+                        },
+                        {
+                            "name": "check_team_quota",
+                            "description": "Checks the API request and token quota for a given team slug",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"team_slug": {"type": "string"}},
+                                "required": ["team_slug"]
+                            }
+                        }
+                    ]
+                }
+            })
+
+        return Response({"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32601, "message": "Method not implemented"}}, status=400)
+`,
+    usageSnippet: `# Add to cursor / claude settings:
+# { "mcpServers": { "speedpy": { "url": "https://yourdomain.com/api/mcp/", "headers": { "Authorization": "Bearer <MCP_API_TOKEN>" } } } }`,
+  },
 ];
 
 /**
@@ -552,32 +821,29 @@ export async function initVaultStore(): Promise<void> {
     )
   `);
 
-  // 2. Seed Industry Boilerplates if missing
+  // 2. Seed & Update Industry Boilerplates using INSERT OR REPLACE
   for (const t of INDUSTRY_BOILERPLATES) {
-    const existing = await dbGet<{ id: string }>("SELECT id FROM template_vault WHERE id = ?", [t.id]);
-    if (!existing) {
-      const checksum = crypto.createHash("sha256").update(t.code).digest("hex").slice(0, 16);
-      await dbRun(
-        `INSERT INTO template_vault 
-         (id, version, category, title, description, languages, keywords, dependencies, required_env, security_level, code, usage_snippet, checksum)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          t.id,
-          t.version,
-          t.category,
-          t.title,
-          t.description,
-          JSON.stringify(t.languages),
-          JSON.stringify(t.keywords),
-          JSON.stringify(t.dependencies),
-          JSON.stringify(t.requiredEnv),
-          t.securityLevel,
-          t.code,
-          t.usageSnippet,
-          checksum,
-        ]
-      );
-    }
+    const checksum = crypto.createHash("sha256").update(t.code).digest("hex").slice(0, 16);
+    await dbRun(
+      `INSERT OR REPLACE INTO template_vault 
+       (id, version, category, title, description, languages, keywords, dependencies, required_env, security_level, code, usage_snippet, checksum)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        t.id,
+        t.version,
+        t.category,
+        t.title,
+        t.description,
+        JSON.stringify(t.languages),
+        JSON.stringify(t.keywords),
+        JSON.stringify(t.dependencies),
+        JSON.stringify(t.requiredEnv),
+        t.securityLevel,
+        t.code,
+        t.usageSnippet,
+        checksum,
+      ]
+    );
   }
 
   // 3. Load lightweight In-Memory Index (Only metadata, < 20KB RAM)

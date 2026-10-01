@@ -16,7 +16,9 @@ export type TemplateCategory =
   | "storage"
   | "testing"
   | "infrastructure"
-  | "communication";
+  | "communication"
+  | "fullstack"
+  | "backend";
 
 export type SecurityLevel = "standard" | "high";
 export type TemplateStatus = "verified" | "experimental" | "deprecated";

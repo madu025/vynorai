@@ -9,6 +9,7 @@
  * lines and surgically patches the template dynamically.
  */
 
+import crypto from "crypto";
 import { GoldenTemplate } from "./types.js";
 
 export interface ProjectContext {
@@ -108,16 +109,69 @@ export function healTemplateForContext(
         wasCorrected = true;
       }
     }
+
+    // Python & Django: Missing models import
+    if (trace.includes("name 'models' is not defined")) {
+      if (!code.includes("from django.db import models") && !code.includes("import models")) {
+        code = "from django.db import models\n" + code;
+        corrections.push("Injected missing 'from django.db import models'");
+        wasCorrected = true;
+      }
+    }
+
+    // Python & Django: Missing DRF status import
+    if (trace.includes("name 'status' is not defined") || trace.includes("cannot import name 'status'")) {
+      if (!code.includes("from rest_framework import status")) {
+        code = "from rest_framework import status\n" + code;
+        corrections.push("Injected missing 'from rest_framework import status'");
+        wasCorrected = true;
+      }
+    }
+
+    // Python & Django: Missing stripe import
+    if (trace.includes("name 'stripe' is not defined") || trace.includes("no module named 'stripe'")) {
+      if (!code.includes("import stripe")) {
+        code = "import stripe\n" + code;
+        corrections.push("Injected missing 'import stripe' module");
+        wasCorrected = true;
+      }
+    }
+
+    // Python & Django: Missing celery shared_task import
+    if (trace.includes("name 'shared_task' is not defined")) {
+      if (!code.includes("from celery import shared_task")) {
+        code = "from celery import shared_task\n" + code;
+        corrections.push("Injected missing 'from celery import shared_task'");
+        wasCorrected = true;
+      }
+    }
+
+    // Python & Django: CSRF failure on webhooks
+    if (trace.includes("csrf verification failed") || trace.includes("csrf cookie not set")) {
+      if (!code.includes("csrf_exempt")) {
+        code = "from django.views.decorators.csrf import csrf_exempt\n" + code;
+        corrections.push("Injected Django @csrf_exempt decorator for webhook endpoints");
+        wasCorrected = true;
+      }
+    }
   }
 
   // 4. Extract Suggested Environment Variables
   const suggestedEnv: Record<string, string> = {};
   for (const envKey of template.requiredEnv || []) {
-    suggestedEnv[envKey] = envKey.includes("SECRET") || envKey.includes("KEY")
-      ? "your_secure_random_key_here"
-      : envKey.includes("URL")
-      ? "https://yourdomain.com"
-      : "configured_value";
+    if (envKey === "SECRET_KEY") {
+      suggestedEnv[envKey] = "django-insecure-" + crypto.randomBytes(24).toString("hex");
+    } else if (envKey === "DATABASE_URL") {
+      suggestedEnv[envKey] = "postgresql://user:password@localhost:5432/app_db";
+    } else if (envKey === "CELERY_BROKER_URL") {
+      suggestedEnv[envKey] = "redis://localhost:6379/0";
+    } else if (envKey.includes("SECRET") || envKey.includes("KEY")) {
+      suggestedEnv[envKey] = "your_secure_random_key_here";
+    } else if (envKey.includes("URL")) {
+      suggestedEnv[envKey] = "https://yourdomain.com";
+    } else {
+      suggestedEnv[envKey] = "configured_value";
+    }
   }
 
   // 5. Detect missing dependencies

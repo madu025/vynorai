@@ -7,12 +7,12 @@ import { getEffectivePlans, updatePlanField, resetPlanToDefault, invalidatePlanC
 
 export const adminRouter = Router();
 
-// Simple admin secret check (set ADMIN_SECRET in .env)
+// Cryptographically timing-safe admin secret check (set ADMIN_SECRET in .env)
 function requireAdmin(req: Request, res: Response, next: Function) {
-  const secret = req.headers["x-admin-secret"];
-  const expected = process.env.ADMIN_SECRET;
-  if (!expected) return res.status(503).json({ error: "Admin authentication is not configured" });
-  if (secret !== expected) {
+  const secret = typeof req.headers["x-admin-secret"] === "string" ? req.headers["x-admin-secret"] : "";
+  const expected = process.env.ADMIN_SECRET || "";
+  if (!expected || expected.length < 32) return res.status(503).json({ error: "Admin authentication is not configured" });
+  if (secret.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(expected))) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   next();

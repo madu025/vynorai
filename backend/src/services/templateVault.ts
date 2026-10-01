@@ -1093,6 +1093,13 @@ export function checkInstantTemplateMatch(
     q.includes("template for") ||
     q.includes("boilerplate") ||
     q.includes("regex for") ||
+    q.includes("hadanna") ||
+    q.includes("karanna") ||
+    q.includes("mata awsayai") ||
+    q.includes("login page") ||
+    q.includes("login form") ||
+    q.includes("create") ||
+    q.includes("build") ||
     q.startsWith("sl phone") ||
     q.startsWith("sl nic") ||
     q.startsWith("payhere hash");

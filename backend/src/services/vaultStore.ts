@@ -40,7 +40,11 @@ export const INDUSTRY_BOILERPLATES: GoldenTemplate[] = [
     title: "Next.js 15 App Router Server Action Authentication with Zod & Secure Cookies",
     description: "Production-ready Next.js 15 Server Action login with Zod input validation, rate limiting, and HttpOnly cookie management.",
     languages: ["typescript", "javascript"],
-    keywords: ["nextjs 15", "server actions", "next auth", "zod form", "useactionstate", "httponly cookie", "nextjs login"],
+    keywords: [
+      "nextjs 15", "server actions", "next auth", "zod form", "useactionstate",
+      "httponly cookie", "nextjs login", "login page", "login form", "login hadanna",
+      "login page ekak", "website login", "auth form", "login"
+    ],
     dependencies: [
       { name: "zod", version: "^3.23.8" },
       { name: "bcryptjs", version: "^2.4.3" },

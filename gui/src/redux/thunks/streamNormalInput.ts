@@ -1,6 +1,7 @@
 import { createAsyncThunk, unwrapResult } from "@reduxjs/toolkit";
 import { LLMFullCompletionOptions, ModelDescription } from "core";
 import { renderChatMessage } from "core/util/messageContent";
+import { countTokens } from "core/llm/countTokens";
 import { getRuleId } from "core/llm/rules/getSystemMessageWithRules";
 import { ToCoreProtocol } from "core/protocol";
 import { BUILT_IN_GROUP_NAME } from "core/tools/builtIn";
@@ -11,6 +12,8 @@ import {
   addPromptCompletionPair,
   errorToolCall,
   setActive,
+  setActiveTaskId,
+  setActiveTaskState,
   setAppliedRulesAtIndex,
   setContextPercentage,
   setInactive,
@@ -144,6 +147,50 @@ export const streamNormalInput = createAsyncThunk<
     const latestUserRequest = [...state.session.history]
       .reverse()
       .find((item) => item.message.role === "user");
+    let taskId = state.session.activeTaskId;
+    if (depth === 0 && latestUserRequest) {
+      try {
+        const started = await extra.ideMessenger.request("agent/task/start", {
+          sessionId: state.session.id,
+          goal: renderChatMessage(latestUserRequest.message),
+        });
+        if (started.status === "success") {
+          taskId = started.content.id;
+          dispatch(setActiveTaskId(taskId));
+          dispatch(setActiveTaskState(started.content.state));
+        }
+      } catch {
+        // Audit persistence must never prevent the user from receiving a response.
+      }
+    }
+    const transitionTask = async (
+      taskState:
+        | "awaiting_approval"
+        | "executing"
+        | "verifying"
+        | "completed"
+        | "failed",
+      reason?: string,
+    ) => {
+      if (!taskId) return;
+      try {
+        const result = await extra.ideMessenger.request(
+          "agent/task/transition",
+          {
+            taskId,
+            state: taskState,
+            reason,
+          },
+        );
+        if (result.status === "error") {
+          console.warn(`Could not transition agent task to ${taskState}`);
+        } else {
+          dispatch(setActiveTaskState(result.content.state));
+        }
+      } catch {
+        // The response path remains available if local journaling is unavailable.
+      }
+    };
     const expertRoles = latestUserRequest
       ? inferExpertRoles(renderChatMessage(latestUserRequest.message))
       : inferExpertRoles("");
@@ -288,6 +335,24 @@ export const streamNormalInput = createAsyncThunk<
       if (next.done && next.value) {
         dispatch(addPromptCompletionPair([next.value]));
 
+        if (taskId) {
+          try {
+            await extra.ideMessenger.request("agent/task/consumeBudget", {
+              taskId,
+              inputTokens: countTokens(
+                next.value.prompt,
+                selectedChatModel.model,
+              ),
+              outputTokens: countTokens(
+                next.value.completion,
+                selectedChatModel.model,
+              ),
+            });
+          } catch {
+            // Usage accounting is local metadata and must not corrupt the response.
+          }
+        }
+
         try {
           extra.ideMessenger.post("devdata/log", {
             name: "chatInteraction",
@@ -390,8 +455,25 @@ export const streamNormalInput = createAsyncThunk<
 
     // 4. Execute remaining tool calls
     if (originalToolCalls.length === 0) {
+      await transitionTask("verifying");
+      if (taskId) {
+        try {
+          await extra.ideMessenger.request("agent/task/recordVerification", {
+            taskId,
+            result: {
+              kind: "response",
+              status: "passed",
+              summary: "Model response completed without pending tool calls.",
+            },
+          });
+        } catch {
+          // Completion is not blocked by an unavailable local audit journal.
+        }
+      }
+      await transitionTask("completed");
       dispatch(setInactive());
     } else if (needsApprovalPolicies.length > 0) {
+      await transitionTask("awaiting_approval", "Tool approval required");
       const builtInReadonlyAutoApproved = autoApprovedPolicies.filter(
         ({ toolCallState }) =>
           toolCallState.tool?.group === BUILT_IN_GROUP_NAME &&
@@ -420,6 +502,7 @@ export const streamNormalInput = createAsyncThunk<
 
       dispatch(setInactive());
     } else {
+      await transitionTask("executing");
       // auto stream cases increase thunk depth by 1 for debugging
       const state4 = getState();
       const generatedCalls4 = selectPendingToolCalls(state4);

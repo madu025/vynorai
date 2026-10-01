@@ -22,6 +22,7 @@ import { profilesReducer } from "./slices/profilesSlice";
 import sessionReducer from "./slices/sessionSlice";
 import tabsReducer from "./slices/tabsSlice";
 import uiReducer from "./slices/uiSlice";
+import workspaceReducer from "./slices/workspaceSlice";
 
 const rootReducer = combineReducers({
   session: sessionReducer,
@@ -31,6 +32,7 @@ const rootReducer = combineReducers({
   indexing: indexingReducer,
   tabs: tabsReducer,
   profiles: profilesReducer,
+  workspace: workspaceReducer,
 });
 
 const saveSubsetFilters = [

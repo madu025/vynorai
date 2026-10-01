@@ -4,10 +4,12 @@ import {
 } from "@continuedev/config-yaml";
 import { IContextProvider, IdeType } from "..";
 import { contextProviderClassFromName } from "../context/providers";
+import CodebaseContextProvider from "../context/providers/CodebaseContextProvider";
 import CurrentFileContextProvider from "../context/providers/CurrentFileContextProvider";
 import DiffContextProvider from "../context/providers/DiffContextProvider";
 import DocsContextProvider from "../context/providers/DocsContextProvider";
 import FileContextProvider from "../context/providers/FileContextProvider";
+import FileTreeContextProvider from "../context/providers/FileTreeContextProvider";
 import ProblemsContextProvider from "../context/providers/ProblemsContextProvider";
 import RulesContextProvider from "../context/providers/RulesContextProvider";
 import TerminalContextProvider from "../context/providers/TerminalContextProvider";
@@ -38,6 +40,17 @@ export function loadConfigContextProviders(
     new ProblemsContextProvider({}),
     new RulesContextProvider({}),
   ];
+
+  // VS Code-compatible hosts (VS Code, Cursor, Antigravity) must be able to
+  // resolve automatic workspace context even when the user has no explicit
+  // `context:` section. Without these providers, GUI requests for `tree` and
+  // `codebase` are silently dropped and the model behaves like a generic chat.
+  if (ideType === "vscode") {
+    defaultProviders.push(
+      new FileTreeContextProvider({}),
+      new CodebaseContextProvider({}),
+    );
+  }
 
   // Add from config
   if (configContext) {

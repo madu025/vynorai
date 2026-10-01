@@ -48,6 +48,14 @@ import { ConfigHandler } from "../config/ConfigHandler";
 import { ProcessedItem } from "../nextEdit/NextEditPrefetchQueue";
 import { NextEditOutcome } from "../nextEdit/types";
 import { ContinueErrorReason } from "../util/errors";
+import type { WorkspaceSnapshot } from "../workspace/types";
+import type {
+  AgentTask,
+  AgentTaskBudget,
+  TaskState,
+  ToolRisk,
+  VerificationResult,
+} from "../agent/types";
 
 export enum OnboardingModes {
   API_KEY = "API Key",
@@ -65,6 +73,56 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   ping: [string, string];
   abort: [undefined, void];
   cancelApply: [undefined, void];
+
+  // Workspace identity and readiness
+  "workspace/getSnapshot": [undefined, WorkspaceSnapshot];
+  "workspace/refreshSnapshot": [undefined, WorkspaceSnapshot];
+  "workspace/invalidate": [{ reason?: string } | undefined, void];
+  "agent/task/start": [
+    {
+      sessionId: string;
+      goal: string;
+      budget?: Partial<
+        Pick<
+          AgentTaskBudget,
+          "maxInputTokens" | "maxOutputTokens" | "maxCostUsd"
+        >
+      >;
+    },
+    AgentTask,
+  ];
+  "agent/task/get": [{ taskId: string }, AgentTask | undefined];
+  "agent/task/transition": [
+    { taskId: string; state: TaskState; reason?: string },
+    AgentTask,
+  ];
+  "agent/task/recordApproval": [
+    {
+      taskId: string;
+      toolCallId: string;
+      toolName: string;
+      risk: ToolRisk;
+      decision: "approved" | "denied";
+      scope: string;
+    },
+    AgentTask,
+  ];
+  "agent/task/recordVerification": [
+    {
+      taskId: string;
+      result: Omit<VerificationResult, "id" | "createdAt">;
+    },
+    AgentTask,
+  ];
+  "agent/task/consumeBudget": [
+    {
+      taskId: string;
+      inputTokens: number;
+      outputTokens: number;
+      costUsd?: number;
+    },
+    AgentTask,
+  ];
 
   // History
   "history/list": [ListHistoryOptions, BaseSessionMetadata[]];

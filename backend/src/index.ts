@@ -12,7 +12,11 @@ import { proxyRouter } from "./routes/proxy.js";
 import { initCacheTable } from "./services/cacheEngine.js";
 import { startHealthMonitor } from "./services/healthMonitor.js";
 import { getRedis, redisStatus } from "./services/redisStore.js";
-import { billingDbStatus, billingParity, initBillingDb } from "./services/billingDb.js";
+import {
+  billingDbStatus,
+  billingParity,
+  initBillingDb,
+} from "./services/billingDb.js";
 
 import { securityHeadersMiddleware } from "./middleware/security.js";
 
@@ -51,9 +55,13 @@ function isAllowedCallback(cb: unknown): boolean {
   try {
     const parsed = new URL(cb);
     const prefix = `${parsed.protocol}//`.toLowerCase();
-    return ALLOWED_CALLBACK_PREFIXES.includes(prefix) &&
-      ["vynorai.vynorai", "continue.continue"].includes(parsed.hostname.toLowerCase()) &&
-      parsed.pathname === "/auth";
+    return (
+      ALLOWED_CALLBACK_PREFIXES.includes(prefix) &&
+      ["vynorai.vynorai", "continue.continue"].includes(
+        parsed.hostname.toLowerCase(),
+      ) &&
+      parsed.pathname === "/auth"
+    );
   } catch {
     return false;
   }
@@ -96,25 +104,30 @@ app.use(securityHeadersMiddleware);
 const allowedOrigins = new Set([
   "https://vynor.lk",
   "https://admin.vynor.lk",
-  ...(process.env.CORS_ORIGINS || "").split(",").map((v) => v.trim()).filter(Boolean),
+  ...(process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean),
 ]);
-app.use(cors({
-  origin(origin, callback) {
-    // Native IDE/CLI requests do not carry a browser Origin header.
-    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
-    // Allow VS Code / IDE webviews and local dev origins
-    if (
-      origin.startsWith("vscode-webview://") ||
-      origin.startsWith("vscode-file://") ||
-      origin.startsWith("http://localhost:") ||
-      origin.startsWith("https://localhost:") ||
-      origin.endsWith(".vynor.lk")
-    ) {
-      return callback(null, true);
-    }
-    return callback(new Error("Origin not allowed"));
-  },
-}));
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Native IDE/CLI requests do not carry a browser Origin header.
+      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+      // Allow VS Code / IDE webviews and local dev origins
+      if (
+        origin.startsWith("vscode-webview://") ||
+        origin.startsWith("vscode-file://") ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("https://localhost:") ||
+        origin.endsWith(".vynor.lk")
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error("Origin not allowed"));
+    },
+  }),
+);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -162,6 +175,27 @@ app.get("/health", (_req, res) => {
       "agentic-tools",
       "quota-guard",
     ],
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Readiness is stricter than liveness. Coolify should stop routing new traffic
+// when the billing store is unavailable, or when distributed IDE auth is
+// explicitly required but Redis is degraded.
+app.get("/ready", (_req, res) => {
+  const redis = redisStatus();
+  const billing = billingDbStatus();
+  const ideAuthRequiresRedis = process.env.IDE_AUTH_REQUIRE_REDIS === "true";
+  const ready = billing.ready && (!ideAuthRequiresRedis || redis.ready);
+
+  return res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "not_ready",
+    billing,
+    redis: {
+      configured: redis.configured,
+      ready: redis.ready,
+      requiredForIdeAuth: ideAuthRequiresRedis,
+    },
     timestamp: new Date().toISOString(),
   });
 });
@@ -262,10 +296,14 @@ adminApp.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 async function start() {
   if (config.nodeEnv === "production") {
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-      throw new Error("JWT_SECRET must be configured with at least 32 characters in production");
+      throw new Error(
+        "JWT_SECRET must be configured with at least 32 characters in production",
+      );
     }
     if (!process.env.ADMIN_SECRET || process.env.ADMIN_SECRET.length < 32) {
-      throw new Error("ADMIN_SECRET must be configured with at least 32 characters in production");
+      throw new Error(
+        "ADMIN_SECRET must be configured with at least 32 characters in production",
+      );
     }
     if (!process.env.DATA_ENCRYPTION_KEY) {
       throw new Error("DATA_ENCRYPTION_KEY must be configured in production");
@@ -288,7 +326,9 @@ async function start() {
   await getRedis();
   const parity = await billingParity();
   if (Object.values(parity).some((entry) => !entry.match)) {
-    throw new Error(`PostgreSQL billing parity check failed: ${JSON.stringify(parity)}`);
+    throw new Error(
+      `PostgreSQL billing parity check failed: ${JSON.stringify(parity)}`,
+    );
   }
 
   const activeKeys = Object.entries(config.aiKeys)

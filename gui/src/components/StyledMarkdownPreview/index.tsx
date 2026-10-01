@@ -66,9 +66,12 @@ const StyledMarkdown = styled.div<{
     background-color: ${vscEditorBackground};
     border-radius: ${defaultBorderRadius};
 
-    max-width: calc(100vw - 24px);
-    overflow-x: scroll;
-    overflow-y: hidden;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: auto;
 
     padding: 8px;
   }
@@ -109,6 +112,11 @@ const StyledMarkdown = styled.div<{
   }
 
   background-color: ${(props) => props.bgColor};
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   font-family:
     var(--vscode-font-family),
     system-ui,

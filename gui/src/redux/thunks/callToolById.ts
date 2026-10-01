@@ -2,12 +2,14 @@ import { createAsyncThunk, unwrapResult } from "@reduxjs/toolkit";
 import { ContextItem, McpUiState } from "core";
 import { CLIENT_TOOLS_IMPLS } from "core/tools/builtIn";
 import { ContinueError, ContinueErrorReason } from "core/util/errors";
+import { classifyToolRisk } from "core/agent/toolRisk";
 
 import { callClientTool } from "../../util/clientTools/callClientTool";
 import { selectSelectedChatModel } from "../slices/configSlice";
 import {
   acceptToolCall,
   errorToolCall,
+  setActiveTaskState,
   setInactive,
   setToolCallCalling,
   updateToolCallOutput,
@@ -38,6 +40,34 @@ export const callToolById = createAsyncThunk<
 
   if (!selectedChatModel) {
     throw new Error("No model selected");
+  }
+
+  if (!isAutoApproved && state.session.activeTaskId) {
+    try {
+      await extra.ideMessenger.request("agent/task/recordApproval", {
+        taskId: state.session.activeTaskId,
+        toolCallId,
+        toolName: toolCallState.toolCall.function.name,
+        risk: classifyToolRisk(toolCallState.toolCall.function.name),
+        decision: "approved",
+        scope: JSON.stringify(
+          toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {},
+        ),
+      });
+      const transition = await extra.ideMessenger.request(
+        "agent/task/transition",
+        {
+          taskId: state.session.activeTaskId,
+          state: "executing",
+          reason: "Approved tool execution started",
+        },
+      );
+      if (transition.status === "success") {
+        dispatch(setActiveTaskState(transition.content.state));
+      }
+    } catch {
+      // Tool execution remains available if local audit persistence is unavailable.
+    }
   }
 
   dispatch(

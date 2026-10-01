@@ -19,6 +19,10 @@ import {
   setMode,
 } from "../redux/slices/sessionSlice";
 import { setTTSActive } from "../redux/slices/uiSlice";
+import {
+  setWorkspaceError,
+  setWorkspaceSnapshot,
+} from "../redux/slices/workspaceSlice";
 
 import { modelSupportsReasoning } from "core/llm/autodetect";
 import { cancelStream } from "../redux/thunks/cancelStream";
@@ -124,6 +128,19 @@ function ParallelListeners() {
       }
     }
     void initialLoadConfig();
+    void ideMessenger
+      .request("workspace/getSnapshot", undefined)
+      .then((result) => {
+        if (result.status === "success") {
+          dispatch(setWorkspaceSnapshot(result.content));
+        } else {
+          dispatch(setWorkspaceError("Workspace information is unavailable."));
+        }
+      })
+      .catch(() => {
+        // Older cores and partial test hosts may not implement this protocol yet.
+        dispatch(setWorkspaceError("Workspace information is unavailable."));
+      });
     const interval = setInterval(() => {
       if (hasDoneInitialConfigLoad.current) {
         // Init to run on initial config load
@@ -238,6 +255,10 @@ function ParallelListeners() {
 
   useWebviewListener("indexing/statusUpdate", async (data) => {
     dispatch(updateIndexingStatus(data));
+  });
+
+  useWebviewListener("workspace/statusUpdate", async (data) => {
+    dispatch(setWorkspaceSnapshot(data));
   });
 
   useWebviewListener(

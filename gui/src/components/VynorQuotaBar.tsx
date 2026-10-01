@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useCallback, useContext } from "react";
 import styled from "styled-components";
-import { ArrowTopRightOnSquareIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowTopRightOnSquareIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
 import { IdeMessengerContext } from "../context/IdeMessenger";
 import { useAppSelector } from "../redux/hooks";
 
@@ -71,7 +74,9 @@ const PlanPill = styled.span<{ $plan: string }>`
       ? "rgba(176, 38, 255, 0.2)"
       : "rgba(0, 229, 255, 0.15)"};
   color: ${(props) =>
-    props.$plan === "PRO" || props.$plan === "ENTERPRISE" ? "#d070ff" : "#00e5ff"};
+    props.$plan === "PRO" || props.$plan === "ENTERPRISE"
+      ? "#d070ff"
+      : "#00e5ff"};
   border: 1px solid
     ${(props) =>
       props.$plan === "PRO" || props.$plan === "ENTERPRISE"
@@ -168,7 +173,9 @@ const LoginButton = styled.button`
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: transform 0.15s, opacity 0.15s;
+  transition:
+    transform 0.15s,
+    opacity 0.15s;
 
   &:hover {
     opacity: 0.9;
@@ -324,28 +331,10 @@ export function VynorQuotaBar() {
   }, [fetchQuota]);
 
   const handleBrowserLogin = async () => {
-    let ideName = "VS Code";
-    let scheme = "vscode";
-    try {
-      if (ideMessenger?.ide?.getIdeInfo) {
-        const info = await ideMessenger.ide.getIdeInfo();
-        if (info?.name) ideName = info.name;
-        const lower = (info?.name || "").toLowerCase();
-        if (lower.includes("antigravity")) {
-          scheme = "antigravity";
-        } else if (lower.includes("cursor")) {
-          scheme = "cursor";
-        } else if (lower.includes("windsurf")) {
-          scheme = "windsurf";
-        }
-      }
-    } catch (_) {}
-
-    const loginUrl = `${VYNOR_API_URL}/login?source=vscode&ide=${encodeURIComponent(ideName)}&scheme=${scheme}&callback=${scheme}://vynorai.vynorai/auth`;
     if (ideMessenger?.post) {
-      ideMessenger.post("openUrl", loginUrl);
+      ideMessenger.post("vynorai/login", undefined);
     } else {
-      window.open(loginUrl, "_blank");
+      window.open(`${VYNOR_API_URL}/login`, "_blank");
     }
   };
 
@@ -367,7 +356,9 @@ export function VynorQuotaBar() {
         <LoginPrompt>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <SparkleIcon>⚡</SparkleIcon>
-            <span style={{ color: "#a0aec0" }}>Sign in to activate VynorAI Cloud</span>
+            <span style={{ color: "#a0aec0" }}>
+              Sign in to activate VynorAI Cloud
+            </span>
           </div>
           <LoginButton onClick={handleBrowserLogin}>
             Sign In with Browser
@@ -386,7 +377,8 @@ export function VynorQuotaBar() {
           <PlanPill $plan={quota.planName}>{quota.planName}</PlanPill>
         </BrandBadge>
         <TokenCount>
-          <span>{quota.remainingTokens.toLocaleString()}</span> / {quota.maxTokens.toLocaleString()} left
+          <span>{quota.remainingTokens.toLocaleString()}</span> /{" "}
+          {quota.maxTokens.toLocaleString()} left
         </TokenCount>
       </HeaderRow>
 
@@ -395,8 +387,17 @@ export function VynorQuotaBar() {
       </ProgressTrack>
 
       <SavingsRow>
-        <span style={{ color: "#00e676", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
-          ✨ {(quota.tokensSaved || 0) > 0
+        <span
+          style={{
+            color: "#00e676",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: 3,
+          }}
+        >
+          ✨{" "}
+          {(quota.tokensSaved || 0) > 0
             ? `Saved +${(quota.tokensSaved || 0).toLocaleString()} tokens`
             : "0-Token SLM Shield Active"}
         </span>
@@ -435,7 +436,8 @@ export function VynorQuotaBar() {
             />
           </button>
           <ActionLink href="#" onClick={handleUpgrade}>
-            Upgrade Plan <ArrowTopRightOnSquareIcon style={{ width: 10, height: 10 }} />
+            Upgrade Plan{" "}
+            <ArrowTopRightOnSquareIcon style={{ width: 10, height: 10 }} />
           </ActionLink>
         </div>
       </FooterRow>

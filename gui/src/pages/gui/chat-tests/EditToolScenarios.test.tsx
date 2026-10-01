@@ -127,6 +127,13 @@ test(
     await user.click(toggleCodeblockChevron);
     await getElementByText(EDIT_CHANGES);
 
+    // Mutating tools must wait for an explicit approval when the policy is
+    // allowedWithPermission.
+    const approveToolCall = await getElementByTestId(
+      `accept-tool-call-button-${EDIT_TOOL_CALL_ID}`,
+    );
+    await user.click(approveToolCall);
+
     // Tool call, check that applyToFile was called for edit
     await waitFor(() => {
       expect(messengerRequestSpy).toHaveBeenCalledWith("applyToFile", {

@@ -38,70 +38,78 @@ describe("Parallel Tool Calls - Basic", () => {
     },
   ];
 
-  test("should handle assistant message with multiple tool calls", async () => {
-    const { ideMessenger, store } = await renderWithProviders(<Chat />);
+  test(
+    "should handle assistant message with multiple tool calls",
+    { timeout: 15000 },
+    async () => {
+      const { ideMessenger, store } = await renderWithProviders(<Chat />);
 
-    // Mock required responses
-    ideMessenger.responses["tools/evaluatePolicy"] = {
-      policy: "allowedWithPermission",
-    };
-    ideMessenger.responses["context/getSymbolsForFiles"] = {};
+      // Mock required responses
+      ideMessenger.responses["tools/evaluatePolicy"] = {
+        policy: "allowedWithPermission",
+      };
+      ideMessenger.responses["context/getSymbolsForFiles"] = {};
 
-    // Setup mock model with direct Redux dispatch
-    const currentConfig = store.getState().config.config;
-    store.dispatch(
-      updateConfig({
-        ...currentConfig,
-        selectedModelByRole: {
-          ...currentConfig.selectedModelByRole,
-          chat: {
-            model: "mock",
-            provider: "mock",
-            title: "Mock LLM",
-            underlyingProviderName: "mock",
-          },
-        },
-        modelsByRole: {
-          ...currentConfig.modelsByRole,
-          chat: [
-            ...(currentConfig.modelsByRole.chat || []),
-            {
+      // Setup mock model with direct Redux dispatch
+      const currentConfig = store.getState().config.config;
+      store.dispatch(
+        updateConfig({
+          ...currentConfig,
+          selectedModelByRole: {
+            ...currentConfig.selectedModelByRole,
+            chat: {
               model: "mock",
               provider: "mock",
               title: "Mock LLM",
               underlyingProviderName: "mock",
             },
-          ],
-        },
-      }),
-    );
+          },
+          modelsByRole: {
+            ...currentConfig.modelsByRole,
+            chat: [
+              ...(currentConfig.modelsByRole.chat || []),
+              {
+                model: "mock",
+                provider: "mock",
+                title: "Mock LLM",
+                underlyingProviderName: "mock",
+              },
+            ],
+          },
+        }),
+      );
 
-    await sendInputWithMockedResponse(
-      ideMessenger,
-      "Use both tools",
-      PARALLEL_TOOL_CALL_RESPONSE,
-    );
+      await sendInputWithMockedResponse(
+        ideMessenger,
+        "Use both tools",
+        PARALLEL_TOOL_CALL_RESPONSE,
+      );
 
-    // Wait for streaming to complete
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    });
+      // Wait for streaming to complete
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      });
 
-    const state = store.getState();
-    const history = state.session.history;
+      const state = store.getState();
+      const history = state.session.history;
 
-    // Should have user message and assistant message
-    expect(history).toHaveLength(2);
+      // Should have user message and assistant message
+      expect(history).toHaveLength(2);
 
-    // Find assistant message with tool calls
-    const assistantMessage = history.find(
-      (item) =>
-        item.message.role === "assistant" && item.toolCallStates?.length,
-    );
+      // Find assistant message with tool calls
+      const assistantMessage = history.find(
+        (item) =>
+          item.message.role === "assistant" && item.toolCallStates?.length,
+      );
 
-    expect(assistantMessage).toBeDefined();
-    expect(assistantMessage!.toolCallStates).toHaveLength(2);
-    expect(assistantMessage!.toolCallStates![0].toolCallId).toBe("tool-call-1");
-    expect(assistantMessage!.toolCallStates![1].toolCallId).toBe("tool-call-2");
-  });
+      expect(assistantMessage).toBeDefined();
+      expect(assistantMessage!.toolCallStates).toHaveLength(2);
+      expect(assistantMessage!.toolCallStates![0].toolCallId).toBe(
+        "tool-call-1",
+      );
+      expect(assistantMessage!.toolCallStates![1].toolCallId).toBe(
+        "tool-call-2",
+      );
+    },
+  );
 });

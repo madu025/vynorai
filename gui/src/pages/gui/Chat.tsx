@@ -62,6 +62,7 @@ import { ExploreDialogWatcher } from "./ExploreDialogWatcher";
 import { useAutoScroll } from "./useAutoScroll";
 import { VynorQuotaBar } from "../../components/VynorQuotaBar";
 import { ExpertTeamPanel } from "../../components/AgentWorkspace/ExpertTeamPanel";
+import { WorkspaceStatus } from "../../components/WorkspaceStatus/WorkspaceStatus";
 
 // Helper function to find the index of the latest conversation summary
 function findLatestSummaryIndex(history: ChatHistoryItem[]): number {
@@ -247,11 +248,7 @@ export function Chat() {
   );
 
   const submitOrQueue = useCallback(
-    (
-      editorState: JSONContent,
-      modifiers: InputModifiers,
-      editor?: Editor,
-    ) => {
+    (editorState: JSONContent, modifiers: InputModifiers, editor?: Editor) => {
       if (reduxStore.getState().session.isStreaming) {
         dispatch(
           enqueueInput({
@@ -493,6 +490,7 @@ export function Chat() {
           ))}
       </StepsDiv>
       <div className={"relative shrink-0"}>
+        <WorkspaceStatus />
         {queuedInputs.length > 0 && (
           <div
             aria-label="Queued prompts"
@@ -507,7 +505,8 @@ export function Chat() {
                 className="bg-lightgray/5 mb-1 flex min-w-0 items-center gap-1 rounded px-2 py-1 last:mb-0"
               >
                 <span className="min-w-0 flex-1 truncate text-[10px]">
-                  {index + 1}. {editorText(input.editorState) || "Context prompt"}
+                  {index + 1}.{" "}
+                  {editorText(input.editorState) || "Context prompt"}
                 </span>
                 <button
                   type="button"

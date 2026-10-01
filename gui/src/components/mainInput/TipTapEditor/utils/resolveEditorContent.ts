@@ -17,6 +17,7 @@ import { processEditorContent } from "./processEditorContent";
 import { renderSlashCommandPrompt } from "./renderSlashCommand";
 import { GetContextRequest } from "./types";
 import { getAutomaticProjectContext } from "./autoProjectContext";
+import { applyContextBudget } from "./contextBudget";
 
 interface ResolveEditorContentInput {
   editorState: JSONContent;
@@ -254,5 +255,6 @@ async function gatherContextItems({
     },
     [],
   );
-  return deduplicatedOutputs;
+  const model = state.config.config.selectedModelByRole.chat?.model ?? "gpt-4";
+  return applyContextBudget(deduplicatedOutputs, model);
 }

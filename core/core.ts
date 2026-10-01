@@ -20,6 +20,7 @@ import Ollama from "./llm/llms/Ollama";
 import { EditAggregator } from "./nextEdit/context/aggregateEdits";
 import { createNewPromptFileV2 } from "./promptFiles/createNewPromptFile";
 import { callTool } from "./tools/callTool";
+import { BuiltInToolNames } from "./tools/builtIn";
 import { ChatDescriber } from "./util/chatDescriber";
 import { compactConversation } from "./util/conversationCompaction";
 import { GlobalContext } from "./util/GlobalContext";
@@ -85,6 +86,17 @@ import type { IMessenger, Message } from "./protocol/messenger";
 import { ContinueError, ContinueErrorReason } from "./util/errors";
 import { shareSession } from "./util/historyUtils";
 import { Logger } from "./util/Logger.js";
+import { WorkspaceSessionService } from "./workspace/WorkspaceSessionService";
+import { TaskRuntime } from "./agent/TaskRuntime";
+
+const WORKSPACE_MUTATING_TOOLS = new Set<string>([
+  BuiltInToolNames.EditExistingFile,
+  BuiltInToolNames.SingleFindAndReplace,
+  BuiltInToolNames.MultiEdit,
+  BuiltInToolNames.CreateNewFile,
+  BuiltInToolNames.CreateRuleBlock,
+  BuiltInToolNames.RunTerminalCommand,
+]);
 
 export class Core {
   configHandler: ConfigHandler;
@@ -94,6 +106,9 @@ export class Core {
   private docsService: DocsService;
   private globalContext = new GlobalContext();
   llmLogger = new LLMLogger();
+  private readonly workspaceSession: WorkspaceSessionService;
+  private readonly taskRuntime = new TaskRuntime();
+  private workspaceRefreshTimer?: ReturnType<typeof setTimeout>;
 
   private messageAbortControllers = new Map<string, AbortController>();
   private addMessageAbortController(id: string): AbortController {
@@ -164,6 +179,10 @@ export class Core {
         this.ide,
         this.messenger,
         this.globalContext.get("indexingPaused"),
+      );
+      this.workspaceSession = new WorkspaceSessionService(
+        this.ide,
+        () => this.codeBaseIndexer.currentIndexingState,
       );
 
       this.configHandler.onConfigUpdate((result) => {
@@ -299,6 +318,41 @@ export class Core {
         throw new Error("ping message incorrect");
       }
       return "pong";
+    });
+
+    on("workspace/getSnapshot", async () =>
+      this.workspaceSession.getSnapshot(),
+    );
+    on("workspace/refreshSnapshot", async () => {
+      this.workspaceSession.invalidate();
+      const snapshot = await this.workspaceSession.getSnapshot(true);
+      this.messenger.send("workspace/statusUpdate", snapshot);
+      return snapshot;
+    });
+    on("workspace/invalidate", () => {
+      this.scheduleWorkspaceRefresh();
+    });
+    on("agent/task/start", async ({ data }) => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return this.taskRuntime.start({
+        ...data,
+        workspaceId: workspace.id,
+        workspaceRevision: workspace.revision,
+      });
+    });
+    on("agent/task/get", ({ data }) => this.taskRuntime.get(data.taskId));
+    on("agent/task/transition", ({ data }) =>
+      this.taskRuntime.transition(data.taskId, data.state, data.reason),
+    );
+    on("agent/task/recordApproval", ({ data }) =>
+      this.taskRuntime.recordApproval(data),
+    );
+    on("agent/task/recordVerification", ({ data }) =>
+      this.taskRuntime.recordVerification(data.taskId, data.result),
+    );
+    on("agent/task/consumeBudget", ({ data }) => {
+      const { taskId, ...usage } = data;
+      return this.taskRuntime.consumeBudget(taskId, usage);
     });
 
     // History
@@ -804,6 +858,7 @@ export class Core {
       }
       const dirs = data?.dirs ?? (await this.ide.getWorkspaceDirs());
       await this.codeBaseIndexer.refreshCodebaseIndex(dirs);
+      this.scheduleWorkspaceRefresh();
     });
     on("index/setPaused", (msg) => {
       this.globalContext.update("indexingPaused", msg.data);
@@ -846,6 +901,8 @@ export class Core {
         return;
       }
 
+      this.workspaceSession.invalidate();
+
       walkDirCache.invalidate();
       void refreshIfNotIgnored(data.uris);
 
@@ -876,6 +933,8 @@ export class Core {
       if (!data?.uris?.length) {
         return;
       }
+
+      this.workspaceSession.invalidate();
 
       walkDirCache.invalidate();
       void refreshIfNotIgnored(data.uris);
@@ -942,6 +1001,7 @@ export class Core {
     });
 
     on("files/opened", async ({ data: { uris } }) => {
+      this.scheduleWorkspaceRefresh();
       if (uris) {
         for (const filepath of uris) {
           try {
@@ -1051,6 +1111,16 @@ export class Core {
     on(
       "tools/evaluatePolicy",
       async ({ data: { toolName, basePolicy, parsedArgs, processedArgs } }) => {
+        if (WORKSPACE_MUTATING_TOOLS.has(toolName)) {
+          const workspace = await this.workspaceSession.getSnapshot();
+          if (!workspace.trusted || workspace.roots.length === 0) {
+            return {
+              policy: "disabled" as const,
+              displayValue:
+                "Workspace-changing tools require an open, trusted workspace.",
+            };
+          }
+        }
         const { config } = await this.configHandler.loadConfig();
         if (!config) {
           throw new Error("Config not loaded");
@@ -1148,6 +1218,14 @@ export class Core {
   }
 
   private async handleToolCall(toolCall: ToolCall) {
+    if (WORKSPACE_MUTATING_TOOLS.has(toolCall.function.name)) {
+      const workspace = await this.workspaceSession.getSnapshot();
+      if (!workspace.trusted || workspace.roots.length === 0) {
+        throw new Error(
+          "Workspace-changing tools are blocked until an open workspace is trusted.",
+        );
+      }
+    }
     const { config } = await this.configHandler.loadConfig();
     if (!config) {
       throw new Error("Config not loaded");
@@ -1245,6 +1323,7 @@ export class Core {
     uris?: string[];
   }>): Promise<void> {
     if (data?.uris?.length) {
+      this.scheduleWorkspaceRefresh();
       const diffCache = GitDiffCache.getInstance(getDiffFn(this.ide));
       diffCache.invalidate();
       walkDirCache.invalidate(); // safe approach for now - TODO - only invalidate on relevant changes
@@ -1303,6 +1382,21 @@ export class Core {
         }
       }
     }
+  }
+
+  private scheduleWorkspaceRefresh(): void {
+    this.workspaceSession.invalidate();
+    if (this.workspaceRefreshTimer) clearTimeout(this.workspaceRefreshTimer);
+    this.workspaceRefreshTimer = setTimeout(() => {
+      void this.workspaceSession
+        .getSnapshot(true)
+        .then((snapshot) =>
+          this.messenger.send("workspace/statusUpdate", snapshot),
+        )
+        .catch((error) =>
+          Logger.warn("Failed to refresh workspace snapshot", error),
+        );
+    }, 150);
   }
 
   private async handleListModels(msg: Message<{ title: string }>) {
@@ -1397,6 +1491,25 @@ export class Core {
       (provider) => provider.description.title === name,
     );
     if (!provider) {
+      if (name === "tree" || name === "codebase") {
+        Logger.warn(
+          `Required workspace context provider "${name}" is unavailable`,
+        );
+        return [
+          {
+            id: {
+              providerTitle: name,
+              itemId: uuidv4(),
+            },
+            name: "Workspace context unavailable",
+            description: `Missing ${name} provider`,
+            hidden: true,
+            content:
+              `The automatic workspace ${name} provider is unavailable. ` +
+              "Do not claim to have inspected the project and do not give a generic project checklist. Tell the user that workspace context failed to load and recommend reloading the IDE window.",
+          },
+        ];
+      }
       return [];
     }
 

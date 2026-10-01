@@ -49,4 +49,7 @@ EXPOSE 3334
 
 VOLUME ["/app/data"]
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl --fail --silent http://127.0.0.1:${PORT}/ready > /dev/null || exit 1
+
 CMD ["node", "dist/index.js"]

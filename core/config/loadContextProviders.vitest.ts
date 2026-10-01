@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, MockedFunction, vi } from "vitest";
 import { contextProviderClassFromName } from "../context/providers";
+import CodebaseContextProvider from "../context/providers/CodebaseContextProvider";
 import CurrentFileContextProvider from "../context/providers/CurrentFileContextProvider";
 import DiffContextProvider from "../context/providers/DiffContextProvider";
 import FileContextProvider from "../context/providers/FileContextProvider";
+import FileTreeContextProvider from "../context/providers/FileTreeContextProvider";
 import ProblemsContextProvider from "../context/providers/ProblemsContextProvider";
 import RulesContextProvider from "../context/providers/RulesContextProvider";
 import TerminalContextProvider from "../context/providers/TerminalContextProvider";
@@ -17,6 +19,20 @@ vi.mock("../context/providers", () => ({
 vi.mock("../context/providers/CurrentFileContextProvider", () => ({
   default: vi.fn().mockImplementation((options) => ({
     description: { title: "current-file" },
+    options,
+  })),
+}));
+
+vi.mock("../context/providers/CodebaseContextProvider", () => ({
+  default: vi.fn().mockImplementation((options) => ({
+    description: { title: "codebase" },
+    options,
+  })),
+}));
+
+vi.mock("../context/providers/FileTreeContextProvider", () => ({
+  default: vi.fn().mockImplementation((options) => ({
+    description: { title: "tree" },
     options,
   })),
 }));
@@ -75,7 +91,7 @@ describe("loadConfigContextProviders", () => {
       const result = loadConfigContextProviders(undefined, false, "vscode");
 
       expect(result.errors).toEqual([]);
-      expect(result.providers).toHaveLength(6);
+      expect(result.providers).toHaveLength(8);
 
       // Verify all default providers are included
       const providerTitles = result.providers.map((p) => p.description.title);
@@ -87,6 +103,8 @@ describe("loadConfigContextProviders", () => {
           "terminal",
           "problems",
           "rules",
+          "tree",
+          "codebase",
         ]),
       );
     });
@@ -95,7 +113,7 @@ describe("loadConfigContextProviders", () => {
       const result = loadConfigContextProviders([], false, "vscode");
 
       expect(result.errors).toEqual([]);
-      expect(result.providers).toHaveLength(6);
+      expect(result.providers).toHaveLength(8);
 
       const providerTitles = result.providers.map((p) => p.description.title);
       expect(providerTitles).toEqual(
@@ -106,6 +124,8 @@ describe("loadConfigContextProviders", () => {
           "terminal",
           "problems",
           "rules",
+          "tree",
+          "codebase",
         ]),
       );
     });
@@ -127,7 +147,7 @@ describe("loadConfigContextProviders", () => {
     const result = loadConfigContextProviders([], true, "vscode");
 
     expect(result.errors).toEqual([]);
-    expect(result.providers).toHaveLength(7);
+    expect(result.providers).toHaveLength(9);
 
     const providerTitles = result.providers.map((p) => p.description.title);
     expect(providerTitles).toEqual(
@@ -139,6 +159,8 @@ describe("loadConfigContextProviders", () => {
         "problems",
         "rules",
         "docs",
+        "tree",
+        "codebase",
       ]),
     );
   });
@@ -177,7 +199,7 @@ describe("with valid config", () => {
     });
 
     // Should have custom provider + all defaults
-    expect(result.providers).toHaveLength(7);
+    expect(result.providers).toHaveLength(9);
 
     const customProvider = result.providers.find(
       (p) => p.description.title === "custom-provider",
@@ -221,7 +243,7 @@ describe("with valid config", () => {
     const result = loadConfigContextProviders(config, false, "vscode");
 
     expect(result.errors).toEqual([]);
-    expect(result.providers).toHaveLength(8); // 2 custom + 6 defaults
+    expect(result.providers).toHaveLength(10); // 2 custom + 8 defaults
 
     expect(mockProvider1).toHaveBeenCalledWith({
       name: "first-provider",
@@ -304,7 +326,7 @@ describe("error handling", () => {
     ]);
 
     // Should still have default providers
-    expect(result.providers).toHaveLength(6);
+    expect(result.providers).toHaveLength(8);
     expect(mockedContextProviderClassFromName).toHaveBeenCalledWith(
       "unknown-provider",
     );
@@ -339,7 +361,7 @@ describe("error handling", () => {
       },
     ]);
 
-    expect(result.providers).toHaveLength(6); // Only defaults
+    expect(result.providers).toHaveLength(8); // Only defaults
   });
 
   it("should handle mix of valid and invalid providers", () => {
@@ -375,7 +397,7 @@ describe("error handling", () => {
     ]);
 
     // Should have valid provider + defaults
-    expect(result.providers).toHaveLength(7);
+    expect(result.providers).toHaveLength(9);
     expect(mockValidProvider).toHaveBeenCalledWith({
       name: "valid",
       key: "value",
@@ -401,7 +423,7 @@ describe("default provider merging", () => {
     expect(result.errors).toEqual([]);
 
     // Should have configured file provider + other defaults (not duplicate file)
-    expect(result.providers).toHaveLength(6);
+    expect(result.providers).toHaveLength(8);
 
     const fileProviders = result.providers.filter(
       (p) => p.description.title === "file",
@@ -434,7 +456,7 @@ describe("default provider merging", () => {
     const result = loadConfigContextProviders(config, false, "vscode");
 
     expect(result.errors).toEqual([]);
-    expect(result.providers).toHaveLength(7); // 1 custom + 6 defaults
+    expect(result.providers).toHaveLength(9); // 1 custom + 8 defaults
 
     // All defaults should be present
     const providerTitles = result.providers.map((p) => p.description.title);
@@ -447,6 +469,8 @@ describe("default provider merging", () => {
         "terminal",
         "problems",
         "rules",
+        "tree",
+        "codebase",
       ]),
     );
   });
@@ -482,6 +506,8 @@ describe("default provider merging", () => {
       "terminal",
       "problems",
       "rules",
+      "tree",
+      "codebase",
     ]);
   });
 });
@@ -575,6 +601,8 @@ describe("provider instantiation", () => {
     expect(TerminalContextProvider).toHaveBeenCalledWith({});
     expect(ProblemsContextProvider).toHaveBeenCalledWith({});
     expect(RulesContextProvider).toHaveBeenCalledWith({});
+    expect(FileTreeContextProvider).toHaveBeenCalledWith({});
+    expect(CodebaseContextProvider).toHaveBeenCalledWith({});
   });
 
   it("should call provider constructors exactly once per provider", () => {
@@ -586,5 +614,7 @@ describe("provider instantiation", () => {
     expect(TerminalContextProvider).toHaveBeenCalledTimes(1);
     expect(ProblemsContextProvider).toHaveBeenCalledTimes(1);
     expect(RulesContextProvider).toHaveBeenCalledTimes(1);
+    expect(FileTreeContextProvider).toHaveBeenCalledTimes(1);
+    expect(CodebaseContextProvider).toHaveBeenCalledTimes(1);
   });
 });

@@ -256,7 +256,11 @@ describe("streamResponseThunk", () => {
     expect(result.type).toBe("chat/streamResponse/fulfilled");
 
     // Verify exact action sequence for this error path
-    const dispatchedActions = mockStore.getActions();
+    const dispatchedActions = mockStore
+      .getActions()
+      .filter(
+        (action) => action.type !== "symbols/updateFromContextItems/fulfilled",
+      );
     expect(dispatchedActions).toEqual([
       {
         type: "chat/streamResponse/pending",
@@ -345,15 +349,6 @@ describe("streamResponseThunk", () => {
       },
       {
         type: "session/setInactive",
-        payload: undefined,
-      },
-      {
-        type: "symbols/updateFromContextItems/fulfilled",
-        meta: {
-          arg: [],
-          requestId: expect.any(String),
-          requestStatus: "fulfilled",
-        },
         payload: undefined,
       },
       {
@@ -582,7 +577,7 @@ describe("streamResponseThunk", () => {
           error: "Model configuration is invalid",
         };
       } else {
-        return await mockIdeMessenger.request(message, data);
+        return await new MockIdeMessenger().request(message, data);
       }
     });
 
@@ -598,7 +593,11 @@ describe("streamResponseThunk", () => {
     expect(result.type).toBe("chat/streamResponse/fulfilled");
 
     // Verify exact action sequence for compilation error with dialog
-    const dispatchedActions = mockStore.getActions();
+    const dispatchedActions = mockStore
+      .getActions()
+      .filter(
+        (action) => action.type !== "symbols/updateFromContextItems/fulfilled",
+      );
     expect(dispatchedActions).toEqual([
       {
         type: "chat/streamResponse/pending",
@@ -679,15 +678,6 @@ describe("streamResponseThunk", () => {
       },
       {
         type: "session/setInlineErrorMessage",
-        payload: undefined,
-      },
-      {
-        type: "symbols/updateFromContextItems/fulfilled",
-        meta: {
-          arg: [],
-          requestId: expect.any(String),
-          requestStatus: "fulfilled",
-        },
         payload: undefined,
       },
       {

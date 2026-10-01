@@ -113,6 +113,34 @@ const DEFAULT_MOCK_CORE_RESPONSES: MockResponses = {
       },
     },
   ],
+  "workspace/getSnapshot": {
+    id: "mock-workspace",
+    revision: 1,
+    roots: [
+      {
+        id: "mock-root",
+        name: "workspace1",
+        branch: "main",
+      },
+    ],
+    activeRootId: "mock-root",
+    activeFile: {
+      rootId: "mock-root",
+      uri: "current_file.py",
+    },
+    manifests: [],
+    instructions: [],
+    index: [
+      {
+        rootId: "mock-root",
+        status: "ready",
+        progress: 1,
+      },
+    ],
+    trusted: true,
+    capabilities: ["read", "write", "execute"],
+    createdAt: 0,
+  },
 };
 
 const DEFAULT_MOCK_CORE_RESPONSE_HANDLERS: MockResponseHandlers = {

@@ -1,7 +1,6 @@
 import { ToolPolicy } from "@continuedev/terminal-security";
 import { Tool, ToolCallState } from "core";
 import { IIdeMessenger } from "../../context/IdeMessenger";
-import { isEditTool } from "../../util/toolCallState";
 import { errorToolCall, updateToolCallOutput } from "../slices/sessionSlice";
 import { DEFAULT_TOOL_SETTING, ToolPolicies } from "../slices/uiSlice";
 import { AppThunkDispatch } from "../store";
@@ -22,11 +21,6 @@ async function evaluateToolPolicy(
   toolCallState: ToolCallState,
   toolPolicies: ToolPolicies,
 ): Promise<EvaluatedPolicy> {
-  // allow edit tool calls without permission
-  if (isEditTool(toolCallState.toolCall.function.name)) {
-    return { policy: "allowedWithoutPermission", toolCallState };
-  }
-
   const basePolicy =
     toolPolicies[toolCallState.toolCall.function.name] ??
     activeTools.find(

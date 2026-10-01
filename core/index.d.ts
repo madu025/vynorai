@@ -856,6 +856,9 @@ export interface IDE {
 
   getWorkspaceDirs(): Promise<string[]>;
 
+  /** Defaults to untrusted when an IDE host cannot report trust explicitly. */
+  isWorkspaceTrusted?(): Promise<boolean>;
+
   fileExists(fileUri: string): Promise<boolean>;
 
   writeFile(path: string, contents: string): Promise<void>;

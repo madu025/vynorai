@@ -7,8 +7,10 @@ import type {
   IndexingStatus,
 } from "../index.js";
 import type { ProfileDescription } from "../config/ProfileLifecycleManager.js";
+import type { WorkspaceSnapshot } from "../workspace/types.js";
 
 export type ToWebviewFromIdeOrCoreProtocol = {
+  "workspace/statusUpdate": [WorkspaceSnapshot, void];
   configUpdate: [
     {
       result: ConfigResult<BrowserSerializedContinueConfig>;

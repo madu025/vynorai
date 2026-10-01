@@ -144,7 +144,8 @@ export class VsCodeMessenger {
       );
 
       const checkpointFilepath =
-        data.filepath ?? vscode.window.activeTextEditor?.document.uri.toString();
+        data.filepath ??
+        vscode.window.activeTextEditor?.document.uri.toString();
       const checkpointId = checkpointFilepath
         ? await checkpointManager.create(checkpointFilepath, "Agent apply")
         : undefined;
@@ -156,6 +157,9 @@ export class VsCodeMessenger {
     this.onWebview("checkpoints/restore", async ({ data }) =>
       checkpointManager.restore(data.id),
     );
+    this.onWebview("vynorai/login", async () => {
+      await vscode.commands.executeCommand("vynorai.login");
+    });
 
     this.onWebview("showTutorial", async (msg) => {
       await showTutorial(this.ide);

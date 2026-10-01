@@ -4,15 +4,29 @@ import { NextFunction, Request, Response, Router } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
-import { billingAll as dbAll, billingGet as dbGet, billingRun as dbRun } from "../services/billingDb.js";
+import {
+  billingAll as dbAll,
+  billingGet as dbGet,
+  billingRun as dbRun,
+} from "../services/billingDb.js";
 import { authRateLimiter } from "../middleware/security.js";
 import { sendVerificationEmail } from "../services/emailService.js";
 import {
   getUserSecurityEvents,
   logSecurityEvent,
 } from "../services/securityAudit.js";
-import { decryptCredential, encryptCredential, maskApiKey } from "../services/credentialVault.js";
+import {
+  decryptCredential,
+  encryptCredential,
+  maskApiKey,
+} from "../services/credentialVault.js";
 import { invalidateAuthCache } from "../services/aiProxy.js";
+import { getRedis } from "../services/redisStore.js";
+import {
+  IDE_AUTH_TTL_SECONDS,
+  IdeAuthorizationCodeStore,
+  IdeAuthStoreUnavailableError,
+} from "../services/ideAuthCodes.js";
 
 export const authRouter = Router();
 
@@ -21,6 +35,10 @@ const sha256 = (v: string) =>
 const getClientIp = (req: Request) =>
   (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const IDE_AUTH_VALUE_RE = /^[a-f0-9]{64}$/i;
+const ideAuthorizationCodes = new IdeAuthorizationCodeStore(getRedis, {
+  requireDistributed: process.env.IDE_AUTH_REQUIRE_REDIS === "true",
+});
 
 // Middleware to authenticate JWT or API Key
 export async function requireAuth(
@@ -47,12 +65,10 @@ export async function requireAuth(
         return res.status(401).json({ error: "Invalid API key" });
       }
       if (user.is_suspended === 1) {
-        return res
-          .status(403)
-          .json({
-            error:
-              "Your account has been suspended for security violations. Contact security@vynor.lk",
-          });
+        return res.status(403).json({
+          error:
+            "Your account has been suspended for security violations. Contact security@vynor.lk",
+        });
       }
       (req as any).user = user;
       return next();
@@ -75,12 +91,10 @@ export async function requireAuth(
       return res.status(401).json({ error: "User not found" });
     }
     if (user.is_suspended === 1) {
-      return res
-        .status(403)
-        .json({
-          error:
-            "Your account has been suspended for security violations. Contact security@vynor.lk",
-        });
+      return res.status(403).json({
+        error:
+          "Your account has been suspended for security violations. Contact security@vynor.lk",
+      });
     }
     (req as any).user = user;
     next();
@@ -88,6 +102,92 @@ export async function requireAuth(
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
+
+// Browser creates a short-lived, single-use code. Raw API credentials never
+// enter custom URI query strings, browser history, or OS protocol logs.
+authRouter.post(
+  "/ide-code",
+  authRateLimiter,
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      const state = typeof req.body?.state === "string" ? req.body.state : "";
+      if (!IDE_AUTH_VALUE_RE.test(state)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid IDE authentication state" });
+      }
+      const user = (req as any).user as { id: string } | undefined;
+      if (!user?.id)
+        return res.status(401).json({ error: "Authentication required" });
+
+      const code = await ideAuthorizationCodes.issue(user.id, state);
+      return res.json({ code, expiresIn: IDE_AUTH_TTL_SECONDS });
+    } catch (error) {
+      if (error instanceof IdeAuthStoreUnavailableError) {
+        return res
+          .status(503)
+          .json({ error: "IDE authentication is temporarily unavailable" });
+      }
+      return next(error);
+    }
+  },
+);
+
+// IDE atomically consumes the code. Replays fail even across API replicas when
+// Redis is configured; single-instance deployments use the bounded fallback.
+authRouter.post(
+  "/ide-exchange",
+  authRateLimiter,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      const code = typeof req.body?.code === "string" ? req.body.code : "";
+      const state = typeof req.body?.state === "string" ? req.body.state : "";
+      if (!IDE_AUTH_VALUE_RE.test(code) || !IDE_AUTH_VALUE_RE.test(state)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid IDE authorization code" });
+      }
+
+      const authorization = await ideAuthorizationCodes.consume(code, state);
+      if (!authorization) {
+        return res
+          .status(401)
+          .json({ error: "Expired or consumed IDE authorization code" });
+      }
+
+      const user = await dbGet<any>(
+        "SELECT id, email, name, api_key, api_key_encrypted, COALESCE(is_suspended, 0) as is_suspended FROM users WHERE id = ?",
+        [authorization.userId],
+      );
+      if (!user || user.is_suspended === 1) {
+        return res.status(403).json({ error: "Account unavailable" });
+      }
+      const apiKey =
+        decryptCredential(user.api_key_encrypted) ||
+        (user.api_key?.startsWith("vynor_live_") ? user.api_key : null);
+      if (!apiKey)
+        return res.status(409).json({ error: "API key rotation required" });
+
+      await logSecurityEvent({
+        eventType: "ide_auth_exchange",
+        actor: user.id,
+        ipAddress: getClientIp(req),
+        details: `Single-use IDE authorization code consumed (${String(req.headers["user-agent"] || "unknown").slice(0, 120)})`,
+      });
+      return res.json({ apiKey, email: user.email, name: user.name || "" });
+    } catch (error) {
+      if (error instanceof IdeAuthStoreUnavailableError) {
+        return res
+          .status(503)
+          .json({ error: "IDE authentication is temporarily unavailable" });
+      }
+      return next(error);
+    }
+  },
+);
 
 // Helper to verify Cloudflare Turnstile token if configured
 async function verifyTurnstileToken(
@@ -155,11 +255,9 @@ authRouter.post(
       const clientIp = getClientIp(req);
       const isHuman = await verifyTurnstileToken(turnstileToken, clientIp);
       if (!isHuman) {
-        return res
-          .status(400)
-          .json({
-            error: "Security check failed. Please verify you are human.",
-          });
+        return res.status(400).json({
+          error: "Security check failed. Please verify you are human.",
+        });
       }
 
       const existingUser = await dbGet("SELECT id FROM users WHERE email = ?", [
@@ -180,7 +278,16 @@ authRouter.post(
 
       await dbRun(
         "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, api_key_masked, api_key_encrypted, name, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
-        [userId, email, passwordHash, storedApiKey, apiKeyHash, maskApiKey(apiKey), encryptedApiKey, name || ""],
+        [
+          userId,
+          email,
+          passwordHash,
+          storedApiKey,
+          apiKeyHash,
+          maskApiKey(apiKey),
+          encryptedApiKey,
+          name || "",
+        ],
       );
 
       // Generate 6-digit OTP (CSPRNG) and verification token, stored as SHA-256 hashes
@@ -291,12 +398,10 @@ authRouter.post(
           details: "Login blocked for suspended account",
           ipAddress: clientIp,
         });
-        return res
-          .status(403)
-          .json({
-            error:
-              "Your account has been suspended for security policy violations. Contact security@vynor.lk",
-          });
+        return res.status(403).json({
+          error:
+            "Your account has been suspended for security policy violations. Contact security@vynor.lk",
+        });
       }
 
       const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -333,7 +438,9 @@ authRouter.post(
           id: user.id,
           email: user.email,
           name: user.name,
-          apiKey: decryptCredential(user.api_key_encrypted) || (user.api_key?.startsWith("vynor_live_") ? user.api_key : null),
+          apiKey:
+            decryptCredential(user.api_key_encrypted) ||
+            (user.api_key?.startsWith("vynor_live_") ? user.api_key : null),
           emailVerified: user.email_verified === 1,
         },
       });
@@ -402,7 +509,8 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
     const cachedRequests = cacheStats?.cachedRequests || 0;
     const chargedTokens = totalUsage?.totalTokens || 0;
     const totalAttempted = chargedTokens + tokensSaved;
-    const savingPct = totalAttempted > 0 ? Math.round((tokensSaved / totalAttempted) * 100) : 0;
+    const savingPct =
+      totalAttempted > 0 ? Math.round((tokensSaved / totalAttempted) * 100) : 0;
     const estimatedLkrSaved = Math.round((tokensSaved / 1_000_000) * 220);
 
     const recentLogs = await dbAll<any>(
@@ -418,11 +526,24 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
       const isFree = log.cached === 1;
       let actionName = "Code Generation & Edit";
       const m = (log.model || "").toLowerCase();
-      if (m.includes("coder") || m.includes("fim") || m.includes("autocomplete") || (isFree && (log.output_tokens || 0) < 60)) {
+      if (
+        m.includes("coder") ||
+        m.includes("fim") ||
+        m.includes("autocomplete") ||
+        (isFree && (log.output_tokens || 0) < 60)
+      ) {
         actionName = "Instant Tab Autocomplete (FIM)";
-      } else if (m.includes("r1") || m.includes("reasoning") || (log.tokens_used || 0) > 1500) {
+      } else if (
+        m.includes("r1") ||
+        m.includes("reasoning") ||
+        (log.tokens_used || 0) > 1500
+      ) {
         actionName = "Deep Reasoning & Architecture";
-      } else if (m.includes("chat") || m.includes("sonnet") || m.includes("gemini")) {
+      } else if (
+        m.includes("chat") ||
+        m.includes("sonnet") ||
+        m.includes("gemini")
+      ) {
         actionName = "Interactive Codebase Chat";
       }
 
@@ -430,8 +551,14 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
         id: log.id,
         actionName,
         model: log.model,
-        tokensUsed: isFree ? 0 : (log.tokens_used || (log.input_tokens + log.output_tokens) || 0),
-        tokensSaved: isFree ? ((log.input_tokens || 0) + (log.output_tokens || 0) || log.tokens_used || 250) : 0,
+        tokensUsed: isFree
+          ? 0
+          : log.tokens_used || log.input_tokens + log.output_tokens || 0,
+        tokensSaved: isFree
+          ? (log.input_tokens || 0) + (log.output_tokens || 0) ||
+            log.tokens_used ||
+            250
+          : 0,
         isFree,
         createdAt: log.created_at,
       };
@@ -442,7 +569,9 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        apiKey: decryptCredential(user.api_key_encrypted) || (user.api_key?.startsWith("vynor_live_") ? user.api_key : null),
+        apiKey:
+          decryptCredential(user.api_key_encrypted) ||
+          (user.api_key?.startsWith("vynor_live_") ? user.api_key : null),
         allowedIps: user.allowed_ips || "",
         isSuspended: false, // suspended users are rejected in requireAuth
         emailVerified: user.email_verified === 1,
@@ -549,24 +678,20 @@ authRouter.post(
       );
 
       if (!record) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Invalid or expired verification code. Please request a new one.",
-          });
+        return res.status(400).json({
+          error:
+            "Invalid or expired verification code. Please request a new one.",
+        });
       }
 
       if (record.attempts >= 5) {
         await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [
           user.id,
         ]);
-        return res
-          .status(400)
-          .json({
-            error:
-              "Too many failed attempts. Please request a new verification code.",
-          });
+        return res.status(400).json({
+          error:
+            "Too many failed attempts. Please request a new verification code.",
+        });
       }
 
       const given = Buffer.from(sha256(otp.trim()), "hex");
@@ -666,7 +791,13 @@ authRouter.post(
 
       await dbRun(
         "UPDATE users SET api_key = ?, api_key_hash = ?, api_key_masked = ?, api_key_encrypted = ? WHERE id = ?",
-        [storedApiKey, newApiKeyHash, maskApiKey(newApiKey), encryptedApiKey, user.id],
+        [
+          storedApiKey,
+          newApiKeyHash,
+          maskApiKey(newApiKey),
+          encryptedApiKey,
+          user.id,
+        ],
       );
       invalidateAuthCache();
 

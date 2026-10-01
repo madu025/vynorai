@@ -20,6 +20,9 @@ import sessionReducer, {
 } from "../../redux/slices/sessionSlice";
 import tabsReducer, { INITIAL_TABS_STATE } from "../../redux/slices/tabsSlice";
 import uiReducer, { DEFAULT_UI_SLICE } from "../../redux/slices/uiSlice";
+import workspaceReducer, {
+  INITIAL_WORKSPACE_STATE,
+} from "../../redux/slices/workspaceSlice";
 import { RootState } from "../../redux/store";
 
 // TODO remove non-serializable streamAborter, causes headaches
@@ -31,6 +34,7 @@ export const getEmptyRootState: () => RootState = () => {
     indexing: INITIAL_INDEXING_STATE,
     profiles: INITIAL_PROFILES_STATE,
     tabs: INITIAL_TABS_STATE,
+    workspace: INITIAL_WORKSPACE_STATE,
   };
   const { streamAborter, ...serializableSession } = INITIAL_SESSION_STATE;
   const sessionCopy = copyOf(serializableSession) as Omit<
@@ -69,6 +73,7 @@ export const createMockStore = (
       indexing: indexingReducer,
       tabs: tabsReducer,
       profiles: profilesReducer,
+      workspace: workspaceReducer,
     },
     preloadedState: {
       ...getEmptyRootState(),

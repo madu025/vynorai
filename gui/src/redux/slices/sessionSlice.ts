@@ -6,6 +6,7 @@ import {
   createSlice,
 } from "@reduxjs/toolkit";
 import { JSONContent } from "@tiptap/react";
+import type { TaskState } from "core/agent/types";
 import {
   ApplyState,
   AssistantChatMessage,
@@ -238,6 +239,8 @@ type SessionState = {
   projectMemories?: ProjectMemory[];
   subagentRuns?: SubagentRun[];
   queuedInputs?: QueuedInput[];
+  activeTaskId?: string;
+  activeTaskState?: TaskState;
   isInEdit: boolean;
   codeBlockApplyStates: {
     states: ApplyState[];
@@ -1017,6 +1020,15 @@ export const sessionSlice = createSlice({
     clearQueuedInputs: (state) => {
       state.queuedInputs = [];
     },
+    setActiveTaskId: (state, action: PayloadAction<string | undefined>) => {
+      state.activeTaskId = action.payload;
+    },
+    setActiveTaskState: (
+      state,
+      action: PayloadAction<TaskState | undefined>,
+    ) => {
+      state.activeTaskState = action.payload;
+    },
     setProjectMemories: (state, action: PayloadAction<ProjectMemory[]>) => {
       state.projectMemories = action.payload;
     },
@@ -1027,7 +1039,9 @@ export const sessionSlice = createSlice({
       state,
       action: PayloadAction<Pick<SubagentRun, "id"> & Partial<SubagentRun>>,
     ) => {
-      const run = state.subagentRuns?.find((item) => item.id === action.payload.id);
+      const run = state.subagentRuns?.find(
+        (item) => item.id === action.payload.id,
+      );
       if (run) Object.assign(run, action.payload);
     },
     setIsInEdit: (state, action: PayloadAction<boolean>) => {
@@ -1153,6 +1167,8 @@ export const {
   enqueueInput,
   removeQueuedInput,
   clearQueuedInputs,
+  setActiveTaskId,
+  setActiveTaskState,
   setProjectMemories,
   setSubagentRuns,
   updateSubagentRun,

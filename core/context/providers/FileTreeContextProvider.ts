@@ -45,6 +45,17 @@ class FileTreeContextProvider extends BaseContextProvider {
     const workspaceDirs = await extras.ide.getWorkspaceDirs();
     const trees = [];
 
+    if (workspaceDirs.length === 0) {
+      return [
+        {
+          content:
+            "No workspace folder is currently open. Do not claim to have inspected a project; ask the user to open a folder or workspace first.",
+          name: "Workspace Not Open",
+          description: "No workspace folder is open",
+        },
+      ];
+    }
+
     for (const workspaceDir of workspaceDirs) {
       const subDirTree: Directory = {
         name: getUriPathBasename(workspaceDir),
@@ -78,7 +89,7 @@ class FileTreeContextProvider extends BaseContextProvider {
         currentTree.files.push(parts.pop()!);
       }
 
-      trees.push(formatFileTree(subDirTree));
+      trees.push(`${subDirTree.name}/\n${formatFileTree(subDirTree, "  ")}`);
     }
 
     const renderedTree = trees.join("\n\n");

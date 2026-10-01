@@ -29,13 +29,19 @@ test("also bootstraps before the pending user message enters history", () => {
   });
 });
 
-test("does not duplicate explicit or later-turn context", () => {
+test("does not duplicate explicit context or focused later-turn context", () => {
   expect(getAutomaticProjectContext("Review project", 1, true)).toEqual({
     codebase: false,
     tree: false,
   });
-  expect(getAutomaticProjectContext("Review project", 2, false)).toEqual({
+  expect(getAutomaticProjectContext("Fix the login bug", 2, false)).toEqual({
     codebase: false,
     tree: false,
   });
+});
+
+test("refreshes project context for an explicit project question on later turns", () => {
+  expect(
+    getAutomaticProjectContext("Did you understand this project?", 4, false),
+  ).toMatchObject({ codebase: true, tree: true });
 });

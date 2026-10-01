@@ -22,15 +22,14 @@ export function getAutomaticProjectContext(
   hasExplicitProjectContext: boolean,
 ): AutomaticProjectContext {
   const normalized = input.replace(/\s+/g, " ").trim();
-  if (
-    userMessageCount > 1 ||
-    hasExplicitProjectContext ||
-    normalized.length < 4
-  ) {
+  if (hasExplicitProjectContext || normalized.length < 4) {
     return { codebase: false, tree: false };
   }
 
   const isProjectOverview = PROJECT_OVERVIEW_TERMS.test(normalized);
+  if (userMessageCount > 1 && !isProjectOverview) {
+    return { codebase: false, tree: false };
+  }
 
   return {
     codebase: true,

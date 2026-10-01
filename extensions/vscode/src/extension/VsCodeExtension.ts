@@ -523,6 +523,15 @@ export class VsCodeExtension {
           ...event.removed.map((folder) => folder.uri.toString()),
         ],
       });
+      void this.core.invoke("workspace/invalidate", {
+        reason: "workspace-folders-changed",
+      });
+    });
+
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      void this.core.invoke("workspace/invalidate", {
+        reason: "workspace-trust-granted",
+      });
     });
 
     // TODO merge this and re-enable https://github.com/continuedev/continue/pull/8364
@@ -608,6 +617,9 @@ export class VsCodeExtension {
 
     this.ide.onDidChangeActiveTextEditor((filepath) => {
       void this.core.invoke("files/opened", { uris: [filepath] });
+      void this.core.invoke("workspace/invalidate", {
+        reason: "active-editor-changed",
+      });
     });
 
     // initializes openedFileLruCache with files that are already open when the extension is activated

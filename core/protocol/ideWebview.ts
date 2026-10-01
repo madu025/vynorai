@@ -14,8 +14,21 @@ import {
 } from "../";
 
 export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
-  "checkpoints/list": [undefined, Array<{ id: string; fileUri: string; fileName: string; createdAt: number; label: string }>];
-  "checkpoints/restore": [{ id: string }, { restored: boolean; reason?: string }];
+  "vynorai/login": [undefined, void];
+  "checkpoints/list": [
+    undefined,
+    Array<{
+      id: string;
+      fileUri: string;
+      fileName: string;
+      createdAt: number;
+      label: string;
+    }>,
+  ];
+  "checkpoints/restore": [
+    { id: string },
+    { restored: boolean; reason?: string },
+  ];
   openUrl: [string, void];
   applyToFile: [ApplyToFilePayload, void];
   overwriteFile: [{ filepath: string; prevFileContent: string | null }, void];

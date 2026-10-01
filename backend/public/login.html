@@ -231,7 +231,6 @@
         var urlParams = new URLSearchParams(window.location.search);
         var source = urlParams.get('source');
         var callbackUrl = getValidatedIdeCallback(urlParams);
-        var apiKey = (data.user && data.user.apiKey) || data.apiKey || '';
 
         var ideParam = urlParams.get('ide') || '';
         var schemeParam = getValidatedIdeScheme(urlParams.get('scheme'));
@@ -240,13 +239,13 @@
         if (source === 'vscode' || callbackUrl) {
           var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : (ideParam.toLowerCase().includes('cursor') ? 'cursor' : 'vscode'));
           var targetBase = callbackUrl || (defaultScheme + '://vynorai.vynorai/auth');
+          var authState = urlParams.get('state') || '';
+          var ideCode = await createIdeCode(data.token, authState);
           var redirectUri = targetBase + (targetBase.includes('?') ? '&' : '?') +
-            'apiKey=' + encodeURIComponent(apiKey) +
-            '&email=' + encodeURIComponent(email) +
-            '&name=' + encodeURIComponent((data.user && data.user.name) || name || '') +
-            '&state=' + encodeURIComponent(urlParams.get('state') || '');
+            'code=' + encodeURIComponent(ideCode) +
+            '&state=' + encodeURIComponent(authState);
 
-          showVsCodeAuthCard(redirectUri, apiKey, email);
+          showVsCodeAuthCard(redirectUri, ideCode, email);
           return;
         }
 
@@ -255,7 +254,19 @@
       } catch(err) { showError(err.message || 'Network error. Please try again.'); }
       finally { setLoading(false); }
     }
-    function showVsCodeAuthCard(redirectUri, apiKey, email) {
+    async function createIdeCode(token, state) {
+      if (!/^[a-f0-9]{64}$/i.test(state)) throw new Error('Invalid or missing IDE authentication state. Start login again from the extension.');
+      var response = await fetch(API + '/api/auth/ide-code', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ state: state })
+      });
+      var payload = await response.json();
+      if (!response.ok || !payload.code) throw new Error(payload.error || 'Could not authorize the IDE.');
+      return payload.code;
+    }
+    function showVsCodeAuthCard(redirectUri, ideCode, email) {
       var authCard = document.getElementById('auth-card');
       if (authCard) authCard.style.display = 'none';
 
@@ -280,7 +291,7 @@
         method: 'POST',
         cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: apiKey, email: email, state: authState })
+        body: JSON.stringify({ code: ideCode, state: authState })
       })
         .then(function(res) {
           if (res.ok) {
@@ -307,10 +318,9 @@
           ⚡ Open in ${escapeHtml(ideName)}
         </a>
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">
-          If your IDE didn't open automatically, your API Key is ready to paste:
+          If your IDE didn't open automatically, use this secure one-time callback:
         </div>
-        <div class="token-display" id="token-display" style="margin-bottom: 12px; word-break:break-all;">${apiKey}</div>
-        <button type="button" class="copy-token-btn" onclick="copyToken()">📋 Copy API Key</button>
+        <a href="${redirectUri}" class="copy-token-btn" style="text-decoration:none; display:inline-block;">Open secure IDE callback</a>
         <p style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">
           Connected as <strong>${escapeHtml(email)}</strong>. You can safely return to your IDE.
         </p>
@@ -338,12 +348,12 @@
           if (source === 'vscode' || callbackUrl) {
             var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : (ideParam.toLowerCase().includes('cursor') ? 'cursor' : 'vscode'));
             var targetBase = callbackUrl || (defaultScheme + '://vynorai.vynorai/auth');
+            var authState = urlParams.get('state') || '';
+            var ideCode = await createIdeCode(token, authState);
             var redirectUri = targetBase + (targetBase.includes('?') ? '&' : '?') +
-              'apiKey=' + encodeURIComponent(meData.user.apiKey) +
-              '&email=' + encodeURIComponent(meData.user.email) +
-              '&name=' + encodeURIComponent(meData.user.name || '') +
-              '&state=' + encodeURIComponent(urlParams.get('state') || '');
-            showVsCodeAuthCard(redirectUri, meData.user.apiKey, meData.user.email);
+              'code=' + encodeURIComponent(ideCode) +
+              '&state=' + encodeURIComponent(authState);
+            showVsCodeAuthCard(redirectUri, ideCode, meData.user.email);
             return;
           }
           window.location.href = '/';
@@ -369,15 +379,6 @@
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, function(char) {
         return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
-      });
-    }
-    function copyToken() {
-      var token = document.getElementById('token-display').textContent;
-      navigator.clipboard.writeText(token).then(function() {
-        var btn = document.querySelector('.copy-token-btn');
-        var orig = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(function() { btn.textContent = orig; }, 2000);
       });
     }
     function logout() { localStorage.removeItem('vynorai_token'); location.reload(); }

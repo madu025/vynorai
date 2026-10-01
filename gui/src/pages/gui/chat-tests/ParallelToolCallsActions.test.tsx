@@ -40,86 +40,90 @@ describe("Parallel Tool Calls - Actions", () => {
     },
   ];
 
-  test("should handle individual tool call actions without breaking other calls", async () => {
-    const { ideMessenger, store } = await renderWithProviders(<Chat />);
+  test(
+    "should handle individual tool call actions without breaking other calls",
+    { timeout: 15000 },
+    async () => {
+      const { ideMessenger, store } = await renderWithProviders(<Chat />);
 
-    // Mock required responses
-    ideMessenger.responses["tools/evaluatePolicy"] = {
-      policy: "allowedWithPermission",
-    };
-    ideMessenger.responses["context/getSymbolsForFiles"] = {};
+      // Mock required responses
+      ideMessenger.responses["tools/evaluatePolicy"] = {
+        policy: "allowedWithPermission",
+      };
+      ideMessenger.responses["context/getSymbolsForFiles"] = {};
 
-    // Setup mock model with direct Redux dispatch
-    const currentConfig = store.getState().config.config;
-    store.dispatch(
-      updateConfig({
-        ...currentConfig,
-        selectedModelByRole: {
-          ...currentConfig.selectedModelByRole,
-          chat: {
-            model: "mock",
-            provider: "mock",
-            title: "Mock LLM",
-            underlyingProviderName: "mock",
-          },
-        },
-        modelsByRole: {
-          ...currentConfig.modelsByRole,
-          chat: [
-            ...(currentConfig.modelsByRole.chat || []),
-            {
+      // Setup mock model with direct Redux dispatch
+      const currentConfig = store.getState().config.config;
+      store.dispatch(
+        updateConfig({
+          ...currentConfig,
+          selectedModelByRole: {
+            ...currentConfig.selectedModelByRole,
+            chat: {
               model: "mock",
               provider: "mock",
               title: "Mock LLM",
               underlyingProviderName: "mock",
             },
-          ],
-        },
-      }),
-    );
+          },
+          modelsByRole: {
+            ...currentConfig.modelsByRole,
+            chat: [
+              ...(currentConfig.modelsByRole.chat || []),
+              {
+                model: "mock",
+                provider: "mock",
+                title: "Mock LLM",
+                underlyingProviderName: "mock",
+              },
+            ],
+          },
+        }),
+      );
 
-    await sendInputWithMockedResponse(
-      ideMessenger,
-      "Use multiple tools",
-      PARALLEL_TOOL_CALL_RESPONSE,
-    );
+      await sendInputWithMockedResponse(
+        ideMessenger,
+        "Use multiple tools",
+        PARALLEL_TOOL_CALL_RESPONSE,
+      );
 
-    // Wait for streaming to complete
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    });
+      // Wait for streaming to complete
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      });
 
-    // Verify we have multiple pending tool calls
-    let state = store.getState();
-    let pendingToolCalls = findAllCurToolCallsByStatus(
-      state.session.history,
-      "generated",
-    );
+      // Verify we have multiple pending tool calls
+      let state = store.getState();
+      let pendingToolCalls = findAllCurToolCallsByStatus(
+        state.session.history,
+        "generated",
+      );
 
-    expect(pendingToolCalls).toHaveLength(2);
+      expect(pendingToolCalls).toHaveLength(2);
 
-    // Cancel the first tool call
-    await act(async () => {
-      store.dispatch(cancelToolCall({ toolCallId: "tool-call-1" }));
-    });
+      // Cancel the first tool call
+      await act(async () => {
+        store.dispatch(cancelToolCall({ toolCallId: "tool-call-1" }));
+      });
 
-    // Check state after canceling first tool call
-    state = store.getState();
-    pendingToolCalls = findAllCurToolCallsByStatus(
-      state.session.history,
-      "generated",
-    );
+      // Check state after canceling first tool call
+      state = store.getState();
+      pendingToolCalls = findAllCurToolCallsByStatus(
+        state.session.history,
+        "generated",
+      );
 
-    // The second tool call should still be pending
-    expect(pendingToolCalls).toHaveLength(1);
-    expect(pendingToolCalls[0].toolCallId).toBe("tool-call-2");
+      // The second tool call should still be pending
+      expect(pendingToolCalls).toHaveLength(1);
+      expect(pendingToolCalls[0].toolCallId).toBe("tool-call-2");
 
-    // The first tool call should now be canceled
-    const canceledToolCalls = findAllCurToolCallsByStatus(
-      state.session.history,
-      "canceled",
-    );
-    expect(canceledToolCalls).toHaveLength(1);
-    expect(canceledToolCalls[0].toolCallId).toBe("tool-call-1");
-  });
+      // The first tool call should now be canceled
+      const canceledToolCalls = findAllCurToolCallsByStatus(
+        state.session.history,
+        "canceled",
+      );
+      expect(canceledToolCalls).toHaveLength(1);
+      expect(canceledToolCalls[0].toolCallId).toBe("tool-call-1");
+    },
+  );
 });

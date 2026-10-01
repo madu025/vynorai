@@ -24,6 +24,7 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
     apiBase: VYNORAI_API_BASE,
     apiKey,
     roles: ["chat", "edit", "apply", "subagent"],
+    template: "none" as any,
     defaultCompletionOptions: { contextLength: 200000, maxTokens: 8192 },
     capabilities: ["tool_use", "image_input"],
   },
@@ -34,6 +35,7 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
     apiBase: VYNORAI_API_BASE,
     apiKey,
     roles: ["chat", "edit"],
+    template: "none" as any,
     defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192 },
   },
   {
@@ -43,6 +45,7 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
     apiBase: VYNORAI_API_BASE,
     apiKey,
     roles: ["autocomplete"],
+    template: "none" as any,
     defaultCompletionOptions: { contextLength: 16000, maxTokens: 512 },
   },
 ];

@@ -33,6 +33,7 @@ class VynorAI extends OpenAI {
     // Best default: DeepSeek V3 via OpenRouter — cheapest with great code quality
     model: "deepseek/deepseek-chat-v3-0324:free",
     useLegacyCompletionsEndpoint: false,
+    template: "none" as any,
     promptTemplates: {
       edit: osModelsEditPrompt,
     },
@@ -42,6 +43,7 @@ class VynorAI extends OpenAI {
 
     super({
       ...options,
+      template: "none" as any,
       // Ensure the proxy URL always ends with /
       apiBase: (options.apiBase || VYNORAI_API_BASE).replace(/\/?$/, "/"),
       requestOptions: {

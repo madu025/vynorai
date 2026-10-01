@@ -84,10 +84,12 @@ export function invalidateModelCache(): void {
 
 // ─── Look up a single model by alias or full ID ──────────────────────────────
 export async function resolveModel(alias: string): Promise<ModelEntry | null> {
+  const { resolveModelId } = await import("../config.js");
+  const canonical = resolveModelId(alias);
   const models = await getAllModels();
   return (
-    models.find((m) => m.id === alias) ||
-    models.find((m) => m.openrouter_id === alias) ||
+    models.find((m) => m.id === alias || m.id === canonical) ||
+    models.find((m) => m.openrouter_id === alias || m.openrouter_id === canonical) ||
     null
   );
 }
@@ -108,13 +110,17 @@ export async function getDefaultAutocompleteModel(): Promise<string> {
 
 /** Check if plan can access model */
 export async function canPlanUseModel(planId: string, modelAlias: string): Promise<boolean> {
+  const { getPlan, resolveModelId } = await import("../config.js");
   const plan = getPlan(planId);
   if (plan.allowedModels.includes("*")) return true;
+  if (plan.allowedModels.includes(modelAlias)) return true;
+  const canonical = resolveModelId(modelAlias);
+  if (plan.allowedModels.includes(canonical)) return true;
 
-  const model = await resolveModel(modelAlias);
+  const model = (await resolveModel(modelAlias)) || (await resolveModel(canonical));
   if (!model) return false;
 
-  const planOrder = ["free", "starter", "pro", "ultra"];
+  const planOrder = ["free", "starter", "pro", "enterprise", "ultra"];
   const userIdx  = planOrder.indexOf(planId.replace(/_monthly|_yearly/, ""));
   const modelIdx = planOrder.indexOf(model.min_plan);
   return userIdx >= modelIdx;

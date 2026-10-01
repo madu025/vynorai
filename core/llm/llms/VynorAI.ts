@@ -21,7 +21,7 @@ import { streamSse } from "@continuedev/fetch";
 // Default to deployed cloud URL; fallback to local dev server
 const VYNORAI_API_BASE =
   process.env.VYNORAI_API_BASE ||
-  "https://api.vynorai.com/v1/";
+  "https://vynor.lk/v1/";
 
 class VynorAI extends OpenAI {
   static providerName = "vynorai";
@@ -86,8 +86,8 @@ class VynorAI extends OpenAI {
         if (errObj?.code === "monthly_limit_reached" || errObj?.type === "quota_exceeded") {
           const upgradePlan = errObj.upgradePlan;
           const upgradeMsg = upgradePlan
-            ? `\n\n⚡ **Upgrade to ${upgradePlan.displayName} Plan** (LKR ${upgradePlan.priceLKR.toLocaleString()}/mo) for **${(upgradePlan.monthlyTokens / 1_000_000).toFixed(0)}M tokens**: [👉 Click here to Upgrade](${errObj.upgradeUrl || "https://vynorai.com/pricing"})`
-            : `\n\n👉 Upgrade your plan at [vynorai.com/pricing](${errObj.upgradeUrl || "https://vynorai.com/pricing"})`;
+            ? `\n\n⚡ **Upgrade to ${upgradePlan.displayName} Plan** (LKR ${upgradePlan.priceLKR.toLocaleString()}/mo) for **${(upgradePlan.monthlyTokens / 1_000_000).toFixed(0)}M tokens**: [👉 Click here to Upgrade](${errObj.upgradeUrl || "https://vynor.lk/#pricing"})`
+            : `\n\n👉 Upgrade your plan at [vynor.lk/#pricing](${errObj.upgradeUrl || "https://vynor.lk/#pricing"})`;
 
           yield {
             role: "assistant",
@@ -99,7 +99,7 @@ class VynorAI extends OpenAI {
         if (errObj?.code === "model_locked" || errObj?.type === "plan_restriction") {
           yield {
             role: "assistant",
-            content: `🔒 **Model Locked (Upgrade Required)**\n\n${errObj.message || "This model requires an upgraded plan."}\n\n👉 [Click here to Upgrade Your Plan](${errObj.upgradeUrl || "https://vynorai.com/#pricing"}) to unlock this Thinking/Premium model.`,
+            content: `🔒 **Model Locked (Upgrade Required)**\n\n${errObj.message || "This model requires an upgraded plan."}\n\n👉 [Click here to Upgrade Your Plan](${errObj.upgradeUrl || "https://vynor.lk/#pricing"}) to unlock this Thinking/Premium model.`,
           };
           return;
         }

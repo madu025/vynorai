@@ -19,6 +19,24 @@ export interface SandboxedCommand {
 }
 
 /**
+ * Destructive patterns that could wipe host systems or exfiltrate private credentials
+ */
+const DESTRUCTIVE_PATTERNS = [
+  /\brm\s+-[rf]{1,2}\s+[\/\\]/i,                      // rm -rf /
+  /\bdel\s+\/[fq]\s+[a-z]:[\/\\]/i,                  // del /f C:\
+  /\brmdir\s+\/[sq]\s+[a-z]:[\/\\]/i,                // rmdir /s C:\
+  /\bformat\s+[a-z]:/i,                               // format C:
+  /\bmkfs\b/i,                                        // mkfs
+  /\bdd\s+if=/i,                                      // dd if=
+  /\b(shutdown|reboot|init\s+0)\b/i,                  // host shutdown
+  /\bcurl\b.*(?:\.ssh|\.aws|\.env|id_rsa)/i,          // credential exfiltration attempts
+];
+
+export function isDestructiveCommand(command: string): boolean {
+  return DESTRUCTIVE_PATTERNS.some((pat) => pat.test(command));
+}
+
+/**
  * Checks if a binary exists in PATH
  */
 function isBinaryAvailable(binary: string): boolean {
@@ -36,13 +54,18 @@ function isBinaryAvailable(binary: string): boolean {
  * Vynor Native Sandbox Engine (Zero-Docker, 10ms micro-sandboxing)
  * ---------------------------------------------------------------------------
  * Provides native OS-level boundary isolation:
- *   - Windows: Job Object & PowerShell directory containment
+ *   - Windows: Job Object & PowerShell directory containment via EncodedCommand
  *   - Linux: Bubblewrap (bwrap) unprivileged user namespace jail
  *   - macOS: Apple Seatbelt (sandbox-exec)
  */
 export function buildSandboxedCommand(options: SandboxExecutionOptions): SandboxedCommand {
   const { cwd, command, allowedWorkspaceDirs = [cwd] } = options;
   const platform = process.platform;
+
+  // Intercept destructive commands before they ever reach an OS shell
+  if (isDestructiveCommand(command)) {
+    throw new Error(`[Vynor Sandbox Guard] Destructive or out-of-bounds command intercepted and blocked: ${command}`);
+  }
 
   // ── 1. Linux: Bubblewrap unprivileged namespace jail ────────────────────────
   if (platform === "linux" && isBinaryAvailable("bwrap")) {
@@ -73,7 +96,6 @@ export function buildSandboxedCommand(options: SandboxExecutionOptions): Sandbox
 
   // ── 2. macOS: Apple Seatbelt sandbox-exec ───────────────────────────────────
   if (platform === "darwin" && isBinaryAvailable("sandbox-exec")) {
-    // Generate Seatbelt profile permitting reads everywhere, but writes only in workspace and /tmp
     const seatbeltProfile = `(version 1)
 (allow default)
 (deny file-write* (subpath "/System"))
@@ -95,23 +117,21 @@ export function buildSandboxedCommand(options: SandboxExecutionOptions): Sandbox
     };
   }
 
-  // ── 3. Windows: PowerShell constrained boundary jail ────────────────────────
+  // ── 3. Windows: PowerShell constrained boundary jail via Base64 EncodedCommand
   if (platform === "win32") {
-    // Wrap command in an isolated execution block that validates working directory
-    // and blocks attempts to escape or run destructive systemic commands
-    const normalizedCwd = path.resolve(cwd).replace(/\\/g, "\\\\");
-    const escapedCmd = command.replace(/"/g, '`"');
+    // Using UTF-16LE Base64 -EncodedCommand completely avoids string-escaping and interpolation bugs
+    const normalizedCwd = path.resolve(cwd);
+    const psScript = [
+      `$ProgressPreference = 'SilentlyContinue'`,
+      `Set-Location -LiteralPath '${normalizedCwd.replace(/'/g, "''")}'`,
+      `& { ${command} }`,
+    ].join("; ");
 
-    const psWrapper = [
-      `$ProgressPreference = 'SilentlyContinue';`,
-      `Set-Location -LiteralPath "${normalizedCwd}";`,
-      `$ExecutionContext.SessionState.LanguageMode = 'FullLanguage';`,
-      `& { ${escapedCmd} }`,
-    ].join(" ");
+    const encoded = Buffer.from(psScript, "utf16le").toString("base64");
 
     return {
       shell: "powershell.exe",
-      args: ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psWrapper],
+      args: ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
       env: {
         ...process.env,
         VYNOR_SANDBOX: "windows-restricted",

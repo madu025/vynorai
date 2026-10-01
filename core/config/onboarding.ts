@@ -8,7 +8,7 @@ export const LOCAL_ONBOARDING_CHAT_TITLE = "Llama 3.1 8B";
 export const LOCAL_ONBOARDING_EMBEDDINGS_MODEL = "nomic-embed-text:latest";
 export const LOCAL_ONBOARDING_EMBEDDINGS_TITLE = "Nomic Embed";
 
-const VYNORAI_API_BASE = "https://api.vynorai.com/v1/";
+const VYNORAI_API_BASE = "https://vynor.lk/v1/";
 
 type OnboardingModel = NonNullable<ConfigYaml["models"]>[number];
 

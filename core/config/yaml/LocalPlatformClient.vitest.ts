@@ -73,6 +73,20 @@ describe("LocalPlatformClient", () => {
     expect(resolvedFQSNs[0]?.found).toBeUndefined();
   });
 
+  test("prefers encrypted IDE secrets over env-file values", async () => {
+    const ideValue = "encrypted-ide-secret";
+    testIde.readSecrets = vi.fn(async () => ({
+      [testFQSN.secretName]: ideValue,
+    }));
+
+    const localPlatformClient = new LocalPlatformClient(testIde);
+    const [resolved] = await localPlatformClient.resolveFQSNs([testFQSN]);
+
+    expect(testIde.readSecrets).toHaveBeenCalledWith([testFQSN.secretName]);
+    expect((resolved as SecretResult & { value: string }).value).toBe(ideValue);
+    expect(resolved?.secretLocation.secretType).toBe(SecretType.User);
+  });
+
   describe("searches for secrets in local .env files", () => {
     let getContinueDotEnv: Mock;
     beforeEach(async () => {

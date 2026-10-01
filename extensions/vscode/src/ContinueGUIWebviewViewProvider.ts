@@ -7,6 +7,15 @@ import { VsCodeWebviewProtocol } from "./webviewProtocol";
 
 import type { FileEdit } from "core";
 
+function serializeForInlineScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 export class ContinueGUIWebviewViewProvider
   implements vscode.WebviewViewProvider
 {
@@ -98,7 +107,7 @@ export class ContinueGUIWebviewViewProvider
         vscode.Uri.joinPath(extensionUri, "gui"),
         vscode.Uri.joinPath(extensionUri, "assets"),
       ],
-      enableCommandUris: true,
+      enableCommandUris: false,
       portMapping: [
         {
           webviewPort: 65433,
@@ -108,6 +117,9 @@ export class ContinueGUIWebviewViewProvider
     };
 
     const nonce = getNonce();
+    const developmentCsp = inDevelopmentMode
+      ? " http://localhost:5173 ws://localhost:5173"
+      : "";
 
     const currentTheme = getTheme();
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -132,7 +144,8 @@ export class ContinueGUIWebviewViewProvider
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script>const vscode = acquireVsCodeApi();</script>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource} https: data:; font-src ${panel.webview.cspSource}; style-src ${panel.webview.cspSource} 'unsafe-inline'${developmentCsp}; script-src ${panel.webview.cspSource} 'nonce-${nonce}'${developmentCsp}; connect-src ${panel.webview.cspSource} https://vynor.lk${developmentCsp};">
+        <script nonce="${nonce}">const vscode = acquireVsCodeApi();</script>
         <link href="${styleMainUri}" rel="stylesheet">
 
         <title>VynorAI</title>
@@ -142,7 +155,7 @@ export class ContinueGUIWebviewViewProvider
 
         ${
           inDevelopmentMode
-            ? `<script type="module">
+            ? `<script type="module" nonce="${nonce}">
           import RefreshRuntime from "http://localhost:5173/@react-refresh"
           RefreshRuntime.injectIntoGlobalHook(window)
           window.$RefreshReg$ = () => {}
@@ -154,28 +167,28 @@ export class ContinueGUIWebviewViewProvider
 
         <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 
-        <script>localStorage.setItem("ide", '"vscode"')</script>
-        <script>localStorage.setItem("vsCodeUriScheme", '"${getvsCodeUriScheme()}"')</script>
-        <script>localStorage.setItem("extensionVersion", '"${getExtensionVersion()}"')</script>
-        <script>window.windowId = "${this.windowId}"</script>
-        <script>window.vscMachineId = "${getUniqueId()}"</script>
-        <script>window.vscMediaUrl = "${vscMediaUrl}"</script>
-        <script>window.ide = "vscode"</script>
-        <script>window.fullColorTheme = ${JSON.stringify(currentTheme)}</script>
-        <script>window.colorThemeName = "dark-plus"</script>
-        <script>window.workspacePaths = ${JSON.stringify(
+        <script nonce="${nonce}">localStorage.setItem("ide", '"vscode"')</script>
+        <script nonce="${nonce}">localStorage.setItem("vsCodeUriScheme", '"${getvsCodeUriScheme()}"')</script>
+        <script nonce="${nonce}">localStorage.setItem("extensionVersion", '"${getExtensionVersion()}"')</script>
+        <script nonce="${nonce}">window.windowId = ${serializeForInlineScript(this.windowId)}</script>
+        <script nonce="${nonce}">window.vscMachineId = ${serializeForInlineScript(getUniqueId())}</script>
+        <script nonce="${nonce}">window.vscMediaUrl = ${serializeForInlineScript(vscMediaUrl)}</script>
+        <script nonce="${nonce}">window.ide = "vscode"</script>
+        <script nonce="${nonce}">window.fullColorTheme = ${serializeForInlineScript(currentTheme)}</script>
+        <script nonce="${nonce}">window.colorThemeName = "dark-plus"</script>
+        <script nonce="${nonce}">window.workspacePaths = ${serializeForInlineScript(
           vscode.workspace.workspaceFolders?.map((folder) =>
             folder.uri.toString(),
           ) || [],
         )}</script>
-        <script>window.isFullScreen = ${isFullScreen}</script>
+        <script nonce="${nonce}">window.isFullScreen = ${isFullScreen}</script>
 
         ${
           edits
-            ? `<script>window.edits = ${JSON.stringify(edits)}</script>`
+            ? `<script nonce="${nonce}">window.edits = ${serializeForInlineScript(edits)}</script>`
             : ""
         }
-        ${page ? `<script>window.location.pathname = "${page}"</script>` : ""}
+        ${page ? `<script nonce="${nonce}">window.location.pathname = ${serializeForInlineScript(page)}</script>` : ""}
       </body>
     </html>`;
   }

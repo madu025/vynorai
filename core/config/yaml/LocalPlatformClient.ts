@@ -94,8 +94,27 @@ export class LocalPlatformClient implements PlatformClient {
 
     const results: (SecretResult | undefined)[] = [];
 
+    // Prefer the IDE's OS-backed/encrypted secret store. This keeps credentials
+    // out of config files, workspace .env files, and the extension-host process
+    // environment while still supporting `${{ secrets.NAME }}` references.
+    const ideSecrets = await this.ide.readSecrets(
+      fqsns.map((fqsn) => fqsn.secretName),
+    );
+
     for (let i = 0; i < fqsns.length; i++) {
-      let secretResult = await this.findSecretInEnvFiles(fqsns[i]);
+      const ideSecret = ideSecrets[fqsns[i].secretName];
+      let secretResult: SecretResult | undefined = ideSecret
+        ? {
+            found: true,
+            fqsn: fqsns[i],
+            value: ideSecret,
+            secretLocation: {
+              secretName: fqsns[i].secretName,
+              secretType: SecretType.User,
+              userSlug: "local-ide",
+            },
+          }
+        : await this.findSecretInEnvFiles(fqsns[i]);
 
       // If not found in .env files, try process.env
       if (!secretResult?.found) {

@@ -1,20 +1,42 @@
 import cors from "cors";
 import express from "express";
-import { http, https } from "follow-redirects";
+import { https } from "follow-redirects";
 
 const PROXY_PORT = 65433;
+const ALLOWED_PROXY_HOSTS = new Set(["vynor.lk"]);
+const VYNORAI_WEB_ORIGIN = "https://vynor.lk";
 const app = express();
-app.use(cors());
+app.use(cors({ origin: VYNORAI_WEB_ORIGIN }));
 
 app.use((req, res, next) => {
   // Proxy the request
   const { origin, host, ...headers } = req.headers;
-  const url = req.headers["x-continue-url"] as string;
-  const parsedUrl = new URL(url);
-  const protocolString = url.split("://")[0];
-  const protocol = protocolString === "https" ? https : http;
+  const url = req.headers["x-continue-url"];
+  if (typeof url !== "string") {
+    res.status(400).send("Missing proxy destination");
+    return;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    res.status(400).send("Invalid proxy destination");
+    return;
+  }
+
+  if (
+    parsedUrl.protocol !== "https:" ||
+    !ALLOWED_PROXY_HOSTS.has(parsedUrl.hostname.toLowerCase())
+  ) {
+    res.status(403).send("Proxy destination is not allowed");
+    return;
+  }
+
+  const protocol = https;
   const proxy = protocol.request(url, {
     method: req.method,
+    maxRedirects: 0,
     headers: {
       ...headers,
       host: parsedUrl.host,
@@ -63,7 +85,7 @@ app.use((req, res, next) => {
 // });
 
 export function startProxy() {
-  const server = app.listen(PROXY_PORT, () => {
+  const server = app.listen(PROXY_PORT, "127.0.0.1", () => {
     console.log(`Proxy server is running on port ${PROXY_PORT}`);
   });
   server.on("error", (e) => {

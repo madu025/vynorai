@@ -1,10 +1,29 @@
-import * as vscode from "vscode";
-import * as fs from "node:fs";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as http from "node:http";
+
 import { getConfigJsonPath, getConfigYamlPath } from "core/util/paths";
+import * as vscode from "vscode";
+import { isSeq, parseDocument } from "yaml";
+
+import { SecretStorage } from "../stubs/SecretStorage";
 
 export const VYNORAI_PROD_URL = "https://vynor.lk/v1";
 export const VYNORAI_WEB_URL = "https://vynor.lk";
+const VYNORAI_SECRET_NAME = "VYNORAI_API_KEY";
+const VYNORAI_SECRET_REF = `\${{ secrets.${VYNORAI_SECRET_NAME} }}`;
+
+function writeFileAtomically(filePath: string, content: string): void {
+  const temporaryPath = `${filePath}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, content, { encoding: "utf-8", mode: 0o600 });
+    fs.renameSync(temporaryPath, filePath);
+  } finally {
+    if (fs.existsSync(temporaryPath)) {
+      fs.unlinkSync(temporaryPath);
+    }
+  }
+}
 
 export interface VynorQuotaInfo {
   planId: string;
@@ -21,24 +40,57 @@ export interface VynorQuotaInfo {
 }
 
 /**
- * Updates the user's config.yaml and config.json to point to VynorAI Production Cloud
- * with their authenticated API key.
+ * Updates local config to reference the encrypted IDE secret. The credential
+ * itself never gets persisted in config.yaml/config.json.
  */
-export async function applyVynorConfig(apiKey: string, email: string): Promise<boolean> {
+export async function applyVynorConfig(): Promise<boolean> {
   let success = false;
 
   // 1. Update config.yaml if present
   try {
     const yamlPath = getConfigYamlPath();
     if (fs.existsSync(yamlPath)) {
-      let content = fs.readFileSync(yamlPath, "utf-8");
-      content = content.replace(/http:\/\/172\.255\.209\.243:3333\/v1\/?/g, `${VYNORAI_PROD_URL}/`);
-      if (/apiKey:\s*.*/.test(content)) {
-        content = content.replace(/apiKey:\s*["']?.*["']?/g, `apiKey: "${apiKey}"`);
-      } else {
-        content = content.replace(/provider:\s*vynorai/g, `provider: vynorai\n    apiKey: "${apiKey}"`);
+      const document = parseDocument(fs.readFileSync(yamlPath, "utf-8"));
+      if (document.errors.length > 0) {
+        throw new Error(document.errors.map((error) => error.message).join("; "));
       }
-      fs.writeFileSync(yamlPath, content, "utf-8");
+
+      if (!isSeq(document.get("models", true))) {
+        document.set("models", []);
+      }
+      const models = document.get("models", true);
+      if (!isSeq(models)) {
+        throw new Error("VynorAI config models must be a YAML sequence");
+      }
+
+      let foundVynorModel = false;
+      models.items.forEach((item, index) => {
+        const model = (item as { toJSON?: () => unknown } | null)?.toJSON?.() as
+          | Record<string, unknown>
+          | undefined;
+        if (
+          model?.provider === "vynorai" ||
+          (typeof model?.apiBase === "string" && model.apiBase.includes("vynor.lk"))
+        ) {
+          foundVynorModel = true;
+          document.setIn(["models", index, "provider"], "vynorai");
+          document.setIn(["models", index, "apiBase"], `${VYNORAI_PROD_URL}/`);
+          document.setIn(["models", index, "apiKey"], VYNORAI_SECRET_REF);
+        }
+      });
+
+      if (!foundVynorModel) {
+        models.add({
+          name: "VynorAI Coder",
+          provider: "vynorai",
+          model: "deepseek/deepseek-chat-v3-0324",
+          apiBase: `${VYNORAI_PROD_URL}/`,
+          apiKey: VYNORAI_SECRET_REF,
+          roles: ["chat", "edit", "apply"],
+        });
+      }
+
+      writeFileAtomically(yamlPath, document.toString());
       success = true;
     }
   } catch (err) {
@@ -68,10 +120,10 @@ export async function applyVynorConfig(apiKey: string, email: string): Promise<b
 
     const vynorModelConfig = {
       title: "VynorAI Coder",
-      provider: "openai",
-      model: "deepseek-coder",
+      provider: "vynorai",
+      model: "deepseek/deepseek-chat-v3-0324",
       apiBase: VYNORAI_PROD_URL,
-      apiKey: apiKey,
+      apiKey: VYNORAI_SECRET_REF,
     };
 
     if (vynorModelIndex >= 0) {
@@ -83,13 +135,13 @@ export async function applyVynorConfig(apiKey: string, email: string): Promise<b
     // Configure tab autocomplete
     config.tabAutocompleteModel = {
       title: "VynorAI Autocomplete",
-      provider: "openai",
-      model: "deepseek-coder",
+      provider: "vynorai",
+      model: "deepseek/deepseek-coder-v2",
       apiBase: VYNORAI_PROD_URL,
-      apiKey: apiKey,
+      apiKey: VYNORAI_SECRET_REF,
     };
 
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+    writeFileAtomically(configPath, JSON.stringify(config, null, 2));
     success = true;
   } catch (err) {
     console.error("[VynorAuth] Failed updating config.json:", err);
@@ -136,12 +188,10 @@ export async function fetchVynorQuota(apiKey: string): Promise<VynorQuotaInfo | 
   }
 }
 
-import * as http from "node:http";
-
 let loopbackServer: http.Server | null = null;
 const LOOPBACK_PORT = 41403;
 const AUTH_STATE_TTL_MS = 5 * 60_000;
-const API_KEY_SECRET = "vynorai_api_key";
+const LEGACY_API_KEY_SECRET = "vynorai_api_key";
 const JWT_SECRET = "vynorai_jwt_token";
 let pendingAuthState: { value: string; expiresAt: number } | null = null;
 
@@ -158,7 +208,7 @@ function startLoopbackServer(
         res.setHeader("Access-Control-Allow-Origin", origin);
         res.setHeader("Vary", "Origin");
       }
-      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
       res.setHeader("Cache-Control", "no-store");
 
@@ -170,11 +220,25 @@ function startLoopbackServer(
 
       try {
         const reqUrl = new URL(req.url || "/", `http://127.0.0.1:${LOOPBACK_PORT}`);
-        if (reqUrl.pathname === "/auth") {
-          const apiKey = reqUrl.searchParams.get("apiKey");
-          const email = reqUrl.searchParams.get("email") || "Developer";
-          const token = reqUrl.searchParams.get("token") || undefined;
-          const state = reqUrl.searchParams.get("state");
+        if (reqUrl.pathname === "/auth" && req.method === "POST") {
+          const chunks: Buffer[] = [];
+          let totalBytes = 0;
+          for await (const chunk of req) {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            totalBytes += buffer.length;
+            if (totalBytes > 8_192) {
+              throw new Error("Authentication payload is too large");
+            }
+            chunks.push(buffer);
+          }
+          const payload = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as {
+            apiKey?: unknown;
+            email?: unknown;
+            state?: unknown;
+          };
+          const apiKey = typeof payload.apiKey === "string" ? payload.apiKey : null;
+          const email = typeof payload.email === "string" ? payload.email : "Developer";
+          const state = typeof payload.state === "string" ? payload.state : null;
 
           const stateIsValid = Boolean(
             state &&
@@ -187,7 +251,7 @@ function startLoopbackServer(
 
           if (origin === VYNORAI_WEB_URL && stateIsValid && keyIsValid && apiKey) {
             pendingAuthState = null; // one-time, replay-resistant handshake
-            await onAuthSuccess(apiKey, email, token);
+            await onAuthSuccess(apiKey, email);
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ success: true, message: "Connected to IDE successfully!" }));
             return;
@@ -226,7 +290,9 @@ export async function handleSuccessfulAuthentication(
   token?: string,
   refreshQuotaStatus?: () => void
 ) {
-  await context.secrets.store(API_KEY_SECRET, apiKey);
+  const secretStorage = new SecretStorage(context);
+  await secretStorage.store(VYNORAI_SECRET_NAME, apiKey);
+  await context.secrets.delete(LEGACY_API_KEY_SECRET);
   await context.globalState.update("vynorai_api_key", undefined);
   if (token) {
     await context.secrets.store(JWT_SECRET, token);
@@ -234,7 +300,7 @@ export async function handleSuccessfulAuthentication(
   }
   if (email) await context.globalState.update("vynorai_user_email", email);
 
-  await applyVynorConfig(apiKey, email);
+  await applyVynorConfig();
 
   try {
     await vscode.commands.executeCommand("continue.reloadConfig");
@@ -255,6 +321,7 @@ export async function handleSuccessfulAuthentication(
  * Setup VynorAI Browser-based OAuth confirmation URI handler & status bar
  */
 export function setupVynorAuth(context: vscode.ExtensionContext) {
+  const secretStorage = new SecretStorage(context);
   // 1. Register Status Bar item for Token Remaining progress
   const statusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
@@ -268,13 +335,18 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
 
   // Update status bar with live quota
   const refreshQuotaStatus = async () => {
-    let savedKey = (await context.secrets.get(API_KEY_SECRET)) || "";
+    let savedKey = (await secretStorage.get(VYNORAI_SECRET_NAME)) || "";
     // One-time migration from older extension releases.
     if (!savedKey) {
-      savedKey = (context.globalState.get("vynorai_api_key") as string) || "";
+      savedKey =
+        (await context.secrets.get(LEGACY_API_KEY_SECRET)) ||
+        (context.globalState.get("vynorai_api_key") as string) ||
+        "";
       if (savedKey) {
-        await context.secrets.store(API_KEY_SECRET, savedKey);
+        await secretStorage.store(VYNORAI_SECRET_NAME, savedKey);
+        await context.secrets.delete(LEGACY_API_KEY_SECRET);
         await context.globalState.update("vynorai_api_key", undefined);
+        await applyVynorConfig();
       }
     }
     if (!savedKey) {
@@ -299,7 +371,7 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
     }
   };
 
-  refreshQuotaStatus();
+  void refreshQuotaStatus();
   // Poll every 5 minutes
   const timer = setInterval(refreshQuotaStatus, 300_000);
   context.subscriptions.push({ dispose: () => clearInterval(timer) });
@@ -363,8 +435,11 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
         placeHolder: "vynor_live_...",
         ignoreFocusOut: true,
       });
-      if (key?.trim()) {
-        await handleSuccessfulAuthentication(context, key.trim(), "Developer", undefined, refreshQuotaStatus);
+      const normalizedKey = key?.trim();
+      if (normalizedKey && /^vynor_live_[a-f0-9]{32}$/i.test(normalizedKey)) {
+        await handleSuccessfulAuthentication(context, normalizedKey, "Developer", undefined, refreshQuotaStatus);
+      } else if (normalizedKey) {
+        void vscode.window.showErrorMessage("Invalid VynorAI API key format.");
       }
     })
   );

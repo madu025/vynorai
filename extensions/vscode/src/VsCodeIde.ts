@@ -246,7 +246,7 @@ class VsCodeIde implements IDE {
     const continueEnabled: boolean =
       (await vscode.workspace
         .getConfiguration(EXTENSION_NAME)
-        .get("telemetryEnabled")) ?? true;
+        .get("telemetryEnabled")) ?? false;
     return globalEnabled && continueEnabled;
   }
 

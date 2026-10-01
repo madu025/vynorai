@@ -136,7 +136,7 @@ function loadSerializedConfig(
   }
 
   if (config.allowAnonymousTelemetry === undefined) {
-    config.allowAnonymousTelemetry = true;
+    config.allowAnonymousTelemetry = false;
   }
 
   if (ideSettings.remoteConfigServerUrl) {

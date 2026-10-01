@@ -179,7 +179,7 @@ export class ContinueConsoleWebviewViewProvider
         vscode.Uri.joinPath(extensionUri, "gui"),
         vscode.Uri.joinPath(extensionUri, "assets"),
       ],
-      enableCommandUris: true,
+      enableCommandUris: false,
       portMapping: [
         {
           webviewPort: 65433,
@@ -189,23 +189,27 @@ export class ContinueConsoleWebviewViewProvider
     };
 
     const nonce = getNonce();
+    const developmentCsp = inDevelopmentMode
+      ? " http://localhost:5173 ws://localhost:5173"
+      : "";
 
     return `<!DOCTYPE html>
     <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script>const vscode = acquireVsCodeApi();</script>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource} https: data:; font-src ${panel.webview.cspSource}; style-src ${panel.webview.cspSource} 'unsafe-inline'${developmentCsp}; script-src ${panel.webview.cspSource} 'nonce-${nonce}'${developmentCsp}; connect-src ${panel.webview.cspSource} https://vynor.lk${developmentCsp};">
+        <script nonce="${nonce}">const vscode = acquireVsCodeApi();</script>
         <link href="${styleMainUri}" rel="stylesheet">
 
-        <title>Continue</title>
+        <title>VynorAI Console</title>
       </head>
       <body>
         <div id="root"></div>
 
         ${
           inDevelopmentMode
-            ? `<script type="module">
+            ? `<script type="module" nonce="${nonce}">
           import RefreshRuntime from "http://localhost:5173/@react-refresh"
           RefreshRuntime.injectIntoGlobalHook(window)
           window.$RefreshReg$ = () => {}

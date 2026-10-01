@@ -230,21 +230,21 @@
 
         var urlParams = new URLSearchParams(window.location.search);
         var source = urlParams.get('source');
-        var callbackUrl = urlParams.get('callback');
+        var callbackUrl = getValidatedIdeCallback(urlParams);
         var apiKey = (data.user && data.user.apiKey) || data.apiKey || '';
 
         var ideParam = urlParams.get('ide') || '';
-        var schemeParam = urlParams.get('scheme') || '';
+        var schemeParam = getValidatedIdeScheme(urlParams.get('scheme'));
 
         // Handle IDE browser authentication confirmation (Antigravity / Cursor / VS Code)
         if (source === 'vscode' || callbackUrl) {
-          var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : 'vscode');
+          var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : (ideParam.toLowerCase().includes('cursor') ? 'cursor' : 'vscode'));
           var targetBase = callbackUrl || (defaultScheme + '://vynorai.vynorai/auth');
           var redirectUri = targetBase + (targetBase.includes('?') ? '&' : '?') +
             'apiKey=' + encodeURIComponent(apiKey) +
-            '&token=' + encodeURIComponent(data.token) +
             '&email=' + encodeURIComponent(email) +
-            '&name=' + encodeURIComponent((data.user && data.user.name) || name || '');
+            '&name=' + encodeURIComponent((data.user && data.user.name) || name || '') +
+            '&state=' + encodeURIComponent(urlParams.get('state') || '');
 
           showVsCodeAuthCard(redirectUri, apiKey, email);
           return;
@@ -276,14 +276,19 @@
       var loopbackConnected = false;
 
       // 1. Ephemeral Localhost Handshake (Direct to IDE background server)
-      fetch('http://127.0.0.1:41403/auth?apiKey=' + encodeURIComponent(apiKey) + '&email=' + encodeURIComponent(email) + '&state=' + encodeURIComponent(authState), { cache: 'no-store' })
+      fetch('http://127.0.0.1:41403/auth', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey, email: email, state: authState })
+      })
         .then(function(res) {
           if (res.ok) {
             loopbackConnected = true;
             var statusEl = document.getElementById('handshake-status');
             if (statusEl) {
               statusEl.style.display = 'block';
-              statusEl.innerHTML = '✨ <strong>' + ideName + ' Connected!</strong> The extension is now active.';
+              statusEl.innerHTML = '✨ <strong>' + escapeHtml(ideName) + ' Connected!</strong> The extension is now active.';
             }
           }
         })
@@ -293,13 +298,13 @@
 
       card.innerHTML = `
         <div class="success-icon" style="font-size: 54px; margin-bottom: 12px;">🚀</div>
-        <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Authorized for ${ideName}!</h2>
+        <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">Authorized for ${escapeHtml(ideName)}!</h2>
         <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">
-          Opening <strong>${ideName}</strong> to activate your VynorAI Coding Assistant & Autopilot...
+          Opening <strong>${escapeHtml(ideName)}</strong> to activate your VynorAI Coding Assistant & Autopilot...
         </p>
         <div id="handshake-status" style="display:none; padding:8px 12px; margin-bottom:14px; background:rgba(0,229,255,0.12); border:1px solid rgba(0,229,255,0.3); border-radius:8px; font-size:13px; color:#00e5ff;"></div>
         <a href="${redirectUri}" class="submit-btn" style="text-decoration:none; margin-bottom: 14px; display:flex; justify-content:center; align-items:center; gap:8px;">
-          ⚡ Open in ${ideName}
+          ⚡ Open in ${escapeHtml(ideName)}
         </a>
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">
           If your IDE didn't open automatically, your API Key is ready to paste:
@@ -307,7 +312,7 @@
         <div class="token-display" id="token-display" style="margin-bottom: 12px; word-break:break-all;">${apiKey}</div>
         <button type="button" class="copy-token-btn" onclick="copyToken()">📋 Copy API Key</button>
         <p style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">
-          Connected as <strong>${email}</strong>. You can safely return to your IDE.
+          Connected as <strong>${escapeHtml(email)}</strong>. You can safely return to your IDE.
         </p>
       `;
 
@@ -323,19 +328,18 @@
       try {
         var urlParams = new URLSearchParams(window.location.search);
         var source = urlParams.get('source');
-        var callbackUrl = urlParams.get('callback');
+        var callbackUrl = getValidatedIdeCallback(urlParams);
         var res = await fetch(API + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
         if (res.status === 401) { localStorage.removeItem('vynorai_token'); localStorage.removeItem('vynor_jwt'); return; }
         if (res.ok) {
           var meData = await res.json();
           var ideParam = urlParams.get('ide') || '';
-          var schemeParam = urlParams.get('scheme') || '';
+          var schemeParam = getValidatedIdeScheme(urlParams.get('scheme'));
           if (source === 'vscode' || callbackUrl) {
-            var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : 'vscode');
+            var defaultScheme = schemeParam || (ideParam.toLowerCase().includes('antigravity') ? 'antigravity' : (ideParam.toLowerCase().includes('cursor') ? 'cursor' : 'vscode'));
             var targetBase = callbackUrl || (defaultScheme + '://vynorai.vynorai/auth');
             var redirectUri = targetBase + (targetBase.includes('?') ? '&' : '?') +
               'apiKey=' + encodeURIComponent(meData.user.apiKey) +
-              '&token=' + encodeURIComponent(token) +
               '&email=' + encodeURIComponent(meData.user.email) +
               '&name=' + encodeURIComponent(meData.user.name || '') +
               '&state=' + encodeURIComponent(urlParams.get('state') || '');
@@ -345,6 +349,27 @@
           window.location.href = '/';
         }
       } catch(_) { /* keep token during temporary network glitches */ }
+    }
+    function getValidatedIdeScheme(value) {
+      return ['vscode', 'vscode-insiders', 'cursor', 'antigravity'].includes(value || '') ? value : '';
+    }
+    function getValidatedIdeCallback(params) {
+      var callback = params.get('callback');
+      if (!callback) return '';
+      try {
+        var parsed = new URL(callback);
+        var scheme = parsed.protocol.replace(':', '');
+        if (!getValidatedIdeScheme(scheme)) return '';
+        if (parsed.hostname !== 'vynorai.vynorai' || parsed.pathname !== '/auth') return '';
+        return parsed.toString();
+      } catch (_) {
+        return '';
+      }
+    }
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, function(char) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+      });
     }
     function copyToken() {
       var token = document.getElementById('token-display').textContent;

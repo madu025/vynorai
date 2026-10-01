@@ -2,7 +2,7 @@
   "name": "vynorai",
   "icon": "media/icon.png",
   "author": "VynorAI",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/vynorai/vynorai"
@@ -11,11 +11,17 @@
     "ui",
     "workspace"
   ],
-  "bugs": {
-    "url": "https://vynorai.com/support"
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "VynorAI requires Workspace Trust before it can read, index, edit, or run tools against project files."
+    }
   },
-  "homepage": "https://vynorai.com",
-  "qna": "https://vynorai.com/support",
+  "bugs": {
+    "url": "https://vynor.lk/support"
+  },
+  "homepage": "https://vynor.lk",
+  "qna": "https://vynor.lk/support",
   "license": "Apache-2.0",
   "displayName": "VynorAI - AI Code Assistant",
   "pricing": "Free",
@@ -87,8 +93,8 @@
       "properties": {
         "continue.telemetryEnabled": {
           "type": "boolean",
-          "default": true,
-          "markdownDescription": "Continue collects anonymous usage data, cleaned of PII, to help us improve the product for our users. Read more  at [continue.dev › Telemetry](https://docs.continue.dev/telemetry).",
+          "default": false,
+          "markdownDescription": "Allow VynorAI to collect anonymous product telemetry. Prompt text, source code, API keys, and file contents are excluded.",
           "markdownDeprecationMessage": "This setting is deprecated and will be removed in a later version. Please use the _Telemetry > Allow Anonymous Telemetry_ setting in the extension's User Settings page.",
           "deprecationMessage": "Please use the _Telemetry > Allow Anonymous Telemetry_ setting in the extension's User Settings page."
         },
@@ -646,7 +652,7 @@
   },
   "scripts": {
     "esbuild-base": "node scripts/esbuild.js",
-    "vscode:prepublish": "echo prepublish done",
+    "vscode:prepublish": "npm run tsc:check && npm test && npm run esbuild",
     "esbuild": "npm run esbuild-base -- --sourcemap",
     "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "esbuild-notify": "npm run esbuild-base -- --sourcemap --notify",
@@ -765,6 +771,7 @@
     "vscode-languageclient": "^8.0.2",
     "vynorai": "file:",
     "ws": "^8.19.0",
+    "yaml": "^2.6.0",
     "yarn": "^1.22.21"
   },
   "overrides": {

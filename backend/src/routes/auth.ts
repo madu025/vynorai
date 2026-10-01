@@ -20,7 +20,7 @@ const getClientIp = (req: Request) =>
   (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Middleware to authenticate JWT
+// Middleware to authenticate JWT or API Key
 export async function requireAuth(
   req: Request,
   res: Response,
@@ -32,6 +32,34 @@ export async function requireAuth(
   }
 
   const token = authHeader.slice("Bearer ".length).trim();
+
+  // 1. Support direct API Key authentication (vynor_live_...) for IDE extensions & QuotaBar
+  if (token.startsWith("vynor_live_")) {
+    try {
+      const keyHash = sha256(token);
+      const user = await dbGet<any>(
+        "SELECT id, email, name, api_key, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE api_key_hash = ? OR api_key = ?",
+        [keyHash, token],
+      );
+      if (!user) {
+        return res.status(401).json({ error: "Invalid API key" });
+      }
+      if (user.is_suspended === 1) {
+        return res
+          .status(403)
+          .json({
+            error:
+              "Your account has been suspended for security violations. Contact security@vynor.lk",
+          });
+      }
+      (req as any).user = user;
+      return next();
+    } catch (err) {
+      return res.status(500).json({ error: "Authentication check failed" });
+    }
+  }
+
+  // 2. Support JWT Bearer token authentication
   try {
     const payload = jwt.verify(token, config.jwtSecret) as {
       userId: string;

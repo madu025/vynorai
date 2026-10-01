@@ -278,11 +278,44 @@ export function VynorQuotaBar() {
     fetchQuota();
     // Auto-refresh quota every 3 minutes
     const interval = setInterval(fetchQuota, 180_000);
-    return () => clearInterval(interval);
+    const handleStorage = () => fetchQuota();
+    const handleMsg = (e: MessageEvent) => {
+      if (
+        e.data?.type === "vynorAuthSuccess" ||
+        e.data?.messageType === "vynorAuthSuccess" ||
+        e.data?.type === "configUpdate"
+      ) {
+        fetchQuota();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("message", handleMsg);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("message", handleMsg);
+    };
   }, [fetchQuota]);
 
-  const handleBrowserLogin = () => {
-    const loginUrl = `${VYNOR_API_URL}/login?source=vscode&callback=vscode://vynorai.vynorai/auth`;
+  const handleBrowserLogin = async () => {
+    let ideName = "VS Code";
+    let scheme = "vscode";
+    try {
+      if (ideMessenger?.ide?.getIdeInfo) {
+        const info = await ideMessenger.ide.getIdeInfo();
+        if (info?.name) ideName = info.name;
+        const lower = (info?.name || "").toLowerCase();
+        if (lower.includes("antigravity")) {
+          scheme = "antigravity";
+        } else if (lower.includes("cursor")) {
+          scheme = "cursor";
+        } else if (lower.includes("windsurf")) {
+          scheme = "windsurf";
+        }
+      }
+    } catch (_) {}
+
+    const loginUrl = `${VYNOR_API_URL}/login?source=vscode&ide=${encodeURIComponent(ideName)}&scheme=${scheme}&callback=${scheme}://vynorai.vynorai/auth`;
     if (ideMessenger?.post) {
       ideMessenger.post("openUrl", loginUrl);
     } else {

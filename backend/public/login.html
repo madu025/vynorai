@@ -157,7 +157,7 @@
         <div class="switch-link" id="switch-link">Don't have an account? <a onclick="switchTab('register')">Create one free</a></div>
         <div class="terms-note">By continuing you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</div>
       </div>
-      <!-- success-card hidden — redirect to dashboard instead -->
+      <div class="auth-card success-view" id="success-card" style="display:none;"></div>
       <div class="rp-footer"><a href="/">Back to homepage</a> | <a href="/admin">Admin Portal</a></div>
     </main>
   </div>
@@ -256,8 +256,18 @@
       finally { setLoading(false); }
     }
     function showVsCodeAuthCard(redirectUri, apiKey, email) {
-      document.getElementById('auth-card').style.display = 'none';
+      var authCard = document.getElementById('auth-card');
+      if (authCard) authCard.style.display = 'none';
+
       var card = document.getElementById('success-card');
+      if (!card) {
+        card = document.createElement('div');
+        card.id = 'success-card';
+        card.className = 'auth-card success-view';
+        var mainEl = document.querySelector('.right-panel') || document.body;
+        mainEl.appendChild(card);
+      }
+      card.style.display = 'block';
       card.classList.add('show');
 
       var urlParams = new URLSearchParams(window.location.search);
@@ -274,8 +284,8 @@
             }
           }
         })
-        .catch(function() {
-          // Local server optional; deep-link handles standard flow
+        .catch(function(err) {
+          console.log('[VynorAuth] Localhost loopback handshake note:', err);
         });
 
       card.innerHTML = `

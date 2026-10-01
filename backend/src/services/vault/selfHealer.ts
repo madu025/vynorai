@@ -165,6 +165,14 @@ export function healTemplateForContext(
       suggestedEnv[envKey] = "postgresql://user:password@localhost:5432/app_db";
     } else if (envKey === "CELERY_BROKER_URL") {
       suggestedEnv[envKey] = "redis://localhost:6379/0";
+    } else if (envKey === "PAYMENTS_PROVIDER") {
+      suggestedEnv[envKey] = "stripe"; // or "lemonsqueezy" / "polar"
+    } else if (envKey === "STRIPE_API_KEY") {
+      suggestedEnv[envKey] = "sk_test_51P...";
+    } else if (envKey === "LEMONSQUEEZY_API_KEY") {
+      suggestedEnv[envKey] = "eyJhbGciOi...";
+    } else if (envKey === "POLAR_ACCESS_TOKEN") {
+      suggestedEnv[envKey] = "polar_at_...";
     } else if (envKey.includes("SECRET") || envKey.includes("KEY")) {
       suggestedEnv[envKey] = "your_secure_random_key_here";
     } else if (envKey.includes("URL")) {

@@ -131,9 +131,9 @@ proxyRouter.post(
 
       await handleChatCompletions(user, sanitized, res);
     } catch (err: any) {
-      console.error("[VynorAI] Proxy error:", err.message);
+      console.error("[VynorAI] Proxy error:", err);
       if (!res.headersSent)
-        res.status(500).json({ error: { message: "Internal proxy error: " + err.message } });
+        res.status(500).json({ error: { message: "Internal proxy error. Please try again later." } });
     }
   }
 );
@@ -149,9 +149,9 @@ proxyRouter.post(
       const user = (req as any).user;
       await handleFimAutocomplete(user, req.body, res);
     } catch (err: any) {
-      console.error("[VynorAI] FIM Autocomplete error:", err.message);
+      console.error("[VynorAI] FIM Autocomplete error:", err);
       if (!res.headersSent)
-        res.status(500).json({ error: { message: "FIM Autocomplete error: " + err.message } });
+        res.status(500).json({ error: { message: "Autocomplete service temporarily unavailable." } });
     }
   }
 );
@@ -167,9 +167,9 @@ proxyRouter.post(
       const user = (req as any).user;
       await handleQuickFix(user, req.body, res);
     } catch (err: any) {
-      console.error("[VynorAI] QuickFix error:", err.message);
+      console.error("[VynorAI] QuickFix error:", err);
       if (!res.headersSent)
-        res.status(500).json({ error: { message: "QuickFix error: " + err.message } });
+        res.status(500).json({ error: { message: "Quick-fix service temporarily unavailable." } });
     }
   }
 );
@@ -236,7 +236,8 @@ proxyRouter.post("/project/index", requireValidSubscriber, async (req: Request, 
       updatedAt: pMap.updatedAt,
     });
   } catch (err: any) {
-    res.status(500).json({ error: { message: "Project indexing failed: " + err.message } });
+    console.error("[VynorAI] Project indexing error:", err);
+    res.status(500).json({ error: { message: "Project indexing failed. Please verify file paths and try again." } });
   }
 });
 
@@ -293,7 +294,8 @@ proxyRouter.get("/security/merkle-verify", requireValidSubscriber, async (req: R
       status: isValid ? "CRYPTOGRAPHICALLY_VERIFIED_TAMPER_PROOF" : "CHAIN_INTEGRITY_COMPROMISED",
     });
   } catch (err: any) {
-    res.status(500).json({ error: { message: "Merkle verification error: " + err.message } });
+    console.error("[VynorAI] Merkle verification error:", err);
+    res.status(500).json({ error: { message: "Audit chain verification failed." } });
   }
 });
 

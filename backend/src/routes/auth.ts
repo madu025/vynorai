@@ -401,6 +401,38 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
     const savingPct = totalAttempted > 0 ? Math.round((tokensSaved / totalAttempted) * 100) : 0;
     const estimatedLkrSaved = Math.round((tokensSaved / 1_000_000) * 220);
 
+    const recentLogs = await dbAll<any>(
+      `SELECT id, model, input_tokens, output_tokens, tokens_used, cached, created_at 
+       FROM usage_logs 
+       WHERE user_id = ? 
+       ORDER BY created_at DESC 
+       LIMIT 15`,
+      [user.id],
+    );
+
+    const recentActivity = (recentLogs || []).map((log: any) => {
+      const isFree = log.cached === 1;
+      let actionName = "Code Generation & Edit";
+      const m = (log.model || "").toLowerCase();
+      if (m.includes("coder") || m.includes("fim") || m.includes("autocomplete") || (isFree && (log.output_tokens || 0) < 60)) {
+        actionName = "Instant Tab Autocomplete (FIM)";
+      } else if (m.includes("r1") || m.includes("reasoning") || (log.tokens_used || 0) > 1500) {
+        actionName = "Deep Reasoning & Architecture";
+      } else if (m.includes("chat") || m.includes("sonnet") || m.includes("gemini")) {
+        actionName = "Interactive Codebase Chat";
+      }
+
+      return {
+        id: log.id,
+        actionName,
+        model: log.model,
+        tokensUsed: isFree ? 0 : (log.tokens_used || (log.input_tokens + log.output_tokens) || 0),
+        tokensSaved: isFree ? ((log.input_tokens || 0) + (log.output_tokens || 0) || log.tokens_used || 250) : 0,
+        isFree,
+        createdAt: log.created_at,
+      };
+    });
+
     res.json({
       user: {
         id: user.id,
@@ -426,6 +458,7 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
       },
       modelUsage: modelUsage || [],
       dailyUsage: dailyUsage || [],
+      recentActivity: recentActivity || [],
     });
   } catch (err: any) {
     console.error("Profile error:", err);

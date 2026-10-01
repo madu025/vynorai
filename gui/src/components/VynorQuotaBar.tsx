@@ -15,6 +15,9 @@ interface QuotaState {
   periodEnd: string;
   isLoggedIn: boolean;
   email: string;
+  tokensSaved?: number;
+  savingPercentage?: number;
+  estimatedLkrSaved?: number;
 }
 
 const BarContainer = styled.div`
@@ -108,6 +111,18 @@ const ProgressFill = styled.div<{ $percent: number; $isWarning: boolean }>`
   box-shadow: 0 0 8px
     ${(props) =>
       props.$isWarning ? "rgba(255, 82, 82, 0.5)" : "rgba(0, 229, 255, 0.4)"};
+`;
+
+const SavingsRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 5px;
+  padding: 3px 7px;
+  background: rgba(0, 230, 118, 0.08);
+  border: 1px solid rgba(0, 230, 118, 0.2);
+  border-radius: 6px;
+  font-size: 10px;
 `;
 
 const FooterRow = styled.div`
@@ -247,6 +262,7 @@ export function VynorQuotaBar() {
 
       const data = await res.json();
       const monthly = data.monthlyUsage || {};
+      const slm = data.slmSavings || {};
       const max = monthly.max_tokens || 100_000;
       const used = monthly.used_tokens || 0;
       const remaining = Math.max(0, max - used);
@@ -261,6 +277,9 @@ export function VynorQuotaBar() {
         periodEnd: monthly.period_end || "",
         isLoggedIn: true,
         email: data.user?.email || "",
+        tokensSaved: slm.tokensSaved || 0,
+        savingPercentage: slm.savingPercentage || 0,
+        estimatedLkrSaved: slm.estimatedLkrSaved || 0,
       };
 
       setQuota(newQuota);
@@ -367,6 +386,19 @@ export function VynorQuotaBar() {
       <ProgressTrack>
         <ProgressFill $percent={quota.percentageUsed} $isWarning={isWarning} />
       </ProgressTrack>
+
+      <SavingsRow>
+        <span style={{ color: "#00e676", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
+          ✨ {(quota.tokensSaved || 0) > 0
+            ? `Saved +${(quota.tokensSaved || 0).toLocaleString()} tokens`
+            : "0-Token SLM Shield Active"}
+        </span>
+        <span style={{ color: "#a0aec0" }}>
+          {(quota.tokensSaved || 0) > 0
+            ? `${quota.savingPercentage}% free`
+            : `Real used: ${quota.usedTokens.toLocaleString()}`}
+        </span>
+      </SavingsRow>
 
       <FooterRow>
         <span>

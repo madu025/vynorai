@@ -14,6 +14,9 @@ export interface VynorQuotaInfo {
   percentageUsed: number;
   periodEnd: string;
   email: string;
+  tokensSaved?: number;
+  savingPercentage?: number;
+  estimatedLkrSaved?: number;
 }
 
 /**
@@ -108,6 +111,7 @@ export async function fetchVynorQuota(apiKey: string): Promise<VynorQuotaInfo | 
     if (!res.ok) return null;
     const data = (await res.json()) as any;
     const monthly = data.monthlyUsage || {};
+    const slm = data.slmSavings || {};
     const maxTokens = monthly.max_tokens || 100_000;
     const usedTokens = monthly.used_tokens || 0;
     const remaining = Math.max(0, maxTokens - usedTokens);
@@ -122,6 +126,9 @@ export async function fetchVynorQuota(apiKey: string): Promise<VynorQuotaInfo | 
       percentageUsed: percentage,
       periodEnd: monthly.period_end || "",
       email: data.user?.email || "",
+      tokensSaved: slm.tokensSaved || 0,
+      savingPercentage: slm.savingPercentage || 0,
+      estimatedLkrSaved: slm.estimatedLkrSaved || 0,
     };
   } catch (err) {
     return null;
@@ -247,8 +254,14 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
     const quota = await fetchVynorQuota(savedKey);
     if (quota) {
       const remainingK = Math.round(quota.remainingTokens / 1000);
-      statusBar.text = `$(sparkle) VynorAI: ${remainingK}k tokens left`;
-      statusBar.tooltip = `Plan: ${quota.planName} | Used: ${quota.usedTokens.toLocaleString()} / ${quota.monthlyTokens.toLocaleString()} tokens (${100 - quota.percentageUsed}% remaining)`;
+      const savedK = quota.tokensSaved && quota.tokensSaved > 0 ? ` (+${Math.round(quota.tokensSaved / 1000)}k saved)` : "";
+      statusBar.text = `$(sparkle) VynorAI: ${remainingK}k left${savedK}`;
+
+      const savedStr = quota.tokensSaved && quota.tokensSaved > 0
+        ? `\n✨ VynorAI Saved: +${quota.tokensSaved.toLocaleString()} tokens free (~රු. ${quota.estimatedLkrSaved || 0})`
+        : `\n✨ 0-Token SLM Optimization: Active`;
+
+      statusBar.tooltip = `VynorAI Coding Intelligence\nPlan: ${quota.planName}\nTokens Left: ${quota.remainingTokens.toLocaleString()} / ${quota.monthlyTokens.toLocaleString()} (${100 - quota.percentageUsed}% remaining)\nReal Consumed: ${quota.usedTokens.toLocaleString()} tokens${savedStr}\nClick to open VynorAI Chat`;
       statusBar.command = "vynorai.openChat";
     }
   };

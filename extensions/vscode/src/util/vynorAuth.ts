@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as fs from "node:fs";
-import { getConfigJsonPath } from "core/util/paths";
+import { getConfigJsonPath, getConfigYamlPath } from "core/util/paths";
 
 export const VYNORAI_PROD_URL = "https://vynor.lk/v1";
 export const VYNORAI_WEB_URL = "https://vynor.lk";
@@ -17,10 +17,31 @@ export interface VynorQuotaInfo {
 }
 
 /**
- * Updates the user's ~/.continue/config.json to point to VynorAI Production Cloud
+ * Updates the user's config.yaml and config.json to point to VynorAI Production Cloud
  * with their authenticated API key.
  */
 export async function applyVynorConfig(apiKey: string, email: string): Promise<boolean> {
+  let success = false;
+
+  // 1. Update config.yaml if present
+  try {
+    const yamlPath = getConfigYamlPath();
+    if (fs.existsSync(yamlPath)) {
+      let content = fs.readFileSync(yamlPath, "utf-8");
+      content = content.replace(/http:\/\/172\.255\.209\.243:3333\/v1\/?/g, `${VYNORAI_PROD_URL}/`);
+      if (/apiKey:\s*.*/.test(content)) {
+        content = content.replace(/apiKey:\s*["']?.*["']?/g, `apiKey: "${apiKey}"`);
+      } else {
+        content = content.replace(/provider:\s*vynorai/g, `provider: vynorai\n    apiKey: "${apiKey}"`);
+      }
+      fs.writeFileSync(yamlPath, content, "utf-8");
+      success = true;
+    }
+  } catch (err) {
+    console.error("[VynorAuth] Failed updating config.yaml:", err);
+  }
+
+  // 2. Update config.json
   try {
     const configPath = getConfigJsonPath();
     let config: any = {};
@@ -65,11 +86,12 @@ export async function applyVynorConfig(apiKey: string, email: string): Promise<b
     };
 
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
-    return true;
+    success = true;
   } catch (err) {
     console.error("[VynorAuth] Failed updating config.json:", err);
-    return false;
   }
+
+  return success;
 }
 
 /**
@@ -189,8 +211,9 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
   // 3. Register Commands
   context.subscriptions.push(
     vscode.commands.registerCommand("vynorai.login", () => {
+      const scheme = vscode.env.uriScheme || "vscode";
       const loginUrl = vscode.Uri.parse(
-        `${VYNORAI_WEB_URL}/login?source=vscode&callback=vscode://vynorai.vynorai/auth`
+        `${VYNORAI_WEB_URL}/login?source=vscode&callback=${scheme}://vynorai.vynorai/auth`
       );
       void vscode.env.openExternal(loginUrl);
     })

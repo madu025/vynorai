@@ -34,7 +34,8 @@ const INJECTION_PATTERNS: RegExp[] = [
 ];
 
 interface Msg { role: string; content: string | any[]; [k: string]: any; }
-interface HybridResult { messages: Msg[]; savedTokens: number; strategy: string[]; contextLimit: number; }
+export type OptimizationMode = "safe" | "aggressive";
+interface HybridResult { messages: Msg[]; savedTokens: number; strategy: string[]; contextLimit: number; optimizationMode: OptimizationMode; }
 
 function charCount(msg: Msg): number {
   if (typeof msg.content === "string") return msg.content.length;
@@ -217,15 +218,19 @@ function applyWindowTruncation(messages: Msg[], budgetTokens: number): { message
     total -= charCount(windowed[trimIdx]);
     trimIdx++;
   }
-  return { messages: [...system, ...windowed.slice(trimIdx)], saved: savedChars };
+  const budgetTrimmedChars = windowed
+    .slice(0, trimIdx)
+    .reduce((s: number, m: Msg) => s + charCount(m), 0);
+  return { messages: [...system, ...windowed.slice(trimIdx)], saved: savedChars + budgetTrimmedChars };
 }
 
 export function applyHybridContext(
   body: any,
-  planId = "free"
+  planId = "free",
+  mode: OptimizationMode = body.optimization_mode === "aggressive" ? "aggressive" : "safe",
 ): { body: any; result: HybridResult } {
   const messages: Msg[] = (body.messages ?? []).map((m: any) => ({ ...m }));
-  if (messages.length === 0) return { body, result: { messages, savedTokens: 0, strategy: [], contextLimit: 0 } };
+  if (messages.length === 0) return { body, result: { messages, savedTokens: 0, strategy: [], contextLimit: 0, optimizationMode: mode } };
 
   const strategy: string[] = [];
   let totalSaved = 0;
@@ -233,6 +238,23 @@ export function applyHybridContext(
   const ctxLimit    = getContextLimitForPlan(planId);   // 32k / 128k / 256k
   const budgetTokens = ctxLimit - SYSTEM_RESERVE;
   const msgCapTokens = getMsgCapTokens(ctxLimit);
+
+  // Safe mode preserves every message verbatim unless the provider context
+  // budget would be exceeded. It never rewrites user instructions or code.
+  if (mode === "safe") {
+    const { messages: windowed, saved } = applyWindowTruncation(messages, budgetTokens);
+    if (saved > 0) strategy.push(`overflow-window(~${toTokens(saved)}tok)`);
+    return {
+      body: { ...body, messages: windowed },
+      result: {
+        messages: windowed,
+        savedTokens: toTokens(saved),
+        strategy,
+        contextLimit: ctxLimit,
+        optimizationMode: mode,
+      },
+    };
+  }
 
   // Layer 0a — single-message cap (plan-scaled)
   const { messages: capped, saved: s0a } = applyMessageCap(messages, msgCapTokens);
@@ -268,6 +290,6 @@ export function applyHybridContext(
 
   return {
     body: { ...body, messages: compressed },
-    result: { messages: compressed, savedTokens: toTokens(totalSaved), strategy, contextLimit: ctxLimit },
+    result: { messages: compressed, savedTokens: toTokens(totalSaved), strategy, contextLimit: ctxLimit, optimizationMode: mode },
   };
 }

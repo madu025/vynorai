@@ -272,11 +272,14 @@
 
       var urlParams = new URLSearchParams(window.location.search);
       var ideName = urlParams.get('ide') || (redirectUri.startsWith('antigravity') ? 'Antigravity IDE' : (redirectUri.startsWith('cursor') ? 'Cursor' : 'VS Code'));
+      var authState = urlParams.get('state') || '';
+      var loopbackConnected = false;
 
       // 1. Ephemeral Localhost Handshake (Direct to IDE background server)
-      fetch('http://127.0.0.1:41403/auth?apiKey=' + encodeURIComponent(apiKey) + '&email=' + encodeURIComponent(email))
+      fetch('http://127.0.0.1:41403/auth?apiKey=' + encodeURIComponent(apiKey) + '&email=' + encodeURIComponent(email) + '&state=' + encodeURIComponent(authState), { cache: 'no-store' })
         .then(function(res) {
           if (res.ok) {
+            loopbackConnected = true;
             var statusEl = document.getElementById('handshake-status');
             if (statusEl) {
               statusEl.style.display = 'block';
@@ -310,10 +313,11 @@
 
       // Trigger automatic deep-link protocol redirect
       setTimeout(function() {
+        if (loopbackConnected) return;
         try {
           window.location.href = redirectUri;
         } catch(_) {}
-      }, 300);
+      }, 1500);
     }
     async function verifyAndRedirect(token) {
       try {
@@ -333,7 +337,8 @@
               'apiKey=' + encodeURIComponent(meData.user.apiKey) +
               '&token=' + encodeURIComponent(token) +
               '&email=' + encodeURIComponent(meData.user.email) +
-              '&name=' + encodeURIComponent(meData.user.name || '');
+              '&name=' + encodeURIComponent(meData.user.name || '') +
+              '&state=' + encodeURIComponent(urlParams.get('state') || '');
             showVsCodeAuthCard(redirectUri, meData.user.apiKey, meData.user.email);
             return;
           }

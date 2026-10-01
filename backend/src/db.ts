@@ -1,6 +1,7 @@
 import sqlite3 from "sqlite3";
 import path from "path";
 import fs from "fs";
+import { encryptCredential, encryptionAtRestConfigured, maskApiKey } from "./services/credentialVault.js";
 
 const dbDir = path.resolve(process.cwd(), "data");
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
@@ -270,6 +271,70 @@ const MIGRATIONS: Migration[] = [
       await dbRun("UPDATE users SET is_suspended = 0 WHERE is_suspended IS NULL").catch(() => {});
       await dbRun("UPDATE users SET email_verified = 0 WHERE email_verified IS NULL").catch(() => {});
       await dbRun("UPDATE usage_logs SET cached = 0 WHERE cached IS NULL").catch(() => {});
+    },
+  },
+  {
+    version: "006_encrypted_recoverable_api_keys",
+    description: "Encrypt recoverable API keys at rest while retaining hash-only authentication",
+    up: async () => {
+      await addColumnIfNotExists("users", "api_key_encrypted TEXT");
+      if (!encryptionAtRestConfigured()) return;
+
+      const legacyUsers = await dbAll<{ id: string; api_key: string; api_key_encrypted?: string }>(
+        "SELECT id, api_key, api_key_encrypted FROM users WHERE api_key_encrypted IS NULL OR api_key_encrypted = ''",
+      );
+      for (const user of legacyUsers) {
+        if (!user.api_key?.startsWith("vynor_live_")) continue;
+        const encrypted = encryptCredential(user.api_key);
+        if (!encrypted) continue;
+        await dbRun(
+          "UPDATE users SET api_key = ?, api_key_masked = ?, api_key_encrypted = ? WHERE id = ?",
+          [`encrypted:${user.id}`, maskApiKey(user.api_key), encrypted, user.id],
+        );
+      }
+    },
+  },
+  {
+    version: "007_request_economics_ledger",
+    description: "Authoritative provider cost, optimization, and per-request margin ledger",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS request_economics (
+        id                     TEXT PRIMARY KEY,
+        request_id             TEXT UNIQUE NOT NULL,
+        usage_log_id           TEXT,
+        user_id                TEXT NOT NULL,
+        plan_id                VARCHAR(64) NOT NULL,
+        requested_model        VARCHAR(128) NOT NULL,
+        resolved_model         VARCHAR(128),
+        provider               VARCHAR(32),
+        input_tokens           INTEGER NOT NULL DEFAULT 0,
+        output_tokens          INTEGER NOT NULL DEFAULT 0,
+        provider_cost_usd      REAL,
+        cost_source            VARCHAR(20) NOT NULL CHECK(cost_source IN ('provider', 'local-zero', 'unknown')),
+        allocated_revenue_usd  REAL NOT NULL DEFAULT 0,
+        gross_margin_usd       REAL,
+        cache_status           VARCHAR(16) NOT NULL DEFAULT 'bypass' CHECK(cache_status IN ('hit', 'miss', 'bypass')),
+        optimization_mode      VARCHAR(20) NOT NULL DEFAULT 'safe',
+        template_id            VARCHAR(128),
+        estimated_tokens_saved INTEGER NOT NULL DEFAULT 0,
+        latency_ms             INTEGER,
+        outcome                VARCHAR(16) NOT NULL DEFAULT 'success' CHECK(outcome IN ('success', 'failed')),
+        created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (usage_log_id) REFERENCES usage_logs (id) ON DELETE SET NULL
+      )`);
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_request_economics_user_created ON request_economics(user_id, created_at DESC)");
+      await execSchema("CREATE INDEX IF NOT EXISTS idx_request_economics_provider_created ON request_economics(provider, created_at DESC)");
+    },
+  },
+  {
+    version: "008_economics_outcome",
+    description: "Separate failed upstream requests from billable economics",
+    up: async () => {
+      await addColumnIfNotExists(
+        "request_economics",
+        "outcome VARCHAR(16) NOT NULL DEFAULT 'success' CHECK(outcome IN ('success', 'failed'))",
+      );
     },
   },
 ];

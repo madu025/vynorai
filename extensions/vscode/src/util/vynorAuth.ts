@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as fs from "node:fs";
+import * as crypto from "node:crypto";
 import { getConfigJsonPath, getConfigYamlPath } from "core/util/paths";
 
 export const VYNORAI_PROD_URL = "https://vynor.lk/v1";
@@ -139,6 +140,10 @@ import * as http from "node:http";
 
 let loopbackServer: http.Server | null = null;
 const LOOPBACK_PORT = 41403;
+const AUTH_STATE_TTL_MS = 5 * 60_000;
+const API_KEY_SECRET = "vynorai_api_key";
+const JWT_SECRET = "vynorai_jwt_token";
+let pendingAuthState: { value: string; expiresAt: number } | null = null;
 
 function startLoopbackServer(
   context: vscode.ExtensionContext,
@@ -148,9 +153,14 @@ function startLoopbackServer(
 
   try {
     loopbackServer = http.createServer(async (req, res) => {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      const origin = req.headers.origin;
+      if (origin === VYNORAI_WEB_URL) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Vary", "Origin");
+      }
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Cache-Control", "no-store");
 
       if (req.method === "OPTIONS") {
         res.writeHead(204);
@@ -164,8 +174,19 @@ function startLoopbackServer(
           const apiKey = reqUrl.searchParams.get("apiKey");
           const email = reqUrl.searchParams.get("email") || "Developer";
           const token = reqUrl.searchParams.get("token") || undefined;
+          const state = reqUrl.searchParams.get("state");
 
-          if (apiKey) {
+          const stateIsValid = Boolean(
+            state &&
+            pendingAuthState &&
+            Date.now() <= pendingAuthState.expiresAt &&
+            state.length === pendingAuthState.value.length &&
+            crypto.timingSafeEqual(Buffer.from(state), Buffer.from(pendingAuthState.value)),
+          );
+          const keyIsValid = Boolean(apiKey && /^vynor_live_[a-f0-9]{32}$/i.test(apiKey));
+
+          if (origin === VYNORAI_WEB_URL && stateIsValid && keyIsValid && apiKey) {
+            pendingAuthState = null; // one-time, replay-resistant handshake
             await onAuthSuccess(apiKey, email, token);
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ success: true, message: "Connected to IDE successfully!" }));
@@ -175,7 +196,7 @@ function startLoopbackServer(
       } catch (e) {}
 
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing or invalid apiKey parameter" }));
+      res.end(JSON.stringify({ error: "Invalid or expired authentication handshake" }));
     });
 
     loopbackServer.listen(LOOPBACK_PORT, "127.0.0.1", () => {
@@ -205,8 +226,12 @@ export async function handleSuccessfulAuthentication(
   token?: string,
   refreshQuotaStatus?: () => void
 ) {
-  await context.globalState.update("vynorai_api_key", apiKey);
-  if (token) await context.globalState.update("vynorai_jwt_token", token);
+  await context.secrets.store(API_KEY_SECRET, apiKey);
+  await context.globalState.update("vynorai_api_key", undefined);
+  if (token) {
+    await context.secrets.store(JWT_SECRET, token);
+    await context.globalState.update("vynorai_jwt_token", undefined);
+  }
   if (email) await context.globalState.update("vynorai_user_email", email);
 
   await applyVynorConfig(apiKey, email);
@@ -243,7 +268,15 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
 
   // Update status bar with live quota
   const refreshQuotaStatus = async () => {
-    const savedKey = (context.globalState.get("vynorai_api_key") as string) || "";
+    let savedKey = (await context.secrets.get(API_KEY_SECRET)) || "";
+    // One-time migration from older extension releases.
+    if (!savedKey) {
+      savedKey = (context.globalState.get("vynorai_api_key") as string) || "";
+      if (savedKey) {
+        await context.secrets.store(API_KEY_SECRET, savedKey);
+        await context.globalState.update("vynorai_api_key", undefined);
+      }
+    }
     if (!savedKey) {
       statusBar.text = "$(key) VynorAI: Log in";
       statusBar.tooltip = "Click to sign in with Vynor AI in browser";
@@ -280,19 +313,28 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       async handleUri(uri: vscode.Uri) {
-        if (uri.path === "/auth" || uri.path.includes("auth")) {
+        if (uri.authority === "vynorai.vynorai" && uri.path === "/auth") {
           const params = new URLSearchParams(uri.query);
           const apiKey = params.get("apiKey");
           const email = params.get("email") || "Developer";
           const token = params.get("token") || undefined;
+          const state = params.get("state");
+          const stateIsValid = Boolean(
+            state &&
+            pendingAuthState &&
+            Date.now() <= pendingAuthState.expiresAt &&
+            state.length === pendingAuthState.value.length &&
+            crypto.timingSafeEqual(Buffer.from(state), Buffer.from(pendingAuthState.value)),
+          );
 
-          if (!apiKey) {
+          if (!apiKey || !/^vynor_live_[a-f0-9]{32}$/i.test(apiKey) || !stateIsValid) {
             void vscode.window.showErrorMessage(
-              "VynorAI Authentication failed: No API Key received from browser."
+              "VynorAI Authentication failed: invalid or expired browser handshake."
             );
             return;
           }
 
+          pendingAuthState = null;
           await handleSuccessfulAuthentication(context, apiKey, email, token, refreshQuotaStatus);
         }
       },
@@ -304,8 +346,10 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("vynorai.login", () => {
       const scheme = vscode.env.uriScheme || "vscode";
       const appName = vscode.env.appName || "IDE";
+      const state = crypto.randomBytes(32).toString("hex");
+      pendingAuthState = { value: state, expiresAt: Date.now() + AUTH_STATE_TTL_MS };
       const loginUrl = vscode.Uri.parse(
-        `${VYNORAI_WEB_URL}/login?source=vscode&ide=${encodeURIComponent(appName)}&scheme=${scheme}&callback=${scheme}://vynorai.vynorai/auth`
+        `${VYNORAI_WEB_URL}/login?source=vscode&ide=${encodeURIComponent(appName)}&scheme=${encodeURIComponent(scheme)}&state=${state}&callback=${encodeURIComponent(`${scheme}://vynorai.vynorai/auth`)}`
       );
       void vscode.env.openExternal(loginUrl);
     })

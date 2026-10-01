@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { dbGet, dbRun } from "../db.js";
+import { decryptCredential, encryptCredential, encryptionAtRestConfigured } from "./credentialVault.js";
 
 interface CacheEntry {
   responseChunks: any[];
@@ -14,7 +15,12 @@ const l1Cache = new Map<string, CacheEntry>();
 /**
  * Generate a deterministic SHA-256 fingerprint for any prompt, code context, and model parameters.
  */
-export function generateCacheKey(model: string, messages: any[], temperature?: number): string {
+export function generateCacheKey(
+  scope: { userId: string; projectId?: string; policyVersion?: string },
+  model: string,
+  messages: any[],
+  temperature?: number
+): string {
   // Normalize messages by stripping non-essential fields and trimming whitespace
   const normalized = messages.map((m) => ({
     role: m.role,
@@ -22,6 +28,11 @@ export function generateCacheKey(model: string, messages: any[], temperature?: n
   }));
 
   const payload = JSON.stringify({
+    // Never share model output across users or projects. Prompts frequently
+    // contain proprietary source code even when the visible text looks alike.
+    userId: scope.userId,
+    projectId: scope.projectId || "default",
+    policyVersion: scope.policyVersion || "v1",
     model,
     temperature: temperature ?? 0,
     messages: normalized,
@@ -45,6 +56,7 @@ export async function getFromCache(cacheKey: string): Promise<CacheEntry | null>
   }
 
   // 2. Check L2 Persistent SQLite Cache
+  if (!encryptionAtRestConfigured()) return null;
   try {
     const row = await dbGet<any>(
       "SELECT response_data, created_at FROM cache_entries WHERE cache_key = ?",
@@ -52,7 +64,9 @@ export async function getFromCache(cacheKey: string): Promise<CacheEntry | null>
     );
 
     if (row && row.response_data) {
-      const parsedChunks = JSON.parse(row.response_data);
+      const plaintext = decryptCredential(row.response_data);
+      if (!plaintext) return null;
+      const parsedChunks = JSON.parse(plaintext);
       const entry: CacheEntry = {
         responseChunks: parsedChunks,
         createdAt: new Date(row.created_at).getTime(),
@@ -85,10 +99,12 @@ export async function saveToCache(cacheKey: string, chunks: any[]): Promise<void
 
   // Save to L2 SQLite asynchronously
   const serialized = JSON.stringify(chunks);
+  const encrypted = encryptCredential(serialized);
+  if (!encrypted) return;
   dbRun(
     `INSERT OR REPLACE INTO cache_entries (cache_key, response_data, created_at) 
      VALUES (?, ?, CURRENT_TIMESTAMP)`,
-    [cacheKey, serialized]
+    [cacheKey, encrypted]
   ).catch((err) => {
     console.error("[CacheEngine] Error saving to L2 cache:", err);
   });
@@ -116,4 +132,7 @@ export async function initCacheTable(): Promise<void> {
   await dbRun(
     "CREATE INDEX IF NOT EXISTS idx_cache_created ON cache_entries (created_at)"
   );
+  // Cache is disposable. Purge legacy plaintext rather than retaining source
+  // code or model output that predates encrypted-at-rest storage.
+  await dbRun("DELETE FROM cache_entries WHERE response_data NOT LIKE 'v1:%'");
 }

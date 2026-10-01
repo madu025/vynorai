@@ -17,7 +17,8 @@ import { sanitizeText } from "./secretSanitizer.js";
 import { getPlan } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
 import { dbRun } from "../db.js";
-import { incrementMonthlyUsage } from "./monthlyQuota.js";
+import { QuotaReservation, settleQuotaReservation } from "./monthlyQuota.js";
+import { recordRequestEconomics } from "./costLedger.js";
 
 export interface FimRequest {
   prefix: string;          // Code before cursor
@@ -51,7 +52,8 @@ function sliceFimContext(prefix: string, suffix: string = ""): { prefix: string;
 export async function handleFimAutocomplete(
   user: AuthenticatedUser,
   body: FimRequest,
-  res: Response
+  res: Response,
+  quotaReservation?: QuotaReservation,
 ) {
   const t0 = Date.now();
   const plan = getPlan(user.subscriptionPlan || "free");
@@ -93,25 +95,36 @@ export async function handleFimAutocomplete(
   res.setHeader("X-VynorAI-Engine", "FIM-UltraFast");
 
   // 4. Dispatch directly to provider
-  const { collected } = await dispatchToProvider(payload, res);
+  const dispatch = await dispatchToProvider(payload, res);
+  const { collected } = dispatch;
 
   const latency = Date.now() - t0;
   console.log(`[VynorAI ⚡ FIM Autocomplete] ${latency}ms | Model: ${model} | User: ${user.email}`);
 
   // 5. Track tokens
-  const estimatedInput = Math.ceil(fimPrompt.length / 4);
+  const estimatedInput = dispatch.usage?.inputTokens || Math.ceil(fimPrompt.length / 4);
   let outputText = "";
   for (const c of collected) {
     if (c?.choices?.[0]?.message?.content) outputText += c.choices[0].message.content;
     else if (c?.choices?.[0]?.text) outputText += c.choices[0].text;
   }
-  const estimatedOutput = Math.max(1, Math.ceil(outputText.length / 4));
-  const totalTokens = estimatedInput + estimatedOutput;
+  const estimatedOutput = dispatch.usage?.outputTokens || Math.max(1, Math.ceil(outputText.length / 4));
+  const totalTokens = dispatch.success ? estimatedInput + estimatedOutput : 0;
+  await settleQuotaReservation(quotaReservation, totalTokens);
 
-  dbRun(
+  const usageLogId = uuidv4();
+  await dbRun(
     "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, ?, ?, 0)",
-    [uuidv4(), user.id, model, estimatedInput, estimatedOutput, totalTokens]
-  ).catch(console.error);
-
-  incrementMonthlyUsage(user.id, totalTokens, 1).catch(console.error);
+    [usageLogId, user.id, model, estimatedInput, estimatedOutput, totalTokens]
+  );
+  await recordRequestEconomics({
+    usageLogId, userId: user.id, planId: plan.id, requestedModel: model,
+    resolvedModel: dispatch.resolvedModel, provider: dispatch.provider,
+    inputTokens: estimatedInput, outputTokens: estimatedOutput,
+    providerCostUsd: dispatch.usage?.providerCostUsd ?? null,
+    costSource: dispatch.usage?.costSource ?? "unknown", cacheStatus: "bypass",
+    optimizationMode: "fim-slice", latencyMs: latency,
+    outcome: dispatch.success ? "success" : "failed",
+    estimatedTokensSaved: Math.max(0, Math.ceil((rawPrefix.length + rawSuffix.length - prefix.length - suffix.length) / 4)),
+  });
 }

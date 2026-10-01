@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import { getAllCircuitStats, resetCircuit } from "../services/circuitBreaker.js";
 import { config, MODEL_ALIASES, PLANS } from "../config.js";
 import { ProviderID } from "../config.js";
@@ -8,8 +9,9 @@ export const adminRouter = Router();
 
 // Simple admin secret check (set ADMIN_SECRET in .env)
 function requireAdmin(req: Request, res: Response, next: Function) {
-  const secret = req.headers["x-admin-secret"] || req.query.secret;
-  const expected = process.env.ADMIN_SECRET || "vynorai_admin_2026";
+  const secret = req.headers["x-admin-secret"];
+  const expected = process.env.ADMIN_SECRET;
+  if (!expected) return res.status(503).json({ error: "Admin authentication is not configured" });
   if (secret !== expected) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -72,11 +74,13 @@ import {
   invalidateModelCache,
   PLAN_CONTEXT_LIMITS,
 } from "../services/modelRegistry.js";
+import { encryptCredential, maskApiKey } from "../services/credentialVault.js";
+import { invalidateAuthCache } from "../services/aiProxy.js";
 
 adminRouter.get("/stats", requireAdmin, async (_req: Request, res: Response) => {
   const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
-  const [totalUsers, activeUsers, topModels, recentErrors] = await Promise.all([
+  const [totalUsers, activeUsers, topModels, recentErrors, economics] = await Promise.all([
     dbAll("SELECT COUNT(*) as count FROM users"),
     dbAll("SELECT COUNT(DISTINCT user_id) as count FROM usage_logs WHERE created_at >= ?", [yesterday]),
     dbAll(`SELECT model, COUNT(*) as requests, SUM(tokens_used) as tokens
@@ -84,6 +88,17 @@ adminRouter.get("/stats", requireAdmin, async (_req: Request, res: Response) => 
            GROUP BY model ORDER BY requests DESC LIMIT 10`, [yesterday]),
     dbAll(`SELECT model, COUNT(*) as count FROM usage_logs
            WHERE created_at >= ? GROUP BY model`, [yesterday]),
+    dbGet<any>(`SELECT
+      COUNT(*) AS requests,
+      SUM(CASE WHEN provider_cost_usd IS NOT NULL THEN 1 ELSE 0 END) AS costTrackedRequests,
+      SUM(CASE WHEN provider_cost_usd IS NULL THEN 1 ELSE 0 END) AS unknownCostRequests,
+      SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END) AS failedRequests,
+      COALESCE(SUM(provider_cost_usd), 0) AS providerCostUsd,
+      COALESCE(SUM(allocated_revenue_usd), 0) AS allocatedRevenueUsd,
+      COALESCE(SUM(CASE WHEN gross_margin_usd IS NOT NULL THEN gross_margin_usd ELSE 0 END), 0) AS trackedGrossMarginUsd,
+      COALESCE(SUM(estimated_tokens_saved), 0) AS estimatedTokensSaved,
+      SUM(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) AS cacheHits
+      FROM request_economics WHERE created_at >= ?`, [yesterday]),
   ]);
 
   res.json({
@@ -91,6 +106,7 @@ adminRouter.get("/stats", requireAdmin, async (_req: Request, res: Response) => 
     activeUsers24h: activeUsers[0]?.count || 0,
     topModels24h:  topModels,
     requestsByModel24h: recentErrors,
+    economics24h: economics || {},
     timestamp: new Date().toISOString(),
   });
 });
@@ -103,7 +119,7 @@ import { logSecurityEvent, getRecentSecurityEvents } from "../services/securityA
  */
 adminRouter.get("/users", requireAdmin, async (_req: Request, res: Response) => {
   const users = await dbAll<any>(`
-    SELECT u.id, u.email, u.name, u.api_key, u.created_at,
+    SELECT u.id, u.email, u.name, u.api_key_masked, u.created_at,
            COALESCE(u.is_suspended, 0) as is_suspended, u.allowed_ips,
            COALESCE(u.email_verified, 0) as email_verified,
            s.plan_name, s.status as subscription_status, s.valid_until,
@@ -188,6 +204,7 @@ adminRouter.post("/users/:userId/grant-subscription", requireAdmin, async (req: 
      VALUES (?, ?, ?, 'active', ?, 'ADMIN_MANUAL_GRANT', ?, 'LKR', ?)`,
     [subId, userId, plan, orderId, planConfig?.priceLKR || 0, validUntil]
   );
+  invalidateAuthCache();
 
   // Initialize or update monthly usage
   const existingUsage = await dbGet<any>("SELECT id FROM monthly_usage WHERE user_id = ?", [userId]);
@@ -336,7 +353,12 @@ adminRouter.post("/users/:userId/rotate-key", requireAdmin, async (req: Request,
   if (!user) return res.status(404).json({ error: "User not found" });
 
   const newApiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
-  await dbRun("UPDATE users SET api_key = ? WHERE id = ?", [newApiKey, userId]);
+  const hash = crypto.createHash("sha256").update(newApiKey).digest("hex");
+  const encrypted = encryptCredential(newApiKey);
+  await dbRun(
+    "UPDATE users SET api_key = ?, api_key_hash = ?, api_key_masked = ?, api_key_encrypted = ? WHERE id = ?",
+    [encrypted ? `encrypted:${userId}` : newApiKey, hash, maskApiKey(newApiKey), encrypted, userId],
+  );
 
   await logSecurityEvent({
     eventType: "ADMIN_FORCE_KEY_ROTATED",
@@ -360,6 +382,7 @@ adminRouter.post("/users/:userId/toggle-suspend", requireAdmin, async (req: Requ
 
   const nextState = user.is_suspended ? 0 : 1;
   await dbRun("UPDATE users SET is_suspended = ? WHERE id = ?", [nextState, userId]);
+  invalidateAuthCache();
 
   await logSecurityEvent({
     eventType: nextState ? "ADMIN_USER_SUSPENDED" : "ADMIN_USER_REACTIVATED",

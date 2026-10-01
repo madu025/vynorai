@@ -18,6 +18,7 @@ import { config, resolveModelId, isOpenRouterModelId, DEFAULT_CHAT_MODEL, Provid
 import { compressCodeSnippet } from "./tokenOptimizer.js";
 import { canUseProvider, recordSuccess, recordFailure } from "./circuitBreaker.js";
 import { v4 as uuidv4 } from "uuid";
+import { extractProviderUsage, ProviderUsage } from "./costLedger.js";
 
 // ─── Endpoint Info ────────────────────────────────────────────────────────────
 interface EndpointInfo {
@@ -41,7 +42,6 @@ function buildEndpoints(): Partial<Record<ProviderID, EndpointInfo>> {
         "HTTP-Referer": "https://vynorai.com",
         "X-Title": "VynorAI Enterprise",
         "Content-Type": "application/json",
-        "X-Data-Retention": "zero",
       },
       isAnthropic: false,
       isOllama: false,
@@ -96,20 +96,38 @@ function selectProviderChain(model: string): ProviderID[] {
   // For OpenRouter-format models (e.g. "anthropic/claude-sonnet-4-6") always
   // prefer OpenRouter. Direct-provider keys only used for Ollama local models.
   if (isOpenRouterModelId(model)) {
-    const chain: ProviderID[] = ["openrouter"];
-    if (eps.deepseek) chain.push("deepseek");
-    if (eps.openai)   chain.push("openai");
-    chain.push("ollama");
+    const directProvider: ProviderID | null = model.startsWith("deepseek/") ? "deepseek"
+      : model.startsWith("openai/") ? "openai"
+      : model.startsWith("anthropic/") ? "anthropic"
+      : null;
+    const directFirst = process.env.VYNOR_PROVIDER_STRATEGY === "direct-first";
+    const chain: ProviderID[] = [];
+    if (directFirst && directProvider && eps[directProvider]) chain.push(directProvider);
+    if (eps.openrouter) chain.push("openrouter");
+    if (!directFirst && directProvider && eps[directProvider]) chain.push(directProvider);
     return chain;
   }
 
   // Short-name model → still prefer OpenRouter
   const chain: ProviderID[] = [];
   if (eps.openrouter) chain.push("openrouter");
-  if (eps.deepseek)   chain.push("deepseek");
-  if (eps.openai)     chain.push("openai");
-  chain.push("ollama");
+  if (eps.deepseek && model.startsWith("deepseek/")) chain.push("deepseek");
+  if (eps.openai && model.startsWith("openai/")) chain.push("openai");
+  if (!model.includes("/")) chain.push("ollama");
   return chain;
+}
+
+function resolveProviderModel(provider: ProviderID, model: string): string | null {
+  if (provider === "openrouter") return model;
+  if (provider === "openai" && model.startsWith("openai/")) return model.slice("openai/".length);
+  if (provider === "anthropic" && model.startsWith("anthropic/")) return model.slice("anthropic/".length);
+  if (provider === "deepseek" && model.startsWith("deepseek/")) {
+    return /(^|[-/])r1($|-)/i.test(model)
+      ? (process.env.DEEPSEEK_REASONER_MODEL || "deepseek-reasoner")
+      : (process.env.DEEPSEEK_CHAT_MODEL || "deepseek-chat");
+  }
+  if (provider === "ollama" && !model.includes("/")) return model;
+  return null;
 }
 
 // ─── Payload Builders ─────────────────────────────────────────────────────────
@@ -128,13 +146,24 @@ function buildAnthropicPayload(body: any, resolvedModel: string): any {
   return { model: resolvedModel, max_tokens, stream, ...(systemBlocks ? { system: systemBlocks } : {}), messages: msgs };
 }
 
-function buildOpenAIPayload(body: any, resolvedModel: string): any {
-  const { messages = [], ...rest } = body;
+function buildOpenAIPayload(body: any, resolvedModel: string, provider: ProviderID): any {
+  const {
+    messages = [], projectRoot: _projectRoot, optimization_mode: _optimizationMode,
+    routing_mode: _routingMode, ...rest
+  } = body;
   const isStream = body.stream !== false;
   return {
     ...rest,
     model: resolvedModel,
     ...(isStream ? { stream_options: { include_usage: true } } : {}),
+    ...(provider === "openrouter" ? {
+      usage: { include: true },
+      provider: {
+        ...(typeof rest.provider === "object" ? rest.provider : {}),
+        data_collection: "deny",
+        zdr: true,
+      },
+    } : {}),
     messages: messages.map((msg: any) => ({
       ...msg,
       content: typeof msg.content === "string" ? compressCodeSnippet(msg.content) : msg.content,
@@ -154,7 +183,7 @@ async function executeWithEndpoint(
 
   const payload  = endpoint.isAnthropic
     ? buildAnthropicPayload(body, resolvedModel)
-    : buildOpenAIPayload(body, resolvedModel);
+    : buildOpenAIPayload(body, resolvedModel, endpoint.provider);
 
   const fetchUrl = endpoint.isAnthropic
     ? `${endpoint.baseUrl}/messages`
@@ -184,12 +213,16 @@ async function executeWithEndpoint(
     if (response.body) {
       const reader  = response.body.getReader();
       const decoder = new TextDecoder();
+      let sseBuffer = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const text = decoder.decode(value, { stream: true });
+        sseBuffer += text;
+        const completeLines = sseBuffer.split(/\r?\n/);
+        sseBuffer = completeLines.pop() ?? "";
         if (endpoint.isAnthropic) {
-          for (const line of text.split("\n")) {
+          for (const line of completeLines) {
             if (!line.startsWith("data: ")) continue;
             try {
               const evt = JSON.parse(line.slice(6));
@@ -205,7 +238,7 @@ async function executeWithEndpoint(
         } else {
           // OpenRouter / OpenAI / Groq native SSE passthrough
           res.write(value);
-          for (const line of text.split("\n")) {
+          for (const line of completeLines) {
             if (line.startsWith("data: ") && !line.includes("[DONE]")) {
               try { const c = JSON.parse(line.slice(6)); collected.push(c); onChunk?.(c); } catch {}
             }
@@ -233,7 +266,14 @@ export async function dispatchToProvider(
   body: any,
   res: Response,
   onChunk?: (c: any) => void
-): Promise<{ success: boolean; collected: any[]; provider?: ProviderID }> {
+): Promise<{
+  success: boolean;
+  collected: any[];
+  provider?: ProviderID;
+  resolvedModel?: string;
+  usage?: ProviderUsage;
+  latencyMs?: number;
+}> {
   const rawModel     = body.model || DEFAULT_CHAT_MODEL;
   const resolvedModel = resolveModelId(rawModel);   // "deepseek-v3" → "deepseek/deepseek-chat-v3-0324"
   const chain        = selectProviderChain(resolvedModel);
@@ -249,9 +289,20 @@ export async function dispatchToProvider(
     }
 
     try {
-      const collected = await executeWithEndpoint(endpoint, resolvedModel, body, res, onChunk);
+      const providerModel = resolveProviderModel(providerKey, resolvedModel);
+      if (!providerModel) continue;
+      const startedAt = Date.now();
+      const collected = await executeWithEndpoint(endpoint, providerModel, body, res, onChunk);
+      const latencyMs = Date.now() - startedAt;
       console.log(`[Router] ✅ ${providerKey} → "${resolvedModel}"`);
-      return { success: true, collected, provider: providerKey };
+      return {
+        success: true,
+        collected,
+        provider: providerKey,
+        resolvedModel: providerModel,
+        usage: extractProviderUsage(collected),
+        latencyMs,
+      };
     } catch (err: any) {
       if (err.status !== 401 && err.status !== 403) recordFailure(providerKey, err.message);
       console.warn(`[Router] ⚠️  ${providerKey} failed: ${err.message} — trying next…`);

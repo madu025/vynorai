@@ -137,7 +137,10 @@ paymentRouter.post("/test-activate", requireAuth, async (req: Request, res: Resp
   // Hardened security: Require ADMIN_SECRET or enforce development environment
   const adminSecret = req.headers["x-admin-secret"];
   const isDev = config.nodeEnv === "development";
-  const isValidAdmin = adminSecret && adminSecret === (process.env.ADMIN_SECRET || "vynorai_admin_2026");
+  const configuredAdminSecret = process.env.ADMIN_SECRET;
+  const isValidAdmin = Boolean(
+    configuredAdminSecret && adminSecret && adminSecret === configuredAdminSecret,
+  );
 
   if (!isDev && !isValidAdmin) {
     return res.status(403).json({ error: "Access denied. Test activation is disabled in production." });

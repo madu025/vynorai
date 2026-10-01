@@ -1,0 +1,98 @@
+import { dbRun } from "../db.js";
+import { getEffectivePrice, getPlan, ProviderID } from "../config.js";
+import { v4 as uuidv4 } from "uuid";
+
+export type CostSource = "provider" | "local-zero" | "unknown";
+
+export interface ProviderUsage {
+  inputTokens: number;
+  outputTokens: number;
+  providerCostUsd: number | null;
+  costSource: CostSource;
+}
+
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return null;
+}
+
+/** Normalize OpenRouter/OpenAI/Anthropic-compatible usage without inventing a cost. */
+export function extractProviderUsage(chunks: any[]): ProviderUsage {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let providerCostUsd: number | null = null;
+
+  for (const chunk of chunks) {
+    const usage = chunk?.usage;
+    if (!usage) continue;
+    inputTokens = finiteNumber(usage.prompt_tokens ?? usage.input_tokens) ?? inputTokens;
+    outputTokens = finiteNumber(usage.completion_tokens ?? usage.output_tokens) ?? outputTokens;
+    providerCostUsd = finiteNumber(
+      usage.cost ?? usage.total_cost ?? usage.cost_details?.upstream_inference_cost,
+    ) ?? providerCostUsd;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    providerCostUsd,
+    costSource: providerCostUsd === null ? "unknown" : "provider",
+  };
+}
+
+export interface EconomicsEvent {
+  requestId?: string;
+  usageLogId?: string | null;
+  userId: string;
+  planId: string;
+  requestedModel: string;
+  resolvedModel?: string | null;
+  provider?: ProviderID | "cache" | "deterministic" | "template" | "blueprint" | null;
+  inputTokens: number;
+  outputTokens: number;
+  providerCostUsd: number | null;
+  costSource: CostSource;
+  cacheStatus?: "hit" | "miss" | "bypass";
+  optimizationMode?: string;
+  templateId?: string | null;
+  estimatedTokensSaved?: number;
+  latencyMs?: number | null;
+  outcome?: "success" | "failed";
+}
+
+/**
+ * Records unit economics. Revenue is an allocation of subscription price per
+ * included request, not a claim that this exact request was individually sold.
+ */
+export async function recordRequestEconomics(event: EconomicsEvent): Promise<void> {
+  const plan = getPlan(event.planId);
+  const monthlyRevenue = getEffectivePrice(plan).usd;
+  const allocatedRevenue = event.outcome !== "failed" && plan.monthlyRequests > 0 && monthlyRevenue > 0
+    ? monthlyRevenue / plan.monthlyRequests
+    : 0;
+  const grossMargin = event.providerCostUsd === null
+    ? null
+    : allocatedRevenue - event.providerCostUsd;
+
+  await dbRun(
+    `INSERT INTO request_economics (
+      id, request_id, usage_log_id, user_id, plan_id, requested_model,
+      resolved_model, provider, input_tokens, output_tokens, provider_cost_usd,
+      cost_source, allocated_revenue_usd, gross_margin_usd, cache_status,
+      optimization_mode, template_id, estimated_tokens_saved, latency_ms, outcome
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      uuidv4(), event.requestId ?? uuidv4(), event.usageLogId ?? null, event.userId,
+      event.planId, event.requestedModel, event.resolvedModel ?? null,
+      event.provider ?? null, event.inputTokens, event.outputTokens,
+      event.providerCostUsd, event.costSource, allocatedRevenue, grossMargin,
+      event.cacheStatus ?? "bypass", event.optimizationMode ?? "safe",
+      event.templateId ?? null, event.estimatedTokensSaved ?? 0,
+      event.latencyMs ?? null, event.outcome ?? "success",
+    ],
+  );
+}

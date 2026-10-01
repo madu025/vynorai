@@ -46,14 +46,15 @@ const ALLOWED_CALLBACK_PREFIXES = [
 
 function isAllowedCallback(cb: unknown): boolean {
   if (typeof cb !== "string" || cb.length > 2048) return false;
-  const lower = cb.toLowerCase();
-  if (
-    lower.includes("://vynorai.vynorai/auth") ||
-    lower.includes("://continue.continue/auth")
-  ) {
-    return true;
+  try {
+    const parsed = new URL(cb);
+    const prefix = `${parsed.protocol}//`.toLowerCase();
+    return ALLOWED_CALLBACK_PREFIXES.includes(prefix) &&
+      ["vynorai.vynorai", "continue.continue"].includes(parsed.hostname.toLowerCase()) &&
+      parsed.pathname === "/auth";
+  } catch {
+    return false;
   }
-  return ALLOWED_CALLBACK_PREFIXES.some((p) => lower.startsWith(p));
 }
 
 // Shared handler: serves login.html for /login?source=vscode&callback=vscode://...
@@ -90,7 +91,18 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(securityHeadersMiddleware);
-app.use(cors({ origin: "*" }));
+const allowedOrigins = new Set([
+  "https://vynor.lk",
+  "https://admin.vynor.lk",
+  ...(process.env.CORS_ORIGINS || "").split(",").map((v) => v.trim()).filter(Boolean),
+]);
+app.use(cors({
+  origin(origin, callback) {
+    // Native IDE/CLI requests do not carry a browser Origin header.
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error("Origin not allowed"));
+  },
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -232,6 +244,17 @@ adminApp.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 async function start() {
+  if (config.nodeEnv === "production") {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+      throw new Error("JWT_SECRET must be configured with at least 32 characters in production");
+    }
+    if (!process.env.ADMIN_SECRET || process.env.ADMIN_SECRET.length < 32) {
+      throw new Error("ADMIN_SECRET must be configured with at least 32 characters in production");
+    }
+    if (!process.env.DATA_ENCRYPTION_KEY) {
+      throw new Error("DATA_ENCRYPTION_KEY must be configured in production");
+    }
+  }
   // Fail loudly at boot if the static pages are missing
   for (const f of [LOGIN_PAGE, ADMIN_PAGE]) {
     if (!fs.existsSync(f))

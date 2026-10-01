@@ -8,6 +8,7 @@ import { sanitizePayload } from "../services/secretSanitizer.js";
 import { handleFimAutocomplete } from "../services/fimEngine.js";
 import { handleQuickFix } from "../services/quickFixEngine.js";
 import { indexProjectFiles, getProjectMap, clearUserIndex } from "../services/ragEngine.js";
+import { releaseQuotaReservation } from "../services/monthlyQuota.js";
 
 export const proxyRouter = Router();
 
@@ -106,6 +107,7 @@ proxyRouter.post(
       // ── Model Plan Restriction Guard ─────────────────────────────────────────
       const allowed = await canPlanUseModel(userPlan, requestedModel);
       if (!allowed) {
+        await releaseQuotaReservation((req as any).quotaInfo?.reservation);
         const resolved = await resolveModel(requestedModel);
         const minPlan = resolved?.min_plan || "pro";
         return res.status(403).json({
@@ -129,8 +131,9 @@ proxyRouter.post(
         console.log(`[Privacy Shield 🛡️] Scrubbed ${scrubbedCount} secret(s) (${scrubbedTypes.join(", ")}) for ${user.email}`);
       }
 
-      await handleChatCompletions(user, sanitized, res);
+      await handleChatCompletions(user, sanitized, res, (req as any).quotaInfo?.reservation);
     } catch (err: any) {
+      await releaseQuotaReservation((req as any).quotaInfo?.reservation).catch(console.error);
       console.error("[VynorAI] Proxy error:", err);
       if (!res.headersSent)
         res.status(500).json({ error: { message: "Internal proxy error. Please try again later." } });
@@ -147,8 +150,9 @@ proxyRouter.post(
   async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      await handleFimAutocomplete(user, req.body, res);
+      await handleFimAutocomplete(user, req.body, res, (req as any).quotaInfo?.reservation);
     } catch (err: any) {
+      await releaseQuotaReservation((req as any).quotaInfo?.reservation).catch(console.error);
       console.error("[VynorAI] FIM Autocomplete error:", err);
       if (!res.headersSent)
         res.status(500).json({ error: { message: "Autocomplete service temporarily unavailable." } });
@@ -165,8 +169,9 @@ proxyRouter.post(
   async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      await handleQuickFix(user, req.body, res);
+      await handleQuickFix(user, req.body, res, (req as any).quotaInfo?.reservation);
     } catch (err: any) {
+      await releaseQuotaReservation((req as any).quotaInfo?.reservation).catch(console.error);
       console.error("[VynorAI] QuickFix error:", err);
       if (!res.headersSent)
         res.status(500).json({ error: { message: "Quick-fix service temporarily unavailable." } });
@@ -340,6 +345,4 @@ proxyRouter.get("/scaffolds/:id", requireValidSubscriber, async (req: Request, r
   }
   res.json(pkg);
 });
-
-
 

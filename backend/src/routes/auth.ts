@@ -11,6 +11,8 @@ import {
   getUserSecurityEvents,
   logSecurityEvent,
 } from "../services/securityAudit.js";
+import { decryptCredential, encryptCredential, maskApiKey } from "../services/credentialVault.js";
+import { invalidateAuthCache } from "../services/aiProxy.js";
 
 export const authRouter = Router();
 
@@ -38,8 +40,8 @@ export async function requireAuth(
     try {
       const keyHash = sha256(token);
       const user = await dbGet<any>(
-        "SELECT id, email, name, api_key, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE api_key_hash = ? OR api_key = ?",
-        [keyHash, token],
+        "SELECT id, email, name, api_key_masked, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE api_key_hash = ?",
+        [keyHash],
       );
       if (!user) {
         return res.status(401).json({ error: "Invalid API key" });
@@ -66,7 +68,7 @@ export async function requireAuth(
       email: string;
     };
     const user = await dbGet<any>(
-      "SELECT id, email, name, api_key, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE id = ?",
+      "SELECT id, email, name, api_key, api_key_encrypted, api_key_masked, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE id = ?",
       [payload.userId],
     );
     if (!user) {
@@ -170,13 +172,15 @@ authRouter.post(
       }
 
       const userId = uuidv4();
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(password, 12);
       const apiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
       const apiKeyHash = sha256(apiKey);
+      const encryptedApiKey = encryptCredential(apiKey);
+      const storedApiKey = encryptedApiKey ? `encrypted:${userId}` : apiKey;
 
       await dbRun(
-        "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, name, email_verified) VALUES (?, ?, ?, ?, ?, ?, 0)",
-        [userId, email, passwordHash, apiKey, apiKeyHash, name || ""],
+        "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, api_key_masked, api_key_encrypted, name, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
+        [userId, email, passwordHash, storedApiKey, apiKeyHash, maskApiKey(apiKey), encryptedApiKey, name || ""],
       );
 
       // Generate 6-digit OTP (CSPRNG) and verification token, stored as SHA-256 hashes
@@ -329,7 +333,7 @@ authRouter.post(
           id: user.id,
           email: user.email,
           name: user.name,
-          apiKey: user.api_key,
+          apiKey: decryptCredential(user.api_key_encrypted) || (user.api_key?.startsWith("vynor_live_") ? user.api_key : null),
           emailVerified: user.email_verified === 1,
         },
       });
@@ -438,7 +442,7 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        apiKey: user.api_key,
+        apiKey: decryptCredential(user.api_key_encrypted) || (user.api_key?.startsWith("vynor_live_") ? user.api_key : null),
         allowedIps: user.allowed_ips || "",
         isSuspended: false, // suspended users are rejected in requireAuth
         emailVerified: user.email_verified === 1,
@@ -657,11 +661,14 @@ authRouter.post(
       const user = (req as any).user;
       const newApiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
       const newApiKeyHash = sha256(newApiKey);
+      const encryptedApiKey = encryptCredential(newApiKey);
+      const storedApiKey = encryptedApiKey ? `encrypted:${user.id}` : newApiKey;
 
       await dbRun(
-        "UPDATE users SET api_key = ?, api_key_hash = ? WHERE id = ?",
-        [newApiKey, newApiKeyHash, user.id],
+        "UPDATE users SET api_key = ?, api_key_hash = ?, api_key_masked = ?, api_key_encrypted = ? WHERE id = ?",
+        [storedApiKey, newApiKeyHash, maskApiKey(newApiKey), encryptedApiKey, user.id],
       );
+      invalidateAuthCache();
 
       await logSecurityEvent({
         eventType: "KEY_ROTATED",

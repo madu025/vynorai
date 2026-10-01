@@ -7,6 +7,7 @@ import { VYNORAI_AGENT_TOOLS, VYNORAI_AGENT_SYSTEM_PROMPT } from "./agentEngine.
 import { dispatchToProvider } from "./providerRouter.js";
 import { estimateInputTokens } from "./quotaGuard.js";
 import { DEFAULT_CHAT_MODEL } from "../config.js";
+import { QuotaReservation, settleQuotaReservation } from "./monthlyQuota.js";
 import { generateZKUserId, computeAuditHash } from "./zkShield.js";
 import { applyHybridContext } from "./hybridContext.js";
 import { enrichWithRAG } from "./ragEngine.js";
@@ -20,12 +21,12 @@ import {
   formatOrchestrationToMarkdown,
 } from "./templateVault.js";
 import { detectProjectBlueprint, formatBlueprintPlan } from "./scaffoldRegistry.js";
+import { recordRequestEconomics } from "./costLedger.js";
 
 export interface AuthenticatedUser {
   id: string;
   email: string;
   name?: string;
-  apiKey: string;
   hasActiveSubscription: boolean;
   subscriptionPlan?: string;
   validUntil?: string;
@@ -40,8 +41,10 @@ const authUserCache = new Map<string, CachedAuthUser>();
 const AUTH_CACHE_TTL_MS = 60_000; // 60-second TTL
 
 export function invalidateAuthCache(apiKey?: string) {
-  if (apiKey) authUserCache.delete(apiKey);
-  else authUserCache.clear();
+  if (!apiKey) return authUserCache.clear();
+  for (const key of authUserCache.keys()) {
+    if (key.startsWith(`${apiKey}:`)) authUserCache.delete(key);
+  }
 }
 
 export async function authenticateApiKey(authHeader?: string, clientIp?: string): Promise<AuthenticatedUser | null> {
@@ -59,8 +62,8 @@ export async function authenticateApiKey(authHeader?: string, clientIp?: string)
   const apiKeyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
 
   const user = await dbGet<any>(
-    "SELECT id, email, name, api_key as apiKey, api_key_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE api_key_hash = ? OR api_key = ?",
-    [apiKeyHash, apiKey]
+    "SELECT id, email, name, api_key_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE api_key_hash = ?",
+    [apiKeyHash]
   );
   if (!user) return null;
 
@@ -95,7 +98,6 @@ export async function authenticateApiKey(authHeader?: string, clientIp?: string)
     id: user.id,
     email: user.email,
     name: user.name,
-    apiKey: user.apiKey,
     hasActiveSubscription: true, // Free tier is active by default for all valid users
     subscriptionPlan: subscription?.plan_name || "free",
     validUntil: subscription?.valid_until || "lifetime",
@@ -119,7 +121,8 @@ export async function authenticateApiKey(authHeader?: string, clientIp?: string)
 export async function handleChatCompletions(
   user: AuthenticatedUser,
   body: any,
-  res: Response
+  res: Response,
+  quotaReservation?: QuotaReservation,
 ) {
   const {
     model = DEFAULT_CHAT_MODEL,
@@ -127,12 +130,25 @@ export async function handleChatCompletions(
     stream = true,
     temperature = 0,
   } = body;
+  const planId = user.subscriptionPlan || "free";
+  const requestId = uuidv4();
+  const requestStartedAt = Date.now();
 
   // ── 1. Cache Lookup ─────────────────────────────────────────────────────────
-  const cacheKey = generateCacheKey(model, messages, temperature);
+  const cacheKey = generateCacheKey(
+    {
+      userId: user.id,
+      projectId: typeof body.projectRoot === "string" ? body.projectRoot : "default",
+      policyVersion: "2026-10-security-v1",
+    },
+    model,
+    messages,
+    temperature,
+  );
   const cached   = await getFromCache(cacheKey);
 
   if (cached?.responseChunks?.length) {
+    await settleQuotaReservation(quotaReservation, 0);
     console.log(`[VynorAI ⚡ CACHE HIT] 0 tokens | key=${cacheKey.slice(0, 10)}…`);
     res.setHeader("X-VynorAI-Cache", "HIT");
     res.setHeader("X-VynorAI-Tokens-Saved", "100%");
@@ -141,10 +157,17 @@ export async function handleChatCompletions(
       try {
         const estimatedInput = estimateInputTokens(messages);
         const savedTokens = Math.max(350, estimatedInput);
+        const usageLogId = uuidv4();
         await dbRun(
           "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
-          [uuidv4(), user.id, "slm-semantic-cache", savedTokens]
+          [usageLogId, user.id, "slm-semantic-cache", savedTokens]
         );
+        await recordRequestEconomics({
+          requestId, usageLogId, userId: user.id, planId, requestedModel: model,
+          provider: "cache", inputTokens: 0, outputTokens: 0,
+          providerCostUsd: 0, costSource: "local-zero", cacheStatus: "hit",
+          estimatedTokensSaved: savedTokens, latencyMs: Date.now() - requestStartedAt,
+        });
       } catch (_) {}
     })();
 
@@ -157,6 +180,17 @@ export async function handleChatCompletions(
       res.write("data: [DONE]\n\n");
       return res.end();
     } else {
+      const content = cached.responseChunks.map((chunk: any) =>
+        chunk?.choices?.[0]?.delta?.content ?? chunk?.choices?.[0]?.message?.content ?? ""
+      ).join("");
+      return res.json({
+        id: `cache-${requestId}`,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      });
     }
   }
 
@@ -169,7 +203,9 @@ export async function handleChatCompletions(
   if (rawQuery) {
     const engineResult = await executeVynorEngine(rawQuery, {});
     if (engineResult.status === "SUCCESS" || engineResult.status === "VALIDATION_FAILED") {
+      await settleQuotaReservation(quotaReservation, 0);
       const responseMarkdown = formatOrchestrationToMarkdown(engineResult);
+      const engineSavedTokens = Math.max(650, Math.round(rawQuery.length / 2) + Math.round(responseMarkdown.length / 3));
       console.log(`[VynorAI ⚡ 5-LAYER ENGINE] 0 tokens | status=${engineResult.status} | workflow=${engineResult.workflowId}`);
       res.setHeader("X-VynorAI-Engine", "5-LAYER-LOCAL");
       res.setHeader("X-VynorAI-Workflow", engineResult.workflowId || "none");
@@ -177,13 +213,21 @@ export async function handleChatCompletions(
 
       (async () => {
         try {
-          const savedTokens = Math.max(650, Math.round(rawQuery.length / 2) + Math.round(responseMarkdown.length / 3));
+          const savedTokens = engineSavedTokens;
           await dbRun(
             "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
             [uuidv4(), user.id, "vynorai-slm-engine", savedTokens]
           );
         } catch (_) {}
       })();
+      recordRequestEconomics({
+        requestId, userId: user.id, planId, requestedModel: model,
+        resolvedModel: "vynorai-local-engine", provider: "deterministic",
+        inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
+        costSource: "local-zero", cacheStatus: "bypass",
+        templateId: engineResult.workflowId, estimatedTokensSaved: engineSavedTokens,
+        latencyMs: Date.now() - requestStartedAt,
+      }).catch((err) => console.error("[Economics] Local engine ledger failed:", err));
 
       const chunk = {
         id: "vynor-" + uuidv4(),
@@ -221,20 +265,30 @@ export async function handleChatCompletions(
 
   const instantMatch = checkInstantTemplateMatch(rawQuery);
   if (instantMatch.matched && instantMatch.responseMarkdown) {
+    await settleQuotaReservation(quotaReservation, 0);
     console.log(`[VynorAI ⚡ INSTANT GOLDEN SCAFFOLD] 0 tokens | template=${instantMatch.template?.id}`);
     res.setHeader("X-VynorAI-Scaffold", "INSTANT_VAULT_HIT");
     res.setHeader("X-VynorAI-Scaffold-Match", instantMatch.template?.id || "matched");
     res.setHeader("X-VynorAI-Tokens-Saved", "100%");
+    const templateSavedTokens = Math.max(1200, Math.round((instantMatch.responseMarkdown?.length || 2000) / 3));
 
     (async () => {
       try {
-        const savedTokens = Math.max(1200, Math.round((instantMatch.responseMarkdown?.length || 2000) / 3));
+        const savedTokens = templateSavedTokens;
         await dbRun(
           "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
           [uuidv4(), user.id, "vynorai-golden-scaffold", savedTokens]
         );
       } catch (_) {}
     })();
+    recordRequestEconomics({
+      requestId, userId: user.id, planId, requestedModel: model,
+      resolvedModel: "vynorai-golden-vault", provider: "template",
+      inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
+      costSource: "local-zero", cacheStatus: "bypass",
+      templateId: instantMatch.template?.id, estimatedTokensSaved: templateSavedTokens,
+      latencyMs: Date.now() - requestStartedAt,
+    }).catch((err) => console.error("[Economics] Template ledger failed:", err));
 
     const chunk = {
       id: "scaffold-" + uuidv4(),
@@ -272,9 +326,19 @@ export async function handleChatCompletions(
   // ── 1c. Composite Project Blueprint Direct Delivery (E-Commerce, SaaS, FinTech) ──
   const blueprintMatch = detectProjectBlueprint(rawQuery);
   if (blueprintMatch) {
+    await settleQuotaReservation(quotaReservation, 0);
     console.log(`[VynorAI 🏗️ BLUEPRINT MATCH] ${blueprintMatch.id} | query="${rawQuery.slice(0, 40)}"`);
     res.setHeader("X-VynorAI-Blueprint", blueprintMatch.id);
     const planMarkdown = formatBlueprintPlan(blueprintMatch);
+    const blueprintSavedTokens = Math.max(500, Math.ceil((rawQuery.length + planMarkdown.length) / 4));
+    recordRequestEconomics({
+      requestId, userId: user.id, planId, requestedModel: model,
+      resolvedModel: "vynorai-blueprint-architect", provider: "blueprint",
+      inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
+      costSource: "local-zero", cacheStatus: "bypass",
+      templateId: blueprintMatch.id, estimatedTokensSaved: blueprintSavedTokens,
+      latencyMs: Date.now() - requestStartedAt,
+    }).catch((err) => console.error("[Economics] Blueprint ledger failed:", err));
 
     const chunk = {
       id: "blueprint-" + uuidv4(),
@@ -324,7 +388,6 @@ export async function handleChatCompletions(
   };
 
   // ── 2a. Memory & Rules: inject user's persistent rules + remembered facts ────
-  const planId = user.subscriptionPlan || "free";
   const projectScope = body.projectRoot ? String(body.projectRoot).slice(-16) : undefined;
   const { body: memBody } = await enrichWithMemory(enriched, user.id, projectScope);
 
@@ -375,24 +438,25 @@ export async function handleChatCompletions(
   const collected: any[] = [];
 
   // ── 3 & 4. Smart Provider Dispatch with Prompt Caching ──────────────────────
-  const { collected: providerChunks } = await dispatchToProvider(
+  const dispatch = await dispatchToProvider(
     optimised,
     res,
     (chunk) => collected.push(chunk)
   );
+  const providerChunks = dispatch.collected;
 
   // If dispatchToProvider already wrote the response (most cases), we're done.
   // Merge whatever came back.
   const allChunks = providerChunks.length ? providerChunks : collected;
 
   // ── 5. Async: Save to Cache + Log Usage + Increment Monthly Ledger ──────
-  if (allChunks.length > 0) {
+  if (dispatch.success && allChunks.length > 0) {
     saveToCache(cacheKey, allChunks);
   }
 
   // Extract exact provider usage if returned in stream / response
-  let realPromptTokens = 0;
-  let realCompletionTokens = 0;
+  let realPromptTokens = dispatch.usage?.inputTokens ?? 0;
+  let realCompletionTokens = dispatch.usage?.outputTokens ?? 0;
   for (const c of allChunks) {
     if (c?.usage) {
       if (typeof c.usage.prompt_tokens === "number") realPromptTokens = c.usage.prompt_tokens;
@@ -411,9 +475,11 @@ export async function handleChatCompletions(
 
   const finalInputTokens = realPromptTokens > 0 ? realPromptTokens : estimatedTokens;
   const finalOutputTokens = realCompletionTokens > 0 ? realCompletionTokens : estimatedOutputTokens;
-  const totalTokens = finalInputTokens + finalOutputTokens;
+  // Never consume customer quota for VynorAI/upstream availability failures.
+  const totalTokens = dispatch.success ? finalInputTokens + finalOutputTokens : 0;
 
   // Insert granular log with Blockchain Merkle Audit Chain
+  const usageLogId = uuidv4();
   (async () => {
     try {
       const lastLog = await dbGet<any>(
@@ -432,16 +498,33 @@ export async function handleChatCompletions(
 
       await dbRun(
         "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached, prev_hash, audit_hash) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
-        [uuidv4(), user.id, model, finalInputTokens, finalOutputTokens, totalTokens, prevHash, auditHash]
+        [usageLogId, user.id, model, finalInputTokens, finalOutputTokens, totalTokens, prevHash, auditHash]
       );
+      await recordRequestEconomics({
+        requestId,
+        usageLogId,
+        userId: user.id,
+        planId,
+        requestedModel: model,
+        resolvedModel: dispatch.resolvedModel,
+        provider: dispatch.provider,
+        inputTokens: finalInputTokens,
+        outputTokens: finalOutputTokens,
+        providerCostUsd: dispatch.usage?.providerCostUsd ?? null,
+        costSource: dispatch.usage?.costSource ?? "unknown",
+        cacheStatus: "miss",
+        optimizationMode: ctxResult.optimizationMode,
+        templateId: scaffold?.id,
+        estimatedTokensSaved: ctxResult.savedTokens,
+        latencyMs: dispatch.latencyMs ?? Date.now() - requestStartedAt,
+        outcome: dispatch.success ? "success" : "failed",
+      });
     } catch (err) {
       console.error("[Merkle Audit] Failed to record audit log:", err);
     }
   })();
 
-  // Increment monthly ledger atomically
-  import("./monthlyQuota.js").then(({ incrementMonthlyUsage }) => {
-    incrementMonthlyUsage(user.id, totalTokens, 1).catch(console.error);
-  });
+  // Replace the pre-dispatch reservation with exact/estimated actual usage.
+  // The request count was already consumed atomically by the middleware.
+  await settleQuotaReservation(quotaReservation, totalTokens);
 }
-

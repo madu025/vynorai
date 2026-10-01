@@ -1,5 +1,9 @@
-const token = '10|Zj0AyQJWPrRRT0XgkcJbnIdPQ26npV4h7lipEkIZ7d7ac351';
-const base = 'http://172.255.209.243:8000/api/v1';
+const token = process.env.COOLIFY_API_TOKEN;
+const base = process.env.COOLIFY_API_URL;
+
+if (!token || !base) {
+  throw new Error('COOLIFY_API_TOKEN and COOLIFY_API_URL must be set');
+}
 
 async function deployApp() {
   const headers = { 
@@ -16,13 +20,13 @@ async function deployApp() {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      project_uuid: 'kpqoxempx3h7l69cpk24nraw',
-      server_uuid: '4rsokr1xcbrlfnej4uruvdjj',
-      environment_name: 'production',
-      git_repository: 'https://github.com/madu025/vynorai',
-      git_branch: 'main',
+      project_uuid: process.env.COOLIFY_PROJECT_UUID,
+      server_uuid: process.env.COOLIFY_SERVER_UUID,
+      environment_name: process.env.COOLIFY_ENVIRONMENT_NAME || 'production',
+      git_repository: process.env.COOLIFY_GIT_REPOSITORY || 'https://github.com/madu025/vynorai',
+      git_branch: process.env.COOLIFY_GIT_BRANCH || 'main',
       build_pack: 'dockerfile',
-      ports_exposes: '3000',
+      ports_exposes: '3333,3334',
       base_directory: '/backend'
     })
   });
@@ -38,13 +42,13 @@ async function deployApp() {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        project_uuid: 'kpqoxempx3h7l69cpk24nraw',
-        server_uuid: '4rsokr1xcbrlfnej4uruvdjj',
-        environment_name: 'production',
-        git_repository: 'madu025/vynorai',
-        git_branch: 'main',
+        project_uuid: process.env.COOLIFY_PROJECT_UUID,
+        server_uuid: process.env.COOLIFY_SERVER_UUID,
+        environment_name: process.env.COOLIFY_ENVIRONMENT_NAME || 'production',
+        git_repository: process.env.COOLIFY_GIT_REPOSITORY || 'madu025/vynorai',
+        git_branch: process.env.COOLIFY_GIT_BRANCH || 'main',
         build_pack: 'dockerfile',
-        ports_exposes: '3000',
+        ports_exposes: '3333,3334',
         base_directory: '/backend'
       })
     });

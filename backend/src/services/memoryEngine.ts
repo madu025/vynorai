@@ -15,6 +15,16 @@
 
 import { dbGet, dbAll, dbRun, db } from "../db.js";
 import { v4 as uuidv4 } from "uuid";
+import { decryptCredential, encryptCredential, encryptionAtRestConfigured } from "./credentialVault.js";
+
+function protect(value: string): string {
+  return encryptCredential(value) || value;
+}
+
+function unprotect(value: string): string {
+  if (!value.startsWith("v1:")) return value;
+  return decryptCredential(value) || "";
+}
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 export async function ensureMemoryTables(): Promise<void> {
@@ -48,6 +58,21 @@ export async function ensureMemoryTables(): Promise<void> {
       (err) => { if (err) reject(err); else resolve(); }
     );
   });
+
+  if (encryptionAtRestConfigured()) {
+    const plaintextRules = await dbAll<{ id: string; rule: string }>(
+      "SELECT id, rule FROM user_rules WHERE rule NOT LIKE 'v1:%'",
+    );
+    for (const row of plaintextRules) {
+      await dbRun("UPDATE user_rules SET rule = ? WHERE id = ?", [protect(row.rule), row.id]);
+    }
+    const plaintextMemory = await dbAll<{ id: string; value: string }>(
+      "SELECT id, value FROM user_memory WHERE value NOT LIKE 'v1:%'",
+    );
+    for (const row of plaintextMemory) {
+      await dbRun("UPDATE user_memory SET value = ? WHERE id = ?", [protect(row.value), row.id]);
+    }
+  }
 }
 
 // ─── Rules CRUD ───────────────────────────────────────────────────────────────
@@ -56,14 +81,14 @@ export async function getUserRules(userId: string, scope = "global"): Promise<st
     "SELECT rule FROM user_rules WHERE user_id = ? AND scope = ? AND enabled = 1 ORDER BY created_at ASC",
     [userId, scope]
   );
-  return rows.map((r) => r.rule);
+  return rows.map((r) => unprotect(r.rule)).filter(Boolean);
 }
 
 export async function addUserRule(userId: string, rule: string, scope = "global"): Promise<string> {
   const id = uuidv4();
   await dbRun(
     "INSERT INTO user_rules (id, user_id, scope, rule) VALUES (?, ?, ?, ?)",
-    [id, userId, scope, rule.trim()]
+    [id, userId, scope, protect(rule.trim())]
   );
   return id;
 }
@@ -84,7 +109,7 @@ export async function getUserMemory(userId: string): Promise<Record<string, stri
      ORDER BY created_at DESC LIMIT 50`,
     [userId]
   );
-  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  return Object.fromEntries(rows.map((r) => [r.key, unprotect(r.value)]).filter(([, value]) => value));
 }
 
 export async function setMemory(userId: string, key: string, value: string, ttlDays?: number): Promise<void> {
@@ -93,7 +118,7 @@ export async function setMemory(userId: string, key: string, value: string, ttlD
     `INSERT INTO user_memory (id, user_id, key, value, expires_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at`,
-    [uuidv4(), userId, key, value, expires]
+    [uuidv4(), userId, key, protect(value), expires]
   );
 }
 

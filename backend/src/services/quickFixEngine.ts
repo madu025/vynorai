@@ -11,6 +11,10 @@ import { AuthenticatedUser } from "./aiProxy.js";
 import { dispatchToProvider } from "./providerRouter.js";
 import { sanitizeText } from "./secretSanitizer.js";
 import { getPlan } from "../config.js";
+import { QuotaReservation, settleQuotaReservation } from "./monthlyQuota.js";
+import { recordRequestEconomics } from "./costLedger.js";
+import { dbRun } from "../db.js";
+import { v4 as uuidv4 } from "uuid";
 
 export interface QuickFixRequest {
   errorLog: string;         // Terminal output / compiler error / stack trace
@@ -23,8 +27,10 @@ export interface QuickFixRequest {
 export async function handleQuickFix(
   user: AuthenticatedUser,
   body: QuickFixRequest,
-  res: Response
+  res: Response,
+  quotaReservation?: QuotaReservation,
 ) {
+  const startedAt = Date.now();
   const plan = getPlan(user.subscriptionPlan || "free");
   const model = body.model || (user.subscriptionPlan === "pro" || user.subscriptionPlan === "ultra" 
     ? "deepseek/deepseek-r1" 
@@ -70,5 +76,29 @@ ${cleanContext}
   };
 
   res.setHeader("X-VynorAI-Engine", "QuickFix-Repair");
-  await dispatchToProvider(payload, res);
+  const dispatch = await dispatchToProvider(payload, res);
+  const { collected } = dispatch;
+  let outputChars = 0;
+  for (const chunk of collected) {
+    outputChars += chunk?.choices?.[0]?.delta?.content?.length || 0;
+    outputChars += chunk?.choices?.[0]?.message?.content?.length || 0;
+  }
+  const inputTokens = dispatch.usage?.inputTokens || Math.ceil(prompt.length / 4);
+  const outputTokens = dispatch.usage?.outputTokens || Math.max(1, Math.ceil(outputChars / 4));
+  const actualTokens = dispatch.success ? inputTokens + outputTokens : 0;
+  await settleQuotaReservation(quotaReservation, actualTokens);
+  const usageLogId = uuidv4();
+  await dbRun(
+    "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, ?, ?, 0)",
+    [usageLogId, user.id, model, inputTokens, outputTokens, actualTokens],
+  );
+  await recordRequestEconomics({
+    usageLogId, userId: user.id, planId: plan.id, requestedModel: model,
+    resolvedModel: dispatch.resolvedModel, provider: dispatch.provider,
+    inputTokens, outputTokens,
+    providerCostUsd: dispatch.usage?.providerCostUsd ?? null,
+    costSource: dispatch.usage?.costSource ?? "unknown", cacheStatus: "bypass",
+    optimizationMode: "quick-fix", latencyMs: dispatch.latencyMs ?? Date.now() - startedAt,
+    outcome: dispatch.success ? "success" : "failed",
+  });
 }

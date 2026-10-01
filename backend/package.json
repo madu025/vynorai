@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "test:quota": "npm run build && node test_quota_concurrency.mjs",
     "start": "node dist/index.js",
     "prod:start": "pm2 start ecosystem.config.cjs",
     "prod:reload": "pm2 reload ecosystem.config.cjs",

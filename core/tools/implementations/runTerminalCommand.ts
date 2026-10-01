@@ -2,6 +2,7 @@ import iconv from "iconv-lite";
 import childProcess from "node:child_process";
 import os from "node:os";
 import { ContinueError, ContinueErrorReason } from "../../util/errors";
+import { buildSandboxedCommand } from "../../util/sandbox.js";
 
 // Default timeout for terminal commands (2 minutes)
 const DEFAULT_TOOL_TIMEOUT_MS = 120_000;
@@ -144,11 +145,18 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
             }
           }
 
-          // Use spawn with color environment
-          const { shell, args } = getShellCommand(command);
-          const childProc = childProcess.spawn(shell, args, {
+          // Use Vynor Native Sandboxed command runner
+          const sandboxed = buildSandboxedCommand({
             cwd,
-            env: getColorEnv(), // Add enhanced environment for colors
+            command,
+            allowedWorkspaceDirs: workspaceDirs.map((w) => resolveWorkingDirectory([w])),
+          });
+          const childProc = childProcess.spawn(sandboxed.shell, sandboxed.args, {
+            cwd,
+            env: {
+              ...getColorEnv(),
+              ...sandboxed.env,
+            },
           });
 
           // Track this process for foreground cancellation

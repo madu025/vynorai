@@ -12,6 +12,7 @@ import { proxyRouter } from "./routes/proxy.js";
 import { initCacheTable } from "./services/cacheEngine.js";
 import { startHealthMonitor } from "./services/healthMonitor.js";
 import { getRedis, redisStatus } from "./services/redisStore.js";
+import { billingDbStatus, billingParity, initBillingDb } from "./services/billingDb.js";
 
 import { securityHeadersMiddleware } from "./middleware/security.js";
 
@@ -131,6 +132,7 @@ app.get("/health", (_req, res) => {
     .map(([k]) => k);
 
   const redis = redisStatus();
+  const billing = billingDbStatus();
   res.json({
     status: "ok",
     service: "VynorAI Cloud API",
@@ -141,6 +143,7 @@ app.get("/health", (_req, res) => {
       : ["ollama (local)"],
     supportedModels: Object.keys(MODEL_ALIASES).length,
     redis: { configured: redis.configured, ready: redis.ready },
+    billing,
     features: [
       "multi-provider-routing",
       "circuit-breaker",
@@ -267,9 +270,14 @@ async function start() {
   }
 
   await initDb();
+  await initBillingDb();
   await initCacheTable();
   await initModelRegistry();
   await getRedis();
+  const parity = await billingParity();
+  if (Object.values(parity).some((entry) => !entry.match)) {
+    throw new Error(`PostgreSQL billing parity check failed: ${JSON.stringify(parity)}`);
+  }
 
   const activeKeys = Object.entries(config.aiKeys)
     .filter(([k, v]) => k !== "ollama" && v)

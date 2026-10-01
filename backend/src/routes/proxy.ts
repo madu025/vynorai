@@ -275,7 +275,7 @@ proxyRouter.delete("/project/index", requireValidSubscriber, (req: Request, res:
 proxyRouter.get("/security/merkle-verify", requireValidSubscriber, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const { dbAll } = await import("../db.js");
+    const { billingAll: dbAll } = await import("../services/billingDb.js");
     const logs = await dbAll<any>(
       "SELECT id, model, tokens_used, prev_hash, audit_hash, created_at FROM usage_logs WHERE user_id = ? ORDER BY created_at ASC LIMIT 100",
       [user.id]
@@ -345,4 +345,3 @@ proxyRouter.get("/scaffolds/:id", requireValidSubscriber, async (req: Request, r
   }
   res.json(pkg);
 });
-

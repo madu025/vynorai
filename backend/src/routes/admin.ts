@@ -64,7 +64,7 @@ adminRouter.post("/circuit/:provider/reset", requireAdmin, (req: Request, res: R
  * GET /admin/stats
  * Usage statistics overview (top users, requests per day, etc.)
  */
-import { dbAll, dbGet, dbRun } from "../db.js";
+import { billingAll as dbAll, billingGet as dbGet, billingRun as dbRun } from "../services/billingDb.js";
 import { v4 as uuidv4 } from "uuid";
 import {
   getAllModels,

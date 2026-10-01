@@ -19,6 +19,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^10.0.13",
+    "pg": "^8.16.3",
     "redis": "^5.8.2",
     "sqlite3": "^5.1.7",
     "uuid": "^11.1.0"
@@ -30,6 +31,7 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.13.9",
     "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.15.5",
     "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
     "tsx": "^4.19.3",

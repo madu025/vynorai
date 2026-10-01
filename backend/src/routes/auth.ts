@@ -4,7 +4,7 @@ import { NextFunction, Request, Response, Router } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
-import { dbAll, dbGet, dbRun } from "../db.js";
+import { billingAll as dbAll, billingGet as dbGet, billingRun as dbRun } from "../services/billingDb.js";
 import { authRateLimiter } from "../middleware/security.js";
 import { sendVerificationEmail } from "../services/emailService.js";
 import {

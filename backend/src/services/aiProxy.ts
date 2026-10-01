@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { Response } from "express";
-import { dbGet, dbRun } from "../db.js";
+import { billingGet as dbGet, billingRun as dbRun } from "./billingDb.js";
 import { v4 as uuidv4 } from "uuid";
 import { generateCacheKey, getFromCache, saveToCache } from "./cacheEngine.js";
 import { VYNORAI_AGENT_TOOLS, VYNORAI_AGENT_SYSTEM_PROMPT } from "./agentEngine.js";

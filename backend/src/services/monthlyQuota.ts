@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { dbGet, dbRun } from "../db.js";
+import { billingGet as dbGet, billingRun as dbRun } from "./billingDb.js";
 import { getPlan, getUpgradePlan, isModelAllowedForPlan, PlanDefinition } from "../config.js";
 
 export interface MonthlyUsageRow {
@@ -47,9 +47,10 @@ export async function getOrInitMonthlyUsage(userId: string, planName: string = "
     const periodEnd = periodEndDate.toISOString().slice(0, 10);
 
     await dbRun(
-      `INSERT OR IGNORE INTO monthly_usage
+      `INSERT INTO monthly_usage
        (id, user_id, plan_name, max_tokens, used_tokens, used_requests, period_start, period_end)
-       VALUES (?, ?, ?, ?, 0, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, 0, 0, ?, ?)
+       ON CONFLICT(user_id, period_start) DO NOTHING`,
       [id, userId, planDef.id, planDef.monthlyTokens, periodStart, periodEnd]
     );
 

@@ -16,7 +16,7 @@ import { dispatchToProvider } from "./providerRouter.js";
 import { sanitizeText } from "./secretSanitizer.js";
 import { getPlan } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
-import { dbRun } from "../db.js";
+import { billingRun as dbRun } from "./billingDb.js";
 import { QuotaReservation, settleQuotaReservation } from "./monthlyQuota.js";
 import { recordRequestEconomics } from "./costLedger.js";
 

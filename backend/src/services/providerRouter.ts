@@ -93,14 +93,13 @@ function buildEndpoints(): Partial<Record<ProviderID, EndpointInfo>> {
 function selectProviderChain(model: string): ProviderID[] {
   const eps = buildEndpoints();
 
-  // For OpenRouter-format models (e.g. "anthropic/claude-sonnet-4-6") always
-  // prefer OpenRouter. Direct-provider keys only used for Ollama local models.
+  // For OpenRouter-format models (e.g. "anthropic/claude-sonnet-4-6")
   if (isOpenRouterModelId(model)) {
     const directProvider: ProviderID | null = model.startsWith("deepseek/") ? "deepseek"
       : model.startsWith("openai/") ? "openai"
       : model.startsWith("anthropic/") ? "anthropic"
       : null;
-    const directFirst = process.env.VYNOR_PROVIDER_STRATEGY === "direct-first";
+    const directFirst = process.env.VYNOR_PROVIDER_STRATEGY !== "openrouter-first";
     const chain: ProviderID[] = [];
     if (directFirst && directProvider && eps[directProvider]) chain.push(directProvider);
     if (eps.openrouter) chain.push("openrouter");
@@ -108,10 +107,10 @@ function selectProviderChain(model: string): ProviderID[] {
     return chain;
   }
 
-  // Short-name model → still prefer OpenRouter
+  // Short-name model (e.g. deepseek-chat, deepseek-r1)
   const chain: ProviderID[] = [];
+  if (eps.deepseek && (model.startsWith("deepseek/") || model.startsWith("deepseek-"))) chain.push("deepseek");
   if (eps.openrouter) chain.push("openrouter");
-  if (eps.deepseek && model.startsWith("deepseek/")) chain.push("deepseek");
   if (eps.openai && model.startsWith("openai/")) chain.push("openai");
   if (!model.includes("/")) chain.push("ollama");
   return chain;
@@ -121,7 +120,7 @@ function resolveProviderModel(provider: ProviderID, model: string): string | nul
   if (provider === "openrouter") return model;
   if (provider === "openai" && model.startsWith("openai/")) return model.slice("openai/".length);
   if (provider === "anthropic" && model.startsWith("anthropic/")) return model.slice("anthropic/".length);
-  if (provider === "deepseek" && model.startsWith("deepseek/")) {
+  if (provider === "deepseek" && (model.startsWith("deepseek/") || model.startsWith("deepseek-"))) {
     return /(^|[-/])r1($|-)/i.test(model)
       ? (process.env.DEEPSEEK_REASONER_MODEL || "deepseek-reasoner")
       : (process.env.DEEPSEEK_CHAT_MODEL || "deepseek-chat");

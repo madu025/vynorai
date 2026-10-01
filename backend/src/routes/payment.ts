@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { config, PLANS, getPlan } from "../config.js";
-import { dbGet, dbRun } from "../db.js";
+import { billingGet as dbGet, billingRun as dbRun } from "../services/billingDb.js";
 import { generatePayhereHash, verifyPayhereIpn } from "../services/payhere.js";
 import { requireAuth } from "./auth.js";
 import { getOrInitMonthlyUsage } from "../services/monthlyQuota.js";

@@ -1,4 +1,4 @@
-import { dbRun } from "../db.js";
+import { billingRun as dbRun } from "./billingDb.js";
 import { getEffectivePrice, getPlan, ProviderID } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
 

@@ -298,6 +298,7 @@ export class TaskRuntime {
     objective: string;
     authority: SubagentAuthority;
     fileScope: string[];
+    dependsOn?: string[];
     budget?: Partial<
       Pick<AgentTaskBudget, "maxInputTokens" | "maxOutputTokens" | "maxCostUsd">
     >;
@@ -309,6 +310,16 @@ export class TaskRuntime {
       if (task.subagents.length >= MAX_IMPLEMENTATION_SUBAGENTS)
         throw new Error("Implementation subagent limit exceeded");
       const fileScope = [...new Set(input.fileScope.map(canonicalScopePath))];
+      const dependsOn = [...new Set(input.dependsOn ?? [])];
+      if (
+        dependsOn.some(
+          (dependencyId) =>
+            !(task.subagents ?? []).some((item) => item.id === dependencyId),
+        )
+      )
+        throw new Error(
+          "Subagent dependency does not exist in the parent task",
+        );
       if (input.authority.write && fileScope.length === 0)
         throw new Error(
           "Write-capable subagents require an explicit file scope",
@@ -346,6 +357,8 @@ export class TaskRuntime {
         status: "queued",
         authority: { ...input.authority },
         fileScope,
+        dependsOn,
+        baseWorkspaceRevision: task.workspaceRevision,
         budget,
         createdAt: now,
         updatedAt: now,
@@ -357,6 +370,7 @@ export class TaskRuntime {
         role: subagent.role,
         authority: subagent.authority,
         fileScope: subagent.fileScope,
+        dependsOn: subagent.dependsOn,
       });
       return structuredClone(subagent);
     });
@@ -365,12 +379,27 @@ export class TaskRuntime {
   async startSubagent(
     taskId: string,
     subagentId: string,
+    workspaceRevision?: number,
   ): Promise<ImplementationSubagent> {
     return this.mutex.runExclusive(async () => {
       const task = this.requireTask(taskId);
       const subagent = this.requireSubagent(task, subagentId);
       if (subagent.status !== "queued")
         throw new Error("Subagent is not queued");
+      const currentRevision = workspaceRevision ?? task.workspaceRevision;
+      if (
+        currentRevision !== task.workspaceRevision ||
+        currentRevision !== subagent.baseWorkspaceRevision
+      )
+        throw new Error("Workspace changed since subagent delegation");
+      const incompleteDependency = subagent.dependsOn.find(
+        (dependencyId) =>
+          this.requireSubagent(task, dependencyId).status !== "completed",
+      );
+      if (incompleteDependency)
+        throw new Error(
+          `Subagent dependency ${incompleteDependency} is incomplete`,
+        );
       if (subagent.authority.write) {
         for (const peer of task.subagents ?? []) {
           if (
@@ -480,12 +509,19 @@ export class TaskRuntime {
     changedFiles: string[];
     verification: VerificationResult[];
     residualRisks?: string[];
+    workspaceRevision?: number;
   }): Promise<ImplementationSubagent> {
     return this.mutex.runExclusive(async () => {
       const task = this.requireTask(input.taskId);
       const subagent = this.requireSubagent(task, input.subagentId);
       if (subagent.status !== "running")
         throw new Error("Subagent is not running");
+      const currentRevision = input.workspaceRevision ?? task.workspaceRevision;
+      if (
+        currentRevision !== task.workspaceRevision ||
+        currentRevision !== subagent.baseWorkspaceRevision
+      )
+        throw new Error("Workspace changed during delegated implementation");
       const changedFiles = [
         ...new Set(input.changedFiles.map(canonicalScopePath)),
       ];
@@ -498,6 +534,19 @@ export class TaskRuntime {
         )
       )
         throw new Error("Subagent changed a file outside its delegated scope");
+      const unorderedConflict = (task.subagents ?? []).find(
+        (peer) =>
+          peer.id !== subagent.id &&
+          peer.status === "completed" &&
+          !subagent.dependsOn.includes(peer.id) &&
+          (peer.handoff?.changedFiles ?? []).some((peerFile) =>
+            changedFiles.some((file) => scopesOverlap(file, peerFile)),
+          ),
+      );
+      if (unorderedConflict)
+        throw new Error(
+          `Handoff conflicts with completed subagent ${unorderedConflict.id} without an explicit dependency`,
+        );
       if (
         changedFiles.length > 0 &&
         !input.verification.some(
@@ -528,6 +577,37 @@ export class TaskRuntime {
     });
   }
 
+  getSubagentMergeQueue(taskId: string): ImplementationSubagent[] {
+    const task = this.requireTask(taskId);
+    const completed = (task.subagents ?? []).filter(
+      (item) => item.status === "completed" && Boolean(item.handoff),
+    );
+    const byId = new Map(completed.map((item) => [item.id, item]));
+    const remaining = new Set(completed.map((item) => item.id));
+    const ordered: ImplementationSubagent[] = [];
+    while (remaining.size) {
+      const ready = [...remaining]
+        .map((id) => byId.get(id)!)
+        .filter((item) =>
+          item.dependsOn.every(
+            (dependencyId) =>
+              !byId.has(dependencyId) || !remaining.has(dependencyId),
+          ),
+        )
+        .sort(
+          (left, right) =>
+            left.createdAt - right.createdAt || left.id.localeCompare(right.id),
+        );
+      if (!ready.length)
+        throw new Error("Subagent handoff dependency cycle detected");
+      for (const item of ready) {
+        remaining.delete(item.id);
+        ordered.push(item);
+      }
+    }
+    return structuredClone(ordered);
+  }
+
   private requireTask(taskId: string): AgentTask {
     const task = this.tasks.get(taskId) ?? this.journal.load(taskId);
     if (!task) throw new Error("Task not found");
@@ -538,6 +618,10 @@ export class TaskRuntime {
       actionDigests: {},
       cancelRequested: false,
     };
+    for (const subagent of task.subagents ?? []) {
+      subagent.dependsOn ??= [];
+      subagent.baseWorkspaceRevision ??= task.workspaceRevision;
+    }
     this.tasks.set(taskId, task);
     return task;
   }

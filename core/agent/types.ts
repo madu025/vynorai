@@ -72,6 +72,10 @@ export interface ImplementationSubagent {
   authority: SubagentAuthority;
   /** Canonical workspace-relative files or directory prefixes. */
   fileScope: string[];
+  /** IDs of earlier subagents whose verified handoffs must complete first. */
+  dependsOn: string[];
+  /** Workspace snapshot revision used to reject stale execution. */
+  baseWorkspaceRevision: number;
   budget: AgentTaskBudget;
   handoff?: SubagentHandoff;
   createdAt: number;

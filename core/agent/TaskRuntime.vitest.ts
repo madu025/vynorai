@@ -357,4 +357,133 @@ describe("implementation subagents", () => {
     });
     expect(runtime.get(task.id)?.budget.inputTokens).toBe(100);
   });
+
+  it("enforces dependency order, stale revisions, and deterministic merge order", async () => {
+    const { runtime } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "s",
+      workspaceId: "w",
+      workspaceRevision: 9,
+      goal: "Ordered delegated implementation",
+    });
+    const authority = {
+      read: true,
+      write: true,
+      command: false,
+      network: false,
+    };
+    const first = await runtime.createSubagent({
+      taskId: task.id,
+      role: "backend",
+      objective: "Implement API",
+      authority,
+      fileScope: ["backend/src"],
+      budget: {
+        maxInputTokens: 10_000,
+        maxOutputTokens: 2_000,
+        maxCostUsd: 0.2,
+      },
+    });
+    const second = await runtime.createSubagent({
+      taskId: task.id,
+      role: "qa",
+      objective: "Add API tests",
+      authority,
+      fileScope: ["backend/src"],
+      dependsOn: [first.id],
+      budget: {
+        maxInputTokens: 10_000,
+        maxOutputTokens: 2_000,
+        maxCostUsd: 0.2,
+      },
+    });
+    await expect(runtime.startSubagent(task.id, second.id, 9)).rejects.toThrow(
+      "dependency",
+    );
+    await expect(runtime.startSubagent(task.id, first.id, 10)).rejects.toThrow(
+      "Workspace changed",
+    );
+    await runtime.startSubagent(task.id, first.id, 9);
+    const verification = [
+      {
+        id: "verification-1",
+        kind: "test" as const,
+        status: "passed" as const,
+        summary: "tests passed",
+        createdAt: Date.now(),
+      },
+    ];
+    await runtime.completeSubagent({
+      taskId: task.id,
+      subagentId: first.id,
+      summary: "API implemented",
+      changedFiles: ["backend/src/api.ts"],
+      verification,
+      workspaceRevision: 9,
+    });
+    await runtime.startSubagent(task.id, second.id, 9);
+    await runtime.completeSubagent({
+      taskId: task.id,
+      subagentId: second.id,
+      summary: "API tests implemented",
+      changedFiles: ["backend/src/api.ts"],
+      verification,
+      workspaceRevision: 9,
+    });
+    expect(
+      runtime.getSubagentMergeQueue(task.id).map((item) => item.id),
+    ).toEqual([first.id, second.id]);
+  });
+
+  it("rejects overlapping completed handoffs without an explicit dependency", async () => {
+    const { runtime } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "s",
+      workspaceId: "w",
+      workspaceRevision: 1,
+      goal: "Detect merge conflicts",
+    });
+    const create = (objective: string) =>
+      runtime.createSubagent({
+        taskId: task.id,
+        role: "backend",
+        objective,
+        authority: { read: true, write: true, command: false, network: false },
+        fileScope: ["core/agent"],
+        budget: {
+          maxInputTokens: 10_000,
+          maxOutputTokens: 2_000,
+          maxCostUsd: 0.2,
+        },
+      });
+    const first = await create("First change");
+    const second = await create("Conflicting change");
+    const verification = [
+      {
+        id: "v",
+        kind: "review" as const,
+        status: "passed" as const,
+        summary: "reviewed",
+        createdAt: Date.now(),
+      },
+    ];
+    await runtime.startSubagent(task.id, first.id);
+    await runtime.completeSubagent({
+      taskId: task.id,
+      subagentId: first.id,
+      summary: "done",
+      changedFiles: ["core/agent/types.ts"],
+      verification,
+    });
+    await runtime.startSubagent(task.id, second.id);
+    await expect(
+      runtime.completeSubagent({
+        taskId: task.id,
+        subagentId: second.id,
+        summary: "done",
+        changedFiles: ["core/agent/types.ts"],
+        verification,
+      }),
+    ).rejects.toThrow("without an explicit dependency");
+  });
 });

@@ -104,6 +104,7 @@ export const WEBVIEW_TO_CORE_PASS_THROUGH: (keyof ToCoreFromWebviewProtocol)[] =
     "agent/subagent/authorizeTool",
     "agent/subagent/consumeBudget",
     "agent/subagent/complete",
+    "agent/subagent/mergeQueue",
     "agent/task/authorizeAction",
     "agent/task/cancel",
     "agent/task/resume",

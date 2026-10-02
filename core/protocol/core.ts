@@ -141,6 +141,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
       objective: string;
       authority: SubagentAuthority;
       fileScope: string[];
+      dependsOn?: string[];
       budget?: Partial<
         Pick<
           AgentTaskBudget,
@@ -193,6 +194,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     },
     ImplementationSubagent,
   ];
+  "agent/subagent/mergeQueue": [{ taskId: string }, ImplementationSubagent[]];
   "agent/plan/create": [
     { taskId: string; steps: ProposedPlanStep[] },
     AgentTask,

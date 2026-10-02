@@ -365,9 +365,14 @@ export class Core {
     on("agent/subagent/create", ({ data }) =>
       this.taskRuntime.createSubagent(data),
     );
-    on("agent/subagent/start", ({ data }) =>
-      this.taskRuntime.startSubagent(data.taskId, data.subagentId),
-    );
+    on("agent/subagent/start", async ({ data }) => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return this.taskRuntime.startSubagent(
+        data.taskId,
+        data.subagentId,
+        workspace.revision,
+      );
+    });
     on("agent/subagent/authorize", ({ data }) =>
       this.taskRuntime.authorizeSubagentAction(data),
     );
@@ -378,8 +383,15 @@ export class Core {
       const { taskId, subagentId, ...usage } = data;
       return this.taskRuntime.consumeSubagentBudget(taskId, subagentId, usage);
     });
-    on("agent/subagent/complete", ({ data }) =>
-      this.taskRuntime.completeSubagent(data),
+    on("agent/subagent/complete", async ({ data }) => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return this.taskRuntime.completeSubagent({
+        ...data,
+        workspaceRevision: workspace.revision,
+      });
+    });
+    on("agent/subagent/mergeQueue", ({ data }) =>
+      this.taskRuntime.getSubagentMergeQueue(data.taskId),
     );
     on("agent/plan/create", ({ data }) =>
       this.agentOrchestrator.createPlan(data.taskId, data.steps),

@@ -2,7 +2,7 @@
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { ChevronUpIcon } from "@heroicons/react/24/solid";
 import { ChatHistoryItem } from "core";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 
 import { AnimatedEllipsis } from "../../AnimatedEllipsis";
@@ -23,6 +23,57 @@ interface ThinkingBlockPeekProps {
   inProgress?: boolean;
   signature?: string;
   tokens?: number;
+}
+
+/**
+ * Strips internal model names and technical provider terms from user-facing thought stream
+ * to preserve a unified, enterprise-grade VynorAI appearance.
+ */
+function sanitizeThinkingContent(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\(?(?:Local\s+)?Qwen(?:\s*2\.5)?(?:\s*Coder)?(?:\s*3B)?\)?/gi, "(Autonomous Architecture Engine)")
+    .replace(/\(?(?:DeepSeek(?:-|\s+))?V4\.1(?:-|\s+)?Flash\)?/gi, "(Code Synthesis Engine)")
+    .replace(/\(?(?:DeepSeek(?:-|\s+))?R1\)?/gi, "(Deep Reasoning Engine)")
+    .replace(/\(?(?:llama\.cpp|ollama)\)?/gi, "(Core Local Runtime)")
+    .replace(/\bQwen\b/gi, "Reasoner")
+    .replace(/\bDeepSeek\b/gi, "Synthesizer");
+}
+
+/**
+ * Detects the active operational phase from the thinking stream
+ */
+function detectThinkingPhase(text: string): { label: string; icon: string } {
+  if (!text) {
+    return { label: "Thinking", icon: "🧠" };
+  }
+
+  // Look at the latest 400 characters to reflect current activity
+  const recent = text.slice(-400).toLowerCase();
+
+  if (/audit|verif|syntax|check|secur|correct|test|lint|bug/i.test(recent)) {
+    return { label: "Auditing", icon: "🛡️" };
+  }
+  if (/patch|refactor|diff|replac|surgical/i.test(recent)) {
+    return { label: "Patching", icon: "🔧" };
+  }
+  if (/scaffold|boiler|templat|golden/i.test(recent)) {
+    return { label: "Scaffolding", icon: "📦" };
+  }
+  if (/synthesiz|generat|coding|implement|code|writ/i.test(recent)) {
+    return { label: "Synthesizing", icon: "⚡" };
+  }
+  if (/retriev|search|context|index|symbol|fil|workspace/i.test(recent)) {
+    return { label: "Retrieving Context", icon: "📚" };
+  }
+  if (/plan|architect|bluepr|step|breakdown/i.test(recent)) {
+    return { label: "Planning", icon: "🧠" };
+  }
+  if (/analyz|investigat|pars|evaluat|intent|requir/i.test(recent)) {
+    return { label: "Analyzing", icon: "🔍" };
+  }
+
+  return { label: "Thinking", icon: "🧠" };
 }
 
 function ThinkingBlockPeek({
@@ -55,6 +106,9 @@ function ThinkingBlockPeek({
     }
   }, [inProgress]);
 
+  const sanitizedContent = useMemo(() => sanitizeThinkingContent(content), [content]);
+  const activePhase = useMemo(() => detectThinkingPhase(content), [content]);
+
   return duplicateRedactedThinkingBlock ? null : (
     <div className="thread-message">
       <div className="mt-1 flex flex-col px-4">
@@ -68,16 +122,22 @@ function ThinkingBlockPeek({
             onClick={() => setOpen(!open)}
           >
             {inProgress ? (
-              <span>
-                {redactedThinking ? "Redacted Thinking" : "Thinking"}
+              <span className="flex items-center gap-1.5">
+                <span className="text-xs leading-none">{activePhase.icon}</span>
+                <span>{redactedThinking ? "Redacted Thinking" : activePhase.label}</span>
                 <AnimatedEllipsis />
               </span>
             ) : redactedThinking ? (
               "Redacted Thinking"
             ) : (
-              "Thought" +
-              (elapsedTime ? ` for ${elapsedTime}` : "") +
-              (tokens ? ` (${tokens} tokens)` : "")
+              <span className="flex items-center gap-1.5">
+                <span className="text-xs leading-none">✨</span>
+                <span>
+                  {"Thought" +
+                    (elapsedTime ? ` for ${elapsedTime}` : "") +
+                    (tokens ? ` (${tokens} tokens)` : "")}
+                </span>
+              </span>
             )}
             {open ? (
               <ChevronUpIcon className="h-3 w-3" />
@@ -100,7 +160,7 @@ function ThinkingBlockPeek({
             <MarkdownWrapper>
               <StyledMarkdownPreview
                 isRenderingInStepContainer
-                source={content}
+                source={sanitizedContent}
                 itemIndex={index}
               />
             </MarkdownWrapper>
@@ -112,3 +172,4 @@ function ThinkingBlockPeek({
 }
 
 export default ThinkingBlockPeek;
+

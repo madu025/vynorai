@@ -6,9 +6,44 @@ import { selectSelectedChatModel } from "../../redux/slices/configSlice";
 interface ThinkingIndicatorProps {
   historyItem: ChatHistoryItem;
 }
+
+/**
+ * Detects the active operational phase from the thinking stream
+ */
+function detectIndicatorPhase(text: string): { label: string; icon: string } {
+  if (!text) {
+    return { label: "Thinking", icon: "🧠" };
+  }
+
+  const recent = text.slice(-400).toLowerCase();
+
+  if (/audit|verif|syntax|check|secur|correct|test|lint|bug/i.test(recent)) {
+    return { label: "Auditing", icon: "🛡️" };
+  }
+  if (/patch|refactor|diff|replac|surgical/i.test(recent)) {
+    return { label: "Patching", icon: "🔧" };
+  }
+  if (/scaffold|boiler|templat|golden/i.test(recent)) {
+    return { label: "Scaffolding", icon: "📦" };
+  }
+  if (/synthesiz|generat|coding|implement|code|writ/i.test(recent)) {
+    return { label: "Synthesizing", icon: "⚡" };
+  }
+  if (/retriev|search|context|index|symbol|fil|workspace/i.test(recent)) {
+    return { label: "Retrieving Context", icon: "📚" };
+  }
+  if (/plan|architect|bluepr|step|breakdown/i.test(recent)) {
+    return { label: "Planning", icon: "🧠" };
+  }
+  if (/analyz|investigat|pars|evaluat|intent|requir/i.test(recent)) {
+    return { label: "Analyzing", icon: "🔍" };
+  }
+
+  return { label: "Thinking", icon: "🧠" };
+}
+
 /*
-    Thinking animation
-    Only for reasoning (long load time) models for now
+    Dynamic Thinking animation for VynorAI reasoning and autonomous planning
 */
 const ThinkingIndicator = ({ historyItem }: ThinkingIndicatorProps) => {
   // Animation for thinking ellipses
@@ -28,18 +63,32 @@ const ThinkingIndicator = ({ historyItem }: ThinkingIndicatorProps) => {
   const hasContent = Array.isArray(historyItem.message.content)
     ? !!historyItem.message.content.length
     : !!historyItem.message.content;
-  const isO1 = selectedModel?.model.startsWith("o1");
-  const isThinking =
-    isStreaming && !historyItem.isGatheringContext && !hasContent;
-  if (!isThinking || !isO1) {
+
+  const isReasoningModel =
+    selectedModel?.model?.toLowerCase().includes("r1") ||
+    selectedModel?.model?.toLowerCase().includes("reasoning") ||
+    selectedModel?.model?.toLowerCase().includes("flash") ||
+    selectedModel?.model?.toLowerCase().includes("o1") ||
+    selectedModel?.model?.toLowerCase().includes("vynor") ||
+    selectedModel?.title?.toLowerCase().includes("reasoning") ||
+    selectedModel?.title?.toLowerCase().includes("r1");
+
+  const hasActiveReasoning = Boolean(historyItem.reasoning?.active);
+  const isThinking = isStreaming && !historyItem.isGatheringContext && (!hasContent || hasActiveReasoning);
+
+  if (!isThinking || (!isReasoningModel && !hasActiveReasoning)) {
     return null;
   }
 
+  const phase = detectIndicatorPhase(historyItem.reasoning?.text || "");
+
   return (
-    <div className="px-2 py-2">
-      <span className="text-lightgray">{`Thinking.${".".repeat(animation)}`}</span>
+    <div className="flex items-center gap-1.5 px-2 py-2 text-xs">
+      <span>{phase.icon}</span>
+      <span className="text-lightgray">{`${phase.label}.${".".repeat(animation)}`}</span>
     </div>
   );
 };
 
 export default ThinkingIndicator;
+

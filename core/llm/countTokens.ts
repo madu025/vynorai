@@ -16,7 +16,7 @@ import {
 } from "./messages.js";
 
 import { renderChatMessage } from "../util/messageContent.js";
-import { AsyncEncoder, LlamaAsyncEncoder } from "./asyncEncoder.js";
+import type { AsyncEncoder } from "./asyncEncoder.js";
 import { DEFAULT_PRUNING_LENGTH } from "./constants.js";
 import { getAdjustedTokenCountFromModel } from "./getAdjustedTokenCount.js";
 import llamaTokenizer from "./llamaTokenizer.js";
@@ -51,13 +51,28 @@ class NonWorkerAsyncEncoder implements AsyncEncoder {
 
 let gptEncoding: Encoding | null = null;
 const llamaEncoding = new LlamaEncoding();
-const llamaAsyncEncoder = new LlamaAsyncEncoder();
+let llamaAsyncEncoder: AsyncEncoder | undefined;
 
-function asyncEncoderForModel(modelName: string): AsyncEncoder {
+async function asyncEncoderForModel(modelName: string): Promise<AsyncEncoder> {
+  // The GUI only needs synchronous token counting. Importing asyncEncoder at
+  // module load time pulls Node's path/workerpool stack into the webview bundle.
+  // Antigravity exposes a Node-like `process` object to webviews, which makes
+  // workerpool select its Node path and call the browser-externalized os.cpus().
+  // Keep browser webviews on the in-process encoder and load workerpool only in
+  // the extension host when asynchronous tokenization is actually requested.
+  if (typeof window !== "undefined") {
+    return new NonWorkerAsyncEncoder(encodingForModel(modelName));
+  }
+
   // Temporary due to issues packaging the worker files
   if (process.env.IS_BINARY) {
     const encoding = encodingForModel(modelName);
     return new NonWorkerAsyncEncoder(encoding);
+  }
+
+  if (!llamaAsyncEncoder) {
+    const { LlamaAsyncEncoder } = await import("./asyncEncoder.js");
+    llamaAsyncEncoder = new LlamaAsyncEncoder();
   }
 
   const modelType = autodetectTemplateType(modelName);
@@ -96,7 +111,7 @@ async function countTokensAsync(
   // defaults to llama2 because the tokenizer tends to produce more tokens
   modelName = "llama2",
 ): Promise<number> {
-  const encoding = asyncEncoderForModel(modelName);
+  const encoding = await asyncEncoderForModel(modelName);
   if (Array.isArray(content)) {
     const promises = content.map(async (part) => {
       if (part.type === "imageUrl") {
@@ -552,7 +567,8 @@ function compileChatMessages({
 
 async function cleanupAsyncEncoders(): Promise<void> {
   try {
-    await llamaAsyncEncoder.close();
+    await llamaAsyncEncoder?.close();
+    llamaAsyncEncoder = undefined;
   } catch (e) {}
 }
 

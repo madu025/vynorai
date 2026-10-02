@@ -15,21 +15,45 @@ export interface SandboxedCommand {
   args: string[];
   env: Record<string, string>;
   isSandboxed: boolean;
-  sandboxType: "windows-restricted" | "linux-bwrap" | "macos-seatbelt" | "host-fallback";
+  sandboxType:
+    | "windows-guarded"
+    | "linux-bwrap"
+    | "macos-seatbelt"
+    | "host-fallback";
+}
+
+const SECRET_ENV_NAME =
+  /(?:secret|token|password|passwd|api[_-]?key|auth|cookie|credential|private[_-]?key)/i;
+
+export function sanitizeSandboxEnvironment(
+  source: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(source).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" && !SECRET_ENV_NAME.test(entry[0]),
+    ),
+  );
+}
+
+function strictSandboxRequired(): boolean {
+  return /^(?:1|true|yes)$/i.test(
+    process.env.VYNOR_REQUIRE_STRICT_SANDBOX ?? "",
+  );
 }
 
 /**
  * Destructive patterns that could wipe host systems or exfiltrate private credentials
  */
 const DESTRUCTIVE_PATTERNS = [
-  /\brm\s+-[rf]{1,2}\s+[\/\\]/i,                      // rm -rf /
-  /\bdel\s+\/[fq]\s+[a-z]:[\/\\]/i,                  // del /f C:\
-  /\brmdir\s+\/[sq]\s+[a-z]:[\/\\]/i,                // rmdir /s C:\
-  /\bformat\s+[a-z]:/i,                               // format C:
-  /\bmkfs\b/i,                                        // mkfs
-  /\bdd\s+if=/i,                                      // dd if=
-  /\b(shutdown|reboot|init\s+0)\b/i,                  // host shutdown
-  /\bcurl\b.*(?:\.ssh|\.aws|\.env|id_rsa)/i,          // credential exfiltration attempts
+  /\brm\s+-[rf]{1,2}\s+[\/\\]/i, // rm -rf /
+  /\bdel\s+\/[fq]\s+[a-z]:[\/\\]/i, // del /f C:\
+  /\brmdir\s+\/[sq]\s+[a-z]:[\/\\]/i, // rmdir /s C:\
+  /\bformat\s+[a-z]:/i, // format C:
+  /\bmkfs\b/i, // mkfs
+  /\bdd\s+if=/i, // dd if=
+  /\b(shutdown|reboot|init\s+0)\b/i, // host shutdown
+  /\bcurl\b.*(?:\.ssh|\.aws|\.env|id_rsa)/i, // credential exfiltration attempts
 ];
 
 export function isDestructiveCommand(command: string): boolean {
@@ -43,7 +67,10 @@ function isBinaryAvailable(binary: string): boolean {
   try {
     const isWindows = process.platform === "win32";
     const checkCmd = isWindows ? `where ${binary}` : `which ${binary}`;
-    const res = require("node:child_process").spawnSync(checkCmd, { shell: true, stdio: "ignore" });
+    const res = require("node:child_process").spawnSync(checkCmd, {
+      shell: true,
+      stdio: "ignore",
+    });
     return res.status === 0;
   } catch {
     return false;
@@ -58,22 +85,46 @@ function isBinaryAvailable(binary: string): boolean {
  *   - Linux: Bubblewrap (bwrap) unprivileged user namespace jail
  *   - macOS: Apple Seatbelt (sandbox-exec)
  */
-export function buildSandboxedCommand(options: SandboxExecutionOptions): SandboxedCommand {
+export function buildSandboxedCommand(
+  options: SandboxExecutionOptions,
+): SandboxedCommand {
   const { cwd, command, allowedWorkspaceDirs = [cwd] } = options;
   const platform = process.platform;
+  const normalizedCwd = path.resolve(cwd);
+  const normalizedAllowed = allowedWorkspaceDirs.map((dir) =>
+    path.resolve(dir),
+  );
+  if (
+    !normalizedAllowed.some(
+      (dir) =>
+        normalizedCwd === dir || normalizedCwd.startsWith(`${dir}${path.sep}`),
+    )
+  ) {
+    throw new Error(
+      "[Vynor Sandbox Guard] Working directory is outside the allowed workspace.",
+    );
+  }
+  const safeEnv = sanitizeSandboxEnvironment();
 
   // Intercept destructive commands before they ever reach an OS shell
   if (isDestructiveCommand(command)) {
-    throw new Error(`[Vynor Sandbox Guard] Destructive or out-of-bounds command intercepted and blocked: ${command}`);
+    throw new Error(
+      `[Vynor Sandbox Guard] Destructive or out-of-bounds command intercepted and blocked: ${command}`,
+    );
   }
 
   // ── 1. Linux: Bubblewrap unprivileged namespace jail ────────────────────────
   if (platform === "linux" && isBinaryAvailable("bwrap")) {
     const bindArgs: string[] = [
-      "--ro-bind", "/", "/",
-      "--dev", "/dev",
-      "--proc", "/proc",
-      "--tmpfs", "/tmp",
+      "--ro-bind",
+      "/",
+      "/",
+      "--dev",
+      "/dev",
+      "--proc",
+      "/proc",
+      "--tmpfs",
+      "/tmp",
     ];
 
     for (const dir of allowedWorkspaceDirs) {
@@ -88,7 +139,7 @@ export function buildSandboxedCommand(options: SandboxExecutionOptions): Sandbox
     return {
       shell: "bwrap",
       args: bindArgs,
-      env: { ...process.env, VYNOR_SANDBOX: "bwrap" } as Record<string, string>,
+      env: { ...safeEnv, VYNOR_SANDBOX: "bwrap" },
       isSandboxed: true,
       sandboxType: "linux-bwrap",
     };
@@ -111,7 +162,7 @@ export function buildSandboxedCommand(options: SandboxExecutionOptions): Sandbox
     return {
       shell: "sandbox-exec",
       args: ["-p", seatbeltProfile, "/bin/bash", "-l", "-c", command],
-      env: { ...process.env, VYNOR_SANDBOX: "seatbelt" } as Record<string, string>,
+      env: { ...safeEnv, VYNOR_SANDBOX: "seatbelt" },
       isSandboxed: true,
       sandboxType: "macos-seatbelt",
     };
@@ -120,7 +171,11 @@ export function buildSandboxedCommand(options: SandboxExecutionOptions): Sandbox
   // ── 3. Windows: PowerShell constrained boundary jail via Base64 EncodedCommand
   if (platform === "win32") {
     // Using UTF-16LE Base64 -EncodedCommand completely avoids string-escaping and interpolation bugs
-    const normalizedCwd = path.resolve(cwd);
+    if (strictSandboxRequired()) {
+      throw new Error(
+        "[Vynor Sandbox Guard] Strict OS isolation is unavailable on this Windows host.",
+      );
+    }
     const psScript = [
       `$ProgressPreference = 'SilentlyContinue'`,
       `Set-Location -LiteralPath '${normalizedCwd.replace(/'/g, "''")}'`,
@@ -131,23 +186,35 @@ export function buildSandboxedCommand(options: SandboxExecutionOptions): Sandbox
 
     return {
       shell: "powershell.exe",
-      args: ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
+      args: [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-EncodedCommand",
+        encoded,
+      ],
       env: {
-        ...process.env,
-        VYNOR_SANDBOX: "windows-restricted",
+        ...safeEnv,
+        VYNOR_SANDBOX: "windows-guarded",
         VYNOR_SANDBOX_CWD: cwd,
       } as Record<string, string>,
-      isSandboxed: true,
-      sandboxType: "windows-restricted",
+      isSandboxed: false,
+      sandboxType: "windows-guarded",
     };
   }
 
   // ── 4. Fallback: Host execution with Vynor AST guardrails ─────────────────────
+  if (strictSandboxRequired()) {
+    throw new Error(
+      "[Vynor Sandbox Guard] Strict OS isolation is unavailable on this host.",
+    );
+  }
   const userShell = process.env.SHELL || "/bin/bash";
   return {
     shell: userShell,
     args: ["-l", "-c", command],
-    env: { ...process.env, VYNOR_SANDBOX: "fallback" } as Record<string, string>,
+    env: { ...safeEnv, VYNOR_SANDBOX: "fallback" },
     isSandboxed: false,
     sandboxType: "host-fallback",
   };

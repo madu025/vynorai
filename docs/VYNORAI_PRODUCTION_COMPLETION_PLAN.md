@@ -127,3 +127,9 @@ Each slice must pass:
 P0.2 → P0.3 → P0.4 → P0.1 → P1.1 → P1.2 → P1.3 → P1.4 → P2.1 → P2.2 → P2.3.
 
 Checkpoint recovery and truthful verification precede greater autonomy. Sandbox hardening precedes unattended terminal execution. Enterprise and marketplace work begins only after those safety foundations are measurable.
+
+## Implemented production evidence
+
+- v1.1.7: mutation completion requires passed non-response verification evidence; automatic tool actions are journaled.
+- v1.1.8: task-scoped multi-file checkpoints and conflict-aware whole-task restore.
+- Current sandbox slice: unified local foreground/background execution gateway, workspace-root validation, credential environment redaction, and optional strict fail-closed execution. Native Windows OS isolation, remote containment, and network namespaces remain open and must not be represented as complete.

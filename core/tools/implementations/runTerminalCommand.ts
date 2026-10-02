@@ -89,8 +89,8 @@ function resolveWorkingDirectory(workspaceDirs: string[]): string {
 }
 
 // Add color-supporting environment variables
-const getColorEnv = () => ({
-  ...process.env,
+const getColorEnv = (base: NodeJS.ProcessEnv = process.env) => ({
+  ...base,
   FORCE_COLOR: "1",
   COLORTERM: "truecolor",
   TERM: "xterm-256color",
@@ -149,15 +149,21 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
           const sandboxed = buildSandboxedCommand({
             cwd,
             command,
-            allowedWorkspaceDirs: workspaceDirs.map((w) => resolveWorkingDirectory([w])),
+            allowedWorkspaceDirs:
+              workspaceDirs.length > 0
+                ? workspaceDirs.map((w) => resolveWorkingDirectory([w]))
+                : [cwd],
           });
-          const childProc = childProcess.spawn(sandboxed.shell, sandboxed.args, {
-            cwd,
-            env: {
-              ...getColorEnv(),
-              ...sandboxed.env,
+          const childProc = childProcess.spawn(
+            sandboxed.shell,
+            sandboxed.args,
+            {
+              cwd,
+              env: {
+                ...getColorEnv(sandboxed.env),
+              },
             },
-          });
+          );
 
           // Track this process for foreground cancellation
           if (toolCallId && waitForCompletion) {
@@ -383,19 +389,25 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
         // Standard execution, waiting for completion
         try {
           // Use spawn approach for consistency with streaming version
-          const { shell: nonStreamingShell, args: nonStreamingArgs } =
-            getShellCommand(command);
+          const sandboxed = buildSandboxedCommand({
+            cwd,
+            command,
+            allowedWorkspaceDirs:
+              workspaceDirs.length > 0
+                ? workspaceDirs.map((w) => resolveWorkingDirectory([w]))
+                : [cwd],
+          });
           const output = await new Promise<{ stdout: string; stderr: string }>(
             (resolve, reject) => {
               let timeoutId: ReturnType<typeof setTimeout> | undefined;
               let sigkillTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
               const childProc = childProcess.spawn(
-                nonStreamingShell,
-                nonStreamingArgs,
+                sandboxed.shell,
+                sandboxed.args,
                 {
                   cwd,
-                  env: getColorEnv(),
+                  env: getColorEnv(sandboxed.env),
                 },
               );
 
@@ -511,16 +523,26 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
         // but don't attach any listeners other than error
         try {
           // Use spawn with color environment
-          const { shell: detachedShell, args: detachedArgs } =
-            getShellCommand(command);
-          const childProc = childProcess.spawn(detachedShell, detachedArgs, {
+          const sandboxed = buildSandboxedCommand({
             cwd,
-            env: getColorEnv(), // Add color environment
-            // Detach the process so it's not tied to the parent
-            detached: true,
-            // Redirect to /dev/null equivalent (works cross-platform)
-            stdio: "ignore",
+            command,
+            allowedWorkspaceDirs:
+              workspaceDirs.length > 0
+                ? workspaceDirs.map((w) => resolveWorkingDirectory([w]))
+                : [cwd],
           });
+          const childProc = childProcess.spawn(
+            sandboxed.shell,
+            sandboxed.args,
+            {
+              cwd,
+              env: getColorEnv(sandboxed.env),
+              // Detach the process so it's not tied to the parent
+              detached: true,
+              // Redirect to /dev/null equivalent (works cross-platform)
+              stdio: "ignore",
+            },
+          );
 
           // Even for detached processes, add event handlers to clean up the background process map
           childProc.on("close", () => {
@@ -564,6 +586,13 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
   // For remote environments (SSH, WSL, Dev Container, Codespaces, etc.),
   // delegate to VS Code's integrated terminal which handles remote execution.
   // Note: output capture and waitForCompletion are not yet supported for remotes.
+  if (
+    /^(?:1|true|yes)$/i.test(process.env.VYNOR_REQUIRE_STRICT_SANDBOX ?? "")
+  ) {
+    throw new Error(
+      "Strict sandbox mode blocks uncontained remote terminal execution.",
+    );
+  }
   await extras.ide.runCommand(command);
   return [
     {

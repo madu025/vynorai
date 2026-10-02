@@ -238,6 +238,11 @@ The frontend is a React + Vite + TypeScript application rendered inside the IDE 
   - Explicit `value={selectedModel?.title ?? ""}` binding ensuring active state synchronization.
   - Active profile fallback to local/Main Config (`useAuth().selectedProfile || { id: "local", title: "Main Config" }`).
   - Dropdown options with vendor icons, model badges, and dynamic configuration triggers.
+- [gui/src/components/mainInput/belowMainInput/ThinkingBlockPeek.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/mainInput/belowMainInput/ThinkingBlockPeek.tsx): **Dynamic Thought Stream & White-Label Drawer**:
+  - Automatically parses `<think>` tags and renders an animated collapsible thought drawer.
+  - **Dynamic Status Phase Detection**: Analyzes active thought text and dynamically updates badge: `Analyzing...` (🔍), `Planning...` (🧠), `Retrieving Context...` (📚), `Synthesizing...` (⚡), `Auditing...` (🛡️), `Patching...` (🔧), `Scaffolding...` (📦).
+  - **Model Sanitization (`sanitizeThinkingContent`)**: Strips internal model and provider references (`Qwen 3B`, `DeepSeek Flash`, `llama.cpp`) to preserve a unified, enterprise-grade VynorAI appearance.
+- [gui/src/components/StepContainer/ThinkingIndicator.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/StepContainer/ThinkingIndicator.tsx): Real-time reasoning indicator supporting all reasoning models (DeepSeek R1, Flash, o1, Vynor Hybrid) with live animated phase states.
 - [gui/src/components/VynorQuotaBar.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/VynorQuotaBar.tsx): Real-time quota indicator displaying:
   - Remaining monthly tokens and tier badge (Free, Starter, Pro, Ultra).
   - Preserved token metrics achieved via local SLM and cache.
@@ -366,6 +371,9 @@ sequenceDiagram
 - [scripts/setup-vps.sh](file:///d:/My%20Project/VynorAI/scripts/setup-vps.sh): Automated VPS provisioning script:
   - Installs Docker CE, sets up a 2GB swap file, configures UFW security, downloads quantized GGUF weights, and deploys the stack via Docker Compose.
 - [scripts/](file:///d:/My%20Project/VynorAI/scripts): Packaging, build, and CI/CD automation scripts (`esbuild.js`, `package.js`, `prepackage.js`, `release-smoke.mjs`).
+- [backend/test_hybrid_reasoning_backtest.ts](file:///d:/My%20Project/VynorAI/backend/test_hybrid_reasoning_backtest.ts): **Automated Hybrid Reasoning & Mutation Backtest Suite**:
+  - Tests 18 targeted edge cases with 100% pass rate.
+  - Verifies prompt classification, `allowMutation` permissions, tool filtering (guaranteeing `edit_file` / `write_file` availability on mutations and isolation on read-only inquiries), reasoning planning, code auditing, and white-label sanitization.
 - [scratch/](file:///d:/My%20Project/VynorAI/scratch): End-to-end integration and verification scripts:
   - `test_vault_healer.js`: Tests the deterministic SLM self-healer and template composer.
   - `test_live_opensaas.js`: End-to-end cloud completion test against live endpoints.

@@ -13,14 +13,10 @@ export const cancelStream = createAsyncThunk<void, undefined, ThunkApiType>(
     const activeTaskId = getState().session.activeTaskId;
     if (activeTaskId) {
       try {
-        const result = await extra.ideMessenger.request(
-          "agent/task/transition",
-          {
-            taskId: activeTaskId,
-            state: "canceled",
-            reason: "Stream canceled",
-          },
-        );
+        const result = await extra.ideMessenger.request("agent/task/cancel", {
+          taskId: activeTaskId,
+          reason: "Stream canceled",
+        });
         if (result.status === "success") {
           dispatch(setActiveTaskState(result.content.state));
         }

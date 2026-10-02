@@ -88,6 +88,7 @@ import { shareSession } from "./util/historyUtils";
 import { Logger } from "./util/Logger.js";
 import { WorkspaceSessionService } from "./workspace/WorkspaceSessionService";
 import { TaskRuntime } from "./agent/TaskRuntime";
+import { AgentOrchestrator } from "./agent/AgentOrchestrator";
 
 const WORKSPACE_MUTATING_TOOLS = new Set<string>([
   BuiltInToolNames.EditExistingFile,
@@ -108,6 +109,7 @@ export class Core {
   llmLogger = new LLMLogger();
   private readonly workspaceSession: WorkspaceSessionService;
   private readonly taskRuntime = new TaskRuntime();
+  private readonly agentOrchestrator = new AgentOrchestrator(this.taskRuntime);
   private workspaceRefreshTimer?: ReturnType<typeof setTimeout>;
 
   private messageAbortControllers = new Map<string, AbortController>();
@@ -353,6 +355,54 @@ export class Core {
     on("agent/task/consumeBudget", ({ data }) => {
       const { taskId, ...usage } = data;
       return this.taskRuntime.consumeBudget(taskId, usage);
+    });
+    on("agent/plan/create", ({ data }) =>
+      this.agentOrchestrator.createPlan(data.taskId, data.steps),
+    );
+    on("agent/plan/next", async ({ data }) => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return this.agentOrchestrator.next(
+        data.taskId,
+        workspace.id,
+        workspace.revision,
+      );
+    });
+    on("agent/plan/startStep", ({ data }) =>
+      this.agentOrchestrator.startStep(data.taskId, data.stepId, data.approved),
+    );
+    on("agent/plan/completeStep", ({ data }) =>
+      this.agentOrchestrator.completeStep(data.taskId, data.stepId, data.scope),
+    );
+    on("agent/plan/failStep", ({ data }) =>
+      this.agentOrchestrator.failStep(
+        data.taskId,
+        data.stepId,
+        data.failureCode,
+      ),
+    );
+    on("agent/task/authorizeAction", async ({ data }) => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return this.agentOrchestrator.authorizeAction(
+        data.taskId,
+        workspace.id,
+        workspace.revision,
+        data.signature,
+      );
+    });
+    on("agent/task/cancel", ({ data }) =>
+      this.agentOrchestrator.cancel(data.taskId, data.reason),
+    );
+    on("agent/task/resume", async ({ data }) => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return this.agentOrchestrator.resume(
+        data.taskId,
+        workspace.id,
+        workspace.revision,
+      );
+    });
+    on("agent/task/listResumable", async ({ data }) => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return this.taskRuntime.listResumable(workspace.id, data?.sessionId);
     });
 
     // History

@@ -90,6 +90,13 @@ export class TaskRuntime {
         approvals: [],
         checkpoints: [],
         verification: [],
+        executionGuard: {
+          autonomousSteps: 0,
+          maxAutonomousSteps: 24,
+          repeatedActionLimit: 3,
+          actionDigests: {},
+          cancelRequested: false,
+        },
         budget: { ...DEFAULT_BUDGET, ...input.budget },
         createdAt: now,
         updatedAt: now,
@@ -104,6 +111,34 @@ export class TaskRuntime {
     const task = this.tasks.get(taskId) ?? this.journal.load(taskId);
     if (task) this.tasks.set(taskId, task);
     return task ? structuredClone(task) : undefined;
+  }
+
+  listResumable(workspaceId: string, sessionId?: string): AgentTask[] {
+    return this.journal
+      .list()
+      .filter(
+        (task) =>
+          task.workspaceId === workspaceId &&
+          (!sessionId || task.sessionId === sessionId) &&
+          !TERMINAL_STATES.has(task.state),
+      )
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .map((task) => structuredClone(task));
+  }
+
+  async mutate(
+    taskId: string,
+    eventType: string,
+    eventData: Record<string, unknown>,
+    update: (task: AgentTask) => void,
+  ): Promise<AgentTask> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(taskId);
+      update(task);
+      task.updatedAt = Date.now();
+      this.persist(task, eventType, eventData);
+      return structuredClone(task);
+    });
   }
 
   async transition(
@@ -206,6 +241,13 @@ export class TaskRuntime {
   private requireTask(taskId: string): AgentTask {
     const task = this.tasks.get(taskId) ?? this.journal.load(taskId);
     if (!task) throw new Error("Task not found");
+    task.executionGuard ??= {
+      autonomousSteps: 0,
+      maxAutonomousSteps: 24,
+      repeatedActionLimit: 3,
+      actionDigests: {},
+      cancelRequested: false,
+    };
     this.tasks.set(taskId, task);
     return task;
   }

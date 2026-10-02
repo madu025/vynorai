@@ -56,6 +56,10 @@ import type {
   ToolRisk,
   VerificationResult,
 } from "../agent/types";
+import type {
+  AgentNextAction,
+  ProposedPlanStep,
+} from "../agent/AgentOrchestrator";
 
 export enum OnboardingModes {
   API_KEY = "API Key",
@@ -123,6 +127,30 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     },
     AgentTask,
   ];
+  "agent/plan/create": [
+    { taskId: string; steps: ProposedPlanStep[] },
+    AgentTask,
+  ];
+  "agent/plan/next": [{ taskId: string }, AgentNextAction];
+  "agent/plan/startStep": [
+    { taskId: string; stepId: string; approved?: boolean },
+    AgentTask,
+  ];
+  "agent/plan/completeStep": [
+    { taskId: string; stepId: string; scope?: string },
+    AgentTask,
+  ];
+  "agent/plan/failStep": [
+    { taskId: string; stepId: string; failureCode: string },
+    AgentTask,
+  ];
+  "agent/task/authorizeAction": [
+    { taskId: string; signature: string },
+    AgentTask,
+  ];
+  "agent/task/cancel": [{ taskId: string; reason?: string }, AgentTask];
+  "agent/task/resume": [{ taskId: string }, AgentTask];
+  "agent/task/listResumable": [{ sessionId?: string } | undefined, AgentTask[]];
 
   // History
   "history/list": [ListHistoryOptions, BaseSessionMetadata[]];

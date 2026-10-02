@@ -93,8 +93,9 @@ export const streamNormalInput = createAsyncThunk<
     { legacySlashCommandData, depth = 0 },
     { dispatch, extra, getState },
   ) => {
-    if (process.env.NODE_ENV === "test" && depth > 50) {
-      const message = `Max stream depth of ${50} reached in test`;
+    const maxAutonomousDepth = 24;
+    if (depth > maxAutonomousDepth) {
+      const message = `Autonomous step limit of ${maxAutonomousDepth} reached`;
       console.error(message, JSON.stringify(getState(), null, 2));
       throw new Error(message);
     }
@@ -158,6 +159,57 @@ export const streamNormalInput = createAsyncThunk<
           taskId = started.content.id;
           dispatch(setActiveTaskId(taskId));
           dispatch(setActiveTaskState(started.content.state));
+          const planned = await extra.ideMessenger.request(
+            "agent/plan/create",
+            {
+              taskId,
+              steps: [
+                {
+                  id: "understand",
+                  summary: "Bind and inspect the active workspace context",
+                  kind: "inspect",
+                  risk: "R0",
+                  maxAttempts: 1,
+                  verificationRequired: false,
+                },
+                {
+                  id: "act",
+                  summary: "Execute the requested work under tool policy",
+                  kind: "act",
+                  risk: "R0",
+                  dependsOn: ["understand"],
+                  maxAttempts: 2,
+                  verificationRequired: true,
+                },
+                {
+                  id: "verify",
+                  summary: "Verify and report the completed work",
+                  kind: "review",
+                  risk: "R0",
+                  dependsOn: ["act"],
+                  maxAttempts: 1,
+                  verificationRequired: false,
+                },
+              ],
+            },
+          );
+          if (planned.status === "success") {
+            await extra.ideMessenger.request("agent/plan/startStep", {
+              taskId,
+              stepId: "understand",
+            });
+            await extra.ideMessenger.request("agent/plan/completeStep", {
+              taskId,
+              stepId: "understand",
+            });
+            const executing = await extra.ideMessenger.request(
+              "agent/plan/startStep",
+              { taskId, stepId: "act" },
+            );
+            if (executing.status === "success") {
+              dispatch(setActiveTaskState(executing.content.state));
+            }
+          }
         }
       } catch {
         // Audit persistence must never prevent the user from receiving a response.
@@ -455,6 +507,20 @@ export const streamNormalInput = createAsyncThunk<
 
     // 4. Execute remaining tool calls
     if (originalToolCalls.length === 0) {
+      if (taskId) {
+        try {
+          await extra.ideMessenger.request("agent/plan/completeStep", {
+            taskId,
+            stepId: "act",
+          });
+          await extra.ideMessenger.request("agent/plan/startStep", {
+            taskId,
+            stepId: "verify",
+          });
+        } catch {
+          // Older task journals may not contain the lifecycle plan.
+        }
+      }
       await transitionTask("verifying");
       if (taskId) {
         try {
@@ -465,6 +531,10 @@ export const streamNormalInput = createAsyncThunk<
               status: "passed",
               summary: "Model response completed without pending tool calls.",
             },
+          });
+          await extra.ideMessenger.request("agent/plan/completeStep", {
+            taskId,
+            stepId: "verify",
           });
         } catch {
           // Completion is not blocked by an unavailable local audit journal.

@@ -42,6 +42,25 @@ export const callToolById = createAsyncThunk<
     throw new Error("No model selected");
   }
 
+  if (state.session.activeTaskId) {
+    const signature = JSON.stringify({
+      tool: toolCallState.toolCall.function.name,
+      arguments: toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {},
+    });
+    const authorization = await extra.ideMessenger.request(
+      "agent/task/authorizeAction",
+      {
+        taskId: state.session.activeTaskId,
+        signature,
+      },
+    );
+    if (authorization.status === "error") {
+      throw new Error(
+        `Agent safety guard blocked tool execution: ${authorization.error}`,
+      );
+    }
+  }
+
   if (!isAutoApproved && state.session.activeTaskId) {
     try {
       await extra.ideMessenger.request("agent/task/recordApproval", {

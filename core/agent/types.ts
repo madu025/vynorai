@@ -38,6 +38,59 @@ export interface AgentTaskBudget {
   maxCostUsd: number;
 }
 
+export type AgentPlanStepState =
+  | "pending"
+  | "running"
+  | "awaiting_approval"
+  | "verifying"
+  | "succeeded"
+  | "failed"
+  | "blocked"
+  | "canceled";
+
+export type AgentPlanStepKind =
+  | "inspect"
+  | "act"
+  | "edit"
+  | "command"
+  | "test"
+  | "typecheck"
+  | "lint"
+  | "build"
+  | "review";
+
+export interface AgentPlanStep {
+  id: string;
+  /** A short, redacted label. Tool arguments and source code are never stored. */
+  summary: string;
+  kind: AgentPlanStepKind;
+  risk: ToolRisk;
+  dependsOn: string[];
+  state: AgentPlanStepState;
+  attempts: number;
+  maxAttempts: number;
+  verificationRequired: boolean;
+  scopeDigest?: string;
+  failureCode?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AgentPlan {
+  version: 1;
+  steps: AgentPlanStep[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AgentExecutionGuard {
+  autonomousSteps: number;
+  maxAutonomousSteps: number;
+  repeatedActionLimit: number;
+  actionDigests: Record<string, number>;
+  cancelRequested: boolean;
+}
+
 export interface AgentTask {
   id: string;
   sessionId: string;
@@ -49,6 +102,8 @@ export interface AgentTask {
   approvals: ApprovalReceipt[];
   checkpoints: string[];
   verification: VerificationResult[];
+  plan?: AgentPlan;
+  executionGuard: AgentExecutionGuard;
   budget: AgentTaskBudget;
   createdAt: number;
   updatedAt: number;

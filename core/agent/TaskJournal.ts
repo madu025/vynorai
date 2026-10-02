@@ -16,7 +16,8 @@ export class TaskJournal {
     this.assertTaskId(task.id);
     const target = path.join(this.directory, `${task.id}.json`);
     const temporary = `${target}.${process.pid}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify(task, undefined, 2), {
+    const safeTask = redactEventData(task) as AgentTask;
+    fs.writeFileSync(temporary, JSON.stringify(safeTask, undefined, 2), {
       encoding: "utf8",
       mode: 0o600,
     });
@@ -29,6 +30,27 @@ export class TaskJournal {
     const target = path.join(this.directory, `${taskId}.json`);
     if (!fs.existsSync(target)) return undefined;
     return JSON.parse(fs.readFileSync(target, "utf8")) as AgentTask;
+  }
+
+  list(): AgentTask[] {
+    return fs
+      .readdirSync(this.directory, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          entry.name.endsWith(".json") &&
+          !entry.name.endsWith(".events.json"),
+      )
+      .map((entry) => entry.name.slice(0, -".json".length))
+      .filter((taskId) => TASK_ID_PATTERN.test(taskId))
+      .map((taskId) => {
+        try {
+          return this.load(taskId);
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((task): task is AgentTask => task !== undefined);
   }
 
   append(event: AgentTaskEvent): void {

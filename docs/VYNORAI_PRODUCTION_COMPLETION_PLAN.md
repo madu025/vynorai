@@ -133,3 +133,4 @@ Checkpoint recovery and truthful verification precede greater autonomy. Sandbox 
 - v1.1.7: mutation completion requires passed non-response verification evidence; automatic tool actions are journaled.
 - v1.1.8: task-scoped multi-file checkpoints and conflict-aware whole-task restore.
 - Current sandbox slice: unified local foreground/background execution gateway, workspace-root validation, credential environment redaction, and optional strict fail-closed execution. Native Windows OS isolation, remote containment, and network namespaces remain open and must not be represented as complete.
+- v1.2.0: origin-restricted Browser QA with bounded click/type/select/wait/press workflows, responsive viewport presets, console/page/network findings, accessibility metadata, screenshots, and local deterministic screenshot-baseline fingerprints. Pixel-tolerant visual diffs, managed local-server lifecycle, and authenticated test-session handling remain open.

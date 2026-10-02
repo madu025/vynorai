@@ -10,6 +10,7 @@ import {
 import { ThunkApiType } from "../store";
 import { streamNormalInput } from "./streamNormalInput";
 import { streamThunkWrapper } from "./streamThunkWrapper";
+import { hasRecordedToolResult } from "../util/toolLoopGuards";
 
 /**
  * Determines if we should continue streaming based on tool call completion status.
@@ -51,6 +52,16 @@ export const streamResponseAfterToolCall = createAsyncThunk<
 
         if (!toolCallState) {
           return; // in cases where edit tool is cancelled mid apply, this will be triggered
+        }
+
+        // A tool callback may be delivered more than once (especially for a
+        // parallel batch). Never append the same result or continue twice.
+        const toolResultAlreadyRecorded = hasRecordedToolResult(
+          state.session.history,
+          toolCallId,
+        );
+        if (toolResultAlreadyRecorded) {
+          return;
         }
 
         const toolOutput = toolCallState.output ?? [];

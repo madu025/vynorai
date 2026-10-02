@@ -1,6 +1,6 @@
 /**
  * VynorAI Provider Router v3 — OpenRouter as Primary Upstream
- * 
+ *
  * Business Model:
  *   VynorAI buys tokens from OpenRouter at wholesale (market) rates.
  *   Users subscribe to VynorAI at a markup.
@@ -14,9 +14,19 @@
  */
 
 import { Response } from "express";
-import { config, resolveModelId, isOpenRouterModelId, DEFAULT_CHAT_MODEL, ProviderID } from "../config.js";
+import {
+  config,
+  resolveModelId,
+  isOpenRouterModelId,
+  DEFAULT_CHAT_MODEL,
+  ProviderID,
+} from "../config.js";
 import { compressCodeSnippet } from "./tokenOptimizer.js";
-import { canUseProvider, recordSuccess, recordFailure } from "./circuitBreaker.js";
+import {
+  canUseProvider,
+  recordSuccess,
+  recordFailure,
+} from "./circuitBreaker.js";
 import { v4 as uuidv4 } from "uuid";
 import { extractProviderUsage, ProviderUsage } from "./costLedger.js";
 
@@ -50,40 +60,63 @@ function buildEndpoints(): Partial<Record<ProviderID, EndpointInfo>> {
   }
 
   // ── Direct providers (optional – override specific model families) ─────
-  if (k.deepseek) eps.deepseek = {
-    baseUrl: "https://api.deepseek.com/v1",
-    headers: { Authorization: `Bearer ${k.deepseek}`, "Content-Type": "application/json" },
-    isAnthropic: false, isOllama: false, provider: "deepseek",
-  };
+  if (k.deepseek)
+    eps.deepseek = {
+      baseUrl: "https://api.deepseek.com/v1",
+      headers: {
+        Authorization: `Bearer ${k.deepseek}`,
+        "Content-Type": "application/json",
+      },
+      isAnthropic: false,
+      isOllama: false,
+      provider: "deepseek",
+    };
 
-  if (k.openai) eps.openai = {
-    baseUrl: "https://api.openai.com/v1",
-    headers: { Authorization: `Bearer ${k.openai}`, "Content-Type": "application/json" },
-    isAnthropic: false, isOllama: false, provider: "openai",
-  };
+  if (k.openai)
+    eps.openai = {
+      baseUrl: "https://api.openai.com/v1",
+      headers: {
+        Authorization: `Bearer ${k.openai}`,
+        "Content-Type": "application/json",
+      },
+      isAnthropic: false,
+      isOllama: false,
+      provider: "openai",
+    };
 
-  if (k.anthropic) eps.anthropic = {
-    baseUrl: "https://api.anthropic.com/v1",
-    headers: {
-      "x-api-key": k.anthropic,
-      "anthropic-version": "2023-06-01",
-      "anthropic-beta": "prompt-caching-2024-07-31",
-      "Content-Type": "application/json",
-    },
-    isAnthropic: true, isOllama: false, provider: "anthropic",
-  };
+  if (k.anthropic)
+    eps.anthropic = {
+      baseUrl: "https://api.anthropic.com/v1",
+      headers: {
+        "x-api-key": k.anthropic,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "prompt-caching-2024-07-31",
+        "Content-Type": "application/json",
+      },
+      isAnthropic: true,
+      isOllama: false,
+      provider: "anthropic",
+    };
 
-  if (k.groq) eps.groq = {
-    baseUrl: "https://api.groq.com/openai/v1",
-    headers: { Authorization: `Bearer ${k.groq}`, "Content-Type": "application/json" },
-    isAnthropic: false, isOllama: false, provider: "groq",
-  };
+  if (k.groq)
+    eps.groq = {
+      baseUrl: "https://api.groq.com/openai/v1",
+      headers: {
+        Authorization: `Bearer ${k.groq}`,
+        "Content-Type": "application/json",
+      },
+      isAnthropic: false,
+      isOllama: false,
+      provider: "groq",
+    };
 
   // Ollama always available (local)
   eps.ollama = {
     baseUrl: k.ollama,
     headers: { "Content-Type": "application/json" },
-    isAnthropic: false, isOllama: true, provider: "ollama",
+    isAnthropic: false,
+    isOllama: true,
+    provider: "ollama",
   };
 
   return eps;
@@ -95,78 +128,195 @@ function selectProviderChain(model: string): ProviderID[] {
 
   // For OpenRouter-format models (e.g. "anthropic/claude-sonnet-4-6")
   if (isOpenRouterModelId(model)) {
-    const directProvider: ProviderID | null = model.startsWith("deepseek/") ? "deepseek"
-      : model.startsWith("openai/") ? "openai"
-      : model.startsWith("anthropic/") ? "anthropic"
-      : null;
-    const directFirst = process.env.VYNOR_PROVIDER_STRATEGY !== "openrouter-first";
+    const directProvider: ProviderID | null = model.startsWith("deepseek/")
+      ? "deepseek"
+      : model.startsWith("openai/")
+        ? "openai"
+        : model.startsWith("anthropic/")
+          ? "anthropic"
+          : null;
+    const directFirst =
+      process.env.VYNOR_PROVIDER_STRATEGY !== "openrouter-first";
     const chain: ProviderID[] = [];
-    if (directFirst && directProvider && eps[directProvider]) chain.push(directProvider);
+    if (directFirst && directProvider && eps[directProvider])
+      chain.push(directProvider);
     if (eps.openrouter) chain.push("openrouter");
-    if (!directFirst && directProvider && eps[directProvider]) chain.push(directProvider);
+    if (!directFirst && directProvider && eps[directProvider])
+      chain.push(directProvider);
     return chain;
   }
 
   // Short-name model (e.g. deepseek-chat, deepseek-r1)
   const chain: ProviderID[] = [];
-  if (eps.deepseek && (model.startsWith("deepseek/") || model.startsWith("deepseek-"))) chain.push("deepseek");
+  if (
+    eps.deepseek &&
+    (model.startsWith("deepseek/") || model.startsWith("deepseek-"))
+  )
+    chain.push("deepseek");
   if (eps.openrouter) chain.push("openrouter");
   if (eps.openai && model.startsWith("openai/")) chain.push("openai");
   if (!model.includes("/")) chain.push("ollama");
   return chain;
 }
 
-function resolveProviderModel(provider: ProviderID, model: string): string | null {
+function resolveProviderModel(
+  provider: ProviderID,
+  model: string,
+): string | null {
   if (provider === "openrouter") return model;
-  if (provider === "openai" && model.startsWith("openai/")) return model.slice("openai/".length);
-  if (provider === "anthropic" && model.startsWith("anthropic/")) return model.slice("anthropic/".length);
-  if (provider === "deepseek" && (model.startsWith("deepseek/") || model.startsWith("deepseek-"))) {
+  if (provider === "openai" && model.startsWith("openai/"))
+    return model.slice("openai/".length);
+  if (provider === "anthropic" && model.startsWith("anthropic/"))
+    return model.slice("anthropic/".length);
+  if (
+    provider === "deepseek" &&
+    (model.startsWith("deepseek/") || model.startsWith("deepseek-"))
+  ) {
     return /(^|[-/])r1($|-)/i.test(model)
-      ? (process.env.DEEPSEEK_REASONER_MODEL || "deepseek-reasoner")
-      : (process.env.DEEPSEEK_CHAT_MODEL || "deepseek-chat");
+      ? process.env.DEEPSEEK_REASONER_MODEL || "deepseek-reasoner"
+      : process.env.DEEPSEEK_CHAT_MODEL || "deepseek-chat";
   }
   if (provider === "ollama" && !model.includes("/")) return model;
   return null;
 }
 
 // ─── Payload Builders ─────────────────────────────────────────────────────────
-function buildAnthropicPayload(body: any, resolvedModel: string): any {
-  const { messages = [], system, tools, max_tokens = 8192, stream = true } = body;
+export function buildAnthropicPayload(body: any, resolvedModel: string): any {
+  const {
+    messages = [],
+    system,
+    tools,
+    max_tokens = 8192,
+    stream = true,
+  } = body;
   const msgs = messages.map((msg: any, idx: number) => {
+    if (msg.role === "tool") {
+      return {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: msg.tool_call_id || msg.toolCallId,
+            content:
+              typeof msg.content === "string"
+                ? msg.content
+                : JSON.stringify(msg.content),
+          },
+        ],
+      };
+    }
+    if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+      const text =
+        typeof msg.content === "string" && msg.content
+          ? [{ type: "text", text: msg.content }]
+          : [];
+      return {
+        role: "assistant",
+        content: [
+          ...text,
+          ...msg.tool_calls.map((call: any) => ({
+            type: "tool_use",
+            id: call.id,
+            name: call.function?.name,
+            input: (() => {
+              try {
+                return JSON.parse(call.function?.arguments || "{}");
+              } catch {
+                return {};
+              }
+            })(),
+          })),
+        ],
+      };
+    }
     let content = msg.content;
     if (typeof content === "string") content = compressCodeSnippet(content);
     const isLarge = typeof content === "string" && content.length > 1500;
     const isPenultimate = idx === messages.length - 2 && msg.role === "user";
     if (isLarge && isPenultimate)
-      return { role: msg.role, content: [{ type: "text", text: content, cache_control: { type: "ephemeral" } }] };
+      return {
+        role: msg.role,
+        content: [
+          { type: "text", text: content, cache_control: { type: "ephemeral" } },
+        ],
+      };
     return { role: msg.role, content };
   });
-  const systemBlocks = system ? [{ type: "text", text: typeof system === "string" ? system : JSON.stringify(system), cache_control: { type: "ephemeral" } }] : undefined;
-  return { model: resolvedModel, max_tokens, stream, ...(systemBlocks ? { system: systemBlocks } : {}), messages: msgs };
+  const systemBlocks = system
+    ? [
+        {
+          type: "text",
+          text: typeof system === "string" ? system : JSON.stringify(system),
+          cache_control: { type: "ephemeral" },
+        },
+      ]
+    : undefined;
+  const anthropicTools = Array.isArray(tools)
+    ? tools.map((tool: any) => ({
+        name: tool.function?.name,
+        description: tool.function?.description,
+        input_schema: tool.function?.parameters ?? {
+          type: "object",
+          properties: {},
+        },
+      }))
+    : undefined;
+  return {
+    model: resolvedModel,
+    max_tokens,
+    stream,
+    ...(systemBlocks ? { system: systemBlocks } : {}),
+    ...(anthropicTools?.length ? { tools: anthropicTools } : {}),
+    messages: msgs,
+  };
 }
 
-function buildOpenAIPayload(body: any, resolvedModel: string, provider: ProviderID): any {
+export function buildOpenAIPayload(
+  body: any,
+  resolvedModel: string,
+  provider: ProviderID,
+): any {
   const {
-    messages = [], projectRoot: _projectRoot, optimization_mode: _optimizationMode,
-    routing_mode: _routingMode, ...rest
+    messages = [],
+    system,
+    projectRoot: _projectRoot,
+    optimization_mode: _optimizationMode,
+    routing_mode: _routingMode,
+    ...rest
   } = body;
   const isStream = body.stream !== false;
   return {
     ...rest,
     model: resolvedModel,
     ...(isStream ? { stream_options: { include_usage: true } } : {}),
-    ...(provider === "openrouter" ? {
-      usage: { include: true },
-      provider: {
-        ...(typeof rest.provider === "object" ? rest.provider : {}),
-        data_collection: "deny",
-        zdr: true,
-      },
-    } : {}),
-    messages: messages.map((msg: any) => ({
-      ...msg,
-      content: typeof msg.content === "string" ? compressCodeSnippet(msg.content) : msg.content,
-    })),
+    ...(provider === "openrouter"
+      ? {
+          usage: { include: true },
+          provider: {
+            ...(typeof rest.provider === "object" ? rest.provider : {}),
+            data_collection: "deny",
+            zdr: true,
+          },
+        }
+      : {}),
+    messages: [
+      ...(system
+        ? [
+            {
+              role: "system",
+              content:
+                typeof system === "string" ? system : JSON.stringify(system),
+            },
+          ]
+        : []),
+      ...messages.map((msg: any) => ({
+        ...msg,
+        content:
+          typeof msg.content === "string"
+            ? compressCodeSnippet(msg.content)
+            : msg.content,
+      })),
+    ],
   };
 }
 
@@ -176,11 +326,11 @@ async function executeWithEndpoint(
   resolvedModel: string,
   body: any,
   res: Response,
-  onChunk?: (c: any) => void
+  onChunk?: (c: any) => void,
 ): Promise<any[]> {
   const isStream = body.stream !== false;
 
-  const payload  = endpoint.isAnthropic
+  const payload = endpoint.isAnthropic
     ? buildAnthropicPayload(body, resolvedModel)
     : buildOpenAIPayload(body, resolvedModel, endpoint.provider);
 
@@ -198,19 +348,24 @@ async function executeWithEndpoint(
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw Object.assign(new Error(`${endpoint.provider} HTTP ${response.status}: ${text.slice(0, 300)}`), { status: response.status });
+    throw Object.assign(
+      new Error(
+        `${endpoint.provider} HTTP ${response.status}: ${text.slice(0, 300)}`,
+      ),
+      { status: response.status },
+    );
   }
 
   const collected: any[] = [];
 
   if (isStream) {
-    res.setHeader("Content-Type",  "text/event-stream");
+    res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection",    "keep-alive");
+    res.setHeader("Connection", "keep-alive");
     res.setHeader("X-VynorAI-Provider", endpoint.provider);
 
     if (response.body) {
-      const reader  = response.body.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let sseBuffer = "";
       while (true) {
@@ -226,8 +381,21 @@ async function executeWithEndpoint(
             try {
               const evt = JSON.parse(line.slice(6));
               if (evt.type === "content_block_delta" && evt.delta?.text) {
-                const chunk = { id: `chatcmpl-${uuidv4()}`, object: "chat.completion.chunk", created: Math.floor(Date.now() / 1000), model: resolvedModel, choices: [{ index: 0, delta: { content: evt.delta.text }, finish_reason: null }] };
-                collected.push(chunk); onChunk?.(chunk);
+                const chunk = {
+                  id: `chatcmpl-${uuidv4()}`,
+                  object: "chat.completion.chunk",
+                  created: Math.floor(Date.now() / 1000),
+                  model: resolvedModel,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: { content: evt.delta.text },
+                      finish_reason: null,
+                    },
+                  ],
+                };
+                collected.push(chunk);
+                onChunk?.(chunk);
                 res.write(`data: ${JSON.stringify(chunk)}\n\n`);
               } else if (evt.type === "message_stop") {
                 res.write("data: [DONE]\n\n");
@@ -239,7 +407,11 @@ async function executeWithEndpoint(
           res.write(value);
           for (const line of completeLines) {
             if (line.startsWith("data: ") && !line.includes("[DONE]")) {
-              try { const c = JSON.parse(line.slice(6)); collected.push(c); onChunk?.(c); } catch {}
+              try {
+                const c = JSON.parse(line.slice(6));
+                collected.push(c);
+                onChunk?.(c);
+              } catch {}
             }
           }
         }
@@ -249,10 +421,28 @@ async function executeWithEndpoint(
   } else {
     const data = await response.json();
     if (endpoint.isAnthropic) {
-      const norm = { id: data.id || uuidv4(), object: "chat.completion", created: Math.floor(Date.now() / 1000), model: resolvedModel, choices: [{ index: 0, message: { role: "assistant", content: data.content?.[0]?.text || "" }, finish_reason: "stop" }], usage: data.usage || {} };
-      collected.push(norm); res.json(norm);
+      const norm = {
+        id: data.id || uuidv4(),
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: resolvedModel,
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: data.content?.[0]?.text || "",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: data.usage || {},
+      };
+      collected.push(norm);
+      res.json(norm);
     } else {
-      collected.push(data); res.json(data);
+      collected.push(data);
+      res.json(data);
     }
   }
 
@@ -264,7 +454,7 @@ async function executeWithEndpoint(
 export async function dispatchToProvider(
   body: any,
   res: Response,
-  onChunk?: (c: any) => void
+  onChunk?: (c: any) => void,
 ): Promise<{
   success: boolean;
   collected: any[];
@@ -273,10 +463,10 @@ export async function dispatchToProvider(
   usage?: ProviderUsage;
   latencyMs?: number;
 }> {
-  const rawModel     = body.model || DEFAULT_CHAT_MODEL;
-  const resolvedModel = resolveModelId(rawModel);   // "deepseek-v3" → "deepseek/deepseek-chat-v3-0324"
-  const chain        = selectProviderChain(resolvedModel);
-  const endpoints    = buildEndpoints();
+  const rawModel = body.model || DEFAULT_CHAT_MODEL;
+  const resolvedModel = resolveModelId(rawModel); // "deepseek-v3" → "deepseek/deepseek-chat-v3-0324"
+  const chain = selectProviderChain(resolvedModel);
+  const endpoints = buildEndpoints();
 
   for (const providerKey of chain) {
     const endpoint = endpoints[providerKey];
@@ -291,7 +481,13 @@ export async function dispatchToProvider(
       const providerModel = resolveProviderModel(providerKey, resolvedModel);
       if (!providerModel) continue;
       const startedAt = Date.now();
-      const collected = await executeWithEndpoint(endpoint, providerModel, body, res, onChunk);
+      const collected = await executeWithEndpoint(
+        endpoint,
+        providerModel,
+        body,
+        res,
+        onChunk,
+      );
       const latencyMs = Date.now() - startedAt;
       console.log(`[Router] ✅ ${providerKey} → "${resolvedModel}"`);
       return {
@@ -303,8 +499,11 @@ export async function dispatchToProvider(
         latencyMs,
       };
     } catch (err: any) {
-      if (err.status !== 401 && err.status !== 403) recordFailure(providerKey, err.message);
-      console.warn(`[Router] ⚠️  ${providerKey} failed: ${err.message} — trying next…`);
+      if (err.status !== 401 && err.status !== 403)
+        recordFailure(providerKey, err.message);
+      console.warn(
+        `[Router] ⚠️  ${providerKey} failed: ${err.message} — trying next…`,
+      );
     }
   }
 
@@ -314,7 +513,7 @@ export async function dispatchToProvider(
 async function sendServiceUnavailable(
   body: any,
   resolvedModel: string,
-  res: Response
+  res: Response,
 ): Promise<{ success: boolean; collected: any[] }> {
   const isStream = body.stream !== false;
   const msg = `⚡ **VynorAI**: Service temporarily unavailable for \`${resolvedModel}\`. Auto-recovering — please retry in 30s.`;
@@ -323,7 +522,13 @@ async function sendServiceUnavailable(
     object: isStream ? "chat.completion.chunk" : "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model: resolvedModel,
-    choices: [{ index: 0, [isStream ? "delta" : "message"]: { role: "assistant", content: msg }, finish_reason: "stop" }],
+    choices: [
+      {
+        index: 0,
+        [isStream ? "delta" : "message"]: { role: "assistant", content: msg },
+        finish_reason: "stop",
+      },
+    ],
   };
   if (isStream) {
     res.setHeader("Content-Type", "text/event-stream");

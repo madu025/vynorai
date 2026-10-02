@@ -1,7 +1,12 @@
 import { config } from "../config.js";
 import { stripRulesAndPreamble } from "./vault/intentClassifier.js";
 
-export type SlmIntentType = "INQUIRY" | "MUTATION" | "SCAFFOLD" | "CHAT" | "UNKNOWN";
+export type SlmIntentType =
+  | "INQUIRY"
+  | "MUTATION"
+  | "SCAFFOLD"
+  | "CHAT"
+  | "UNKNOWN";
 
 export interface SlmRoutingDecision {
   intent: SlmIntentType;
@@ -31,11 +36,21 @@ Respond ONLY with raw JSON: {"intent": "...", "complexity": "...", "reasoningEff
 function computeReasoningEffort(
   complexity: "EASY" | "MEDIUM" | "HARD",
   intent: SlmIntentType,
-  explicitEffort?: number
-): { effort: number; category: "low" | "medium" | "high"; budgetTokens: number } {
-  if (typeof explicitEffort === "number" && explicitEffort >= 1 && explicitEffort <= 100) {
-    const category = explicitEffort < 35 ? "low" : explicitEffort < 70 ? "medium" : "high";
-    const budgetTokens = explicitEffort < 35 ? 1024 : explicitEffort < 70 ? 3072 : 8192;
+  explicitEffort?: number,
+): {
+  effort: number;
+  category: "low" | "medium" | "high";
+  budgetTokens: number;
+} {
+  if (
+    typeof explicitEffort === "number" &&
+    explicitEffort >= 1 &&
+    explicitEffort <= 100
+  ) {
+    const category =
+      explicitEffort < 35 ? "low" : explicitEffort < 70 ? "medium" : "high";
+    const budgetTokens =
+      explicitEffort < 35 ? 1024 : explicitEffort < 70 ? 3072 : 8192;
     return { effort: Math.round(explicitEffort), category, budgetTokens };
   }
 
@@ -54,7 +69,7 @@ function computeReasoningEffort(
  */
 export async function analyzeIntentWithLocalSlm(
   prompt: string,
-  timeoutMs = config.localSlm?.timeoutMs || 500
+  timeoutMs = config.localSlm?.timeoutMs || 500,
 ): Promise<SlmRoutingDecision> {
   const clean = stripRulesAndPreamble(prompt).trim();
 
@@ -90,31 +105,56 @@ export async function analyzeIntentWithLocalSlm(
 
     const data: any = await res.json();
     const rawContent = data?.choices?.[0]?.message?.content || "";
-    
+
     // Parse JSON response
     const jsonMatch = rawContent.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      const intent: SlmIntentType = ["INQUIRY", "MUTATION", "SCAFFOLD", "CHAT"].includes(parsed.intent)
+      const intent: SlmIntentType = [
+        "INQUIRY",
+        "MUTATION",
+        "SCAFFOLD",
+        "CHAT",
+      ].includes(parsed.intent)
         ? parsed.intent
         : "UNKNOWN";
-      const complexity: "EASY" | "MEDIUM" | "HARD" = ["EASY", "MEDIUM", "HARD"].includes(parsed.complexity)
+      const complexity: "EASY" | "MEDIUM" | "HARD" = [
+        "EASY",
+        "MEDIUM",
+        "HARD",
+      ].includes(parsed.complexity)
         ? parsed.complexity
         : "MEDIUM";
-      const allowMutation = Boolean(parsed.allowMutation && (intent === "MUTATION" || intent === "SCAFFOLD"));
+      const allowMutation = Boolean(
+        parsed.allowMutation &&
+          (intent === "MUTATION" || intent === "SCAFFOLD"),
+      );
 
       const { effort, category, budgetTokens } = computeReasoningEffort(
         complexity,
         intent,
-        typeof parsed.reasoningEffort === "number" ? parsed.reasoningEffort : undefined
+        typeof parsed.reasoningEffort === "number"
+          ? parsed.reasoningEffort
+          : undefined,
       );
 
-      let suggestedAction: SlmRoutingDecision["suggestedAction"] = "CLOUD_FULL_AGENT";
-      let recommendedTools = ["read_file", "edit_file", "write_file", "run_command", "list_directory"];
+      let suggestedAction: SlmRoutingDecision["suggestedAction"] =
+        "CLOUD_FULL_AGENT";
+      let recommendedTools = [
+        "read_file",
+        "edit_file",
+        "write_file",
+        "run_command",
+        "list_directory",
+      ];
 
       if (intent === "INQUIRY" || !allowMutation) {
         suggestedAction = "CLOUD_READONLY";
-        recommendedTools = ["read_file", "list_directory", "get_golden_template"];
+        recommendedTools = [
+          "read_file",
+          "list_directory",
+          "get_golden_template",
+        ];
       } else if (intent === "CHAT" && complexity === "EASY") {
         suggestedAction = "LOCAL_DIRECT";
         recommendedTools = [];
@@ -129,7 +169,8 @@ export async function analyzeIntentWithLocalSlm(
         allowMutation,
         recommendedTools,
         suggestedAction,
-        confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.9,
+        confidence:
+          typeof parsed.confidence === "number" ? parsed.confidence : 0.9,
         reasoning: rawContent,
         source: "local-slm",
       };
@@ -148,22 +189,41 @@ export async function analyzeIntentWithLocalSlm(
  */
 function deterministicFallback(clean: string): SlmRoutingDecision {
   const isInformational =
-    /^(did you|do you|can you|could you|what is|what are|explain|how does|how do|tell me about|analyze|review|understand|summary|summarize|where is|why is)\b/i.test(clean) ||
-    /\b(understand\s+this\s+project|understand\s+the\s+project|explain\s+this|what\s+does\s+this|explain\s+project|meaning\s+eka|mokakda|kiyala\s+denna|kiyanna|therum\s+ganna)\b/i.test(clean);
+    /^(did you|do you|can you|could you|what is|what are|explain|how does|how do|tell me about|analyze|review|understand|summary|summarize|where is|why is)\b/i.test(
+      clean,
+    ) ||
+    /\b(understand\s+this\s+project|understand\s+the\s+project|explain\s+this|what\s+does\s+this|explain\s+project|meaning\s+eka|mokakda|kiyala\s+denna|kiyanna|therum\s+ganna)\b/i.test(
+      clean,
+    );
 
   const isHard =
-    /\b(architecture|refactor|database schema|migration|concurrency|race condition|security|jwt rotation|crypto|algorithm|optimize memory|deadlock)\b/i.test(clean);
+    /\b(architecture|refactor|database schema|migration|concurrency|race condition|security|jwt rotation|crypto|algorithm|optimize memory|deadlock)\b/i.test(
+      clean,
+    );
 
   const isMutation =
-    /\b(create|write|add|implement|fix|refactor|update|delete|remove|modify|edit|build|scaffold|generate|setup|hadanna|hadapan|danna|weda karanna)\b/i.test(clean) ||
+    /\b(create|write|add|implement|fix|refactor|update|delete|remove|modify|edit|build|scaffold|generate|setup|hadanna|hadapan|danna|weda karanna)\b/i.test(
+      clean,
+    ) ||
     clean.startsWith("/") ||
     /^\/(template|scaffold|golden)/i.test(clean);
 
   const allowMutation = isMutation && !isInformational;
-  const intent: SlmIntentType = isInformational ? "INQUIRY" : isMutation ? "MUTATION" : "CHAT";
-  const complexity: "EASY" | "MEDIUM" | "HARD" = isHard ? "HARD" : isMutation ? "MEDIUM" : "EASY";
+  const intent: SlmIntentType = isInformational
+    ? "INQUIRY"
+    : isMutation
+      ? "MUTATION"
+      : "CHAT";
+  const complexity: "EASY" | "MEDIUM" | "HARD" = isHard
+    ? "HARD"
+    : isMutation
+      ? "MEDIUM"
+      : "EASY";
 
-  const { effort, category, budgetTokens } = computeReasoningEffort(complexity, intent);
+  const { effort, category, budgetTokens } = computeReasoningEffort(
+    complexity,
+    intent,
+  );
 
   return {
     intent,
@@ -173,7 +233,14 @@ function deterministicFallback(clean: string): SlmRoutingDecision {
     thinkingBudgetTokens: budgetTokens,
     allowMutation,
     recommendedTools: allowMutation
-      ? ["read_file", "edit_file", "write_file", "run_command", "list_directory", "get_golden_template"]
+      ? [
+          "read_file",
+          "edit_file",
+          "write_file",
+          "run_command",
+          "list_directory",
+          "get_golden_template",
+        ]
       : ["read_file", "list_directory", "get_golden_template"],
     suggestedAction: allowMutation ? "CLOUD_FULL_AGENT" : "CLOUD_READONLY",
     confidence: 0.85,
@@ -188,7 +255,7 @@ function deterministicFallback(clean: string): SlmRoutingDecision {
 export async function generateReasoningPlan(
   userPrompt: string,
   contextSnippet = "",
-  timeoutMs = 4000
+  timeoutMs = 4000,
 ): Promise<{ plan: string; success: boolean }> {
   const clean = stripRulesAndPreamble(userPrompt).trim();
 
@@ -259,12 +326,13 @@ Keep output under 250 words.`;
 export async function auditGeneratedCode(
   codeSnippet: string,
   userPrompt: string,
-  timeoutMs = 4000
+  timeoutMs = 4000,
 ): Promise<{ audit: string; hasCriticalErrors: boolean }> {
   if (!codeSnippet || !config.localSlm?.enabled || !config.localSlm?.url) {
     return {
       audit: "[✓] Syntax verified: Clean\n[✓] Edge cases audited: Passing",
-      hasCriticalErrors: false,
+      // An unavailable model is not evidence that the code passed review.
+      hasCriticalErrors: true,
     };
   }
 
@@ -301,7 +369,9 @@ Respond with:
     if (res.ok) {
       const data: any = await res.json();
       const content = data?.choices?.[0]?.message?.content?.trim() || "";
-      const hasCriticalErrors = content.includes("NEEDS_FIX");
+      const explicitlyPassed = /\bStatus\s*:\s*PASSED\b/i.test(content);
+      const explicitlyFailed = /\bNEEDS_FIX\b/i.test(content);
+      const hasCriticalErrors = explicitlyFailed || !explicitlyPassed;
       return { audit: content, hasCriticalErrors };
     }
   } catch (_err) {
@@ -312,6 +382,8 @@ Respond with:
 
   return {
     audit: "[✓] Syntax verified: Clean\n[✓] Edge cases audited: Passing",
-    hasCriticalErrors: false,
+    // Fail closed: callers must run deterministic verification instead of
+    // reporting a fabricated successful audit.
+    hasCriticalErrors: true,
   };
 }

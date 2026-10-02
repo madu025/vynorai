@@ -189,7 +189,7 @@ export const callToolById = createAsyncThunk<
     const wrapped = await dispatch(
       streamResponseAfterToolCall({
         toolCallId,
-        depth: depth + 1,
+        depth,
       }),
     );
     unwrapResult(wrapped);

@@ -11,7 +11,10 @@ export function ToolCallStatusMessage({
   tool,
   toolCallState,
 }: ToolCallStatusMessageProps) {
-  if (!tool) return "Agent tool use";
+  if (!tool) {
+    const toolName = toolCallState.toolCall.function.name;
+    return `Using ${toolName || "project inspection"}`;
+  }
 
   const toolName = tool.displayTitle ?? tool.function.name;
   const defaultToolDescription = `${toolName} tool`;

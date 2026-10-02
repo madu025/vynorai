@@ -24,13 +24,23 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
     type: "function",
     function: {
       name: "read_file",
-      description: "Read contents of a file within the workspace. Use this to inspect code before modifying.",
+      description:
+        "Read contents of a file within the workspace. Use this to inspect code before modifying.",
       parameters: {
         type: "object",
         properties: {
-          filePath: { type: "string", description: "Relative path to the file from workspace root" },
-          startLine: { type: "number", description: "Optional starting line number (1-indexed)" },
-          endLine: { type: "number", description: "Optional ending line number (1-indexed)" },
+          filePath: {
+            type: "string",
+            description: "Relative path to the file from workspace root",
+          },
+          startLine: {
+            type: "number",
+            description: "Optional starting line number (1-indexed)",
+          },
+          endLine: {
+            type: "number",
+            description: "Optional ending line number (1-indexed)",
+          },
         },
         required: ["filePath"],
       },
@@ -40,13 +50,23 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
     type: "function",
     function: {
       name: "edit_file",
-      description: "Make a precise find-and-replace edit to an existing file with exact matching oldContent.",
+      description:
+        "Make a precise find-and-replace edit to an existing file with exact matching oldContent.",
       parameters: {
         type: "object",
         properties: {
-          filePath: { type: "string", description: "Relative path to the file" },
-          oldContent: { type: "string", description: "The exact snippet of code to be replaced" },
-          newContent: { type: "string", description: "The replacement code snippet" },
+          filePath: {
+            type: "string",
+            description: "Relative path to the file",
+          },
+          oldContent: {
+            type: "string",
+            description: "The exact snippet of code to be replaced",
+          },
+          newContent: {
+            type: "string",
+            description: "The replacement code snippet",
+          },
         },
         required: ["filePath", "oldContent", "newContent"],
       },
@@ -56,12 +76,19 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
     type: "function",
     function: {
       name: "write_file",
-      description: "Create a new file or completely overwrite an existing file with the provided content.",
+      description:
+        "Create a new file or completely overwrite an existing file with the provided content.",
       parameters: {
         type: "object",
         properties: {
-          filePath: { type: "string", description: "Relative path to the file" },
-          content: { type: "string", description: "The complete content to write into the file" },
+          filePath: {
+            type: "string",
+            description: "Relative path to the file",
+          },
+          content: {
+            type: "string",
+            description: "The complete content to write into the file",
+          },
         },
         required: ["filePath", "content"],
       },
@@ -71,11 +98,15 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
     type: "function",
     function: {
       name: "run_command",
-      description: "Execute a terminal command (e.g. npm test, git status, tsc) to verify changes or compile errors.",
+      description:
+        "Execute a terminal command (e.g. npm test, git status, tsc) to verify changes or compile errors.",
       parameters: {
         type: "object",
         properties: {
-          command: { type: "string", description: "The exact shell command to execute" },
+          command: {
+            type: "string",
+            description: "The exact shell command to execute",
+          },
         },
         required: ["command"],
       },
@@ -89,7 +120,10 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
       parameters: {
         type: "object",
         properties: {
-          dirPath: { type: "string", description: "Relative directory path (e.g. '.' or 'src')" },
+          dirPath: {
+            type: "string",
+            description: "Relative directory path (e.g. '.' or 'src')",
+          },
         },
         required: ["dirPath"],
       },
@@ -99,11 +133,16 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
     type: "function",
     function: {
       name: "get_golden_template",
-      description: "Retrieve a production-vetted, zero-bug golden boilerplate template (e.g. 'jwt-auth-rotation', 'sl-mobile-validator', 'payhere-lkr-gateway', 'prisma-production-schema', 'security-headers-ratelimit', 'nextjs-app-auth', 'fastapi-jwt-auth'). Always use this instead of writing security, auth, or regex logic from scratch.",
+      description:
+        "Retrieve a production-vetted, zero-bug golden boilerplate template (e.g. 'jwt-auth-rotation', 'sl-mobile-validator', 'payhere-lkr-gateway', 'prisma-production-schema', 'security-headers-ratelimit', 'nextjs-app-auth', 'fastapi-jwt-auth'). Always use this instead of writing security, auth, or regex logic from scratch.",
       parameters: {
         type: "object",
         properties: {
-          templateId: { type: "string", description: "The ID or keyword of the template (e.g. 'sl-phone', 'jwt', 'payhere', 'prisma', 'ratelimit')" },
+          templateId: {
+            type: "string",
+            description:
+              "The ID or keyword of the template (e.g. 'sl-phone', 'jwt', 'payhere', 'prisma', 'ratelimit')",
+          },
         },
         required: ["templateId"],
       },
@@ -116,9 +155,16 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
  */
 export const READ_ONLY_TOOL_NAMES = new Set([
   "read_file",
+  "read_file_range",
   "readFile",
+  "read_currently_open_file",
   "list_directory",
   "list_dir",
+  "ls",
+  "file_glob_search",
+  "view_diff",
+  "codebase",
+  "read_skill",
   "get_golden_template",
   "view_file",
   "grep_search",
@@ -128,7 +174,10 @@ export const READ_ONLY_TOOL_NAMES = new Set([
  * Dynamically prune mutating tools (write_file, edit_file, run_command) on read-only/informational queries.
  * Saves 800-1200 prompt tokens and eliminates accidental file mutation loops.
  */
-export function filterToolsForIntent(tools: any[] | undefined, allowMutation: boolean): any[] {
+export function filterToolsForIntent(
+  tools: any[] | undefined,
+  allowMutation: boolean,
+): any[] {
   if (!Array.isArray(tools) || tools.length === 0) return [];
   if (allowMutation) return tools;
   return tools.filter((tool: any) => {

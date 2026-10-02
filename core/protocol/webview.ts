@@ -11,6 +11,7 @@ import type { WorkspaceSnapshot } from "../workspace/types.js";
 
 export type ToWebviewFromIdeOrCoreProtocol = {
   "workspace/statusUpdate": [WorkspaceSnapshot, void];
+  "workspace/pathsUpdate": [{ paths: string[] }, void];
   configUpdate: [
     {
       result: ConfigResult<BrowserSerializedContinueConfig>;

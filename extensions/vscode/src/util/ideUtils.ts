@@ -64,18 +64,17 @@ export class VsCodeIdeUtils {
     );
   }
 
-  private _workspaceDirectories: vscode.Uri[] | undefined = undefined;
+  private _workspaceDirectoriesOverride: vscode.Uri[] | undefined;
   getWorkspaceDirectories(): vscode.Uri[] {
-    if (this._workspaceDirectories === undefined) {
-      this._workspaceDirectories =
-        vscode.workspace.workspaceFolders?.map((folder) => folder.uri) || [];
-    }
-
-    return this._workspaceDirectories;
+    return (
+      this._workspaceDirectoriesOverride ??
+      vscode.workspace.workspaceFolders?.map((folder) => folder.uri) ??
+      []
+    );
   }
 
   setWokspaceDirectories(dirs: vscode.Uri[] | undefined): void {
-    this._workspaceDirectories = dirs;
+    this._workspaceDirectoriesOverride = dirs;
   }
 
   getUniqueId() {

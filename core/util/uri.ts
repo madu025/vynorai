@@ -34,7 +34,14 @@ export function findUriInDirs(
   if (!uriComps.scheme) {
     throw new Error(`Invalid uri: ${uri}`);
   }
-  const uriPathParts = getCleanUriPath(uri).split("/");
+  const decodePathPart = (part: string) => {
+    try {
+      return decodeURIComponent(part);
+    } catch {
+      return part;
+    }
+  };
+  const uriPathParts = getCleanUriPath(uri).split("/").map(decodePathPart);
 
   for (const dir of dirUriCandidates) {
     const dirComps = URI.parse(dir);
@@ -43,29 +50,43 @@ export function findUriInDirs(
       throw new Error(`Invalid uri: ${dir}`);
     }
 
-    if (uriComps.scheme !== dirComps.scheme) {
+    if (uriComps.scheme.toLowerCase() !== dirComps.scheme.toLowerCase()) {
+      continue;
+    }
+    if (
+      (uriComps.host ?? "").toLowerCase() !==
+      (dirComps.host ?? "").toLowerCase()
+    ) {
       continue;
     }
     // Can't just use startsWith because e.g.
     // file:///folder/file is not within file:///fold
 
     // At this point we break the path up and check if each dir path part matches
-    const dirPathParts = getCleanUriPath(dir).split("/");
+    const dirPathParts = getCleanUriPath(dir).split("/").map(decodePathPart);
 
     if (uriPathParts.length < dirPathParts.length) {
       continue;
     }
     let allDirPartsMatch = true;
     for (let i = 0; i < dirPathParts.length; i++) {
-      if (dirPathParts[i] !== uriPathParts[i]) {
+      const isWindowsDrive =
+        uriComps.scheme.toLowerCase() === "file" &&
+        i === 0 &&
+        /^[a-z]:$/i.test(dirPathParts[i] ?? "") &&
+        /^[a-z]:$/i.test(uriPathParts[i] ?? "");
+      const dirPart = isWindowsDrive
+        ? dirPathParts[i]?.toLowerCase()
+        : dirPathParts[i];
+      const uriPart = isWindowsDrive
+        ? uriPathParts[i]?.toLowerCase()
+        : uriPathParts[i];
+      if (dirPart !== uriPart) {
         allDirPartsMatch = false;
       }
     }
     if (allDirPartsMatch) {
-      const relativePath = uriPathParts
-        .slice(dirPathParts.length)
-        .map(decodeURIComponent)
-        .join("/");
+      const relativePath = uriPathParts.slice(dirPathParts.length).join("/");
       return {
         uri,
         relativePathOrBasename: relativePath,

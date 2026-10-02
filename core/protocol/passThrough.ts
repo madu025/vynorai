@@ -87,6 +87,26 @@ export const WEBVIEW_TO_CORE_PASS_THROUGH: (keyof ToCoreFromWebviewProtocol)[] =
     "process/isBackgrounded",
     "process/killTerminalProcess",
     "models/fetch",
+    // Workspace lifecycle and durable agent execution
+    "workspace/getSnapshot",
+    "workspace/refreshSnapshot",
+    "workspace/invalidate",
+    "workspace/getVerificationPlan",
+    "agent/task/start",
+    "agent/task/get",
+    "agent/task/transition",
+    "agent/task/recordApproval",
+    "agent/task/recordVerification",
+    "agent/task/consumeBudget",
+    "agent/task/authorizeAction",
+    "agent/task/cancel",
+    "agent/task/resume",
+    "agent/task/listResumable",
+    "agent/plan/create",
+    "agent/plan/next",
+    "agent/plan/startStep",
+    "agent/plan/completeStep",
+    "agent/plan/failStep",
   ];
 
 // Message types to pass through from core to webview
@@ -106,4 +126,5 @@ export const CORE_TO_WEBVIEW_PASS_THROUGH: (keyof ToWebviewFromCoreProtocol)[] =
     "sessionUpdate",
     "didCloseFiles",
     "toolCallPartialOutput",
+    "workspace/statusUpdate",
   ];

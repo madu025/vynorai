@@ -179,7 +179,9 @@ export class VsCodeExtension {
       },
     );
     this.ide = new VsCodeIde(this.webviewProtocolPromise, context);
-    this.ideUtils = new VsCodeIdeUtils();
+    // The IDE exposed to Core and the extension event handlers must observe the
+    // same workspace override state.
+    this.ideUtils = this.ide.ideUtils;
     this.extensionContext = context;
     this.windowId = uuidv4();
 
@@ -519,6 +521,12 @@ export class VsCodeExtension {
       );
 
       this.ideUtils.setWokspaceDirectories(dirs);
+
+      void this.webviewProtocolPromise.then((protocol) =>
+        protocol.request("workspace/pathsUpdate", {
+          paths: dirs?.map((dir) => dir.toString()) ?? [],
+        }),
+      );
 
       this.core.invoke("index/forceReIndex", {
         dirs: [

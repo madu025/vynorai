@@ -64,6 +64,26 @@ describe("uri utils", () => {
       });
     });
 
+    it("matches Windows drive letters across case and percent encoding", () => {
+      expect(
+        findUriInDirs("file:///D:/My%20Project/VynorAI/src/file.ts", [
+          "file:///d%3A/My%20Project/VynorAI",
+        ]),
+      ).toEqual({
+        uri: "file:///D:/My%20Project/VynorAI/src/file.ts",
+        relativePathOrBasename: "src/file.ts",
+        foundInDir: "file:///d%3A/My%20Project/VynorAI",
+      });
+    });
+
+    it("does not match file URIs from different UNC hosts", () => {
+      expect(
+        findUriInDirs("file://server-b/share/project/file.ts", [
+          "file://server-a/share/project",
+        ]).foundInDir,
+      ).toBeNull();
+    });
+
     it("should throw error for invalid URIs", () => {
       expect(() => findUriInDirs("invalid-uri", dirUris)).toThrow(
         "Invalid uri: invalid-uri",

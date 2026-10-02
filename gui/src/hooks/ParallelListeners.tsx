@@ -261,6 +261,10 @@ function ParallelListeners() {
     dispatch(setWorkspaceSnapshot(data));
   });
 
+  useWebviewListener("workspace/pathsUpdate", async ({ paths }) => {
+    window.workspacePaths = paths;
+  });
+
   useWebviewListener(
     "updateApplyState",
     async (state) => {

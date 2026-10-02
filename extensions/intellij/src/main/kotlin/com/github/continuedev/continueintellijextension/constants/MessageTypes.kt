@@ -65,6 +65,7 @@ class MessageTypes {
             "sessionUpdate",
             "didCloseFiles",
             "toolCallPartialOutput",
+            "workspace/statusUpdate",
         )
 
         // Note: If updating these values, make a corresponding update in
@@ -154,7 +155,26 @@ class MessageTypes {
             "process/markAsBackgrounded",
             "process/isBackgrounded",
             "process/killTerminalProcess",
-            "models/fetch"
+            "models/fetch",
+            "workspace/getSnapshot",
+            "workspace/refreshSnapshot",
+            "workspace/invalidate",
+            "workspace/getVerificationPlan",
+            "agent/task/start",
+            "agent/task/get",
+            "agent/task/transition",
+            "agent/task/recordApproval",
+            "agent/task/recordVerification",
+            "agent/task/consumeBudget",
+            "agent/task/authorizeAction",
+            "agent/task/cancel",
+            "agent/task/resume",
+            "agent/task/listResumable",
+            "agent/plan/create",
+            "agent/plan/next",
+            "agent/plan/startStep",
+            "agent/plan/completeStep",
+            "agent/plan/failStep"
         )
     }
 }

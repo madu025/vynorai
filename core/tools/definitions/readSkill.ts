@@ -17,7 +17,7 @@ export const readSkillTool: GetTool = async (params) => {
       name: BuiltInToolNames.ReadSkill,
       description: `
 Use this tool to read the content of a skill by its name. Skills contain detailed instructions for specific tasks. The skill name should match one of the available skills listed below: 
-${skills.map((skill) => `\nname: ${skill.name}\ndescription: ${skill.description}\n`)}`,
+${skills.map((skill) => `\nname: ${skill.name}\ndescription: ${skill.description}\ntrust: ${skill.trust}\ndeclared permissions: ${skill.permissions.join(", ") || "none"}\n`)}`,
       parameters: {
         type: "object",
         required: ["skillName"],

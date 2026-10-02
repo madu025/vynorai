@@ -3,6 +3,7 @@ import {
   parseMarkdownRule,
 } from "@continuedev/config-yaml";
 import z from "zod";
+import { createHash } from "node:crypto";
 import { IDE, Skill } from "../..";
 import { walkDir } from "../../indexing/walkDir";
 import { localPathToUri } from "../../util/pathToUri";
@@ -10,9 +11,16 @@ import { getGlobalFolderWithName } from "../../util/paths";
 import { findUriInDirs, joinPathsToUri } from "../../util/uri";
 import { getAllDotContinueDefinitionFiles } from "../loadLocalAssistants";
 
-const skillFrontmatterSchema = z.object({
+export const skillFrontmatterSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
+  permissions: z
+    .array(z.enum(["workspace-read", "workspace-write", "command", "network"]))
+    .max(4)
+    .refine((values) => new Set(values).size === values.length, {
+      message: "Skill permissions must be unique",
+    })
+    .default([]),
 });
 
 const SKILLS_DIR = "skills";
@@ -85,6 +93,9 @@ export async function loadMarkdownSkills(ide: IDE) {
           .filter((file) => !file.endsWith("SKILL.md"));
 
         const foundRelativeUri = findUriInDirs(fileUri, workspaceDirs);
+        const trust = foundRelativeUri.foundInDir
+          ? "workspace-untrusted"
+          : "user-installed";
 
         skills.push({
           ...validatedFrontmatter,
@@ -93,6 +104,8 @@ export async function loadMarkdownSkills(ide: IDE) {
             ? foundRelativeUri.relativePathOrBasename
             : fileUri,
           files: filesInSkillsDirectory,
+          trust,
+          digest: createHash("sha256").update(content).digest("hex"),
         });
       } catch (error) {
         errors.push({

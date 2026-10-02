@@ -1943,6 +1943,11 @@ export interface Skill {
   content: string;
   files: string[];
   license?: string;
+  permissions: Array<
+    "workspace-read" | "workspace-write" | "command" | "network"
+  >;
+  trust: "workspace-untrusted" | "user-installed";
+  digest: string;
 }
 
 export interface CompleteOnboardingPayload {

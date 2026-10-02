@@ -323,6 +323,12 @@ export class AgentOrchestrator {
         if (["running", "verifying", "awaiting_approval"].includes(step.state))
           step.state = "pending";
       }
+      for (const subagent of task.subagents ?? []) {
+        if (subagent.status === "running") {
+          subagent.status = "queued";
+          subagent.updatedAt = Date.now();
+        }
+      }
       task.state = task.plan ? "planning" : "gathering";
     });
   }

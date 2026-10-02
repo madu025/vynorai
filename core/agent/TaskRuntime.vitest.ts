@@ -107,6 +107,25 @@ describe("TaskRuntime", () => {
     ).toHaveLength(1);
   });
 
+  it("continues journal sequence numbers after a runtime restart", async () => {
+    const { runtime, directory } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "session-1",
+      workspaceId: "workspace-1",
+      workspaceRevision: 1,
+      goal: "Crash recovery",
+    });
+    await runtime.transition(task.id, "planning");
+    const restarted = new TaskRuntime(directory);
+    await restarted.transition(task.id, "executing");
+    const events = fs
+      .readFileSync(path.join(directory, `${task.id}.events.jsonl`), "utf8")
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => JSON.parse(line));
+    expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+  });
+
   it("blocks mutation completion when only a model response was recorded", async () => {
     const { runtime } = createRuntime();
     const task = await runtime.start({

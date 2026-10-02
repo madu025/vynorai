@@ -64,6 +64,34 @@ export class TaskJournal {
     setConfigFilePermissions(target);
   }
 
+  maxEventSequence(): number {
+    let maximum = 0;
+    for (const entry of fs.readdirSync(this.directory, {
+      withFileTypes: true,
+    })) {
+      if (!entry.isFile() || !entry.name.endsWith(".events.jsonl")) continue;
+      try {
+        const lines = fs
+          .readFileSync(path.join(this.directory, entry.name), "utf8")
+          .trim()
+          .split(/\r?\n/)
+          .filter(Boolean);
+        for (const line of lines) {
+          const event = JSON.parse(line) as Partial<AgentTaskEvent>;
+          if (
+            typeof event.sequence === "number" &&
+            Number.isSafeInteger(event.sequence)
+          )
+            maximum = Math.max(maximum, event.sequence);
+        }
+      } catch {
+        // A malformed historical event must not prevent task recovery. New
+        // events continue after the highest sequence that could be decoded.
+      }
+    }
+    return maximum;
+  }
+
   private assertTaskId(taskId: string): void {
     if (!TASK_ID_PATTERN.test(taskId)) throw new Error("Invalid task id");
   }

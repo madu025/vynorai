@@ -195,6 +195,14 @@ describe("AgentOrchestrator", () => {
     });
     await first.runtime.startSubagent(first.task.id, subagent.id);
 
+    const recovered = await first.orchestrator.resume(
+      first.task.id,
+      "workspace-1",
+      7,
+    );
+    expect(recovered.subagents?.[0].status).toBe("queued");
+    await first.runtime.startSubagent(first.task.id, subagent.id);
+
     const canceled = await first.orchestrator.cancel(first.task.id);
     expect(canceled.state).toBe("canceled");
     expect(canceled.executionGuard.cancelRequested).toBe(true);

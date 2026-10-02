@@ -92,10 +92,11 @@ export class TaskRuntime {
   private readonly mutex = new Mutex();
   private readonly journal: TaskJournal;
   private readonly tasks = new Map<string, AgentTask>();
-  private sequence = 0;
+  private sequence: number;
 
   constructor(directory = path.join(getContinueGlobalPath(), "agent-tasks")) {
     this.journal = new TaskJournal(directory);
+    this.sequence = this.journal.maxEventSequence();
   }
 
   async start(input: {

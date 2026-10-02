@@ -35,6 +35,7 @@ type CheckpointSummary = {
   fileName: string;
   createdAt: number;
   label: string;
+  taskId?: string;
 };
 
 export function ExpertTeamPanel() {

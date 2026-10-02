@@ -23,11 +23,17 @@ export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
       fileName: string;
       createdAt: number;
       label: string;
+      taskId?: string;
     }>,
   ];
+  "checkpoints/setActiveTask": [{ taskId?: string }, void];
   "checkpoints/restore": [
     { id: string },
     { restored: boolean; reason?: string },
+  ];
+  "checkpoints/restoreTask": [
+    { taskId: string },
+    { restored: boolean; restoredFiles: number; reason?: string },
   ];
   openUrl: [string, void];
   applyToFile: [ApplyToFilePayload, void];

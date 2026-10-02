@@ -154,8 +154,14 @@ export class VsCodeMessenger {
     });
 
     this.onWebview("checkpoints/list", async () => checkpointManager.list());
+    this.onWebview("checkpoints/setActiveTask", async ({ data }) => {
+      checkpointManager.setActiveTask(data.taskId);
+    });
     this.onWebview("checkpoints/restore", async ({ data }) =>
       checkpointManager.restore(data.id),
+    );
+    this.onWebview("checkpoints/restoreTask", async ({ data }) =>
+      checkpointManager.restoreTask(data.taskId),
     );
     this.onWebview("vynorai/login", async () => {
       await vscode.commands.executeCommand("vynorai.login");

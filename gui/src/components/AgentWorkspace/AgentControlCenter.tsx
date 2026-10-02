@@ -1,5 +1,6 @@
 import {
   ArrowPathIcon,
+  ArrowUturnLeftIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   CommandLineIcon,
@@ -70,6 +71,7 @@ export function AgentControlCenter() {
   const [expanded, setExpanded] = useState(true);
   const [busyTaskId, setBusyTaskId] = useState<string>();
   const [error, setError] = useState<string>();
+  const [taskCheckpointCount, setTaskCheckpointCount] = useState(0);
 
   const refreshTask = useCallback(async () => {
     if (!activeTaskId) {
@@ -83,10 +85,12 @@ export function AgentControlCenter() {
   }, [activeTaskId, ideMessenger]);
 
   const refreshSupportingData = useCallback(async () => {
-    const [resumableResult, verificationResult] = await Promise.all([
-      ideMessenger.request("agent/task/listResumable", { sessionId }),
-      ideMessenger.request("workspace/getVerificationPlan", undefined),
-    ]);
+    const [resumableResult, verificationResult, checkpointResult] =
+      await Promise.all([
+        ideMessenger.request("agent/task/listResumable", { sessionId }),
+        ideMessenger.request("workspace/getVerificationPlan", undefined),
+        ideMessenger.request("checkpoints/list", undefined),
+      ]);
     if (resumableResult.status === "success") {
       setResumable(
         resumableResult.content.filter((item) => item.id !== activeTaskId),
@@ -94,6 +98,13 @@ export function AgentControlCenter() {
     }
     if (verificationResult.status === "success") {
       setVerification(verificationResult.content);
+    }
+    if (checkpointResult.status === "success") {
+      setTaskCheckpointCount(
+        checkpointResult.content.filter(
+          (checkpoint) => checkpoint.taskId === activeTaskId,
+        ).length,
+      );
     }
   }, [activeTaskId, ideMessenger, sessionId]);
 
@@ -166,6 +177,31 @@ export function AgentControlCenter() {
       dispatch(setActiveTaskState(result.content.state));
     } else {
       setError(result.error);
+    }
+  };
+
+  const restoreTask = async () => {
+    if (!visibleTask || isStreaming || busyTaskId) return;
+    setBusyTaskId(visibleTask.id);
+    setError(undefined);
+    try {
+      const result = await ideMessenger.request("checkpoints/restoreTask", {
+        taskId: visibleTask.id,
+      });
+      if (result.status === "error") throw new Error(result.error);
+      if (!result.content.restored) {
+        throw new Error(result.content.reason ?? "Task restore was canceled");
+      }
+      await ideMessenger.request("workspace/invalidate", {
+        reason: "Agent task restored",
+      });
+      setTaskCheckpointCount(0);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not restore task",
+      );
+    } finally {
+      setBusyTaskId(undefined);
     }
   };
 
@@ -273,6 +309,20 @@ export function AgentControlCenter() {
                 <PlayIcon className="h-3 w-3" />
               )}
               Resume autonomous run
+            </button>
+          )}
+
+          {visibleTask && taskCheckpointCount > 0 && (
+            <button
+              type="button"
+              disabled={isStreaming || Boolean(busyTaskId)}
+              onClick={() => void restoreTask()}
+              className="text-warning hover:bg-warning/10 mt-1.5 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded border border-solid border-current bg-transparent px-2 py-1.5 text-[10px] disabled:cursor-default disabled:opacity-50"
+              title="Restore every file changed by this agent task to its pre-task state"
+            >
+              <ArrowUturnLeftIcon className="h-3 w-3" />
+              Restore task changes ({taskCheckpointCount} checkpoint
+              {taskCheckpointCount === 1 ? "" : "s"})
             </button>
           )}
 

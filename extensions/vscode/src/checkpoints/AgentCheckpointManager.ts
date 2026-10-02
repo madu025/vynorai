@@ -7,6 +7,7 @@ export type AgentCheckpointSummary = {
   fileName: string;
   createdAt: number;
   label: string;
+  taskId?: string;
 };
 
 type StoredCheckpoint = AgentCheckpointSummary & {
@@ -18,11 +19,19 @@ const MAX_CHECKPOINTS = 20;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 function hash(content: string | null): string {
-  return createHash("sha256").update(content ?? "<missing>").digest("hex");
+  return createHash("sha256")
+    .update(content ?? "<missing>")
+    .digest("hex");
 }
 
 export class AgentCheckpointManager {
+  private activeTaskId?: string;
+
   constructor(private readonly context: vscode.ExtensionContext) {}
+
+  setActiveTask(taskId?: string): void {
+    this.activeTaskId = taskId?.trim() || undefined;
+  }
 
   private get checkpointDir(): vscode.Uri {
     const workspaceScope = (vscode.workspace.workspaceFolders ?? [])
@@ -43,7 +52,9 @@ export class AgentCheckpointManager {
   private ensureWorkspaceFile(fileUri: string): vscode.Uri {
     const uri = vscode.Uri.parse(fileUri, true);
     if (uri.scheme !== "file" || !vscode.workspace.getWorkspaceFolder(uri)) {
-      throw new Error("Checkpoints are limited to files inside the current workspace.");
+      throw new Error(
+        "Checkpoints are limited to files inside the current workspace.",
+      );
     }
     return uri;
   }
@@ -57,28 +68,42 @@ export class AgentCheckpointManager {
       const bytes = await vscode.workspace.fs.readFile(uri);
       return new TextDecoder().decode(bytes);
     } catch (error) {
-      if (error instanceof vscode.FileSystemError && error.code === "FileNotFound") {
+      if (
+        error instanceof vscode.FileSystemError &&
+        error.code === "FileNotFound"
+      ) {
         return null;
       }
       throw error;
     }
   }
 
-  async create(fileUri: string, label = "Agent edit"): Promise<string | undefined> {
+  async create(
+    fileUri: string,
+    label = "Agent edit",
+  ): Promise<string | undefined> {
     let uri: vscode.Uri;
     try {
       uri = this.ensureWorkspaceFile(fileUri);
       const stat = await vscode.workspace.fs.stat(uri);
       if (stat.size > MAX_FILE_BYTES) return undefined;
     } catch (error) {
-      if (!(error instanceof vscode.FileSystemError && error.code === "FileNotFound")) {
+      if (
+        !(
+          error instanceof vscode.FileSystemError &&
+          error.code === "FileNotFound"
+        )
+      ) {
         return undefined;
       }
       uri = vscode.Uri.parse(fileUri, true);
       if (!vscode.workspace.getWorkspaceFolder(uri)) return undefined;
     }
     const beforeContent = await this.readCurrentContent(uri);
-    if (beforeContent !== null && Buffer.byteLength(beforeContent, "utf8") > MAX_FILE_BYTES) {
+    if (
+      beforeContent !== null &&
+      Buffer.byteLength(beforeContent, "utf8") > MAX_FILE_BYTES
+    ) {
       return undefined;
     }
     const checkpoint: StoredCheckpoint = {
@@ -87,6 +112,7 @@ export class AgentCheckpointManager {
       fileName: vscode.workspace.asRelativePath(uri, false),
       createdAt: Date.now(),
       label,
+      taskId: this.activeTaskId,
       beforeContent,
     };
     await vscode.workspace.fs.createDirectory(this.checkpointDir);
@@ -112,16 +138,27 @@ export class AgentCheckpointManager {
 
   async list(): Promise<AgentCheckpointSummary[]> {
     try {
-      const entries = await vscode.workspace.fs.readDirectory(this.checkpointDir);
+      const entries = await vscode.workspace.fs.readDirectory(
+        this.checkpointDir,
+      );
       const checkpoints = await Promise.all(
         entries
-          .filter(([name, type]) => type === vscode.FileType.File && name.endsWith(".json"))
+          .filter(
+            ([name, type]) =>
+              type === vscode.FileType.File && name.endsWith(".json"),
+          )
           .map(([name]) => this.read(name.slice(0, -5))),
       );
       return checkpoints
         .filter((item): item is StoredCheckpoint => !!item)
         .sort((a, b) => b.createdAt - a.createdAt)
-        .map(({ beforeContent: _beforeContent, afterHash: _afterHash, ...summary }) => summary);
+        .map(
+          ({
+            beforeContent: _beforeContent,
+            afterHash: _afterHash,
+            ...summary
+          }) => summary,
+        );
     } catch {
       return [];
     }
@@ -129,7 +166,8 @@ export class AgentCheckpointManager {
 
   async restore(id: string): Promise<{ restored: boolean; reason?: string }> {
     const checkpoint = await this.read(id);
-    if (!checkpoint) return { restored: false, reason: "Checkpoint not found." };
+    if (!checkpoint)
+      return { restored: false, reason: "Checkpoint not found." };
     const uri = this.ensureWorkspaceFile(checkpoint.fileUri);
     const currentContent = await this.readCurrentContent(uri);
     if (checkpoint.afterHash && hash(currentContent) !== checkpoint.afterHash) {
@@ -139,26 +177,122 @@ export class AgentCheckpointManager {
         "Restore Anyway",
       );
       if (choice !== "Restore Anyway") {
-        return { restored: false, reason: "Restore canceled to protect newer changes." };
+        return {
+          restored: false,
+          reason: "Restore canceled to protect newer changes.",
+        };
       }
     }
 
     if (checkpoint.beforeContent === null) {
-      if (currentContent !== null) await vscode.workspace.fs.delete(uri, { useTrash: true });
+      if (currentContent !== null)
+        await vscode.workspace.fs.delete(uri, { useTrash: true });
     } else {
       const document = await vscode.workspace.openTextDocument(uri);
       const edit = new vscode.WorkspaceEdit();
       edit.replace(
         uri,
-        new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)),
+        new vscode.Range(
+          document.positionAt(0),
+          document.positionAt(document.getText().length),
+        ),
         checkpoint.beforeContent,
       );
       if (!(await vscode.workspace.applyEdit(edit))) {
-        return { restored: false, reason: "VS Code rejected the restore edit." };
+        return {
+          restored: false,
+          reason: "VS Code rejected the restore edit.",
+        };
       }
       await document.save();
     }
     return { restored: true };
+  }
+
+  async restoreTask(
+    taskId: string,
+  ): Promise<{ restored: boolean; restoredFiles: number; reason?: string }> {
+    const checkpoints = (
+      await Promise.all(
+        (await this.list())
+          .filter((checkpoint) => checkpoint.taskId === taskId)
+          .map((checkpoint) => this.read(checkpoint.id)),
+      )
+    ).filter((item): item is StoredCheckpoint => !!item);
+    if (!checkpoints.length) {
+      return {
+        restored: false,
+        restoredFiles: 0,
+        reason: "No checkpoints were recorded for this task.",
+      };
+    }
+
+    const byFile = new Map<string, StoredCheckpoint[]>();
+    for (const checkpoint of checkpoints) {
+      const group = byFile.get(checkpoint.fileUri) ?? [];
+      group.push(checkpoint);
+      byFile.set(checkpoint.fileUri, group);
+    }
+
+    const conflicts: string[] = [];
+    for (const group of byFile.values()) {
+      group.sort((left, right) => left.createdAt - right.createdAt);
+      const latest = group[group.length - 1];
+      const uri = this.ensureWorkspaceFile(latest.fileUri);
+      if (
+        latest.afterHash &&
+        hash(await this.readCurrentContent(uri)) !== latest.afterHash
+      ) {
+        conflicts.push(latest.fileName);
+      }
+    }
+    if (conflicts.length) {
+      const choice = await vscode.window.showWarningMessage(
+        `${conflicts.length} file(s) changed after the agent task. Restore the task anyway?`,
+        { modal: true, detail: conflicts.slice(0, 10).join("\n") },
+        "Restore Task Anyway",
+      );
+      if (choice !== "Restore Task Anyway") {
+        return {
+          restored: false,
+          restoredFiles: 0,
+          reason: "Task restore canceled to protect newer changes.",
+        };
+      }
+    }
+
+    let restoredFiles = 0;
+    for (const group of byFile.values()) {
+      const earliest = group[0];
+      const uri = this.ensureWorkspaceFile(earliest.fileUri);
+      const currentContent = await this.readCurrentContent(uri);
+      if (earliest.beforeContent === null) {
+        if (currentContent !== null) {
+          await vscode.workspace.fs.delete(uri, { useTrash: true });
+        }
+      } else {
+        const document = await vscode.workspace.openTextDocument(uri);
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(
+          uri,
+          new vscode.Range(
+            document.positionAt(0),
+            document.positionAt(document.getText().length),
+          ),
+          earliest.beforeContent,
+        );
+        if (!(await vscode.workspace.applyEdit(edit))) {
+          return {
+            restored: false,
+            restoredFiles,
+            reason: `VS Code rejected restore for ${earliest.fileName}.`,
+          };
+        }
+        await document.save();
+      }
+      restoredFiles += 1;
+    }
+    return { restored: true, restoredFiles };
   }
 
   private async read(id: string): Promise<StoredCheckpoint | undefined> {
@@ -176,11 +310,13 @@ export class AgentCheckpointManager {
   private async prune(): Promise<void> {
     const checkpoints = await this.list();
     await Promise.all(
-      checkpoints.slice(MAX_CHECKPOINTS).map((checkpoint) =>
-        vscode.workspace.fs.delete(
-          vscode.Uri.joinPath(this.checkpointDir, `${checkpoint.id}.json`),
+      checkpoints
+        .slice(MAX_CHECKPOINTS)
+        .map((checkpoint) =>
+          vscode.workspace.fs.delete(
+            vscode.Uri.joinPath(this.checkpointDir, `${checkpoint.id}.json`),
+          ),
         ),
-      ),
     );
   }
 }

@@ -178,6 +178,11 @@ export const streamNormalInput = createAsyncThunk<
       .reverse()
       .find((item) => item.message.role === "user");
     let taskId = resumeTaskId ?? state.session.activeTaskId;
+    if (resumeTaskId && state.session.mode === "agent") {
+      await extra.ideMessenger.request("checkpoints/setActiveTask", {
+        taskId: resumeTaskId,
+      });
+    }
     if (depth === 0 && !resumeTaskId && latestUserRequest) {
       try {
         const started = await extra.ideMessenger.request("agent/task/start", {
@@ -188,6 +193,11 @@ export const streamNormalInput = createAsyncThunk<
           taskId = started.content.id;
           dispatch(setActiveTaskId(taskId));
           dispatch(setActiveTaskState(started.content.state));
+          if (state.session.mode === "agent") {
+            await extra.ideMessenger.request("checkpoints/setActiveTask", {
+              taskId,
+            });
+          }
           const planned = await extra.ideMessenger.request(
             "agent/plan/create",
             {
@@ -267,6 +277,11 @@ export const streamNormalInput = createAsyncThunk<
           console.warn(`Could not transition agent task to ${taskState}`);
         } else {
           dispatch(setActiveTaskState(result.content.state));
+          if (taskState === "completed" || taskState === "failed") {
+            await extra.ideMessenger.request("checkpoints/setActiveTask", {
+              taskId: undefined,
+            });
+          }
         }
       } catch {
         // The response path remains available if local journaling is unavailable.

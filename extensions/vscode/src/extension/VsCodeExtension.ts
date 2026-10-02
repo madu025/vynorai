@@ -250,16 +250,6 @@ export class VsCodeExtension {
       this.extensionContext,
     );
 
-    // Sidebar
-    context.subscriptions.push(
-      vscode.window.registerWebviewViewProvider(
-        "continue.continueGUIView",
-        this.sidebar,
-        {
-          webviewOptions: { retainContextWhenHidden: true },
-        },
-      ),
-    );
     resolveWebviewProtocol(this.sidebar.webviewProtocol);
 
     const inProcessMessenger = new InProcessMessenger<
@@ -281,6 +271,19 @@ export class VsCodeExtension {
     this.core = new Core(inProcessMessenger, this.ide);
     this.configHandler = this.core.configHandler;
     resolveConfigHandler?.(this.configHandler);
+
+    // Expose the webview only after Core has registered all protocol handlers.
+    // Antigravity can resolve an already-visible view during activation; when
+    // registration happened earlier, its first workspace request was dropped.
+    context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider(
+        "continue.continueGUIView",
+        this.sidebar,
+        {
+          webviewOptions: { retainContextWhenHidden: true },
+        },
+      ),
+    );
 
     void this.configHandler.loadConfig();
 

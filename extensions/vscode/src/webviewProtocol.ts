@@ -10,10 +10,13 @@ import { handleLLMError } from "./util/errorHandling";
 export class VsCodeWebviewProtocol
   implements IMessenger<FromWebviewProtocol, ToWebviewProtocol>
 {
+  private static readonly MAX_PENDING_MESSAGES = 100;
+
   listeners = new Map<
     keyof FromWebviewProtocol,
     ((message: Message) => any)[]
   >();
+  private pendingMessages: Message[] = [];
 
   send(messageType: string, data: any, messageId?: string): string {
     const id = messageId ?? uuidv4();
@@ -35,6 +38,18 @@ export class VsCodeWebviewProtocol
       this.listeners.set(messageType, []);
     }
     this.listeners.get(messageType)?.push(handler);
+
+    const pending = this.pendingMessages.filter(
+      (message) => message.messageType === messageType,
+    );
+    if (pending.length > 0) {
+      this.pendingMessages = this.pendingMessages.filter(
+        (message) => message.messageType !== messageType,
+      );
+      for (const message of pending) {
+        void this.handleMessage(message);
+      }
+    }
   }
 
   _webview?: vscode.Webview;
@@ -48,76 +63,95 @@ export class VsCodeWebviewProtocol
     this._webview = webView;
     this._webviewListener?.dispose();
 
-    const handleMessage = async (msg: Message): Promise<void> => {
-      if (!("messageType" in msg) || !("messageId" in msg)) {
-        throw new Error(`Invalid webview protocol msg: ${JSON.stringify(msg)}`);
-      }
+    this._webviewListener = this._webview.onDidReceiveMessage(
+      this.handleMessage,
+    );
+  }
 
-      const respond = (message: any) =>
-        this.send(msg.messageType, message, msg.messageId);
+  private readonly handleMessage = async (msg: Message): Promise<void> => {
+    if (!("messageType" in msg) || !("messageId" in msg)) {
+      throw new Error(`Invalid webview protocol msg: ${JSON.stringify(msg)}`);
+    }
 
-      const handlers =
-        this.listeners.get(msg.messageType as keyof FromWebviewProtocol) || [];
-      for (const handler of handlers) {
-        try {
-          const response = await handler(msg);
-          // For generator types e.g. llm/streamChat
-          if (
-            response &&
-            typeof response[Symbol.asyncIterator] === "function"
-          ) {
-            let next = await response.next();
-            while (!next.done) {
-              respond({
-                done: false,
-                content: next.value,
-                status: "success",
-              });
-              next = await response.next();
-            }
-            respond({
+    const respond = (message: any) =>
+      this.send(msg.messageType, message, msg.messageId);
+
+    const handlers =
+      this.listeners.get(msg.messageType as keyof FromWebviewProtocol) || [];
+    if (handlers.length === 0) {
+      if (
+        this.pendingMessages.length >=
+        VsCodeWebviewProtocol.MAX_PENDING_MESSAGES
+      ) {
+        const dropped = this.pendingMessages.shift();
+        if (dropped) {
+          this.send(
+            dropped.messageType,
+            {
               done: true,
+              error: "VynorAI core startup queue exceeded its safe limit.",
+              status: "error",
+            },
+            dropped.messageId,
+          );
+        }
+      }
+      this.pendingMessages.push(msg);
+      return;
+    }
+
+    for (const handler of handlers) {
+      try {
+        const response = await handler(msg);
+        // For generator types e.g. llm/streamChat
+        if (response && typeof response[Symbol.asyncIterator] === "function") {
+          let next = await response.next();
+          while (!next.done) {
+            respond({
+              done: false,
               content: next.value,
               status: "success",
             });
+            next = await response.next();
+          }
+          respond({
+            done: true,
+            content: next.value,
+            status: "success",
+          });
+        } else {
+          respond({ done: true, content: response, status: "success" });
+        }
+      } catch (e: any) {
+        if (await handleLLMError(e)) {
+          // Respond without an error, so the UI doesn't show the error component
+          respond({ done: true, status: "error" });
+        }
+        let message = e.message;
+        respond({ done: true, error: message, status: "error" });
+
+        const stringified = JSON.stringify({ msg }, null, 2);
+        console.error(`Error handling webview message: ${stringified}\n\n${e}`);
+
+        if (
+          stringified.includes("llm/streamChat") ||
+          stringified.includes("chatDescriber/describe")
+        ) {
+          return;
+        }
+
+        if (e.cause) {
+          if (e.cause.name === "ConnectTimeoutError") {
+            message = `Connection timed out. If you expect it to take a long time to connect, you can increase the timeout in your config by setting "requestOptions": { "timeout": 10000 }. You can find the full config reference here: https://docs.continue.dev/reference/config`;
+          } else if (e.cause.code === "ECONNREFUSED") {
+            message = `Connection was refused. This likely means that there is no server running at the specified URL. If you are running your own server you may need to set the "apiBase" parameter in config.json. For example, you can set up an OpenAI-compatible server like here: https://docs.continue.dev/reference/Model%20Providers/openai#openai-compatible-servers--apis`;
           } else {
-            respond({ done: true, content: response, status: "success" });
-          }
-        } catch (e: any) {
-          if (await handleLLMError(e)) {
-            // Respond without an error, so the UI doesn't show the error component
-            respond({ done: true, status: "error" });
-          }
-          let message = e.message;
-          respond({ done: true, error: message, status: "error" });
-
-          const stringified = JSON.stringify({ msg }, null, 2);
-          console.error(
-            `Error handling webview message: ${stringified}\n\n${e}`,
-          );
-
-          if (
-            stringified.includes("llm/streamChat") ||
-            stringified.includes("chatDescriber/describe")
-          ) {
-            return;
-          }
-
-          if (e.cause) {
-            if (e.cause.name === "ConnectTimeoutError") {
-              message = `Connection timed out. If you expect it to take a long time to connect, you can increase the timeout in your config by setting "requestOptions": { "timeout": 10000 }. You can find the full config reference here: https://docs.continue.dev/reference/config`;
-            } else if (e.cause.code === "ECONNREFUSED") {
-              message = `Connection was refused. This likely means that there is no server running at the specified URL. If you are running your own server you may need to set the "apiBase" parameter in config.json. For example, you can set up an OpenAI-compatible server like here: https://docs.continue.dev/reference/Model%20Providers/openai#openai-compatible-servers--apis`;
-            } else {
-              message = `The request failed with "${e.cause.name}": ${e.cause.message}. If you're having trouble setting up Continue, please see the troubleshooting guide for help.`;
-            }
+            message = `The request failed with "${e.cause.name}": ${e.cause.message}. If you're having trouble setting up Continue, please see the troubleshooting guide for help.`;
           }
         }
       }
-    };
-
-    this._webviewListener = this._webview.onDidReceiveMessage(handleMessage);
-  }
+    }
+  };
 
   constructor() {}
 

@@ -40,9 +40,7 @@ type CheckpointSummary = {
 export function ExpertTeamPanel() {
   const dispatch = useAppDispatch();
   const ideMessenger = useContext(IdeMessengerContext);
-  const enabled = useAppSelector(
-    (state) => state.session.expertTeamEnabled,
-  );
+  const enabled = useAppSelector((state) => state.session.expertTeamEnabled);
   const history = useAppSelector((state) => state.session.history);
   const isStreaming = useAppSelector((state) => state.session.isStreaming);
   const memories = useAppSelector(
@@ -82,7 +80,9 @@ export function ExpertTeamPanel() {
       if (!active) return;
       const key = projectMemoryStorageKey(workspaceDirs);
       setMemoryKey(key);
-      dispatch(setProjectMemories(parseProjectMemories(localStorage.getItem(key))));
+      dispatch(
+        setProjectMemories(parseProjectMemories(localStorage.getItem(key))),
+      );
     });
     return () => {
       active = false;
@@ -98,7 +98,8 @@ export function ExpertTeamPanel() {
   if (!enabled) return null;
 
   const hasToolCalls = history.some((item) => item.toolCallStates?.length);
-  const activeStage = history.length === 0 ? 0 : hasToolCalls ? 2 : isStreaming ? 1 : 4;
+  const activeStage =
+    history.length === 0 ? 0 : hasToolCalls ? 2 : isStreaming ? 1 : 4;
   const latestUserRequest = [...history]
     .reverse()
     .find((item) => item.message.role === "user");
@@ -113,7 +114,11 @@ export function ExpertTeamPanel() {
       return;
     }
     const text = normalizeProjectMemory(draft);
-    if (memories.some((memory) => memory.text.toLowerCase() === text.toLowerCase())) {
+    if (
+      memories.some(
+        (memory) => memory.text.toLowerCase() === text.toLowerCase(),
+      )
+    ) {
       setMemoryError("That project memory already exists.");
       return;
     }
@@ -140,7 +145,9 @@ export function ExpertTeamPanel() {
         <div className="flex min-w-0 items-center gap-2">
           <UserGroupIcon className="text-accent h-4 w-4 flex-shrink-0" />
           <div className="min-w-0">
-            <div className="truncate text-xs font-semibold">Vynor Expert Team</div>
+            <div className="truncate text-xs font-semibold">
+              Vynor Expert Team
+            </div>
             <div className="text-description-muted truncate text-[10px]">
               Project-aware specialist review passes
             </div>
@@ -152,7 +159,9 @@ export function ExpertTeamPanel() {
               key={role}
               className="bg-lightgray/10 flex items-center gap-1 rounded-full px-1.5 py-0.5"
             >
-              {role === "Security" && <ShieldCheckIcon className="h-2.5 w-2.5" />}
+              {role === "Security" && (
+                <ShieldCheckIcon className="h-2.5 w-2.5" />
+              )}
               {role}
             </span>
           ))}
@@ -201,7 +210,9 @@ export function ExpertTeamPanel() {
                     : "text-description-muted bg-lightgray/5"
               }`}
             >
-              {complete && <CheckCircleIcon className="hidden h-2.5 w-2.5 sm:block" />}
+              {complete && (
+                <CheckCircleIcon className="hidden h-2.5 w-2.5 sm:block" />
+              )}
               <span className="truncate">{stage}</span>
             </div>
           );
@@ -212,11 +223,16 @@ export function ExpertTeamPanel() {
           <div className="text-description flex min-w-0 items-center gap-1 text-[10px]">
             <CpuChipIcon className="h-3 w-3 flex-shrink-0" />
             <span className="truncate">
-              Isolated council · {subagentModel?.title ?? "subagent model not configured"}
+              Isolated council ·{" "}
+              {subagentModel?.title ?? "subagent model not configured"}
             </span>
           </div>
-          {subagentRuns.some((run) => run.status === "researching") && (
-            <span className="text-description-muted text-[9px]">Stop cancels all</span>
+          {subagentRuns.some((run) =>
+            ["researching", "synthesizing"].includes(run.status),
+          ) && (
+            <span className="text-description-muted text-[9px]">
+              Stop cancels all
+            </span>
           )}
         </div>
         <div
@@ -240,8 +256,8 @@ export function ExpertTeamPanel() {
                 depth === "off"
                   ? "No specialist model calls"
                   : depth === "smart"
-                    ? "One specialist call for lower cost"
-                    : "Up to two parallel specialist calls"
+                    ? "Up to three specialists plus Lead Reviewer synthesis"
+                    : "Up to five parallel specialists plus Lead Reviewer synthesis"
               }
             >
               {depth}
@@ -251,8 +267,8 @@ export function ExpertTeamPanel() {
             {councilDepth === "off"
               ? "0 extra calls"
               : councilDepth === "smart"
-                ? "≤1 extra call"
-                : "≤2 extra calls"}
+                ? "≤4 review calls"
+                : "≤6 review calls"}
           </span>
         </div>
         {subagentRuns.length > 0 && (
@@ -271,7 +287,7 @@ export function ExpertTeamPanel() {
                           ? "bg-red-500"
                           : run.status === "canceled"
                             ? "bg-gray-500"
-                            : "bg-yellow-500 animate-pulse"
+                            : "animate-pulse bg-yellow-500"
                     }`}
                   />
                   <span className="font-medium">{run.role}</span>
@@ -279,9 +295,15 @@ export function ExpertTeamPanel() {
                     {run.status}
                   </span>
                 </summary>
-                {(run.summary || run.error) && (
+                {(run.summary || run.error || run.findings?.length) && (
                   <div className="text-description mt-1 max-h-28 overflow-y-auto whitespace-pre-wrap border-0 border-t border-solid border-white/5 pt-1">
                     {run.summary ?? run.error}
+                    {!!run.findings?.length && (
+                      <div className="mt-1 font-medium">
+                        {run.findings.length} structured finding
+                        {run.findings.length === 1 ? "" : "s"}
+                      </div>
+                    )}
                   </div>
                 )}
               </details>
@@ -292,7 +314,8 @@ export function ExpertTeamPanel() {
       {showMemories && (
         <div className="border-command-border mt-2 border-0 border-t border-solid pt-2">
           <div className="text-description-muted mb-1.5 text-[10px]">
-            Approved facts are stored locally for this workspace and reused only in Expert Team mode. Never add credentials.
+            Approved facts are stored locally for this workspace and reused only
+            in Expert Team mode. Never add credentials.
           </div>
           <div className="flex min-w-0 gap-1">
             <input
@@ -330,7 +353,9 @@ export function ExpertTeamPanel() {
                   key={memory.id}
                   className="bg-lightgray/5 flex min-w-0 items-start gap-1 rounded px-2 py-1 text-[10px]"
                 >
-                  <span className="min-w-0 flex-1 break-words">{memory.text}</span>
+                  <span className="min-w-0 flex-1 break-words">
+                    {memory.text}
+                  </span>
                   <button
                     type="button"
                     aria-label={`Delete memory: ${memory.text}`}
@@ -354,10 +379,13 @@ export function ExpertTeamPanel() {
       {showCheckpoints && supportsCheckpoints && (
         <div className="border-command-border mt-2 border-0 border-t border-solid pt-2">
           <div className="text-description-muted mb-1.5 text-[10px]">
-            Local snapshots are created before agent file edits. Restore warns before overwriting newer changes.
+            Local snapshots are created before agent file edits. Restore warns
+            before overwriting newer changes.
           </div>
           {checkpointStatus && (
-            <div className="text-description mb-1 text-[10px]">{checkpointStatus}</div>
+            <div className="text-description mb-1 text-[10px]">
+              {checkpointStatus}
+            </div>
           )}
           {checkpoints.length === 0 ? (
             <div className="text-description-muted text-[10px]">
@@ -371,9 +399,12 @@ export function ExpertTeamPanel() {
                   className="bg-lightgray/5 flex min-w-0 items-center gap-2 rounded px-2 py-1"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[10px]">{checkpoint.fileName}</div>
+                    <div className="truncate text-[10px]">
+                      {checkpoint.fileName}
+                    </div>
                     <div className="text-description-muted text-[9px]">
-                      {checkpoint.label} · {new Date(checkpoint.createdAt).toLocaleTimeString()}
+                      {checkpoint.label} ·{" "}
+                      {new Date(checkpoint.createdAt).toLocaleTimeString()}
                     </div>
                   </div>
                   <button
@@ -391,7 +422,7 @@ export function ExpertTeamPanel() {
                       setCheckpointStatus(
                         result.content.restored
                           ? `Restored ${checkpoint.fileName}`
-                          : result.content.reason ?? "Restore canceled.",
+                          : (result.content.reason ?? "Restore canceled."),
                       );
                       await refreshCheckpoints();
                     }}

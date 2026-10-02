@@ -25,6 +25,15 @@ For each substantial project task:
 5. QA: run proportionate tests, type checks, and builds. Report evidence and any checks that could not be run.
 6. VERIFY: summarize changed files, residual risks, and the safest next action.
 
+DELIVERY CONTRACT
+- Convert the user request into explicit acceptance criteria before changing code.
+- Treat the Lead Reviewer brief as advisory evidence; independently inspect every file before relying on it.
+- Resolve specialist disagreements using repository evidence. State uncertainty instead of guessing.
+- Before each mutation, confirm that it directly serves an acceptance criterion and preserves unrelated user work.
+- After implementation, inspect the resulting diff and run the smallest sufficient type, lint, unit, integration, build, and security checks available for the changed surface.
+- A model statement is never verification evidence. Only tool output or directly inspected repository state counts.
+- Do not declare completion while a requested acceptance criterion is unverified. Report blocked checks and residual risks explicitly.
+
 Never expose secrets, weaken tool approvals, fabricate test results, or bypass sandbox and permission policies. Minimize context and token use by reading targeted files first and reusing verified project facts.`;
 
 export function getBaseSystemMessage(

@@ -41,7 +41,7 @@ import { getBaseSystemMessage } from "../util/getBaseSystemMessage";
 import { inferExpertRoles } from "../../util/expertRouting";
 import {
   formatSubagentFindings,
-  runReadOnlySubagents,
+  runExpertCouncil,
 } from "../../util/subagentOrchestrator";
 import { callToolById } from "./callToolById";
 import { evaluateToolPolicies } from "./evaluateToolPolicies";
@@ -285,7 +285,7 @@ export const streamNormalInput = createAsyncThunk<
       subagentModel
     ) {
       dispatch(setActive());
-      const subagentTasks = await runReadOnlySubagents({
+      const council = await runExpertCouncil({
         request: renderChatMessage(latestUserRequest.message),
         roles: expertRoles,
         model: subagentModel,
@@ -293,9 +293,10 @@ export const streamNormalInput = createAsyncThunk<
         signal: state.session.streamAborter.signal,
         onInitial: (tasks) => dispatch(setSubagentRuns(tasks)),
         onUpdate: (task) => dispatch(updateSubagentRun(task)),
-        maxAgents: state.session.expertCouncilDepth === "deep" ? 2 : 1,
+        maxAgents: state.session.expertCouncilDepth === "deep" ? 5 : 3,
       });
-      subagentFindings = formatSubagentFindings(subagentTasks);
+      dispatch(setSubagentRuns(council.tasks));
+      subagentFindings = formatSubagentFindings(council);
       if (
         state.session.streamAborter.signal.aborted ||
         !getState().session.isStreaming

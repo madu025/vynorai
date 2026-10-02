@@ -206,10 +206,24 @@ export type ChatHistoryItemWithMessageId = ChatHistoryItem & {
 export type SubagentRun = {
   id: string;
   role: string;
-  status: "queued" | "researching" | "completed" | "failed" | "canceled";
+  status:
+    | "queued"
+    | "researching"
+    | "synthesizing"
+    | "completed"
+    | "failed"
+    | "canceled";
   summary?: string;
+  findings?: Array<{
+    severity: "critical" | "high" | "medium" | "low" | "info";
+    confidence: "high" | "medium" | "low";
+    title: string;
+    evidence: string;
+    recommendation: string;
+  }>;
   error?: string;
   startedAt: number;
+  completedAt?: number;
 };
 
 export type ExpertCouncilDepth = "off" | "smart" | "deep";

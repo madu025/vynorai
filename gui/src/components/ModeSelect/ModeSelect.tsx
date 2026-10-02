@@ -10,10 +10,7 @@ import { isRecommendedAgentModel } from "core/llm/toolSupport";
 import { useCallback, useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
 import { selectSelectedChatModel } from "../../redux/slices/configSlice";
-import {
-  setExpertTeamEnabled,
-  setMode,
-} from "../../redux/slices/sessionSlice";
+import { setExpertTeamEnabled, setMode } from "../../redux/slices/sessionSlice";
 import { getFontSize, getMetaKeyLabel } from "../../util";
 import { ToolTip } from "../gui/Tooltip";
 import { useMainEditor } from "../mainInput/TipTapEditor";
@@ -195,7 +192,7 @@ export function ModeSelect() {
               <span>Expert Team</span>
               <ToolTip
                 style={{ zIndex: 200001 }}
-                content="Project discovery, implementation, security and QA review passes"
+                content="Adaptive read-only specialists, Lead Reviewer synthesis, implementation, security and QA verification"
               >
                 <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
               </ToolTip>

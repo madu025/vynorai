@@ -30,7 +30,11 @@ export function verificationFromToolResult(args: {
 }): Omit<VerificationResult, "id" | "createdAt"> | undefined {
   const normalizedTool = args.toolName.toLowerCase();
   let kind: VerificationKind | undefined;
-  if (normalizedTool.includes("view_diff")) kind = "review";
+  if (
+    normalizedTool.includes("view_diff") ||
+    normalizedTool.includes("browser_qa")
+  )
+    kind = "review";
   else if (args.command) kind = classifyVerificationCommand(args.command);
   if (!kind) return undefined;
 

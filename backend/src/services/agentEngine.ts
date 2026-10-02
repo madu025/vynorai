@@ -165,6 +165,7 @@ export const READ_ONLY_TOOL_NAMES = new Set([
   "view_diff",
   "codebase",
   "read_skill",
+  "browser_qa",
   "get_golden_template",
   "view_file",
   "grep_search",

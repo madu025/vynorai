@@ -1,4 +1,5 @@
 export { codebaseTool } from "./codebaseTool";
+export { browserQaTool } from "./browserQa";
 export { createNewFileTool } from "./createNewFile";
 export { createRuleBlock } from "./createRuleBlock";
 export { editFileTool } from "./editFile";

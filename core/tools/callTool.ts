@@ -6,6 +6,7 @@ import { canParseUrl } from "../util/url";
 import { BuiltInToolNames } from "./builtIn";
 
 import { codebaseToolImpl } from "./implementations/codebaseTool";
+import { browserQaImpl } from "./implementations/browserQa";
 import { createNewFileImpl } from "./implementations/createNewFile";
 import { createRuleBlockImpl } from "./implementations/createRuleBlock";
 import { fetchUrlContentImpl } from "./implementations/fetchUrlContent";
@@ -190,6 +191,8 @@ export async function callBuiltInTool(
   extras: ToolExtras,
 ): Promise<ContextItem[]> {
   switch (functionName) {
+    case BuiltInToolNames.BrowserQa:
+      return await browserQaImpl(args, extras);
     case BuiltInToolNames.ReadFile:
       return await readFileImpl(args, extras);
     case BuiltInToolNames.ReadFileRange:

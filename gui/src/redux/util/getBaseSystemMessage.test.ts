@@ -9,6 +9,7 @@ import {
   NO_TOOL_WARNING,
   VYNOR_EXPERT_TEAM_SYSTEM_MESSAGE,
 } from "./getBaseSystemMessage";
+import type { WorkspaceSnapshot } from "core/workspace/types";
 
 test("getBaseSystemMessage should return the correct system message based on mode", () => {
   const mockModel = {
@@ -71,9 +72,14 @@ test("expert team contract is opt-in and restricted to agent mode", () => {
 test("expert team includes only explicitly supplied project memories", () => {
   const model = { baseAgentSystemMessage: "Agent" } as ModelDescription;
   const tool = { function: { name: "read", parameters: {} } } as Tool;
-  const result = getBaseSystemMessage("agent", model, [tool], true, [
-    { id: "1", text: "Use pnpm", createdAt: 1 },
-  ], ["Engineer", "QA"]);
+  const result = getBaseSystemMessage(
+    "agent",
+    model,
+    [tool],
+    true,
+    [{ id: "1", text: "Use pnpm", createdAt: 1 }],
+    ["Engineer", "QA"],
+  );
 
   expect(result).toContain("USER-APPROVED PROJECT MEMORY");
   expect(result).toContain("Use pnpm");
@@ -114,4 +120,33 @@ test("getBaseSystemMessage should append no-tools warning for agent/plan modes w
   expect(getBaseSystemMessage("plan", mockModel)).toBe(
     "Custom Plan System Message" + NO_TOOL_WARNING,
   );
+});
+
+test("appends connected workspace evidence to the model prompt", () => {
+  const snapshot: WorkspaceSnapshot = {
+    id: "workspace-1",
+    revision: 1,
+    roots: [{ id: "root-1", name: "VynorAI" }],
+    manifests: [],
+    instructions: [],
+    index: [{ rootId: "root-1", status: "ready" }],
+    trusted: true,
+    capabilities: ["readFile"],
+    createdAt: 1,
+  };
+
+  const result = getBaseSystemMessage(
+    "chat",
+    { baseChatSystemMessage: "Chat" } as ModelDescription,
+    [],
+    false,
+    [],
+    [],
+    "",
+    "",
+    snapshot,
+  );
+
+  expect(result).toContain("WORKSPACE CONNECTION");
+  expect(result).toContain("Roots: VynorAI");
 });

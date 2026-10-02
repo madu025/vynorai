@@ -12,24 +12,25 @@ export const selectActiveTools = createSelector(
     (store: RootState) => store.ui.toolGroupSettings,
   ],
   (mode, tools, policies, groupPolicies): Tool[] => {
+    const enabledTools = tools.filter((tool) => {
+      const toolPolicy =
+        policies[tool.function.name] ??
+        tool.defaultToolPolicy ??
+        DEFAULT_TOOL_SETTING;
+      return (
+        toolPolicy !== "disabled" && groupPolicies[tool.group] !== "exclude"
+      );
+    });
     if (mode === "chat") {
-      return [];
-    } else {
-      const enabledTools = tools.filter((tool) => {
-        const toolPolicy =
-          policies[tool.function.name] ??
-          tool.defaultToolPolicy ??
-          DEFAULT_TOOL_SETTING;
-        return (
-          toolPolicy !== "disabled" && groupPolicies[tool.group] !== "exclude"
-        );
-      });
-      if (mode === "plan") {
-        return enabledTools.filter(
-          (t) => t.group !== BUILT_IN_GROUP_NAME || t.readonly,
-        );
-      }
-      return enabledTools;
+      // Chat can ground answers by inspecting the project, but it must never
+      // mutate files or run commands implicitly.
+      return enabledTools.filter((tool) => tool.readonly === true);
     }
+    if (mode === "plan") {
+      return enabledTools.filter(
+        (t) => t.group !== BUILT_IN_GROUP_NAME || t.readonly,
+      );
+    }
+    return enabledTools;
   },
 );

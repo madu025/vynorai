@@ -47,6 +47,7 @@ import { callToolById } from "./callToolById";
 import { evaluateToolPolicies } from "./evaluateToolPolicies";
 import { preprocessToolCalls } from "./preprocessToolCallArgs";
 import { streamResponseAfterToolCall } from "./streamResponseAfterToolCall";
+import { setWorkspaceSnapshot } from "../slices/workspaceSlice";
 
 /**
  * Builds completion options with reasoning configuration based on session state and model capabilities.
@@ -105,6 +106,25 @@ export const streamNormalInput = createAsyncThunk<
 
     if (!selectedChatModel) {
       throw new Error("No chat model selected");
+    }
+
+    // Do not rely solely on the webview mount listener: the first user prompt
+    // can race extension/core initialization in VS Code-compatible hosts.
+    let workspaceSnapshot = state.workspace.snapshot;
+    if (depth === 0 || !workspaceSnapshot) {
+      try {
+        const result = await extra.ideMessenger.request(
+          "workspace/getSnapshot",
+          undefined,
+          5_000,
+        );
+        if (result.status === "success") {
+          workspaceSnapshot = result.content;
+          dispatch(setWorkspaceSnapshot(result.content));
+        }
+      } catch (error) {
+        console.warn("Workspace snapshot unavailable for this request", error);
+      }
     }
 
     // Get tools and apply model-level overrides (disabled, description, etc.)
@@ -296,6 +316,7 @@ export const streamNormalInput = createAsyncThunk<
       expertRoles,
       latestUserRequest ? renderChatMessage(latestUserRequest.message) : "",
       subagentFindings,
+      workspaceSnapshot,
     )}${browserQaGuidance}`;
 
     const systemMessage = systemToolsFramework

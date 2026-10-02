@@ -40,6 +40,7 @@ export interface IIdeMessenger {
   request<T extends keyof FromWebviewProtocol>(
     messageType: T,
     data: FromWebviewProtocol[T][0],
+    timeoutMs?: number,
   ): Promise<WebviewSingleProtocolMessage<T>>;
 
   streamRequest<T extends keyof FromWebviewProtocol>(
@@ -146,17 +147,29 @@ export class IdeMessenger implements IIdeMessenger {
   request<T extends keyof FromWebviewProtocol>(
     messageType: T,
     data: FromWebviewProtocol[T][0],
+    timeoutMs?: number,
   ): Promise<WebviewSingleMessage<T>> {
     const messageId = uuidv4();
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const handler = (event: any) => {
         if (event.data.messageId === messageId) {
           window.removeEventListener("message", handler);
+          if (timeout) clearTimeout(timeout);
           resolve(event.data.data as WebviewSingleMessage<T>);
         }
       };
       window.addEventListener("message", handler);
+
+      if (timeoutMs) {
+        timeout = setTimeout(() => {
+          window.removeEventListener("message", handler);
+          reject(
+            new Error(`${String(messageType)} timed out after ${timeoutMs}ms`),
+          );
+        }, timeoutMs);
+      }
 
       this.post(messageType, data, messageId);
     });

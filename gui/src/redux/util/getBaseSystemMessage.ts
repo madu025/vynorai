@@ -6,6 +6,8 @@ import {
 } from "core/llm/defaultSystemMessages";
 import { formatProjectMemories, ProjectMemory } from "../../util/projectMemory";
 import { ExpertRole, formatExpertRouting } from "../../util/expertRouting";
+import type { WorkspaceSnapshot } from "core/workspace/types";
+import { formatWorkspaceGrounding } from "./workspaceGrounding";
 
 export const NO_TOOL_WARNING =
   "\n\nTHE USER HAS NOT PROVIDED ANY TOOLS, DO NOT ATTEMPT TO USE ANY TOOLS. STOP AND LET THE USER KNOW THAT THERE ARE NO TOOLS AVAILABLE. The user can provide tools by enabling them in the Tool Policies section of the notch (wrench icon)";
@@ -34,6 +36,7 @@ export function getBaseSystemMessage(
   expertRoles: ExpertRole[] = [],
   latestUserRequest = "",
   subagentFindings = "",
+  workspaceSnapshot?: WorkspaceSnapshot,
 ): string {
   let baseMessage: string;
 
@@ -55,6 +58,10 @@ export function getBaseSystemMessage(
     if (expertRoles.length) baseMessage += formatExpertRouting(expertRoles);
     baseMessage += formatProjectMemories(projectMemories, latestUserRequest);
     baseMessage += subagentFindings;
+  }
+
+  if (workspaceSnapshot) {
+    baseMessage += formatWorkspaceGrounding(workspaceSnapshot);
   }
 
   return baseMessage;

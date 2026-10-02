@@ -217,7 +217,7 @@ export const streamNormalInput = createAsyncThunk<
                   risk: "R0",
                   dependsOn: ["act"],
                   maxAttempts: 1,
-                  verificationRequired: false,
+                  verificationRequired: true,
                 },
               ],
             },

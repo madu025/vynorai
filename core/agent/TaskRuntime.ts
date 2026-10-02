@@ -148,6 +148,21 @@ export class TaskRuntime {
   ): Promise<AgentTask> {
     return this.mutex.runExclusive(async () => {
       const task = this.requireTask(taskId);
+      if (state === "completed") {
+        const mutated = task.approvals.some(
+          (receipt) =>
+            receipt.decision === "approved" &&
+            (receipt.risk === "R2" || receipt.risk === "R3"),
+        );
+        const hasPassedEvidence = task.verification.some(
+          (result) => result.status === "passed" && result.kind !== "response",
+        );
+        if (mutated && !hasPassedEvidence) {
+          throw new Error(
+            "Mutation task cannot complete without passed test, typecheck, lint, build, or diff-review evidence",
+          );
+        }
+      }
       if (!TRANSITIONS[task.state].includes(state)) {
         throw new Error(`Invalid task transition: ${task.state} -> ${state}`);
       }

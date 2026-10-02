@@ -17,6 +17,7 @@ import {
 import { ThunkApiType } from "../store";
 import { findToolCallById, logToolUsage } from "../util";
 import { streamResponseAfterToolCall } from "./streamResponseAfterToolCall";
+import { verificationFromToolResult } from "../util/verificationEvidence";
 
 export const callToolById = createAsyncThunk<
   void,
@@ -61,7 +62,7 @@ export const callToolById = createAsyncThunk<
     }
   }
 
-  if (!isAutoApproved && state.session.activeTaskId) {
+  if (state.session.activeTaskId) {
     try {
       await extra.ideMessenger.request("agent/task/recordApproval", {
         taskId: state.session.activeTaskId,
@@ -73,16 +74,18 @@ export const callToolById = createAsyncThunk<
           toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {},
         ),
       });
-      const transition = await extra.ideMessenger.request(
-        "agent/task/transition",
-        {
-          taskId: state.session.activeTaskId,
-          state: "executing",
-          reason: "Approved tool execution started",
-        },
-      );
-      if (transition.status === "success") {
-        dispatch(setActiveTaskState(transition.content.state));
+      if (!isAutoApproved) {
+        const transition = await extra.ideMessenger.request(
+          "agent/task/transition",
+          {
+            taskId: state.session.activeTaskId,
+            state: "executing",
+            reason: "Approved tool execution started",
+          },
+        );
+        if (transition.status === "success") {
+          dispatch(setActiveTaskState(transition.content.state));
+        }
       }
     } catch {
       // Tool execution remains available if local audit persistence is unavailable.
@@ -166,6 +169,30 @@ export const callToolById = createAsyncThunk<
         mcpUiState,
       }),
     );
+  }
+
+  if (state.session.activeTaskId) {
+    const rawArgs =
+      toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {};
+    const evidence = verificationFromToolResult({
+      toolName: toolCallState.toolCall.function.name,
+      command:
+        typeof (rawArgs as Record<string, unknown>).command === "string"
+          ? ((rawArgs as Record<string, unknown>).command as string)
+          : undefined,
+      output,
+      failed: Boolean(error),
+    });
+    if (evidence) {
+      try {
+        await extra.ideMessenger.request("agent/task/recordVerification", {
+          taskId: state.session.activeTaskId,
+          result: evidence,
+        });
+      } catch {
+        // Verification journaling must not hide the actual tool result.
+      }
+    }
   }
 
   if (streamResponse) {

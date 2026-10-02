@@ -105,6 +105,35 @@ describe("TaskRuntime", () => {
       results.filter((result) => result.status === "rejected"),
     ).toHaveLength(1);
   });
+
+  it("blocks mutation completion when only a model response was recorded", async () => {
+    const { runtime } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "session-1",
+      workspaceId: "workspace-1",
+      workspaceRevision: 1,
+      goal: "Edit a production file",
+    });
+    await runtime.transition(task.id, "executing");
+    await runtime.recordApproval({
+      taskId: task.id,
+      toolCallId: "call-edit",
+      toolName: "multi_edit",
+      risk: "R2",
+      decision: "approved",
+      scope: "src/app.ts",
+    });
+    await runtime.transition(task.id, "verifying");
+    await runtime.recordVerification(task.id, {
+      kind: "response",
+      status: "passed",
+      summary: "The model said the edit was complete",
+    });
+
+    await expect(runtime.transition(task.id, "completed")).rejects.toThrow(
+      "Mutation task cannot complete without passed",
+    );
+  });
 });
 
 describe("redactSecrets", () => {

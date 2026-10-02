@@ -577,6 +577,42 @@ export class TaskRuntime {
     });
   }
 
+  async failSubagent(
+    taskId: string,
+    subagentId: string,
+    failureCode: string,
+  ): Promise<ImplementationSubagent> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(taskId);
+      const subagent = this.requireSubagent(task, subagentId);
+      if (subagent.status !== "running" && subagent.status !== "queued")
+        throw new Error("Subagent is not active");
+      subagent.status = "failed";
+      subagent.updatedAt = task.updatedAt = Date.now();
+      this.persist(task, "subagent.failed", {
+        subagentId,
+        failureCode: digest(failureCode).slice(0, 16),
+      });
+      return structuredClone(subagent);
+    });
+  }
+
+  async cancelSubagent(
+    taskId: string,
+    subagentId: string,
+  ): Promise<ImplementationSubagent> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(taskId);
+      const subagent = this.requireSubagent(task, subagentId);
+      if (subagent.status !== "running" && subagent.status !== "queued")
+        throw new Error("Subagent is not active");
+      subagent.status = "canceled";
+      subagent.updatedAt = task.updatedAt = Date.now();
+      this.persist(task, "subagent.canceled", { subagentId });
+      return structuredClone(subagent);
+    });
+  }
+
   getSubagentMergeQueue(taskId: string): ImplementationSubagent[] {
     const task = this.requireTask(taskId);
     const completed = (task.subagents ?? []).filter(

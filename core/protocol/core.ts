@@ -163,6 +163,15 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     },
     boolean,
   ];
+  "agent/subagent/authorizeTool": [
+    {
+      taskId: string;
+      subagentId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    },
+    boolean,
+  ];
   "agent/subagent/consumeBudget": [
     {
       taskId: string;
@@ -446,7 +455,10 @@ export type ToCoreFromIdeOrWebviewProtocol = {
 
   "auth/getAuthUrl": [{ useOnboarding: boolean }, { url: string }];
   "tools/call": [
-    { toolCall: ToolCall },
+    {
+      toolCall: ToolCall;
+      delegation?: { taskId: string; subagentId: string };
+    },
     {
       contextItems: ContextItem[];
       errorMessage?: string;

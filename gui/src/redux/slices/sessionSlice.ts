@@ -254,6 +254,8 @@ type SessionState = {
   subagentRuns?: SubagentRun[];
   queuedInputs?: QueuedInput[];
   activeTaskId?: string;
+  /** Set only while an implementation subagent model turn owns tool dispatch. */
+  activeImplementationSubagentId?: string;
   activeTaskState?: TaskState;
   isInEdit: boolean;
   codeBlockApplyStates: {
@@ -1037,7 +1039,17 @@ export const sessionSlice = createSlice({
       state.queuedInputs = [];
     },
     setActiveTaskId: (state, action: PayloadAction<string | undefined>) => {
+      if (state.activeTaskId !== action.payload)
+        state.activeImplementationSubagentId = undefined;
       state.activeTaskId = action.payload;
+    },
+    setActiveImplementationSubagentId: (
+      state,
+      action: PayloadAction<string | undefined>,
+    ) => {
+      state.activeImplementationSubagentId = state.activeTaskId
+        ? action.payload
+        : undefined;
     },
     setActiveTaskState: (
       state,
@@ -1184,6 +1196,7 @@ export const {
   removeQueuedInput,
   clearQueuedInputs,
   setActiveTaskId,
+  setActiveImplementationSubagentId,
   setActiveTaskState,
   setProjectMemories,
   setSubagentRuns,

@@ -21,7 +21,7 @@ import {
   useState,
 } from "react";
 import { IdeMessengerContext } from "../../../context/IdeMessenger";
-import { useAppDispatch } from "../../../redux/hooks";
+import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import { streamResponseThunk } from "../../../redux/thunks/streamResponse";
 
 /**
@@ -96,6 +96,10 @@ export function McpAppRenderer({
 }) {
   const ideMessenger = useContext(IdeMessengerContext);
   const dispatch = useAppDispatch();
+  const activeTaskId = useAppSelector((state) => state.session.activeTaskId);
+  const activeSubagentId = useAppSelector(
+    (state) => state.session.activeImplementationSubagentId,
+  );
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const appBridgeRef = useRef<AppBridge | null>(null);
   const [iframeHeight, setIframeHeight] = useState(300);
@@ -218,6 +222,10 @@ export function McpAppRenderer({
           id: generateOpenAIToolCallId(),
           type: "function",
         },
+        delegation:
+          activeTaskId && activeSubagentId
+            ? { taskId: activeTaskId, subagentId: activeSubagentId }
+            : undefined,
       });
       if (output.status === "error") {
         throw new Error(`Failed to call tool from MCP UI: ${output.error}`);
@@ -271,7 +279,13 @@ export function McpAppRenderer({
     return () => {
       appBridgeRef.current = null;
     };
-  }, [ideMessenger, dispatch]);
+  }, [
+    ideMessenger,
+    dispatch,
+    activeTaskId,
+    activeSubagentId,
+    toolCallState.tool?.group,
+  ]);
 
   // Connect bridge to iframe when it loads
   const handleIframeLoad = useCallback(async () => {

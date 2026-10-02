@@ -21,6 +21,7 @@ import { EditAggregator } from "./nextEdit/context/aggregateEdits";
 import { createNewPromptFileV2 } from "./promptFiles/createNewPromptFile";
 import { callTool } from "./tools/callTool";
 import { BuiltInToolNames } from "./tools/builtIn";
+import { safeParseToolCallArgs } from "./tools/parseArgs";
 import { ChatDescriber } from "./util/chatDescriber";
 import { compactConversation } from "./util/conversationCompaction";
 import { GlobalContext } from "./util/GlobalContext";
@@ -369,6 +370,9 @@ export class Core {
     );
     on("agent/subagent/authorize", ({ data }) =>
       this.taskRuntime.authorizeSubagentAction(data),
+    );
+    on("agent/subagent/authorizeTool", ({ data }) =>
+      this.taskRuntime.authorizeSubagentTool(data),
     );
     on("agent/subagent/consumeBudget", ({ data }) => {
       const { taskId, subagentId, ...usage } = data;
@@ -1188,9 +1192,16 @@ export class Core {
       return { url: "" };
     });
 
-    on("tools/call", async ({ data: { toolCall } }) =>
-      this.handleToolCall(toolCall),
-    );
+    on("tools/call", async ({ data: { toolCall, delegation } }) => {
+      if (delegation) {
+        this.taskRuntime.authorizeSubagentTool({
+          ...delegation,
+          toolName: toolCall.function.name,
+          args: safeParseToolCallArgs(toolCall),
+        });
+      }
+      return this.handleToolCall(toolCall);
+    });
 
     on(
       "tools/evaluatePolicy",

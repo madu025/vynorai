@@ -5,6 +5,7 @@ import { Mutex } from "async-mutex";
 
 import { getContinueGlobalPath } from "../util/paths";
 import { TaskJournal } from "./TaskJournal";
+import { classifyDelegatedToolCall } from "./SubagentToolPolicy";
 import type {
   AgentTask,
   AgentTaskBudget,
@@ -455,6 +456,20 @@ export class TaskRuntime {
         throw new Error("Subagent resource is outside its delegated scope");
     }
     return true;
+  }
+
+  authorizeSubagentTool(input: {
+    taskId: string;
+    subagentId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+  }): boolean {
+    const authorization = classifyDelegatedToolCall(input.toolName, input.args);
+    return this.authorizeSubagentAction({
+      taskId: input.taskId,
+      subagentId: input.subagentId,
+      ...authorization,
+    });
   }
 
   async completeSubagent(input: {

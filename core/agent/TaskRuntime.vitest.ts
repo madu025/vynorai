@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { TaskRuntime } from "./TaskRuntime";
 import { redactSecrets } from "./redactSecrets";
+import { BuiltInToolNames } from "../tools/builtIn";
 
 const temporaryDirectories: string[] = [];
 
@@ -312,6 +313,22 @@ describe("implementation subagents", () => {
         subagentId: subagent.id,
         capability: "read",
         resource: "core/secrets.ts",
+      }),
+    ).toThrow("outside its delegated scope");
+    expect(
+      runtime.authorizeSubagentTool({
+        taskId: task.id,
+        subagentId: subagent.id,
+        toolName: BuiltInToolNames.ReadFile,
+        args: { filepath: "backend/src/auth/session.ts" },
+      }),
+    ).toBe(true);
+    expect(() =>
+      runtime.authorizeSubagentTool({
+        taskId: task.id,
+        subagentId: subagent.id,
+        toolName: BuiltInToolNames.GrepSearch,
+        args: { query: "secret" },
       }),
     ).toThrow("outside its delegated scope");
     await runtime.consumeSubagentBudget(task.id, subagent.id, {

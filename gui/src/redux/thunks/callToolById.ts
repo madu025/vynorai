@@ -62,6 +62,31 @@ export const callToolById = createAsyncThunk<
     }
   }
 
+  const delegation =
+    state.session.activeTaskId && state.session.activeImplementationSubagentId
+      ? {
+          taskId: state.session.activeTaskId,
+          subagentId: state.session.activeImplementationSubagentId,
+        }
+      : undefined;
+  if (delegation) {
+    const authorization = await extra.ideMessenger.request(
+      "agent/subagent/authorizeTool",
+      {
+        ...delegation,
+        toolName: toolCallState.toolCall.function.name,
+        args: {
+          ...(toolCallState.parsedArgs ?? {}),
+          ...(toolCallState.processedArgs ?? {}),
+        },
+      },
+    );
+    if (authorization.status === "error")
+      throw new Error(
+        `Subagent authority blocked tool execution: ${authorization.error}`,
+      );
+  }
+
   if (state.session.activeTaskId) {
     try {
       await extra.ideMessenger.request("agent/task/recordApproval", {
@@ -130,6 +155,7 @@ export const callToolById = createAsyncThunk<
     // Tool is called on core side
     const result = await extra.ideMessenger.request("tools/call", {
       toolCall: toolCallState.toolCall,
+      delegation,
     });
     if (result.status === "error") {
       throw new Error(result.error);

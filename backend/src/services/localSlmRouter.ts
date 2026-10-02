@@ -149,7 +149,7 @@ export async function analyzeIntentWithLocalSlm(
 function deterministicFallback(clean: string): SlmRoutingDecision {
   const isInformational =
     /^(did you|do you|can you|could you|what is|what are|explain|how does|how do|tell me about|analyze|review|understand|summary|summarize|where is|why is)\b/i.test(clean) ||
-    /\b(understand\s+this\s+project|understand\s+the\s+project|explain\s+this|what\s+does\s+this|explain\s+project)\b/i.test(clean);
+    /\b(understand\s+this\s+project|understand\s+the\s+project|explain\s+this|what\s+does\s+this|explain\s+project|meaning\s+eka|mokakda|kiyala\s+denna|kiyanna|therum\s+ganna)\b/i.test(clean);
 
   const isHard =
     /\b(architecture|refactor|database schema|migration|concurrency|race condition|security|jwt rotation|crypto|algorithm|optimize memory|deadlock)\b/i.test(clean);

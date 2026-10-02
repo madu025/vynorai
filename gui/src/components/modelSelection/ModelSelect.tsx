@@ -128,6 +128,13 @@ function ModelSelect() {
   const [options, setOptions] = useState<Option[]>([]);
   const [sortedOptions, setSortedOptions] = useState<Option[]>([]);
   const { selectedProfile } = useAuth();
+  const profiles = useAppSelector((state) => state.profiles.profiles);
+  const selectedProfileId = useAppSelector((state) => state.profiles.selectedProfileId);
+  const activeProfile =
+    selectedProfile ??
+    profiles?.find((p) => p.id === selectedProfileId) ??
+    profiles?.[0] ??
+    null;
   const tinyFont = useFontSize(-4);
 
   let selectedModel = null;
@@ -189,7 +196,7 @@ function ModelSelect() {
 
         void dispatch(
           updateSelectedModelByRole({
-            selectedProfile,
+            selectedProfile: activeProfile,
             role: "chat",
             modelTitle: newModelTitle,
           }),
@@ -234,11 +241,12 @@ function ModelSelect() {
 
   return (
     <Listbox
+      value={selectedModel?.title ?? ""}
       onChange={async (val: string) => {
-        if (val === selectedModel?.title) return;
+        if (!val || val === selectedModel?.title) return;
         void dispatch(
           updateSelectedModelByRole({
-            selectedProfile,
+            selectedProfile: activeProfile,
             role: isInEdit ? "edit" : "chat",
             modelTitle: val,
           }),

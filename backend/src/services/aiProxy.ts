@@ -3,7 +3,7 @@ import { Response } from "express";
 import { billingGet as dbGet, billingRun as dbRun } from "./billingDb.js";
 import { v4 as uuidv4 } from "uuid";
 import { generateCacheKey, getFromCache, saveToCache } from "./cacheEngine.js";
-import { VYNORAI_AGENT_TOOLS, VYNORAI_AGENT_SYSTEM_PROMPT } from "./agentEngine.js";
+import { VYNORAI_AGENT_TOOLS, VYNORAI_AGENT_SYSTEM_PROMPT, filterToolsForIntent } from "./agentEngine.js";
 import { dispatchToProvider } from "./providerRouter.js";
 import { estimateInputTokens } from "./quotaGuard.js";
 import { DEFAULT_CHAT_MODEL } from "../config.js";
@@ -23,6 +23,7 @@ import {
 } from "./templateVault.js";
 import { detectProjectBlueprint, formatBlueprintPlan } from "./scaffoldRegistry.js";
 import { recordRequestEconomics } from "./costLedger.js";
+import { analyzeIntentWithLocalSlm } from "./localSlmRouter.js";
 
 export interface AuthenticatedUser {
   id: string;
@@ -196,56 +197,77 @@ export async function handleChatCompletions(
   }
 
   // ── 1b. 5-Layer Deterministic Local Engineering Engine (0 Tokens & 100% Deterministic) ──
-  const lastUserMsgEarly = [...(messages || [])].reverse().find((m: any) => m.role === "user");
-  const rawQuery = typeof lastUserMsgEarly?.content === "string"
-    ? lastUserMsgEarly.content
-    : Array.isArray(lastUserMsgEarly?.content) ? lastUserMsgEarly.content.map((p: any) => p.text ?? "").join("") : "";
-  const cleanPrompt = stripRulesAndPreamble(rawQuery).trim();
+  const lastMsg = Array.isArray(messages) && messages.length > 0 ? messages[messages.length - 1] : null;
+  const isToolFollowUp = lastMsg?.role === "tool" || (lastMsg?.role as string) === "function";
+  const hasToolHistory = messages?.some(
+    (m: any) =>
+      m.role === "tool" ||
+      m.role === "function" ||
+      (m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0)
+  );
 
-  if (cleanPrompt && !cleanPrompt.startsWith("/") && cleanPrompt.length > 3) {
-    const engineResult = await executeVynorEngine(cleanPrompt, {});
-    if (engineResult.status === "SUCCESS" || engineResult.status === "VALIDATION_FAILED") {
-      await settleQuotaReservation(quotaReservation, 0);
-      const responseMarkdown = formatOrchestrationToMarkdown(engineResult);
-      const engineSavedTokens = Math.max(650, Math.round(rawQuery.length / 2) + Math.round(responseMarkdown.length / 3));
-      console.log(`[VynorAI ⚡ 5-LAYER ENGINE] 0 tokens | status=${engineResult.status} | workflow=${engineResult.workflowId}`);
-      res.setHeader("X-VynorAI-Engine", "5-LAYER-LOCAL");
-      res.setHeader("X-VynorAI-Workflow", engineResult.workflowId || "none");
-      res.setHeader("X-VynorAI-Tokens-Saved", "100%");
+  // CRITICAL GUARD: Only run the 0-token deterministic engine on initial user turns.
+  // NEVER run on tool continuations, tool outputs, or multi-turn tool loops!
+  if (!isToolFollowUp && !hasToolHistory) {
+    const lastUserMsgEarly = [...(messages || [])].reverse().find((m: any) => m.role === "user");
+    let rawQuery = "";
+    if (typeof lastUserMsgEarly?.content === "string") {
+      rawQuery = lastUserMsgEarly.content;
+    } else if (Array.isArray(lastUserMsgEarly?.content)) {
+      // Find the last text part (the actual user prompt, since context items are prepended)
+      const textParts = lastUserMsgEarly.content.filter((p: any) => typeof p.text === "string");
+      rawQuery = textParts.length > 0 ? textParts[textParts.length - 1].text : "";
+    }
+    const cleanPrompt = stripRulesAndPreamble(rawQuery).trim();
 
-      (async () => {
-        try {
-          const savedTokens = engineSavedTokens;
-          await dbRun(
-            "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
-            [uuidv4(), user.id, "vynorai-slm-engine", savedTokens]
-          );
-        } catch (_) {}
-      })();
-      recordRequestEconomics({
-        requestId, userId: user.id, planId, requestedModel: model,
-        resolvedModel: "vynorai-local-engine", provider: "deterministic",
-        inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
-        costSource: "local-zero", cacheStatus: "bypass",
-        templateId: engineResult.workflowId, estimatedTokensSaved: engineSavedTokens,
-        latencyMs: Date.now() - requestStartedAt,
-      }).catch((err) => console.error("[Economics] Local engine ledger failed:", err));
+    // Guard against conversational/informational questions (e.g. "did you understand this project")
+    const isInformationalQuery = /^(did you|do you|can you|could you|what is|what are|explain|how does|how do|tell me about|analyze|review|understand|summary|summarize)\b/i.test(cleanPrompt);
 
-      const clientRequestedTools = Array.isArray(body?.tools) && body.tools.length > 0;
-      const fileEntries = Object.entries(engineResult.modifiedFiles);
+    if (cleanPrompt && !cleanPrompt.startsWith("/") && cleanPrompt.length > 3 && !isInformationalQuery) {
+      const engineResult = await executeVynorEngine(cleanPrompt, {});
+      if (engineResult.status === "SUCCESS" || engineResult.status === "VALIDATION_FAILED") {
+        await settleQuotaReservation(quotaReservation, 0);
+        const responseMarkdown = formatOrchestrationToMarkdown(engineResult);
+        const engineSavedTokens = Math.max(650, Math.round(rawQuery.length / 2) + Math.round(responseMarkdown.length / 3));
+        console.log(`[VynorAI ⚡ 5-LAYER ENGINE] 0 tokens | status=${engineResult.status} | workflow=${engineResult.workflowId}`);
+        res.setHeader("X-VynorAI-Engine", "5-LAYER-LOCAL");
+        res.setHeader("X-VynorAI-Workflow", engineResult.workflowId || "none");
+        res.setHeader("X-VynorAI-Tokens-Saved", "100%");
 
-      if (clientRequestedTools && fileEntries.length > 0) {
-        const toolCalls = fileEntries.map(([path, content], i) => ({
-          id: `call_${uuidv4().replace(/-/g, "").slice(0, 10)}_${i}`,
-          type: "function",
-          function: {
-            name: "createNewFile",
-            arguments: JSON.stringify({
-              filepath: path,
-              contents: content,
-            }),
-          },
-        }));
+        (async () => {
+          try {
+            const savedTokens = engineSavedTokens;
+            await dbRun(
+              "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
+              [uuidv4(), user.id, "vynorai-slm-engine", savedTokens]
+            );
+          } catch (_) {}
+        })();
+        recordRequestEconomics({
+          requestId, userId: user.id, planId, requestedModel: model,
+          resolvedModel: "vynorai-local-engine", provider: "deterministic",
+          inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
+          costSource: "local-zero", cacheStatus: "bypass",
+          templateId: engineResult.workflowId, estimatedTokensSaved: engineSavedTokens,
+          latencyMs: Date.now() - requestStartedAt,
+        }).catch((err) => console.error("[Economics] Local engine ledger failed:", err));
+
+        const clientRequestedTools = Array.isArray(body?.tools) && body.tools.length > 0;
+        const fileEntries = Object.entries(engineResult.modifiedFiles);
+        const explicitScaffoldIntent = /\b(add|create|build|scaffold|generate|setup|make|hadanna|danna)\b/i.test(cleanPrompt) || cleanPrompt.startsWith("/template");
+
+        if (clientRequestedTools && fileEntries.length > 0 && explicitScaffoldIntent) {
+          const toolCalls = fileEntries.map(([path, content], i) => ({
+            id: `call_${uuidv4().replace(/-/g, "").slice(0, 10)}_${i}`,
+            type: "function",
+            function: {
+              name: "createNewFile",
+              arguments: JSON.stringify({
+                filepath: path,
+                contents: content,
+              }),
+            },
+          }));
 
         if (stream) {
           res.setHeader("Content-Type", "text/event-stream");
@@ -338,117 +360,118 @@ export async function handleChatCompletions(
           choices: [{ index: 0, message: { role: "assistant", content: responseMarkdown }, finish_reason: "stop" }],
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
         });
+        }
       }
     }
-  }
 
-  const instantMatch = checkInstantTemplateMatch(cleanPrompt || rawQuery);
-  if (instantMatch.matched && instantMatch.responseMarkdown) {
-    await settleQuotaReservation(quotaReservation, 0);
-    console.log(`[VynorAI ⚡ INSTANT GOLDEN SCAFFOLD] 0 tokens | template=${instantMatch.template?.id}`);
-    res.setHeader("X-VynorAI-Scaffold", "INSTANT_VAULT_HIT");
-    res.setHeader("X-VynorAI-Scaffold-Match", instantMatch.template?.id || "matched");
-    res.setHeader("X-VynorAI-Tokens-Saved", "100%");
-    const templateSavedTokens = Math.max(1200, Math.round((instantMatch.responseMarkdown?.length || 2000) / 3));
+    const instantMatch = checkInstantTemplateMatch(cleanPrompt || rawQuery);
+    if (instantMatch.matched && instantMatch.responseMarkdown) {
+      await settleQuotaReservation(quotaReservation, 0);
+      console.log(`[VynorAI ⚡ INSTANT GOLDEN SCAFFOLD] 0 tokens | template=${instantMatch.template?.id}`);
+      res.setHeader("X-VynorAI-Scaffold", "INSTANT_VAULT_HIT");
+      res.setHeader("X-VynorAI-Scaffold-Match", instantMatch.template?.id || "matched");
+      res.setHeader("X-VynorAI-Tokens-Saved", "100%");
+      const templateSavedTokens = Math.max(1200, Math.round((instantMatch.responseMarkdown?.length || 2000) / 3));
 
-    (async () => {
-      try {
-        const savedTokens = templateSavedTokens;
-        await dbRun(
-          "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
-          [uuidv4(), user.id, "vynorai-golden-scaffold", savedTokens]
-        );
-      } catch (_) {}
-    })();
-    recordRequestEconomics({
-      requestId, userId: user.id, planId, requestedModel: model,
-      resolvedModel: "vynorai-golden-vault", provider: "template",
-      inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
-      costSource: "local-zero", cacheStatus: "bypass",
-      templateId: instantMatch.template?.id, estimatedTokensSaved: templateSavedTokens,
-      latencyMs: Date.now() - requestStartedAt,
-    }).catch((err) => console.error("[Economics] Template ledger failed:", err));
+      (async () => {
+        try {
+          const savedTokens = templateSavedTokens;
+          await dbRun(
+            "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
+            [uuidv4(), user.id, "vynorai-golden-scaffold", savedTokens]
+          );
+        } catch (_) {}
+      })();
+      recordRequestEconomics({
+        requestId, userId: user.id, planId, requestedModel: model,
+        resolvedModel: "vynorai-golden-vault", provider: "template",
+        inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
+        costSource: "local-zero", cacheStatus: "bypass",
+        templateId: instantMatch.template?.id, estimatedTokensSaved: templateSavedTokens,
+        latencyMs: Date.now() - requestStartedAt,
+      }).catch((err) => console.error("[Economics] Template ledger failed:", err));
 
-    const chunk = {
-      id: "scaffold-" + uuidv4(),
-      object: "chat.completion.chunk",
-      created: Math.floor(Date.now() / 1000),
-      model: "vynorai-golden-vault",
-      choices: [
-        {
-          index: 0,
-          delta: { role: "assistant", content: instantMatch.responseMarkdown },
-          finish_reason: "stop",
-        },
-      ],
-    };
-
-    if (stream) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-      res.write("data: [DONE]\n\n");
-      return res.end();
-    } else {
-      return res.json({
+      const chunk = {
         id: "scaffold-" + uuidv4(),
-        object: "chat.completion",
+        object: "chat.completion.chunk",
         created: Math.floor(Date.now() / 1000),
         model: "vynorai-golden-vault",
-        choices: [{ index: 0, message: { role: "assistant", content: instantMatch.responseMarkdown }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      });
+        choices: [
+          {
+            index: 0,
+            delta: { role: "assistant", content: instantMatch.responseMarkdown },
+            finish_reason: "stop",
+          },
+        ],
+      };
+
+      if (stream) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      } else {
+        return res.json({
+          id: "scaffold-" + uuidv4(),
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: "vynorai-golden-vault",
+          choices: [{ index: 0, message: { role: "assistant", content: instantMatch.responseMarkdown }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        });
+      }
     }
-  }
 
-  // ── 1c. Composite Project Blueprint Direct Delivery (E-Commerce, SaaS, FinTech) ──
-  const blueprintMatch = detectProjectBlueprint(cleanPrompt || rawQuery);
-  if (blueprintMatch) {
-    await settleQuotaReservation(quotaReservation, 0);
-    console.log(`[VynorAI 🏗️ BLUEPRINT MATCH] ${blueprintMatch.id} | query="${rawQuery.slice(0, 40)}"`);
-    res.setHeader("X-VynorAI-Blueprint", blueprintMatch.id);
-    const planMarkdown = formatBlueprintPlan(blueprintMatch);
-    const blueprintSavedTokens = Math.max(500, Math.ceil((rawQuery.length + planMarkdown.length) / 4));
-    recordRequestEconomics({
-      requestId, userId: user.id, planId, requestedModel: model,
-      resolvedModel: "vynorai-blueprint-architect", provider: "blueprint",
-      inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
-      costSource: "local-zero", cacheStatus: "bypass",
-      templateId: blueprintMatch.id, estimatedTokensSaved: blueprintSavedTokens,
-      latencyMs: Date.now() - requestStartedAt,
-    }).catch((err) => console.error("[Economics] Blueprint ledger failed:", err));
+    // ── 1c. Composite Project Blueprint Direct Delivery (E-Commerce, SaaS, FinTech) ──
+    const blueprintMatch = detectProjectBlueprint(cleanPrompt || rawQuery);
+    if (blueprintMatch) {
+      await settleQuotaReservation(quotaReservation, 0);
+      console.log(`[VynorAI 🏗️ BLUEPRINT MATCH] ${blueprintMatch.id} | query="${rawQuery.slice(0, 40)}"`);
+      res.setHeader("X-VynorAI-Blueprint", blueprintMatch.id);
+      const planMarkdown = formatBlueprintPlan(blueprintMatch);
+      const blueprintSavedTokens = Math.max(500, Math.ceil((rawQuery.length + planMarkdown.length) / 4));
+      recordRequestEconomics({
+        requestId, userId: user.id, planId, requestedModel: model,
+        resolvedModel: "vynorai-blueprint-architect", provider: "blueprint",
+        inputTokens: 0, outputTokens: 0, providerCostUsd: 0,
+        costSource: "local-zero", cacheStatus: "bypass",
+        templateId: blueprintMatch.id, estimatedTokensSaved: blueprintSavedTokens,
+        latencyMs: Date.now() - requestStartedAt,
+      }).catch((err) => console.error("[Economics] Blueprint ledger failed:", err));
 
-    const chunk = {
-      id: "blueprint-" + uuidv4(),
-      object: "chat.completion.chunk",
-      created: Math.floor(Date.now() / 1000),
-      model: "vynorai-blueprint-architect",
-      choices: [
-        {
-          index: 0,
-          delta: { role: "assistant", content: planMarkdown },
-          finish_reason: "stop",
-        },
-      ],
-    };
-
-    if (stream) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-      res.write("data: [DONE]\n\n");
-      return res.end();
-    } else {
-      return res.json({
+      const chunk = {
         id: "blueprint-" + uuidv4(),
-        object: "chat.completion",
+        object: "chat.completion.chunk",
         created: Math.floor(Date.now() / 1000),
         model: "vynorai-blueprint-architect",
-        choices: [{ index: 0, message: { role: "assistant", content: planMarkdown }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      });
+        choices: [
+          {
+            index: 0,
+            delta: { role: "assistant", content: planMarkdown },
+            finish_reason: "stop",
+          },
+        ],
+      };
+
+      if (stream) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      } else {
+        return res.json({
+          id: "blueprint-" + uuidv4(),
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: "vynorai-blueprint-architect",
+          choices: [{ index: 0, message: { role: "assistant", content: planMarkdown }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        });
+      }
     }
   }
 
@@ -457,13 +480,56 @@ export async function handleChatCompletions(
   res.setHeader("X-VynorAI-ZK-Shield", "Active");
   res.setHeader("X-VynorAI-ZK-Surrogate", zkUserId);
 
+  // Dynamic Tool Gating via Local SLM / Deterministic Classifier:
+  // Determine whether this request turn permits code mutation or is an informational/read-only query.
+  const lastUserMsgForGating = [...(body.messages || [])].reverse().find((m: any) => m.role === "user");
+  let lastPromptForGating = "";
+  if (typeof lastUserMsgForGating?.content === "string") {
+    lastPromptForGating = lastUserMsgForGating.content;
+  } else if (Array.isArray(lastUserMsgForGating?.content)) {
+    const textParts = lastUserMsgForGating.content.filter((p: any) => typeof p.text === "string");
+    lastPromptForGating = textParts.length > 0 ? textParts[textParts.length - 1].text : "";
+  }
+  const cleanPromptForGating = stripRulesAndPreamble(lastPromptForGating);
+
+  // Invoke Local SLM (Qwen 2.5 Coder 3B on VPS) with sub-500ms fallback
+  const slmDecision = await analyzeIntentWithLocalSlm(cleanPromptForGating);
+  res.setHeader("X-VynorAI-Router-Source", slmDecision.source);
+  res.setHeader("X-VynorAI-Router-Intent", slmDecision.intent);
+  res.setHeader("X-VynorAI-Reasoning-Effort", String(slmDecision.reasoningEffort));
+  res.setHeader("X-VynorAI-Reasoning-Category", slmDecision.reasoningCategory);
+  res.setHeader("X-VynorAI-Thinking-Budget", String(slmDecision.thinkingBudgetTokens));
+
+  // Allow mutating tools only if in an active agent tool loop or if SLM confirms mutation intent
+  const isAgentToolLoop = isToolFollowUp || hasToolHistory;
+  const allowMutation = isAgentToolLoop || slmDecision.allowMutation;
+
+  const baseTools = body.tools !== undefined ? body.tools : VYNORAI_AGENT_TOOLS;
+  const gatedTools = filterToolsForIntent(baseTools, allowMutation);
+  const prunedCount = (baseTools?.length || 0) - (gatedTools?.length || 0);
+
+  if (prunedCount > 0) {
+    res.setHeader("X-VynorAI-Tool-Gating", `Pruned ${prunedCount} mutating tools`);
+    res.setHeader("X-VynorAI-Tool-Tokens-Saved", String(prunedCount * 180));
+  }
+
   const enriched = {
     ...body,
     model,
     stream,
     user: zkUserId,
-    tools: body.tools ?? VYNORAI_AGENT_TOOLS,
+    tools: gatedTools,
     system: body.system ?? VYNORAI_AGENT_SYSTEM_PROMPT,
+    // Dynamically inject optimal reasoning weight (1-100) & thinking budget into upstream DeepSeek / OpenRouter
+    reasoning_effort: body.reasoning_effort ?? slmDecision.reasoningCategory,
+    extra_body: {
+      ...(body.extra_body || {}),
+      reasoning_effort: body.reasoning_effort ?? slmDecision.reasoningEffort, // 1-100 continuous effort for DeepSeek V4.1-Flash
+    },
+    thinking: body.thinking ?? {
+      type: "enabled",
+      budget_tokens: slmDecision.thinkingBudgetTokens,
+    },
   };
 
   // ── 2a. Memory & Rules: inject user's persistent rules + remembered facts ────

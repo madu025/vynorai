@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  # ── 1. VynorAI Cloud Backend & Reverse Proxy ───────────────────────────────
+  vynor-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vynor-backend
+    restart: unless-stopped
+    ports:
+      - "3333:3333"
+      - "3334:3334"
+    environment:
+      - PORT=3333
+      - ADMIN_PORT=3334
+      - NODE_ENV=production
+      - BASE_URL=https://vynor.lk
+      - REDIS_URL=redis://vynor-redis:6379
+      - LOCAL_SLM_ENABLED=true
+      - LOCAL_SLM_URL=http://vynor-slm:8080/v1
+      - LOCAL_SLM_MODEL=qwen2.5-coder-3b-instruct
+      - LOCAL_SLM_TIMEOUT_MS=600
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - vynor-redis
+      - vynor-slm
+    networks:
+      - vynor-net
+
+  # ── 2. Dedicated Low-Latency Redis ─────────────────────────────────────────
+  vynor-redis:
+    image: redis:7-alpine
+    container_name: vynor-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - vynor-redis-data:/data
+    networks:
+      - vynor-net
+
+  # ── 3. High-Performance Local SLM (Qwen 2.5 Coder 3B / llama.cpp Server) ──
+  vynor-slm:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: vynor-slm
+    restart: unless-stopped
+    command: >
+      -m /models/qwen2.5-coder-3b-instruct-q4_k_m.gguf
+      --host 0.0.0.0
+      --port 8080
+      -c 4096
+      -t 3
+      --parallel 2
+    volumes:
+      - ./models:/models:ro
+    networks:
+      - vynor-net
+
+volumes:
+  vynor-redis-data:
+
+networks:
+  vynor-net:
+    driver: bridge

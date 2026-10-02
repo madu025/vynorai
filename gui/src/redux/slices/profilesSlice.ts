@@ -115,7 +115,9 @@ export const profilesSlice = createSlice({
       return (
         (state.profiles ?? []).find(
           (profile) => profile.id === state.selectedProfileId,
-        ) ?? null
+        ) ??
+        state.profiles?.[0] ??
+        null
       );
     },
 

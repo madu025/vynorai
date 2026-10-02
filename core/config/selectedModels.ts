@@ -36,9 +36,7 @@ export function rectifySelectedModelsFromGlobalContext(
     const currentSelection = currentForProfile[role] ?? null;
 
     if (currentSelection) {
-      const match = continueConfig.modelsByRole[role].find(
-        (m) => m.title === currentSelection,
-      );
+      const match = continueConfig.modelsByRole[role]?.find((m: ILLM) => m.title === currentSelection) ?? continueConfig.modelsByRole.chat?.find((m: ILLM) => m.title === currentSelection) ?? continueConfig.modelsByRole.edit?.find((m: ILLM) => m.title === currentSelection);
       if (match) {
         newModel = match;
       }

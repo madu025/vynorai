@@ -143,14 +143,29 @@ export const INTENT_REGISTRY: IntentDefinition[] = [
  */
 export function stripRulesAndPreamble(text: string): string {
   if (!text || typeof text !== "string") return "";
+
+  // If explicit user instruction delimiter is present, extract it directly
+  const userInstMatch = text.match(/<user_instruction>([\s\S]*?)<\/user_instruction>/i);
+  if (userInstMatch && userInstMatch[1].trim()) {
+    return userInstMatch[1].trim();
+  }
+
   let clean = text;
   // Strip Markdown rules / YAML Frontmatter
   clean = clean.replace(/---[\s\S]*?---/g, "");
-  // Strip rule headers and rule body
-  clean = clean.replace(/#+\s*(VynorAI\s+Core\s+Engineering\s+Rules|Engineering\s+Rules)[\s\S]*?(?=\n\n[^\n#-]|\n---|$)/gi, "");
+  // Strip Markdown code blocks (context items often include code blocks)
+  clean = clean.replace(/```[\s\S]*?```/g, "");
+  // Strip HTML / XML comment and context tags
+  clean = clean.replace(/<!--[\s\S]*?-->/g, "");
   clean = clean.replace(/<vynorai_agent[\s\S]*?<\/vynorai_agent>/gi, "");
+  clean = clean.replace(/<workspace_context>[\s\S]*?<\/workspace_context>/gi, "");
+  clean = clean.replace(/<context_item[\s\S]*?<\/context_item>/gi, "");
   clean = clean.replace(/<context>[\s\S]*?<\/context>/gi, "");
   clean = clean.replace(/<system>[\s\S]*?<\/system>/gi, "");
+  // Strip file header annotations from IDE context items
+  clean = clean.replace(/^(#+|===+)\s*(File:|Active file:|Context:).*$/gmi, "");
+  // Strip rule headers and rule body
+  clean = clean.replace(/#+\s*(VynorAI\s+Core\s+Engineering\s+Rules|Engineering\s+Rules)[\s\S]*?(?=\n\n[^\n#-]|\n---|$)/gi, "");
   clean = clean.replace(/^\s*-\s*When the user asks for[\s\S]*$/gmi, "");
   return clean.trim();
 }
@@ -178,14 +193,17 @@ export function classifyIntentAndRoute(
     };
   }
 
-  // Strip attached rules, system prompts, or preamble
+  // Strip attached rules, system prompts, context items, or preamble
   const cleanQ = stripRulesAndPreamble(query) || query;
   const qLower = cleanQ.trim().toLowerCase();
 
-  // Guard: Conversational greetings, tests, checks, or meta questions route to cloud LLM
+  // Guard: Conversational greetings, tests, project understanding, explanations, reviews or meta questions route to cloud LLM
   const isConversationalOrMeta =
     /^(hi|hello|hey|test|check|exte?nsion|kawda|mokakda|kohomada)\b/i.test(qLower) ||
-    /^(can you|please|oya|puluwanda|pulwunda)\s+(check|test|help)/i.test(qLower) ||
+    /^(can you|could you|please|oya|puluwanda|pulwunda)\s+(check|test|help|explain|understand|read|look|see)/i.test(qLower) ||
+    /^(did you|do you|are you)\s+(understand|know|see|find|get)/i.test(qLower) ||
+    /^(what|how|why|where|who|when|explain|tell me|describe|analyze|review|summarize|understand)\b/i.test(qLower) ||
+    /\b(understand\s+this\s+project|understand\s+the\s+project|explain\s+this|what\s+does\s+this|explain\s+project)\b/i.test(qLower) ||
     /exte?ion\s+(eka\s+)?che?c?k/i.test(qLower);
 
   if (isConversationalOrMeta && !/^\/(template|scaffold|golden)/i.test(qLower)) {
@@ -194,7 +212,7 @@ export function classifyIntentAndRoute(
       intentId: null,
       confidence: 0,
       tier: "FALLBACK_LLM",
-      reasons: ["Conversational or meta extension query: routing to LLM."],
+      reasons: ["Conversational, analytical, or meta extension query: routing to LLM."],
       matchedKeywords: [],
     };
   }
@@ -234,14 +252,17 @@ export function classifyIntentAndRoute(
         matchedIntent = intent;
         break;
       }
-      // Partial token overlap check
-      const patWords = patLower.split(/\s+/).filter((w) => w.length > 2);
-      const matches = patWords.filter((w) => new RegExp(`\\b${w}\\b`, "i").test(qLower)).length;
-      if (matches >= 2 && matches / patWords.length >= 0.7) {
-        const partialScore = 0.8 + (matches / patWords.length) * 0.15;
-        if (partialScore > intentScore) {
-          intentScore = partialScore;
-          matchedIntent = intent;
+      // Partial token overlap check: only apply if the query is a concise user instruction (not a large document/context)
+      const qTokens = qLower.split(/\s+/).filter((w) => w.length > 2);
+      if (qTokens.length <= 30) {
+        const patWords = patLower.split(/\s+/).filter((w) => w.length > 2);
+        const matches = patWords.filter((w) => new RegExp(`\\b${w}\\b`, "i").test(qLower)).length;
+        if (matches >= 2 && matches / patWords.length >= 0.7) {
+          const partialScore = 0.8 + (matches / patWords.length) * 0.15;
+          if (partialScore > intentScore) {
+            intentScore = partialScore;
+            matchedIntent = intent;
+          }
         }
       }
     }

@@ -248,4 +248,11 @@ export const config = {
     gemini:     process.env.GEMINI_API_KEY     || "",
     ollama:     process.env.OLLAMA_BASE_URL    || "http://localhost:11434",
   },
+
+  localSlm: {
+    enabled: process.env.LOCAL_SLM_ENABLED === "true",
+    url: process.env.LOCAL_SLM_URL || "http://localhost:8080/v1",
+    model: process.env.LOCAL_SLM_MODEL || "qwen2.5-coder-3b-instruct",
+    timeoutMs: parseInt(process.env.LOCAL_SLM_TIMEOUT_MS || "500", 10),
+  },
 };

@@ -112,6 +112,32 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
 ];
 
 /**
+ * Tools that do not modify or execute code in the user's workspace
+ */
+export const READ_ONLY_TOOL_NAMES = new Set([
+  "read_file",
+  "readFile",
+  "list_directory",
+  "list_dir",
+  "get_golden_template",
+  "view_file",
+  "grep_search",
+]);
+
+/**
+ * Dynamically prune mutating tools (write_file, edit_file, run_command) on read-only/informational queries.
+ * Saves 800-1200 prompt tokens and eliminates accidental file mutation loops.
+ */
+export function filterToolsForIntent(tools: any[] | undefined, allowMutation: boolean): any[] {
+  if (!Array.isArray(tools) || tools.length === 0) return [];
+  if (allowMutation) return tools;
+  return tools.filter((tool: any) => {
+    const name = tool?.function?.name || tool?.name || "";
+    return READ_ONLY_TOOL_NAMES.has(name);
+  });
+}
+
+/**
  * System prompt that activates the Enterprise Anti-Vibe-Coding Autonomous Agent behavior
  */
 export const VYNORAI_AGENT_SYSTEM_PROMPT = `You are VynorAI, an expert elite enterprise software architect and autonomous engineer.

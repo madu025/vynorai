@@ -572,8 +572,12 @@ export class Core {
     });
 
     on("config/updateSelectedModel", async (msg) => {
+      const targetProfileId =
+        msg.data.profileId ||
+        this.configHandler.currentProfile?.profileDescription.id ||
+        "local";
       const newSelectedModels = this.globalContext.updateSelectedModel(
-        msg.data.profileId,
+        targetProfileId,
         msg.data.role,
         msg.data.title,
       );

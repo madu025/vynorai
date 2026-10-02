@@ -95,13 +95,17 @@ export const streamNormalInput = createAsyncThunk<
     { legacySlashCommandData, depth = 0, resumeTaskId },
     { dispatch, extra, getState },
   ) => {
-    const maxAutonomousDepth = 24;
+    const state = getState();
+    const maxAutonomousDepth = state.session.mode === "chat" ? 2 : 24;
     if (depth > maxAutonomousDepth) {
+      if (state.session.mode === "chat") {
+        dispatch(setInactive());
+        return;
+      }
       const message = `Autonomous step limit of ${maxAutonomousDepth} reached`;
       console.error(message, JSON.stringify(getState(), null, 2));
       throw new Error(message);
     }
-    const state = getState();
     const selectedChatModel = selectSelectedChatModel(state);
 
     if (!selectedChatModel) {

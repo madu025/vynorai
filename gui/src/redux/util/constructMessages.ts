@@ -82,9 +82,11 @@ export function constructMessages(
 
       const ctxItemParts = item.contextItems
         .map((ctxItem) => {
+          const nameAttr = ctxItem.name ? ` name="${ctxItem.name}"` : "";
+          const uriAttr = ctxItem.uri?.value ? ` uri="${ctxItem.uri.value}"` : "";
           return {
             type: "text",
-            text: `${ctxItem.content}\n`,
+            text: `<context_item${nameAttr}${uriAttr}>\n${ctxItem.content}\n</context_item>\n`,
           } as TextMessagePart;
         })
         .filter((part) => !!part.text.trim());

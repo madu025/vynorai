@@ -18,40 +18,39 @@ export const updateSelectedModelByRole = createAsyncThunk<
     { role, modelTitle, selectedProfile },
     { dispatch, extra, getState },
   ) => {
-    if (!selectedProfile) {
-      return;
-    }
-
     const state = getState();
 
     const {
       config: { config },
     } = state;
 
-    const model = state.config.config.modelsByRole[role]?.find(
-      (m) => m.title === modelTitle,
-    );
+    const effectiveProfileId =
+      selectedProfile?.id ??
+      state.profiles.selectedProfileId ??
+      state.profiles.profiles?.[0]?.id ??
+      "local";
 
-    if (!model) {
-      console.error(
-        `Model with title "${modelTitle}" not found for role "${role}"`,
+    // Find model across current role, chat role, or edit role
+    const model =
+      state.config.config.modelsByRole[role]?.find((m) => m.title === modelTitle) ??
+      state.config.config.modelsByRole.chat?.find((m) => m.title === modelTitle) ??
+      state.config.config.modelsByRole.edit?.find((m) => m.title === modelTitle);
+
+    if (model) {
+      dispatch(
+        updateConfig({
+          ...config,
+          selectedModelByRole: {
+            ...config.selectedModelByRole,
+            [role]: model,
+          },
+        }),
       );
-      return;
     }
-
-    dispatch(
-      updateConfig({
-        ...config,
-        selectedModelByRole: {
-          ...config.selectedModelByRole,
-          [role]: model,
-        },
-      }),
-    );
 
     extra.ideMessenger.post("config/updateSelectedModel", {
       role,
-      profileId: selectedProfile.id,
+      profileId: effectiveProfileId,
       title: modelTitle,
     });
   },

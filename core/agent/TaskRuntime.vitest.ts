@@ -147,3 +147,178 @@ describe("redactSecrets", () => {
     expect(value).not.toContain("AKIA1234567890ABCDEF");
   });
 });
+
+describe("implementation subagents", () => {
+  it("persists least-privilege scope without storing the objective", async () => {
+    const { runtime, directory } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "session-1",
+      workspaceId: "workspace-1",
+      workspaceRevision: 1,
+      goal: "Parent task",
+    });
+    const objective = "Fix token=private-value in the frontend";
+    const subagent = await runtime.createSubagent({
+      taskId: task.id,
+      role: "frontend",
+      objective,
+      authority: { read: true, write: true, command: true, network: false },
+      fileScope: ["gui/src"],
+      budget: {
+        maxInputTokens: 10_000,
+        maxOutputTokens: 2_000,
+        maxCostUsd: 0.5,
+      },
+    });
+    const persisted = fs.readFileSync(
+      path.join(directory, `${task.id}.json`),
+      "utf8",
+    );
+    expect(subagent.fileScope).toEqual(["gui/src"]);
+    expect(persisted).not.toContain(objective);
+    expect(persisted).not.toContain("private-value");
+  });
+
+  it("prevents concurrent ownership of overlapping write scopes", async () => {
+    const { runtime } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "s",
+      workspaceId: "w",
+      workspaceRevision: 1,
+      goal: "Parallel work",
+    });
+    const authority = {
+      read: true,
+      write: true,
+      command: false,
+      network: false,
+    };
+    const first = await runtime.createSubagent({
+      taskId: task.id,
+      role: "frontend",
+      objective: "Edit UI",
+      authority,
+      fileScope: ["gui/src"],
+      budget: {
+        maxInputTokens: 20_000,
+        maxOutputTokens: 3_000,
+        maxCostUsd: 0.5,
+      },
+    });
+    const second = await runtime.createSubagent({
+      taskId: task.id,
+      role: "qa",
+      objective: "Edit UI tests",
+      authority,
+      fileScope: ["gui/src/tests"],
+      budget: {
+        maxInputTokens: 20_000,
+        maxOutputTokens: 3_000,
+        maxCostUsd: 0.5,
+      },
+    });
+    await runtime.startSubagent(task.id, first.id);
+    await expect(runtime.startSubagent(task.id, second.id)).rejects.toThrow(
+      "owned by running subagent",
+    );
+  });
+
+  it("rejects traversal, out-of-scope edits, and unevidenced handoffs", async () => {
+    const { runtime } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "s",
+      workspaceId: "w",
+      workspaceRevision: 1,
+      goal: "Safe implementation",
+    });
+    await expect(
+      runtime.createSubagent({
+        taskId: task.id,
+        role: "backend",
+        objective: "Escape",
+        authority: { read: true, write: true, command: false, network: false },
+        fileScope: ["../outside"],
+      }),
+    ).rejects.toThrow("workspace-relative");
+    const subagent = await runtime.createSubagent({
+      taskId: task.id,
+      role: "backend",
+      objective: "API change",
+      authority: { read: true, write: true, command: true, network: false },
+      fileScope: ["backend/src"],
+    });
+    await runtime.startSubagent(task.id, subagent.id);
+    await expect(
+      runtime.completeSubagent({
+        taskId: task.id,
+        subagentId: subagent.id,
+        summary: "done",
+        changedFiles: ["core/secrets.ts"],
+        verification: [],
+      }),
+    ).rejects.toThrow("outside its delegated scope");
+    await expect(
+      runtime.completeSubagent({
+        taskId: task.id,
+        subagentId: subagent.id,
+        summary: "done",
+        changedFiles: ["backend/src/api.ts"],
+        verification: [],
+      }),
+    ).rejects.toThrow("requires passed verification");
+  });
+
+  it("enforces capabilities and charges usage to child and parent", async () => {
+    const { runtime } = createRuntime();
+    const task = await runtime.start({
+      sessionId: "s",
+      workspaceId: "w",
+      workspaceRevision: 1,
+      goal: "Delegated work",
+      budget: { maxInputTokens: 20_000, maxOutputTokens: 5_000, maxCostUsd: 1 },
+    });
+    const subagent = await runtime.createSubagent({
+      taskId: task.id,
+      role: "security",
+      objective: "Review auth",
+      authority: { read: true, write: false, command: false, network: false },
+      fileScope: ["backend/src/auth"],
+      budget: {
+        maxInputTokens: 5_000,
+        maxOutputTokens: 1_000,
+        maxCostUsd: 0.2,
+      },
+    });
+    await runtime.startSubagent(task.id, subagent.id);
+    expect(
+      runtime.authorizeSubagentAction({
+        taskId: task.id,
+        subagentId: subagent.id,
+        capability: "read",
+        resource: "backend/src/auth/jwt.ts",
+      }),
+    ).toBe(true);
+    expect(() =>
+      runtime.authorizeSubagentAction({
+        taskId: task.id,
+        subagentId: subagent.id,
+        capability: "write",
+        resource: "backend/src/auth/jwt.ts",
+      }),
+    ).toThrow("lacks write authority");
+    expect(() =>
+      runtime.authorizeSubagentAction({
+        taskId: task.id,
+        subagentId: subagent.id,
+        capability: "read",
+        resource: "core/secrets.ts",
+      }),
+    ).toThrow("outside its delegated scope");
+    await runtime.consumeSubagentBudget(task.id, subagent.id, {
+      inputTokens: 100,
+      outputTokens: 20,
+      costUsd: 0.01,
+    });
+    expect(runtime.get(task.id)?.budget.inputTokens).toBe(100);
+  });
+});

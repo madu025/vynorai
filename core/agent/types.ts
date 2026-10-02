@@ -38,6 +38,46 @@ export interface AgentTaskBudget {
   maxCostUsd: number;
 }
 
+export type ImplementationSubagentRole =
+  | "architect"
+  | "frontend"
+  | "backend"
+  | "database"
+  | "security"
+  | "performance"
+  | "devops"
+  | "qa"
+  | "verifier";
+
+export interface SubagentAuthority {
+  read: boolean;
+  write: boolean;
+  command: boolean;
+  network: boolean;
+}
+
+export interface SubagentHandoff {
+  summary: string;
+  changedFiles: string[];
+  verification: VerificationResult[];
+  residualRisks: string[];
+  completedAt: number;
+}
+
+export interface ImplementationSubagent {
+  id: string;
+  role: ImplementationSubagentRole;
+  objectiveDigest: string;
+  status: "queued" | "running" | "completed" | "failed" | "canceled";
+  authority: SubagentAuthority;
+  /** Canonical workspace-relative files or directory prefixes. */
+  fileScope: string[];
+  budget: AgentTaskBudget;
+  handoff?: SubagentHandoff;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type AgentPlanStepState =
   | "pending"
   | "running"
@@ -105,6 +145,7 @@ export interface AgentTask {
   plan?: AgentPlan;
   executionGuard: AgentExecutionGuard;
   budget: AgentTaskBudget;
+  subagents?: ImplementationSubagent[];
   createdAt: number;
   updatedAt: number;
 }

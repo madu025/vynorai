@@ -297,6 +297,12 @@ export class AgentOrchestrator {
           if (!["succeeded", "failed", "blocked"].includes(step.state))
             step.state = "canceled";
         }
+        for (const subagent of task.subagents ?? []) {
+          if (subagent.status === "queued" || subagent.status === "running") {
+            subagent.status = "canceled";
+            subagent.updatedAt = Date.now();
+          }
+        }
       },
     );
   }

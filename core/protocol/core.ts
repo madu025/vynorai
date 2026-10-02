@@ -55,6 +55,9 @@ import type {
 import type {
   AgentTask,
   AgentTaskBudget,
+  ImplementationSubagent,
+  ImplementationSubagentRole,
+  SubagentAuthority,
   TaskState,
   ToolRisk,
   VerificationResult,
@@ -130,6 +133,56 @@ export type ToCoreFromIdeOrWebviewProtocol = {
       costUsd?: number;
     },
     AgentTask,
+  ];
+  "agent/subagent/create": [
+    {
+      taskId: string;
+      role: ImplementationSubagentRole;
+      objective: string;
+      authority: SubagentAuthority;
+      fileScope: string[];
+      budget?: Partial<
+        Pick<
+          AgentTaskBudget,
+          "maxInputTokens" | "maxOutputTokens" | "maxCostUsd"
+        >
+      >;
+    },
+    ImplementationSubagent,
+  ];
+  "agent/subagent/start": [
+    { taskId: string; subagentId: string },
+    ImplementationSubagent,
+  ];
+  "agent/subagent/authorize": [
+    {
+      taskId: string;
+      subagentId: string;
+      capability: keyof SubagentAuthority;
+      resource?: string;
+    },
+    boolean,
+  ];
+  "agent/subagent/consumeBudget": [
+    {
+      taskId: string;
+      subagentId: string;
+      inputTokens: number;
+      outputTokens: number;
+      costUsd?: number;
+    },
+    ImplementationSubagent,
+  ];
+  "agent/subagent/complete": [
+    {
+      taskId: string;
+      subagentId: string;
+      summary: string;
+      changedFiles: string[];
+      verification: VerificationResult[];
+      residualRisks?: string[];
+    },
+    ImplementationSubagent,
   ];
   "agent/plan/create": [
     { taskId: string; steps: ProposedPlanStep[] },

@@ -181,10 +181,25 @@ describe("AgentOrchestrator", () => {
     expect(resumed.state).toBe("planning");
     expect(resumed.plan?.steps[0].state).toBe("pending");
 
+    const subagent = await first.runtime.createSubagent({
+      taskId: first.task.id,
+      role: "qa",
+      objective: "Verify the delegated change",
+      authority: { read: true, write: false, command: false, network: false },
+      fileScope: ["core/agent"],
+      budget: {
+        maxInputTokens: 5_000,
+        maxOutputTokens: 1_000,
+        maxCostUsd: 0.1,
+      },
+    });
+    await first.runtime.startSubagent(first.task.id, subagent.id);
+
     const canceled = await first.orchestrator.cancel(first.task.id);
     expect(canceled.state).toBe("canceled");
     expect(canceled.executionGuard.cancelRequested).toBe(true);
     expect(canceled.plan?.steps[0].state).toBe("canceled");
+    expect(canceled.subagents?.[0].status).toBe("canceled");
   });
 
   it("persists only redacted, bounded plan summaries", async () => {

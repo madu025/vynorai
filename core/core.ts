@@ -361,6 +361,22 @@ export class Core {
       const { taskId, ...usage } = data;
       return this.taskRuntime.consumeBudget(taskId, usage);
     });
+    on("agent/subagent/create", ({ data }) =>
+      this.taskRuntime.createSubagent(data),
+    );
+    on("agent/subagent/start", ({ data }) =>
+      this.taskRuntime.startSubagent(data.taskId, data.subagentId),
+    );
+    on("agent/subagent/authorize", ({ data }) =>
+      this.taskRuntime.authorizeSubagentAction(data),
+    );
+    on("agent/subagent/consumeBudget", ({ data }) => {
+      const { taskId, subagentId, ...usage } = data;
+      return this.taskRuntime.consumeSubagentBudget(taskId, subagentId, usage);
+    });
+    on("agent/subagent/complete", ({ data }) =>
+      this.taskRuntime.completeSubagent(data),
+    );
     on("agent/plan/create", ({ data }) =>
       this.agentOrchestrator.createPlan(data.taskId, data.steps),
     );

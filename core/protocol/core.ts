@@ -48,7 +48,10 @@ import { ConfigHandler } from "../config/ConfigHandler";
 import { ProcessedItem } from "../nextEdit/NextEditPrefetchQueue";
 import { NextEditOutcome } from "../nextEdit/types";
 import { ContinueErrorReason } from "../util/errors";
-import type { WorkspaceSnapshot } from "../workspace/types";
+import type {
+  VerificationCommandCandidate,
+  WorkspaceSnapshot,
+} from "../workspace/types";
 import type {
   AgentTask,
   AgentTaskBudget,
@@ -82,6 +85,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "workspace/getSnapshot": [undefined, WorkspaceSnapshot];
   "workspace/refreshSnapshot": [undefined, WorkspaceSnapshot];
   "workspace/invalidate": [{ reason?: string } | undefined, void];
+  "workspace/getVerificationPlan": [undefined, VerificationCommandCandidate[]];
   "agent/task/start": [
     {
       sessionId: string;

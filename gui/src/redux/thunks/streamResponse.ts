@@ -21,11 +21,15 @@ export const streamResponseThunk = createAsyncThunk<
     editorState: JSONContent;
     modifiers: InputModifiers;
     index?: number;
+    resumeTaskId?: string;
   },
   ThunkApiType
 >(
   "chat/streamResponse",
-  async ({ editorState, modifiers, index }, { dispatch, extra, getState }) => {
+  async (
+    { editorState, modifiers, index, resumeTaskId },
+    { dispatch, extra, getState },
+  ) => {
     await dispatch(
       streamThunkWrapper(async () => {
         const state = getState();
@@ -86,6 +90,7 @@ export const streamResponseThunk = createAsyncThunk<
         unwrapResult(
           await dispatch(
             streamNormalInput({
+              resumeTaskId,
               legacySlashCommandData: legacyCommandWithInput
                 ? {
                     command: legacyCommandWithInput.command,

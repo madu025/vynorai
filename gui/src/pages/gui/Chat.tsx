@@ -63,6 +63,7 @@ import { useAutoScroll } from "./useAutoScroll";
 import { VynorQuotaBar } from "../../components/VynorQuotaBar";
 import { ExpertTeamPanel } from "../../components/AgentWorkspace/ExpertTeamPanel";
 import { WorkspaceStatus } from "../../components/WorkspaceStatus/WorkspaceStatus";
+import { AgentControlCenter } from "../../components/AgentWorkspace/AgentControlCenter";
 
 // Helper function to find the index of the latest conversation summary
 function findLatestSummaryIndex(history: ChatHistoryItem[]): number {
@@ -490,6 +491,7 @@ export function Chat() {
           ))}
       </StepsDiv>
       <div className={"relative shrink-0"}>
+        <AgentControlCenter />
         <WorkspaceStatus />
         {queuedInputs.length > 0 && (
           <div

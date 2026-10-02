@@ -85,12 +85,13 @@ export const streamNormalInput = createAsyncThunk<
   {
     legacySlashCommandData?: ToCoreProtocol["llm/streamChat"][0]["legacySlashCommandData"];
     depth?: number;
+    resumeTaskId?: string;
   },
   ThunkApiType
 >(
   "chat/streamNormalInput",
   async (
-    { legacySlashCommandData, depth = 0 },
+    { legacySlashCommandData, depth = 0, resumeTaskId },
     { dispatch, extra, getState },
   ) => {
     const maxAutonomousDepth = 24;
@@ -148,8 +149,8 @@ export const streamNormalInput = createAsyncThunk<
     const latestUserRequest = [...state.session.history]
       .reverse()
       .find((item) => item.message.role === "user");
-    let taskId = state.session.activeTaskId;
-    if (depth === 0 && latestUserRequest) {
+    let taskId = resumeTaskId ?? state.session.activeTaskId;
+    if (depth === 0 && !resumeTaskId && latestUserRequest) {
       try {
         const started = await extra.ideMessenger.request("agent/task/start", {
           sessionId: state.session.id,

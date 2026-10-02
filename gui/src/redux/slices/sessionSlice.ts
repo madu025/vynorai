@@ -727,6 +727,8 @@ export const sessionSlice = createSlice({
       state.isStreaming = false;
       state.queuedInputs = [];
       state.symbols = {};
+      state.activeTaskId = undefined;
+      state.activeTaskState = undefined;
 
       state.inlineErrorMessage = undefined;
       state.isPruned = false;

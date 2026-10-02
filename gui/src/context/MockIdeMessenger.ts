@@ -141,6 +141,8 @@ const DEFAULT_MOCK_CORE_RESPONSES: MockResponses = {
     capabilities: ["read", "write", "execute"],
     createdAt: 0,
   },
+  "workspace/getVerificationPlan": [],
+  "agent/task/listResumable": [],
 };
 
 const DEFAULT_MOCK_CORE_RESPONSE_HANDLERS: MockResponseHandlers = {

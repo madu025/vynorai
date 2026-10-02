@@ -89,6 +89,7 @@ import { Logger } from "./util/Logger.js";
 import { WorkspaceSessionService } from "./workspace/WorkspaceSessionService";
 import { TaskRuntime } from "./agent/TaskRuntime";
 import { AgentOrchestrator } from "./agent/AgentOrchestrator";
+import { discoverVerificationCommands } from "./agent/VerificationDiscovery";
 
 const WORKSPACE_MUTATING_TOOLS = new Set<string>([
   BuiltInToolNames.EditExistingFile,
@@ -334,6 +335,10 @@ export class Core {
     on("workspace/invalidate", () => {
       this.scheduleWorkspaceRefresh();
     });
+    on("workspace/getVerificationPlan", async () => {
+      const workspace = await this.workspaceSession.getSnapshot();
+      return discoverVerificationCommands(this.ide, workspace);
+    });
     on("agent/task/start", async ({ data }) => {
       const workspace = await this.workspaceSession.getSnapshot();
       return this.taskRuntime.start({
@@ -394,11 +399,20 @@ export class Core {
     );
     on("agent/task/resume", async ({ data }) => {
       const workspace = await this.workspaceSession.getSnapshot();
-      return this.agentOrchestrator.resume(
+      const resumed = await this.agentOrchestrator.resume(
         data.taskId,
         workspace.id,
         workspace.revision,
       );
+      const next = this.agentOrchestrator.next(
+        data.taskId,
+        workspace.id,
+        workspace.revision,
+      );
+      if (next.action === "execute") {
+        return this.agentOrchestrator.startStep(data.taskId, next.step.id);
+      }
+      return resumed;
     });
     on("agent/task/listResumable", async ({ data }) => {
       const workspace = await this.workspaceSession.getSnapshot();

@@ -178,7 +178,7 @@ function ParallelListeners() {
   // ON LOAD
   useEffect(() => {
     // Override persisted state
-    void dispatch(cancelStream());
+    void dispatch(cancelStream({ cancelTask: false }));
 
     const jetbrains = isJetBrains();
     setDocumentStylesFromLocalStorage(jetbrains);

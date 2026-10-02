@@ -41,3 +41,15 @@ export interface WorkspaceSnapshot {
   capabilities: string[];
   createdAt: number;
 }
+
+export interface VerificationCommandCandidate {
+  id: string;
+  rootId: string;
+  rootName: string;
+  kind: "test" | "typecheck" | "lint" | "build";
+  command: string;
+  source: string;
+  confidence: "high" | "medium";
+  /** Repository-defined commands are untrusted and must never run silently. */
+  requiresApproval: true;
+}

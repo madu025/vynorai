@@ -1,24 +1,25 @@
 # VynorAI Code Map & Architecture Index
 
-> **Status:** This is the maintained architecture index for the production codebase. Last agent-runtime refresh: 2026-10-02.
+> **Status:** This is the maintained architecture index for the production codebase. Last agent-runtime refresh: 2026-10-02 (Post-Model Selection Fix & VPS SLM Deployment).
 
 ---
 
 ## 1. High-Level Architecture Overview
 
-VynorAI is a multi-tier AI-assisted developer platform engineered to provide cost-effective frontier AI models, Sri Lankan local payments (via PayHere), and a zero-token deterministic local SLM / Golden Vault engine across multiple IDEs.
+VynorAI is a multi-tier AI-assisted developer platform engineered to provide cost-effective frontier AI models, Sri Lankan local payments (via PayHere), a zero-token deterministic local SLM / Golden Vault engine, and an autonomous VPS-hosted Local SLM (Qwen 2.5 Coder 3B) across multiple IDEs.
 
 ```mermaid
 graph TB
     subgraph IDELayer ["IDE Ecosystem (VS Code / Antigravity / Cursor / Windsurf)"]
-        GUI["React Sidebar GUI (gui/)<br/>• VynorQuotaBar<br/>• TipTapEditor & autoProjectContext"]
+        GUI["React Sidebar GUI (gui/)<br/>• ModelSelect Dropdown & Bi-directional Binding<br/>• VynorQuotaBar<br/>• TipTapEditor & autoProjectContext"]
         ExtHost["VS Code Extension Host (extensions/vscode/)<br/>• VsCodeIde.ts<br/>• commands.ts<br/>• vynorAuth.ts (Loopback Server :41403)"]
-        CoreEngine["Core Engine (core/)<br/>• WorkspaceSessionService + CodebaseIndexer<br/>• Deterministic AgentOrchestrator<br/>• LLM, Tool, Context & Autocomplete services"]
+        CoreEngine["Core Engine (core/)<br/>• Model Selection & Cross-Role Fallback<br/>• WorkspaceSessionService + CodebaseIndexer<br/>• Deterministic AgentOrchestrator<br/>• LLM, Tool, Context & Autocomplete services"]
     end
 
     subgraph EdgeLayer ["Edge & Deployment Infrastructure"]
         Cloudflare["Cloudflare Edge Proxy (SSL, DDoS Guard)"]
         Coolify["Coolify Production Container (172.255.209.243)"]
+        VPSHost["Dedicated VPS Node (docker-compose.vps.yml)<br/>• 4vCPU / 6GB RAM<br/>• llama.cpp server (:8080)<br/>• Qwen 2.5 Coder 3B GGUF"]
     end
 
     subgraph BackendLayer ["Backend Cloud Infrastructure (backend/)"]
@@ -31,24 +32,26 @@ graph TB
 
         subgraph Services ["Backend Core Services"]
             AIProxy["aiProxy.ts & providerRouter.ts"]
+            LocalSLMRouter["localSlmRouter.ts (Sub-600ms Local VPS Inference)"]
             DeterministicSLM["5-Layer SLM & Vault Engine (services/vault/)<br/>• intentClassifier<br/>• scorer<br/>• composer<br/>• patchEngine<br/>• validator & selfHealer"]
+            AgentEngine["agentEngine.ts (DeepSeek V4.1 Flash Continuous Reasoning)"]
             QuotaEngine["monthlyQuota.ts & quotaGuard.ts"]
             CacheService["cacheEngine.ts (Sub-15ms Exact & Semantic Cache)"]
-            ModelReg["modelRegistry.ts (DeepSeek V3/R1, Qwen, Claude, Llama)"]
+            ModelReg["modelRegistry.ts (DeepSeek V3/V4.1, Claude 3.7, Qwen, Llama)"]
             RAG["ragEngine.ts (Smart Code Chunking & Retrieval)"]
         end
 
         subgraph Persistence ["Persistence Layer"]
             SQLiteDB[("SQLite Database (vynor.db / WAL Mode)")]
             BillingDB[("Billing Database & Cryptographic Audit Logs")]
-            RedisDB[("Redis Store (Session & Quota Tokens)")]
+            RedisDB[("Redis Store (Session & Quota Tokens / LRU 256MB)")]
         end
     end
 
     subgraph FrontierLLMs ["Frontier Cloud Providers"]
         OpenRouter["OpenRouter API"]
-        DeepSeek["DeepSeek Direct API"]
-        Anthropic["Anthropic Claude API"]
+        DeepSeek["DeepSeek Direct API (V3 / R1 / V4.1-Flash)"]
+        Anthropic["Anthropic Claude API (3.7 Sonnet)"]
     end
 
     GUI <-->|"Webview IPC (vscode.postMessage)"| ExtHost
@@ -62,8 +65,10 @@ graph TB
     ProxyRoute --> QuotaEngine
     QuotaEngine --> CacheService
     CacheService -- Cache Miss --> DeterministicSLM
+    DeterministicSLM -- Fast Code/Edit/Intent --> LocalSLMRouter
+    LocalSLMRouter --> VPSHost
     DeterministicSLM -- Fallback Required --> AIProxy
-    AIProxy --> ModelReg --> OpenRouter & DeepSeek & Anthropic
+    AIProxy --> AgentEngine --> ModelReg --> OpenRouter & DeepSeek & Anthropic
     Server --> SQLiteDB & BillingDB & RedisDB
 ```
 
@@ -71,12 +76,12 @@ graph TB
 
 ## 2. Backend Index (`backend/`)
 
-The backend is built with Node.js, Express, and TypeScript (`backend/package.json`), providing authentication, PayHere payment processing, quota enforcement, model proxying, and the deterministic SLM vault.
+The backend is built with Node.js, Express, and TypeScript (`backend/package.json`), providing authentication, PayHere payment processing, quota enforcement, model proxying, the deterministic SLM vault, and the local SLM router.
 
 ### 2.1 Entry Points & Server Setup
 
 - [backend/src/index.ts](file:///d:/My%20Project/VynorAI/backend/src/index.ts): Main application entry point. Configures Express, CORS, Cloudflare reverse proxy settings (`trust proxy`), static assets (`login.html`, `admin.html`), clean URL routes, security headers, and mounts sub-routers (`/api/auth`, `/v1`, `/api/admin`, `/api/payment`, `/api/memory`).
-- [backend/src/config.ts](file:///d:/My%20Project/VynorAI/backend/src/config.ts): Centralized configuration loader. Manages environment variables, port bindings, JWT secret keys, model aliases (`MODEL_ALIASES`), default models, PayHere merchant keys, and quota tiers.
+- [backend/src/config.ts](file:///d:/My%20Project/VynorAI/backend/src/config.ts): Centralized configuration loader. Manages environment variables, port bindings, JWT secret keys, model aliases (`MODEL_ALIASES`), default models, PayHere merchant keys, quota tiers, and the `localSlm` VPS configuration (`LOCAL_SLM_ENABLED`, `LOCAL_SLM_URL`, `LOCAL_SLM_MODEL`, `LOCAL_SLM_TIMEOUT_MS`).
 - [backend/src/db.ts](file:///d:/My%20Project/VynorAI/backend/src/db.ts): Primary database connection manager. Initializes SQLite tables in WAL mode (`users`, `subscriptions`, `api_keys`, `usage_logs`, `transactions`, `ide_auth_codes`) and seeds initial plan configurations.
 
 ### 2.2 Middleware
@@ -110,6 +115,11 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
 #### A. AI Proxy, Routing & Completion
 
 - [backend/src/services/aiProxy.ts](file:///d:/My%20Project/VynorAI/backend/src/services/aiProxy.ts): Master proxy engine orchestrating incoming `/v1/chat/completions` calls. Coordinates API key authentication, secret sanitization, quota reservation, exact/semantic cache inspection, 5-layer SLM delegation, and upstream streaming.
+- [backend/src/services/localSlmRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/localSlmRouter.ts): **VPS Local SLM Router**:
+  - Connects to dedicated VPS node running `llama.cpp:server` with quantized Qwen 2.5 Coder 3B GGUF.
+  - Ultra-fast sub-600ms latency for small code edits, prompt summarization, intent categorization, and zero-token usage.
+  - Automatic timeout and circuit-breaker failover to cloud frontier models if the VPS node is unreachable or under heavy load.
+- [backend/src/services/agentEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/agentEngine.ts): Multi-turn agent orchestration supporting DeepSeek V4.1 Flash continuous reasoning (effort 1-100), tool calling loops, and self-correcting code generation.
 - [backend/src/services/providerRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/providerRouter.ts): Upstream provider multiplexer. Routes requests to OpenRouter, DeepSeek direct endpoints, or Anthropic with automatic circuit-breaker fallback.
 - [backend/src/services/modelRegistry.ts](file:///d:/My%20Project/VynorAI/backend/src/services/modelRegistry.ts): Single source of truth for available models, plan permissions, display names, context windows, and pricing tier metadata.
 - [backend/src/services/tokenOptimizer.ts](file:///d:/My%20Project/VynorAI/backend/src/services/tokenOptimizer.ts): Compresses repetitive conversation history, trims whitespace, and optimizes tokens before reaching frontier providers.
@@ -223,6 +233,11 @@ The frontend is a React + Vite + TypeScript application rendered inside the IDE 
 
 ### 4.2 Vynor UI Components & Features (`gui/src/components/`)
 
+- [gui/src/components/modelSelection/ModelSelect.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/modelSelection/ModelSelect.tsx): **Interactive Model Selection Subsystem**:
+  - Two-way bound HeadlessUI `<Listbox>` rendering available frontier models (Claude 3.7 Sonnet, DeepSeek R1/V3, Llama 3.3, Qwen 2.5 Coder).
+  - Explicit `value={selectedModel?.title ?? ""}` binding ensuring active state synchronization.
+  - Active profile fallback to local/Main Config (`useAuth().selectedProfile || { id: "local", title: "Main Config" }`).
+  - Dropdown options with vendor icons, model badges, and dynamic configuration triggers.
 - [gui/src/components/VynorQuotaBar.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/VynorQuotaBar.tsx): Real-time quota indicator displaying:
   - Remaining monthly tokens and tier badge (Free, Starter, Pro, Ultra).
   - Preserved token metrics achieved via local SLM and cache.
@@ -236,7 +251,12 @@ The frontend is a React + Vite + TypeScript application rendered inside the IDE 
 - `gui/src/redux/`: Redux Toolkit store and state slices:
   - `sessionSlice`: Current chat session, message history, streaming tokens.
   - `configSlice`: User settings, model configurations, selected providers.
+  - `profilesSlice`: Multi-profile and local config management. Includes `selectSelectedProfile` with fallback to `state.profiles[0]` (preventing null-profile lockouts).
   - `uiStateSlice`: Sidebar toggle states, active tabs, dialogs.
+- `gui/src/redux/thunks/updateSelectedModelByRole.ts`: Core thunk handling model switches:
+  - Resolves active profile with fallback to `"local"` / `"Main Config"`.
+  - Searches models across roles (`role`, `chat`, `edit`) to guarantee model resolution.
+  - Immediately dispatches Redux action `setDefaultModel` for instant UI feedback and transmits `config/updateSelectedModel` IPC to the core engine.
 - `gui/src/context/`: Context providers for IDE messaging (`VScodeMessenger`) and theme synchronization.
 - `gui/src/hooks/`: Custom React hooks for keyboard navigation, streaming text decoding, and debounce.
 
@@ -249,8 +269,11 @@ The `core/` package is the platform-agnostic TypeScript core shared between the 
 ### 5.1 Orchestration, Protocol & Agent Runtime
 
 - [core/core.ts](file:///d:/My%20Project/VynorAI/core/core.ts): Central core orchestrator. Dispatches IPC messages, coordinates streaming chat responses, manages sessions, and binds workspace actions:
+  - **`config/updateSelectedModel`**: Handles model switching messages from GUI, resolving target profile ID (`msg.data.profileId || currentProfile.id || "local"`), and updating selected models across roles.
   - **`workspace/getVerificationPlan`**: Dynamically binds `VerificationDiscovery` to active workspace snapshots.
   - **`agent/task/resume`**: Autonomous task execution progression using `agentOrchestrator.next()` and `startStep()`.
+- [core/config/selectedModels.ts](file:///d:/My%20Project/VynorAI/core/config/selectedModels.ts): Model selection persistence and cross-role lookup:
+  - Finds candidate models in `modelsByRole[role]` with fallback to `modelsByRole.chat` and `modelsByRole.edit`.
 - [core/protocol/core.ts](file:///d:/My%20Project/VynorAI/core/protocol/core.ts): Comprehensive schema and type definitions defining IPC messages, IDE actions, tool calls, and model configs:
   - Added typed contract `workspace/getVerificationPlan: [undefined, VerificationCommandCandidate[]]`.
 - [core/workspace/types.ts](file:///d:/My%20Project/VynorAI/core/workspace/types.ts): Workspace snapshot, root directory, and manifest interfaces:
@@ -335,9 +358,14 @@ sequenceDiagram
 - [binary/](file:///d:/My%20Project/VynorAI/binary): Headless Node.js packaging bundle allowing the core engine to execute as a standalone process for non-VS Code clients.
 - [sync/](file:///d:/My%20Project/VynorAI/sync): High-performance Rust crate compiled to `sync.node` using `napi-rs` for ultra-fast file watching, AST parsing, and workspace synchronization.
 
-### 6.3 Scripts & Scratch Tools (`scripts/` & `scratch/`)
+### 6.3 Scripts, Deployment & Scratch Tools (`scripts/`, `scratch/` & Root)
 
-- [scripts/](file:///d:/My%20Project/VynorAI/scripts): Packaging, build, and CI/CD automation scripts (`esbuild.js`, `package.js`, `release-smoke.mjs`).
+- [docker-compose.vps.yml](file:///d:/My%20Project/VynorAI/docker-compose.vps.yml): **Production VPS Deployment Compose**:
+  - Orchestrates `vynor-backend` (:3333, :3334), `vynor-redis` (256MB LRU policy), and `vynor-slm` (`llama.cpp:server` on :8080).
+  - Optimized for 4vCPU / 6GB RAM nodes running Qwen 2.5 Coder 3B GGUF with 4096 context window, 3 threads, and 2 parallel slots.
+- [scripts/setup-vps.sh](file:///d:/My%20Project/VynorAI/scripts/setup-vps.sh): Automated VPS provisioning script:
+  - Installs Docker CE, sets up a 2GB swap file, configures UFW security, downloads quantized GGUF weights, and deploys the stack via Docker Compose.
+- [scripts/](file:///d:/My%20Project/VynorAI/scripts): Packaging, build, and CI/CD automation scripts (`esbuild.js`, `package.js`, `prepackage.js`, `release-smoke.mjs`).
 - [scratch/](file:///d:/My%20Project/VynorAI/scratch): End-to-end integration and verification scripts:
   - `test_vault_healer.js`: Tests the deterministic SLM self-healer and template composer.
   - `test_live_opensaas.js`: End-to-end cloud completion test against live endpoints.
@@ -351,12 +379,14 @@ sequenceDiagram
 | :----------------------- | :------------------------ | :------------------------------------------ | :------------------------------------------------------------------------------------- |
 | **Browser OAuth**        | **Extension Host**        | HTTP `127.0.0.1:41403` / URI Scheme         | Transmits auth tokens from web portal to IDE                                           |
 | **GUI Webview**          | **Extension Host**        | `vscode.postMessage` / typed IPC            | Chat inputs, settings updates, diff decisions                                          |
+| **GUI ModelSelect**      | **Core Engine**           | `config/updateSelectedModel` IPC            | Instant multi-role model switching with fallback profile resolution                   |
 | **Extension Host**       | **Core Engine**           | In-Process TypeScript API / Stream          | Prompt evaluation, indexing queries, tool executions                                   |
 | **Agent Control Center** | **AgentOrchestrator**     | Typed `agent/task/*` and `agent/plan/*` IPC | Plan progress, safety budgets, cancellation, and resumable execution                   |
 | **Verification UI**      | **VerificationDiscovery** | `workspace/getVerificationPlan` IPC         | Approval-required test/typecheck/lint/build suggestions without exposing script bodies |
 | **Extension Host**       | **Backend Proxy**         | HTTPS REST / SSE Stream                     | Chat completions, FIM autocompletions, model lists                                     |
 | **Extension Host**       | **Backend Auth**          | HTTPS REST (`/api/auth/*`)                  | Token exchange, session polling, subscription query                                    |
-| **Backend Proxy**        | **Upstream LLMs**         | HTTPS REST / Streaming                      | Forwards cache-miss prompts to DeepSeek/OpenRouter                                     |
+| **Backend Proxy**        | **Local SLM Router**      | HTTP `http://vynor-slm:8080/v1`             | Sub-600ms zero-token code edits, completions, and classification on VPS llama.cpp      |
+| **Backend Proxy**        | **Upstream LLMs**         | HTTPS REST / Streaming                      | Forwards cache-miss prompts to DeepSeek/OpenRouter/Anthropic                           |
 | **Core Indexer**         | **Local DBs**             | SQLite FTS5 / LanceDB                       | Persistent vector and keyword search indices                                           |
 
 ---
@@ -366,8 +396,11 @@ sequenceDiagram
 | Capability                               | Primary Source Files                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | :--------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Backend Server & Routes**              | [backend/src/index.ts](file:///d:/My%20Project/VynorAI/backend/src/index.ts), [proxy.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/proxy.ts), [auth.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/auth.ts), [payment.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/payment.ts)                                                                                                                                                              |
+| **VPS Local SLM & Infrastructure**       | [localSlmRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/localSlmRouter.ts), [docker-compose.vps.yml](file:///d:/My%20Project/VynorAI/docker-compose.vps.yml), [setup-vps.sh](file:///d:/My%20Project/VynorAI/scripts/setup-vps.sh)                                                                                                                                                                                                               |
+| **Agentic Engine & Reasoning**           | [agentEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/agentEngine.ts), [aiProxy.ts](file:///d:/My%20Project/VynorAI/backend/src/services/aiProxy.ts)                                                                                                                                                                                                                                                                                                 |
 | **Deterministic 5-Layer SLM**            | [orchestrator.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/orchestrator.ts), [intentClassifier.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/intentClassifier.ts), [scorer.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/scorer.ts), [templateVault.ts](file:///d:/My%20Project/VynorAI/backend/src/services/templateVault.ts)                                                                                     |
 | **Quota & PayHere Billing**              | [monthlyQuota.ts](file:///d:/My%20Project/VynorAI/backend/src/services/monthlyQuota.ts), [billingDb.ts](file:///d:/My%20Project/VynorAI/backend/src/services/billingDb.ts), [payhere.ts](file:///d:/My%20Project/VynorAI/backend/src/services/payhere.ts)                                                                                                                                                                                                              |
+| **Model Selection Subsystem**            | [ModelSelect.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/modelSelection/ModelSelect.tsx), [updateSelectedModelByRole.ts](file:///d:/My%20Project/VynorAI/gui/src/redux/thunks/updateSelectedModelByRole.ts), [profilesSlice.ts](file:///d:/My%20Project/VynorAI/gui/src/redux/slices/profilesSlice.ts), [selectedModels.ts](file:///d:/My%20Project/VynorAI/core/config/selectedModels.ts)                                                           |
 | **Extension Host & Auth**                | [extension.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/extension.ts), [vynorAuth.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/util/vynorAuth.ts), [VsCodeIde.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/VsCodeIde.ts)                                                                                                                                                                                                        |
 | **Frontend GUI, Agent Control & Quota**  | [Chat.tsx](file:///d:/My%20Project/VynorAI/gui/src/pages/gui/Chat.tsx), [AgentControlCenter.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/AgentWorkspace/AgentControlCenter.tsx), [VynorQuotaBar.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/VynorQuotaBar.tsx), [autoProjectContext.ts](file:///d:/My%20Project/VynorAI/gui/src/components/mainInput/TipTapEditor/utils/autoProjectContext.ts)                                                  |
 | **Codebase Indexing & Search**           | [CodebaseIndexer.ts](file:///d:/My%20Project/VynorAI/core/indexing/CodebaseIndexer.ts), [CodeSnippetsIndex.ts](file:///d:/My%20Project/VynorAI/core/indexing/CodeSnippetsIndex.ts), [FullTextSearchCodebaseIndex.ts](file:///d:/My%20Project/VynorAI/core/indexing/FullTextSearchCodebaseIndex.ts)                                                                                                                                                                     |
@@ -386,3 +419,4 @@ VynorAI is an independent product built from a pinned Continue-derived foundatio
 - Continue security or compatibility updates are selected explicitly, applied on a temporary integration branch, and accepted only after Core, GUI, extension, packaging, and Antigravity smoke gates pass.
 - IDE-specific behavior must remain behind protocol or IDE adapters. Cloud billing, quota, agent policy, task persistence, and Vynor UI must not depend on an upstream release schedule.
 - Existing direct changes to shared chat/core files are migration seams. New Vynor functionality should prefer dedicated modules with small typed integration points rather than additional embedded forks.
+

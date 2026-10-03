@@ -1,6 +1,13 @@
 # Public entry point for the VPS (docker-compose.vps.yml).
-# DNS for both hosts is proxied by Cloudflare; set Cloudflare SSL/TLS to
-# "Full (strict)". Caddy gets the origin certificates over HTTP-01.
+# Both hosts are proxied by Cloudflare, which serves the public certificate.
+# Cloudflare's "Always Use HTTPS" blocks Let's Encrypt HTTP-01 at the origin,
+# so Caddy uses its own origin certificate: set Cloudflare SSL/TLS to "Full".
+# To move to "Full (strict)", install a Cloudflare Origin CA certificate and
+# replace `tls internal` with `tls /certs/origin.pem /certs/origin.key`.
+{
+	# Origin is reachable only through Cloudflare; no ACME account needed.
+	auto_https disable_redirects
+}
 
 (cloudflare_client_ip) {
 	# Cloudflare sends the visitor IP here. Express trusts one proxy hop, so a
@@ -10,6 +17,7 @@
 }
 
 vynor.lk {
+	tls internal
 	encode zstd gzip
 	reverse_proxy vynor-backend:3333 {
 		import cloudflare_client_ip
@@ -19,6 +27,7 @@ vynor.lk {
 }
 
 admin.vynor.lk {
+	tls internal
 	encode zstd gzip
 	reverse_proxy vynor-backend:3334 {
 		import cloudflare_client_ip

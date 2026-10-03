@@ -140,9 +140,9 @@ services:
       -m /models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
       --host 0.0.0.0
       --port 8080
-      -c 8192
+      -c 16384
       -t 3
-      --parallel 2
+      --parallel 4
     volumes:
       - ./models:/models:ro
     mem_limit: 2g

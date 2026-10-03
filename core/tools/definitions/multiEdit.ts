@@ -51,6 +51,7 @@ CRITICAL REQUIREMENTS:
 - Do not leave the code in a broken state
 - Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked
 - Use replace_all for replacing and renaming all matches for a string across the file. This parameter is useful if you want to rename a variable, for instance
+- Keep each old_string to the smallest snippet that is unique in the file (usually 1-5 lines). Do not copy whole functions or files into old_string/new_string when only part of them changes
 
 WARNINGS:
 - If earlier edits affect the text that later edits are trying to find, files can become mangled

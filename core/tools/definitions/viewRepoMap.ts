@@ -13,7 +13,8 @@ export const viewRepoMapTool: Tool = {
   group: BUILT_IN_GROUP_NAME,
   function: {
     name: BuiltInToolNames.ViewRepoMap,
-    description: "View the repository map",
+    description:
+      "View a compact map of the repository: every file with the signatures of its classes, methods and functions. Call this first to find where code lives; it replaces many ls, glob and read_file calls.",
     parameters: {
       type: "object",
       properties: {},
@@ -22,6 +23,7 @@ export const viewRepoMapTool: Tool = {
   systemMessageDescription: {
     prefix: `To view the repository map, use the ${BuiltInToolNames.ViewRepoMap} tool. This will provide a visual representation of the project's structure and organization.`,
   },
-  defaultToolPolicy: "allowedWithPermission",
+  // Read-only and local: asking each time would push the model back to ls/read loops.
+  defaultToolPolicy: "allowedWithoutPermission",
   toolCallIcon: "MapIcon",
 };

@@ -5,6 +5,56 @@ x-logging: &default-logging
     max-size: "20m"
     max-file: "5"
 
+# Two identical backend workers behind Caddy (sticky per API key). Rolling
+# deploys restart one at a time: deploy/rolling-deploy.sh.
+x-backend: &backend
+  image: vynor-backend:local
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  logging: *default-logging
+  restart: unless-stopped
+  # Shared by both workers. Postgres is the system of record (DATABASE_URL);
+  # this only holds local files such as the dev SQLite database.
+  volumes:
+    - vynor-backend-data:/app/data
+  environment:
+    - PORT=3333
+    - ADMIN_PORT=3334
+    - NODE_ENV=production
+    - BASE_URL=https://vynor.lk
+    - REDIS_URL=redis://vynor-redis:6379
+    # Tier routing runs in-process (ROUTER_MODE=classifier). The llama.cpp
+    # SLM is optional: start it with --profile slm and set ROUTER_MODE=slm.
+    - ROUTER_MODE=classifier
+    - LOCAL_SLM_ENABLED=false
+    - LOCAL_SLM_URL=http://vynor-slm:8080/v1
+    - LOCAL_SLM_MODEL=qwen2.5-coder-1.5b-instruct
+    - LOCAL_SLM_TIMEOUT_MS=1500
+    - SEMANTIC_CACHE_ENABLED=true
+    - LOCAL_EMBED_URL=http://vynor-embed:8081/v1
+    - LOCAL_EMBED_MODEL=bge-small-en-v1.5
+  env_file:
+    - ./backend/.env
+  depends_on:
+    vynor-postgres:
+      condition: service_healthy
+    vynor-redis:
+      condition: service_started
+    vynor-embed:
+      condition: service_started
+  mem_limit: 768m
+  networks:
+    - vynor-net
+  # Agent responses stream for minutes; let them finish on deploy.
+  stop_grace_period: 75s
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3333/ready > /dev/null || exit 1"]
+    interval: 5s
+    timeout: 3s
+    start_period: 20s
+    retries: 3
+
 services:
   # ── 0. Caddy: HTTPS for vynor.lk (API) and admin.vynor.lk (admin portal) ────
   vynor-caddy:
@@ -21,53 +71,24 @@ services:
       - vynor-caddy-config:/config
     depends_on:
       - vynor-backend
+      - vynor-backend-2
     mem_limit: 128m
     networks:
       - vynor-net
 
-  # ── 1. VynorAI Cloud Backend ────────────────────────────────────────────────
+  # ── 1. VynorAI Cloud Backend: two workers ───────────────────────────────────
   vynor-backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    <<: *backend
     container_name: vynor-backend
-    logging: *default-logging
-    restart: unless-stopped
-    # Only Caddy is public; localhost binding keeps curl health checks working.
+    # Only Caddy is public; localhost binding keeps curl health checks and
+    # admin scripts working against worker 1.
     ports:
       - "127.0.0.1:3333:3333"
       - "127.0.0.1:3334:3334"
-    # SQLite lives here; without this volume every rebuild wipes users and payments.
-    volumes:
-      - vynor-backend-data:/app/data
-    environment:
-      - PORT=3333
-      - ADMIN_PORT=3334
-      - NODE_ENV=production
-      - BASE_URL=https://vynor.lk
-      - REDIS_URL=redis://vynor-redis:6379
-      # Tier routing runs in-process (ROUTER_MODE=classifier). The llama.cpp
-      # SLM is optional: start it with --profile slm and set ROUTER_MODE=slm.
-      - ROUTER_MODE=classifier
-      - LOCAL_SLM_ENABLED=false
-      - LOCAL_SLM_URL=http://vynor-slm:8080/v1
-      - LOCAL_SLM_MODEL=qwen2.5-coder-1.5b-instruct
-      - LOCAL_SLM_TIMEOUT_MS=1500
-      - SEMANTIC_CACHE_ENABLED=true
-      - LOCAL_EMBED_URL=http://vynor-embed:8081/v1
-      - LOCAL_EMBED_MODEL=bge-small-en-v1.5
-    env_file:
-      - ./backend/.env
-    depends_on:
-      vynor-postgres:
-        condition: service_healthy
-      vynor-redis:
-        condition: service_started
-      vynor-embed:
-        condition: service_started
-    mem_limit: 768m
-    networks:
-      - vynor-net
+
+  vynor-backend-2:
+    <<: *backend
+    container_name: vynor-backend-2
 
   # ── 1b. PostgreSQL: the system of record (users, billing, usage, admin) ─────
   # Private to vynor-net; never published. DATABASE_URL in backend/.env.

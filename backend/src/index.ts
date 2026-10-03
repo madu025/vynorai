@@ -181,7 +181,15 @@ app.get("/health", (_req, res) => {
 // Readiness is stricter than liveness. Coolify should stop routing new traffic
 // when the billing store is unavailable, or when distributed IDE auth is
 // explicitly required but Redis is degraded.
+// Set on SIGTERM: /ready turns 503 so the load balancer stops sending new
+// requests here while in-flight streams finish (rolling deploys, no downtime).
+let draining = false;
+
 app.get("/ready", (_req, res) => {
+  if (draining)
+    return res
+      .status(503)
+      .json({ status: "draining", timestamp: new Date().toISOString() });
   const redis = redisStatus();
   const billing = billingDbStatus();
   const ideAuthRequiresRedis = process.env.IDE_AUTH_REQUIRE_REDIS === "true";
@@ -372,9 +380,18 @@ async function start() {
   });
 
   // Graceful shutdown — closes both servers cleanly
+  // Long agent responses stream for a minute or more; give them time to end.
+  const drainMs = parseInt(process.env.SHUTDOWN_DRAIN_MS || "5000", 10);
+  const shutdownTimeoutMs = parseInt(
+    process.env.SHUTDOWN_TIMEOUT_MS || "60000",
+    10,
+  );
+
   const gracefulShutdown = (signal: string) => {
+    if (draining) return;
+    draining = true;
     console.log(
-      `\n[${signal}] Signal received. Commencing graceful shutdown...`,
+      `[${signal}] Draining: /ready is 503; closing in ${drainMs}ms, forced exit after ${shutdownTimeoutMs}ms.`,
     );
 
     let closed = 0;
@@ -386,13 +403,19 @@ async function start() {
       }
     };
 
-    server.close(onClose);
-    adminServer.close(onClose);
+    // Keep accepting while the load balancer notices the 503, then stop
+    // taking new connections and let in-flight requests finish.
+    setTimeout(() => {
+      server.close(onClose);
+      adminServer.close(onClose);
+      server.closeIdleConnections?.();
+      adminServer.closeIdleConnections?.();
+    }, drainMs).unref();
 
     setTimeout(() => {
-      console.error("Forced process termination after 8s timeout.");
+      console.error(`Forced process termination after ${shutdownTimeoutMs}ms.`);
       process.exit(1);
-    }, 8000).unref();
+    }, shutdownTimeoutMs).unref();
   };
 
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

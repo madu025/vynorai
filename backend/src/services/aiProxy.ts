@@ -8,7 +8,11 @@ import {
   VYNORAI_AGENT_SYSTEM_PROMPT,
   filterToolsForIntent,
 } from "./agentEngine.js";
-import { dispatchToProvider } from "./providerRouter.js";
+import {
+  dispatchToProvider,
+  hasImageInput,
+  isTextOnlyModel,
+} from "./providerRouter.js";
 import { estimateInputTokens } from "./quotaGuard.js";
 import { DEFAULT_CHAT_MODEL } from "../config.js";
 import {
@@ -63,6 +67,9 @@ import {
   analyzeIntentWithLocalSlm,
   isMutationRequest,
 } from "./localSlmRouter.js";
+
+// Screenshots and designs are read by DeepSeek V4.1 Flash (V4 Pro is text-only).
+const IMAGE_MODEL = "deepseek/deepseek-flash";
 
 function messageText(m: any): string {
   if (typeof m?.content === "string") return m.content;
@@ -730,6 +737,15 @@ export async function handleChatCompletions(
   );
   let route = await resolveRoute(model, tier, planId);
 
+  // Screenshots and designs need a model that can see them: V4.1 Flash.
+  const imageTurn = hasImageInput(body.messages);
+  if (imageTurn && isTextOnlyModel(route.model)) {
+    route = route.auto
+      ? await resolveRoute(model, "heavy", planId)
+      : { ...route, model: IMAGE_MODEL };
+    res.setHeader("X-VynorAI-Route-Downgraded", "image-input");
+  }
+
   // Auto reserved credits at Flash weight. A pricier route (V4 Pro for deep
   // reasoning) must top up the reservation first; if the cycle can't cover
   // it, run on Flash with thinking instead of refusing the request.
@@ -917,7 +933,15 @@ export async function handleChatCompletions(
   const totalTokens = dispatch.success
     ? finalInputTokens + finalOutputTokens
     : 0;
-  const creditsCharged = billableCredits(route.model, totalTokens);
+  // A Pro turn that fell back to Flash is billed as Flash.
+  const billedModel =
+    dispatch.success &&
+    isTextOnlyModel(route.model) &&
+    dispatch.resolvedModel &&
+    !isTextOnlyModel(dispatch.resolvedModel)
+      ? dispatch.resolvedModel
+      : route.model;
+  const creditsCharged = billableCredits(billedModel, totalTokens);
 
   // Insert granular log with Blockchain Merkle Audit Chain
   const usageLogId = uuidv4();
@@ -944,7 +968,7 @@ export async function handleChatCompletions(
           usageLogId,
           user.id,
           // The model actually billed (vynor-auto resolves to a tier model).
-          route.model,
+          billedModel,
           finalInputTokens,
           finalOutputTokens,
           totalTokens,

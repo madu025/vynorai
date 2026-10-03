@@ -144,3 +144,28 @@ test("Anthropic payload preserves tools and translates tool history", () => {
   assert.equal(payload.messages[0].content[0].type, "tool_use");
   assert.equal(payload.messages[1].content[0].type, "tool_result");
 });
+
+test("image turns are detected and never sent to text-only models", async () => {
+  const { hasImageInput, isTextOnlyModel } = await import(
+    "../src/services/providerRouter.ts"
+  );
+  assert.equal(
+    hasImageInput([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "fix this UI" },
+          {
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,AAAA" },
+          },
+        ],
+      },
+    ]),
+    true,
+  );
+  assert.equal(hasImageInput([{ role: "user", content: "plain text" }]), false);
+  assert.equal(isTextOnlyModel("deepseek/deepseek-v4-pro"), true);
+  assert.equal(isTextOnlyModel("deepseek/deepseek-flash"), false);
+  assert.equal(isTextOnlyModel("deepseek-flash"), false);
+});

@@ -539,6 +539,7 @@ export async function dispatchToProvider(
   body: any,
   res: Response,
   onChunk?: (c: any) => void,
+  allowProFallback = true,
 ): Promise<{
   success: boolean;
   collected: any[];
@@ -591,7 +592,48 @@ export async function dispatchToProvider(
     }
   }
 
+  // DeepSeek keeps V4 Pro "until further notice". If it is unavailable, run
+  // the turn on V4.1 Flash at maximum thinking instead of failing it.
+  if (
+    allowProFallback &&
+    /deepseek-v4-pro/i.test(resolvedModel) &&
+    !res.headersSent
+  ) {
+    console.warn(
+      "[Router] V4 Pro unavailable — retrying on V4.1 Flash (max effort)",
+    );
+    return dispatchToProvider(
+      {
+        ...body,
+        model: PRO_FALLBACK_MODEL,
+        thinking: { type: "enabled" },
+        reasoning_effort: "max",
+      },
+      res,
+      onChunk,
+      false,
+    );
+  }
+
   return sendServiceUnavailable(body, resolvedModel, res);
+}
+
+const PRO_FALLBACK_MODEL = "deepseek/deepseek-flash";
+
+/** Models that cannot read image input. DeepSeek V4.1 Flash can; V4 Pro cannot. */
+export function isTextOnlyModel(model: string): boolean {
+  return /deepseek-v4-pro|deepseek-coder|qwen-2\.5-coder|llama-3/i.test(model);
+}
+
+/** True when any message carries an image part (OpenAI-style content array). */
+export function hasImageInput(messages: any[] | undefined): boolean {
+  return (messages || []).some(
+    (m: any) =>
+      Array.isArray(m?.content) &&
+      m.content.some(
+        (p: any) => p?.type === "image_url" || p?.type === "image",
+      ),
+  );
 }
 
 async function sendServiceUnavailable(

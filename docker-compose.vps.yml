@@ -46,7 +46,10 @@ services:
       - NODE_ENV=production
       - BASE_URL=https://vynor.lk
       - REDIS_URL=redis://vynor-redis:6379
-      - LOCAL_SLM_ENABLED=true
+      # Tier routing runs in-process (ROUTER_MODE=classifier). The llama.cpp
+      # SLM is optional: start it with --profile slm and set ROUTER_MODE=slm.
+      - ROUTER_MODE=classifier
+      - LOCAL_SLM_ENABLED=false
       - LOCAL_SLM_URL=http://vynor-slm:8080/v1
       - LOCAL_SLM_MODEL=qwen2.5-coder-1.5b-instruct
       - LOCAL_SLM_TIMEOUT_MS=1500
@@ -59,8 +62,6 @@ services:
       vynor-postgres:
         condition: service_healthy
       vynor-redis:
-        condition: service_started
-      vynor-slm:
         condition: service_started
       vynor-embed:
         condition: service_started
@@ -150,6 +151,8 @@ services:
   vynor-slm:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: vynor-slm
+    # Off by default: the in-process classifier routes better and costs no RAM.
+    profiles: ["slm"]
     logging: *default-logging
     restart: unless-stopped
     command: >

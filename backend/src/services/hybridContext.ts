@@ -476,7 +476,7 @@ async function drainSummaryQueue(): Promise<void> {
   if (summaryWorkerRunning) return;
   summaryWorkerRunning = true;
   try {
-    // One at a time: the VPS model has two slots and routing needs the other.
+    // One at a time: background work, never worth parallel upstream calls.
     while (summaryQueue.length) {
       const job = summaryQueue.shift()!;
       const summary = await summarizeConversation(job.transcript);

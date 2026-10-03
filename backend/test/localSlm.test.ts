@@ -33,8 +33,13 @@ before(async () => {
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const fakeUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+  process.env.ROUTER_MODE = "slm";
   process.env.LOCAL_SLM_ENABLED = "true";
-  process.env.LOCAL_SLM_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+  process.env.LOCAL_SLM_URL = fakeUrl;
+  // Compaction runs on the background LLM; point its local role at the fake.
+  process.env.LOCAL_LLM_URL = fakeUrl;
+  process.env.LOCAL_LLM_ROLES = "compaction";
   slm = await import("../src/services/localSlmRouter.js");
   hybrid = await import("../src/services/hybridContext.js");
 });

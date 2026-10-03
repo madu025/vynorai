@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import { config } from "../config.js";
+import { runBackgroundLlm } from "./backgroundLlm.js";
+import { classifyTier } from "./tierClassifier.js";
 import { stripRulesAndPreamble } from "./vault/intentClassifier.js";
 
 export type SlmIntentType =
@@ -20,7 +22,7 @@ export interface SlmRoutingDecision {
   suggestedAction: "LOCAL_DIRECT" | "CLOUD_READONLY" | "CLOUD_FULL_AGENT";
   confidence: number;
   reasoning?: string;
-  source: "local-slm" | "deterministic-fallback";
+  source: "classifier" | "local-slm" | "deterministic-fallback";
 }
 
 // Kept byte-identical across calls so llama.cpp reuses its KV cache (cache_prompt).
@@ -179,9 +181,40 @@ async function classifyTierWithSlmUnguarded(
 }
 
 /**
+ * Which tier router runs: "classifier" (in-process model, default), "slm"
+ * (llama.cpp server), or "rules" (deterministic only).
+ */
+function routerMode(): "classifier" | "slm" | "rules" {
+  const mode = process.env.ROUTER_MODE;
+  return mode === "slm" || mode === "rules" ? mode : "classifier";
+}
+
+function withTier(
+  base: SlmRoutingDecision,
+  letter: "L" | "N" | "H",
+  source: SlmRoutingDecision["source"],
+  confidence: number,
+): SlmRoutingDecision {
+  const complexity = LETTER_TO_COMPLEXITY[letter];
+  const { effort, category, budgetTokens } = computeReasoningEffort(
+    complexity,
+    base.intent,
+  );
+  return {
+    ...base,
+    complexity,
+    reasoningEffort: effort,
+    reasoningCategory: category,
+    thinkingBudgetTokens: budgetTokens,
+    confidence,
+    source,
+  };
+}
+
+/**
  * Classify a request. Intent and mutation authority are always deterministic
- * (a small model must never grant write access); the local SLM, when reachable,
- * only refines the complexity tier that drives model choice and output budget.
+ * (a model must never grant write access); the classifier or SLM only picks
+ * the complexity tier that drives thinking and output budget.
  */
 export async function analyzeIntentWithLocalSlm(
   prompt: string,
@@ -189,7 +222,23 @@ export async function analyzeIntentWithLocalSlm(
 ): Promise<SlmRoutingDecision> {
   const clean = stripRulesAndPreamble(prompt).trim();
   const base = deterministicFallback(clean);
-  if (!config.localSlm.enabled || !config.localSlm.url || clean.length < 4)
+  if (clean.length < 4) return base;
+  const mode = routerMode();
+
+  if (mode === "classifier") {
+    const result = classifyTier(clean);
+    // No H cap here: the classifier is calibrated on held-out data (H precision
+    // ~0.9); the cap exists for the small generative SLM, which over-calls H.
+    if (result)
+      return withTier(
+        base,
+        result.letter,
+        "classifier",
+        Math.max(...result.probs),
+      );
+    return base;
+  }
+  if (mode === "rules" || !config.localSlm.enabled || !config.localSlm.url)
     return base;
 
   const key = crypto.createHash("sha256").update(clean).digest("hex");
@@ -198,31 +247,17 @@ export async function analyzeIntentWithLocalSlm(
 
   const raw = await classifyTierWithSlm(clean, timeoutMs);
   if (!raw) return base;
-  const letter = capSlmTier(raw, clean);
-
-  const complexity = LETTER_TO_COMPLEXITY[letter];
-  const { effort, category, budgetTokens } = computeReasoningEffort(
-    complexity,
-    base.intent,
-  );
-  const decision: SlmRoutingDecision = {
-    ...base,
-    complexity,
-    reasoningEffort: effort,
-    reasoningCategory: category,
-    thinkingBudgetTokens: budgetTokens,
-    confidence: 0.9,
-    source: "local-slm",
-  };
+  const decision = withTier(base, capSlmTier(raw, clean), "local-slm", 0.9);
   memoSet(key, decision);
   return decision;
 }
 
 /**
- * Load the classifier's system prompt into the llama.cpp KV cache at startup,
- * so the first user request is not the one that pays for it (and times out).
+ * Load the SLM classifier prompt into the llama.cpp KV cache at startup, so
+ * the first user request is not the one that pays for it. Only in "slm" mode.
  */
 export async function warmUpLocalSlm(attempts = 5): Promise<boolean> {
+  if (routerMode() !== "slm") return false;
   if (!config.localSlm.enabled || !config.localSlm.url) return false;
   for (let i = 0; i < attempts; i++) {
     if (await classifyTierWithSlm("hello", 30_000)) return true;
@@ -235,62 +270,29 @@ export async function warmUpLocalSlm(attempts = 5): Promise<boolean> {
 }
 
 /**
- * Summarize earlier conversation turns for background compaction. Slow on a
- * CPU-only VPS, so callers must never await this on a user's request path.
+ * Summarize earlier conversation turns for background compaction. Runs on
+ * DeepSeek Flash, or on a GPU server that owns the "compaction" role (see
+ * backgroundLlm.ts). Never awaited on a user's request path.
  */
 export async function summarizeConversation(
   transcript: string,
-  timeoutMs = 90_000,
 ): Promise<string | null> {
-  if (!config.localSlm.enabled || !config.localSlm.url || !transcript.trim())
-    return null;
-  // Background work: always leave a slot free for request routing.
-  if (slmBusy(1)) return null;
-  slmInFlight++;
-  try {
-    return await summarizeConversationUnguarded(transcript, timeoutMs);
-  } finally {
-    slmInFlight--;
-  }
-}
-
-async function summarizeConversationUnguarded(
-  transcript: string,
-  timeoutMs: number,
-): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(`${config.localSlm.url}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: config.localSlm.model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "Summarize this earlier part of a coding conversation for the assistant's memory. " +
-              "Keep: the user's goals, decisions made, file paths, function names, errors found, and open tasks. " +
-              "Drop greetings and code bodies. Use terse bullet points, under 200 words.",
-          },
-          { role: "user", content: transcript.slice(-12_000) },
-        ],
-        temperature: 0.2,
-        max_tokens: 320,
-        cache_prompt: true,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const data: any = await res.json();
-    const summary = String(data?.choices?.[0]?.message?.content ?? "").trim();
-    return summary || null;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  if (!transcript.trim()) return null;
+  const result = await runBackgroundLlm(
+    "compaction",
+    [
+      {
+        role: "system",
+        content:
+          "Summarize this earlier part of a coding conversation for the assistant's memory. " +
+          "Keep: the user's goals, decisions made, file paths, function names, errors found, and open tasks. " +
+          "Drop greetings and code bodies. Use terse bullet points, under 200 words.",
+      },
+      { role: "user", content: transcript.slice(-12_000) },
+    ],
+    320,
+  );
+  return result?.text ?? null;
 }
 
 const MUTATION_VERBS =

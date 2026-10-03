@@ -65,12 +65,9 @@ let weights: Float32Array | null = null;
 
 function loadWeights(model: TierModel): Float32Array {
   if (!weights) {
-    const bytes = Buffer.from(model.weightsB64, "base64");
-    weights = new Float32Array(
-      bytes.buffer,
-      bytes.byteOffset,
-      bytes.byteLength / 4,
-    );
+    // Copy into a fresh buffer: a pooled Buffer's offset need not be 4-aligned.
+    const bytes = Uint8Array.from(Buffer.from(model.weightsB64, "base64"));
+    weights = new Float32Array(bytes.buffer);
   }
   return weights;
 }

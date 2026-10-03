@@ -161,6 +161,12 @@ services:
       --embeddings
       -c 512
       -t 1
+    # The image's built-in check probes :8080; this server listens on :8081.
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     volumes:
       - ./models:/models:ro
     mem_limit: 384m

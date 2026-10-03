@@ -32,7 +32,7 @@ export const defaultConfig: ConfigYaml = {
       roles: ["chat", "edit", "apply", "subagent"],
       // The backend tier policy caps output; leave room for heavy turns.
       defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 },
-      capabilities: ["tool_use"],
+      capabilities: ["tool_use", "image_input"],
     },
     // ── Advanced: fixed models ───────────────────────────────────────────
     {
@@ -42,7 +42,7 @@ export const defaultConfig: ConfigYaml = {
       apiBase: VYNORAI_API_BASE,
       roles: ["chat", "edit", "apply", "subagent"],
       defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192 },
-      capabilities: ["tool_use"],
+      capabilities: ["tool_use", "image_input"],
     },
     // ── 🧠 Premium model (Pro & Ultra, 4x credits) ────────────────────────
     {

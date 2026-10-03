@@ -13,6 +13,12 @@ import { SecretStorage } from "../stubs/SecretStorage";
 /** Fires when the signed-in account changes; the webview resets its tabs and history. */
 export const accountChangedEmitter = new vscode.EventEmitter<string | null>();
 
+/** VynorAI models served by DeepSeek V4.1 Flash, which accepts image input. */
+export function supportsVynorImages(model: string): boolean {
+  return /^(vynor-auto|auto)$|deepseek[-/](deepseek-)?(flash|chat|v3|v4-flash)/i.test(
+    model,
+  );
+}
 const isEmail = (value: unknown): value is string =>
   typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
@@ -141,7 +147,7 @@ export async function applyVynorConfig(): Promise<boolean> {
               contextLength: 64000,
               maxTokens: 16384,
             },
-            capabilities: ["tool_use"],
+            capabilities: ["tool_use", "image_input"],
           }),
         );
       }
@@ -165,6 +171,17 @@ export async function applyVynorConfig(): Promise<boolean> {
             );
           }
           document.setIn(["models", index, "apiKey"], VYNORAI_SECRET_REF);
+          // DeepSeek V4.1 Flash reads images natively (screenshots, designs).
+          // Auto serves image turns on Flash; V4 Pro is text-only.
+          if (supportsVynorImages(String(model.model ?? ""))) {
+            const caps = Array.isArray(model.capabilities)
+              ? (model.capabilities as string[])
+              : ["tool_use"];
+            document.setIn(
+              ["models", index, "capabilities"],
+              [...new Set([...caps, "image_input"])],
+            );
+          }
           const roles = Array.isArray(model.roles)
             ? model.roles
             : ["chat", "edit", "apply"];
@@ -182,7 +199,7 @@ export async function applyVynorConfig(): Promise<boolean> {
         models.add({
           name: "VynorAI Coder",
           provider: "vynorai",
-          model: "deepseek/deepseek-chat-v3-0324",
+          model: "deepseek/deepseek-flash",
           apiBase: `${VYNORAI_PROD_URL}/`,
           apiKey: VYNORAI_SECRET_REF,
           roles: ["chat", "edit", "apply", "subagent"],
@@ -221,7 +238,7 @@ export async function applyVynorConfig(): Promise<boolean> {
     const vynorModelConfig = {
       title: "VynorAI Coder",
       provider: "vynorai",
-      model: "deepseek/deepseek-chat-v3-0324",
+      model: "deepseek/deepseek-flash",
       apiBase: VYNORAI_PROD_URL,
       apiKey: VYNORAI_SECRET_REF,
     };

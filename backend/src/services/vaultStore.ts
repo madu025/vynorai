@@ -8,10 +8,13 @@
  */
 
 import crypto from "crypto";
-import { dbAll, dbGet, dbRun } from "../db.js";
-import { billingDbStatus, billingGet, billingRun } from "./billingDb.js";
+import { dbAll, dbGet, dbRun, usingPostgres } from "../db.js";
 import { GoldenTemplate } from "./vault/types.js";
-import { healTemplateForContext, ProjectContext, SelfHealingResult } from "./vault/selfHealer.js";
+import {
+  healTemplateForContext,
+  ProjectContext,
+  SelfHealingResult,
+} from "./vault/selfHealer.js";
 
 export interface VaultIndexItem {
   id: string;
@@ -37,13 +40,26 @@ export const INDUSTRY_BOILERPLATES: GoldenTemplate[] = [
     id: "nextjs-15-server-actions-auth",
     version: "1.0.0",
     category: "auth",
-    title: "Next.js 15 App Router Server Action Authentication with Zod & Secure Cookies",
-    description: "Production-ready Next.js 15 Server Action login with Zod input validation, rate limiting, and HttpOnly cookie management.",
+    title:
+      "Next.js 15 App Router Server Action Authentication with Zod & Secure Cookies",
+    description:
+      "Production-ready Next.js 15 Server Action login with Zod input validation, rate limiting, and HttpOnly cookie management.",
     languages: ["typescript", "javascript"],
     keywords: [
-      "nextjs 15", "server actions", "next auth", "zod form", "useactionstate",
-      "httponly cookie", "nextjs login", "login page", "login form", "login hadanna",
-      "login page ekak", "website login", "auth form", "login"
+      "nextjs 15",
+      "server actions",
+      "next auth",
+      "zod form",
+      "useactionstate",
+      "httponly cookie",
+      "nextjs login",
+      "login page",
+      "login form",
+      "login hadanna",
+      "login page ekak",
+      "website login",
+      "auth form",
+      "login",
     ],
     dependencies: [
       { name: "zod", version: "^3.23.8" },
@@ -108,10 +124,20 @@ export async function loginAction(prevState: ActionState, formData: FormData): P
     id: "prisma-production-multitenant",
     version: "1.0.0",
     category: "database",
-    title: "Prisma Multi-Tenant Production Schema with RBAC, Sessions & Audit Logs",
-    description: "Battle-tested PostgreSQL Prisma schema featuring Organization multi-tenancy, RBAC, revocable sessions, and tamper-evident audit logs.",
+    title:
+      "Prisma Multi-Tenant Production Schema with RBAC, Sessions & Audit Logs",
+    description:
+      "Battle-tested PostgreSQL Prisma schema featuring Organization multi-tenancy, RBAC, revocable sessions, and tamper-evident audit logs.",
     languages: ["prisma", "typescript"],
-    keywords: ["prisma schema", "multitenant", "rbac", "user sessions", "audit log", "postgresql prisma", "database schema"],
+    keywords: [
+      "prisma schema",
+      "multitenant",
+      "rbac",
+      "user sessions",
+      "audit log",
+      "postgresql prisma",
+      "database schema",
+    ],
     dependencies: [{ name: "@prisma/client", version: "^5.20.0" }],
     requiredEnv: ["DATABASE_URL"],
     securityLevel: "high",
@@ -215,10 +241,19 @@ model AuditLog {
     id: "jwt-refresh-rotation-redis",
     version: "1.0.0",
     category: "auth",
-    title: "Cryptographic JWT Refresh Token Rotation with Redis & Family Revocation",
-    description: "Eliminates stolen token reuse. Rotates refresh token upon every use; detects token replay and revokes entire token family.",
+    title:
+      "Cryptographic JWT Refresh Token Rotation with Redis & Family Revocation",
+    description:
+      "Eliminates stolen token reuse. Rotates refresh token upon every use; detects token replay and revokes entire token family.",
     languages: ["typescript", "javascript"],
-    keywords: ["jwt refresh token", "token rotation", "redis session", "auth rotation", "replay detection", "httponly auth"],
+    keywords: [
+      "jwt refresh token",
+      "token rotation",
+      "redis session",
+      "auth rotation",
+      "replay detection",
+      "httponly auth",
+    ],
     dependencies: [
       { name: "ioredis", version: "^5.4.1" },
       { name: "jsonwebtoken", version: "^9.0.2" },
@@ -276,10 +311,19 @@ export async function rotateRefreshToken(oldRefreshToken: string) {
     id: "payhere-ipn-webhook-validator",
     version: "2.1.0",
     category: "payments",
-    title: "PayHere Sri Lanka IPN Webhook Cryptographic Verification & Idempotent Crediting",
-    description: "Verifies PayHere MD5 checksum signature (merchant_secret, order_id, payhere_amount, payhere_currency, status_code), preventing payment spoofing and double-crediting.",
+    title:
+      "PayHere Sri Lanka IPN Webhook Cryptographic Verification & Idempotent Crediting",
+    description:
+      "Verifies PayHere MD5 checksum signature (merchant_secret, order_id, payhere_amount, payhere_currency, status_code), preventing payment spoofing and double-crediting.",
     languages: ["typescript", "javascript"],
-    keywords: ["payhere webhook", "payhere ipn", "md5 signature", "sri lanka payhere", "payhere verification", "payhere callback"],
+    keywords: [
+      "payhere webhook",
+      "payhere ipn",
+      "md5 signature",
+      "sri lanka payhere",
+      "payhere verification",
+      "payhere callback",
+    ],
     dependencies: [{ name: "crypto", version: "node-native" }],
     requiredEnv: ["PAYHERE_MERCHANT_ID", "PAYHERE_MERCHANT_SECRET"],
     securityLevel: "high",
@@ -320,10 +364,18 @@ export function verifyPayHereIPN(payload: PayHereIPNPayload, merchantSecret: str
     id: "docker-multistage-production",
     version: "1.0.0",
     category: "infrastructure",
-    title: "Multi-Stage Slim Production Dockerfile for Node.js / TypeScript with Non-Root Security",
-    description: "Minimal alpine footprint, multi-stage build caching, non-root user execution, and healthcheck for enterprise containers.",
+    title:
+      "Multi-Stage Slim Production Dockerfile for Node.js / TypeScript with Non-Root Security",
+    description:
+      "Minimal alpine footprint, multi-stage build caching, non-root user execution, and healthcheck for enterprise containers.",
     languages: ["dockerfile", "yaml"],
-    keywords: ["dockerfile nodejs", "docker compose", "multistage build", "production docker", "alpine nodejs"],
+    keywords: [
+      "dockerfile nodejs",
+      "docker compose",
+      "multistage build",
+      "production docker",
+      "alpine nodejs",
+    ],
     dependencies: [],
     requiredEnv: ["PORT", "NODE_ENV"],
     securityLevel: "high",
@@ -357,9 +409,16 @@ CMD ["node", "dist/index.js"]
     version: "1.0.0",
     category: "security",
     title: "Sub-Millisecond Sliding Window Rate Limiter using Redis Multi-Exec",
-    description: "Atomic, distributed sliding-window rate limiter preventing API scraping and DDoS without clock-skew vulnerabilities.",
+    description:
+      "Atomic, distributed sliding-window rate limiter preventing API scraping and DDoS without clock-skew vulnerabilities.",
     languages: ["typescript", "javascript"],
-    keywords: ["rate limit redis", "sliding window", "ddos shield", "api limiter", "express rate limit"],
+    keywords: [
+      "rate limit redis",
+      "sliding window",
+      "ddos shield",
+      "api limiter",
+      "express rate limit",
+    ],
     dependencies: [{ name: "ioredis", version: "^5.4.1" }],
     requiredEnv: ["REDIS_URL"],
     securityLevel: "high",
@@ -397,10 +456,18 @@ export function createSlidingWindowLimiter(redis: Redis, limit: number = 60, win
     id: "tailwind-lucide-dashboard-shell",
     version: "1.0.0",
     category: "api",
-    title: "Modern Dark-Mode Responsive Dashboard Layout Shell in Tailwind CSS & Lucide React",
-    description: "Polished glassmorphism dashboard shell with mobile sidebar drawer, search, stats cards, and avatar dropdown.",
+    title:
+      "Modern Dark-Mode Responsive Dashboard Layout Shell in Tailwind CSS & Lucide React",
+    description:
+      "Polished glassmorphism dashboard shell with mobile sidebar drawer, search, stats cards, and avatar dropdown.",
     languages: ["tsx", "jsx", "typescript"],
-    keywords: ["tailwind dashboard", "dashboard layout", "lucide icons", "dark mode sidebar", "react dashboard shell"],
+    keywords: [
+      "tailwind dashboard",
+      "dashboard layout",
+      "lucide icons",
+      "dark mode sidebar",
+      "react dashboard shell",
+    ],
     dependencies: [
       { name: "lucide-react", version: "^0.450.0" },
       { name: "tailwind-merge", version: "^2.5.0" },
@@ -484,10 +551,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     id: "fastapi-async-crud-pydantic",
     version: "1.0.0",
     category: "api",
-    title: "FastAPI Async CRUD Starter with Pydantic v2 Schema Validation & Async SQLAlchemy",
-    description: "Production async FastAPI microservice pattern with lifespan connection pooling and OpenAPI documentation.",
+    title:
+      "FastAPI Async CRUD Starter with Pydantic v2 Schema Validation & Async SQLAlchemy",
+    description:
+      "Production async FastAPI microservice pattern with lifespan connection pooling and OpenAPI documentation.",
     languages: ["python"],
-    keywords: ["fastapi async", "pydantic v2", "sqlalchemy 2 async", "python api crud", "fastapi starter"],
+    keywords: [
+      "fastapi async",
+      "pydantic v2",
+      "sqlalchemy 2 async",
+      "python api crud",
+      "fastapi starter",
+    ],
     dependencies: [
       { name: "fastapi", version: "^0.115.0" },
       { name: "uvicorn", version: "^0.31.0" },
@@ -532,12 +607,22 @@ async def create_item(payload: ItemCreate):
     id: "speedpy-django-ai-saas",
     version: "1.0.0",
     category: "fullstack",
-    title: "SpeedPy Production Django 5+ AI SaaS Boilerplate (Teams, Billing, MCP Server & Celery)",
-    description: "Production Django 5+ SaaS architecture inspired by SpeedPy with multi-tenant Teams, Model Context Protocol (MCP) server for AI coding agents, idempotent Stripe/Paddle webhooks, and Celery background tasks.",
+    title:
+      "SpeedPy Production Django 5+ AI SaaS Boilerplate (Teams, Billing, MCP Server & Celery)",
+    description:
+      "Production Django 5+ SaaS architecture inspired by SpeedPy with multi-tenant Teams, Model Context Protocol (MCP) server for AI coding agents, idempotent Stripe/Paddle webhooks, and Celery background tasks.",
     languages: ["python", "django"],
     keywords: [
-      "speedpy", "django saas", "django boilerplate", "django mcp", "django teams",
-      "python saas", "django multitenant", "speedpy saas", "django stripe paddle", "django ai agent"
+      "speedpy",
+      "django saas",
+      "django boilerplate",
+      "django mcp",
+      "django teams",
+      "python saas",
+      "django multitenant",
+      "speedpy saas",
+      "django stripe paddle",
+      "django ai agent",
     ],
     dependencies: [
       { name: "django", version: ">=5.1" },
@@ -545,10 +630,14 @@ async def create_item(payload: ItemCreate):
       { name: "celery", version: ">=5.4" },
       { name: "redis", version: ">=5.0" },
       { name: "stripe", version: ">=10.0" },
-      { name: "psycopg2-binary", version: ">=2.9" }
+      { name: "psycopg2-binary", version: ">=2.9" },
     ],
     requiredEnv: [
-      "SECRET_KEY", "DATABASE_URL", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "CELERY_BROKER_URL"
+      "SECRET_KEY",
+      "DATABASE_URL",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET",
+      "CELERY_BROKER_URL",
     ],
     securityLevel: "high",
     status: "verified",
@@ -712,15 +801,23 @@ urlpatterns = [
     version: "1.0.0",
     category: "backend",
     title: "SpeedPy Model Context Protocol (MCP) Standard Server for AI Agents",
-    description: "Full RFC-compliant Model Context Protocol server exposing database inspection, team actions, and prompt templates to AI coding assistants (Cursor, Claude, Copilot).",
+    description:
+      "Full RFC-compliant Model Context Protocol server exposing database inspection, team actions, and prompt templates to AI coding assistants (Cursor, Claude, Copilot).",
     languages: ["python", "django", "fastapi"],
     keywords: [
-      "mcp server", "model context protocol", "django mcp", "fastmcp", "speedpy mcp",
-      "ai agent server", "cursor mcp", "claude mcp", "mcp boilerplate"
+      "mcp server",
+      "model context protocol",
+      "django mcp",
+      "fastmcp",
+      "speedpy mcp",
+      "ai agent server",
+      "cursor mcp",
+      "claude mcp",
+      "mcp boilerplate",
     ],
     dependencies: [
       { name: "mcp", version: ">=1.0.0" },
-      { name: "djangorestframework", version: ">=3.15" }
+      { name: "djangorestframework", version: ">=3.15" },
     ],
     requiredEnv: ["MCP_API_TOKEN", "SECRET_KEY"],
     securityLevel: "high",
@@ -801,23 +898,38 @@ class SpeedPyMCPEndpoint(APIView):
     id: "open-saas-fullstack",
     version: "2.0.0",
     category: "fullstack",
-    title: "Open SaaS Production Full-Stack Architecture (React, Node.js, Prisma & Multi-Billing)",
-    description: "Battle-tested SaaS starter kit inspired by Wasp Open SaaS with Prisma ORM, multi-payment processing (Stripe, Lemon Squeezy, Polar), AI credits metering, file storage, and ShadCN admin metrics.",
+    title:
+      "Open SaaS Production Full-Stack Architecture (React, Node.js, Prisma & Multi-Billing)",
+    description:
+      "Battle-tested SaaS starter kit inspired by Wasp Open SaaS with Prisma ORM, multi-payment processing (Stripe, Lemon Squeezy, Polar), AI credits metering, file storage, and ShadCN admin metrics.",
     languages: ["typescript", "javascript", "prisma", "react"],
     keywords: [
-      "open saas", "opensaas", "wasp saas", "react node saas", "prisma saas",
-      "saas boilerplate", "stripe lemon squeezy polar", "shadcn admin dashboard", "ai credits saas"
+      "open saas",
+      "opensaas",
+      "wasp saas",
+      "react node saas",
+      "prisma saas",
+      "saas boilerplate",
+      "stripe lemon squeezy polar",
+      "shadcn admin dashboard",
+      "ai credits saas",
     ],
     dependencies: [
       { name: "@prisma/client", version: ">=5.18.0" },
       { name: "stripe", version: ">=16.0.0" },
       { name: "@lemonsqueezy/lemonsqueezy.js", version: ">=2.2.0" },
       { name: "@polar-sh/sdk", version: ">=0.6.0" },
-      { name: "zod", version: "^3.23.8" }
+      { name: "zod", version: "^3.23.8" },
     ],
     requiredEnv: [
-      "DATABASE_URL", "PAYMENTS_PROVIDER", "STRIPE_API_KEY", "STRIPE_WEBHOOK_SECRET",
-      "LEMONSQUEEZY_API_KEY", "LEMONSQUEEZY_WEBHOOK_SECRET", "POLAR_ACCESS_TOKEN", "POLAR_WEBHOOK_SECRET"
+      "DATABASE_URL",
+      "PAYMENTS_PROVIDER",
+      "STRIPE_API_KEY",
+      "STRIPE_WEBHOOK_SECRET",
+      "LEMONSQUEEZY_API_KEY",
+      "LEMONSQUEEZY_WEBHOOK_SECRET",
+      "POLAR_ACCESS_TOKEN",
+      "POLAR_WEBHOOK_SECRET",
     ],
     securityLevel: "high",
     status: "verified",
@@ -990,18 +1102,29 @@ if (!isAllowed) throw new Error("Insufficient AI Credits. Please upgrade your pl
     id: "open-saas-multi-payment-processor",
     version: "2.0.0",
     category: "payments",
-    title: "Open SaaS Unified Multi-Payment Gateway (Stripe, Lemon Squeezy & Polar.sh Webhook Router)",
-    description: "Production payment verification router supporting Stripe, Lemon Squeezy, and Polar.sh with timing-safe HMAC signatures and automatic tier reconciliation.",
+    title:
+      "Open SaaS Unified Multi-Payment Gateway (Stripe, Lemon Squeezy & Polar.sh Webhook Router)",
+    description:
+      "Production payment verification router supporting Stripe, Lemon Squeezy, and Polar.sh with timing-safe HMAC signatures and automatic tier reconciliation.",
     languages: ["typescript", "javascript"],
     keywords: [
-      "multi payment webhook", "lemon squeezy stripe", "polar payment",
-      "saas billing webhook", "open saas payment", "unified checkout", "timing safe webhook"
+      "multi payment webhook",
+      "lemon squeezy stripe",
+      "polar payment",
+      "saas billing webhook",
+      "open saas payment",
+      "unified checkout",
+      "timing safe webhook",
     ],
     dependencies: [
       { name: "stripe", version: ">=16.0.0" },
-      { name: "@lemonsqueezy/lemonsqueezy.js", version: ">=2.2.0" }
+      { name: "@lemonsqueezy/lemonsqueezy.js", version: ">=2.2.0" },
     ],
-    requiredEnv: ["STRIPE_WEBHOOK_SECRET", "LEMONSQUEEZY_WEBHOOK_SECRET", "POLAR_WEBHOOK_SECRET"],
+    requiredEnv: [
+      "STRIPE_WEBHOOK_SECRET",
+      "LEMONSQUEEZY_WEBHOOK_SECRET",
+      "POLAR_WEBHOOK_SECRET",
+    ],
     securityLevel: "high",
     status: "verified",
     code: `import crypto from "crypto";
@@ -1047,8 +1170,9 @@ export function verifyPolarWebhook(rawBody: string, signature: string, secret: s
  * Initializes the template_vault table in the database and seeds boilerplates
  */
 export async function initVaultStore(): Promise<void> {
-  // 1. Ensure Table exists
-  await dbRun(`
+  // 1. Ensure table exists (PostgreSQL schema lives in postgresSchema.ts)
+  if (!usingPostgres)
+    await dbRun(`
     CREATE TABLE IF NOT EXISTS template_vault (
       id VARCHAR(128) PRIMARY KEY,
       version VARCHAR(32) NOT NULL,
@@ -1071,13 +1195,24 @@ export async function initVaultStore(): Promise<void> {
     )
   `);
 
-  // 2. Seed & Update Industry Boilerplates using INSERT OR REPLACE
+  // 2. Seed & update industry boilerplates (portable upsert; keeps usage counters)
   for (const t of INDUSTRY_BOILERPLATES) {
-    const checksum = crypto.createHash("sha256").update(t.code).digest("hex").slice(0, 16);
+    const checksum = crypto
+      .createHash("sha256")
+      .update(t.code)
+      .digest("hex")
+      .slice(0, 16);
     await dbRun(
-      `INSERT OR REPLACE INTO template_vault 
+      `INSERT INTO template_vault
        (id, version, category, title, description, languages, keywords, dependencies, required_env, security_level, code, usage_snippet, checksum)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         version = excluded.version, category = excluded.category, title = excluded.title,
+         description = excluded.description, languages = excluded.languages, keywords = excluded.keywords,
+         dependencies = excluded.dependencies, required_env = excluded.required_env,
+         security_level = excluded.security_level, code = excluded.code,
+         usage_snippet = excluded.usage_snippet, checksum = excluded.checksum,
+         updated_at = CURRENT_TIMESTAMP`,
       [
         t.id,
         t.version,
@@ -1092,7 +1227,7 @@ export async function initVaultStore(): Promise<void> {
         t.code,
         t.usageSnippet,
         checksum,
-      ]
+      ],
     );
   }
 
@@ -1108,15 +1243,29 @@ export async function initVaultStore(): Promise<void> {
     category: r.category,
     title: r.title,
     description: r.description,
-    languages: typeof r.languages === "string" ? JSON.parse(r.languages || "[]") : r.languages,
-    keywords: typeof r.keywords === "string" ? JSON.parse(r.keywords || "[]") : r.keywords,
-    dependencies: typeof r.dependencies === "string" ? JSON.parse(r.dependencies || "[]") : r.dependencies,
-    requiredEnv: typeof r.required_env === "string" ? JSON.parse(r.required_env || "[]") : r.required_env,
+    languages:
+      typeof r.languages === "string"
+        ? JSON.parse(r.languages || "[]")
+        : r.languages,
+    keywords:
+      typeof r.keywords === "string"
+        ? JSON.parse(r.keywords || "[]")
+        : r.keywords,
+    dependencies:
+      typeof r.dependencies === "string"
+        ? JSON.parse(r.dependencies || "[]")
+        : r.dependencies,
+    requiredEnv:
+      typeof r.required_env === "string"
+        ? JSON.parse(r.required_env || "[]")
+        : r.required_env,
     securityLevel: r.security_level,
   }));
 
   isVaultInitialized = true;
-  console.log(`[VaultStore] Initialized ${IN_MEMORY_VAULT_INDEX.length} lightweight indexed templates in memory.`);
+  console.log(
+    `[VaultStore] Initialized ${IN_MEMORY_VAULT_INDEX.length} lightweight indexed templates in memory.`,
+  );
 }
 
 /**
@@ -1153,9 +1302,11 @@ export function matchTemplateIndex(query: string): VaultIndexItem | null {
 export async function getTemplateWithSelfHealing(
   templateId: string,
   context?: ProjectContext,
-  errorTrace?: string
+  errorTrace?: string,
 ): Promise<{ template: GoldenTemplate; healing: SelfHealingResult } | null> {
-  const row = await dbGet<any>("SELECT * FROM template_vault WHERE id = ?", [templateId]);
+  const row = await dbGet<any>("SELECT * FROM template_vault WHERE id = ?", [
+    templateId,
+  ]);
   if (!row) return null;
 
   const template: GoldenTemplate = {
@@ -1164,10 +1315,22 @@ export async function getTemplateWithSelfHealing(
     category: row.category as any,
     title: row.title,
     description: row.description,
-    languages: typeof row.languages === "string" ? JSON.parse(row.languages || "[]") : row.languages,
-    keywords: typeof row.keywords === "string" ? JSON.parse(row.keywords || "[]") : row.keywords,
-    dependencies: typeof row.dependencies === "string" ? JSON.parse(row.dependencies || "[]") : row.dependencies,
-    requiredEnv: typeof row.required_env === "string" ? JSON.parse(row.required_env || "[]") : row.required_env,
+    languages:
+      typeof row.languages === "string"
+        ? JSON.parse(row.languages || "[]")
+        : row.languages,
+    keywords:
+      typeof row.keywords === "string"
+        ? JSON.parse(row.keywords || "[]")
+        : row.keywords,
+    dependencies:
+      typeof row.dependencies === "string"
+        ? JSON.parse(row.dependencies || "[]")
+        : row.dependencies,
+    requiredEnv:
+      typeof row.required_env === "string"
+        ? JSON.parse(row.required_env || "[]")
+        : row.required_env,
     securityLevel: row.security_level,
     status: "verified",
     code: row.code,
@@ -1182,10 +1345,13 @@ export async function getTemplateWithSelfHealing(
   if (healing.wasCorrected) {
     dbRun(
       "UPDATE template_vault SET usage_count = usage_count + 1, auto_correction_count = auto_correction_count + 1, last_corrected_at = ?, updated_at = ? WHERE id = ?",
-      [now, now, templateId]
+      [now, now, templateId],
     ).catch(console.error);
   } else {
-    dbRun("UPDATE template_vault SET usage_count = usage_count + 1, updated_at = ? WHERE id = ?", [now, templateId]).catch(console.error);
+    dbRun(
+      "UPDATE template_vault SET usage_count = usage_count + 1, updated_at = ? WHERE id = ?",
+      [now, templateId],
+    ).catch(console.error);
   }
 
   return { template, healing };

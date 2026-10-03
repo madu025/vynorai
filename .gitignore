@@ -188,3 +188,6 @@ data/
 scratch/
 
 
+
+# VPS database backups (docker-compose.vps.yml vynor-pg-backup)
+/backups/

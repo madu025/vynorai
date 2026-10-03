@@ -83,9 +83,10 @@ export async function getOrInitMonthlyUsage(
     const periodEnd = isoDate(new Date(now.getTime() + CYCLE_DAYS * DAY_MS));
 
     await dbRun(
-      `INSERT OR IGNORE INTO monthly_usage
+      `INSERT INTO monthly_usage
        (id, user_id, plan_name, max_tokens, used_tokens, used_requests, bonus_tokens, bonus_requests, period_start, period_end)
-       VALUES (?, ?, ?, ?, 0, 0, 0, 0, ?, ?)`,
+       VALUES (?, ?, ?, ?, 0, 0, 0, 0, ?, ?)
+       ON CONFLICT(user_id, period_start) DO NOTHING`,
       [
         uuidv4(),
         userId,

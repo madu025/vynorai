@@ -1,5 +1,6 @@
 /**
- * End-to-end PayHere IPN + quota ledger tests against a throwaway SQLite DB.
+ * End-to-end PayHere IPN + quota ledger tests against a throwaway database
+ * (SQLite by default; PostgreSQL when DATABASE_URL points at an empty one).
  * Modules are imported dynamically after chdir/env setup because db.ts and
  * config.ts read the working directory and environment at import time.
  */
@@ -50,7 +51,11 @@ before(async () => {
 
 after(async () => {
   server?.close();
-  await new Promise<void>((resolve) => dbm.db.close(() => resolve()));
+  if (dbm.db) {
+    await new Promise<void>((resolve) => dbm.db!.close(() => resolve()));
+  } else {
+    await (await import("../src/services/pgDriver.js")).closePostgres();
+  }
   process.chdir(originalCwd);
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3 });

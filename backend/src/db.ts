@@ -7,22 +7,52 @@ import {
   maskApiKey,
 } from "./services/credentialVault.js";
 
-const dbDir = path.resolve(process.cwd(), "data");
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+import {
+  getPool,
+  markPostgresReady,
+  pgAll,
+  pgGet,
+  pgRun,
+  postgresConfigured,
+  postgresReady,
+} from "./services/pgDriver.js";
+import { applyPostgresMigrations } from "./services/postgresSchema.js";
 
-const dbPath = path.join(dbDir, "vynorai.db");
-export const db = new sqlite3.Database(dbPath);
+/**
+ * Production runs on PostgreSQL (DATABASE_URL). SQLite remains for local
+ * development and the test suite, so every query must stay portable: use
+ * `?` placeholders and ON CONFLICT upserts, never SQLite-only syntax.
+ */
+export const usingPostgres = postgresConfigured();
 
-// Immediately activate foreign keys on connection
-db.run("PRAGMA foreign_keys = ON;");
+function openSqlite(): sqlite3.Database {
+  const dbDir = path.resolve(process.cwd(), "data");
+  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+  const sqlite = new sqlite3.Database(path.join(dbDir, "vynorai.db"));
+  sqlite.run("PRAGMA foreign_keys = ON;");
+  return sqlite;
+}
+
+/** SQLite handle; null when running on PostgreSQL. */
+export const db: sqlite3.Database | null = usingPostgres ? null : openSqlite();
+
+export function databaseStatus(): {
+  driver: "postgres" | "sqlite";
+  ready: boolean;
+} {
+  return usingPostgres
+    ? { driver: "postgres", ready: postgresReady() }
+    : { driver: "sqlite", ready: true };
+}
 
 // ─── Query Helpers ────────────────────────────────────────────────────────────
 export function dbGet<T = any>(
   sql: string,
   params: any[] = [],
 ): Promise<T | undefined> {
+  if (usingPostgres) return pgGet<T>(sql, params);
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
+    db!.get(sql, params, (err, row) => {
       if (err) reject(err);
       else resolve(row as T);
     });
@@ -30,8 +60,9 @@ export function dbGet<T = any>(
 }
 
 export function dbAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  if (usingPostgres) return pgAll<T>(sql, params);
   return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
+    db!.all(sql, params, (err, rows) => {
       if (err) reject(err);
       else resolve(rows as T[]);
     });
@@ -42,8 +73,9 @@ export function dbRun(
   sql: string,
   params: any[] = [],
 ): Promise<{ lastID: number; changes: number }> {
+  if (usingPostgres) return pgRun(sql, params);
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
+    db!.run(sql, params, function (err) {
       if (err) reject(err);
       else resolve({ lastID: this.lastID, changes: this.changes });
     });
@@ -584,6 +616,20 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "014_provider_credentials",
+    description:
+      "Provider API keys managed from the admin portal, encrypted at rest",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS provider_credentials (
+        provider      VARCHAR(32) PRIMARY KEY,
+        key_encrypted TEXT NOT NULL,
+        key_masked    VARCHAR(32) NOT NULL,
+        updated_by    VARCHAR(128),
+        updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {
@@ -615,6 +661,15 @@ async function applyMigrations(): Promise<void> {
 
 /** Initialize all database tables, foreign keys, constraints, and performance indexes */
 export async function initDb(): Promise<void> {
+  if (usingPostgres) {
+    const applied = await applyPostgresMigrations(getPool());
+    for (const version of applied)
+      console.log(`[DB Migration] ✅ ${version} applied (PostgreSQL).`);
+    markPostgresReady(true);
+    startVerificationCleanup();
+    return;
+  }
+
   // ── 1. High-Concurrency PRAGMAs (WAL Mode & Foreign Keys) ─────────────────
   await execSchema("PRAGMA foreign_keys = ON;");
   await execSchema("PRAGMA journal_mode = WAL;");
@@ -626,7 +681,11 @@ export async function initDb(): Promise<void> {
   // ── 2. Run Systematic Versioned Migrations ─────────────────────────────────
   await applyMigrations();
 
-  // ── 3. Start automated periodic expired token cleanup (every 1 hour) ───────
+  startVerificationCleanup();
+}
+
+/** Hourly purge of expired email verification tokens. */
+function startVerificationCleanup(): void {
   setInterval(async () => {
     try {
       await dbRun(

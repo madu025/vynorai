@@ -47,10 +47,74 @@ services:
     env_file:
       - ./backend/.env
     depends_on:
-      - vynor-redis
-      - vynor-slm
-      - vynor-embed
+      vynor-postgres:
+        condition: service_healthy
+      vynor-redis:
+        condition: service_started
+      vynor-slm:
+        condition: service_started
+      vynor-embed:
+        condition: service_started
     mem_limit: 768m
+    networks:
+      - vynor-net
+
+  # ── 1b. PostgreSQL: the system of record (users, billing, usage, admin) ─────
+  # Private to vynor-net; never published. DATABASE_URL in backend/.env.
+  vynor-postgres:
+    image: postgres:16-alpine
+    container_name: vynor-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=vynor
+      - POSTGRES_USER=vynor
+    env_file:
+      - ./deploy/postgres.env # POSTGRES_PASSWORD only
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=512MB
+      -c max_connections=60
+      -c wal_compression=on
+    volumes:
+      - vynor-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vynor -d vynor"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 512m
+    networks:
+      - vynor-net
+
+  # ── 1c. Nightly logical backups to ./backups (14 days kept) ─────────────────
+  vynor-pg-backup:
+    image: postgres:16-alpine
+    container_name: vynor-pg-backup
+    restart: unless-stopped
+    env_file:
+      - ./deploy/postgres.env # POSTGRES_PASSWORD only
+    environment:
+      - PGHOST=vynor-postgres
+      - PGUSER=vynor
+      - PGDATABASE=vynor
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        export PGPASSWORD="$$POSTGRES_PASSWORD"
+        while true; do
+          until pg_isready -q; do sleep 5; done
+          f=/backups/vynor-$$(date -u +%Y%m%d-%H%M%S).dump
+          if pg_dump -Fc -f "$$f.part"; then mv "$$f.part" "$$f"; echo "backup ok $$f"; else rm -f "$$f.part"; echo "backup FAILED"; fi
+          find /backups -name 'vynor-*.dump' -mtime +14 -delete
+          sleep 86400
+        done
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      vynor-postgres:
+        condition: service_healthy
+    mem_limit: 128m
     networks:
       - vynor-net
 
@@ -106,6 +170,7 @@ services:
 volumes:
   vynor-redis-data:
   vynor-backend-data:
+  vynor-postgres-data:
   vynor-caddy-data:
   vynor-caddy-config:
 

@@ -12,11 +12,8 @@ import { proxyRouter } from "./routes/proxy.js";
 import { initCacheTable } from "./services/cacheEngine.js";
 import { startHealthMonitor } from "./services/healthMonitor.js";
 import { getRedis, redisStatus } from "./services/redisStore.js";
-import {
-  billingDbStatus,
-  billingParity,
-  initBillingDb,
-} from "./services/billingDb.js";
+import { billingDbStatus } from "./services/billingDb.js";
+import { loadProviderCredentials } from "./services/providerCredentials.js";
 
 import { securityHeadersMiddleware } from "./middleware/security.js";
 
@@ -318,18 +315,12 @@ async function start() {
   }
 
   await initDb();
-  await initBillingDb();
   await initCacheTable();
   const { initVaultStore } = await import("./services/vaultStore.js");
   await initVaultStore();
   await initModelRegistry();
+  await loadProviderCredentials();
   await getRedis();
-  const parity = await billingParity();
-  if (Object.values(parity).some((entry) => !entry.match)) {
-    throw new Error(
-      `PostgreSQL billing parity check failed: ${JSON.stringify(parity)}`,
-    );
-  }
 
   const activeKeys = Object.entries(config.aiKeys)
     .filter(([k, v]) => k !== "ollama" && v)

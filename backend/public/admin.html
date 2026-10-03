@@ -189,6 +189,9 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item" onclick="showPage('plans')" id="nav-plans">
       <span class="nav-icon">📦</span>Plans & Pricing
     </div>
+    <div class="nav-item" onclick="showPage('providers')" id="nav-providers">
+      <span class="nav-icon">🔐</span>Provider Keys
+    </div>
     <div class="nav-item" onclick="showPage('models')" id="nav-models">
       <span class="nav-icon">🤖</span>Model Registry
     </div>
@@ -372,6 +375,35 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       <p class="subtitle">Edit plan prices, token limits, and features live — no restart needed</p>
       <div class="alert alert-info">💡 Changes apply within 30 seconds automatically. Click "Save" to update.</div>
       <div class="plan-grid" id="planGrid"><div class="loading">Loading plans...</div></div>
+    </div>
+
+    <!-- PROVIDER KEYS -->
+    <div class="page" id="page-providers">
+      <h1>Provider Keys</h1>
+      <p class="subtitle">API keys VynorAI uses to call DeepSeek, OpenRouter and other providers for every customer. Saved keys are encrypted and apply immediately.</p>
+      <div class="alert alert-info">🔒 Keys are tested before saving and only ever shown masked. A key saved here overrides the server's .env value; removing it falls back to .env.</div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🔐 Providers</div>
+          <button class="btn btn-ghost" onclick="loadProviders()">↻ Refresh</button></div>
+        <div class="panel-body" style="padding:0">
+          <table class="model-table">
+            <thead><tr><th>Status</th><th>Provider</th><th>Key</th><th>Source</th><th>Updated</th><th>Actions</th></tr></thead>
+            <tbody id="providerBody"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="providerForm" style="display:none" class="panel">
+        <div class="panel-header"><div class="panel-title" id="providerFormTitle">Set key</div></div>
+        <div class="panel-body">
+          <label>API key</label>
+          <input id="providerKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"/>
+          <div style="margin-top:1rem;display:flex;gap:.5rem">
+            <button class="btn btn-primary" id="providerSaveBtn" onclick="saveProviderKey()">Test &amp; Save</button>
+            <button class="btn btn-ghost" onclick="testProviderKeyInput()">Test only</button>
+            <button class="btn btn-ghost" onclick="closeProviderForm()">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- MODELS -->
@@ -602,6 +634,7 @@ function showPage(id) {
   if (id === 'staff')    loadStaff();
   if (id === 'plans')    loadPlans();
   if (id === 'models')   loadModels();
+  if (id === 'providers') loadProviders();
   if (id === 'system')   loadSystem();
 }
 
@@ -952,6 +985,73 @@ async function resetPlan(id) {
   const r = await api('DELETE', `/admin/plans/${id}/override`);
   if (r?.ok) { showToast(`Plan "${id}" reset`); loadPlans(); }
   else showToast('Failed', 'err');
+}
+
+const PROVIDER_LABELS = { deepseek:'DeepSeek', openrouter:'OpenRouter', openai:'OpenAI', anthropic:'Anthropic', groq:'Groq', gemini:'Google Gemini' };
+const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let editingProvider = null;
+
+async function loadProviders() {
+  const data = await api('GET', '/admin/provider-keys');
+  if (!data) return;
+  const SOURCE = { admin:'Admin portal', env:'Server .env', none:'—' };
+  document.getElementById('providerBody').innerHTML = data.providers.map(p => `
+    <tr>
+      <td><span class="status-dot ${p.source !== 'none' ? 'on' : 'off'}"></span></td>
+      <td><strong>${escHtml(PROVIDER_LABELS[p.provider] || p.provider)}</strong></td>
+      <td><code style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--muted)">${escHtml(p.masked || 'not set')}</code></td>
+      <td><span class="tag">${SOURCE[p.source]}</span></td>
+      <td style="font-size:.75rem;color:var(--muted)">${escHtml(p.updatedAt || '')}</td>
+      <td style="display:flex;gap:.4rem">
+        <button class="btn btn-primary" style="padding:.3rem .6rem;font-size:.75rem" onclick="openProviderForm('${p.provider}')">${p.source === 'admin' ? 'Replace' : 'Set key'}</button>
+        ${p.source !== 'none' ? `<button class="btn btn-ghost" style="padding:.3rem .6rem;font-size:.75rem" onclick="testStoredProviderKey('${p.provider}')">Test</button>` : ''}
+        ${p.source === 'admin' ? `<button class="btn btn-danger" style="padding:.3rem .6rem;font-size:.75rem" onclick="removeProviderKey('${p.provider}')">Remove</button>` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+function openProviderForm(provider) {
+  editingProvider = provider;
+  document.getElementById('providerFormTitle').innerText = `Set ${PROVIDER_LABELS[provider] || provider} key`;
+  document.getElementById('providerKeyInput').value = '';
+  document.getElementById('providerForm').style.display = 'block';
+  document.getElementById('providerKeyInput').focus();
+}
+
+function closeProviderForm() {
+  editingProvider = null;
+  document.getElementById('providerKeyInput').value = '';
+  document.getElementById('providerForm').style.display = 'none';
+}
+
+async function saveProviderKey() {
+  const key = document.getElementById('providerKeyInput').value.trim();
+  if (!editingProvider || !key) { showToast('Paste a key first', 'err'); return; }
+  const btn = document.getElementById('providerSaveBtn');
+  btn.disabled = true; btn.innerText = 'Testing…';
+  const r = await api('PUT', `/admin/provider-keys/${editingProvider}`, { key });
+  btn.disabled = false; btn.innerText = 'Test & Save';
+  if (r?.ok) { showToast(`${PROVIDER_LABELS[editingProvider]} key saved (${r.provider.masked})`); closeProviderForm(); loadProviders(); }
+  else showToast(r?.error || 'Failed to save key', 'err');
+}
+
+async function testProviderKeyInput() {
+  const key = document.getElementById('providerKeyInput').value.trim();
+  if (!editingProvider || !key) { showToast('Paste a key first', 'err'); return; }
+  const r = await api('POST', `/admin/provider-keys/${editingProvider}/test`, { key });
+  if (r) showToast(r.message, r.ok ? 'ok' : 'err');
+}
+
+async function testStoredProviderKey(provider) {
+  const r = await api('POST', `/admin/provider-keys/${provider}/test`, {});
+  if (r) showToast(`${PROVIDER_LABELS[provider]}: ${r.message}`, r.ok ? 'ok' : 'err');
+}
+
+async function removeProviderKey(provider) {
+  if (!confirm(`Remove the ${PROVIDER_LABELS[provider]} key saved in the portal? Requests fall back to the server .env key, if any.`)) return;
+  const r = await api('DELETE', `/admin/provider-keys/${provider}`);
+  if (r?.ok) { showToast(`${PROVIDER_LABELS[provider]} key removed`); loadProviders(); }
+  else showToast(r?.error || 'Failed', 'err');
 }
 
 async function loadModels() {

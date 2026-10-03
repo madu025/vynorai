@@ -11,7 +11,7 @@
  *   Ultra         → 256k tokens
  */
 
-import { dbGet, dbAll, dbRun, db } from "../db.js";
+import { dbGet, dbAll, dbRun, usingPostgres } from "../db.js";
 import { v4 as uuidv4 } from "uuid";
 import { getPlan } from "../config.js";
 
@@ -139,9 +139,10 @@ export async function canPlanUseModel(
 
 // ─── DB Schema: create model_registry table ──────────────────────────────────
 export async function ensureModelRegistryTable(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(
-      `CREATE TABLE IF NOT EXISTS model_registry (
+  // PostgreSQL schema lives in postgresSchema.ts.
+  if (usingPostgres) return;
+  await dbRun(
+    `CREATE TABLE IF NOT EXISTS model_registry (
         id                      TEXT PRIMARY KEY,
         openrouter_id           TEXT NOT NULL,
         display_name            TEXT NOT NULL,
@@ -153,12 +154,7 @@ export async function ensureModelRegistryTable(): Promise<void> {
         created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
-      (err) => {
-        if (err) reject(err);
-        else resolve();
-      },
-    );
-  });
+  );
 }
 
 // ─── Default model seed ───────────────────────────────────────────────────────
@@ -324,10 +320,11 @@ async function seedDefaultModels(): Promise<void> {
   await ensureModelRegistryTable();
   for (const m of DEFAULT_MODELS) {
     await dbRun(
-      `INSERT OR IGNORE INTO model_registry
+      `INSERT INTO model_registry
         (id, openrouter_id, display_name, context_window, min_plan,
          is_default_chat, is_default_autocomplete, enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
       [
         m.id,
         m.openrouter_id,

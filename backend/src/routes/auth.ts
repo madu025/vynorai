@@ -487,10 +487,13 @@ authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
               COUNT(*) as requestCount, 
               SUM(tokens_used) as totalTokens 
        FROM usage_logs 
-       WHERE user_id = ? AND created_at >= date('now', '-7 days') 
-       GROUP BY DATE(created_at) 
+       WHERE user_id = ? AND created_at >= ?
+       GROUP BY DATE(created_at)
        ORDER BY date ASC`,
-      [user.id],
+      [
+        user.id,
+        new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
+      ],
     );
 
     const cacheStats = await dbGet<any>(

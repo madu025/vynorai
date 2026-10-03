@@ -1,0 +1,2 @@
+# Server-generated secrets (deploy/init-env.sh)
+postgres.env

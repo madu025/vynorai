@@ -1,6 +1,10 @@
 import crypto from "crypto";
-import { dbGet, dbRun } from "../db.js";
-import { decryptCredential, encryptCredential, encryptionAtRestConfigured } from "./credentialVault.js";
+import { dbGet, dbRun, usingPostgres } from "../db.js";
+import {
+  decryptCredential,
+  encryptCredential,
+  encryptionAtRestConfigured,
+} from "./credentialVault.js";
 import { getDistributedCache, setDistributedCache } from "./redisStore.js";
 
 interface CacheEntry {
@@ -21,12 +25,15 @@ export function generateCacheKey(
   scope: { userId: string; projectId?: string; policyVersion?: string },
   model: string,
   messages: any[],
-  temperature?: number
+  temperature?: number,
 ): string {
   // Normalize messages by stripping non-essential fields and trimming whitespace
   const normalized = messages.map((m) => ({
     role: m.role,
-    content: typeof m.content === "string" ? m.content.trim() : JSON.stringify(m.content),
+    content:
+      typeof m.content === "string"
+        ? m.content.trim()
+        : JSON.stringify(m.content),
   }));
 
   const payload = JSON.stringify({
@@ -47,7 +54,9 @@ export function generateCacheKey(
  * Check both L1 (RAM) and L2 (SQLite DB) caches.
  * Returns cached chunks if found, or null if miss.
  */
-export async function getFromCache(cacheKey: string): Promise<CacheEntry | null> {
+export async function getFromCache(
+  cacheKey: string,
+): Promise<CacheEntry | null> {
   // 1. Check L1 In-Memory Cache
   if (l1Cache.has(cacheKey)) {
     const entry = l1Cache.get(cacheKey)!;
@@ -63,12 +72,18 @@ export async function getFromCache(cacheKey: string): Promise<CacheEntry | null>
       const encrypted = await getDistributedCache(cacheKey);
       const plaintext = decryptCredential(encrypted);
       if (plaintext) {
-        const entry: CacheEntry = { responseChunks: JSON.parse(plaintext), createdAt: Date.now() };
+        const entry: CacheEntry = {
+          responseChunks: JSON.parse(plaintext),
+          createdAt: Date.now(),
+        };
         setL1Cache(cacheKey, entry);
         return entry;
       }
     } catch (err) {
-      console.error("[CacheEngine] Redis read failed; using SQLite fallback:", err);
+      console.error(
+        "[CacheEngine] Redis read failed; using SQLite fallback:",
+        err,
+      );
     }
   }
 
@@ -77,7 +92,7 @@ export async function getFromCache(cacheKey: string): Promise<CacheEntry | null>
   try {
     const row = await dbGet<any>(
       "SELECT response_data, created_at FROM cache_entries WHERE cache_key = ?",
-      [cacheKey]
+      [cacheKey],
     );
 
     if (row && row.response_data) {
@@ -103,7 +118,10 @@ export async function getFromCache(cacheKey: string): Promise<CacheEntry | null>
 /**
  * Save response chunks into both L1 (RAM) and L2 (SQLite DB)
  */
-export async function saveToCache(cacheKey: string, chunks: any[]): Promise<void> {
+export async function saveToCache(
+  cacheKey: string,
+  chunks: any[],
+): Promise<void> {
   if (!chunks || chunks.length === 0) return;
 
   const entry: CacheEntry = {
@@ -118,13 +136,20 @@ export async function saveToCache(cacheKey: string, chunks: any[]): Promise<void
   const serialized = JSON.stringify(chunks);
   const encrypted = encryptCredential(serialized);
   if (!encrypted) return;
-  setDistributedCache(cacheKey, encrypted, DISTRIBUTED_CACHE_TTL_SECONDS).catch((err) => {
-    console.error("[CacheEngine] Redis write failed; SQLite copy retained:", err);
-  });
+  setDistributedCache(cacheKey, encrypted, DISTRIBUTED_CACHE_TTL_SECONDS).catch(
+    (err) => {
+      console.error(
+        "[CacheEngine] Redis write failed; SQLite copy retained:",
+        err,
+      );
+    },
+  );
   dbRun(
-    `INSERT OR REPLACE INTO cache_entries (cache_key, response_data, created_at) 
-     VALUES (?, ?, CURRENT_TIMESTAMP)`,
-    [cacheKey, encrypted]
+    `INSERT INTO cache_entries (cache_key, response_data, created_at)
+     VALUES (?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(cache_key) DO UPDATE SET
+       response_data = excluded.response_data, created_at = excluded.created_at`,
+    [cacheKey, encrypted],
   ).catch((err) => {
     console.error("[CacheEngine] Error saving to L2 cache:", err);
   });
@@ -142,16 +167,18 @@ function setL1Cache(key: string, entry: CacheEntry) {
  * Initialize cache table in SQLite
  */
 export async function initCacheTable(): Promise<void> {
-  await dbRun(
-    `CREATE TABLE IF NOT EXISTS cache_entries (
-      cache_key TEXT PRIMARY KEY,
-      response_data TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
-  );
-  await dbRun(
-    "CREATE INDEX IF NOT EXISTS idx_cache_created ON cache_entries (created_at)"
-  );
+  if (!usingPostgres) {
+    await dbRun(
+      `CREATE TABLE IF NOT EXISTS cache_entries (
+        cache_key TEXT PRIMARY KEY,
+        response_data TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+    );
+    await dbRun(
+      "CREATE INDEX IF NOT EXISTS idx_cache_created ON cache_entries (created_at)",
+    );
+  }
   // Cache is disposable. Purge legacy plaintext rather than retaining source
   // code or model output that predates encrypted-at-rest storage.
   await dbRun("DELETE FROM cache_entries WHERE response_data NOT LIKE 'v1:%'");

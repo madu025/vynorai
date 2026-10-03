@@ -109,6 +109,14 @@ import {
 import { encryptCredential, maskApiKey } from "../services/credentialVault.js";
 import { invalidateAuthCache } from "../services/aiProxy.js";
 import { creditTopup, startPaidCycle } from "../services/monthlyQuota.js";
+import {
+  deleteProviderKey,
+  isManagedProvider,
+  listProviderKeys,
+  ManagedProvider,
+  setProviderKey,
+  testProviderKey,
+} from "../services/providerCredentials.js";
 
 adminRouter.get(
   "/stats",
@@ -174,6 +182,8 @@ adminRouter.get(
   "/users",
   requireAdmin,
   async (_req: Request, res: Response) => {
+    // One row per user: latest active subscription and latest usage cycle.
+    // (Portable SQL — PostgreSQL rejects SQLite's loose GROUP BY.)
     const users = await dbAll<any>(`
     SELECT u.id, u.email, u.name, u.api_key_masked, u.created_at,
            COALESCE(u.is_suspended, 0) as is_suspended, u.allowed_ips,
@@ -181,9 +191,14 @@ adminRouter.get(
            s.plan_name, s.status as subscription_status, s.valid_until,
            m.used_tokens, m.used_requests, m.max_tokens
     FROM users u
-    LEFT JOIN subscriptions s ON u.id = s.user_id AND s.status = 'active'
-    LEFT JOIN monthly_usage m ON u.id = m.user_id
-    GROUP BY u.id
+    LEFT JOIN subscriptions s ON s.id = (
+      SELECT s2.id FROM subscriptions s2
+      WHERE s2.user_id = u.id AND s2.status = 'active'
+      ORDER BY s2.valid_until DESC LIMIT 1)
+    LEFT JOIN monthly_usage m ON m.id = (
+      SELECT m2.id FROM monthly_usage m2
+      WHERE m2.user_id = u.id
+      ORDER BY m2.period_start DESC LIMIT 1)
     ORDER BY u.created_at DESC
     LIMIT 100
   `);
@@ -820,5 +835,89 @@ adminRouter.post(
       ok: true,
       message: "Plan cache cleared — next request reloads from DB",
     });
+  },
+);
+
+// ─── Provider API keys (DeepSeek, OpenRouter, …) ──────────────────────────────
+// Stored encrypted; responses only ever contain masked keys.
+
+function providerParam(req: Request, res: Response): ManagedProvider | null {
+  const provider = String(req.params["provider"] || "");
+  if (isManagedProvider(provider)) return provider;
+  res.status(404).json({ error: `Unknown provider "${provider}"` });
+  return null;
+}
+
+/** GET /admin/provider-keys — which providers have a key, and from where */
+adminRouter.get(
+  "/provider-keys",
+  requireAdmin,
+  (_req: Request, res: Response) => {
+    res.json({ providers: listProviderKeys() });
+  },
+);
+
+/** PUT /admin/provider-keys/:provider { key, skipTest? } — verified, then saved */
+adminRouter.put(
+  "/provider-keys/:provider",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const provider = providerParam(req, res);
+    if (!provider) return;
+    const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+    if (!key) return res.status(400).json({ error: "key is required" });
+
+    if (req.body?.skipTest !== true) {
+      const test = await testProviderKey(provider, key);
+      if (!test.ok) {
+        return res.status(422).json({ error: test.message, test });
+      }
+    }
+    try {
+      const status = await setProviderKey(provider, key, "ADMIN");
+      await logSecurityEvent({
+        eventType: "ADMIN_PROVIDER_KEY_SET",
+        severity: "WARN",
+        actor: "ADMIN",
+        target: provider,
+        details: `Provider key for ${provider} set (${status.masked})`,
+        ipAddress: req.ip,
+      });
+      res.json({ ok: true, provider: status });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+    }
+  },
+);
+
+/** DELETE /admin/provider-keys/:provider — falls back to the .env key, if any */
+adminRouter.delete(
+  "/provider-keys/:provider",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const provider = providerParam(req, res);
+    if (!provider) return;
+    const status = await deleteProviderKey(provider);
+    await logSecurityEvent({
+      eventType: "ADMIN_PROVIDER_KEY_DELETED",
+      severity: "WARN",
+      actor: "ADMIN",
+      target: provider,
+      details: `Provider key for ${provider} removed; now ${status.source}`,
+      ipAddress: req.ip,
+    });
+    res.json({ ok: true, provider: status });
+  },
+);
+
+/** POST /admin/provider-keys/:provider/test { key? } — tests a new or the stored key */
+adminRouter.post(
+  "/provider-keys/:provider/test",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const provider = providerParam(req, res);
+    if (!provider) return;
+    const key = typeof req.body?.key === "string" ? req.body.key : undefined;
+    res.json(await testProviderKey(provider, key));
   },
 );

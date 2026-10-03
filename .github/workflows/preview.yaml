@@ -17,10 +17,11 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
+      # Pre-releases use an odd minor version: v1.3.0-vscode, v1.5.2-vscode, ...
       - id: check
         working-directory: .
         run: |
-          if [[ "${{ github.event.release.tag_name }}" == v1.3.*-vscode ]]; then
+          if [[ "${{ github.event.release.tag_name }}" =~ ^v[0-9]+\.[0-9]*[13579]\.[0-9]+-vscode$ ]]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
             echo "should_run=false" >> $GITHUB_OUTPUT
@@ -116,8 +117,8 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: |
             vsix-artifacts/*.vsix
-          token: ${{ secrets.CI_GITHUB_TOKEN }}
-          repository: continuedev/continue
+          # Attach the .vsix files to this repository's release.
+          token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: true
 
   publish:
@@ -156,9 +157,8 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_TOKEN }}
 
-      # 3. Publish the extension to Open VSX Registry
+      # 3. Publish the extension to Open VSX Registry (Antigravity / Cursor / Windsurf)
       - name: Publish (Open VSX Registry)
-        continue-on-error: true
         run: |
           cd extensions/vscode
           npx ovsx publish --pre-release -p ${{ secrets.VSX_REGISTRY_TOKEN }} --packagePath ../../vsix-artifacts/*.vsix

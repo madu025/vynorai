@@ -17,10 +17,11 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
+      # Stable releases use an even minor version: v1.2.3-vscode, v1.4.0-vscode, ...
       - id: check
         working-directory: .
         run: |
-          if [[ "${{ github.event.release.tag_name }}" == v1.2.*-vscode ]]; then
+          if [[ "${{ github.event.release.tag_name }}" =~ ^v[0-9]+\.[0-9]*[02468]\.[0-9]+-vscode$ ]]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
             echo "should_run=false" >> $GITHUB_OUTPUT
@@ -41,6 +42,17 @@ jobs:
         run: |
           cd extensions/vscode
           node scripts/versionCheck.js
+
+      # The Marketplace rejects re-used versions, and users only get an update
+      # when the version goes up, so the tag must match package.json exactly.
+      - name: Tag matches package.json version
+        if: github.event_name == 'release'
+        run: |
+          VERSION=$(node -p "require('./extensions/vscode/package.json').version")
+          if [[ "${{ github.event.release.tag_name }}" != "v${VERSION}-vscode" ]]; then
+            echo "Tag ${{ github.event.release.tag_name }} does not match package.json version ${VERSION}"
+            exit 1
+          fi
 
   build:
     needs: [check_release_name, check-version]
@@ -132,8 +144,8 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: |
             vsix-artifacts/*.vsix
-          token: ${{ secrets.CI_GITHUB_TOKEN }}
-          repository: continuedev/continue
+          # Attach the .vsix files to this repository's release.
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
     runs-on: ubuntu-latest
@@ -170,9 +182,9 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_TOKEN }}
 
-      # 3. Publish the extension to Open VSX Registry
+      # 3. Publish the extension to Open VSX Registry. Required: Antigravity,
+      # Cursor and Windsurf install and update extensions from Open VSX.
       - name: Publish (Open VSX Registry)
-        continue-on-error: true
         run: |
           cd extensions/vscode
           npx ovsx publish -p ${{ secrets.VSX_REGISTRY_TOKEN }} --packagePath ../../vsix-artifacts/*.vsix

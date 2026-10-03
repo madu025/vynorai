@@ -1,0 +1,206 @@
+{"text": "design a URL shortener that handles 10k writes per second with analytics", "label": "H"}
+{"text": "design the notification system for a ride hailing app", "label": "H"}
+{"text": "how should we partition data for a multi-tenant analytics product", "label": "H"}
+{"text": "plan the move from a single VPS to a highly available setup across two regions", "label": "H"}
+{"text": "choose between event sourcing and a normal CRUD model for our ledger and explain the consequences", "label": "H"}
+{"text": "our microservices keep calling each other in chains and timing out, redesign the communication", "label": "H"}
+{"text": "split the read and write models for reporting without making the data inconsistent for users", "label": "H"}
+{"text": "design idempotent payment processing across our API, queue and the PayHere callback", "label": "H"}
+{"text": "we need exactly-once processing of orders from Kafka into postgres, how", "label": "H"}
+{"text": "design the caching strategy for product pages with personalization and inventory changes", "label": "H"}
+{"text": "design a search architecture for 10 million products with filters and facets", "label": "H"}
+{"text": "plan a strangler migration from our PHP monolith to node services", "label": "H"}
+{"text": "how do we version our public API without breaking existing mobile apps", "label": "H"}
+{"text": "design a plugin system so customers can extend our app safely", "label": "H"}
+{"text": "design rate limits per plan across multiple API servers that stay accurate", "label": "H"}
+{"text": "design the data model and sync protocol for an offline-first field survey app", "label": "H"}
+{"text": "how should we store and query time series metrics from 5000 IoT devices", "label": "H"}
+{"text": "design a job scheduler that survives restarts and never runs a job twice", "label": "H"}
+{"text": "design a secure file sharing feature with expiring links and access logs", "label": "H"}
+{"text": "design an inventory system that stays correct with concurrent orders across shops", "label": "H"}
+{"text": "there's a deadlock between the billing worker and the API when both update subscriptions", "label": "H"}
+{"text": "two workers sometimes pick the same job from the queue table", "label": "H"}
+{"text": "counters in redis drift from the database totals over time", "label": "H"}
+{"text": "users occasionally see someone else's cart", "label": "H"}
+{"text": "session data leaks between requests under high concurrency in our node server", "label": "H"}
+{"text": "the async code sometimes resolves in the wrong order and corrupts the balance", "label": "H"}
+{"text": "events arrive out of order from the webhook provider and our state gets wrong", "label": "H"}
+{"text": "the cache sometimes serves stale prices for hours after an update", "label": "H"}
+{"text": "our distributed lock sometimes lets two processes in", "label": "H"}
+{"text": "the mobile app crashes for 2% of users on startup and we only have partial crash logs", "label": "H"}
+{"text": "CPU spikes to 100% every day around 3pm and the site goes down", "label": "H"}
+{"text": "response times degrade slowly over the week until we restart the server", "label": "H"}
+{"text": "the database grows 20GB a week and queries are getting slower, plan what to do", "label": "H"}
+{"text": "page load is 8 seconds on mobile, find and fix the biggest wins across the app", "label": "H"}
+{"text": "our lambda cold starts are 6 seconds, get them down", "label": "H"}
+{"text": "the build output is 12MB of javascript, cut it down without breaking features", "label": "H"}
+{"text": "find why the websocket server uses 4GB RAM with only 2000 clients", "label": "H"}
+{"text": "audit our dependencies for known vulnerabilities and plan the fixes", "label": "H"}
+{"text": "pen test our login and password reset flows and fix what you find", "label": "H"}
+{"text": "check every endpoint for broken access control", "label": "H"}
+{"text": "we leaked an API key in a public repo, contain it and fix our secrets handling", "label": "H"}
+{"text": "make our app compliant with PCI for card payments", "label": "H"}
+{"text": "design how we encrypt customer data so even our admins can't read it", "label": "H"}
+{"text": "review the crypto code in this module for mistakes", "label": "H"}
+{"text": "our JWTs never expire and can't be revoked, redesign auth sessions", "label": "H"}
+{"text": "refactor the order service so business rules don't live in controllers anymore", "label": "H"}
+{"text": "untangle the circular dependencies between our modules", "label": "H"}
+{"text": "restructure the monorepo into packages with clear boundaries", "label": "H"}
+{"text": "replace our hand-rolled ORM with prisma across the project", "label": "H"}
+{"text": "migrate from REST to GraphQL for the mobile app without breaking the web app", "label": "H"}
+{"text": "move the whole app from class components and redux to hooks and react query", "label": "H"}
+{"text": "port our python 2 codebase to python 3", "label": "H"}
+{"text": "implement a B-tree", "label": "H"}
+{"text": "implement a rope data structure for the text editor", "label": "H"}
+{"text": "write a scheduler that fairly shares GPU time between tenants", "label": "H"}
+{"text": "implement the raft consensus algorithm for our config store", "label": "H"}
+{"text": "write an efficient diff algorithm for large documents", "label": "H"}
+{"text": "find the shortest delivery route through 30 stops", "label": "H"}
+{"text": "write a matching engine for buy and sell orders", "label": "H"}
+{"text": "write a spell checker that suggests corrections for sinhala words", "label": "H"}
+{"text": "design pricing logic with tiered discounts, bundles, coupons and taxes that never conflict", "label": "H"}
+{"text": "calculate shipping across zones, weights and couriers with the cheapest option", "label": "N"}
+{"text": "what's a monorepo", "label": "L"}
+{"text": "what is a webhook", "label": "L"}
+{"text": "what is an ORM", "label": "L"}
+{"text": "what does async mean", "label": "L"}
+{"text": "what is a foreign key", "label": "L"}
+{"text": "what is memoization", "label": "L"}
+{"text": "what is tree shaking", "label": "L"}
+{"text": "what is SSR", "label": "L"}
+{"text": "what does git stash do", "label": "L"}
+{"text": "what is a reverse proxy", "label": "L"}
+{"text": "what's the difference between process and thread", "label": "L"}
+{"text": "what's the difference between unit and integration tests", "label": "L"}
+{"text": "what does 'strict mode' do in typescript", "label": "L"}
+{"text": "what is the virtual DOM", "label": "L"}
+{"text": "what are generics", "label": "L"}
+{"text": "what is a hash map", "label": "L"}
+{"text": "what is big O notation", "label": "L"}
+{"text": "what does this HTTP status code mean: 422", "label": "L"}
+{"text": "what port does postgres use", "label": "L"}
+{"text": "how do I check the node version", "label": "L"}
+{"text": "how do I exit vim", "label": "L"}
+{"text": "how do I create a new git branch", "label": "L"}
+{"text": "how do I install tailwind", "label": "L"}
+{"text": "how do I read env variables in node", "label": "L"}
+{"text": "how do I format a date in javascript", "label": "L"}
+{"text": "how do I make an http request in python", "label": "L"}
+{"text": "how do I open the browser devtools network tab", "label": "L"}
+{"text": "how to center text in css", "label": "L"}
+{"text": "how to comment in python", "label": "L"}
+{"text": "how to loop over an object in js", "label": "L"}
+{"text": "how to convert string to number", "label": "L"}
+{"text": "where should I put this file", "label": "L"}
+{"text": "is this a good variable name", "label": "L"}
+{"text": "does this need a semicolon", "label": "L"}
+{"text": "can I delete this file", "label": "L"}
+{"text": "is it ok to use any here", "label": "L"}
+{"text": "should this be a const", "label": "L"}
+{"text": "is this the latest version of the library", "label": "L"}
+{"text": "what does this warning mean", "label": "L"}
+{"text": "what does this function return when the input is null", "label": "L"}
+{"text": "remove this console.log", "label": "L"}
+{"text": "delete the commented out code", "label": "L"}
+{"text": "rename the file to camelCase", "label": "L"}
+{"text": "fix the indentation", "label": "L"}
+{"text": "change the port to 8080", "label": "L"}
+{"text": "change the title of the page", "label": "L"}
+{"text": "make the button bigger", "label": "L"}
+{"text": "add a margin below the header", "label": "L"}
+{"text": "change the font to Inter", "label": "L"}
+{"text": "add an alt attribute to the images", "label": "L"}
+{"text": "make this text bold", "label": "L"}
+{"text": "use a template string here", "label": "L"}
+{"text": "add a default value for this parameter", "label": "L"}
+{"text": "make this field optional", "label": "L"}
+{"text": "export this function", "label": "L"}
+{"text": "add a placeholder to the input", "label": "L"}
+{"text": "swap the order of these two columns", "label": "L"}
+{"text": "set the timeout to 30 seconds", "label": "L"}
+{"text": "log the error before rethrowing", "label": "L"}
+{"text": "add a null check here", "label": "L"}
+{"text": "return 404 if the user is not found", "label": "L"}
+{"text": "uppercase the status before saving", "label": "L"}
+{"text": "sort this list by date descending", "label": "L"}
+{"text": "add a key prop to the list items", "label": "L"}
+{"text": "wrap this in a try catch", "label": "L"}
+{"text": "use the env variable instead of the hardcoded url", "label": "L"}
+{"text": "add the missing await", "label": "L"}
+{"text": "update the readme with the new command", "label": "L"}
+{"text": "make the link open in a new tab", "label": "L"}
+{"text": "disable the submit button while loading", "label": "L"}
+{"text": "show the error message under the field", "label": "L"}
+{"text": "increase the max upload size to 10MB", "label": "L"}
+{"text": "add a favicon", "label": "L"}
+{"text": "write a function that sends a welcome sms", "label": "N"}
+{"text": "write a react hook for media queries", "label": "N"}
+{"text": "write a middleware that blocks requests from banned IPs", "label": "N"}
+{"text": "write an endpoint that returns sales grouped by day for a date range", "label": "N"}
+{"text": "write a script that imports customers from a CSV into postgres", "label": "N"}
+{"text": "write a component that shows a paginated table with sorting", "label": "N"}
+{"text": "write a function that resizes uploaded images to three sizes", "label": "N"}
+{"text": "write a function that retries a promise with exponential backoff", "label": "N"}
+{"text": "write a modal component with a portal and focus trap", "label": "N"}
+{"text": "write a login API that returns a JWT and a refresh token", "label": "N"}
+{"text": "add an endpoint to change the password with the old password check", "label": "N"}
+{"text": "add email verification with a token that expires in 24 hours", "label": "N"}
+{"text": "add a 'forgot password' email with a reset link", "label": "N"}
+{"text": "add an avatar upload to the profile page", "label": "N"}
+{"text": "add a notifications dropdown with unread count", "label": "N"}
+{"text": "add a comments section with replies", "label": "N"}
+{"text": "add tags to posts with filtering", "label": "N"}
+{"text": "add a draft and publish workflow for articles", "label": "N"}
+{"text": "add an activity log page for each user", "label": "N"}
+{"text": "add a settings page for notification preferences", "label": "N"}
+{"text": "add bulk delete with a confirmation", "label": "N"}
+{"text": "add CSV export for the reports table", "label": "N"}
+{"text": "add a printable receipt view", "label": "N"}
+{"text": "add a contact form that emails the admin", "label": "N"}
+{"text": "add an FAQ accordion", "label": "N"}
+{"text": "add a testimonials slider", "label": "N"}
+{"text": "add a pricing toggle for monthly and yearly", "label": "N"}
+{"text": "add a cart badge that updates live", "label": "N"}
+{"text": "add a product filter sidebar with price range and categories", "label": "N"}
+{"text": "add a 'load more' button to the blog list", "label": "N"}
+{"text": "add a password strength meter", "label": "N"}
+{"text": "add an OTP input with auto focus between boxes", "label": "N"}
+{"text": "add an image gallery with a lightbox", "label": "N"}
+{"text": "add a sticky add-to-cart bar on mobile", "label": "N"}
+{"text": "add a countdown for the flash sale", "label": "N"}
+{"text": "add a language switcher", "label": "N"}
+{"text": "add a theme provider with light and dark", "label": "N"}
+{"text": "add route-level code splitting", "label": "N"}
+{"text": "add a health check script for the cron jobs", "label": "N"}
+{"text": "add metrics for request count and latency", "label": "N"}
+{"text": "add a retry policy to the http client", "label": "N"}
+{"text": "add timeouts to all database queries", "label": "N"}
+{"text": "add a circuit breaker around the payment API", "label": "N"}
+{"text": "add a queue for sending emails", "label": "N"}
+{"text": "add caching headers to static assets", "label": "N"}
+{"text": "add gzip compression", "label": "L"}
+{"text": "add a robots meta noindex to staging", "label": "L"}
+{"text": "add a redirect from www to the root domain", "label": "L"}
+{"text": "meka optimize karanna", "label": "N"}
+{"text": "me component eka podi components walata kadanna", "label": "N"}
+{"text": "me api eke validation danna", "label": "N"}
+{"text": "me page eka mobile walata responsive karanna", "label": "N"}
+{"text": "unit tests liyanna me service ekata", "label": "N"}
+{"text": "typescript walata convert karanna", "label": "N"}
+{"text": "error handling danna mulu api ekatama", "label": "N"}
+{"text": "loading spinner ekak danna", "label": "L"}
+{"text": "me function eke nama wenas karanna", "label": "L"}
+{"text": "console log ain karanna", "label": "L"}
+{"text": "button eka disable karanna loading weddi", "label": "L"}
+{"text": "port eka 3000 ta wenas karanna", "label": "L"}
+{"text": "me error eka enne ai", "label": "L"}
+{"text": "react wala useEffect kiyanne mokakda", "label": "L"}
+{"text": "jwt kiyanne mokakda", "label": "L"}
+{"text": "database design eka hariyata thiyenawada kiyala balanna", "label": "N"}
+{"text": "mulu system eke database design eka aluthen hadanna multi branch support ekka", "label": "H"}
+{"text": "payment double charge wena prashnaya hoyala fix karanna", "label": "H"}
+{"text": "high traffic ekata server eka scale karanna plan ekak", "label": "H"}
+{"text": "app eka offline mode ekata sync ekka hadanna", "label": "H"}
+{"text": "api eka hack karanna puluwanda kiyala security audit ekak karanna", "label": "H"}
+{"text": "cron job eka dekapara run wenawa, hethuwa hoyanna", "label": "H"}
+{"text": "inventory count eka orders walin passe waradi wenawa", "label": "H"}

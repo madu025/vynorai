@@ -1,0 +1,208 @@
+{"text": "write a function to capitalize the first letter of each word", "label": "N"}
+{"text": "make this function return early instead of nesting ifs", "label": "L"}
+{"text": "turn this for loop into a map", "label": "L"}
+{"text": "add types to this function", "label": "L"}
+{"text": "add types to the whole utils folder", "label": "N"}
+{"text": "write a zod schema for this form", "label": "N"}
+{"text": "convert this JSON to a TypeScript interface", "label": "L"}
+{"text": "write a generic Result type and use it in the api layer", "label": "N"}
+{"text": "make this function generic", "label": "N"}
+{"text": "fix the any types in this file", "label": "N"}
+{"text": "write a discriminated union for these API responses", "label": "N"}
+{"text": "why does typescript think this can be undefined", "label": "L"}
+{"text": "write a react component that shows a countdown timer", "label": "N"}
+{"text": "make this modal close on escape", "label": "L"}
+{"text": "add form validation with react-hook-form", "label": "N"}
+{"text": "build a multi-step checkout form with validation per step and a summary", "label": "N"}
+{"text": "add a drag and drop kanban board", "label": "N"}
+{"text": "the context re-renders the whole app, restructure state so only consumers that need it update", "label": "H"}
+{"text": "move server state to react query", "label": "N"}
+{"text": "migrate the app from pages router to app router in Next.js", "label": "H"}
+{"text": "add a server action for the contact form", "label": "N"}
+{"text": "why is my next.js page not revalidating", "label": "N"}
+{"text": "add middleware to protect /dashboard routes", "label": "N"}
+{"text": "generate static pages for all blog posts", "label": "N"}
+{"text": "add a vue component for a star rating", "label": "N"}
+{"text": "convert this vue 2 options api component to composition api", "label": "N"}
+{"text": "write a svelte store for the cart", "label": "N"}
+{"text": "add an angular service to fetch products", "label": "N"}
+{"text": "write an express route to create a user", "label": "N"}
+{"text": "add a global error handler middleware", "label": "N"}
+{"text": "add request logging with morgan", "label": "L"}
+{"text": "split routes.ts into separate route files", "label": "N"}
+{"text": "add graceful shutdown to the server", "label": "N"}
+{"text": "add an endpoint to export a user's data as JSON for GDPR", "label": "N"}
+{"text": "implement account deletion that removes data across all services and backups policy", "label": "H"}
+{"text": "write a NestJS module for notifications", "label": "N"}
+{"text": "add a guard for admin routes in NestJS", "label": "N"}
+{"text": "write a fastify plugin for auth", "label": "N"}
+{"text": "write a Django model for blog posts", "label": "N"}
+{"text": "add a Django admin for orders", "label": "N"}
+{"text": "write a django rest framework viewset with filtering", "label": "N"}
+{"text": "fix the N+1 queries in this django view with select_related", "label": "N"}
+{"text": "add celery to run the report generation in the background", "label": "N"}
+{"text": "write a flask endpoint that accepts a file upload", "label": "N"}
+{"text": "write a pydantic model for this payload", "label": "L"}
+{"text": "add async SQLAlchemy to the FastAPI app", "label": "N"}
+{"text": "write a python decorator that times a function", "label": "N"}
+{"text": "write a python CLI with argparse for this script", "label": "N"}
+{"text": "read a large CSV in chunks and aggregate it", "label": "N"}
+{"text": "scrape product prices from this page every hour", "label": "N"}
+{"text": "train a simple sklearn model to predict churn from this CSV", "label": "N"}
+{"text": "design the ML pipeline: feature store, training, evaluation, deployment and monitoring for drift", "label": "H"}
+{"text": "plot monthly sales with matplotlib", "label": "L"}
+{"text": "clean this dataframe: drop duplicates, fix dates, fill missing values", "label": "N"}
+{"text": "write a Laravel controller for products with validation", "label": "N"}
+{"text": "add a Laravel job to send the invoice email", "label": "N"}
+{"text": "add an eloquent relationship between orders and items", "label": "L"}
+{"text": "write a Laravel migration for the bookings table", "label": "N"}
+{"text": "add sanctum API authentication", "label": "N"}
+{"text": "write a blade component for the product card", "label": "N"}
+{"text": "optimize this eloquent query that loads 10k rows", "label": "N"}
+{"text": "write a wordpress plugin that adds a contact form", "label": "N"}
+{"text": "add a woocommerce hook to apply a discount for first orders", "label": "N"}
+{"text": "the woocommerce store is slow with 20k products, find and fix the bottlenecks", "label": "H"}
+{"text": "write a spring boot entity and repository for customers", "label": "N"}
+{"text": "add spring security with JWT", "label": "N"}
+{"text": "write a JUnit test for the service", "label": "N"}
+{"text": "fix the LazyInitializationException", "label": "N"}
+{"text": "our spring service has connection pool exhaustion under load, find the cause", "label": "H"}
+{"text": "write a kotlin data class for this json", "label": "L"}
+{"text": "add a room database to the android app", "label": "N"}
+{"text": "write a jetpack compose screen for the profile", "label": "N"}
+{"text": "write a swiftui view for the settings screen", "label": "N"}
+{"text": "write a C# minimal API for todos", "label": "N"}
+{"text": "add entity framework migrations", "label": "N"}
+{"text": "write a go function to read a config file", "label": "N"}
+{"text": "add context cancellation to these goroutines", "label": "N"}
+{"text": "write a worker pool in go with bounded concurrency", "label": "N"}
+{"text": "write a rust function to parse this log format", "label": "N"}
+{"text": "make this rust code use iterators instead of loops", "label": "L"}
+{"text": "write a bash script that rotates log files", "label": "N"}
+{"text": "write a powershell script to clean temp folders", "label": "N"}
+{"text": "write a regex for Sri Lankan vehicle numbers", "label": "N"}
+{"text": "write a regex that matches emails", "label": "L"}
+{"text": "write a cron expression for every weekday at 9am", "label": "L"}
+{"text": "write an nginx config for a node app with SSL", "label": "N"}
+{"text": "write a caddyfile for two domains", "label": "N"}
+{"text": "write a systemd service for this app", "label": "N"}
+{"text": "write a github action that builds a docker image and pushes it", "label": "N"}
+{"text": "set up preview deployments for every pull request", "label": "N"}
+{"text": "write a docker compose file for postgres and redis", "label": "L"}
+{"text": "reduce our docker image from 1.2GB", "label": "N"}
+{"text": "write a SQL query to find duplicate emails", "label": "L"}
+{"text": "write a query that ranks products by sales within each category", "label": "N"}
+{"text": "write a recursive CTE for the category tree", "label": "N"}
+{"text": "add a unique constraint and handle existing duplicates", "label": "N"}
+{"text": "write a trigger that updates updated_at", "label": "L"}
+{"text": "design the database schema for a school management system", "label": "H"}
+{"text": "design the schema for a hotel booking app", "label": "H"}
+{"text": "add a column for discount percentage", "label": "L"}
+{"text": "write a mongodb aggregation for daily active users", "label": "N"}
+{"text": "should we use mongodb or postgres for this", "label": "N"}
+{"text": "write a redis cache wrapper with TTL", "label": "N"}
+{"text": "implement a distributed lock with redis that is safe if a node crashes", "label": "H"}
+{"text": "write a rate limiter using a sliding window in redis", "label": "N"}
+{"text": "write a function to generate a secure random token", "label": "L"}
+{"text": "hash passwords with argon2", "label": "L"}
+{"text": "implement refresh token rotation with reuse detection", "label": "H"}
+{"text": "add input sanitization to the comment form", "label": "N"}
+{"text": "set secure headers and a content security policy", "label": "N"}
+{"text": "our app was flagged for SSRF in the URL preview feature, fix it properly", "label": "H"}
+{"text": "encrypt this field in the database", "label": "N"}
+{"text": "write a webhook receiver that verifies the signature", "label": "N"}
+{"text": "make the webhook handler idempotent", "label": "N"}
+{"text": "write a function to calculate VAT for Sri Lanka", "label": "N"}
+{"text": "format phone numbers to +94", "label": "L"}
+{"text": "convert sinhala unicode text to lowercase safely", "label": "L"}
+{"text": "write a function to validate an NIC and extract birth date and gender", "label": "N"}
+{"text": "add district and province dropdowns for Sri Lanka", "label": "N"}
+{"text": "integrate the dialog/mobitel SMS gateway for OTP", "label": "N"}
+{"text": "build a delivery tracking system with riders, live location and ETA", "label": "H"}
+{"text": "write a function to check if a year is a leap year", "label": "L"}
+{"text": "write binary search", "label": "N"}
+{"text": "implement LRU cache", "label": "N"}
+{"text": "solve two sum in O(n)", "label": "N"}
+{"text": "explain dynamic programming with an example", "label": "L"}
+{"text": "solve the knapsack problem for our shipment packing with weight and volume limits", "label": "H"}
+{"text": "write a function that detects cycles in a dependency graph", "label": "N"}
+{"text": "schedule exams so no student has two at once with the fewest days", "label": "H"}
+{"text": "write a function to merge overlapping intervals", "label": "N"}
+{"text": "write a debounce and a throttle", "label": "N"}
+{"text": "implement a pub/sub in memory", "label": "N"}
+{"text": "implement a consistent hashing ring", "label": "H"}
+{"text": "write a function to flatten a nested object", "label": "N"}
+{"text": "write a function to deep compare two objects", "label": "N"}
+{"text": "write a function to chunk an array", "label": "L"}
+{"text": "write a function that formats bytes to KB/MB/GB", "label": "L"}
+{"text": "write a function to parse query strings", "label": "N"}
+{"text": "write a markdown to html converter for headings and lists", "label": "N"}
+{"text": "write a simple template engine", "label": "N"}
+{"text": "write an expression parser that handles precedence and parentheses", "label": "H"}
+{"text": "build a tiny interpreter for our rules DSL", "label": "H"}
+{"text": "add a share button", "label": "L"}
+{"text": "add a copy to clipboard button", "label": "L"}
+{"text": "add a back to top button", "label": "L"}
+{"text": "add breadcrumbs to the docs pages", "label": "N"}
+{"text": "add a cookie consent banner", "label": "N"}
+{"text": "add a footer with links", "label": "L"}
+{"text": "build the landing page with hero, features, pricing and FAQ", "label": "N"}
+{"text": "make the navbar sticky", "label": "L"}
+{"text": "add animations when sections scroll into view", "label": "N"}
+{"text": "fix the z-index so the dropdown shows above the modal", "label": "L"}
+{"text": "make the grid 3 columns on desktop and 1 on mobile", "label": "L"}
+{"text": "the font looks different on windows", "label": "L"}
+{"text": "add a print stylesheet for invoices", "label": "N"}
+{"text": "write an email template that works in outlook", "label": "N"}
+{"text": "add charts to the admin dashboard with recharts", "label": "N"}
+{"text": "add a map with markers for our shops", "label": "N"}
+{"text": "add a rich text editor to the post form", "label": "N"}
+{"text": "add a date range picker", "label": "N"}
+{"text": "add a file preview for PDFs", "label": "N"}
+{"text": "add voice input to the search", "label": "N"}
+{"text": "add a QR code to the receipt", "label": "L"}
+{"text": "scan a QR code in the mobile app", "label": "N"}
+{"text": "add an AI summary of each support ticket using our LLM API", "label": "N"}
+{"text": "build a RAG chatbot over our docs with citations", "label": "H"}
+{"text": "add embeddings search to the help center", "label": "N"}
+{"text": "call the deepseek API from this function", "label": "L"}
+{"text": "stream the LLM response to the browser", "label": "N"}
+{"text": "write an agent loop with tool calling and a step limit", "label": "H"}
+{"text": "write a prompt that extracts invoice fields as JSON", "label": "N"}
+{"text": "count tokens before sending to the model", "label": "L"}
+{"text": "write a function that retries the openai call on 429", "label": "N"}
+{"text": "write a jest mock for the api module", "label": "N"}
+{"text": "mock the date in this test", "label": "L"}
+{"text": "write tests for the edge cases of this parser", "label": "N"}
+{"text": "write an integration test for the checkout API", "label": "N"}
+{"text": "set up test containers for postgres in CI", "label": "N"}
+{"text": "write a load test with k6 for the login endpoint", "label": "N"}
+{"text": "write pytest fixtures for the database", "label": "N"}
+{"text": "add code coverage reporting to CI", "label": "L"}
+{"text": "write a storybook story for the button", "label": "L"}
+{"text": "add visual regression tests", "label": "N"}
+{"text": "write a changelog entry for this release", "label": "L"}
+{"text": "write release notes from these commits", "label": "L"}
+{"text": "write a CONTRIBUTING guide", "label": "N"}
+{"text": "write an ADR for choosing postgres over mongo", "label": "N"}
+{"text": "write a technical design doc for the new billing system", "label": "H"}
+{"text": "estimate how long this feature would take", "label": "L"}
+{"text": "break this epic into tasks", "label": "N"}
+{"text": "write user stories for the booking feature", "label": "N"}
+{"text": "write a function that converts LKR to USD with the latest rate", "label": "N"}
+{"text": "cache the exchange rate for an hour", "label": "L"}
+{"text": "add a currency selector that changes all prices", "label": "N"}
+{"text": "support multiple currencies in carts, orders, refunds and accounting consistently", "label": "H"}
+{"text": "add a referral program with codes and rewards", "label": "N"}
+{"text": "detect fraud in referral signups", "label": "H"}
+{"text": "add a wishlist", "label": "N"}
+{"text": "add product reviews with ratings", "label": "N"}
+{"text": "recommend products based on purchase history", "label": "H"}
+{"text": "add stock alerts when inventory is low", "label": "N"}
+{"text": "add coupon codes with expiry and usage limits", "label": "N"}
+{"text": "add an abandoned cart email after 24 hours", "label": "N"}
+{"text": "add a loyalty points system", "label": "N"}
+{"text": "add an order status timeline", "label": "N"}
+{"text": "add returns and refunds", "label": "N"}
+{"text": "add a subscription box with monthly billing", "label": "N"}
+{"text": "add a marketplace with multiple sellers, commissions and payouts", "label": "H"}

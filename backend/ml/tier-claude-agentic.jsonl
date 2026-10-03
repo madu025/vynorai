@@ -1,0 +1,180 @@
+{"text": "implement the forgot password flow end to end: endpoint, email, reset page, and tests. run the tests when done", "label": "N"}
+{"text": "add a /health endpoint, write a test for it, and run the test suite", "label": "N"}
+{"text": "find every place we call the old fetchJson helper, switch them to the new apiClient, and make sure the build passes", "label": "N"}
+{"text": "the build is failing on main, figure out why and fix it", "label": "N"}
+{"text": "run the tests and fix whatever is failing", "label": "N"}
+{"text": "npm run typecheck has 40 errors after the upgrade, fix all of them", "label": "N"}
+{"text": "go through the codebase and add proper error handling to every API route, then run the tests", "label": "H"}
+{"text": "explore the repo and tell me how authentication works", "label": "N"}
+{"text": "look around the project and explain the folder structure", "label": "L"}
+{"text": "read src/billing and summarize how credits are charged", "label": "N"}
+{"text": "map out all the places where we write to the users table and check none of them skip validation", "label": "H"}
+{"text": "create a new page /settings with a form to update the profile, wire it to the existing API, and add it to the nav", "label": "N"}
+{"text": "add a dark mode toggle that persists in localStorage, update the header and all pages that hardcode colors", "label": "N"}
+{"text": "implement multi-tenant workspaces: data model, invites, role checks on every endpoint, and migrate existing users into a default workspace", "label": "H"}
+{"text": "set up the project from scratch: Next.js, Tailwind, Prisma with Postgres, auth, and a dashboard layout", "label": "H"}
+{"text": "scaffold a new express API with TypeScript, eslint, jest and a sample route", "label": "N"}
+{"text": "add an admin panel that lists users with search and pagination, reuse the existing table component", "label": "N"}
+{"text": "write an end-to-end Playwright test for signup and login, and add it to CI", "label": "N"}
+{"text": "our test coverage is 30%, raise it to 80% for the services folder", "label": "H"}
+{"text": "fix all eslint warnings in src/components", "label": "N"}
+{"text": "update every dependency to the latest minor version and make sure nothing breaks", "label": "N"}
+{"text": "upgrade the app from React 17 to React 19 and fix every breaking change across the codebase", "label": "H"}
+{"text": "go through the TODO comments in the repo and implement the small ones", "label": "N"}
+{"text": "investigate the flaky test in orders.test.ts, it fails about one run in ten", "label": "H"}
+{"text": "the e2e suite takes 40 minutes; parallelize it and remove shared state between tests so it stays reliable", "label": "H"}
+{"text": "add OpenAPI docs for all routes and serve them at /docs", "label": "N"}
+{"text": "implement CSV import for products with validation, a preview step, and error reporting per row", "label": "N"}
+{"text": "integrate Stripe subscriptions with webhooks, proration, failed payment handling, and sync to our plans table", "label": "H"}
+{"text": "add email notifications when an order ships, using the existing mailer", "label": "N"}
+{"text": "add a search bar to the products page that filters as you type", "label": "N"}
+{"text": "implement full-text search across products, orders and customers with ranking and typo tolerance", "label": "H"}
+{"text": "replace all inline styles in src/pages with tailwind classes", "label": "N"}
+{"text": "localize the whole app into sinhala and tamil, including dates, numbers, and right text lengths in the layout", "label": "H"}
+{"text": "add audit logging for admin actions", "label": "N"}
+{"text": "write a seed script that creates demo data for local development", "label": "N"}
+{"text": "containerize the whole stack with docker compose: api, worker, postgres, redis, and a reverse proxy", "label": "N"}
+{"text": "set up blue-green deploys for our VPS with health checks and automatic rollback", "label": "H"}
+{"text": "add a retry with backoff to the email sending job and a dead letter table for failures", "label": "N"}
+{"text": "build a background job system with priorities, retries, scheduling and a dashboard", "label": "H"}
+{"text": "port the python data script to typescript so it runs inside our node worker", "label": "N"}
+{"text": "rewrite the legacy jQuery admin pages in React, page by page, keeping the same URLs", "label": "H"}
+{"text": "fix the bug, then add a regression test so it doesn't come back", "label": "N"}
+{"text": "check the git diff and write a good commit message for it", "label": "L"}
+{"text": "review my uncommitted changes and point out anything risky", "label": "N"}
+{"text": "review the whole PR across 30 files for correctness, races and missed edge cases", "label": "H"}
+{"text": "make the API return consistent error objects everywhere and update the frontend to show them", "label": "N"}
+{"text": "implement soft delete for posts and comments, and hide deleted items in every query", "label": "N"}
+{"text": "add role based permissions: admin, editor, viewer, enforce them on the server and hide buttons on the client", "label": "N"}
+{"text": "design and implement a permissions system with custom roles, resource-level rules and an audit trail", "label": "H"}
+{"text": "add a file upload to S3 with presigned URLs and show progress in the UI", "label": "N"}
+{"text": "add an image cropper before upload", "label": "N"}
+{"text": "keep going", "label": "L"}
+{"text": "continue from where you stopped", "label": "N"}
+{"text": "do the next step in the plan", "label": "N"}
+{"text": "mark the first todo done and move to the next one", "label": "N"}
+{"text": "you missed the tests, add them", "label": "N"}
+{"text": "you broke the login page, fix it", "label": "N"}
+{"text": "undo your last change to the router", "label": "L"}
+{"text": "apply the same fix to the other three handlers", "label": "N"}
+{"text": "now run the linter", "label": "L"}
+{"text": "start the dev server and check the page loads", "label": "L"}
+{"text": "run npm test", "label": "L"}
+{"text": "install zod", "label": "L"}
+{"text": "create a new branch called feature/invoices", "label": "L"}
+{"text": "commit this with a sensible message", "label": "L"}
+{"text": "the tests pass locally but fail in CI, figure out the difference", "label": "H"}
+{"text": "add a Sri Lankan phone number field with validation to the signup form", "label": "N"}
+{"text": "implement the PayHere checkout: create order, redirect, verify the notify callback, and mark the order paid", "label": "N"}
+{"text": "build a POS screen for a small shop: product grid, cart, discounts, receipt printing", "label": "H"}
+{"text": "add a monthly sales report page with a chart", "label": "N"}
+{"text": "generate invoices as PDF and email them to customers", "label": "N"}
+{"text": "we need an accounting module with double-entry ledger, VAT, and reports that reconcile", "label": "H"}
+{"text": "mulu project ekema tests run karala fail wena ewa fix karanna", "label": "N"}
+{"text": "admin panel ekata users list ekak search ekka hadanna", "label": "N"}
+{"text": "me feature eka end to end hadanna, backend, frontend, tests okkoma", "label": "N"}
+{"text": "project eka docker walata danna", "label": "N"}
+{"text": "app eke performance eka check karala mokakda slow kiyala hoyanna", "label": "H"}
+{"text": "codebase eka balala auth eka wada karana widiha kiyanna", "label": "N"}
+{"text": "hari, ilaga step eka karanna", "label": "N"}
+{"text": "issarahata yanna", "label": "L"}
+{"text": "@src/routes/auth.ts @src/middleware/session.ts sessions expire too early, fix it", "label": "N"}
+{"text": "@src/db/schema.ts add a coupons table and wire it into checkout", "label": "N"}
+{"text": "@workspace where do we send the welcome email", "label": "L"}
+{"text": "@codebase how does the cache invalidation work", "label": "N"}
+{"text": "@terminal fix the error above", "label": "N"}
+{"text": "@problems fix all of these", "label": "N"}
+{"text": "@diff review this", "label": "N"}
+{"text": "@file explain the selected code", "label": "L"}
+{"text": "/fix", "label": "N"}
+{"text": "/explain", "label": "L"}
+{"text": "/test", "label": "N"}
+{"text": "/review", "label": "N"}
+{"text": "/refactor", "label": "N"}
+{"text": "/docs", "label": "N"}
+{"text": "/optimize", "label": "N"}
+{"text": "/security", "label": "H"}
+{"text": "here's the stack trace:\nError: connect ECONNREFUSED 127.0.0.1:5432\n    at TCPConnectWrap.afterConnect", "label": "L"}
+{"text": "getting this when I deploy:\nError: Cannot find module '/app/dist/index.js'", "label": "N"}
+{"text": "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory, happens after the job runs for an hour", "label": "H"}
+{"text": "Warning: Each child in a list should have a unique \"key\" prop.", "label": "L"}
+{"text": "Hydration failed because the initial UI does not match what was rendered on the server", "label": "N"}
+{"text": "CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource", "label": "N"}
+{"text": "TS2322: Type 'string | undefined' is not assignable to type 'string'.", "label": "L"}
+{"text": "Uncaught (in promise) TypeError: Failed to fetch", "label": "N"}
+{"text": "ERROR 1452: Cannot add or update a child row: a foreign key constraint fails", "label": "N"}
+{"text": "429 Too Many Requests from the payment API during the nightly batch", "label": "N"}
+{"text": "segmentation fault in the native module, only on linux arm64 builds", "label": "H"}
+{"text": "could not serialize access due to concurrent update, happens when two admins approve the same order", "label": "H"}
+{"text": "Error: P2002 Unique constraint failed on the fields: (`email`)", "label": "N"}
+{"text": "java.lang.OutOfMemoryError: GC overhead limit exceeded in the report generator", "label": "H"}
+{"text": "Flutter: RenderFlex overflowed by 42 pixels on the bottom", "label": "L"}
+{"text": "Laravel: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status'", "label": "N"}
+{"text": "python: IndentationError: unexpected indent", "label": "L"}
+{"text": "go: panic: assignment to entry in nil map", "label": "L"}
+{"text": "rust: cannot borrow `self` as mutable because it is also borrowed as immutable, in the event loop", "label": "N"}
+{"text": "docker: no space left on device", "label": "L"}
+{"text": "nginx 502 bad gateway after deploy", "label": "N"}
+{"text": "sometimes users get logged out randomly and we can't see a pattern in the logs", "label": "H"}
+{"text": "the cron job ran twice last night and sent duplicate emails", "label": "H"}
+{"text": "prices show wrong after midnight Sri Lanka time but are fine in the morning", "label": "N"}
+{"text": "the numbers on the dashboard don't match the database totals", "label": "N"}
+{"text": "reports are off by a few rupees every month, figure out where rounding goes wrong across invoices, refunds and tax", "label": "H"}
+{"text": "write a function that splits a bill between n people in LKR with cents handled correctly", "label": "N"}
+{"text": "make this component accessible: keyboard navigation, aria labels, focus trap", "label": "N"}
+{"text": "audit the whole app for accessibility issues and fix them", "label": "H"}
+{"text": "add a sitemap and robots.txt", "label": "L"}
+{"text": "improve SEO: meta tags, open graph, structured data for products", "label": "N"}
+{"text": "set up error tracking with Sentry for frontend and backend", "label": "N"}
+{"text": "add analytics events for signup, purchase and churn", "label": "N"}
+{"text": "build an A/B testing framework with assignment, exposure logging and significance reporting", "label": "H"}
+{"text": "add a websocket chat between customer and support agent", "label": "N"}
+{"text": "build realtime collaborative editing for documents", "label": "H"}
+{"text": "add a calendar view for bookings", "label": "N"}
+{"text": "prevent double booking of the same time slot when two people book at once", "label": "H"}
+{"text": "add an export to Excel button", "label": "N"}
+{"text": "add two-factor authentication with TOTP", "label": "N"}
+{"text": "add login with Google", "label": "N"}
+{"text": "implement SSO with SAML for enterprise customers, mapping groups to roles", "label": "H"}
+{"text": "add an API key system so customers can call our API, with scopes and rate limits", "label": "H"}
+{"text": "add a 'last seen' timestamp to users", "label": "L"}
+{"text": "show a toast when saving succeeds", "label": "L"}
+{"text": "add a skeleton loader to the cards", "label": "L"}
+{"text": "add infinite scroll to the feed", "label": "N"}
+{"text": "add optimistic updates to the like button", "label": "N"}
+{"text": "cache API responses on the client and invalidate them correctly after mutations across the app", "label": "H"}
+{"text": "add a service worker so the app works offline", "label": "N"}
+{"text": "make the mobile app support deep links", "label": "N"}
+{"text": "add biometric login to the app", "label": "N"}
+{"text": "reduce the mobile app bundle size, it's 80MB", "label": "H"}
+{"text": "add an onboarding carousel", "label": "N"}
+{"text": "write a GraphQL resolver for orders with pagination", "label": "N"}
+{"text": "our GraphQL server has N+1 problems everywhere, add dataloaders across all resolvers", "label": "H"}
+{"text": "add a gRPC endpoint for the inventory service", "label": "N"}
+{"text": "design the contract between the inventory and order services so stock never goes negative", "label": "H"}
+{"text": "write a k8s deployment and service yaml for the api", "label": "N"}
+{"text": "set up autoscaling and zero-downtime rolling deploys on kubernetes with proper readiness probes", "label": "H"}
+{"text": "write terraform for an S3 bucket and cloudfront", "label": "N"}
+{"text": "add a nightly database backup to S3 and a script to restore it", "label": "N"}
+{"text": "design our disaster recovery: RPO, RTO, backups, failover drills", "label": "H"}
+{"text": "add a feature flag for the new checkout", "label": "L"}
+{"text": "clean up the feature flags that are fully rolled out", "label": "N"}
+{"text": "what tests should I write for this function?", "label": "L"}
+{"text": "write property-based tests for the parser", "label": "N"}
+{"text": "fuzz the file parser to find crashes", "label": "H"}
+{"text": "benchmark the two implementations and tell me which is faster", "label": "N"}
+{"text": "profile startup time and get it under one second", "label": "H"}
+{"text": "add a debounce to the search input", "label": "L"}
+{"text": "throttle the scroll handler", "label": "L"}
+{"text": "write a custom useFetch hook with abort and caching", "label": "N"}
+{"text": "write a typed event bus", "label": "N"}
+{"text": "write a state machine for the order lifecycle with allowed transitions", "label": "N"}
+{"text": "model the whole order fulfilment process across warehouses, partial shipments, returns and refunds", "label": "H"}
+{"text": "add a migration to backfill the slug column for existing posts", "label": "N"}
+{"text": "backfill 50 million rows without locking the table or slowing production", "label": "H"}
+{"text": "write a SQL view for monthly revenue", "label": "N"}
+{"text": "explain this EXPLAIN ANALYZE output", "label": "N"}
+{"text": "why is postgres not using my index", "label": "N"}
+{"text": "tune postgres for our workload, we have 16GB RAM and mostly reads", "label": "N"}
+{"text": "shard the database by tenant and route queries correctly", "label": "H"}
+{"text": "add read replicas and make sure writes are never read stale where it matters", "label": "H"}

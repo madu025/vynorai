@@ -1,0 +1,99 @@
+{"text": "what's the purpose of package-lock.json", "label": "L"}
+{"text": "change the heading color to dark gray", "label": "L"}
+{"text": "how do I undo git add", "label": "L"}
+{"text": "should I use a class or a function here", "label": "L"}
+{"text": "add a title tag to the page", "label": "L"}
+{"text": "remove the extra blank lines", "label": "L"}
+{"text": "explain what this middleware is doing", "label": "L"}
+{"text": "what is the difference between PUT and PATCH", "label": "L"}
+{"text": "make the submit button full width", "label": "L"}
+{"text": "rename userList to customers", "label": "L"}
+{"text": "where is the config loaded", "label": "L"}
+{"text": "is this endpoint public", "label": "L"}
+{"text": "add a trailing slash redirect", "label": "L"}
+{"text": "what's a good name for this table", "label": "L"}
+{"text": "thank you so much", "label": "L"}
+{"text": "go on", "label": "L"}
+{"text": "use single quotes", "label": "L"}
+{"text": "react query eka mokatada", "label": "L"}
+{"text": "me file eka mokatada", "label": "L"}
+{"text": "font size eka podi karanna", "label": "L"}
+{"text": "Error: ENOENT: no such file or directory, open 'config.json'", "label": "L"}
+{"text": "add a cancel button to the edit form", "label": "L"}
+{"text": "set the default sort to newest first", "label": "L"}
+{"text": "what does the ?? operator do", "label": "L"}
+{"text": "show the user's name in the header", "label": "L"}
+{"text": "how can I check which process is using port 5000", "label": "L"}
+{"text": "add a hover effect to the cards", "label": "L"}
+{"text": "what's the max length of a varchar in postgres", "label": "L"}
+{"text": "convert this arrow function to a regular function", "label": "L"}
+{"text": "trim whitespace from the inputs before saving", "label": "L"}
+{"text": "build a newsletter signup with double opt-in", "label": "N"}
+{"text": "write a function that validates a Sri Lankan postal code", "label": "N"}
+{"text": "add a reorder button to past orders", "label": "N"}
+{"text": "write tests for the discount calculation", "label": "N"}
+{"text": "add server-side pagination to the invoices list", "label": "N"}
+{"text": "the modal doesn't close after saving", "label": "N"}
+{"text": "implement a like button with a count", "label": "N"}
+{"text": "write an endpoint to upload a profile photo to cloud storage", "label": "N"}
+{"text": "fix the date showing in UTC instead of local time", "label": "N"}
+{"text": "add a staff role that can view but not edit orders", "label": "N"}
+{"text": "create a reusable Table component with sorting and empty state", "label": "N"}
+{"text": "make the dashboard cards load in parallel", "label": "N"}
+{"text": "write a script to resize all images in a folder", "label": "N"}
+{"text": "add a webhook so customers get notified when their order ships", "label": "N"}
+{"text": "write a query that returns customers who haven't ordered in 90 days", "label": "N"}
+{"text": "add a sitemap generator for all product pages", "label": "N"}
+{"text": "write a function to split a full name into first and last", "label": "N"}
+{"text": "add authentication to the websocket connection", "label": "N"}
+{"text": "write a GitHub action to run migrations on deploy", "label": "N"}
+{"text": "TypeError: undefined is not a function when calling items.forEach", "label": "N"}
+{"text": "make the API return 400 with field errors when validation fails", "label": "N"}
+{"text": "write a react native screen that lists orders with pull to refresh", "label": "N"}
+{"text": "add a scheduled report that emails a weekly summary", "label": "N"}
+{"text": "write unit tests for the auth middleware", "label": "N"}
+{"text": "add a confirmation email after booking", "label": "N"}
+{"text": "my flutter list doesn't update after adding an item", "label": "N"}
+{"text": "add retries to the file upload when the network drops", "label": "N"}
+{"text": "write a laravel seeder for categories", "label": "N"}
+{"text": "invoice ekak email karanna order eka complete unama", "label": "N"}
+{"text": "me api ekata rate limit ekak danna", "label": "N"}
+{"text": "admin dashboard ekata sales chart ekak danna", "label": "N"}
+{"text": "login unama dashboard ekata redirect karanna", "label": "N"}
+{"text": "convert this express app to use typescript", "label": "N"}
+{"text": "the search returns results in the wrong order", "label": "N"}
+{"text": "add an endpoint that returns the current user's subscription status", "label": "N"}
+{"text": "write a function that groups orders by customer and totals them", "label": "N"}
+{"text": "add validation so end date can't be before start date", "label": "N"}
+{"text": "write a test that checks the email is sent after signup", "label": "N"}
+{"text": "add sorting by price to the product API", "label": "N"}
+{"text": "write an n8n-style workflow runner with steps and retries", "label": "H"}
+{"text": "our order totals sometimes disagree between the cart and the invoice", "label": "H"}
+{"text": "plan how to migrate 3 million users to the new auth system without forcing password resets", "label": "H"}
+{"text": "design the billing system for usage-based pricing with monthly invoices and credits", "label": "H"}
+{"text": "the queue backs up every evening and jobs are delayed by an hour", "label": "H"}
+{"text": "figure out why some payments are marked paid but the money never arrives", "label": "H"}
+{"text": "decide how to split our team's monolith into services and what stays together", "label": "H"}
+{"text": "the API leaks memory only when clients disconnect mid-stream", "label": "H"}
+{"text": "design a way for customers to run their own code in our platform safely", "label": "H"}
+{"text": "make the checkout work correctly when the same user has two tabs open", "label": "H"}
+{"text": "review the whole repo for places where errors are swallowed silently", "label": "H"}
+{"text": "our analytics numbers differ between the dashboard and the export", "label": "H"}
+{"text": "design a ranking algorithm for the marketplace search", "label": "H"}
+{"text": "there's an intermittent 502 from the load balancer we can't explain", "label": "H"}
+{"text": "how should we structure permissions for organizations, teams and projects", "label": "H"}
+{"text": "plan our database migration from MySQL to Postgres with no data loss", "label": "H"}
+{"text": "design a multi-step approval workflow engine that admins can configure", "label": "H"}
+{"text": "find why test runs leave the database in a dirty state for the next suite", "label": "H"}
+{"text": "secure our admin panel against account takeover", "label": "H"}
+{"text": "design how mobile and web share the same business logic", "label": "H"}
+{"text": "users report the app drains battery, find out why", "label": "H"}
+{"text": "mulu app eke architecture eka aluthen design karanna scalability walata", "label": "H"}
+{"text": "payment gateway eken callback dekak enawa samahara welawata, eka handle karanna", "label": "H"}
+{"text": "multi branch shop system ekata stock sync eka hariyata hadanna", "label": "H"}
+{"text": "design a leaderboard that updates in real time for 100k players", "label": "H"}
+{"text": "our build randomly fails with out of memory in CI", "label": "H"}
+{"text": "implement end-to-end encryption for chat messages", "label": "H"}
+{"text": "work out a caching plan that cuts our database load by 80%", "label": "H"}
+{"text": "trace why some webhooks are processed twice and some never", "label": "H"}
+{"text": "design data retention and deletion that satisfies GDPR across all our stores", "label": "H"}

@@ -1,0 +1,213 @@
+{"text": "what is dependency injection", "label": "L"}
+{"text": "what's the difference between SQL and NoSQL", "label": "L"}
+{"text": "explain event loop in node", "label": "L"}
+{"text": "what is a promise", "label": "L"}
+{"text": "how does JWT work", "label": "L"}
+{"text": "what is REST vs GraphQL", "label": "L"}
+{"text": "when should I use a queue", "label": "L"}
+{"text": "what is idempotency", "label": "L"}
+{"text": "explain CAP theorem", "label": "L"}
+{"text": "what is docker in simple words", "label": "L"}
+{"text": "what does this line do", "label": "L"}
+{"text": "why is this a bad practice", "label": "L"}
+{"text": "is this code correct?", "label": "L"}
+{"text": "can this be simplified?", "label": "L"}
+{"text": "what would you name this function", "label": "L"}
+{"text": "which is better here, map or forEach", "label": "L"}
+{"text": "how do I debug this in vscode", "label": "L"}
+{"text": "how do I set up eslint", "label": "L"}
+{"text": "what's the best folder structure for a react app", "label": "L"}
+{"text": "how do I deploy a node app to a VPS", "label": "L"}
+{"text": "how do I connect to postgres from node", "label": "L"}
+{"text": "what does 'use client' mean", "label": "L"}
+{"text": "what is the difference between == and ===", "label": "L"}
+{"text": "what is a race condition and how do I avoid it in this code", "label": "N"}
+{"text": "explain how this sorting function works step by step", "label": "L"}
+{"text": "explain this whole file", "label": "L"}
+{"text": "explain how the request flows from the router to the database in this project", "label": "N"}
+{"text": "why is this slow?", "label": "N"}
+{"text": "why does this crash?", "label": "N"}
+{"text": "why doesn't this work", "label": "N"}
+{"text": "it works on my machine but not on the server", "label": "N"}
+{"text": "it only fails sometimes", "label": "H"}
+{"text": "it fails randomly under load", "label": "H"}
+{"text": "nothing happens when I click the button", "label": "N"}
+{"text": "the form submits twice", "label": "N"}
+{"text": "the image doesn't show", "label": "L"}
+{"text": "the API returns 500", "label": "N"}
+{"text": "data is not saving", "label": "N"}
+{"text": "login is broken", "label": "N"}
+{"text": "the app is slow", "label": "N"}
+{"text": "the whole app became slow after the last release and we don't know which change caused it", "label": "H"}
+{"text": "fix this", "label": "N"}
+{"text": "fix it", "label": "N"}
+{"text": "make it better", "label": "N"}
+{"text": "clean this up", "label": "N"}
+{"text": "optimize this function", "label": "N"}
+{"text": "improve the performance of the whole backend", "label": "H"}
+{"text": "make this code production ready", "label": "N"}
+{"text": "make the whole codebase production ready", "label": "H"}
+{"text": "add comments", "label": "L"}
+{"text": "add error handling", "label": "N"}
+{"text": "add logging", "label": "N"}
+{"text": "add tests", "label": "N"}
+{"text": "add types", "label": "L"}
+{"text": "shorter", "label": "L"}
+{"text": "more detail please", "label": "L"}
+{"text": "in python instead", "label": "N"}
+{"text": "use async/await instead", "label": "N"}
+{"text": "do it without any library", "label": "N"}
+{"text": "what about edge cases?", "label": "N"}
+{"text": "what if the list is empty", "label": "L"}
+{"text": "and for the mobile version?", "label": "N"}
+{"text": "is there a faster way?", "label": "N"}
+{"text": "can you show the full file", "label": "L"}
+{"text": "why did you choose that approach", "label": "L"}
+{"text": "that's wrong, the field is called user_id not userId", "label": "L"}
+{"text": "no, I meant the other function", "label": "L"}
+{"text": "perfect", "label": "L"}
+{"text": "great, thanks", "label": "L"}
+{"text": "stop", "label": "L"}
+{"text": "wait", "label": "L"}
+{"text": "never mind", "label": "L"}
+{"text": "good morning", "label": "L"}
+{"text": "are you there", "label": "L"}
+{"text": "ayubowan", "label": "L"}
+{"text": "kohomada", "label": "L"}
+{"text": "meka mokakda", "label": "L"}
+{"text": "meka wada karanne kohomada", "label": "L"}
+{"text": "me code eka explain karanna", "label": "L"}
+{"text": "meke error eka mokadda kiyanna", "label": "L"}
+{"text": "meka fix karala denna", "label": "N"}
+{"text": "meka wada karanne naha", "label": "N"}
+{"text": "button eka click karama mukuth wenne naha", "label": "N"}
+{"text": "form eka submit wenne naha", "label": "N"}
+{"text": "data save wenne naha database ekata", "label": "N"}
+{"text": "login eka wada karanne naha", "label": "N"}
+{"text": "page eka load wenne godak slow", "label": "N"}
+{"text": "mulu app ekama slow, hethuwa hoyanna", "label": "H"}
+{"text": "sometimes wada karanawa sometimes naha", "label": "H"}
+{"text": "contact form ekak hadanna", "label": "N"}
+{"text": "register page ekak hadanna validation ekka", "label": "N"}
+{"text": "product list ekak table ekaka pennanna", "label": "N"}
+{"text": "search ekak danna", "label": "N"}
+{"text": "dark mode danna", "label": "N"}
+{"text": "api ekak hadanna products walata", "label": "N"}
+{"text": "database table ekak hadanna orders walata", "label": "N"}
+{"text": "email ekak yawanna order eka confirm unama", "label": "N"}
+{"text": "pdf ekak generate karanna invoice ekata", "label": "N"}
+{"text": "test liyanna me function ekata", "label": "N"}
+{"text": "comments danna", "label": "L"}
+{"text": "variable name eka wenas karanna", "label": "L"}
+{"text": "color eka blue karanna", "label": "L"}
+{"text": "text eka center karanna", "label": "L"}
+{"text": "import eka add karanna", "label": "L"}
+{"text": "spelling eka hadanna", "label": "L"}
+{"text": "e-commerce site ekak mulu system ekama hadanna payment ekka", "label": "H"}
+{"text": "school management system ekak design karanna", "label": "H"}
+{"text": "microservices walata wenas karanna one", "label": "H"}
+{"text": "security eka check karanna mulu app ekema", "label": "H"}
+{"text": "scalable architecture ekak yojana karanna", "label": "H"}
+{"text": "race condition ekak thiyenawa wage, hoyala fix karanna", "label": "H"}
+{"text": "memory leak ekak thiyenawa production eke", "label": "H"}
+{"text": "react walin todo app ekak hadanna", "label": "N"}
+{"text": "laravel walin blog ekak hadanna", "label": "N"}
+{"text": "flutter app ekata splash screen ekak danna", "label": "N"}
+{"text": "python script ekak liyanna excel file ekak read karanna", "label": "N"}
+{"text": "me query eka fast karanna", "label": "N"}
+{"text": "index ekak danna", "label": "L"}
+{"text": "docker file ekak liyanna", "label": "N"}
+{"text": "git push karanna bari, error ekak enawa", "label": "L"}
+{"text": "npm install karama error", "label": "N"}
+{"text": "server eka deploy karanna help karanna", "label": "N"}
+{"text": "domain eka connect karanne kohomada", "label": "L"}
+{"text": "ssl certificate ekak danna", "label": "N"}
+{"text": "Can you check if there are any bugs in this function?", "label": "N"}
+{"text": "Please review this code", "label": "N"}
+{"text": "Is this the right way to handle errors in express?", "label": "L"}
+{"text": "Suggest improvements for this component", "label": "N"}
+{"text": "What's wrong with my SQL query?", "label": "N"}
+{"text": "How can I make this faster?", "label": "N"}
+{"text": "Could you write the unit tests for this class?", "label": "N"}
+{"text": "Can you convert this to TypeScript?", "label": "N"}
+{"text": "Please add pagination to this API", "label": "N"}
+{"text": "I need a function that validates credit card numbers", "label": "N"}
+{"text": "I want to add authentication to my app, where do I start?", "label": "N"}
+{"text": "I'm getting a CORS error when calling my API from React", "label": "N"}
+{"text": "I don't understand this error, can you help?", "label": "L"}
+{"text": "My react state isn't updating", "label": "N"}
+{"text": "My docker container keeps restarting", "label": "N"}
+{"text": "My tests are flaky in CI only", "label": "H"}
+{"text": "My API is getting slower as the database grows", "label": "H"}
+{"text": "We're planning to rebuild our app, which stack should we choose for 50k users?", "label": "H"}
+{"text": "We need to support offline mode and sync later", "label": "H"}
+{"text": "We have duplicate orders in the database and don't know how they got there", "label": "H"}
+{"text": "We store passwords in plain text, migrate everyone to hashed passwords safely", "label": "H"}
+{"text": "We want to move from heroku to AWS with minimal downtime", "label": "H"}
+{"text": "Our monthly cloud bill doubled, find what's costing money in our infrastructure", "label": "H"}
+{"text": "Help me understand this legacy codebase before I change anything", "label": "N"}
+{"text": "Summarize what changed in the last 10 commits", "label": "L"}
+{"text": "Write a script to find unused npm packages", "label": "N"}
+{"text": "Find all the dead exports in the project", "label": "N"}
+{"text": "Find where this env variable is used", "label": "L"}
+{"text": "Find all API routes that don't check authentication", "label": "H"}
+{"text": "List the TODOs in the codebase", "label": "L"}
+{"text": "Which files import the old logger?", "label": "L"}
+{"text": "Generate a .env.example from the code", "label": "N"}
+{"text": "rename the project from 'shopx' to 'lankamart' everywhere", "label": "N"}
+{"text": "change the primary color across the app", "label": "N"}
+{"text": "update the copyright year", "label": "L"}
+{"text": "bump the version to 2.0.0", "label": "L"}
+{"text": "add a license file", "label": "L"}
+{"text": "remove the unused dependencies", "label": "N"}
+{"text": "delete the old migration files that are already applied", "label": "N"}
+{"text": "organize imports in all files", "label": "N"}
+{"text": "format the whole project with prettier", "label": "L"}
+{"text": "is my API design RESTful?", "label": "N"}
+{"text": "review my database schema for problems", "label": "N"}
+{"text": "review the architecture of this service and suggest how it should evolve for multi-region", "label": "H"}
+{"text": "what are the security risks of this file upload code", "label": "N"}
+{"text": "threat model our payment flow", "label": "H"}
+{"text": "how would you test this?", "label": "L"}
+{"text": "how would you structure this feature", "label": "N"}
+{"text": "how would you design Uber", "label": "H"}
+{"text": "how would you scale this to millions of users", "label": "H"}
+{"text": "how do big companies handle feature flags", "label": "L"}
+{"text": "compare prisma and drizzle for our project", "label": "N"}
+{"text": "compare redux, zustand and context for this app", "label": "N"}
+{"text": "pros and cons of serverless for our workload with long jobs and websockets", "label": "H"}
+{"text": "should we write our own auth or use a provider", "label": "N"}
+{"text": "rewrite this paragraph of the README to be clearer", "label": "L"}
+{"text": "translate these UI strings to sinhala", "label": "L"}
+{"text": "write a nice 404 message", "label": "L"}
+{"text": "write error messages that are friendly", "label": "L"}
+{"text": "suggest a name for my app", "label": "L"}
+{"text": "write a commit message", "label": "L"}
+{"text": "write a PR description for these changes", "label": "L"}
+{"text": "Here is my component:\n```tsx\nexport function A(){ const [x,setX]=useState(0); useEffect(()=>{setX(x+1)}) }\n```\nwhy infinite loop?", "label": "L"}
+{"text": "```py\nfor i in range(len(items)):\n    print(items[i])\n```\nmake this pythonic", "label": "L"}
+{"text": "```sql\nSELECT * FROM orders WHERE YEAR(created_at)=2026\n```\nwhy is this slow", "label": "N"}
+{"text": "```js\napp.get('/user', (req,res)=>{ db.query('SELECT * FROM users WHERE id='+req.query.id) })\n```\nany issues?", "label": "N"}
+{"text": "```ts\nconst cache = {}\nexport async function get(k){ if(!cache[k]) cache[k]=await load(k); return cache[k] }\n```\nthis is called concurrently from many requests, is it safe and what happens on errors", "label": "H"}
+{"text": "```go\nfor _, item := range items { go process(item) }\n```\nwhy do some items never get processed", "label": "N"}
+{"text": "this function is 300 lines, break it up", "label": "N"}
+{"text": "this file has gotten too big", "label": "N"}
+{"text": "this codebase is a mess, where should we start cleaning up", "label": "H"}
+{"text": "write a small helper to sleep for n ms", "label": "L"}
+{"text": "write a uuid generator", "label": "L"}
+{"text": "write a function to slugify a title", "label": "L"}
+{"text": "write a function to calculate age from date of birth", "label": "L"}
+{"text": "write a function to get the start and end of the current month", "label": "L"}
+{"text": "write a function to mask an email address", "label": "L"}
+{"text": "write a function to shuffle an array", "label": "L"}
+{"text": "write a function to remove duplicates from an array of objects by id", "label": "L"}
+{"text": "write a function to validate a strong password", "label": "N"}
+{"text": "write a function that paginates any array", "label": "L"}
+{"text": "write a function that groups transactions by day and sums them", "label": "N"}
+{"text": "write a function that calculates compound interest", "label": "N"}
+{"text": "write a function that converts numbers to words in english", "label": "N"}
+{"text": "write a function that converts numbers to sinhala words for cheques", "label": "N"}
+{"text": "write a function to compute working days between dates excluding Sri Lankan public holidays", "label": "N"}
+{"text": "write a loan amortization schedule", "label": "N"}
+{"text": "write a payroll calculator with EPF and ETF for Sri Lanka", "label": "N"}
+{"text": "build the full payroll system with attendance, leave, overtime, EPF/ETF and payslips", "label": "H"}

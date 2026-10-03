@@ -27,8 +27,14 @@ const DATA = path.resolve("ml/tier-dataset.jsonl"); // run from backend/
 const OUT = path.resolve("src/services/tierModel.generated.ts");
 // Hand-labeled by Claude: gap-filling training examples, and an independent
 // test set written apart from the DeepSeek-generated data.
-const EXTRA = path.resolve("ml/tier-claude.jsonl");
-const EXTERNAL_TEST = path.resolve("ml/tier-claude-test.jsonl");
+const ML_DIR = path.resolve("ml");
+const claudeFiles = (test: boolean) =>
+  fs
+    .readdirSync(ML_DIR)
+    .filter(
+      (f) => /^tier-claude.*\.jsonl$/.test(f) && f.includes("test") === test,
+    )
+    .map((f) => path.join(ML_DIR, f));
 
 type Example = { text: string; label: TierLetter };
 
@@ -127,8 +133,8 @@ function readJsonl(file: string): Example[] {
 
 async function main() {
   const all = readJsonl(DATA);
-  const extra = readJsonl(EXTRA);
-  const external = readJsonl(EXTERNAL_TEST);
+  const extra = claudeFiles(false).flatMap(readJsonl);
+  const external = claudeFiles(true).flatMap(readJsonl);
   const data = shuffle(all, rng(42));
   const nTrain = Math.floor(data.length * 0.7);
   const nVal = Math.floor(data.length * 0.15);

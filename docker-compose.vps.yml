@@ -145,7 +145,7 @@ services:
       --parallel 4
     volumes:
       - ./models:/models:ro
-    mem_limit: 2g
+    mem_limit: 3g
     networks:
       - vynor-net
 

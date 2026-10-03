@@ -117,7 +117,30 @@ function computeReasoningEffort(
 }
 
 /** Ask the local model for a single tier letter. Returns null on timeout/offline. */
+/**
+ * Requests currently on the SLM. When every slot is busy, a new request would
+ * only wait out the timeout and then fall back anyway, so fall back at once.
+ */
+let slmInFlight = 0;
+
+export function slmBusy(reserve = 0): boolean {
+  return slmInFlight >= Math.max(1, config.localSlm.maxInFlight - reserve);
+}
+
 async function classifyTierWithSlm(
+  clean: string,
+  timeoutMs: number,
+): Promise<"L" | "N" | "H" | null> {
+  if (slmBusy()) return null;
+  slmInFlight++;
+  try {
+    return await classifyTierWithSlmUnguarded(clean, timeoutMs);
+  } finally {
+    slmInFlight--;
+  }
+}
+
+async function classifyTierWithSlmUnguarded(
   clean: string,
   timeoutMs: number,
 ): Promise<"L" | "N" | "H" | null> {
@@ -221,6 +244,20 @@ export async function summarizeConversation(
 ): Promise<string | null> {
   if (!config.localSlm.enabled || !config.localSlm.url || !transcript.trim())
     return null;
+  // Background work: always leave a slot free for request routing.
+  if (slmBusy(1)) return null;
+  slmInFlight++;
+  try {
+    return await summarizeConversationUnguarded(transcript, timeoutMs);
+  } finally {
+    slmInFlight--;
+  }
+}
+
+async function summarizeConversationUnguarded(
+  transcript: string,
+  timeoutMs: number,
+): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

@@ -425,6 +425,8 @@ export const config = {
     model: process.env.LOCAL_SLM_MODEL || "qwen2.5-coder-1.5b-instruct",
     // One-letter classification on a 4-vCPU box: ~0.5-1.5s incl. prompt processing.
     timeoutMs: parseInt(process.env.LOCAL_SLM_TIMEOUT_MS || "1500", 10),
+    // Match llama.cpp --parallel: more in flight only queues behind the timeout.
+    maxInFlight: parseInt(process.env.LOCAL_SLM_MAX_INFLIGHT || "4", 10),
     compactionEnabled: process.env.LOCAL_SLM_COMPACTION !== "false",
   },
 

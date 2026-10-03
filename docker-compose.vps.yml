@@ -1,5 +1,5 @@
-services:
-  # ── 0. Caddy: HTTPS for vynor.lk (API) and admin.vynor.lk (admin portal) ────
+﻿services:
+  # â”€â”€ 0. Caddy: HTTPS for vynor.lk (API) and admin.vynor.lk (admin portal) â”€â”€â”€â”€
   vynor-caddy:
     image: caddy:2-alpine
     container_name: vynor-caddy
@@ -17,7 +17,7 @@ services:
     networks:
       - vynor-net
 
-  # ── 1. VynorAI Cloud Backend ────────────────────────────────────────────────
+  # â”€â”€ 1. VynorAI Cloud Backend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vynor-backend:
     build:
       context: ./backend
@@ -54,7 +54,7 @@ services:
     networks:
       - vynor-net
 
-  # ── 2. Dedicated Low-Latency Redis ─────────────────────────────────────────
+  # â”€â”€ 2. Dedicated Low-Latency Redis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vynor-redis:
     image: redis:7-alpine
     container_name: vynor-redis
@@ -65,11 +65,11 @@ services:
     networks:
       - vynor-net
 
-  # ── 3. Local SLM: tier router + background summarizer (Qwen 2.5 Coder 1.5B) ──
+  # â”€â”€ 3. Local SLM: tier router + background summarizer (Qwen 2.5 Coder 1.5B) â”€â”€
   # 8192 ctx / 2 slots = 4096 tokens per slot: one slot for routing, one for
   # conversation summaries (~3k-token transcripts). ~1.2 GB RAM incl. KV cache.
   vynor-slm:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server
     container_name: vynor-slm
     restart: unless-stopped
     command: >
@@ -85,9 +85,9 @@ services:
     networks:
       - vynor-net
 
-  # ── 4. Embeddings for the semantic cache (bge-small, ~150 MB RAM) ──────────
+  # â”€â”€ 4. Embeddings for the semantic cache (bge-small, ~150 MB RAM) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vynor-embed:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server
     container_name: vynor-embed
     restart: unless-stopped
     command: >

@@ -54,7 +54,19 @@ import {
   formatBlueprintPlan,
 } from "./scaffoldRegistry.js";
 import { recordRequestEconomics } from "./costLedger.js";
-import { analyzeIntentWithLocalSlm } from "./localSlmRouter.js";
+import {
+  analyzeIntentWithLocalSlm,
+  isMutationRequest,
+} from "./localSlmRouter.js";
+
+function messageText(m: any): string {
+  if (typeof m?.content === "string") return m.content;
+  if (Array.isArray(m?.content))
+    return m.content
+      .map((p: any) => (typeof p?.text === "string" ? p.text : ""))
+      .join("");
+  return "";
+}
 
 /** The IDE's (auto) compaction prompt — see core/util/conversationCompaction.ts. */
 export function isCompactionRequest(prompt: string): boolean {
@@ -738,7 +750,17 @@ export async function handleChatCompletions(
 
   // Mutation authority comes from the latest user request and persists across
   // its tool loop. Read-only tool output must never escalate privileges.
-  const allowMutation = slmDecision.allowMutation;
+  // Once the user asked for changes in this conversation, keep the edit tools:
+  // the tool list is part of the provider prefix, so toggling it per turn
+  // throws away the prefix cache (and blocks edits on "now explain…" turns).
+  const allowMutation =
+    slmDecision.allowMutation ||
+    (body.messages || []).some(
+      (m: any) =>
+        m.role === "user" &&
+        m !== lastUserMsgForGating &&
+        isMutationRequest(stripRulesAndPreamble(messageText(m)).trim()),
+    );
 
   // A conversation-compaction request must produce a summary, not tool calls.
   const baseTools = isCompactionRequest(cleanPromptForGating)

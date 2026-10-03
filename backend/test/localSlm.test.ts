@@ -103,3 +103,15 @@ test("capSlmTier: short follow-ups never turn on thinking", async () => {
   assert.equal(capSlmTier("L", "refactor everything"), "L");
   assert.equal(capSlmTier("N", "hi"), "N");
 });
+
+test("isMutationRequest: rename/redesign style edits keep the edit tools", async () => {
+  const { isMutationRequest } = await import(
+    "../src/services/localSlmRouter.ts"
+  );
+  assert.equal(
+    isMutationRequest("Rename writeFileAtomic to atomicWrite."),
+    true,
+  );
+  assert.equal(isMutationRequest("Redesign the index writes"), true);
+  assert.equal(isMutationRequest("what does this regex do"), false);
+});

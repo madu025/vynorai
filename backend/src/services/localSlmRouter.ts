@@ -256,6 +256,14 @@ export async function summarizeConversation(
   }
 }
 
+const MUTATION_VERBS =
+  /\b(create|write|add|implement|fix|refactor|update|delete|remove|modify|edit|build|scaffold|generate|setup|set up|rename|move|replace|change|convert|migrate|extract|inline|redesign|rewrite|restructure|optimi[sz]e|upgrade|install|patch|apply|make|hadanna|hadapan|danna|weda karanna|wenas karanna)\b/i;
+
+/** True when a user turn asks for code to be changed. */
+export function isMutationRequest(clean: string): boolean {
+  return MUTATION_VERBS.test(clean) || clean.startsWith("/");
+}
+
 /**
  * Deterministic fallback when Local SLM is unavailable or offline
  */
@@ -273,12 +281,7 @@ function deterministicFallback(clean: string): SlmRoutingDecision {
       clean,
     );
 
-  const isMutation =
-    /\b(create|write|add|implement|fix|refactor|update|delete|remove|modify|edit|build|scaffold|generate|setup|hadanna|hadapan|danna|weda karanna)\b/i.test(
-      clean,
-    ) ||
-    clean.startsWith("/") ||
-    /^\/(template|scaffold|golden)/i.test(clean);
+  const isMutation = isMutationRequest(clean);
 
   const allowMutation = isMutation && !isInformational;
   const intent: SlmIntentType = isInformational

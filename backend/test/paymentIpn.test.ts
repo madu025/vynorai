@@ -292,3 +292,31 @@ test("settlement charges model-weighted credits and failures refund the request"
   assert.equal(cycle.used_tokens, 6400);
   assert.equal(cycle.used_requests, 1);
 });
+
+test("the public price list reflects admin price overrides, the same source checkout charges", async () => {
+  const fetchPlans = async () =>
+    (await (await fetch(`${baseUrl}/api/payment/plans`)).json()) as any;
+
+  const before = await fetchPlans();
+  const starter = before.plans.find((p: any) => p.id === "starter");
+  assert.equal(starter.priceLKR, PLANS.starter.priceLKR);
+  assert.equal(starter.monthlyCredits, PLANS.starter.monthlyTokens);
+  assert.deepEqual(
+    before.plans.map((p: any) => p.id),
+    ["free", "starter", "pro", "ultra", "topup5m", "pro_yearly"],
+  );
+  assert.ok(before.plans.find((p: any) => p.id === "topup5m").topup);
+
+  const {
+    initPlanManager,
+    updatePlanField,
+    invalidatePlanCache,
+    getEffectivePlan,
+  } = await import("../src/services/planManager.js");
+  await initPlanManager();
+  await updatePlanField("starter", { price_lkr: 1999 });
+  invalidatePlanCache();
+  const after = await fetchPlans();
+  assert.equal(after.plans.find((p: any) => p.id === "starter").priceLKR, 1999);
+  assert.equal((await getEffectivePlan("starter")).priceLKR, 1999);
+});

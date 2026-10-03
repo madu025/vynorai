@@ -284,7 +284,7 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <!-- USERS & SUBSCRIPTIONS -->
     <div class="page" id="page-users">
       <h1>Users & Subscriptions</h1>
-      <p class="subtitle">Monitor customer accounts, grant manual subscriptions (Bank transfers), and top-up tokens</p>
+      <p class="subtitle">Monitor customer accounts, grant manual subscriptions (Bank transfers), and top up credits</p>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
         <input id="userSearchInp" oninput="filterUsersTable()" placeholder="Search by email or name..." style="max-width:320px;padding:.5rem 1rem;"/>
         <button class="btn btn-ghost" onclick="loadUsers()">↻ Refresh Users</button>
@@ -299,7 +299,7 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
                 <th>API Key</th>
                 <th>Status</th>
                 <th>Plan</th>
-                <th>Tokens Used</th>
+                <th>Credits Used</th>
                 <th>IP Access</th>
                 <th>Operations</th>
               </tr>
@@ -660,7 +660,7 @@ function renderUsersTable(users) {
     const isSub = u.subscription_status === 'active';
     const planBadge = isSub ? `<span class="badge badge-pro">${(u.plan_name||'pro').toUpperCase()}</span>` : '<span class="badge badge-free">FREE</span>';
     const used = (u.used_tokens || 0).toLocaleString();
-    const max = (u.max_tokens || 50000).toLocaleString();
+    const max = (u.max_tokens || 100000).toLocaleString();
     const statusBadge = u.is_suspended 
       ? '<span class="badge badge-suspended" style="background:rgba(239,68,68,0.2);color:#ef4444;">⛔ SUSPENDED</span>' 
       : '<span class="badge badge-starter">✅ ACTIVE</span>';
@@ -728,7 +728,7 @@ async function adminGrantPlan(userId, email) {
 }
 
 async function adminAddTokens(userId, email) {
-  const tokens = prompt(`Add bonus tokens to ${email}:\n(e.g. 500000 or 1000000):`, '500000');
+  const tokens = prompt(`Add bonus credits to ${email}:\n(1 credit = 1 DeepSeek V4.1 Flash token; e.g. 500000 or 1000000):`, '500000');
   if (!tokens) return;
   const amt = parseInt(tokens);
   if (isNaN(amt) || amt <= 0) {
@@ -740,7 +740,7 @@ async function adminAddTokens(userId, email) {
     showToast(res.message);
     loadUsers();
   } else {
-    showToast(res?.error || 'Failed to add tokens', 'err');
+    showToast(res?.error || 'Failed to add credits', 'err');
   }
 }
 
@@ -949,14 +949,14 @@ async function loadPlans() {
       <div class="plan-name"><span class="badge ${BADGE[id]||'badge-free'}">${id.toUpperCase()}</span>${p.displayName}</div>
       <div class="plan-price">LKR ${p.priceLKR.toLocaleString()}</div>
       <div class="plan-meta">
-        Tokens: <strong>${(p.monthlyTokens/1e6).toFixed(1)}M</strong><br>
+        Credits: <strong>${(p.monthlyTokens/1e6).toFixed(1)}M</strong>/month<br>
         Requests: <strong>${p.monthlyRequests.toLocaleString()}</strong><br>
         USD: <strong>$${p.priceUSD}</strong>
       </div>
       <div class="divider"></div>
       <div class="form-row"><label>Price (LKR)</label><input id="pl_${id}_price_lkr" type="number" value="${p.priceLKR}"/></div>
       <div class="form-row"><label>Price (USD)</label><input id="pl_${id}_price_usd" type="number" step="0.01" value="${p.priceUSD}"/></div>
-      <div class="form-row"><label>Monthly Tokens</label><input id="pl_${id}_tokens" type="number" value="${p.monthlyTokens}"/></div>
+      <div class="form-row"><label>Monthly Credits</label><input id="pl_${id}_tokens" type="number" value="${p.monthlyTokens}"/></div>
       <div class="form-row"><label>Monthly Requests</label><input id="pl_${id}_reqs" type="number" value="${p.monthlyRequests}"/></div>
       <div class="form-row"><label>Features (one per line)</label><textarea id="pl_${id}_features">${(p.features||[]).join('\n')}</textarea></div>
       <div class="plan-actions">

@@ -21,8 +21,50 @@ import {
   validateIpnAgainstOrder,
 } from "../services/billingPolicy.js";
 import { invalidateAuthCache } from "../services/aiProxy.js";
+import {
+  getEffectivePlan,
+  getEffectivePlans,
+} from "../services/planManager.js";
 
 export const paymentRouter = Router();
+
+/** Plans offered on the website, in display order. */
+const PUBLIC_PLAN_IDS = [
+  "free",
+  "starter",
+  "pro",
+  "ultra",
+  "topup5m",
+  "pro_yearly",
+];
+
+/**
+ * GET /api/payment/plans — public price list for the website. Reads the same
+ * effective plans (admin overrides included) that checkout charges.
+ */
+paymentRouter.get("/plans", async (_req: Request, res: Response) => {
+  const plans = await getEffectivePlans();
+  res.setHeader("Cache-Control", "public, max-age=60");
+  res.json({
+    creditUnit:
+      "1 credit = 1 DeepSeek V4.1 Flash token; other models use more credits per token",
+    plans: PUBLIC_PLAN_IDS.filter((id) => plans[id]).map((id) => {
+      const p = plans[id];
+      return {
+        id: p.id,
+        name: p.displayName,
+        priceLKR: p.priceLKR,
+        priceUSD: p.priceUSD,
+        monthlyCredits: p.monthlyTokens,
+        monthlyRequests: p.monthlyRequests,
+        contextWindow: p.contextWindow,
+        features: p.features,
+        topup: isTopupPlan(p.id),
+        yearly: p.id.endsWith("_yearly"),
+      };
+    }),
+  });
+});
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -122,7 +164,9 @@ paymentRouter.post(
       const user = (req as any).user;
       const { plan = "starter", phone, address, city } = req.body;
 
-      const planConfig = getPlan(plan);
+      // Same source as GET /plans, so the price shown is the price charged
+      // (admin price overrides included).
+      const planConfig = await getEffectivePlan(String(plan));
       if (!planConfig || planConfig.id === "free" || planConfig.id !== plan) {
         return res
           .status(400)

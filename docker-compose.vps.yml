@@ -1,8 +1,16 @@
+# Container logs are capped so a busy month cannot fill the disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   # ── 0. Caddy: HTTPS for vynor.lk (API) and admin.vynor.lk (admin portal) ────
   vynor-caddy:
     image: caddy:2-alpine
     container_name: vynor-caddy
+    logging: *default-logging
     restart: unless-stopped
     ports:
       - "80:80"
@@ -23,6 +31,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vynor-backend
+    logging: *default-logging
     restart: unless-stopped
     # Only Caddy is public; localhost binding keeps curl health checks working.
     ports:
@@ -64,6 +73,7 @@ services:
   vynor-postgres:
     image: postgres:16-alpine
     container_name: vynor-postgres
+    logging: *default-logging
     restart: unless-stopped
     environment:
       - POSTGRES_DB=vynor
@@ -72,8 +82,11 @@ services:
       - ./deploy/postgres.env # POSTGRES_PASSWORD only
     command: >
       postgres
-      -c shared_buffers=128MB
-      -c effective_cache_size=512MB
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c random_page_cost=1.1
       -c max_connections=60
       -c wal_compression=on
     volumes:
@@ -83,7 +96,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    mem_limit: 512m
+    mem_limit: 768m
     networks:
       - vynor-net
 
@@ -91,6 +104,7 @@ services:
   vynor-pg-backup:
     image: postgres:16-alpine
     container_name: vynor-pg-backup
+    logging: *default-logging
     restart: unless-stopped
     env_file:
       - ./deploy/postgres.env # POSTGRES_PASSWORD only
@@ -122,6 +136,7 @@ services:
   vynor-redis:
     image: redis:7-alpine
     container_name: vynor-redis
+    logging: *default-logging
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
@@ -135,17 +150,21 @@ services:
   vynor-slm:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: vynor-slm
+    logging: *default-logging
     restart: unless-stopped
     command: >
       -m /models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
       --host 0.0.0.0
       --port 8080
       -c 16384
-      -t 3
+      -t 2
       --parallel 4
     volumes:
       - ./models:/models:ro
     mem_limit: 3g
+    # Leave 2 of the 4 vCPUs to the backend and Postgres: under load the
+    # router falls back to rules anyway, so the SLM must never starve them.
+    cpus: 2
     networks:
       - vynor-net
 
@@ -153,6 +172,7 @@ services:
   vynor-embed:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: vynor-embed
+    logging: *default-logging
     restart: unless-stopped
     command: >
       -m /models/bge-small-en-v1.5-q8_0.gguf

@@ -37,6 +37,11 @@ download_model "./models/bge-small-en-v1.5-q8_0.gguf" \
   "https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf" \
   "bge-small-en-v1.5 embeddings Q8_0 (~36 MB)"
 
+if [ ! -f ./backend/.env ]; then
+    echo "❌ backend/.env is missing. Run deploy/init-env.sh, then fill in the API keys and PayHere details."
+    exit 1
+fi
+
 # 3. Launch Docker Compose Stack
 echo "🐳 Starting VynorAI containers (Backend + Redis + Local SLM Router)..."
 docker compose -f docker-compose.vps.yml down --remove-orphans || true

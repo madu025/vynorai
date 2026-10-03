@@ -1,16 +1,36 @@
-version: "3.8"
-
 services:
-  # ── 1. VynorAI Cloud Backend & Reverse Proxy ───────────────────────────────
+  # ── 0. Caddy: HTTPS for vynor.lk (API) and admin.vynor.lk (admin portal) ────
+  vynor-caddy:
+    image: caddy:2-alpine
+    container_name: vynor-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - vynor-caddy-data:/data
+      - vynor-caddy-config:/config
+    depends_on:
+      - vynor-backend
+    mem_limit: 128m
+    networks:
+      - vynor-net
+
+  # ── 1. VynorAI Cloud Backend ────────────────────────────────────────────────
   vynor-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: vynor-backend
     restart: unless-stopped
+    # Only Caddy is public; localhost binding keeps curl health checks working.
     ports:
-      - "3333:3333"
-      - "3334:3334"
+      - "127.0.0.1:3333:3333"
+      - "127.0.0.1:3334:3334"
+    # SQLite lives here; without this volume every rebuild wipes users and payments.
+    volumes:
+      - vynor-backend-data:/app/data
     environment:
       - PORT=3333
       - ADMIN_PORT=3334
@@ -85,6 +105,9 @@ services:
 
 volumes:
   vynor-redis-data:
+  vynor-backend-data:
+  vynor-caddy-data:
+  vynor-caddy-config:
 
 networks:
   vynor-net:

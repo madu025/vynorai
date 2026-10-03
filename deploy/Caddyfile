@@ -1,0 +1,26 @@
+# Public entry point for the VPS (docker-compose.vps.yml).
+# DNS for both hosts is proxied by Cloudflare; set Cloudflare SSL/TLS to
+# "Full (strict)". Caddy gets the origin certificates over HTTP-01.
+
+(cloudflare_client_ip) {
+	# Cloudflare sends the visitor IP here. Express trusts one proxy hop, so a
+	# single-entry X-Forwarded-For gives rate limits and logs the real client.
+	header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+	header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+}
+
+vynor.lk {
+	encode zstd gzip
+	reverse_proxy vynor-backend:3333 {
+		import cloudflare_client_ip
+		# Model responses stream over SSE; never buffer them.
+		flush_interval -1
+	}
+}
+
+admin.vynor.lk {
+	encode zstd gzip
+	reverse_proxy vynor-backend:3334 {
+		import cloudflare_client_ip
+	}
+}

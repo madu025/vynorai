@@ -65,8 +65,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # Mount the folder, not the file: git pull replaces Caddyfile with a new
+    # inode, which a single-file bind mount never sees (reload would keep
+    # serving the old config).
+    command: caddy run --config /etc/caddy/deploy/Caddyfile --adapter caddyfile
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy:/etc/caddy/deploy:ro
       - vynor-caddy-data:/data
       - vynor-caddy-config:/config
     depends_on:

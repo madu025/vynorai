@@ -26,6 +26,8 @@ wait_healthy() {
 }
 
 git pull -q
+# Pick up Caddyfile changes without dropping connections.
+docker exec vynor-caddy caddy reload --config /etc/caddy/deploy/Caddyfile --adapter caddyfile >/dev/null
 echo "Building image…"
 $COMPOSE build vynor-backend
 

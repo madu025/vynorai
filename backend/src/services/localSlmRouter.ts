@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { config } from "../config.js";
 import { stripRulesAndPreamble } from "./vault/intentClassifier.js";
 
@@ -22,13 +23,40 @@ export interface SlmRoutingDecision {
   source: "local-slm" | "deterministic-fallback";
 }
 
-const ROUTER_SYSTEM_PROMPT = `You are VynorAI's sub-millisecond intent and dynamic reasoning effort classifier.
-Given the user prompt, classify into JSON:
-- "intent": "INQUIRY" (asking to explain, understand, review, check, read-only question) | "MUTATION" (asking to create, edit, modify, fix, delete code) | "SCAFFOLD" (asking to generate boilerplate/setup) | "CHAT" (greetings/meta)
-- "complexity": "EASY" | "MEDIUM" | "HARD"
-- "reasoningEffort": integer 1-100 (10-30: quick Q&A/explanations; 40-60: standard coding/edits; 70-100: complex architecture, security, concurrency, math)
-- "allowMutation": true only if intent is MUTATION or SCAFFOLD, otherwise false.
-Respond ONLY with raw JSON: {"intent": "...", "complexity": "...", "reasoningEffort": number, "allowMutation": boolean, "confidence": 0.0-1.0}`;
+// Kept byte-identical across calls so llama.cpp reuses its KV cache (cache_prompt).
+const TIER_SYSTEM_PROMPT = `Classify how much reasoning a coding request needs. Reply with ONE letter only.
+L = quick question, explanation, greeting, or a tiny one-line change
+N = normal coding: write or edit a function or component, fix an ordinary bug
+H = hard: architecture, multi-file refactor, concurrency, security, performance, tricky algorithm`;
+
+const TIER_GRAMMAR = 'root ::= "L" | "N" | "H"';
+const LETTER_TO_COMPLEXITY = { L: "EASY", N: "MEDIUM", H: "HARD" } as const;
+
+// A tool loop re-sends the same user turn many times; classify it once.
+const DECISION_MEMO_MAX = 2000;
+const DECISION_MEMO_TTL_MS = 30 * 60_000;
+const decisionMemo = new Map<
+  string,
+  { decision: SlmRoutingDecision; at: number }
+>();
+
+function memoGet(key: string): SlmRoutingDecision | null {
+  const hit = decisionMemo.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > DECISION_MEMO_TTL_MS) {
+    decisionMemo.delete(key);
+    return null;
+  }
+  return hit.decision;
+}
+
+function memoSet(key: string, decision: SlmRoutingDecision): void {
+  if (decisionMemo.size >= DECISION_MEMO_MAX) {
+    const oldest = decisionMemo.keys().next().value;
+    if (oldest) decisionMemo.delete(oldest);
+  }
+  decisionMemo.set(key, { decision, at: Date.now() });
+}
 
 /**
  * Calculates continuous reasoning effort (1-100), category (low/med/high), and token budget
@@ -63,125 +91,127 @@ function computeReasoningEffort(
   return { effort: 90, category: "high", budgetTokens: 8192 };
 }
 
-/**
- * Classify user intent and calculate dynamic reasoning weight (1-100) using VPS Qwen 2.5 Coder 3B.
- * Falls back deterministically if the local model is offline or exceeds timeout.
- */
-export async function analyzeIntentWithLocalSlm(
-  prompt: string,
-  timeoutMs = config.localSlm?.timeoutMs || 500,
-): Promise<SlmRoutingDecision> {
-  const clean = stripRulesAndPreamble(prompt).trim();
-
-  // If local SLM is disabled or not configured, return deterministic fallback
-  if (!config.localSlm?.enabled || !config.localSlm?.url) {
-    return deterministicFallback(clean);
-  }
-
+/** Ask the local model for a single tier letter. Returns null on timeout/offline. */
+async function classifyTierWithSlm(
+  clean: string,
+  timeoutMs: number,
+): Promise<"L" | "N" | "H" | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     const res = await fetch(`${config.localSlm.url}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: config.localSlm.model || "qwen2.5-coder-3b-instruct",
+        model: config.localSlm.model,
         messages: [
-          { role: "system", content: ROUTER_SYSTEM_PROMPT },
-          { role: "user", content: clean.slice(0, 400) }, // First 400 chars are sufficient for intent
+          { role: "system", content: TIER_SYSTEM_PROMPT },
+          { role: "user", content: clean.slice(0, 600) },
         ],
-        temperature: 0.1,
-        max_tokens: 70,
+        temperature: 0,
+        max_tokens: 1,
+        // llama.cpp extensions: constrain output to one letter and reuse the system-prompt KV cache.
+        grammar: TIER_GRAMMAR,
+        cache_prompt: true,
       }),
       signal: controller.signal,
     });
-
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      return deterministicFallback(clean);
-    }
-
+    if (!res.ok) return null;
     const data: any = await res.json();
-    const rawContent = data?.choices?.[0]?.message?.content || "";
-
-    // Parse JSON response
-    const jsonMatch = rawContent.match(/\{[\s\S]*?\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const intent: SlmIntentType = [
-        "INQUIRY",
-        "MUTATION",
-        "SCAFFOLD",
-        "CHAT",
-      ].includes(parsed.intent)
-        ? parsed.intent
-        : "UNKNOWN";
-      const complexity: "EASY" | "MEDIUM" | "HARD" = [
-        "EASY",
-        "MEDIUM",
-        "HARD",
-      ].includes(parsed.complexity)
-        ? parsed.complexity
-        : "MEDIUM";
-      const allowMutation = Boolean(
-        parsed.allowMutation &&
-          (intent === "MUTATION" || intent === "SCAFFOLD"),
-      );
-
-      const { effort, category, budgetTokens } = computeReasoningEffort(
-        complexity,
-        intent,
-        typeof parsed.reasoningEffort === "number"
-          ? parsed.reasoningEffort
-          : undefined,
-      );
-
-      let suggestedAction: SlmRoutingDecision["suggestedAction"] =
-        "CLOUD_FULL_AGENT";
-      let recommendedTools = [
-        "read_file",
-        "edit_file",
-        "write_file",
-        "run_command",
-        "list_directory",
-      ];
-
-      if (intent === "INQUIRY" || !allowMutation) {
-        suggestedAction = "CLOUD_READONLY";
-        recommendedTools = [
-          "read_file",
-          "list_directory",
-          "get_golden_template",
-        ];
-      } else if (intent === "CHAT" && complexity === "EASY") {
-        suggestedAction = "LOCAL_DIRECT";
-        recommendedTools = [];
-      }
-
-      return {
-        intent,
-        complexity,
-        reasoningEffort: effort,
-        reasoningCategory: category,
-        thinkingBudgetTokens: budgetTokens,
-        allowMutation,
-        recommendedTools,
-        suggestedAction,
-        confidence:
-          typeof parsed.confidence === "number" ? parsed.confidence : 0.9,
-        reasoning: rawContent,
-        source: "local-slm",
-      };
-    }
-  } catch (_err) {
-    // Timeout or network error — fail safe to deterministic fallback
+    const letter = String(data?.choices?.[0]?.message?.content ?? "")
+      .trim()
+      .charAt(0)
+      .toUpperCase();
+    return letter === "L" || letter === "N" || letter === "H" ? letter : null;
+  } catch {
+    return null;
   } finally {
     clearTimeout(timer);
   }
+}
 
-  return deterministicFallback(clean);
+/**
+ * Classify a request. Intent and mutation authority are always deterministic
+ * (a small model must never grant write access); the local SLM, when reachable,
+ * only refines the complexity tier that drives model choice and output budget.
+ */
+export async function analyzeIntentWithLocalSlm(
+  prompt: string,
+  timeoutMs = config.localSlm.timeoutMs,
+): Promise<SlmRoutingDecision> {
+  const clean = stripRulesAndPreamble(prompt).trim();
+  const base = deterministicFallback(clean);
+  if (!config.localSlm.enabled || !config.localSlm.url || clean.length < 4)
+    return base;
+
+  const key = crypto.createHash("sha256").update(clean).digest("hex");
+  const cached = memoGet(key);
+  if (cached) return cached;
+
+  const letter = await classifyTierWithSlm(clean, timeoutMs);
+  if (!letter) return base;
+
+  const complexity = LETTER_TO_COMPLEXITY[letter];
+  const { effort, category, budgetTokens } = computeReasoningEffort(
+    complexity,
+    base.intent,
+  );
+  const decision: SlmRoutingDecision = {
+    ...base,
+    complexity,
+    reasoningEffort: effort,
+    reasoningCategory: category,
+    thinkingBudgetTokens: budgetTokens,
+    confidence: 0.9,
+    source: "local-slm",
+  };
+  memoSet(key, decision);
+  return decision;
+}
+
+/**
+ * Summarize earlier conversation turns for background compaction. Slow on a
+ * CPU-only VPS, so callers must never await this on a user's request path.
+ */
+export async function summarizeConversation(
+  transcript: string,
+  timeoutMs = 90_000,
+): Promise<string | null> {
+  if (!config.localSlm.enabled || !config.localSlm.url || !transcript.trim())
+    return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${config.localSlm.url}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: config.localSlm.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Summarize this earlier part of a coding conversation for the assistant's memory. " +
+              "Keep: the user's goals, decisions made, file paths, function names, errors found, and open tasks. " +
+              "Drop greetings and code bodies. Use terse bullet points, under 200 words.",
+          },
+          { role: "user", content: transcript.slice(-12_000) },
+        ],
+        temperature: 0.2,
+        max_tokens: 320,
+        cache_prompt: true,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const summary = String(data?.choices?.[0]?.message?.content ?? "").trim();
+    return summary || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -192,7 +222,7 @@ function deterministicFallback(clean: string): SlmRoutingDecision {
     /^(did you|do you|can you|could you|what is|what are|explain|how does|how do|tell me about|analyze|review|understand|summary|summarize|where is|why is)\b/i.test(
       clean,
     ) ||
-    /\b(understand\s+this\s+project|understand\s+the\s+project|explain\s+this|what\s+does\s+this|explain\s+project|meaning\s+eka|mokakda|kiyala\s+denna|kiyanna|therum\s+ganna)\b/i.test(
+    /\b(understand\s+this\s+project|understand\s+the\s+project|explain\s+this|what\s+does\s+this|explain\s+project|meaning\s+eka|mokakda|kiyala\s+denna|kiyanna|therum\s+ganna|summary\s+of\s+this\s+conversation)\b/i.test(
       clean,
     );
 

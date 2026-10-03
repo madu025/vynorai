@@ -1,21 +1,42 @@
 import pg from "pg";
-import { dbAll as sqliteAll, dbGet as sqliteGet, dbRun as sqliteRun } from "../db.js";
+import {
+  dbAll as sqliteAll,
+  dbGet as sqliteGet,
+  dbRun as sqliteRun,
+} from "../db.js";
 
 const { Pool } = pg;
-const BILLING_TABLES = ["users", "subscriptions", "monthly_usage", "usage_logs", "request_economics"];
+const BILLING_TABLES = [
+  "users",
+  "subscriptions",
+  "monthly_usage",
+  "usage_logs",
+  "request_economics",
+];
 let pool: pg.Pool | null = null;
 let ready = false;
 
 export function postgresBillingConfigured(): boolean {
-  return process.env.BILLING_DB_MODE === "postgres" && Boolean(process.env.DATABASE_URL);
+  return (
+    process.env.BILLING_DB_MODE === "postgres" &&
+    Boolean(process.env.DATABASE_URL)
+  );
 }
 
-export function billingDbStatus(): { mode: "sqlite" | "postgres"; ready: boolean } {
-  return { mode: postgresBillingConfigured() ? "postgres" : "sqlite", ready: postgresBillingConfigured() ? ready : true };
+export function billingDbStatus(): {
+  mode: "sqlite" | "postgres";
+  ready: boolean;
+} {
+  return {
+    mode: postgresBillingConfigured() ? "postgres" : "sqlite",
+    ready: postgresBillingConfigured() ? ready : true,
+  };
 }
 
 function isBillingSql(sql: string): boolean {
-  return BILLING_TABLES.some((table) => new RegExp(`\\b${table}\\b`, "i").test(sql));
+  return BILLING_TABLES.some((table) =>
+    new RegExp(`\\b${table}\\b`, "i").test(sql),
+  );
 }
 
 function postgresSql(sql: string): string {
@@ -60,6 +81,9 @@ async function createSchema(client: pg.PoolClient): Promise<void> {
       UNIQUE(user_id, period_start)
     );
     CREATE INDEX IF NOT EXISTS idx_pg_monthly_usage_active ON monthly_usage(user_id, period_end);
+    ALTER TABLE monthly_usage ADD COLUMN IF NOT EXISTS bonus_tokens BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE monthly_usage ADD COLUMN IF NOT EXISTS bonus_requests BIGINT NOT NULL DEFAULT 0;
+    UPDATE subscriptions SET status = 'credited' WHERE plan_name LIKE 'topup%' AND status = 'active';
 
     CREATE TABLE IF NOT EXISTS usage_logs (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -82,6 +106,7 @@ async function createSchema(client: pg.PoolClient): Promise<void> {
       outcome VARCHAR(16) NOT NULL DEFAULT 'success', created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_pg_economics_user_created ON request_economics(user_id, created_at DESC);
+    ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS cached_input_tokens BIGINT NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS billing_migrations (
       version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, details JSONB
@@ -89,15 +114,22 @@ async function createSchema(client: pg.PoolClient): Promise<void> {
   `);
 }
 
-async function backfillTable(client: pg.PoolClient, table: string): Promise<number> {
-  const rows = await sqliteAll<Record<string, unknown>>(`SELECT * FROM ${table}`);
+async function backfillTable(
+  client: pg.PoolClient,
+  table: string,
+): Promise<number> {
+  const rows = await sqliteAll<Record<string, unknown>>(
+    `SELECT * FROM ${table}`,
+  );
   for (const row of rows) {
     const columns = Object.keys(row);
     if (!columns.length) continue;
     const quoted = columns.map((column) => `"${column}"`).join(", ");
     const values = columns.map((_, index) => `$${index + 1}`).join(", ");
-    const updates = columns.filter((column) => column !== "id")
-      .map((column) => `"${column}" = EXCLUDED."${column}"`).join(", ");
+    const updates = columns
+      .filter((column) => column !== "id")
+      .map((column) => `"${column}" = EXCLUDED."${column}"`)
+      .join(", ");
     await client.query(
       `INSERT INTO ${table} (${quoted}) VALUES (${values}) ON CONFLICT (id) DO UPDATE SET ${updates}`,
       columns.map((column) => row[column]),
@@ -107,22 +139,32 @@ async function backfillTable(client: pg.PoolClient, table: string): Promise<numb
 }
 
 export async function initBillingDb(): Promise<void> {
-  if (!postgresBillingConfigured()) { ready = true; return; }
+  if (!postgresBillingConfigured()) {
+    ready = true;
+    return;
+  }
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     max: Number(process.env.PG_POOL_MAX || 20),
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
-    ssl: process.env.PG_SSL === "require" ? { rejectUnauthorized: true } : undefined,
+    ssl:
+      process.env.PG_SSL === "require"
+        ? { rejectUnauthorized: true }
+        : undefined,
   });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await createSchema(client);
-    const migrated = await client.query("SELECT 1 FROM billing_migrations WHERE version = $1", ["001_sqlite_backfill"]);
+    const migrated = await client.query(
+      "SELECT 1 FROM billing_migrations WHERE version = $1",
+      ["001_sqlite_backfill"],
+    );
     if (migrated.rowCount === 0) {
       const counts: Record<string, number> = {};
-      for (const table of BILLING_TABLES) counts[table] = await backfillTable(client, table);
+      for (const table of BILLING_TABLES)
+        counts[table] = await backfillTable(client, table);
       await client.query(
         "INSERT INTO billing_migrations(version, details) VALUES ($1, $2::jsonb)",
         ["001_sqlite_backfill", JSON.stringify(counts)],
@@ -139,35 +181,61 @@ export async function initBillingDb(): Promise<void> {
   }
 }
 
-export async function billingGet<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
-  if (!postgresBillingConfigured() || !isBillingSql(sql)) return sqliteGet<T>(sql, params);
+export async function billingGet<T = any>(
+  sql: string,
+  params: any[] = [],
+): Promise<T | undefined> {
+  if (!postgresBillingConfigured() || !isBillingSql(sql))
+    return sqliteGet<T>(sql, params);
   if (!ready) throw new Error("PostgreSQL billing store is unavailable");
   const result = await (await pgPool()).query(postgresSql(sql), params);
   return result.rows[0] as T | undefined;
 }
 
-export async function billingAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-  if (!postgresBillingConfigured() || !isBillingSql(sql)) return sqliteAll<T>(sql, params);
+export async function billingAll<T = any>(
+  sql: string,
+  params: any[] = [],
+): Promise<T[]> {
+  if (!postgresBillingConfigured() || !isBillingSql(sql))
+    return sqliteAll<T>(sql, params);
   if (!ready) throw new Error("PostgreSQL billing store is unavailable");
   const result = await (await pgPool()).query(postgresSql(sql), params);
   return result.rows as T[];
 }
 
-export async function billingRun(sql: string, params: any[] = []): Promise<{ lastID: number; changes: number }> {
-  if (!postgresBillingConfigured() || !isBillingSql(sql)) return sqliteRun(sql, params);
+export async function billingRun(
+  sql: string,
+  params: any[] = [],
+): Promise<{ lastID: number; changes: number }> {
+  if (!postgresBillingConfigured() || !isBillingSql(sql))
+    return sqliteRun(sql, params);
   if (!ready) throw new Error("PostgreSQL billing store is unavailable");
   const result = await (await pgPool()).query(postgresSql(sql), params);
   // SQLite remains a rollback mirror. PostgreSQL is authoritative and succeeds first.
-  await sqliteRun(sql, params).catch((error) => console.error("[BillingDB] SQLite mirror write failed:", error));
+  await sqliteRun(sql, params).catch((error) =>
+    console.error("[BillingDB] SQLite mirror write failed:", error),
+  );
   return { lastID: 0, changes: result.rowCount ?? 0 };
 }
 
-export async function billingParity(): Promise<Record<string, { sqlite: number; postgres: number; match: boolean }>> {
+export async function billingParity(): Promise<
+  Record<string, { sqlite: number; postgres: number; match: boolean }>
+> {
   if (!postgresBillingConfigured() || !ready) return {};
-  const result: Record<string, { sqlite: number; postgres: number; match: boolean }> = {};
+  const result: Record<
+    string,
+    { sqlite: number; postgres: number; match: boolean }
+  > = {};
   for (const table of BILLING_TABLES) {
-    const sqlite = (await sqliteGet<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`))?.count ?? 0;
-    const pgResult = await (await pgPool()).query(`SELECT COUNT(*)::int AS count FROM ${table}`);
+    const sqlite =
+      (
+        await sqliteGet<{ count: number }>(
+          `SELECT COUNT(*) AS count FROM ${table}`,
+        )
+      )?.count ?? 0;
+    const pgResult = await (
+      await pgPool()
+    ).query(`SELECT COUNT(*)::int AS count FROM ${table}`);
     const postgres = Number(pgResult.rows[0]?.count ?? 0);
     result[table] = { sqlite, postgres, match: sqlite === postgres };
   }

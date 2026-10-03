@@ -6,6 +6,70 @@
  * 3. Smart Code Compression (pruning duplicate whitespace and empty lines)
  */
 
+import crypto from "crypto";
+
+// ─── Prefix-cache layout ──────────────────────────────────────────────────────
+// DeepSeek / OpenAI / OpenRouter bill a repeated prompt *prefix* at a fraction
+// of the normal input price. The prefix is: system prompt → tools → history.
+// Anything that changes per request (RAG hits, web results, scaffold hints)
+// must therefore ride on the LAST user message, never on the system message.
+
+const TURN_CONTEXT_MAX = 1000;
+const TURN_CONTEXT_TTL_MS = 30 * 60_000;
+const turnContextMemo = new Map<string, { text: string; at: number }>();
+
+function messageText(msg: any): string {
+  if (typeof msg?.content === "string") return msg.content;
+  if (Array.isArray(msg?.content))
+    return msg.content.map((p: any) => p?.text ?? "").join("");
+  return "";
+}
+
+/** Stable identity of the current user turn (same across its whole tool loop). */
+export function turnKey(scope: string, messages: any[]): string {
+  const lastUser = [...(messages ?? [])]
+    .reverse()
+    .find((m: any) => m.role === "user");
+  return crypto
+    .createHash("sha256")
+    .update(`${scope}\u0000${messageText(lastUser)}`)
+    .digest("hex");
+}
+
+/**
+ * Compute per-turn context once and replay it for every request in the same
+ * turn, so tool-loop follow-ups send a byte-identical prefix.
+ */
+export async function memoizeTurnContext(
+  key: string,
+  compute: () => Promise<string>,
+): Promise<string> {
+  const hit = turnContextMemo.get(key);
+  if (hit && Date.now() - hit.at < TURN_CONTEXT_TTL_MS) return hit.text;
+  const text = await compute();
+  if (turnContextMemo.size >= TURN_CONTEXT_MAX) {
+    const oldest = turnContextMemo.keys().next().value;
+    if (oldest) turnContextMemo.delete(oldest);
+  }
+  turnContextMemo.set(key, { text, at: Date.now() });
+  return text;
+}
+
+/** Prepend per-turn context to the last user message, leaving the prefix untouched. */
+export function attachTurnContext(messages: any[], context: string): any[] {
+  if (!context.trim()) return messages;
+  const idx = messages.map((m: any) => m.role).lastIndexOf("user");
+  if (idx < 0) return messages;
+  const block = `<vynor-context>\n${context.trim()}\n</vynor-context>\n\n`;
+  const msg = messages[idx];
+  const content = Array.isArray(msg.content)
+    ? [{ type: "text", text: block }, ...msg.content]
+    : block + (msg.content ?? "");
+  const out = [...messages];
+  out[idx] = { ...msg, content };
+  return out;
+}
+
 export interface OptimizedRequest {
   messages: any[];
   system?: any;

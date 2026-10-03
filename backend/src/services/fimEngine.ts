@@ -2,7 +2,7 @@
  * VynorAI Ultra-Fast FIM (Fill-in-the-Middle) Autocomplete Engine
  * ---------------------------------------------------------------
  * Optimized for sub-120ms inline ghost text completions in VS Code.
- * 
+ *
  * Supports:
  * - Standard Qwen / DeepSeek FIM tokens (<|fim_prefix|>, <|fim_suffix|>, <|fim_middle|>)
  * - Context window slicing (keeps surrounding 60 lines prefix + 30 lines suffix)
@@ -17,22 +17,30 @@ import { sanitizeText } from "./secretSanitizer.js";
 import { getPlan } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
 import { billingRun as dbRun } from "./billingDb.js";
-import { QuotaReservation, settleQuotaReservation } from "./monthlyQuota.js";
+import {
+  QuotaReservation,
+  releaseQuotaReservation,
+  settleQuotaReservation,
+} from "./monthlyQuota.js";
+import { creditsFor } from "./billingPolicy.js";
 import { recordRequestEconomics } from "./costLedger.js";
 
 export interface FimRequest {
-  prefix: string;          // Code before cursor
-  suffix?: string;         // Code after cursor
-  language?: string;       // e.g. "typescript", "python", "html"
-  max_tokens?: number;     // Defaults to 64
-  temperature?: number;    // Defaults to 0.1
-  model?: string;          // Optional model override
+  prefix: string; // Code before cursor
+  suffix?: string; // Code after cursor
+  language?: string; // e.g. "typescript", "python", "html"
+  max_tokens?: number; // Defaults to 64
+  temperature?: number; // Defaults to 0.1
+  model?: string; // Optional model override
 }
 
 /**
  * Slice context intelligently to keep prompt payload small and fast.
  */
-function sliceFimContext(prefix: string, suffix: string = ""): { prefix: string; suffix: string } {
+function sliceFimContext(
+  prefix: string,
+  suffix: string = "",
+): { prefix: string; suffix: string } {
   const prefixLines = prefix.split("\n");
   const suffixLines = suffix.split("\n");
 
@@ -72,7 +80,10 @@ export async function handleFimAutocomplete(
   // <|fim_prefix|>...<|fim_suffix|>...<|fim_middle|>
   const fimPrompt = `<|fim_prefix|>${prefix}<|fim_suffix|>${suffix}<|fim_middle|>`;
 
-  const model = body.model || plan.defaultAutocompleteModel || "qwen/qwen-2.5-coder-32b-instruct";
+  const model =
+    body.model ||
+    plan.defaultAutocompleteModel ||
+    "qwen/qwen-2.5-coder-32b-instruct";
   const maxTokens = Math.min(body.max_tokens || 64, 128);
   const temperature = body.temperature ?? 0.1;
 
@@ -88,7 +99,13 @@ export async function handleFimAutocomplete(
     max_tokens: maxTokens,
     temperature,
     stream: false, // Fast 1-shot completion for autocomplete
-    stop: ["\n\n\n", "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>", "<|endoftext|>"],
+    stop: [
+      "\n\n\n",
+      "<|fim_prefix|>",
+      "<|fim_suffix|>",
+      "<|fim_middle|>",
+      "<|endoftext|>",
+    ],
   };
 
   res.setHeader("X-VynorAI-FIM-Model", model);
@@ -99,32 +116,56 @@ export async function handleFimAutocomplete(
   const { collected } = dispatch;
 
   const latency = Date.now() - t0;
-  console.log(`[VynorAI ⚡ FIM Autocomplete] ${latency}ms | Model: ${model} | User: ${user.email}`);
+  console.log(
+    `[VynorAI ⚡ FIM Autocomplete] ${latency}ms | Model: ${model} | User: ${user.email}`,
+  );
 
   // 5. Track tokens
-  const estimatedInput = dispatch.usage?.inputTokens || Math.ceil(fimPrompt.length / 4);
+  const estimatedInput =
+    dispatch.usage?.inputTokens || Math.ceil(fimPrompt.length / 4);
   let outputText = "";
   for (const c of collected) {
-    if (c?.choices?.[0]?.message?.content) outputText += c.choices[0].message.content;
+    if (c?.choices?.[0]?.message?.content)
+      outputText += c.choices[0].message.content;
     else if (c?.choices?.[0]?.text) outputText += c.choices[0].text;
   }
-  const estimatedOutput = dispatch.usage?.outputTokens || Math.max(1, Math.ceil(outputText.length / 4));
+  const estimatedOutput =
+    dispatch.usage?.outputTokens ||
+    Math.max(1, Math.ceil(outputText.length / 4));
   const totalTokens = dispatch.success ? estimatedInput + estimatedOutput : 0;
-  await settleQuotaReservation(quotaReservation, totalTokens);
+  if (dispatch.success)
+    await settleQuotaReservation(
+      quotaReservation,
+      creditsFor(model, totalTokens),
+    );
+  else await releaseQuotaReservation(quotaReservation);
 
   const usageLogId = uuidv4();
   await dbRun(
     "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, ?, ?, 0)",
-    [usageLogId, user.id, model, estimatedInput, estimatedOutput, totalTokens]
+    [usageLogId, user.id, model, estimatedInput, estimatedOutput, totalTokens],
   );
   await recordRequestEconomics({
-    usageLogId, userId: user.id, planId: plan.id, requestedModel: model,
-    resolvedModel: dispatch.resolvedModel, provider: dispatch.provider,
-    inputTokens: estimatedInput, outputTokens: estimatedOutput,
+    usageLogId,
+    userId: user.id,
+    planId: plan.id,
+    requestedModel: model,
+    resolvedModel: dispatch.resolvedModel,
+    provider: dispatch.provider,
+    inputTokens: estimatedInput,
+    outputTokens: estimatedOutput,
     providerCostUsd: dispatch.usage?.providerCostUsd ?? null,
-    costSource: dispatch.usage?.costSource ?? "unknown", cacheStatus: "bypass",
-    optimizationMode: "fim-slice", latencyMs: latency,
+    costSource: dispatch.usage?.costSource ?? "unknown",
+    cacheStatus: "bypass",
+    optimizationMode: "fim-slice",
+    latencyMs: latency,
     outcome: dispatch.success ? "success" : "failed",
-    estimatedTokensSaved: Math.max(0, Math.ceil((rawPrefix.length + rawSuffix.length - prefix.length - suffix.length) / 4)),
+    estimatedTokensSaved: Math.max(
+      0,
+      Math.ceil(
+        (rawPrefix.length + rawSuffix.length - prefix.length - suffix.length) /
+          4,
+      ),
+    ),
   });
 }

@@ -36,6 +36,85 @@ test("OpenAI payload converts top-level system instructions to a message", () =>
   });
 });
 
+test("DeepSeek thinking is opt-in: off unless explicitly enabled", () => {
+  const off = buildOpenAIPayload(
+    { messages: [{ role: "user", content: "hi" }] },
+    "deepseek-flash",
+    "deepseek",
+  );
+  assert.deepEqual(off.thinking, { type: "disabled" });
+  assert.equal(off.reasoning_effort, undefined);
+
+  const on = buildOpenAIPayload(
+    {
+      thinking: { type: "enabled", budget_tokens: 8192 },
+      reasoning_effort: "high",
+      messages: [],
+    },
+    "deepseek-flash",
+    "deepseek",
+  );
+  // budget_tokens is not a DeepSeek parameter and must not leak through.
+  assert.deepEqual(on.thinking, { type: "enabled" });
+  assert.equal(on.reasoning_effort, "high");
+
+  // Legacy reasoning model ids imply thinking.
+  const r1 = buildOpenAIPayload(
+    { model: "deepseek/deepseek-r1", messages: [] },
+    "deepseek-flash",
+    "deepseek",
+  );
+  assert.deepEqual(r1.thinking, { type: "enabled" });
+});
+
+test("DeepSeek history always carries reasoning_content (400 otherwise with tools)", () => {
+  const payload = buildOpenAIPayload(
+    {
+      thinking: { type: "enabled" },
+      tools: [tool],
+      messages: [
+        { role: "user", content: "read it" },
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "plan",
+          reasoning_details: [{}],
+          tool_calls: [
+            { id: "c1", function: { name: "read_file", arguments: "{}" } },
+          ],
+        },
+        { role: "tool", tool_call_id: "c1", content: "x" },
+        { role: "assistant", content: "done" },
+      ],
+    },
+    "deepseek-flash",
+    "deepseek",
+  );
+  const assistants = payload.messages.filter(
+    (m: any) => m.role === "assistant",
+  );
+  assert.equal(assistants[0].reasoning_content, "plan");
+  assert.equal(assistants[0].reasoning, undefined);
+  assert.equal(assistants[0].reasoning_details, undefined);
+  assert.equal(assistants[1].reasoning_content, "");
+});
+
+test("OpenRouter gets its unified reasoning parameter, never raw thinking", () => {
+  const off = buildOpenAIPayload(
+    { thinking: { type: "disabled" }, messages: [] },
+    "x/y",
+    "openrouter",
+  );
+  assert.deepEqual(off.reasoning, { enabled: false });
+  assert.equal(off.thinking, undefined);
+  const on = buildOpenAIPayload(
+    { thinking: { type: "enabled" }, reasoning_effort: "high", messages: [] },
+    "x/y",
+    "openrouter",
+  );
+  assert.deepEqual(on.reasoning, { effort: "high" });
+});
+
 test("Anthropic payload preserves tools and translates tool history", () => {
   const payload = buildAnthropicPayload(
     {

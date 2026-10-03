@@ -21,6 +21,10 @@ import {
   maskApiKey,
 } from "../services/credentialVault.js";
 import { invalidateAuthCache } from "../services/aiProxy.js";
+import {
+  getActiveSubscription,
+  getOrInitMonthlyUsage,
+} from "../services/monthlyQuota.js";
 import { getRedis } from "../services/redisStore.js";
 import {
   IDE_AUTH_TTL_SECONDS,
@@ -455,18 +459,10 @@ authRouter.post(
 authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const now = new Date().toISOString();
-
-    const subscription = await dbGet<any>(
-      `SELECT * FROM subscriptions 
-       WHERE user_id = ? AND status = 'active' AND valid_until > ? 
-       ORDER BY valid_until DESC LIMIT 1`,
-      [user.id, now],
-    );
-
-    const monthlyUsage = await dbGet<any>(
-      "SELECT * FROM monthly_usage WHERE user_id = ?",
-      [user.id],
+    const subscription = await getActiveSubscription<any>(user.id);
+    const monthlyUsage = await getOrInitMonthlyUsage(
+      user.id,
+      subscription?.plan_name || "free",
     );
 
     const totalUsage = await dbGet<any>(

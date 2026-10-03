@@ -12,18 +12,18 @@
  * All results are injected as a system-level context block (same as RAG).
  */
 
-const MAX_PAGE_CHARS   = 8_000;   // max chars to keep from a fetched page
+const MAX_PAGE_CHARS = 8_000; // max chars to keep from a fetched page
 const FETCH_TIMEOUT_MS = 8_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface WebResult {
-  title:   string;
-  url:     string;
+  title: string;
+  url: string;
   snippet: string;
 }
 
 export interface WebSearchResult {
-  query:   string;
+  query: string;
   results: WebResult[];
   injectedTokens: number;
 }
@@ -31,7 +31,7 @@ export interface WebSearchResult {
 // ─── URL fetcher ──────────────────────────────────────────────────────────────
 async function fetchUrlText(url: string): Promise<string> {
   const res = await fetch(url, {
-    signal:  AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: { "User-Agent": "VynorAI/2.0 (+https://vynorai.com)" },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -53,7 +53,9 @@ async function fetchUrlText(url: string): Promise<string> {
 // ─── DuckDuckGo Instant Answer (no API key) ───────────────────────────────────
 async function ddgSearch(query: string): Promise<WebResult[]> {
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
   if (!res.ok) return [];
   const data: any = await res.json();
 
@@ -61,23 +63,34 @@ async function ddgSearch(query: string): Promise<WebResult[]> {
 
   // Abstract (top answer)
   if (data.AbstractText) {
-    results.push({ title: data.Heading || query, url: data.AbstractURL || "", snippet: data.AbstractText });
+    results.push({
+      title: data.Heading || query,
+      url: data.AbstractURL || "",
+      snippet: data.AbstractText,
+    });
   }
   // Related topics
   for (const t of (data.RelatedTopics ?? []).slice(0, 4)) {
     if (t.Text && t.FirstURL) {
-      results.push({ title: t.Text.slice(0, 80), url: t.FirstURL, snippet: t.Text });
+      results.push({
+        title: t.Text.slice(0, 80),
+        url: t.FirstURL,
+        snippet: t.Text,
+      });
     }
   }
   return results.slice(0, 5);
 }
 
 // ─── @web pattern detector ────────────────────────────────────────────────────
-const URL_PATTERN   = /https?:\/\/[^\s\])"]+/g;
+const URL_PATTERN = /https?:\/\/[^\s\])"]+/g;
 const WEB_AT_PATTERN = /@web\s+(.+?)(?:\n|$)/gi;
 
-export function extractWebMentions(text: string): { urls: string[]; queries: string[] } {
-  const urls:    string[] = [...(text.match(URL_PATTERN)   ?? [])];
+export function extractWebMentions(text: string): {
+  urls: string[];
+  queries: string[];
+} {
+  const urls: string[] = [...(text.match(URL_PATTERN) ?? [])];
   const queries: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = WEB_AT_PATTERN.exec(text)) !== null) queries.push(m[1].trim());
@@ -87,16 +100,20 @@ export function extractWebMentions(text: string): { urls: string[]; queries: str
 
 // ─── Main enricher ────────────────────────────────────────────────────────────
 export async function enrichWithWeb(
-  body: any
-): Promise<{ body: any; webResult: WebSearchResult | null }> {
+  body: any,
+): Promise<{ context: string; webResult: WebSearchResult | null }> {
   const messages: any[] = body.messages ?? [];
   const lastUser = [...messages].reverse().find((m: any) => m.role === "user");
-  const text = typeof lastUser?.content === "string"
-    ? lastUser.content
-    : Array.isArray(lastUser?.content) ? lastUser.content.map((p: any) => p.text ?? "").join("") : "";
+  const text =
+    typeof lastUser?.content === "string"
+      ? lastUser.content
+      : Array.isArray(lastUser?.content)
+        ? lastUser.content.map((p: any) => p.text ?? "").join("")
+        : "";
 
   const { urls, queries } = extractWebMentions(text);
-  if (urls.length === 0 && queries.length === 0) return { body, webResult: null };
+  if (urls.length === 0 && queries.length === 0)
+    return { context: "", webResult: null };
 
   const results: WebResult[] = [];
 
@@ -106,7 +123,11 @@ export async function enrichWithWeb(
       const content = await fetchUrlText(url);
       results.push({ title: url, url, snippet: content });
     } catch (e: any) {
-      results.push({ title: url, url, snippet: `[Fetch failed: ${e.message}]` });
+      results.push({
+        title: url,
+        url,
+        snippet: `[Fetch failed: ${e.message}]`,
+      });
     }
   }
 
@@ -118,32 +139,30 @@ export async function enrichWithWeb(
     } catch {}
   }
 
-  if (results.length === 0) return { body, webResult: null };
+  if (results.length === 0) return { context: "", webResult: null };
 
   // Build context block
   const contextBlock = [
     "<!-- VynorAI @Web Context -->",
-    ...results.map((r, i) =>
-      `### [${i + 1}] ${r.title}\nSource: ${r.url}\n\n${r.snippet}`
+    ...results.map(
+      (r, i) => `### [${i + 1}] ${r.title}\nSource: ${r.url}\n\n${r.snippet}`,
     ),
     "<!-- end @web context -->",
   ].join("\n\n");
 
   const injectedTokens = Math.ceil(contextBlock.length / 4);
+  console.log(
+    `[@Web] Built ${results.length} results (${injectedTokens} tokens) | urls:${urls.length} queries:${queries.length}`,
+  );
 
-  // Inject into system message
-  const newMessages = [...messages];
-  const sysIdx = newMessages.findIndex((m: any) => m.role === "system");
-  if (sysIdx >= 0) {
-    newMessages[sysIdx] = { ...newMessages[sysIdx], content: (newMessages[sysIdx].content ?? "") + "\n\n" + contextBlock };
-  } else {
-    newMessages.unshift({ role: "system", content: contextBlock });
-  }
-
-  console.log(`[@Web] Injected ${results.length} results (${injectedTokens} tokens) | urls:${urls.length} queries:${queries.length}`);
-
+  // Returned as per-turn context; the caller attaches it to the last user
+  // message so the cached system/history prefix stays unchanged.
   return {
-    body: { ...body, messages: newMessages },
-    webResult: { query: [...urls, ...queries].join(", "), results, injectedTokens },
+    context: contextBlock,
+    webResult: {
+      query: [...urls, ...queries].join(", "),
+      results,
+      injectedTokens,
+    },
   };
 }

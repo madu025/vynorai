@@ -1,15 +1,33 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const targetPath = path.join(process.env.USERPROFILE || 'C:/Users/USER', '.vynorai', 'config.yaml');
+const targetPath = path.join(
+  process.env.USERPROFILE || "C:/Users/USER",
+  ".vynorai",
+  "config.yaml",
+);
 
 const yamlContent = `name: VynorAI Coding Agent
 version: 2.0.0
 schema: v1
 models:
-  - name: "VynorAI DeepSeek V3 (Coding)"
+  - name: "VynorAI Auto"
     provider: vynorai
-    model: deepseek/deepseek-chat-v3-0324
+    model: vynor-auto
+    apiBase: http://localhost:3000/v1/
+    roles:
+      - chat
+      - edit
+      - apply
+      - subagent
+    defaultCompletionOptions:
+      contextLength: 64000
+      maxTokens: 16384
+    capabilities:
+      - tool_use
+  - name: "VynorAI DeepSeek V4.1 Flash"
+    provider: vynorai
+    model: deepseek/deepseek-flash
     apiBase: http://localhost:3000/v1/
     roles:
       - chat
@@ -20,12 +38,13 @@ models:
       maxTokens: 8192
     capabilities:
       - tool_use
-  - name: "VynorAI DeepSeek R1 (Reasoning)"
+  - name: "VynorAI DeepSeek V4 Pro"
     provider: vynorai
-    model: deepseek/deepseek-r1
+    model: deepseek/deepseek-v4-pro
     apiBase: http://localhost:3000/v1/
     roles:
       - chat
+      - edit
     defaultCompletionOptions:
       contextLength: 64000
       maxTokens: 16384
@@ -79,6 +98,5 @@ models:
       temperature: 0
 `;
 
-
-fs.writeFileSync(targetPath, yamlContent, 'utf8');
-console.log('Successfully written to', targetPath);
+fs.writeFileSync(targetPath, yamlContent, "utf8");
+console.log("Successfully written to", targetPath);

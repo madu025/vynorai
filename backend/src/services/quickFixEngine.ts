@@ -11,16 +11,21 @@ import { AuthenticatedUser } from "./aiProxy.js";
 import { dispatchToProvider } from "./providerRouter.js";
 import { sanitizeText } from "./secretSanitizer.js";
 import { getPlan } from "../config.js";
-import { QuotaReservation, settleQuotaReservation } from "./monthlyQuota.js";
+import {
+  QuotaReservation,
+  releaseQuotaReservation,
+  settleQuotaReservation,
+} from "./monthlyQuota.js";
+import { creditsFor } from "./billingPolicy.js";
 import { recordRequestEconomics } from "./costLedger.js";
 import { billingRun as dbRun } from "./billingDb.js";
 import { v4 as uuidv4 } from "uuid";
 
 export interface QuickFixRequest {
-  errorLog: string;         // Terminal output / compiler error / stack trace
-  codeContext?: string;     // Active file code around the error
-  filePath?: string;        // Path to the failing file
-  language?: string;        // Language (e.g. typescript, python)
+  errorLog: string; // Terminal output / compiler error / stack trace
+  codeContext?: string; // Active file code around the error
+  filePath?: string; // Path to the failing file
+  language?: string; // Language (e.g. typescript, python)
   model?: string;
 }
 
@@ -32,9 +37,11 @@ export async function handleQuickFix(
 ) {
   const startedAt = Date.now();
   const plan = getPlan(user.subscriptionPlan || "free");
-  const model = body.model || (user.subscriptionPlan === "pro" || user.subscriptionPlan === "ultra" 
-    ? "deepseek/deepseek-r1" 
-    : "deepseek/deepseek-chat-v3-0324");
+  const model =
+    body.model ||
+    (user.subscriptionPlan === "pro" || user.subscriptionPlan === "ultra"
+      ? "deepseek/deepseek-r1"
+      : "deepseek/deepseek-chat-v3-0324");
 
   const cleanError = sanitizeText(body.errorLog || "").text;
   const cleanContext = sanitizeText(body.codeContext || "").text;
@@ -49,10 +56,14 @@ Diagnose the exact root cause and generate a surgical fix.
 ${cleanError}
 \`\`\`
 
-${cleanContext ? `### ACTIVE CODE CONTEXT (${body.filePath || "File"}):
+${
+  cleanContext
+    ? `### ACTIVE CODE CONTEXT (${body.filePath || "File"}):
 \`\`\`${body.language || ""}
 ${cleanContext}
-\`\`\`` : ""}
+\`\`\``
+    : ""
+}
 
 ### INSTRUCTIONS:
 1. Explain the root cause in 1-2 concise bullet points.
@@ -68,7 +79,11 @@ ${cleanContext}
   const payload = {
     model,
     messages: [
-      { role: "system", content: "You are an elite automated debugger that fixes terminal compiler and runtime errors." },
+      {
+        role: "system",
+        content:
+          "You are an elite automated debugger that fixes terminal compiler and runtime errors.",
+      },
       { role: "user", content: prompt },
     ],
     temperature: 0.1,
@@ -83,22 +98,36 @@ ${cleanContext}
     outputChars += chunk?.choices?.[0]?.delta?.content?.length || 0;
     outputChars += chunk?.choices?.[0]?.message?.content?.length || 0;
   }
-  const inputTokens = dispatch.usage?.inputTokens || Math.ceil(prompt.length / 4);
-  const outputTokens = dispatch.usage?.outputTokens || Math.max(1, Math.ceil(outputChars / 4));
+  const inputTokens =
+    dispatch.usage?.inputTokens || Math.ceil(prompt.length / 4);
+  const outputTokens =
+    dispatch.usage?.outputTokens || Math.max(1, Math.ceil(outputChars / 4));
   const actualTokens = dispatch.success ? inputTokens + outputTokens : 0;
-  await settleQuotaReservation(quotaReservation, actualTokens);
+  if (dispatch.success)
+    await settleQuotaReservation(
+      quotaReservation,
+      creditsFor(model, actualTokens),
+    );
+  else await releaseQuotaReservation(quotaReservation);
   const usageLogId = uuidv4();
   await dbRun(
     "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, ?, ?, 0)",
     [usageLogId, user.id, model, inputTokens, outputTokens, actualTokens],
   );
   await recordRequestEconomics({
-    usageLogId, userId: user.id, planId: plan.id, requestedModel: model,
-    resolvedModel: dispatch.resolvedModel, provider: dispatch.provider,
-    inputTokens, outputTokens,
+    usageLogId,
+    userId: user.id,
+    planId: plan.id,
+    requestedModel: model,
+    resolvedModel: dispatch.resolvedModel,
+    provider: dispatch.provider,
+    inputTokens,
+    outputTokens,
     providerCostUsd: dispatch.usage?.providerCostUsd ?? null,
-    costSource: dispatch.usage?.costSource ?? "unknown", cacheStatus: "bypass",
-    optimizationMode: "quick-fix", latencyMs: dispatch.latencyMs ?? Date.now() - startedAt,
+    costSource: dispatch.usage?.costSource ?? "unknown",
+    cacheStatus: "bypass",
+    optimizationMode: "quick-fix",
+    latencyMs: dispatch.latencyMs ?? Date.now() - startedAt,
     outcome: dispatch.success ? "success" : "failed",
   });
 }

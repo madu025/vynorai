@@ -19,13 +19,18 @@ services:
       - REDIS_URL=redis://vynor-redis:6379
       - LOCAL_SLM_ENABLED=true
       - LOCAL_SLM_URL=http://vynor-slm:8080/v1
-      - LOCAL_SLM_MODEL=qwen2.5-coder-3b-instruct
-      - LOCAL_SLM_TIMEOUT_MS=600
+      - LOCAL_SLM_MODEL=qwen2.5-coder-1.5b-instruct
+      - LOCAL_SLM_TIMEOUT_MS=1500
+      - SEMANTIC_CACHE_ENABLED=true
+      - LOCAL_EMBED_URL=http://vynor-embed:8081/v1
+      - LOCAL_EMBED_MODEL=bge-small-en-v1.5
     env_file:
       - ./backend/.env
     depends_on:
       - vynor-redis
       - vynor-slm
+      - vynor-embed
+    mem_limit: 768m
     networks:
       - vynor-net
 
@@ -40,20 +45,41 @@ services:
     networks:
       - vynor-net
 
-  # ── 3. High-Performance Local SLM (Qwen 2.5 Coder 3B / llama.cpp Server) ──
+  # ── 3. Local SLM: tier router + background summarizer (Qwen 2.5 Coder 1.5B) ──
+  # 8192 ctx / 2 slots = 4096 tokens per slot: one slot for routing, one for
+  # conversation summaries (~3k-token transcripts). ~1.2 GB RAM incl. KV cache.
   vynor-slm:
     image: ghcr.io/ggerganov/llama.cpp:server
     container_name: vynor-slm
     restart: unless-stopped
     command: >
-      -m /models/qwen2.5-coder-3b-instruct-q4_k_m.gguf
+      -m /models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
       --host 0.0.0.0
       --port 8080
-      -c 4096
+      -c 8192
       -t 3
       --parallel 2
     volumes:
       - ./models:/models:ro
+    mem_limit: 2g
+    networks:
+      - vynor-net
+
+  # ── 4. Embeddings for the semantic cache (bge-small, ~150 MB RAM) ──────────
+  vynor-embed:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: vynor-embed
+    restart: unless-stopped
+    command: >
+      -m /models/bge-small-en-v1.5-q8_0.gguf
+      --host 0.0.0.0
+      --port 8081
+      --embeddings
+      -c 512
+      -t 1
+    volumes:
+      - ./models:/models:ro
+    mem_limit: 384m
     networks:
       - vynor-net
 

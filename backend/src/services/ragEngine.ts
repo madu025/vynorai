@@ -19,11 +19,11 @@ export interface CodeChunk {
   id: string;
   filename: string;
   type: "function" | "class" | "module" | "block";
-  name: string;          // function/class name if detectable
+  name: string; // function/class name if detectable
   content: string;
   startLine: number;
   tokenEst: number;
-  score?: number;        // set during retrieval
+  score?: number; // set during retrieval
 }
 
 export interface RAGResult {
@@ -34,10 +34,10 @@ export interface RAGResult {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const CHUNK_MAX_LINES    = 80;     // max lines per chunk
-const CHUNK_MIN_LINES    = 3;      // ignore tiny fragments
-const TOP_K              = 5;      // inject top 5 chunks
-const CHARS_PER_TOKEN    = 4;
+const CHUNK_MAX_LINES = 80; // max lines per chunk
+const CHUNK_MIN_LINES = 3; // ignore tiny fragments
+const TOP_K = 5; // inject top 5 chunks
+const CHARS_PER_TOKEN = 4;
 
 // ─── Chunking ─────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,16 @@ export function chunkCode(filename: string, content: string): CodeChunk[] {
   const isPython = ["py", "pyw"].includes(ext);
   const isRust = ext === "rs";
   const isGo = ext === "go";
-  const isJavaFamily = ["java", "kt", "swift", "cs", "cpp", "c", "h", "hpp"].includes(ext);
+  const isJavaFamily = [
+    "java",
+    "kt",
+    "swift",
+    "cs",
+    "cpp",
+    "c",
+    "h",
+    "hpp",
+  ].includes(ext);
   const isPHP = ext === "php";
   const isRuby = ext === "rb";
 
@@ -69,38 +78,34 @@ export function chunkCode(filename: string, content: string): CodeChunk[] {
       /^\s*(public|private|protected|static)?\s*(async\s+)?\w+\s*\([^)]*\)\s*[:{]/,
       /^(export\s+)?interface\s+\w+/,
       /^(export\s+)?type\s+\w+\s*=/,
-      /^(pub\s+)?(fn|struct|impl|enum|trait)\s+\w+/
+      /^(pub\s+)?(fn|struct|impl|enum|trait)\s+\w+/,
     );
   }
   if (isGo) {
     boundaries.push(
       /^func\s+(\([^)]+\)\s+)?\w+/,
-      /^type\s+\w+\s+(struct|interface)/
+      /^type\s+\w+\s+(struct|interface)/,
     );
   }
   if (isJavaFamily) {
     boundaries.push(
       /^\s*(public|private|protected|internal|abstract|static|final|override|\w+)\s+[\w<>\[\],\s]+\s+\w+\s*\([^)]*\)\s*[{;]?/,
       /^\s*(public|private|protected)?\s*(class|interface|enum|record|struct)\s+\w+/,
-      /^(fun|func)\s+\w+/
+      /^(fun|func)\s+\w+/,
     );
   }
   if (isPHP) {
     boundaries.push(
       /^\s*(public|private|protected|static)?\s*function\s+\w+/,
       /^(abstract\s+)?class\s+\w+/,
-      /^(interface|trait)\s+\w+/
+      /^(interface|trait)\s+\w+/,
     );
   }
   if (isRuby) {
     boundaries.push(/^def\s+\w+/, /^class\s+\w+/, /^module\s+\w+/);
   }
   if (isPython) {
-    boundaries.push(
-      /^def\s+\w+/,
-      /^async\s+def\s+\w+/,
-      /^class\s+\w+/,
-    );
+    boundaries.push(/^def\s+\w+/, /^async\s+def\s+\w+/, /^class\s+\w+/);
   }
 
   // Split at major documentation block headers
@@ -126,25 +131,29 @@ export function chunkCode(filename: string, content: string): CodeChunk[] {
       if (chunkLines.length >= CHUNK_MIN_LINES) {
         // Extract name from first boundary line (TS, Python, Java, C#, C++, Go, PHP, Rust)
         const nameMatch =
-          lines[chunkStart]?.match(/(?:function|class|def|func|fn|const|let|var|interface|type|struct)\s+(\w+)/) ||
-          lines[chunkStart]?.match(/\b(?:void|int|string|bool|boolean|async|public|private|protected)\s+(?:[\w<>\[\]]+\s+)?(\w+)\s*\(/) ||
+          lines[chunkStart]?.match(
+            /(?:function|class|def|func|fn|const|let|var|interface|type|struct)\s+(\w+)/,
+          ) ||
+          lines[chunkStart]?.match(
+            /\b(?:void|int|string|bool|boolean|async|public|private|protected)\s+(?:[\w<>\[\]]+\s+)?(\w+)\s*\(/,
+          ) ||
           lines[chunkStart]?.match(/(\w+)\s*\([^)]*\)\s*[:{]/);
         chunks.push({
-          id:        `${filename}:${chunkStart}`,
+          id: `${filename}:${chunkStart}`,
           filename,
-          type:      chunkType,
-          name:      nameMatch?.[1] ?? chunkName,
-          content:   chunkLines.join("\n"),
+          type: chunkType,
+          name: nameMatch?.[1] ?? chunkName,
+          content: chunkLines.join("\n"),
           startLine: chunkStart + 1,
-          tokenEst:  Math.ceil(chunkLines.join("\n").length / CHARS_PER_TOKEN),
+          tokenEst: Math.ceil(chunkLines.join("\n").length / CHARS_PER_TOKEN),
         });
       }
 
       chunkStart = i;
       const nextLine = lines[i]?.trimStart() ?? "";
-      if (/class/.test(nextLine))     chunkType = "class";
+      if (/class/.test(nextLine)) chunkType = "class";
       else if (/function|def/.test(nextLine)) chunkType = "function";
-      else                            chunkType = "block";
+      else chunkType = "block";
     }
   }
 
@@ -158,13 +167,13 @@ function fixedChunks(filename: string, lines: string[]): CodeChunk[] {
     const slice = lines.slice(i, i + CHUNK_MAX_LINES);
     if (slice.length >= CHUNK_MIN_LINES) {
       chunks.push({
-        id:        `${filename}:${i}`,
+        id: `${filename}:${i}`,
         filename,
-        type:      "block",
-        name:      `lines ${i + 1}-${i + slice.length}`,
-        content:   slice.join("\n"),
+        type: "block",
+        name: `lines ${i + 1}-${i + slice.length}`,
+        content: slice.join("\n"),
         startLine: i + 1,
-        tokenEst:  Math.ceil(slice.join("\n").length / CHARS_PER_TOKEN),
+        tokenEst: Math.ceil(slice.join("\n").length / CHARS_PER_TOKEN),
       });
     }
     i += CHUNK_MAX_LINES;
@@ -190,8 +199,10 @@ function tfidf(query: string[], doc: string[]): number {
   let score = 0;
   for (const qt of query) {
     if (docSet.has(qt)) {
-      const tf  = (docFreq[qt] ?? 0) / Math.max(doc.length, 1);
-      const idf = Math.log(1 + 1 / Math.max(doc.filter((t) => t === qt).length, 1));
+      const tf = (docFreq[qt] ?? 0) / Math.max(doc.length, 1);
+      const idf = Math.log(
+        1 + 1 / Math.max(doc.filter((t) => t === qt).length, 1),
+      );
       score += tf * idf;
     }
   }
@@ -232,15 +243,19 @@ export function retrieveTopChunks(
   query: string,
   chunks: CodeChunk[],
   topK = TOP_K,
-  projectMap?: ProjectMap | null
+  projectMap?: ProjectMap | null,
 ): CodeChunk[] {
   if (chunks.length === 0) return [];
 
   const qTokens = tokenize(query);
-  const scored  = chunks.map((chunk) => {
+  const scored = chunks.map((chunk) => {
     let symbolBonus = 0;
     const chunkNameLower = chunk.name.toLowerCase();
-    if (qTokens.some((t) => chunkNameLower.includes(t) || t.includes(chunkNameLower))) {
+    if (
+      qTokens.some(
+        (t) => chunkNameLower.includes(t) || t.includes(chunkNameLower),
+      )
+    ) {
       symbolBonus = 0.45;
     }
     return {
@@ -266,7 +281,11 @@ function sessionKey(userId: string, filename: string): string {
   return `${userId}::${filename}`;
 }
 
-export function indexFileForUser(userId: string, filename: string, content: string): number {
+export function indexFileForUser(
+  userId: string,
+  filename: string,
+  content: string,
+): number {
   const chunks = chunkCode(filename, content);
   _index.set(sessionKey(userId, filename), chunks);
   return chunks.length;
@@ -279,7 +298,7 @@ export function indexFileForUser(userId: string, filename: string, content: stri
 export function indexProjectFiles(
   userId: string,
   projectRoot: string,
-  files: Array<{ path: string; content: string }>
+  files: Array<{ path: string; content: string }>,
 ): ProjectMap {
   const languagesSet = new Set<string>();
   const symbols: Record<string, ProjectSymbol> = {};
@@ -295,7 +314,11 @@ export function indexProjectFiles(
     totalChunks += chunks.length;
 
     for (const chunk of chunks) {
-      if (chunk.name && chunk.name !== "module" && !chunk.name.startsWith("lines ")) {
+      if (
+        chunk.name &&
+        chunk.name !== "module" &&
+        !chunk.name.startsWith("lines ")
+      ) {
         symbols[chunk.name.toLowerCase()] = {
           name: chunk.name,
           type: chunk.type,
@@ -351,88 +374,69 @@ export function clearUserIndex(userId: string): void {
 export function enrichWithRAG(
   body: any,
   userId: string,
-  planId = "free"
-): { body: any; rag: RAGResult | null } {
+  planId = "free",
+): { context: string; rag: RAGResult | null } {
   const messages: any[] = body.messages ?? [];
-  if (messages.length === 0) return { body, rag: null };
+  if (messages.length === 0) return { context: "", rag: null };
+
+  // Only retrieve from an explicitly indexed project (POST /v1/project/index).
+  // Re-injecting code that is already in the conversation costs tokens twice.
+  const pMap = getProjectMap(userId);
+  if (!pMap) return { context: "", rag: null };
 
   // Determine topK by plan
-  const topK = planId === "ultra" ? 8 : planId === "pro" ? 6 : planId === "starter" ? 5 : 3;
+  const topK =
+    planId === "ultra"
+      ? 8
+      : planId === "pro"
+        ? 6
+        : planId === "starter"
+          ? 5
+          : 3;
 
-  // ── Step 1: Extract code blocks from all messages and index ────────────────
-  const codeBlockRe = /```[\w]*[ \t]*([^\n]*)\n([\s\S]*?)```/g;
-  let scannedFiles = 0;
-
-  for (const msg of messages) {
-    const text = typeof msg.content === "string"
-      ? msg.content
-      : Array.isArray(msg.content) ? msg.content.map((p: any) => p.text ?? "").join("") : "";
-
-    let m: RegExpExecArray | null;
-    while ((m = codeBlockRe.exec(text)) !== null) {
-      const hint    = m[1].trim();
-      const content = m[2];
-      if (!hint || content.split("\n").length < CHUNK_MIN_LINES) continue;
-      indexFileForUser(userId, hint, content);
-      scannedFiles++;
-    }
-    codeBlockRe.lastIndex = 0;
-  }
-
-  // ── Step 2: Get query from last user message ────────────────────────────────
+  // ── Step 1: Get query from last user message ────────────────────────────────
   const lastUser = [...messages].reverse().find((m: any) => m.role === "user");
-  const query = typeof lastUser?.content === "string"
-    ? lastUser.content
-    : Array.isArray(lastUser?.content) ? lastUser.content.map((p: any) => p.text ?? "").join("") : "";
+  const query =
+    typeof lastUser?.content === "string"
+      ? lastUser.content
+      : Array.isArray(lastUser?.content)
+        ? lastUser.content.map((p: any) => p.text ?? "").join("")
+        : "";
 
-  if (!query || query.length < 10) return { body, rag: null };
+  if (!query || query.length < 10) return { context: "", rag: null };
 
-  // ── Step 3: Retrieve top-K relevant chunks ──────────────────────────────────
+  // ── Step 2: Retrieve top-K relevant chunks ──────────────────────────────────
   const allChunks = getUserChunks(userId);
-  if (allChunks.length === 0) return { body, rag: null };
+  if (allChunks.length === 0) return { context: "", rag: null };
 
-  const pMap = getProjectMap(userId);
-  const topChunks  = retrieveTopChunks(query, allChunks, topK, pMap);
-  if (topChunks.length === 0) return { body, rag: null };
+  const topChunks = retrieveTopChunks(query, allChunks, topK, pMap);
+  if (topChunks.length === 0) return { context: "", rag: null };
 
   // ── Step 4: Build RAG context block ────────────────────────────────────────
   const ragBlock = [
     "<!-- VynorAI RAG Context: most relevant code snippets for this query -->",
-    ...topChunks.map((c) =>
-      `\`\`\`${c.filename.split(".").pop() ?? ""} ${c.filename} (${c.type}: ${c.name}, L${c.startLine})\n${c.content}\n\`\`\``
+    ...topChunks.map(
+      (c) =>
+        `\`\`\`${c.filename.split(".").pop() ?? ""} ${c.filename} (${c.type}: ${c.name}, L${c.startLine})\n${c.content}\n\`\`\``,
     ),
     "<!-- end RAG context -->",
   ].join("\n\n");
 
-  const ragTokens  = Math.ceil(ragBlock.length / CHARS_PER_TOKEN);
-  const allTokens  = allChunks.reduce((s, c) => s + c.tokenEst, 0);
+  const ragTokens = Math.ceil(ragBlock.length / CHARS_PER_TOKEN);
+  const allTokens = allChunks.reduce((s, c) => s + c.tokenEst, 0);
   const savedTokens = Math.max(0, allTokens - ragTokens);
 
-  // Inject as a system-level message (before first user message)
-  const systemIdx = messages.findIndex((m: any) => m.role === "system");
-  const newMessages = [...messages];
-  const ragMsg = { role: "system", content: ragBlock };
-
-  if (systemIdx >= 0) {
-    // Append to existing system message
-    newMessages[systemIdx] = {
-      ...newMessages[systemIdx],
-      content: (newMessages[systemIdx].content ?? "") + "\n\n" + ragBlock,
-    };
-  } else {
-    newMessages.unshift(ragMsg);
-  }
-
   console.log(
-    `[SmartRAG] 🔍 chunks: ${allChunks.length} scanned → ${topChunks.length} injected | ` +
-    `saved ~${savedTokens} tokens | query: "${query.slice(0, 50)}..."`
+    `[SmartRAG] 🔍 chunks: ${allChunks.length} scanned → ${topChunks.length} selected | ` +
+      `saved ~${savedTokens} tokens | query: "${query.slice(0, 50)}..."`,
   );
 
+  // Returned as per-turn context; the caller attaches it to the last user message.
   return {
-    body: { ...body, messages: newMessages },
+    context: ragBlock,
     rag: {
-      chunks:              topChunks,
-      totalChunksScanned:  allChunks.length,
+      chunks: topChunks,
+      totalChunksScanned: allChunks.length,
       savedTokens,
       query,
     },

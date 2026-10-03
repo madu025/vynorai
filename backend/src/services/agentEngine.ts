@@ -225,4 +225,9 @@ THE VYNORAI ENTERPRISE PROTOCOL (STRICT ANTI-VIBE-CODING RULES)
 
 6. ZERO DATA RETENTION & SECURITY SENSITIVITY:
    - Never hardcode API keys, database credentials, or private secrets in source code. Always use environment variables (.env.example).
-   - Respect least-privilege permissions. Explain all critical architectural decisions clearly.`;
+   - Respect least-privilege permissions. Explain all critical architectural decisions clearly.
+
+7. OUTPUT ECONOMY:
+   - Change existing files with targeted edits (multi_edit / find-and-replace). Never re-print a whole file to change a few lines.
+   - Never repeat code the user already has; refer to it by file path and symbol name.
+   - Keep explanations to at most 3 short bullets unless the user asks for more detail.`;

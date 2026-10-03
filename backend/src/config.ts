@@ -1,7 +1,14 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-export type ProviderID = "openrouter" | "openai" | "anthropic" | "deepseek" | "gemini" | "groq" | "ollama";
+export type ProviderID =
+  | "openrouter"
+  | "openai"
+  | "anthropic"
+  | "deepseek"
+  | "gemini"
+  | "groq"
+  | "ollama";
 
 // ─── Plan Definitions ──────────────────────────────────────────────────────────
 /**
@@ -18,143 +25,275 @@ export type ProviderID = "openrouter" | "openai" | "anthropic" | "deepseek" | "g
  *   Qwen-72B   : .40/M  → LKR ~120/M  →  83x margin on Enterprise✅
  */
 export interface PlanDefinition {
-  id:                       string;
-  displayName:              string;
-  monthlyTokens:            number;
-  monthlyRequests:          number;
-  priceLKR:                 number;
-  priceUSD:                 number;
-  discountPct:              number;   // 0-100 promo discount applied to price
-  contextWindow:            number;   // context limit in tokens
-  defaultChatModel:         string;   // primary model for this plan
-  defaultAutocompleteModel: string;   // FIM model
-  allowedModels:            string[]; // ["*"] = all models
-  features:                 string[];
-  payhereItemId:            string;
-  upgradeUrl:               string;
+  id: string;
+  displayName: string;
+  monthlyTokens: number;
+  monthlyRequests: number;
+  priceLKR: number;
+  priceUSD: number;
+  discountPct: number; // 0-100 promo discount applied to price
+  contextWindow: number; // context limit in tokens
+  defaultChatModel: string; // primary model for this plan
+  defaultAutocompleteModel: string; // FIM model
+  allowedModels: string[]; // ["*"] = all models
+  features: string[];
+  payhereItemId: string;
+  upgradeUrl: string;
 }
 
 export const PLANS: Record<string, PlanDefinition> = {
   free: {
-    id: "free", displayName: "Free Trial",
-    monthlyTokens: 100_000, monthlyRequests: 100,
-    priceLKR: 0, priceUSD: 0, discountPct: 0,
+    id: "free",
+    displayName: "Free Trial",
+    monthlyTokens: 100_000,
+    monthlyRequests: 100,
+    priceLKR: 0,
+    priceUSD: 0,
+    discountPct: 0,
     contextWindow: 32_000,
-    defaultChatModel:         "deepseek/deepseek-chat-v3-0324",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "deepseek/deepseek-chat-v3-0324",
-    allowedModels: ["deepseek/deepseek-chat-v3-0324","deepseek-v3","deepseek-chat","qwen/qwen-2.5-coder-32b-instruct","qwen-2.5-coder"],
-    features: ["100,000 tokens/month (Free Onboarding)","100 requests/month","32k context window","DeepSeek V3 + Qwen 32B Code Engine","Standard Latency Queue"],
-    payhereItemId: "", upgradeUrl: "https://vynor.lk/#pricing",
+    allowedModels: [
+      "deepseek/deepseek-flash",
+      "deepseek-flash",
+      "deepseek/deepseek-chat-v3-0324",
+      "deepseek-v3",
+      "deepseek-chat",
+      "qwen/qwen-2.5-coder-32b-instruct",
+      "qwen-2.5-coder",
+    ],
+    features: [
+      "100,000 tokens/month (Free Onboarding)",
+      "100 requests/month",
+      "32k context window",
+      "DeepSeek V3 + Qwen 32B Code Engine",
+      "Standard Latency Queue",
+    ],
+    payhereItemId: "",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
 
   starter: {
-    id: "starter", displayName: "Starter",
-    monthlyTokens: 8_000_000, monthlyRequests: 2_500,
-    priceLKR: 1_850, priceUSD: 5.99, discountPct: 0,
+    id: "starter",
+    displayName: "Starter",
+    monthlyTokens: 8_000_000,
+    monthlyRequests: 2_500,
+    priceLKR: 1_850,
+    priceUSD: 5.99,
+    discountPct: 0,
     contextWindow: 32_000,
-    defaultChatModel:         "qwen/qwen-2.5-coder-32b-instruct",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "qwen/qwen-2.5-coder-32b-instruct",
     allowedModels: [
-      "qwen/qwen-2.5-coder-32b-instruct","qwen-2.5-coder",
-      "deepseek/deepseek-chat-v3-0324","deepseek-v3","deepseek-chat",
-      "deepseek/deepseek-coder-v2","deepseek-coder",
+      "deepseek/deepseek-flash",
+      "deepseek-flash",
+      "qwen/qwen-2.5-coder-32b-instruct",
+      "qwen-2.5-coder",
+      "deepseek/deepseek-chat-v3-0324",
+      "deepseek-v3",
+      "deepseek-chat",
+      "deepseek/deepseek-coder-v2",
+      "deepseek-coder",
     ],
     features: [
-      "8 Million Tokens/month (8M)","2,500 Fast Coding Requests/month","32k Context Window",
+      "8 Million Tokens/month (8M)",
+      "2,500 Fast Coding Requests/month",
+      "32k Context Window",
       "Qwen 2.5 Coder 32B & DeepSeek V3 (Lowest latency)",
-      "Real-time Tab Autocomplete (FIM)","All 9 Slash Commands","Smart 0-Token Caching",
+      "Real-time Tab Autocomplete (FIM)",
+      "All 9 Slash Commands",
+      "Smart 0-Token Caching",
     ],
-    payhereItemId: "vynorai_starter", upgradeUrl: "https://vynor.lk/#pricing",
+    payhereItemId: "vynorai_starter",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
 
   pro: {
-    id: "pro", displayName: "Pro",
-    monthlyTokens: 25_000_000, monthlyRequests: 7_500,
-    priceLKR: 3_850, priceUSD: 12.50, discountPct: 0,
+    id: "pro",
+    displayName: "Pro",
+    monthlyTokens: 25_000_000,
+    monthlyRequests: 7_500,
+    priceLKR: 3_850,
+    priceUSD: 12.5,
+    discountPct: 0,
     contextWindow: 128_000,
-    defaultChatModel:         "deepseek/deepseek-coder-v2",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
     allowedModels: [
-      "deepseek/deepseek-coder-v2","deepseek-coder",
-      "deepseek/deepseek-chat-v3-0324","deepseek-v3","deepseek-chat",
-      "deepseek/deepseek-r1","deepseek-r1",
-      "qwen/qwen-2.5-coder-32b-instruct","qwen-2.5-coder",
-      "meta-llama/llama-3.3-70b-instruct","llama-3.3-70b",
-      "google/gemini-2.5-flash","gemini-2.5-flash",
+      "deepseek/deepseek-flash",
+      "deepseek-flash",
+      "deepseek/deepseek-v4-pro",
+      "deepseek-v4-pro",
+      "deepseek/deepseek-coder-v2",
+      "deepseek-coder",
+      "deepseek/deepseek-chat-v3-0324",
+      "deepseek-v3",
+      "deepseek-chat",
+      "deepseek/deepseek-r1",
+      "deepseek-r1",
+      "qwen/qwen-2.5-coder-32b-instruct",
+      "qwen-2.5-coder",
+      "meta-llama/llama-3.3-70b-instruct",
+      "llama-3.3-70b",
+      "google/gemini-2.5-flash",
+      "gemini-2.5-flash",
     ],
     features: [
-      "25 Million Tokens/month (25M)","7,500 High-Speed Requests/month","128k Context Window",
+      "25 Million Tokens/month (25M)",
+      "7,500 High-Speed Requests/month",
+      "128k Context Window",
       "DeepSeek R1 (High-Precision Reasoning) + DeepSeek V3",
       "Llama 3.3 70B + Gemini 2.5 Flash",
-      "Full Agent Mode (Multi-file auto edit)","Priority Fast-Track Queue",
+      "Full Agent Mode (Multi-file auto edit)",
+      "Priority Fast-Track Queue",
     ],
-    payhereItemId: "vynorai_pro", upgradeUrl: "https://vynor.lk/#pricing",
+    payhereItemId: "vynorai_pro",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
 
   enterprise: {
-    id: "enterprise", displayName: "Ultra",
-    monthlyTokens: 60_000_000, monthlyRequests: 20_000,
-    priceLKR: 7_900, priceUSD: 25.50, discountPct: 0,
+    id: "enterprise",
+    displayName: "Ultra",
+    monthlyTokens: 60_000_000,
+    monthlyRequests: 20_000,
+    priceLKR: 7_900,
+    priceUSD: 25.5,
+    discountPct: 0,
     contextWindow: 256_000,
-    defaultChatModel:         "qwen/qwen-2.5-coder-72b-instruct",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
     allowedModels: ["*"],
     features: [
-      "60 Million Tokens/month (60M)","20,000 Agent Requests/month","256k Large Context Window",
+      "60 Million Tokens/month (60M)",
+      "20,000 Agent Requests/month",
+      "256k Large Context Window",
       "All Premier Models Unlocked (Qwen 72B, DeepSeek R1, Llama 70B)",
-      "Dedicated Low-Latency Pipeline","Multi-device Support (Up to 3 devices)","VIP Priority Support",
+      "Dedicated Low-Latency Pipeline",
+      "Multi-device Support (Up to 3 devices)",
+      "VIP Priority Support",
     ],
-    payhereItemId: "vynorai_ultra", upgradeUrl: "https://vynor.lk/#pricing",
+    payhereItemId: "vynorai_ultra",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
 
   // ── Legacy aliases ───────────────────────────────────────────────────────────
   ultra: {
-    id: "ultra", displayName: "Ultra",
-    monthlyTokens: 60_000_000, monthlyRequests: 20_000,
-    priceLKR: 7_900, priceUSD: 25.50, discountPct: 0,
+    id: "ultra",
+    displayName: "Ultra",
+    monthlyTokens: 60_000_000,
+    monthlyRequests: 20_000,
+    priceLKR: 7_900,
+    priceUSD: 25.5,
+    discountPct: 0,
     contextWindow: 256_000,
-    defaultChatModel:         "qwen/qwen-2.5-coder-72b-instruct",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
     allowedModels: ["*"],
     features: [
-      "60 Million Tokens/month (60M)","20,000 Agent Requests/month","256k Large Context Window",
+      "60 Million Tokens/month (60M)",
+      "20,000 Agent Requests/month",
+      "256k Large Context Window",
       "All Premier Models Unlocked (Qwen 72B, DeepSeek R1, Llama 70B)",
-      "Dedicated Low-Latency Pipeline","Multi-device Support (Up to 3 devices)","VIP Priority Support",
+      "Dedicated Low-Latency Pipeline",
+      "Multi-device Support (Up to 3 devices)",
+      "VIP Priority Support",
     ],
-    payhereItemId: "vynorai_ultra", upgradeUrl: "https://vynor.lk/#pricing",
+    payhereItemId: "vynorai_ultra",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
   topup5m: {
-    id: "topup5m", displayName: "Top-Up Pack (5M)",
-    monthlyTokens: 5_000_000, monthlyRequests: 1_500,
-    priceLKR: 650, priceUSD: 2.10, discountPct: 0,
+    id: "topup5m",
+    displayName: "Top-Up Pack (5M)",
+    monthlyTokens: 5_000_000,
+    monthlyRequests: 1_500,
+    priceLKR: 650,
+    priceUSD: 2.1,
+    discountPct: 0,
     contextWindow: 128_000,
-    defaultChatModel: "deepseek/deepseek-chat-v3-0324",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
-    allowedModels: ["*"],
-    features: ["+5,000,000 Extra Tokens","1,500 Additional Requests","Instant Credit to Active Plan"],
-    payhereItemId: "vynorai_topup_5m", upgradeUrl: "https://vynor.lk/#pricing",
+    // Top-ups credit the current cycle and are never an active tier.
+    allowedModels: [],
+    features: [
+      "+5,000,000 Extra Credits",
+      "1,500 Additional Requests",
+      "Instant Credit to Active Plan",
+    ],
+    payhereItemId: "vynorai_topup_5m",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
   pro_monthly: {
-    id: "pro_monthly", displayName: "Pro Monthly",
-    monthlyTokens: 25_000_000, monthlyRequests: 7_500,
-    priceLKR: 3_850, priceUSD: 12.50, discountPct: 0,
+    id: "pro_monthly",
+    displayName: "Pro Monthly",
+    monthlyTokens: 25_000_000,
+    monthlyRequests: 7_500,
+    priceLKR: 3_850,
+    priceUSD: 12.5,
+    discountPct: 0,
     contextWindow: 128_000,
-    defaultChatModel:         "deepseek/deepseek-coder-v2",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
-    allowedModels: ["*"],
-    features: ["25M tokens/month","128k context","DeepSeek R1 + V3"],
-    payhereItemId: "vynorai_pro", upgradeUrl: "https://vynor.lk/#pricing",
+    // Same price as Pro, so the same model list as Pro.
+    allowedModels: [
+      "deepseek/deepseek-flash",
+      "deepseek-flash",
+      "deepseek/deepseek-v4-pro",
+      "deepseek-v4-pro",
+      "deepseek/deepseek-coder-v2",
+      "deepseek-coder",
+      "deepseek/deepseek-chat-v3-0324",
+      "deepseek-v3",
+      "deepseek-chat",
+      "deepseek/deepseek-r1",
+      "deepseek-r1",
+      "qwen/qwen-2.5-coder-32b-instruct",
+      "qwen-2.5-coder",
+      "meta-llama/llama-3.3-70b-instruct",
+      "llama-3.3-70b",
+      "google/gemini-2.5-flash",
+      "gemini-2.5-flash",
+    ],
+    features: ["25M tokens/month", "128k context", "DeepSeek R1 + V3"],
+    payhereItemId: "vynorai_pro",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
   pro_yearly: {
-    id: "pro_yearly", displayName: "Pro Yearly (2 months free)",
-    monthlyTokens: 25_000_000, monthlyRequests: 7_500,
-    priceLKR: 38_500, priceUSD: 125.00, discountPct: 17,
+    id: "pro_yearly",
+    displayName: "Pro Yearly (2 months free)",
+    monthlyTokens: 25_000_000,
+    monthlyRequests: 7_500,
+    priceLKR: 38_500,
+    priceUSD: 125.0,
+    discountPct: 17,
     contextWindow: 128_000,
-    defaultChatModel:         "deepseek/deepseek-coder-v2",
+    defaultChatModel: "deepseek/deepseek-flash",
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
-    allowedModels: ["*"],
-    features: ["25M tokens/month","128k context","17% discount (2 months free)"],
-    payhereItemId: "vynorai_pro_yearly", upgradeUrl: "https://vynor.lk/#pricing",
+    allowedModels: [
+      "deepseek/deepseek-flash",
+      "deepseek-flash",
+      "deepseek/deepseek-v4-pro",
+      "deepseek-v4-pro",
+      "deepseek/deepseek-coder-v2",
+      "deepseek-coder",
+      "deepseek/deepseek-chat-v3-0324",
+      "deepseek-v3",
+      "deepseek-chat",
+      "deepseek/deepseek-r1",
+      "deepseek-r1",
+      "qwen/qwen-2.5-coder-32b-instruct",
+      "qwen-2.5-coder",
+      "meta-llama/llama-3.3-70b-instruct",
+      "llama-3.3-70b",
+      "google/gemini-2.5-flash",
+      "gemini-2.5-flash",
+    ],
+    features: [
+      "25M tokens/month",
+      "128k context",
+      "17% discount (2 months free)",
+    ],
+    payhereItemId: "vynorai_pro_yearly",
+    upgradeUrl: "https://vynor.lk/#pricing",
   },
 };
 
@@ -164,74 +303,105 @@ export function getPlan(planId: string): PlanDefinition {
 }
 
 /** Effective price after discount */
-export function getEffectivePrice(plan: PlanDefinition): { lkr: number; usd: number } {
+export function getEffectivePrice(plan: PlanDefinition): {
+  lkr: number;
+  usd: number;
+} {
   const mul = (100 - plan.discountPct) / 100;
-  return { lkr: Math.round(plan.priceLKR * mul), usd: Math.round(plan.priceUSD * mul * 100) / 100 };
+  return {
+    lkr: Math.round(plan.priceLKR * mul),
+    usd: Math.round(plan.priceUSD * mul * 100) / 100,
+  };
 }
 
 /** Check if a requested model is accessible on user's plan */
-export function isModelAllowedForPlan(planId: string, modelId: string): boolean {
+export function isModelAllowedForPlan(
+  planId: string,
+  modelId: string,
+): boolean {
   const plan = getPlan(planId);
   if (plan.allowedModels.includes("*")) return true;
-  return plan.allowedModels.some(
-    (allowed) => allowed === modelId || modelId.toLowerCase().includes(allowed.toLowerCase())
+  // Exact alias or canonical match only — substring matching let e.g.
+  // "qwen-2.5-coder" unlock "qwen/qwen-2.5-coder-72b-instruct".
+  return (
+    plan.allowedModels.includes(modelId) ||
+    plan.allowedModels.includes(resolveModelId(modelId))
   );
 }
 
 /** Suggest the next upgrade plan */
 export function getUpgradePlan(currentPlanId: string): PlanDefinition | null {
   const ladder: string[] = ["free", "starter", "pro", "enterprise"];
-  const normalized = currentPlanId.replace("_monthly", "").replace("_yearly", "").replace("ultra", "enterprise");
+  const normalized = currentPlanId
+    .replace("_monthly", "")
+    .replace("_yearly", "")
+    .replace("ultra", "enterprise");
   const idx = ladder.indexOf(normalized);
   if (idx === -1 || idx >= ladder.length - 1) return null;
   return PLANS[ladder[idx + 1]];
 }
 
 // ─── OpenRouter Model Aliases ──────────────────────────────────────────────────
-export function isOpenRouterModelId(model: string): boolean { return model.includes("/"); }
+export function isOpenRouterModelId(model: string): boolean {
+  return model.includes("/");
+}
 
 export const MODEL_ALIASES: Record<string, string> = {
-  "claude-sonnet-4-6":   "anthropic/claude-sonnet-4-6",
-  "claude-3-7-sonnet":   "anthropic/claude-3.7-sonnet",
-  "claude-3-5-sonnet":   "anthropic/claude-3.5-sonnet",
-  "claude-3-haiku":      "anthropic/claude-3-haiku",
-  "claude-opus-4-6":     "anthropic/claude-opus-4-6",
-  "gpt-4o":              "openai/gpt-4o",
-  "gpt-4o-mini":         "openai/gpt-4o-mini",
-  "o3":                  "openai/o3",
-  "o3-mini":             "openai/o3-mini",
-  "deepseek-chat":       "deepseek/deepseek-chat-v3-0324",
-  "deepseek-coder":      "deepseek/deepseek-coder-v2",
-  "deepseek-v3":         "deepseek/deepseek-chat-v3-0324",
-  "deepseek-r1":         "deepseek/deepseek-r1",
-  "gemini-2.5-pro":      "google/gemini-2.5-pro",
-  "gemini-2.5-flash":    "google/gemini-2.5-flash",
-  "llama-3.3-70b":       "meta-llama/llama-3.3-70b-instruct",
-  "llama-3.1-8b":        "meta-llama/llama-3.1-8b-instruct:free",
-  "qwen-2.5-coder":      "qwen/qwen-2.5-coder-32b-instruct",
-  "qwen-2.5-coder-72b":  "qwen/qwen-2.5-coder-72b-instruct",
+  "claude-sonnet-4-6": "anthropic/claude-sonnet-4-6",
+  "claude-3-7-sonnet": "anthropic/claude-3.7-sonnet",
+  "claude-3-5-sonnet": "anthropic/claude-3.5-sonnet",
+  "claude-3-haiku": "anthropic/claude-3-haiku",
+  "claude-opus-4-6": "anthropic/claude-opus-4-6",
+  "gpt-4o": "openai/gpt-4o",
+  "gpt-4o-mini": "openai/gpt-4o-mini",
+  o3: "openai/o3",
+  "o3-mini": "openai/o3-mini",
+  "deepseek-flash": "deepseek/deepseek-flash",
+  "deepseek-v4-pro": "deepseek/deepseek-v4-pro",
+  "deepseek-chat": "deepseek/deepseek-chat-v3-0324",
+  "deepseek-coder": "deepseek/deepseek-coder-v2",
+  "deepseek-v3": "deepseek/deepseek-chat-v3-0324",
+  "deepseek-r1": "deepseek/deepseek-r1",
+  "gemini-2.5-pro": "google/gemini-2.5-pro",
+  "gemini-2.5-flash": "google/gemini-2.5-flash",
+  "llama-3.3-70b": "meta-llama/llama-3.3-70b-instruct",
+  "llama-3.1-8b": "meta-llama/llama-3.1-8b-instruct:free",
+  "qwen-2.5-coder": "qwen/qwen-2.5-coder-32b-instruct",
+  "qwen-2.5-coder-72b": "qwen/qwen-2.5-coder-72b-instruct",
 };
 
-export function resolveModelId(model: string): string { return MODEL_ALIASES[model] || model; }
+export function resolveModelId(model: string): string {
+  return MODEL_ALIASES[model] || model;
+}
 
-export const DEFAULT_CHAT_MODEL   = "deepseek/deepseek-chat-v3-0324";
+export const DEFAULT_CHAT_MODEL = "deepseek/deepseek-flash";
 export const DEFAULT_AUTOCOMPLETE = "deepseek/deepseek-coder-v2";
 
 // ─── Full Config ───────────────────────────────────────────────────────────────
 export const config = {
-  port:      parseInt(process.env.PORT || "3000", 10),
-  adminPort: parseInt(process.env.ADMIN_PORT || String((parseInt(process.env.PORT || "3000", 10) + 1)), 10),
-  nodeEnv:   process.env.NODE_ENV || "development",
-  baseUrl:   process.env.BASE_URL || "http://localhost:3000",
+  port: parseInt(process.env.PORT || "3000", 10),
+  adminPort: parseInt(
+    process.env.ADMIN_PORT ||
+      String(parseInt(process.env.PORT || "3000", 10) + 1),
+    10,
+  ),
+  nodeEnv: process.env.NODE_ENV || "development",
+  baseUrl: process.env.BASE_URL || "http://localhost:3000",
   jwtSecret: process.env.JWT_SECRET || "vynorai_default_secret_2026",
 
   payhere: {
-    merchantId:     process.env.PAYHERE_MERCHANT_ID     || "",
+    merchantId: process.env.PAYHERE_MERCHANT_ID || "",
     merchantSecret: process.env.PAYHERE_MERCHANT_SECRET || "",
     env: (process.env.PAYHERE_ENV || "sandbox").toLowerCase(),
-    returnUrl: process.env.PAYHERE_RETURN_URL || "http://localhost:3000/dashboard.html?payment=success",
-    cancelUrl: process.env.PAYHERE_CANCEL_URL || "http://localhost:3000/dashboard.html?payment=cancel",
-    notifyUrl: process.env.PAYHERE_NOTIFY_URL || "http://localhost:3000/api/payment/notify",
+    returnUrl:
+      process.env.PAYHERE_RETURN_URL ||
+      "http://localhost:3000/dashboard.html?payment=success",
+    cancelUrl:
+      process.env.PAYHERE_CANCEL_URL ||
+      "http://localhost:3000/dashboard.html?payment=cancel",
+    notifyUrl:
+      process.env.PAYHERE_NOTIFY_URL ||
+      "http://localhost:3000/api/payment/notify",
     get checkoutUrl() {
       return this.env === "live"
         ? "https://www.payhere.lk/pay/checkout"
@@ -241,18 +411,30 @@ export const config = {
 
   aiKeys: {
     openrouter: process.env.OPENROUTER_API_KEY || "",
-    openai:     process.env.OPENAI_API_KEY     || "",
-    anthropic:  process.env.ANTHROPIC_API_KEY  || "",
-    deepseek:   process.env.DEEPSEEK_API_KEY   || "",
-    groq:       process.env.GROQ_API_KEY       || "",
-    gemini:     process.env.GEMINI_API_KEY     || "",
-    ollama:     process.env.OLLAMA_BASE_URL    || "http://localhost:11434",
+    openai: process.env.OPENAI_API_KEY || "",
+    anthropic: process.env.ANTHROPIC_API_KEY || "",
+    deepseek: process.env.DEEPSEEK_API_KEY || "",
+    groq: process.env.GROQ_API_KEY || "",
+    gemini: process.env.GEMINI_API_KEY || "",
+    ollama: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
   },
 
   localSlm: {
     enabled: process.env.LOCAL_SLM_ENABLED === "true",
     url: process.env.LOCAL_SLM_URL || "http://localhost:8080/v1",
-    model: process.env.LOCAL_SLM_MODEL || "qwen2.5-coder-3b-instruct",
-    timeoutMs: parseInt(process.env.LOCAL_SLM_TIMEOUT_MS || "500", 10),
+    model: process.env.LOCAL_SLM_MODEL || "qwen2.5-coder-1.5b-instruct",
+    // One-letter classification on a 4-vCPU box: ~0.5-1.5s incl. prompt processing.
+    timeoutMs: parseInt(process.env.LOCAL_SLM_TIMEOUT_MS || "1500", 10),
+    compactionEnabled: process.env.LOCAL_SLM_COMPACTION !== "false",
+  },
+
+  semanticCache: {
+    enabled: process.env.SEMANTIC_CACHE_ENABLED === "true",
+    embedUrl: process.env.LOCAL_EMBED_URL || "http://localhost:8081/v1",
+    embedModel: process.env.LOCAL_EMBED_MODEL || "bge-small-en-v1.5",
+    timeoutMs: parseInt(process.env.LOCAL_EMBED_TIMEOUT_MS || "400", 10),
+    threshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || "0.95"),
+    // "user" never shares answers across accounts; "global" shares generic Q&A only.
+    scope: process.env.SEMANTIC_CACHE_SCOPE === "global" ? "global" : "user",
   },
 };

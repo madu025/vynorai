@@ -159,11 +159,27 @@ function selectProviderChain(model: string): ProviderID[] {
   return chain;
 }
 
+/** Legacy reasoning models: thinking is expected even if the request omits it. */
+export function isReasoningModel(model: string): boolean {
+  return /(^|[-/])(r1|reasoner)($|[-:])/i.test(model);
+}
+
+// DeepSeek's direct API serves one hybrid V4 model family ("deepseek-flash",
+// "deepseek-v4-pro"); thinking is a per-request switch, not a separate model.
+// Older ids (V3, Coder V2, R1) are served by Flash with the matching mode.
 function resolveProviderModel(
   provider: ProviderID,
   model: string,
 ): string | null {
-  if (provider === "openrouter") return model;
+  if (provider === "openrouter") {
+    // Direct-API-only ids: degrade to a known OpenRouter model if DeepSeek is down.
+    if (/^deepseek\/(deepseek-flash|deepseek-v4-pro)$/.test(model))
+      return (
+        process.env.OPENROUTER_DEEPSEEK_FALLBACK ||
+        "deepseek/deepseek-chat-v3-0324"
+      );
+    return model;
+  }
   if (provider === "openai" && model.startsWith("openai/"))
     return model.slice("openai/".length);
   if (provider === "anthropic" && model.startsWith("anthropic/"))
@@ -172,9 +188,9 @@ function resolveProviderModel(
     provider === "deepseek" &&
     (model.startsWith("deepseek/") || model.startsWith("deepseek-"))
   ) {
-    return /(^|[-/])r1($|-)/i.test(model)
-      ? process.env.DEEPSEEK_REASONER_MODEL || "deepseek-reasoner"
-      : process.env.DEEPSEEK_CHAT_MODEL || "deepseek-chat";
+    if (/v4-pro/i.test(model))
+      return process.env.DEEPSEEK_PRO_MODEL || "deepseek-v4-pro";
+    return process.env.DEEPSEEK_CHAT_MODEL || "deepseek-flash";
   }
   if (provider === "ollama" && !model.includes("/")) return model;
   return null;
@@ -271,6 +287,56 @@ export function buildAnthropicPayload(body: any, resolvedModel: string): any {
   };
 }
 
+/**
+ * Translate the generic thinking policy ({ thinking: { type }, reasoning_effort })
+ * into each provider's dialect. Thinking is opt-in everywhere: DeepSeek V4
+ * defaults it ON, which would bill reasoning tokens on every autocomplete.
+ */
+export function reasoningParams(
+  body: any,
+  provider: ProviderID,
+): Record<string, any> {
+  const requested = body.thinking?.type;
+  const enabled =
+    requested === "enabled" ||
+    (requested === undefined && isReasoningModel(String(body.model ?? "")));
+  const effort =
+    typeof body.reasoning_effort === "string" ? body.reasoning_effort : "high";
+
+  if (provider === "deepseek") {
+    if (!enabled) return { thinking: { type: "disabled" } };
+    // DeepSeek accepts low | high | max; budget_tokens is not supported.
+    return {
+      thinking: { type: "enabled" },
+      reasoning_effort:
+        effort === "max" ? "max" : effort === "low" ? "low" : "high",
+    };
+  }
+  if (provider === "openrouter") {
+    return enabled
+      ? { reasoning: { effort: effort === "max" ? "high" : effort } }
+      : { reasoning: { enabled: false } };
+  }
+  return enabled && provider === "openai"
+    ? { reasoning_effort: effort === "max" ? "high" : effort }
+    : {};
+}
+
+/**
+ * DeepSeek thinking mode with tools returns 400 unless every prior assistant
+ * turn carries reasoning_content. Clients may send it as `reasoning`.
+ */
+function withReasoningContent(messages: any[]): any[] {
+  return messages.map((msg: any) => {
+    if (msg.role !== "assistant") return msg;
+    const { reasoning, reasoning_details: _details, ...rest } = msg;
+    return {
+      ...rest,
+      reasoning_content: msg.reasoning_content ?? reasoning ?? "",
+    };
+  });
+}
+
 export function buildOpenAIPayload(
   body: any,
   resolvedModel: string,
@@ -282,11 +348,37 @@ export function buildOpenAIPayload(
     projectRoot: _projectRoot,
     optimization_mode: _optimizationMode,
     routing_mode: _routingMode,
+    thinking: _thinking,
+    reasoning_effort: _reasoningEffort,
+    extra_body: _extraBody,
     ...rest
   } = body;
   const isStream = body.stream !== false;
+  const reasoning = reasoningParams(body, provider);
+  const outMessages =
+    provider === "deepseek" ? withReasoningContent(messages) : messages;
+  const systemText = system
+    ? typeof system === "string"
+      ? system
+      : JSON.stringify(system)
+    : null;
+  // DeepSeek/OpenAI cache prefixes automatically; Anthropic models routed via
+  // OpenRouter only cache content explicitly marked with cache_control.
+  const systemContent =
+    systemText &&
+    provider === "openrouter" &&
+    resolvedModel.startsWith("anthropic/")
+      ? [
+          {
+            type: "text",
+            text: systemText,
+            cache_control: { type: "ephemeral" },
+          },
+        ]
+      : systemText;
   return {
     ...rest,
+    ...reasoning,
     model: resolvedModel,
     ...(isStream ? { stream_options: { include_usage: true } } : {}),
     ...(provider === "openrouter"
@@ -300,16 +392,8 @@ export function buildOpenAIPayload(
         }
       : {}),
     messages: [
-      ...(system
-        ? [
-            {
-              role: "system",
-              content:
-                typeof system === "string" ? system : JSON.stringify(system),
-            },
-          ]
-        : []),
-      ...messages.map((msg: any) => ({
+      ...(systemContent ? [{ role: "system", content: systemContent }] : []),
+      ...outMessages.map((msg: any) => ({
         ...msg,
         content:
           typeof msg.content === "string"

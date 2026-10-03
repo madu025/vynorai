@@ -11,7 +11,31 @@ import {
 import { dispatchToProvider } from "./providerRouter.js";
 import { estimateInputTokens } from "./quotaGuard.js";
 import { DEFAULT_CHAT_MODEL } from "../config.js";
-import { QuotaReservation, settleQuotaReservation } from "./monthlyQuota.js";
+import {
+  getActiveSubscription,
+  QuotaReservation,
+  releaseQuotaReservation,
+  settleQuotaReservation,
+  topUpReservation,
+} from "./monthlyQuota.js";
+import { creditsFor, creditWeight } from "./billingPolicy.js";
+import {
+  applyTierPolicy,
+  refineTier,
+  resolveRoute,
+  tierFromComplexity,
+} from "./autoRouter.js";
+import {
+  attachTurnContext,
+  memoizeTurnContext,
+  turnKey,
+} from "./tokenOptimizer.js";
+import {
+  semanticCacheQuestion,
+  semanticLookup,
+  semanticSave,
+  semanticScope,
+} from "./semanticCache.js";
 import { generateZKUserId, computeAuditHash } from "./zkShield.js";
 import { applyHybridContext } from "./hybridContext.js";
 import { enrichWithRAG } from "./ragEngine.js";
@@ -31,6 +55,11 @@ import {
 } from "./scaffoldRegistry.js";
 import { recordRequestEconomics } from "./costLedger.js";
 import { analyzeIntentWithLocalSlm } from "./localSlmRouter.js";
+
+/** The IDE's (auto) compaction prompt — see core/util/conversationCompaction.ts. */
+export function isCompactionRequest(prompt: string): boolean {
+  return /\bsummary of this conversation\b/i.test(prompt);
+}
 
 export interface AuthenticatedUser {
   id: string;
@@ -105,13 +134,7 @@ export async function authenticateApiKey(
     }
   }
 
-  const now = new Date().toISOString();
-  const subscription = await dbGet<any>(
-    `SELECT plan_name, valid_until FROM subscriptions
-     WHERE user_id = ? AND status = 'active' AND valid_until > ?
-     ORDER BY valid_until DESC LIMIT 1`,
-    [user.id, now],
-  );
+  const subscription = await getActiveSubscription<any>(user.id);
 
   const authResult: AuthenticatedUser = {
     id: user.id,
@@ -169,22 +192,32 @@ export async function handleChatCompletions(
   );
   const cached = await getFromCache(cacheKey);
 
-  if (cached?.responseChunks?.length) {
+  /** Serve a stored answer at zero upstream cost (exact or semantic cache hit). */
+  const serveCachedChunks = async (
+    chunks: any[],
+    kind: "exact" | "semantic",
+  ) => {
     await settleQuotaReservation(quotaReservation, 0);
     console.log(
-      `[VynorAI ⚡ CACHE HIT] 0 tokens | key=${cacheKey.slice(0, 10)}…`,
+      `[VynorAI ⚡ ${kind.toUpperCase()} CACHE HIT] 0 tokens | key=${cacheKey.slice(0, 10)}…`,
     );
-    res.setHeader("X-VynorAI-Cache", "HIT");
+    res.setHeader("X-VynorAI-Cache", kind === "exact" ? "HIT" : "SEMANTIC-HIT");
     res.setHeader("X-VynorAI-Tokens-Saved", "100%");
 
     (async () => {
       try {
         const estimatedInput = estimateInputTokens(messages);
-        const savedTokens = Math.max(350, estimatedInput);
+        // Plain estimate (no floors) — this feeds the user-facing savings figure.
+        const savedTokens = estimatedInput;
         const usageLogId = uuidv4();
         await dbRun(
           "INSERT INTO usage_logs (id, user_id, model, input_tokens, output_tokens, tokens_used, cached) VALUES (?, ?, ?, ?, 0, 0, 1)",
-          [usageLogId, user.id, "slm-semantic-cache", savedTokens],
+          [
+            usageLogId,
+            user.id,
+            kind === "exact" ? "vynorai-exact-cache" : "vynorai-semantic-cache",
+            savedTokens,
+          ],
         );
         await recordRequestEconomics({
           requestId,
@@ -208,34 +241,37 @@ export async function handleChatCompletions(
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
-      for (const chunk of cached.responseChunks)
+      for (const chunk of chunks)
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);
       res.write("data: [DONE]\n\n");
       return res.end();
-    } else {
-      const content = cached.responseChunks
-        .map(
-          (chunk: any) =>
-            chunk?.choices?.[0]?.delta?.content ??
-            chunk?.choices?.[0]?.message?.content ??
-            "",
-        )
-        .join("");
-      return res.json({
-        id: `cache-${requestId}`,
-        object: "chat.completion",
-        created: Math.floor(Date.now() / 1000),
-        model,
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content },
-            finish_reason: "stop",
-          },
-        ],
-        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      });
     }
+    const content = chunks
+      .map(
+        (chunk: any) =>
+          chunk?.choices?.[0]?.delta?.content ??
+          chunk?.choices?.[0]?.message?.content ??
+          "",
+      )
+      .join("");
+    return res.json({
+      id: `cache-${requestId}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    });
+  };
+
+  if (cached?.responseChunks?.length) {
+    return serveCachedChunks(cached.responseChunks, "exact");
   }
 
   // ── 1b. 5-Layer Deterministic Local Engineering Engine (0 Tokens & 100% Deterministic) ──
@@ -277,11 +313,13 @@ export async function handleChatCompletions(
     const isInformationalQuery =
       /^(did you|do you|can you|could you|what is|what are|explain|how does|how do|tell me about|analyze|review|understand|summary|summarize)\b/i.test(
         cleanPrompt,
-      );
+      ) || isCompactionRequest(cleanPrompt);
     const hasExplicitMutationIntent =
-      /\b(add|create|build|scaffold|generate|setup|make|implement|fix|refactor|update|delete|remove|modify|edit|write|hadanna|danna)\b/i.test(
+      !isCompactionRequest(cleanPrompt) &&
+      (/\b(add|create|build|scaffold|generate|setup|make|implement|fix|refactor|update|delete|remove|modify|edit|write|hadanna|danna)\b/i.test(
         cleanPrompt,
-      ) || /^\/(template|scaffold|golden|edit)\b/i.test(cleanPrompt);
+      ) ||
+        /^\/(template|scaffold|golden|edit)\b/i.test(cleanPrompt));
 
     if (
       cleanPrompt &&
@@ -296,10 +334,8 @@ export async function handleChatCompletions(
       ) {
         await settleQuotaReservation(quotaReservation, 0);
         const responseMarkdown = formatOrchestrationToMarkdown(engineResult);
-        const engineSavedTokens = Math.max(
-          650,
-          Math.round(rawQuery.length / 2) +
-            Math.round(responseMarkdown.length / 3),
+        const engineSavedTokens = Math.ceil(
+          (rawQuery.length + responseMarkdown.length) / 4,
         );
         console.log(
           `[VynorAI ⚡ 5-LAYER ENGINE] 0 tokens | status=${engineResult.status} | workflow=${engineResult.workflowId}`,
@@ -491,9 +527,8 @@ export async function handleChatCompletions(
         instantMatch.template?.id || "matched",
       );
       res.setHeader("X-VynorAI-Tokens-Saved", "100%");
-      const templateSavedTokens = Math.max(
-        1200,
-        Math.round((instantMatch.responseMarkdown?.length || 2000) / 3),
+      const templateSavedTokens = Math.ceil(
+        (rawQuery.length + (instantMatch.responseMarkdown?.length || 0)) / 4,
       );
 
       (async () => {
@@ -580,9 +615,8 @@ export async function handleChatCompletions(
       );
       res.setHeader("X-VynorAI-Blueprint", blueprintMatch.id);
       const planMarkdown = formatBlueprintPlan(blueprintMatch);
-      const blueprintSavedTokens = Math.max(
-        500,
-        Math.ceil((rawQuery.length + planMarkdown.length) / 4),
+      const blueprintSavedTokens = Math.ceil(
+        (rawQuery.length + planMarkdown.length) / 4,
       );
       recordRequestEconomics({
         requestId,
@@ -665,25 +699,53 @@ export async function handleChatCompletions(
   }
   const cleanPromptForGating = stripRulesAndPreamble(lastPromptForGating);
 
-  // Invoke Local SLM (Qwen 2.5 Coder 3B on VPS) with sub-500ms fallback
+  // Classify the turn on the VPS model (deterministic fallback), then route:
+  // light/normal → cheap chat model, heavy → reasoning model (for vynor-auto).
   const slmDecision = await analyzeIntentWithLocalSlm(cleanPromptForGating);
+  const tier = refineTier(
+    tierFromComplexity(slmDecision.complexity),
+    cleanPromptForGating,
+  );
+  let route = await resolveRoute(model, tier, planId);
+
+  // Auto reserved credits at Flash weight. A pricier route (V4 Pro for deep
+  // reasoning) must top up the reservation first; if the cycle can't cover
+  // it, run on Flash with thinking instead of refusing the request.
+  const reservedWeight = creditWeight(model);
+  const routeWeight = creditWeight(route.model);
+  if (route.auto && routeWeight > reservedWeight && quotaReservation) {
+    const extra =
+      quotaReservation.reservedTokens * (routeWeight / reservedWeight - 1);
+    if (!(await topUpReservation(quotaReservation, extra))) {
+      route = await resolveRoute(model, "heavy", planId);
+      res.setHeader("X-VynorAI-Route-Downgraded", "insufficient-credits");
+    }
+  }
   res.setHeader("X-VynorAI-Router-Source", slmDecision.source);
   res.setHeader("X-VynorAI-Router-Intent", slmDecision.intent);
-  res.setHeader(
-    "X-VynorAI-Reasoning-Effort",
-    String(slmDecision.reasoningEffort),
-  );
-  res.setHeader("X-VynorAI-Reasoning-Category", slmDecision.reasoningCategory);
-  res.setHeader(
-    "X-VynorAI-Thinking-Budget",
-    String(slmDecision.thinkingBudgetTokens),
-  );
+  res.setHeader("X-VynorAI-Tier", tier);
+  res.setHeader("X-VynorAI-Model", route.model);
+
+  // ── 2-pre. Semantic cache: near-duplicate generic questions ────────────────
+  const semanticQuestion = semanticCacheQuestion(body.messages, body.tools);
+  const semanticKey = semanticQuestion ? semanticScope(user.id, model) : null;
+  let semanticVector: Float32Array | null = null;
+  if (semanticQuestion && semanticKey) {
+    const hit = await semanticLookup(semanticKey, semanticQuestion);
+    semanticVector = hit.vector;
+    if (hit.chunks) return serveCachedChunks(hit.chunks, "semantic");
+  }
 
   // Mutation authority comes from the latest user request and persists across
   // its tool loop. Read-only tool output must never escalate privileges.
   const allowMutation = slmDecision.allowMutation;
 
-  const baseTools = body.tools !== undefined ? body.tools : VYNORAI_AGENT_TOOLS;
+  // A conversation-compaction request must produce a summary, not tool calls.
+  const baseTools = isCompactionRequest(cleanPromptForGating)
+    ? []
+    : body.tools !== undefined
+      ? body.tools
+      : VYNORAI_AGENT_TOOLS;
   const gatedTools = filterToolsForIntent(baseTools, allowMutation);
   const prunedCount = (baseTools?.length || 0) - (gatedTools?.length || 0);
 
@@ -695,26 +757,20 @@ export async function handleChatCompletions(
     res.setHeader("X-VynorAI-Tool-Tokens-Saved", String(prunedCount * 180));
   }
 
-  const enriched = {
-    ...body,
-    model,
-    stream,
-    user: zkUserId,
-    tools: gatedTools,
-    system: body.system ?? VYNORAI_AGENT_SYSTEM_PROMPT,
-    // Dynamically inject optimal reasoning weight (1-100) & thinking budget into upstream DeepSeek / OpenRouter
-    reasoning_effort: body.reasoning_effort ?? slmDecision.reasoningCategory,
-    extra_body: {
-      ...(body.extra_body || {}),
-      reasoning_effort: body.reasoning_effort ?? slmDecision.reasoningEffort, // 1-100 continuous effort for DeepSeek V4.1-Flash
+  // Tier policy caps output and only enables (expensive) thinking for heavy turns.
+  const enriched = applyTierPolicy(
+    {
+      ...body,
+      model: route.model,
+      stream,
+      user: zkUserId,
+      tools: gatedTools,
+      system: body.system ?? VYNORAI_AGENT_SYSTEM_PROMPT,
     },
-    thinking: body.thinking ?? {
-      type: "enabled",
-      budget_tokens: slmDecision.thinkingBudgetTokens,
-    },
-  };
+    tier,
+  );
 
-  // ── 2a. Memory & Rules: inject user's persistent rules + remembered facts ────
+  // ── 2a. Memory & Rules: stable per user, so it lives in the cached prefix ────
   const projectScope = body.projectRoot
     ? String(body.projectRoot).slice(-16)
     : undefined;
@@ -724,20 +780,10 @@ export async function handleChatCompletions(
     projectScope,
   );
 
-  // ── 2b. @Web Search: fetch URLs / @web queries in user message ────────────
-  const { body: webBody, webResult } = await enrichWithWeb(memBody);
-  if (webResult)
-    res.setHeader("X-VynorAI-Web-Results", String(webResult.results.length));
-
-  // ── 2c. Smart RAG: index code files, inject top-K relevant chunks ─────────
-  const { body: ragBody, rag } = enrichWithRAG(webBody, user.id, planId);
-  if (rag) {
-    res.setHeader("X-VynorAI-RAG-Chunks", String(rag.chunks.length));
-    res.setHeader("X-VynorAI-RAG-Saved", String(rag.savedTokens));
-  }
-
-  // ── 2c-2. Golden Scaffold & Template Vault (0-Token Deterministic Injection) ────
-  const lastUserMsg = [...(ragBody.messages || [])]
+  // ── 2b. Per-turn context (@web, project RAG, golden scaffold) ─────────────
+  // Attached to the LAST user message and memoized per turn, so the system
+  // prompt + history prefix stays byte-identical and provider-cache-hot.
+  const lastUserMsg = [...(memBody.messages || [])]
     .reverse()
     .find((m: any) => m.role === "user");
   const lastQuery =
@@ -747,30 +793,35 @@ export async function handleChatCompletions(
         ? lastUserMsg.content.map((p: any) => p.text ?? "").join("")
         : "";
   const scaffold = detectTemplateIntent(lastQuery);
-  let scaffoldBody = ragBody;
-  if (scaffold) {
-    res.setHeader("X-VynorAI-Scaffold-Match", scaffold.id);
-    res.setHeader("X-VynorAI-Scaffold-Saved", "80%");
-    const scaffoldContext = formatTemplateContext(scaffold);
-    const systemIdx = (scaffoldBody.messages || []).findIndex(
-      (m: any) => m.role === "system",
+  if (scaffold) res.setHeader("X-VynorAI-Scaffold-Match", scaffold.id);
+  const turnContext = await memoizeTurnContext(
+    turnKey(user.id, memBody.messages || []),
+    async () => {
+      const blocks: string[] = [];
+      const { context: webContext } = await enrichWithWeb(memBody);
+      if (webContext) blocks.push(webContext);
+      const { context: ragContext } = enrichWithRAG(memBody, user.id, planId);
+      if (ragContext) blocks.push(ragContext);
+      if (scaffold) blocks.push(formatTemplateContext(scaffold));
+      return blocks.join("\n\n");
+    },
+  );
+  if (turnContext)
+    res.setHeader(
+      "X-VynorAI-Turn-Context-Tokens",
+      String(Math.ceil(turnContext.length / 4)),
     );
-    const updatedMessages = [...(scaffoldBody.messages || [])];
-    if (systemIdx >= 0) {
-      updatedMessages[systemIdx] = {
-        ...updatedMessages[systemIdx],
-        content: updatedMessages[systemIdx].content + "\n\n" + scaffoldContext,
-      };
-    } else {
-      updatedMessages.unshift({ role: "system", content: scaffoldContext });
-    }
-    scaffoldBody = { ...scaffoldBody, messages: updatedMessages };
-  }
+  const contextBody = {
+    ...memBody,
+    messages: attachTurnContext(memBody.messages || [], turnContext),
+  };
 
-  // ── 2d. Hybrid Context: plan-aware trim + compress ────────────────────────
+  // ── 2c. Hybrid Context: tool-output trim, sticky window, background summary ──
   const { body: optimised, result: ctxResult } = applyHybridContext(
-    scaffoldBody,
+    contextBody,
     planId,
+    undefined,
+    { scope: user.id },
   );
   if (ctxResult.savedTokens > 0) {
     res.setHeader("X-VynorAI-Saved-Tokens", String(ctxResult.savedTokens));
@@ -794,6 +845,7 @@ export async function handleChatCompletions(
   // ── 5. Async: Save to Cache + Log Usage + Increment Monthly Ledger ──────
   if (dispatch.success && allChunks.length > 0) {
     saveToCache(cacheKey, allChunks);
+    if (semanticKey) semanticSave(semanticKey, semanticVector, allChunks);
   }
 
   // Extract exact provider usage if returned in stream / response
@@ -852,7 +904,8 @@ export async function handleChatCompletions(
         [
           usageLogId,
           user.id,
-          model,
+          // The model actually billed (vynor-auto resolves to a tier model).
+          route.model,
           finalInputTokens,
           finalOutputTokens,
           totalTokens,
@@ -872,6 +925,7 @@ export async function handleChatCompletions(
         outputTokens: finalOutputTokens,
         providerCostUsd: dispatch.usage?.providerCostUsd ?? null,
         costSource: dispatch.usage?.costSource ?? "unknown",
+        cachedInputTokens: dispatch.usage?.cachedInputTokens ?? 0,
         cacheStatus: "miss",
         optimizationMode: ctxResult.optimizationMode,
         templateId: scaffold?.id,
@@ -884,7 +938,14 @@ export async function handleChatCompletions(
     }
   })();
 
-  // Replace the pre-dispatch reservation with exact/estimated actual usage.
-  // The request count was already consumed atomically by the middleware.
-  await settleQuotaReservation(quotaReservation, totalTokens);
+  // Replace the pre-dispatch reservation with the model-weighted actual cost.
+  // Upstream failures refund both credits and the request count.
+  if (dispatch.success) {
+    await settleQuotaReservation(
+      quotaReservation,
+      creditsFor(route.model, totalTokens),
+    );
+  } else {
+    await releaseQuotaReservation(quotaReservation);
+  }
 }

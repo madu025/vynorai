@@ -13,18 +13,29 @@ if ! command -v docker &> /dev/null; then
     systemctl enable --now docker
 fi
 
-# 2. Prepare Model Directory for Local SLM (Qwen 2.5 Coder 3B)
+# 2. Prepare models: router/summarizer (Qwen 2.5 Coder 1.5B) + embeddings (bge-small)
 mkdir -p ./models
-MODEL_FILE="./models/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
 
-if [ ! -f "$MODEL_FILE" ]; then
-    echo "📥 Downloading Qwen 2.5 Coder 3B Instruct Quantized Model (2.0 GB)..."
-    curl -L -o "$MODEL_FILE" \
-      "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
-    echo "✅ Qwen 2.5 Coder 3B download complete."
-else
-    echo "✅ Model file already exists at $MODEL_FILE"
-fi
+download_model() {
+    local file="$1" url="$2" label="$3"
+    if [ ! -f "$file" ]; then
+        echo "📥 Downloading $label..."
+        curl -fL -o "$file.part" "$url"
+        mv "$file.part" "$file"
+        echo "✅ $label download complete."
+    else
+        echo "✅ $label already exists at $file"
+    fi
+}
+
+# 1.5B is ~2x faster than 3B on CPU and plenty for one-letter tier routing.
+download_model "./models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf" \
+  "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf" \
+  "Qwen 2.5 Coder 1.5B Instruct Q4_K_M (~1.1 GB)"
+
+download_model "./models/bge-small-en-v1.5-q8_0.gguf" \
+  "https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf" \
+  "bge-small-en-v1.5 embeddings Q8_0 (~36 MB)"
 
 # 3. Launch Docker Compose Stack
 echo "🐳 Starting VynorAI containers (Backend + Redis + Local SLM Router)..."

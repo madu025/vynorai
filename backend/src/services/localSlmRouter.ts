@@ -26,8 +26,33 @@ export interface SlmRoutingDecision {
 // Kept byte-identical across calls so llama.cpp reuses its KV cache (cache_prompt).
 const TIER_SYSTEM_PROMPT = `Classify how much reasoning a coding request needs. Reply with ONE letter only.
 L = quick question, explanation, greeting, or a tiny one-line change
-N = normal coding: write or edit a function or component, fix an ordinary bug
-H = hard: architecture, multi-file refactor, concurrency, security, performance, tricky algorithm`;
+N = normal coding: write or edit a function or component, fix an ordinary bug, write tests, add docs or types
+H = hard: architecture, multi-file refactor, concurrency, security, performance, tricky algorithm
+Examples:
+"what does this regex do" -> L
+"rename this variable" -> L
+"Now add jest tests for it." -> N
+"fix the null check in login" -> N
+"write a debounce function" -> N
+"redesign the auth flow across the api and the db layer" -> H
+"find the race condition in the job queue" -> H`;
+
+/**
+ * A 3B model over-calls H on short follow-ups ("add tests for it"), and H turns
+ * on thinking: several times the cost and a cold provider prefix cache. Only a
+ * long request, or one that names hard work, may stay H.
+ */
+const HARD_HINT =
+  /\b(architecture|architect|redesign|refactor|multi[- ]file|across (the )?(codebase|project|files)|migration|schema|concurrency|race condition|deadlock|thread|security|vulnerab\w*|performance|optimi[sz]e|memory leak|algorithm|complexity|distributed|scal(e|ing|ability))\b/i;
+const HARD_MIN_CHARS = 400;
+
+export function capSlmTier(
+  letter: "L" | "N" | "H",
+  clean: string,
+): "L" | "N" | "H" {
+  if (letter !== "H") return letter;
+  return clean.length >= HARD_MIN_CHARS || HARD_HINT.test(clean) ? "H" : "N";
+}
 
 const TIER_GRAMMAR = 'root ::= "L" | "N" | "H"';
 const LETTER_TO_COMPLEXITY = { L: "EASY", N: "MEDIUM", H: "HARD" } as const;
@@ -148,8 +173,9 @@ export async function analyzeIntentWithLocalSlm(
   const cached = memoGet(key);
   if (cached) return cached;
 
-  const letter = await classifyTierWithSlm(clean, timeoutMs);
-  if (!letter) return base;
+  const raw = await classifyTierWithSlm(clean, timeoutMs);
+  if (!raw) return base;
+  const letter = capSlmTier(raw, clean);
 
   const complexity = LETTER_TO_COMPLEXITY[letter];
   const { effort, category, budgetTokens } = computeReasoningEffort(
@@ -167,6 +193,22 @@ export async function analyzeIntentWithLocalSlm(
   };
   memoSet(key, decision);
   return decision;
+}
+
+/**
+ * Load the classifier's system prompt into the llama.cpp KV cache at startup,
+ * so the first user request is not the one that pays for it (and times out).
+ */
+export async function warmUpLocalSlm(attempts = 5): Promise<boolean> {
+  if (!config.localSlm.enabled || !config.localSlm.url) return false;
+  for (let i = 0; i < attempts; i++) {
+    if (await classifyTierWithSlm("hello", 30_000)) return true;
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
+  console.warn(
+    "[SLM] Warm-up failed; routing uses the deterministic fallback until it answers.",
+  );
+  return false;
 }
 
 /**

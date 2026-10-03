@@ -1,4 +1,5 @@
 import cors from "cors";
+import { warmUpLocalSlm } from "./services/localSlmRouter.js";
 import express, { NextFunction, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
@@ -330,6 +331,9 @@ async function start() {
 
   // Start background health monitor (probes providers every 60s)
   startHealthMonitor(60_000);
+
+  // Prime the local SLM so the first routed request does not time out.
+  void warmUpLocalSlm();
 
   // ── Main API server ──────────────────────────────────────────────────────────
   const server = app.listen(config.port, () => {

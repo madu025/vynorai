@@ -44,7 +44,7 @@ after(() => server.close());
 test("the VPS model only picks the tier; mutation authority stays deterministic", async () => {
   letter = "H";
   const decision = await slm.analyzeIntentWithLocalSlm(
-    "explain how the payment webhook works",
+    "explain how the payment webhook architecture works",
   );
   assert.equal(decision.source, "local-slm");
   assert.equal(decision.complexity, "HARD");
@@ -93,4 +93,13 @@ test("dropped turns are summarized in the background and reused", async () => {
     scope: "user-2",
   });
   assert.ok(!other.result.strategy.includes("summary"));
+});
+
+test("capSlmTier: short follow-ups never turn on thinking", async () => {
+  const { capSlmTier } = await import("../src/services/localSlmRouter.ts");
+  assert.equal(capSlmTier("H", "Now add jest tests for it."), "N");
+  assert.equal(capSlmTier("H", "fix the race condition in the queue"), "H");
+  assert.equal(capSlmTier("H", "x".repeat(400)), "H");
+  assert.equal(capSlmTier("L", "refactor everything"), "L");
+  assert.equal(capSlmTier("N", "hi"), "N");
 });

@@ -284,9 +284,14 @@ export async function summarizeConversation(
       {
         role: "system",
         content:
-          "Summarize this earlier part of a coding conversation for the assistant's memory. " +
-          "Keep: the user's goals, decisions made, file paths, function names, errors found, and open tasks. " +
-          "Drop greetings and code bodies. Use terse bullet points, under 200 words.",
+          "You are compacting the earlier part of a coding agent session so the agent can continue without it. " +
+          "Write a terse digest under 250 words with exactly these headings:\n" +
+          "Goal: what the user is trying to achieve.\n" +
+          "Decisions: choices made and constraints the user stated.\n" +
+          "Files: paths read or changed, with one line on what changed.\n" +
+          "Errors: failures seen and how they were fixed (or not yet).\n" +
+          "Open tasks: what remains, in order.\n" +
+          "Keep exact identifiers (paths, function names, commands). Drop greetings and code bodies.",
       },
       { role: "user", content: transcript.slice(-12_000) },
     ],

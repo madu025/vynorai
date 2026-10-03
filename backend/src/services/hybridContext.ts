@@ -399,6 +399,7 @@ export function applyReadDedupe(messages: Msg[]): {
 // between boundaries the prompt grows append-only and stays cache-hot.
 const COMPACT_TRIGGER = 0.85; // drop when the conversation exceeds 85% of budget
 const COMPACT_CHUNK = 0.5; // each boundary drops about half the budget
+const PRESUMMARY_TRIGGER = 0.7; // start summarizing the next block here
 
 /** First index at or after `from` where a window may start (never a tool result). */
 function nextStart(convo: Msg[], from: number): number {
@@ -408,20 +409,15 @@ function nextStart(convo: Msg[], from: number): number {
   return convo.length;
 }
 
-function applyWindowTruncation(
-  messages: Msg[],
-  budgetTokens: number,
-): { messages: Msg[]; saved: number; dropped: Msg[] } {
-  const system = messages.filter((m: Msg) => m.role === "system");
-  const convo = messages.filter((m: Msg) => m.role !== "system");
-  const sizes = convo.map(charCount);
-  const systemChars = system.reduce((s: number, m: Msg) => s + charCount(m), 0);
-  const budgetChars = budgetTokens * CHARS_PER_TOKEN - systemChars;
-  const triggerChars = budgetChars * COMPACT_TRIGGER;
-  const chunkChars = Math.max(1, budgetChars * COMPACT_CHUNK);
+/** Window start after every compaction boundary passed at `triggerChars`. */
+function boundaryStart(
+  convo: Msg[],
+  sizes: number[],
+  triggerChars: number,
+  chunkChars: number,
+): number {
   const tailChars = (from: number) =>
     sizes.slice(from).reduce((s, n) => s + n, 0);
-
   // Walk boundaries from the beginning; each depends only on earlier messages.
   let start = 0;
   while (tailChars(start) > triggerChars) {
@@ -432,7 +428,11 @@ function applyWindowTruncation(
     if (next >= convo.length - 1 || next <= start) break;
     start = next;
   }
+  return start;
+}
 
+/** Kept and dropped messages for a window starting at `start`. */
+function splitAt(convo: Msg[], start: number): { kept: Msg[]; dropped: Msg[] } {
   // A window that resumes mid tool-loop keeps the request that started it.
   let head: Msg[] = [];
   if (start > 0 && convo[start].role !== "user") {
@@ -445,9 +445,40 @@ function applyWindowTruncation(
   }
   const kept = [...head, ...convo.slice(start)];
   const keptSet = new Set(kept);
-  const dropped = convo.filter((m) => !keptSet.has(m));
+  return { kept, dropped: convo.filter((m) => !keptSet.has(m)) };
+}
+
+function applyWindowTruncation(
+  messages: Msg[],
+  budgetTokens: number,
+): { messages: Msg[]; saved: number; dropped: Msg[]; upcoming: Msg[] } {
+  const system = messages.filter((m: Msg) => m.role === "system");
+  const convo = messages.filter((m: Msg) => m.role !== "system");
+  const sizes = convo.map(charCount);
+  const systemChars = system.reduce((s: number, m: Msg) => s + charCount(m), 0);
+  const budgetChars = budgetTokens * CHARS_PER_TOKEN - systemChars;
+  const chunkChars = Math.max(1, budgetChars * COMPACT_CHUNK);
+
+  const start = boundaryStart(
+    convo,
+    sizes,
+    budgetChars * COMPACT_TRIGGER,
+    chunkChars,
+  );
+  const { kept, dropped } = splitAt(convo, start);
+
+  // What the NEXT compaction will drop, once the context passes PRESUMMARY:
+  // summarizing it now means the summary is ready the moment those turns go.
+  const ahead = boundaryStart(
+    convo,
+    sizes,
+    budgetChars * PRESUMMARY_TRIGGER,
+    chunkChars,
+  );
+  const upcoming = ahead > start ? splitAt(convo, ahead).dropped : [];
+
   const saved = dropped.reduce((s: number, m: Msg) => s + charCount(m), 0);
-  return { messages: [...system, ...kept], saved, dropped };
+  return { messages: [...system, ...kept], saved, dropped, upcoming };
 }
 
 // ─── Layer 1b: Background compaction of dropped turns ────────────────────────
@@ -509,6 +540,13 @@ function scheduleSummary(key: string, dropped: Msg[]): void {
   pendingSummaries.add(key);
   summaryQueue.push({ key, transcript: transcriptOf(dropped) });
   void drainSummaryQueue();
+}
+
+/** Queue the summary of turns the next compaction will drop, ahead of time. */
+function presummarize(upcoming: Msg[], scope?: string): void {
+  if (!scope || upcoming.length === 0 || !config.localSlm.compactionEnabled)
+    return;
+  scheduleSummary(droppedKey(scope, upcoming), upcoming);
 }
 
 function applyCompaction(
@@ -577,7 +615,9 @@ export function applyHybridContext(
       messages: windowed,
       saved,
       dropped,
+      upcoming,
     } = applyWindowTruncation(trimmed, budgetTokens);
+    presummarize(upcoming, options.scope);
     if (saved > 0) strategy.push(`window(~${toTokens(saved)}tok)`);
     const { messages: deduped, saved: sDedupe } = applyReadDedupe(windowed);
     if (sDedupe > 0) strategy.push(`read-dedupe(~${toTokens(sDedupe)}tok)`);
@@ -626,7 +666,9 @@ export function applyHybridContext(
     messages: windowedRaw,
     saved: s1,
     dropped,
+    upcoming,
   } = applyWindowTruncation(toolTrimmed, budgetTokens);
+  presummarize(upcoming, options.scope);
   if (s1 > 0) strategy.push(`window(~${toTokens(s1)}tok)`);
   totalSaved += s1;
   const { messages: dedupedRead, saved: s1c } = applyReadDedupe(windowedRaw);

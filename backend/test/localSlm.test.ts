@@ -156,3 +156,33 @@ test("history is append-only below the compaction trigger (prefix stays cache-ho
     prev = out;
   }
 });
+
+test("the next compaction's summary is prepared before the drop, so no turn runs without it", async () => {
+  const msgs: any[] = [{ role: "system", content: "rules" }];
+  const req = (n: number) =>
+    hybrid.applyHybridContext({ messages: msgs.slice(0, n) }, "pro", "safe", {
+      scope: "presum-user",
+    });
+  // Grow the conversation until the first compaction actually drops turns.
+  let firstDrop = -1;
+  let atDrop: any = null;
+  for (let i = 0; i < 60 && firstDrop < 0; i++) {
+    msgs.push({ role: "user", content: `step ${i} ` + "u".repeat(10_000) });
+    msgs.push({
+      role: "assistant",
+      content: `done ${i} ` + "a".repeat(10_000),
+    });
+    const r = req(msgs.length);
+    if (r.result.strategy.some((s: string) => s.startsWith("window"))) {
+      firstDrop = msgs.length;
+      atDrop = r;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20)); // let the background summary land
+  }
+  assert.ok(firstDrop > 0, "conversation never reached the compaction trigger");
+  // The very request that first drops turns already carries their summary.
+  assert.ok(
+    atDrop.result.strategy.includes("summary"),
+    JSON.stringify(atDrop.result.strategy),
+  );
+});

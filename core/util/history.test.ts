@@ -2,8 +2,10 @@ import { v4 as uuidv4 } from "uuid";
 
 import { Session } from "..";
 import { NEW_SESSION_TITLE } from "./constants";
-import historyManager from "./history";
-import { getSessionFilePath } from "./paths";
+import * as fs from "fs";
+import * as path from "path";
+import historyManager, { accountFolderName } from "./history";
+import { getSessionFilePath, getSessionsFolderPath } from "./paths";
 
 const sessionId = uuidv4();
 const testSession: Session = {
@@ -22,10 +24,8 @@ describe("No sessions have been created", () => {
     expect(sessions).toEqual([]);
   });
 
-  test("Deleting session throws error", () => {
-    expect(() => {
-      historyManager.delete(testSessionId);
-    }).toThrow(`Session file ${testSessionPath} does not exist`);
+  test("Deleting a missing session is a no-op (stale entries stay deletable)", () => {
+    expect(() => historyManager.delete(testSessionId)).not.toThrow();
   });
 
   test("Loading session returns default session", () => {
@@ -219,5 +219,71 @@ describe("Many sessions created", () => {
     }
     sessions = historyManager.list({});
     expect(sessions.length).toBe(0);
+  });
+});
+
+describe("Account-scoped history", () => {
+  const session = (id: string, title: string): Session => ({
+    sessionId: id,
+    title,
+    workspaceDirectory: "",
+    history: [],
+  });
+
+  afterAll(() => historyManager.setScope({ kind: "global" }));
+
+  test("signed out lists nothing and writes nothing", () => {
+    historyManager.setScope({ kind: "global" });
+    historyManager.save(session(uuidv4(), "before login"));
+    historyManager.setScope({ kind: "signedOut" });
+    expect(historyManager.list({})).toEqual([]);
+    historyManager.save(session(uuidv4(), "should not be stored"));
+    expect(historyManager.list({})).toEqual([]);
+  });
+
+  test("the first account keeps the old shared chats; other accounts start empty", () => {
+    historyManager.setScope({
+      kind: "account",
+      accountId: "first@example.com",
+    });
+    const titles = historyManager.list({}).map((s) => s.title);
+    expect(titles).toContain("before login");
+
+    historyManager.setScope({
+      kind: "account",
+      accountId: "second@example.com",
+    });
+    expect(historyManager.list({})).toEqual([]);
+    historyManager.save(session(uuidv4(), "second's chat"));
+
+    historyManager.setScope({
+      kind: "account",
+      accountId: "first@example.com",
+    });
+    expect(historyManager.list({}).map((s) => s.title)).not.toContain(
+      "second's chat",
+    );
+  });
+
+  test("a corrupt index is rebuilt from session files instead of showing an empty history", () => {
+    historyManager.setScope({
+      kind: "account",
+      accountId: "corrupt@example.com",
+    });
+    const id = uuidv4();
+    historyManager.save(session(id, "survives corruption"));
+    const dir = path.join(
+      getSessionsFolderPath(),
+      "accounts",
+      accountFolderName("corrupt@example.com"),
+    );
+    fs.writeFileSync(path.join(dir, "sessions.json"), '[{"sessionId": "trunc');
+    expect(historyManager.list({}).map((s) => s.sessionId)).toEqual([id]);
+  });
+
+  test("path traversal in a session id is rejected", () => {
+    expect(() => historyManager.save(session("../../escape", "x"))).toThrow(
+      /Invalid session id/,
+    );
   });
 });

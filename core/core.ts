@@ -500,6 +500,8 @@ export class Core {
       historyManager.clearAll();
     });
 
+    on("history/account", () => historyManager.accountKey());
+
     on("devdata/log", async (msg) => {
       void DataLogger.getInstance().logDevData(msg.data);
     });

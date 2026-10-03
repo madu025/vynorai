@@ -11,7 +11,10 @@ import { useAppDispatch, useAppSelector } from "../redux/hooks";
 import { setCodeToEdit } from "../redux/slices/editState";
 import { setShowDialog } from "../redux/slices/uiSlice";
 import { enterEdit, exitEdit } from "../redux/thunks/edit";
-import { saveCurrentSession } from "../redux/thunks/session";
+import {
+  saveCurrentSession,
+  syncHistoryAccount,
+} from "../redux/thunks/session";
 import { fontSize, isMetaEquivalentKeyPressed } from "../util";
 import { ROUTES } from "../util/navigation";
 import { FatalErrorIndicator } from "./config/FatalErrorNotice";
@@ -54,6 +57,28 @@ const Layout = () => {
   const isHome =
     location.pathname === ROUTES.HOME ||
     location.pathname === ROUTES.HOME_INDEX;
+
+  // Chat history is per VynorAI account: ask whose history is visible on
+  // load, and follow sign-in / sign-out after that.
+  useEffect(() => {
+    void ideMessenger
+      .request("history/account", undefined)
+      .then((result) => {
+        if (result.status === "success") {
+          void dispatch(syncHistoryAccount(result.content));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useWebviewListener(
+    "accountChanged",
+    async ({ account }) => {
+      navigate(ROUTES.HOME);
+      await dispatch(syncHistoryAccount(account));
+    },
+    [],
+  );
 
   useWebviewListener(
     "newSession",

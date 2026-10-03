@@ -59,6 +59,7 @@ import {
   initDocumentContentCache,
 } from "../util/editLoggingUtils";
 import type { VsCodeWebviewProtocol } from "../webviewProtocol";
+import { accountChangedEmitter } from "../util/vynorAuth";
 
 export class VsCodeExtension {
   // Currently some of these are public so they can be used in testing (test/test-suites)
@@ -253,6 +254,16 @@ export class VsCodeExtension {
     );
 
     resolveWebviewProtocol(this.sidebar.webviewProtocol);
+
+    // Sign-in / sign-out switches whose history is visible; the GUI closes
+    // tabs and the open chat that belonged to the previous account.
+    context.subscriptions.push(
+      accountChangedEmitter.event((account) => {
+        void this.sidebar.webviewProtocol?.request("accountChanged", {
+          account,
+        });
+      }),
+    );
 
     const inProcessMessenger = new InProcessMessenger<
       ToCoreProtocol,

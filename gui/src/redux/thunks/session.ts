@@ -12,6 +12,8 @@ import {
   setIsSessionMetadataLoading,
   updateSessionMetadata,
 } from "../slices/sessionSlice";
+import { setTabs } from "../slices/tabsSlice";
+import { setHistoryAccount } from "../slices/uiSlice";
 import { ThunkApiType } from "../store";
 import { updateSelectedModelByRole } from "../thunks/updateSelectedModelByRole";
 
@@ -56,8 +58,26 @@ export const deleteSession = createAsyncThunk<void, string, ThunkApiType>(
   async (id, { getState, dispatch, extra }) => {
     dispatch(deleteSessionMetadata(id)); // optimistic
     const state = getState();
+    // Close every tab showing this chat; otherwise that tab saves it again
+    // and the deleted chat reappears in history.
+    const remainingTabs = state.tabs.tabs.filter((tab) => tab.sessionId !== id);
+    if (remainingTabs.length !== state.tabs.tabs.length) {
+      dispatch(
+        setTabs(
+          remainingTabs.length
+            ? remainingTabs.map((tab, i) => ({
+                ...tab,
+                isActive: remainingTabs.some((t) => t.isActive)
+                  ? tab.isActive
+                  : i === remainingTabs.length - 1,
+              }))
+            : [freshTab()],
+        ),
+      );
+    }
     if (id === state.session.id) {
-      await dispatch(loadLastSession());
+      // Never reload "the last session": it may be the one being deleted.
+      dispatch(newSession());
     }
     const result = await extra.ideMessenger.request("history/delete", { id });
     if (result.status === "error") {
@@ -66,6 +86,34 @@ export const deleteSession = createAsyncThunk<void, string, ThunkApiType>(
     void dispatch(refreshSessionMetadata({}));
   },
 );
+
+function freshTab() {
+  return {
+    id: Date.now().toString(36) + Math.random().toString(36).substring(2),
+    title: "Chat 1",
+    isActive: true,
+  };
+}
+
+/**
+ * Keeps the open chat and tabs in step with the signed-in account. The
+ * extension reports whose history is visible; when it differs from the
+ * account the persisted tabs belong to, the old account's chats are closed.
+ */
+export const syncHistoryAccount = createAsyncThunk<
+  void,
+  string | null,
+  ThunkApiType
+>("session/syncHistoryAccount", async (account, { dispatch, getState }) => {
+  if (account === "pending") return; // login still being checked
+  const previous = getState().ui.historyAccount;
+  if (previous !== account) {
+    dispatch(setTabs([freshTab()]));
+    dispatch(newSession());
+    dispatch(setHistoryAccount(account));
+  }
+  await dispatch(refreshSessionMetadata({}));
+});
 
 export const updateSession = createAsyncThunk<void, Session, ThunkApiType>(
   "session/update",
@@ -93,13 +141,18 @@ export const loadSession = createAsyncThunk<
   ThunkApiType
 >(
   "session/load",
-  async ({ sessionId, saveCurrentSession: save }, { extra, dispatch }) => {
+  async (
+    { sessionId, saveCurrentSession: save },
+    { extra, dispatch, getState },
+  ) => {
+    if (sessionId === getState().session.id) return; // already open
     if (save) {
-      // save the session in the background
-      void dispatch(
+      // Finish writing the open chat first: loading from disk while it is
+      // still being saved can bring back an older copy.
+      await dispatch(
         saveCurrentSession({
           openNewSession: false,
-          generateTitle: true,
+          generateTitle: false,
         }),
       );
     }

@@ -91,6 +91,8 @@ export type ToWebviewFromIdeProtocol = ToWebviewFromIdeOrCoreProtocol & {
 
   focusContinueSessionId: [{ sessionId: string | undefined }, void];
   newSession: [undefined, void];
+  /** The signed-in VynorAI account changed (sign in, sign out, switch). */
+  accountChanged: [{ account: string | null }, void];
   setTheme: [{ theme: any }, void];
   setColors: [{ [key: string]: string }, void];
   "jetbrains/editorInsetRefresh": [undefined, void];

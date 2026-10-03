@@ -29,6 +29,8 @@ type UIState = {
   ruleSettings: RulePolicies;
   reasoningSettings: ReasoningSettings;
   ttsActive: boolean;
+  /** Account whose chats the persisted tabs/session belong to (HistoryManager.accountKey). */
+  historyAccount?: string | null;
 };
 
 export const DEFAULT_TOOL_SETTING: ToolPolicy = "allowedWithPermission";
@@ -55,6 +57,9 @@ export const uiSlice = createSlice({
   name: "ui",
   initialState: DEFAULT_UI_SLICE,
   reducers: {
+    setHistoryAccount: (state, action: PayloadAction<string | null>) => {
+      state.historyAccount = action.payload;
+    },
     setOnboardingCard: (
       state,
       action: PayloadAction<Partial<OnboardingCardState>>,
@@ -153,6 +158,7 @@ export const uiSlice = createSlice({
 });
 
 export const {
+  setHistoryAccount,
   setOnboardingCard,
   setDialogMessage,
   setShowDialog,

@@ -228,6 +228,8 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "history/save": [Session, void];
   "history/share": [{ id: string; outputDir?: string }, void];
   "history/clear": [undefined, void];
+  /** Whose history is visible (see HistoryManager.accountKey). */
+  "history/account": [undefined, string | null];
   "devdata/log": [DevDataLogEvent, void];
   "config/addOpenAiKey": [string, void];
   "config/addModel": [

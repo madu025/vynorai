@@ -85,6 +85,8 @@ export const createMockStore = (
           ignoredPaths: ["session.streamAborter", "ui.dialogMessage"],
           ignoredActions: ["ui/setDialogMessage"],
         },
+        // newSession aborts the previous AbortController in place.
+        immutableCheck: { ignoredPaths: ["session.streamAborter"] },
         thunk: {
           extraArgument: {
             ideMessenger: mockIdeMessenger,

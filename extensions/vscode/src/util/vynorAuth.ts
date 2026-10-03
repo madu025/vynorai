@@ -2,11 +2,47 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as http from "node:http";
 
+import historyManager from "core/util/history";
 import { getConfigJsonPath, getConfigYamlPath } from "core/util/paths";
 import * as vscode from "vscode";
 import { isSeq, parseDocument } from "yaml";
 
 import { SecretStorage } from "../stubs/SecretStorage";
+
+// ─── Per-account chat history ─────────────────────────────────────────────────
+/** Fires when the signed-in account changes; the webview resets its tabs and history. */
+export const accountChangedEmitter = new vscode.EventEmitter<string | null>();
+
+const isEmail = (value: unknown): value is string =>
+  typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+/**
+ * Shows only the signed-in account's chats (or none when signed out).
+ * Account id is the email; a key without a known email falls back to its hash.
+ */
+export function applyHistoryScope(
+  account: { email?: string; apiKey?: string } | null,
+): void {
+  const before = JSON.stringify(historyManager.getScope());
+  if (!account) {
+    historyManager.setScope({ kind: "signedOut" });
+  } else if (isEmail(account.email)) {
+    historyManager.setScope({
+      kind: "account",
+      accountId: account.email.toLowerCase(),
+    });
+  } else if (account.apiKey) {
+    historyManager.setScope({
+      kind: "account",
+      accountId: `key:${crypto.createHash("sha256").update(account.apiKey).digest("hex")}`,
+    });
+  } else {
+    historyManager.setScope({ kind: "signedOut" });
+  }
+  if (JSON.stringify(historyManager.getScope()) !== before) {
+    accountChangedEmitter.fire(historyManager.accountKey());
+  }
+}
 
 export const VYNORAI_PROD_URL = "https://vynor.lk/v1";
 export const VYNORAI_WEB_URL = "https://vynor.lk";
@@ -461,7 +497,16 @@ export async function handleSuccessfulAuthentication(
     await context.secrets.store(JWT_SECRET, token);
     await context.globalState.update("vynorai_jwt_token", undefined);
   }
-  if (email) await context.globalState.update("vynorai_user_email", email);
+  // Key-only logins (setApiKey) learn the email from the account endpoint, so
+  // history lands in the same folder as a browser login for that account.
+  let accountEmail = email;
+  if (!isEmail(accountEmail)) {
+    accountEmail = (await fetchVynorQuota(apiKey))?.email || accountEmail;
+  }
+  if (isEmail(accountEmail)) {
+    await context.globalState.update("vynorai_user_email", accountEmail);
+  }
+  applyHistoryScope({ email: accountEmail, apiKey });
 
   await applyVynorConfig();
 
@@ -486,6 +531,9 @@ export async function handleSuccessfulAuthentication(
 export function setupVynorAuth(context: vscode.ExtensionContext) {
   const secretStorage = new SecretStorage(context);
   let configSynced = false;
+  // Until the stored login is checked, show no history at all rather than
+  // whichever account (or nobody) used this machine before.
+  historyManager.setScope({ kind: "pending" });
   // 1. Register Status Bar item for Token Remaining progress
   const statusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
@@ -536,11 +584,16 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
       } catch (_) {}
     }
     if (!savedKey) {
+      applyHistoryScope(null);
       statusBar.text = "$(key) VynorAI: Log in";
       statusBar.tooltip = "Click to sign in with Vynor AI in browser";
       statusBar.command = "vynorai.login";
       return;
     }
+
+    const storedEmail = context.globalState.get<string>("vynorai_user_email");
+    if (isEmail(storedEmail))
+      applyHistoryScope({ email: storedEmail, apiKey: savedKey });
 
     // Users who logged in before a release still get newly shipped models
     // (e.g. VynorAI Auto). applyVynorConfig is idempotent.
@@ -550,6 +603,14 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
     }
 
     const quota = await fetchVynorQuota(savedKey);
+    // Offline with no known email: stay signed out for history rather than
+    // guess an account folder (old chats would be moved into the wrong one).
+    if (!isEmail(storedEmail) && quota) {
+      if (isEmail(quota.email)) {
+        await context.globalState.update("vynorai_user_email", quota.email);
+      }
+      applyHistoryScope({ email: quota.email, apiKey: savedKey });
+    }
     if (quota) {
       const remainingK = Math.round(quota.remainingTokens / 1000);
       const savedK =
@@ -681,6 +742,39 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
         }
       },
     ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("vynorai.logout", async () => {
+      const choice = await vscode.window.showWarningMessage(
+        "Sign out of VynorAI on this computer? Your chats stay saved to your account and come back when you sign in again.",
+        { modal: true },
+        "Sign Out",
+      );
+      if (choice !== "Sign Out") return;
+      await secretStorage.delete(VYNORAI_SECRET_NAME);
+      await context.secrets.delete(JWT_SECRET);
+      await context.secrets.delete(LEGACY_API_KEY_SECRET);
+      await context.globalState.update("vynorai_api_key", undefined);
+      await context.globalState.update("vynorai_jwt_token", undefined);
+      await context.globalState.update("vynorai_user_email", undefined);
+      // Older releases wrote the key into config files; startup would pick it
+      // up again and silently sign back in.
+      for (const file of [getConfigYamlPath(), getConfigJsonPath()]) {
+        try {
+          if (!fs.existsSync(file)) continue;
+          const content = fs.readFileSync(file, "utf-8");
+          const cleaned = content.replace(/vynor_live_[a-f0-9]{32}/gi, "");
+          if (cleaned !== content) writeFileAtomically(file, cleaned);
+        } catch (_) {}
+      }
+      applyHistoryScope(null);
+      try {
+        await vscode.commands.executeCommand("continue.reloadConfig");
+      } catch (_) {}
+      await refreshQuotaStatus();
+      void vscode.window.showInformationMessage("Signed out of VynorAI.");
+    }),
   );
 
   context.subscriptions.push(

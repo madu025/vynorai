@@ -2,7 +2,7 @@
   "name": "vynorai",
   "icon": "media/icon.png",
   "author": "VynorAI",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "repository": {
     "type": "git",
     "url": "https://github.com/vynorai/vynorai"
@@ -380,6 +380,31 @@
         "category": "Continue",
         "title": "Open in new window",
         "group": "Continue"
+      },
+      {
+        "command": "vynorai.login",
+        "category": "VynorAI",
+        "title": "Sign In"
+      },
+      {
+        "command": "vynorai.logout",
+        "category": "VynorAI",
+        "title": "Sign Out"
+      },
+      {
+        "command": "vynorai.setApiKey",
+        "category": "VynorAI",
+        "title": "Set API Key"
+      },
+      {
+        "command": "vynorai.openDashboard",
+        "category": "VynorAI",
+        "title": "Open Account Dashboard"
+      },
+      {
+        "command": "vynorai.upgradePlan",
+        "category": "VynorAI",
+        "title": "Upgrade Plan"
       }
     ],
     "keybindings": [

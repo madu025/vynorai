@@ -183,18 +183,28 @@ export const TabBar = React.forwardRef<HTMLDivElement>((_, ref) => {
 
   const handleTabClick = async (id: string) => {
     const targetTab = tabs.find((tab) => tab.id === id);
-    if (!targetTab) return;
+    // Re-clicking the open tab used to reload it from disk while it was still
+    // being saved, which could bring back an older copy.
+    if (!targetTab || targetTab.isActive) return;
 
     if (targetTab.sessionId) {
-      // Switch to existing session
+      // Switch to existing session (saves the open chat first)
       await dispatch(
         loadSession({
           sessionId: targetTab.sessionId,
           saveCurrentSession: hasHistory,
         }),
       );
+    } else {
+      // An empty tab is a new chat. Without this the open chat stayed on
+      // screen and was attached to this tab too (two tabs, one chat).
+      if (hasHistory) {
+        await dispatch(
+          saveCurrentSession({ openNewSession: false, generateTitle: false }),
+        );
+      }
+      dispatch(newSession());
     }
-
     dispatch(setActiveTab(id));
   };
 
@@ -217,6 +227,12 @@ export const TabBar = React.forwardRef<HTMLDivElement>((_, ref) => {
           ),
         );
       } else {
+        // Closing the last tab must not throw away its chat.
+        if (hasHistory) {
+          await dispatch(
+            saveCurrentSession({ openNewSession: false, generateTitle: true }),
+          );
+        }
         dispatch(setTabs([]));
         dispatch(newSession());
       }

@@ -307,9 +307,14 @@ export async function handleChatCompletions(
         m.tool_calls.length > 0),
   );
 
+  // An IDE agent (it sends its own tools) works on the user's codebase: a canned
+  // template or blueprint would replace that work. Templates still reach the
+  // model as reference context (see turn context below).
+  const isIdeAgent = Array.isArray(body.tools) && body.tools.length > 0;
+
   // CRITICAL GUARD: Only run the 0-token deterministic engine on initial user turns.
   // NEVER run on tool continuations, tool outputs, or multi-turn tool loops!
-  if (!isToolFollowUp && !hasToolHistory) {
+  if (!isToolFollowUp && !hasToolHistory && !isIdeAgent) {
     const lastUserMsgEarly = [...(messages || [])]
       .reverse()
       .find((m: any) => m.role === "user");

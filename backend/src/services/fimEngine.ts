@@ -22,7 +22,7 @@ import {
   releaseQuotaReservation,
   settleQuotaReservation,
 } from "./monthlyQuota.js";
-import { creditsFor } from "./billingPolicy.js";
+import { usageCredits } from "./billingPolicy.js";
 import { recordRequestEconomics } from "./costLedger.js";
 
 export interface FimRequest {
@@ -136,7 +136,13 @@ export async function handleFimAutocomplete(
   if (dispatch.success)
     await settleQuotaReservation(
       quotaReservation,
-      creditsFor(model, totalTokens),
+      dispatch.success
+        ? usageCredits(model, {
+            inputTokens: estimatedInput,
+            cachedInputTokens: dispatch.usage?.cachedInputTokens ?? 0,
+            outputTokens: estimatedOutput,
+          })
+        : 0,
     );
   else await releaseQuotaReservation(quotaReservation);
 

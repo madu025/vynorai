@@ -1030,7 +1030,7 @@
             <span class="plan-badge" style="background: rgba(255,255,255,0.1); color: var(--text-muted);">Trial</span>
             <h3>Free Trial</h3>
             <div class="price">රු. 0 <span>/ month</span></div>
-            <ul class="feature-list"><li>100,000 credits/month</li><li>100 requests/month</li><li>VynorAI Auto (DeepSeek V4.1 Flash)</li></ul>
+            <ul class="feature-list"><li>100,000 credits/month</li><li>300 requests/month</li><li>VynorAI Auto (DeepSeek V4.1 Flash)</li></ul>
           </div>
           <div class="glass-card pricing-card">
             <h3>Starter</h3>
@@ -1052,7 +1052,7 @@
           </div>
         </div>
         <p id="creditNote" style="text-align:center; color: var(--text-muted); font-size: 13px; margin-top: 14px;">
-          1 credit = 1 DeepSeek V4.1 Flash token. VynorAI Auto picks the cheapest model that can do the job; premium models use more credits per token, shown in the model picker.
+          Credits follow real cost: a new input token is 1 credit, a cached input token is 0.1 (agent sessions re-send context, so most input is cached), an output token is 4. Off-peak hours give 1.5&times; more work per credit. VynorAI Auto picks the cheapest model that can do the job; premium models use more credits, shown in the model picker.
         </p>
 
         <!-- Instant Quota Top-Up Booster -->
@@ -1272,7 +1272,7 @@
           alertBox.classList.remove('hidden');
         }
 
-        // Monthly credit meter (1 credit = 1 DeepSeek V4.1 Flash token; top-ups included in max)
+        // Monthly credit meter (cost-weighted credits; top-ups included in max)
         if (monthly) {
           const used = monthly.used_tokens || 0;
           const max = monthly.max_tokens || 100000;

@@ -16,7 +16,7 @@ import {
   releaseQuotaReservation,
   settleQuotaReservation,
 } from "./monthlyQuota.js";
-import { creditsFor } from "./billingPolicy.js";
+import { usageCredits } from "./billingPolicy.js";
 import { recordRequestEconomics } from "./costLedger.js";
 import { billingRun as dbRun } from "./billingDb.js";
 import { v4 as uuidv4 } from "uuid";
@@ -106,7 +106,13 @@ ${cleanContext}
   if (dispatch.success)
     await settleQuotaReservation(
       quotaReservation,
-      creditsFor(model, actualTokens),
+      dispatch.success
+        ? usageCredits(model, {
+            inputTokens,
+            cachedInputTokens: dispatch.usage?.cachedInputTokens ?? 0,
+            outputTokens,
+          })
+        : 0,
     );
   else await releaseQuotaReservation(quotaReservation);
   const usageLogId = uuidv4();

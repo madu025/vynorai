@@ -23,10 +23,10 @@ import {
   topUpReservation,
 } from "./monthlyQuota.js";
 import {
-  billableCredits,
   creditsFor,
   creditWeight,
   offPeakCreditFactor,
+  usageCredits,
 } from "./billingPolicy.js";
 import {
   applyTierPolicy,
@@ -941,7 +941,13 @@ export async function handleChatCompletions(
     !isTextOnlyModel(dispatch.resolvedModel)
       ? dispatch.resolvedModel
       : route.model;
-  const creditsCharged = billableCredits(billedModel, totalTokens);
+  const creditsCharged = dispatch.success
+    ? usageCredits(billedModel, {
+        inputTokens: finalInputTokens,
+        cachedInputTokens: dispatch.usage?.cachedInputTokens ?? 0,
+        outputTokens: finalOutputTokens,
+      })
+    : 0;
 
   // Insert granular log with Blockchain Merkle Audit Chain
   const usageLogId = uuidv4();

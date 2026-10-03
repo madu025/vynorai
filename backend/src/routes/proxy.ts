@@ -285,7 +285,7 @@ proxyRouter.get(
         periodEnd: monthlyUsage.period_end,
         lastResetAt: monthlyUsage.last_reset_at,
       },
-      // Measured in credits: 1 credit = 1 DeepSeek V3 token (see billingPolicy.ts).
+      // Measured in cost-weighted credits (see usageCredits in billingPolicy.ts).
       unit: "credits",
       tokens: {
         used: monthlyUsage.used_tokens,

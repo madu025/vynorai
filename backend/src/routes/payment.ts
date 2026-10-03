@@ -47,7 +47,7 @@ paymentRouter.get("/plans", async (_req: Request, res: Response) => {
   res.setHeader("Cache-Control", "public, max-age=60");
   res.json({
     creditUnit:
-      "1 credit = 1 DeepSeek V4.1 Flash token; other models use more credits per token",
+      "Credits follow real cost: new input 1, cached input 0.1, output 4 per token; other models use more credits",
     plans: PUBLIC_PLAN_IDS.filter((id) => plans[id]).map((id) => {
       const p = plans[id];
       return {

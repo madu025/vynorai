@@ -46,7 +46,9 @@ export const PLANS: Record<string, PlanDefinition> = {
     id: "free",
     displayName: "Free Trial",
     monthlyTokens: 100_000,
-    monthlyRequests: 100,
+    // Each agent tool round is a request; 100 ran out after a few tasks. A
+    // free user's worst case is ~$0.03 of upstream cost (100K credits).
+    monthlyRequests: 300,
     priceLKR: 0,
     priceUSD: 0,
     discountPct: 0,
@@ -64,7 +66,7 @@ export const PLANS: Record<string, PlanDefinition> = {
     ],
     features: [
       "100,000 credits/month",
-      "100 requests/month",
+      "300 requests/month",
       "VynorAI Auto (DeepSeek V4.1 Flash)",
       "32k context window",
     ],

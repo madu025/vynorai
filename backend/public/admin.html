@@ -763,7 +763,7 @@ async function adminGrantPlan(userId, email) {
 }
 
 async function adminAddTokens(userId, email) {
-  const tokens = prompt(`Add bonus credits to ${email}:\n(1 credit = 1 DeepSeek V4.1 Flash token; e.g. 500000 or 1000000):`, '500000');
+  const tokens = prompt(`Add bonus credits to ${email}:\n(1 credit = 1 uncached input token; cached input 0.1, output 4. e.g. 500000 or 1000000):`, '500000');
   if (!tokens) return;
   const amt = parseInt(tokens);
   if (isNaN(amt) || amt <= 0) {

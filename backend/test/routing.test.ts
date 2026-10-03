@@ -153,7 +153,7 @@ test("thinking is explicitly off except on heavy turns; max_tokens can only be l
 test("auto and Flash are the 1x baseline; V4 Pro is weighted", () => {
   assert.equal(creditWeight("vynor-auto"), 1);
   assert.equal(creditWeight("deepseek-flash"), 1);
-  assert.equal(creditWeight("deepseek-v4-pro"), 4);
+  assert.equal(creditWeight("deepseek-v4-pro"), 5);
 });
 
 // ─── Prefix-cache layout ──────────────────────────────────────────────────────

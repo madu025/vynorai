@@ -6,9 +6,10 @@ import {
   isDeepSeekOffPeak,
 } from "../src/services/pricing.ts";
 import {
-  billableCredits,
   offPeakCreditFactor,
+  usageCredits,
 } from "../src/services/billingPolicy.ts";
+import { PLANS, getEffectivePrice } from "../src/config.ts";
 
 // Beijing is UTC+8. 2026-10-05 is a Monday.
 const MON_10_BJ = new Date("2026-10-05T02:00:00Z"); // 10:00 peak
@@ -49,12 +50,17 @@ test("off-peak gives DeepSeek requests a credit discount, never other models", (
   assert.equal(offPeakCreditFactor("deepseek/deepseek-flash", MON_10_BJ), 1);
   assert.equal(offPeakCreditFactor("deepseek/deepseek-flash", SAT_10_BJ), 0.67);
   assert.equal(offPeakCreditFactor("anthropic/claude-sonnet-4", SAT_10_BJ), 1);
+  const thousandIn = {
+    inputTokens: 1000,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+  };
   assert.equal(
-    billableCredits("deepseek/deepseek-flash", 1000, SAT_10_BJ),
+    usageCredits("deepseek/deepseek-flash", thousandIn, SAT_10_BJ),
     670,
   );
   assert.equal(
-    billableCredits("deepseek/deepseek-flash", 1000, MON_10_BJ),
+    usageCredits("deepseek/deepseek-flash", thousandIn, MON_10_BJ),
     1000,
   );
 
@@ -64,4 +70,59 @@ test("off-peak gives DeepSeek requests a credit discount, never other models", (
   process.env.OFFPEAK_CREDIT_FACTOR = "1";
   assert.equal(offPeakCreditFactor("deepseek-flash", SAT_10_BJ), 1);
   delete process.env.OFFPEAK_CREDIT_FACTOR;
+});
+
+test("credits weight cached input 0.1 and output 4 (DeepSeek only)", () => {
+  const usage = {
+    inputTokens: 10_000,
+    cachedInputTokens: 9_000,
+    outputTokens: 500,
+  };
+  // 1,000 uncached + 9,000 x 0.1 + 500 x 4 = 3,900
+  assert.equal(
+    usageCredits("deepseek/deepseek-flash", usage, MON_10_BJ),
+    3_900,
+  );
+  // Pro: x5
+  assert.equal(
+    usageCredits("deepseek/deepseek-v4-pro", usage, MON_10_BJ),
+    19_500,
+  );
+  // Other providers get no cached discount: 10,000 + 2,000 = 12,000 x 10
+  assert.equal(usageCredits("openai/gpt-4o", usage, MON_10_BJ), 120_000);
+});
+
+test("no token mix can make a paid plan lose money (peak prices, worst case)", () => {
+  let seed = 3;
+  const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+  let worstCostPerCredit = 0;
+  for (const model of ["deepseek/deepseek-flash", "deepseek/deepseek-v4-pro"]) {
+    for (let i = 0; i < 2000; i++) {
+      const input = Math.floor(rand() * 200_000);
+      const usage = {
+        inputTokens: input,
+        cachedInputTokens: Math.floor(input * rand()),
+        outputTokens: Math.floor(rand() * 40_000),
+      };
+      const credits = usageCredits(model, usage, MON_10_BJ);
+      if (!credits) continue;
+      const cost = estimateDeepSeekCostUsd(model, usage, MON_10_BJ)!;
+      worstCostPerCredit = Math.max(worstCostPerCredit, cost / credits);
+    }
+  }
+  assert.ok(
+    worstCostPerCredit * 1e6 <= 0.3 + 1e-9,
+    `worst $${worstCostPerCredit * 1e6}/1M credits`,
+  );
+  // Every paid plan earns more per credit than the worst case costs, after a 3% payment fee.
+  for (const plan of Object.values(PLANS)) {
+    const usd = getEffectivePrice(plan).usd;
+    if (!usd || !plan.monthlyTokens) continue;
+    const months = plan.id.endsWith("_yearly") ? 12 : 1;
+    const revenuePerCredit = (usd * 0.97) / (plan.monthlyTokens * months);
+    assert.ok(
+      revenuePerCredit > worstCostPerCredit,
+      `${plan.id} loses money in the worst case`,
+    );
+  }
 });

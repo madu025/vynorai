@@ -166,12 +166,15 @@ export class CodebaseIndexer {
       return [];
     }
 
-    const indexTypesToBuild = new Set( // use set to remove duplicates
-      config.contextProviders
+    const indexTypesToBuild = new Set<ContextIndexingType>([
+      ...config.contextProviders
         .map((provider) => provider.description.dependsOnIndexing)
         .filter((indexType) => Array.isArray(indexType)) // remove undefined indexTypes
         .flat(),
-    );
+      // view_repo_map is always offered as a tool and reads its signatures
+      // from this index, whether or not a context provider asks for it.
+      "codeSnippets",
+    ]);
 
     const indexTypeToIndexerMapping: Record<
       ContextIndexingType,

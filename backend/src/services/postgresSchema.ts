@@ -248,6 +248,14 @@ CREATE TABLE IF NOT EXISTS provider_credentials (
 );
 `,
   },
+  {
+    version: "pg_002_economics_estimates",
+    sql: `
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS estimated_cost_usd DOUBLE PRECISION;
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS credits_charged BIGINT;
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS off_peak SMALLINT NOT NULL DEFAULT 0;
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

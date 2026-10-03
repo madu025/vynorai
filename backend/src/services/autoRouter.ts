@@ -46,10 +46,23 @@ export function tierFromComplexity(
       : "light";
 }
 
+/** DeepSeek thinking depth. "low" thinks far less than "high" (~half the reasoning tokens). */
+export type ReasoningEffort = "low" | "high" | "max";
+
 interface TierProfile {
   model: string;
   maxTokens: number;
   thinking: boolean;
+  effort?: ReasoningEffort;
+}
+
+function effortFromEnv(
+  value: string | undefined,
+  fallback: ReasoningEffort,
+): ReasoningEffort {
+  return value === "low" || value === "high" || value === "max"
+    ? value
+    : fallback;
 }
 
 // One hybrid model (DeepSeek V4.1 Flash) for every tier: only the thinking
@@ -75,12 +88,15 @@ export function tierProfile(tier: Tier): TierProfile {
         // Reasoning tokens count toward output, so heavy needs headroom.
         maxTokens: 16384,
         thinking: true,
+        // Big coding work needs a plan, not a proof: think briefly.
+        effort: effortFromEnv(process.env.AUTO_EFFORT_HEAVY, "low"),
       };
     case "deep":
       return {
         model: process.env.AUTO_MODEL_DEEP || "deepseek/deepseek-v4-pro",
         maxTokens: 16384,
         thinking: true,
+        effort: effortFromEnv(process.env.AUTO_EFFORT_DEEP, "high"),
       };
   }
 }
@@ -135,7 +151,8 @@ export function applyTierPolicy(body: any, tier: Tier): any {
       : { type: think ? "enabled" : "disabled" };
 
   if (reasoning_effort !== undefined) out.reasoning_effort = reasoning_effort;
-  else if (out.thinking?.type === "enabled") out.reasoning_effort = "high";
+  else if (out.thinking?.type === "enabled")
+    out.reasoning_effort = profile.effort ?? "high";
 
   return out;
 }

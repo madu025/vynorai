@@ -18,7 +18,12 @@ import {
   settleQuotaReservation,
   topUpReservation,
 } from "./monthlyQuota.js";
-import { creditsFor, creditWeight } from "./billingPolicy.js";
+import {
+  billableCredits,
+  creditsFor,
+  creditWeight,
+  offPeakCreditFactor,
+} from "./billingPolicy.js";
 import {
   applyTierPolicy,
   refineTier,
@@ -737,6 +742,12 @@ export async function handleChatCompletions(
   res.setHeader("X-VynorAI-Router-Intent", slmDecision.intent);
   res.setHeader("X-VynorAI-Tier", tier);
   res.setHeader("X-VynorAI-Model", route.model);
+  const offPeakFactor = offPeakCreditFactor(route.model);
+  if (offPeakFactor < 1)
+    res.setHeader(
+      "X-VynorAI-Offpeak-Bonus",
+      `${Math.round((1 / offPeakFactor) * 100) / 100}x`,
+    );
 
   // ── 2-pre. Semantic cache: near-duplicate generic questions ────────────────
   const semanticQuestion = semanticCacheQuestion(body.messages, body.tools);
@@ -901,6 +912,7 @@ export async function handleChatCompletions(
   const totalTokens = dispatch.success
     ? finalInputTokens + finalOutputTokens
     : 0;
+  const creditsCharged = billableCredits(route.model, totalTokens);
 
   // Insert granular log with Blockchain Merkle Audit Chain
   const usageLogId = uuidv4();
@@ -954,6 +966,8 @@ export async function handleChatCompletions(
         estimatedTokensSaved: ctxResult.savedTokens,
         latencyMs: dispatch.latencyMs ?? Date.now() - requestStartedAt,
         outcome: dispatch.success ? "success" : "failed",
+        creditsCharged,
+        offPeak: offPeakFactor < 1,
       });
     } catch (err) {
       console.error("[Merkle Audit] Failed to record audit log:", err);
@@ -963,10 +977,7 @@ export async function handleChatCompletions(
   // Replace the pre-dispatch reservation with the model-weighted actual cost.
   // Upstream failures refund both credits and the request count.
   if (dispatch.success) {
-    await settleQuotaReservation(
-      quotaReservation,
-      creditsFor(route.model, totalTokens),
-    );
+    await settleQuotaReservation(quotaReservation, creditsCharged);
   } else {
     await releaseQuotaReservation(quotaReservation);
   }

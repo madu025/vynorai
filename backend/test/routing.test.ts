@@ -120,7 +120,17 @@ test("thinking is explicitly off except on heavy turns; max_tokens can only be l
 
   const heavy = applyTierPolicy({ messages: [] }, "heavy");
   assert.deepEqual(heavy.thinking, { type: "enabled" });
-  assert.equal(heavy.reasoning_effort, "high");
+  // Heavy coding thinks briefly; only deep logic pays for full reasoning.
+  assert.equal(heavy.reasoning_effort, "low");
+  assert.equal(
+    applyTierPolicy({ messages: [] }, "deep").reasoning_effort,
+    "high",
+  );
+  assert.equal(
+    applyTierPolicy({ messages: [], reasoning_effort: "max" }, "heavy")
+      .reasoning_effort,
+    "max",
+  );
 
   // A user-chosen reasoning model keeps thinking even on a light turn.
   assert.deepEqual(

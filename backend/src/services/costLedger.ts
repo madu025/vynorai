@@ -1,6 +1,7 @@
 import { billingRun as dbRun } from "./billingDb.js";
 import { getEffectivePrice, getPlan, ProviderID } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
+import { estimateDeepSeekCostUsd } from "./pricing.js";
 
 export type CostSource = "provider" | "local-zero" | "unknown";
 
@@ -88,6 +89,9 @@ export interface EconomicsEvent {
   estimatedTokensSaved?: number;
   latencyMs?: number | null;
   outcome?: "success" | "failed";
+  /** Credits taken from the user's quota for this request. */
+  creditsCharged?: number;
+  offPeak?: boolean;
 }
 
 /**
@@ -99,14 +103,27 @@ export async function recordRequestEconomics(
 ): Promise<void> {
   const plan = getPlan(event.planId);
   const monthlyRevenue = getEffectivePrice(plan).usd;
+  const succeeded = event.outcome !== "failed";
+  // Credit plans: revenue is the share of the plan price these credits represent.
   const allocatedRevenue =
-    event.outcome !== "failed" && plan.monthlyRequests > 0 && monthlyRevenue > 0
-      ? monthlyRevenue / plan.monthlyRequests
-      : 0;
-  const grossMargin =
+    !succeeded || monthlyRevenue <= 0
+      ? 0
+      : event.creditsCharged !== undefined && plan.monthlyTokens > 0
+        ? (event.creditsCharged * monthlyRevenue) / plan.monthlyTokens
+        : plan.monthlyRequests > 0
+          ? monthlyRevenue / plan.monthlyRequests
+          : 0;
+  // DeepSeek reports tokens, not money: price them from the published list.
+  const estimatedCost =
     event.providerCostUsd === null
-      ? null
-      : allocatedRevenue - event.providerCostUsd;
+      ? estimateDeepSeekCostUsd(event.resolvedModel ?? event.requestedModel, {
+          inputTokens: event.inputTokens,
+          cachedInputTokens: event.cachedInputTokens ?? 0,
+          outputTokens: event.outputTokens,
+        })
+      : null;
+  const cost = event.providerCostUsd ?? estimatedCost;
+  const grossMargin = cost === null ? null : allocatedRevenue - cost;
 
   await dbRun(
     `INSERT INTO request_economics (
@@ -114,8 +131,8 @@ export async function recordRequestEconomics(
       resolved_model, provider, input_tokens, output_tokens, provider_cost_usd,
       cost_source, allocated_revenue_usd, gross_margin_usd, cache_status,
       optimization_mode, template_id, estimated_tokens_saved, latency_ms, outcome,
-      cached_input_tokens
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      cached_input_tokens, estimated_cost_usd, credits_charged, off_peak
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       uuidv4(),
       event.requestId ?? uuidv4(),
@@ -138,6 +155,9 @@ export async function recordRequestEconomics(
       event.latencyMs ?? null,
       event.outcome ?? "success",
       event.cachedInputTokens ?? 0,
+      estimatedCost,
+      event.creditsCharged ?? null,
+      event.offPeak ? 1 : 0,
     ],
   );
 }

@@ -11,6 +11,7 @@
  * Update CREDIT_WEIGHTS whenever upstream list prices change.
  */
 import { resolveModelId } from "../config.js";
+import { isDeepSeekModel, isDeepSeekOffPeak } from "./pricing.js";
 
 // First match wins — keep specific patterns above general ones.
 const CREDIT_WEIGHTS: Array<[RegExp, number]> = [
@@ -51,6 +52,36 @@ export function creditsFor(
 ): number {
   if (!Number.isFinite(tokens) || tokens <= 0) return 0;
   return Math.ceil(tokens * creditWeight(model));
+}
+
+/**
+ * DeepSeek bills off-peak hours at half price. Passing part of that on
+ * (default: 0.67 credits per token, i.e. 1.5x more work per credit) moves
+ * heavy work to cheap hours and still keeps more margin than peak.
+ */
+export function offPeakCreditFactor(
+  model: string | undefined | null,
+  at: Date = new Date(),
+): number {
+  if (!model || !isDeepSeekModel(resolveModelId(model))) return 1;
+  if (!isDeepSeekOffPeak(at)) return 1;
+  const configured = Number(process.env.OFFPEAK_CREDIT_FACTOR ?? "0.67");
+  // Never below DeepSeek's own discount, never a surcharge.
+  return Number.isFinite(configured)
+    ? Math.min(1, Math.max(0.5, configured))
+    : 1;
+}
+
+/** Credits actually charged for a finished request (model weight x off-peak factor). */
+export function billableCredits(
+  model: string | undefined | null,
+  tokens: number,
+  at: Date = new Date(),
+): number {
+  const credits = creditsFor(model, tokens);
+  return credits === 0
+    ? 0
+    : Math.ceil(credits * offPeakCreditFactor(model, at));
 }
 
 // ─── Plans ────────────────────────────────────────────────────────────────────

@@ -189,6 +189,9 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item" onclick="showPage('plans')" id="nav-plans">
       <span class="nav-icon">📦</span>Plans & Pricing
     </div>
+    <div class="nav-item" onclick="showPage('economics')" id="nav-economics">
+      <span class="nav-icon">💹</span>Economics
+    </div>
     <div class="nav-item" onclick="showPage('providers')" id="nav-providers">
       <span class="nav-icon">🔐</span>Provider Keys
     </div>
@@ -378,6 +381,37 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     </div>
 
     <!-- PROVIDER KEYS -->
+    <div class="page" id="page-economics">
+      <h1>Economics</h1>
+      <p class="subtitle">Upstream cost vs the plan revenue that charged credits represent. DeepSeek reports no prices, so its cost is computed from token counts and the published price list (peak and off-peak).</p>
+      <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+        <select id="econDays" onchange="loadEconomics()">
+          <option value="1">Last 24 hours</option><option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option>
+        </select>
+        <button class="btn btn-ghost" onclick="loadEconomics()">↻ Refresh</button>
+      </div>
+      <div class="cards" id="econCards"><div class="loading">Loading...</div></div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">📅 Per day</div></div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead><tr><th>Day</th><th>Requests</th><th>Credits</th><th>Cache hit</th><th>Cost</th><th>Revenue</th><th>Margin</th></tr></thead>
+            <tbody id="econDaily"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">👤 Users, lowest margin first</div></div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead><tr><th>User</th><th>Plan</th><th>Requests</th><th>Credits</th><th>Cache hit</th><th>Cost</th><th>Revenue</th><th>Margin</th></tr></thead>
+            <tbody id="econUsers"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-providers">
       <h1>Provider Keys</h1>
       <p class="subtitle">API keys VynorAI uses to call DeepSeek, OpenRouter and other providers for every customer. Saved keys are encrypted and apply immediately.</p>
@@ -635,6 +669,7 @@ function showPage(id) {
   if (id === 'plans')    loadPlans();
   if (id === 'models')   loadModels();
   if (id === 'providers') loadProviders();
+  if (id === 'economics') loadEconomics();
   if (id === 'system')   loadSystem();
 }
 
@@ -990,6 +1025,34 @@ async function resetPlan(id) {
 const PROVIDER_LABELS = { deepseek:'DeepSeek', openrouter:'OpenRouter', openai:'OpenAI', anthropic:'Anthropic', groq:'Groq', gemini:'Google Gemini' };
 const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let editingProvider = null;
+
+const econUsd = v => '$' + (Number(v) || 0).toFixed(Math.abs(Number(v)) < 1 ? 4 : 2);
+const econPct = v => v === null || v === undefined ? '—' : Number(v).toFixed(0) + '%';
+const econNum = v => (Number(v) || 0).toLocaleString();
+function econMargin(r) {
+  const color = r.marginUsd < 0 ? 'var(--danger)' : 'var(--success)';
+  return `<span style="color:${color}">${econUsd(r.marginUsd)} (${econPct(r.marginPct)})</span>`;
+}
+
+async function loadEconomics() {
+  const days = document.getElementById('econDays').value;
+  const data = await api('GET', '/admin/economics?days=' + days);
+  if (!data) return;
+  const t = data.totals;
+  const card = (label, value, sub, cls = '') => `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value ${cls}">${value}</div><div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">${sub}</div></div>`;
+  document.getElementById('econCards').innerHTML =
+    card('Gross margin', econPct(t.marginPct), `${econUsd(t.marginUsd)} on ${econUsd(t.revenueUsd)} revenue`, t.marginUsd < 0 ? 'amber' : 'green') +
+    card('Upstream cost', econUsd(t.costUsd), `${econNum(t.requests)} requests` + (t.unpricedRequests > 0 ? ` • ${econNum(t.unpricedRequests)} unpriced` : '')) +
+    card('Cost per 1M credits', t.costPerMillionCredits === null ? '—' : econUsd(t.costPerMillionCredits), `${econNum(t.credits)} credits charged`, 'purple') +
+    card('Prefix cache hit', econPct(t.cacheHitPct), `${econNum(t.cacheHits)} exact-cache hits • ${econNum(t.offPeakRequests)} off-peak`) +
+    card('Paying users below cost', econNum(data.negativeMarginUsers), 'Free users are excluded', data.negativeMarginUsers > 0 ? 'amber' : 'green');
+  document.getElementById('econDaily').innerHTML = data.daily.length
+    ? data.daily.map(d => `<tr><td>${escHtml(d.day)}</td><td>${econNum(d.requests)}</td><td>${econNum(d.credits)}</td><td>${econPct(d.cacheHitPct)}</td><td>${econUsd(d.costUsd)}</td><td>${econUsd(d.revenueUsd)}</td><td>${econMargin(d)}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="loading">No requests in this period</td></tr>';
+  document.getElementById('econUsers').innerHTML = data.users.length
+    ? data.users.map(u => `<tr><td>${escHtml(u.email || u.userId)}</td><td><span class="badge badge-${escHtml(u.planId)}">${escHtml(u.planId)}</span></td><td>${econNum(u.requests)}</td><td>${econNum(u.credits)}</td><td>${econPct(u.cacheHitPct)}</td><td>${econUsd(u.costUsd)}</td><td>${econUsd(u.revenueUsd)}</td><td>${econMargin(u)}</td></tr>`).join('')
+    : '<tr><td colspan="8" class="loading">No requests in this period</td></tr>';
+}
 
 async function loadProviders() {
   const data = await api('GET', '/admin/provider-keys');

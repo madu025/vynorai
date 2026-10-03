@@ -77,7 +77,7 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
     function: {
       name: "write_file",
       description:
-        "Create a new file or completely overwrite an existing file with the provided content.",
+        "Create a new file. For an existing file use edit_file instead; overwrite only when most of the file changes.",
       parameters: {
         type: "object",
         properties: {

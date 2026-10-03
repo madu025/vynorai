@@ -630,6 +630,25 @@ const MIGRATIONS: Migration[] = [
       )`);
     },
   },
+  {
+    version: "015_economics_estimates",
+    description:
+      "Cost computed from published prices when the provider reports none, credits charged, off-peak flag",
+    up: async () => {
+      await addColumnIfNotExists(
+        "request_economics",
+        "estimated_cost_usd REAL",
+      );
+      await addColumnIfNotExists(
+        "request_economics",
+        "credits_charged INTEGER",
+      );
+      await addColumnIfNotExists(
+        "request_economics",
+        "off_peak INTEGER NOT NULL DEFAULT 0",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

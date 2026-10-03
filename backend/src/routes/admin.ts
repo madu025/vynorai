@@ -848,6 +848,86 @@ function providerParam(req: Request, res: Response): ManagedProvider | null {
   return null;
 }
 
+/**
+ * GET /admin/economics?days=30
+ * Unit economics: real (or list-price) upstream cost vs the plan revenue the
+ * charged credits represent, overall, per day, and per user (worst first).
+ */
+adminRouter.get(
+  "/economics",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    const since = new Date(Date.now() - days * 86400_000)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
+    const sums = (t = "") => {
+      const cost = `COALESCE(${t}provider_cost_usd, ${t}estimated_cost_usd)`;
+      return `
+      COUNT(*) AS requests,
+      COALESCE(SUM(${t}input_tokens), 0) AS inputTokens,
+      COALESCE(SUM(${t}cached_input_tokens), 0) AS cachedInputTokens,
+      COALESCE(SUM(${t}output_tokens), 0) AS outputTokens,
+      COALESCE(SUM(${t}credits_charged), 0) AS credits,
+      COALESCE(SUM(${cost}), 0) AS costUsd,
+      COALESCE(SUM(${t}allocated_revenue_usd), 0) AS revenueUsd,
+      SUM(CASE WHEN ${cost} IS NULL THEN 1 ELSE 0 END) AS unpricedRequests,
+      SUM(CASE WHEN ${t}cache_status = 'hit' THEN 1 ELSE 0 END) AS cacheHits,
+      SUM(CASE WHEN ${t}off_peak = 1 THEN 1 ELSE 0 END) AS offPeakRequests`;
+    };
+    const SUMS = sums();
+    const WHERE = "WHERE created_at >= ? AND outcome = 'success'";
+
+    const [totals, daily, users] = await Promise.all([
+      dbGet<any>(`SELECT ${SUMS} FROM request_economics ${WHERE}`, [since]),
+      dbAll<any>(
+        `SELECT SUBSTR(created_at, 1, 10) AS day, ${SUMS}
+         FROM request_economics ${WHERE}
+         GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
+        [since],
+      ),
+      dbAll<any>(
+        `SELECT e.user_id AS userId, u.email AS email, MAX(e.plan_id) AS planId, ${sums("e.")}
+         FROM request_economics e LEFT JOIN users u ON u.id = e.user_id
+         WHERE e.created_at >= ? AND e.outcome = 'success'
+         GROUP BY e.user_id, u.email`,
+        [since],
+      ),
+    ]);
+
+    const withMargin = (r: any) => {
+      const costUsd = Number(r.costUsd) || 0;
+      const revenueUsd = Number(r.revenueUsd) || 0;
+      const input = Number(r.inputTokens) || 0;
+      return {
+        ...r,
+        marginUsd: revenueUsd - costUsd,
+        marginPct:
+          revenueUsd > 0 ? ((revenueUsd - costUsd) / revenueUsd) * 100 : null,
+        cacheHitPct:
+          input > 0 ? (Number(r.cachedInputTokens) / input) * 100 : null,
+        costPerMillionCredits:
+          Number(r.credits) > 0 ? (costUsd / Number(r.credits)) * 1e6 : null,
+      };
+    };
+    const perUser = users
+      .map(withMargin)
+      .sort((a, b) => a.marginUsd - b.marginUsd);
+
+    res.json({
+      days,
+      totals: withMargin(totals || {}),
+      daily: daily.map(withMargin),
+      // Free users are always negative (no revenue); flag paying users only.
+      negativeMarginUsers: perUser.filter(
+        (u) => u.planId !== "free" && u.marginUsd < 0,
+      ).length,
+      users: perUser.slice(0, 100),
+    });
+  },
+);
+
 /** GET /admin/provider-keys — which providers have a key, and from where */
 adminRouter.get(
   "/provider-keys",

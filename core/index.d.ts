@@ -542,6 +542,10 @@ export interface ChatHistoryItem {
   reasoning?: Reasoning;
   appliedRules?: RuleMetadata[];
   conversationSummary?: string;
+  /** Agent task started by this user prompt; its file checkpoints back "Rewind to here". */
+  taskId?: string;
+  /** User-role message added by the agent loop itself (e.g. the verification gate), not typed by the user. */
+  isAutoPrompt?: boolean;
 }
 
 export interface LLMFullCompletionOptions extends BaseCompletionOptions {

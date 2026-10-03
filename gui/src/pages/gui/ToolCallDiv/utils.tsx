@@ -9,30 +9,6 @@ import { ComponentType, SVGProps } from "react";
 import { vscButtonBackground } from "../../../components";
 import Spinner from "../../../components/gui/Spinner";
 
-// Helper function to determine the intro verb based on tool call status
-export function getStatusIntro(
-  status: ToolCallState["status"],
-  isInstant?: boolean,
-): string {
-  if (status === "done" || (isInstant && status === "calling")) {
-    return "";
-  }
-
-  switch (status) {
-    case "generating":
-      return "will";
-    case "generated":
-      return "wants to";
-    case "calling":
-      return "is";
-    case "canceled":
-    case "errored":
-      return "tried to";
-    default:
-      return "";
-  }
-}
-
 // Helper function to get the appropriate verb for group actions
 export function getGroupActionVerb(toolCallStates: ToolCallState[]): string {
   if (toolCallStates.length === 0) return "Performing";

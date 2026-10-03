@@ -12,6 +12,15 @@ export const VYNORAI_PROD_URL = "https://vynor.lk/v1";
 export const VYNORAI_WEB_URL = "https://vynor.lk";
 const VYNORAI_SECRET_NAME = "VYNORAI_API_KEY";
 const VYNORAI_SECRET_REF = `\${{ secrets.${VYNORAI_SECRET_NAME} }}`;
+/** Backend-routed model: light/normal/heavy is decided per request. */
+export const VYNORAI_AUTO_MODEL = "vynor-auto";
+
+function isLocalApiBase(apiBase: unknown): boolean {
+  return (
+    typeof apiBase === "string" &&
+    /\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(apiBase)
+  );
+}
 
 function writeFileAtomically(filePath: string, content: string): void {
   const temporaryPath = `${filePath}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`;
@@ -68,6 +77,39 @@ export async function applyVynorConfig(): Promise<boolean> {
         throw new Error("VynorAI config models must be a YAML sequence");
       }
 
+      const entries = models.items.map(
+        (item) =>
+          (item as { toJSON?: () => unknown } | null)?.toJSON?.() as
+            | Record<string, unknown>
+            | undefined,
+      );
+      // A developer pointing VynorAI models at a local backend keeps it.
+      const localBase = entries.find(
+        (m) => m?.provider === "vynorai" && isLocalApiBase(m.apiBase),
+      )?.apiBase as string | undefined;
+
+      // Auto is first so it is the default for new users; the backend picks
+      // the upstream model per request. Existing VynorAI models stay available
+      // as advanced choices.
+      if (!entries.some((m) => m?.model === VYNORAI_AUTO_MODEL)) {
+        models.items.unshift(
+          document.createNode({
+            name: "VynorAI Auto",
+            provider: "vynorai",
+            model: VYNORAI_AUTO_MODEL,
+            apiBase: localBase ?? `${VYNORAI_PROD_URL}/`,
+            apiKey: VYNORAI_SECRET_REF,
+            roles: ["chat", "edit", "apply", "subagent"],
+            // Backend tier policy caps output; leave room for heavy turns.
+            defaultCompletionOptions: {
+              contextLength: 64000,
+              maxTokens: 16384,
+            },
+            capabilities: ["tool_use"],
+          }),
+        );
+      }
+
       let foundVynorModel = false;
       models.items.forEach((item, index) => {
         const model = (
@@ -80,14 +122,22 @@ export async function applyVynorConfig(): Promise<boolean> {
         ) {
           foundVynorModel = true;
           document.setIn(["models", index, "provider"], "vynorai");
-          document.setIn(["models", index, "apiBase"], `${VYNORAI_PROD_URL}/`);
+          if (!isLocalApiBase(model.apiBase)) {
+            document.setIn(
+              ["models", index, "apiBase"],
+              `${VYNORAI_PROD_URL}/`,
+            );
+          }
           document.setIn(["models", index, "apiKey"], VYNORAI_SECRET_REF);
           const roles = Array.isArray(model.roles)
             ? model.roles
             : ["chat", "edit", "apply"];
+          // Only chat models can act as subagents (not autocomplete-only models).
           document.setIn(
             ["models", index, "roles"],
-            [...new Set([...roles, "subagent"])],
+            roles.includes("chat")
+              ? [...new Set([...roles, "subagent"])]
+              : roles,
           );
         }
       });
@@ -145,6 +195,18 @@ export async function applyVynorConfig(): Promise<boolean> {
     } else {
       config.models.unshift(vynorModelConfig);
     }
+
+    // Auto first: default for new users, routed per request by the backend.
+    config.models = config.models.filter(
+      (m: any) => m.model !== VYNORAI_AUTO_MODEL,
+    );
+    config.models.unshift({
+      title: "VynorAI Auto",
+      provider: "vynorai",
+      model: VYNORAI_AUTO_MODEL,
+      apiBase: VYNORAI_PROD_URL,
+      apiKey: VYNORAI_SECRET_REF,
+    });
 
     // Configure tab autocomplete
     config.tabAutocompleteModel = {
@@ -423,6 +485,7 @@ export async function handleSuccessfulAuthentication(
  */
 export function setupVynorAuth(context: vscode.ExtensionContext) {
   const secretStorage = new SecretStorage(context);
+  let configSynced = false;
   // 1. Register Status Bar item for Token Remaining progress
   const statusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
@@ -477,6 +540,13 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
       statusBar.tooltip = "Click to sign in with Vynor AI in browser";
       statusBar.command = "vynorai.login";
       return;
+    }
+
+    // Users who logged in before a release still get newly shipped models
+    // (e.g. VynorAI Auto). applyVynorConfig is idempotent.
+    if (!configSynced) {
+      configSynced = true;
+      await applyVynorConfig();
     }
 
     const quota = await fetchVynorQuota(savedKey);

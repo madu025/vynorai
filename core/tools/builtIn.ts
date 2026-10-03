@@ -18,6 +18,8 @@ export enum BuiltInToolNames {
   BrowserQa = "browser_qa",
   CodebaseTool = "codebase",
   ReadSkill = "read_skill",
+  UpdateTodoList = "update_todo_list",
+  RunSubagent = "run_subagent",
 
   // excluded from allTools for now
   ViewRepoMap = "view_repo_map",
@@ -30,4 +32,5 @@ export const CLIENT_TOOLS_IMPLS = [
   BuiltInToolNames.EditExistingFile,
   BuiltInToolNames.SingleFindAndReplace,
   BuiltInToolNames.MultiEdit,
+  BuiltInToolNames.UpdateTodoList,
 ];

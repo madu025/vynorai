@@ -27,6 +27,7 @@ class RepoMapGenerator {
   private SNIPPETS_BATCH_SIZE = 100;
   private URI_BATCH_SIZE = 100;
   private REPO_MAX_CONTEXT_LENGTH_RATIO = 0.5;
+  private REPO_MAX_TOKENS = 8_000;
   private PREAMBLE =
     "Below is a repository map. \n" +
     "For each file in the codebase, " +
@@ -38,8 +39,11 @@ class RepoMapGenerator {
     private ide: IDE,
     private options: RepoMapOptions,
   ) {
-    this.maxRepoMapTokens =
-      llm.contextLength * this.REPO_MAX_CONTEXT_LENGTH_RATIO;
+    // A signature map past ~8k tokens costs more than the reads it saves.
+    this.maxRepoMapTokens = Math.min(
+      llm.contextLength * this.REPO_MAX_CONTEXT_LENGTH_RATIO,
+      this.REPO_MAX_TOKENS,
+    );
   }
 
   private getUriForWrite(uri: string) {

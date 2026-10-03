@@ -81,6 +81,8 @@ const DEFAULT_MOCK_CORE_RESPONSES: MockResponses = {
   "checkpoints/setActiveTask": undefined,
   "checkpoints/restore": { restored: true },
   "checkpoints/restoreTask": { restored: true, restoredFiles: 1 },
+  "checkpoints/restoreTasks": { restored: true, restoredFiles: 1 },
+  "hooks/run": { blocked: false, warnings: [], ran: 0 },
   readFile: "File contents",
   "tools/call": {
     contextItems: [

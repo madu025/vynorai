@@ -126,6 +126,8 @@ class MessageTypes {
             "getDiffLines",
             "chatDescriber/describe",
             "conversation/compact",
+            "hooks/run",
+            "tools/abort",
             "stats/getTokensPerDay",
             "stats/getTokensPerModel",
             // Codebase

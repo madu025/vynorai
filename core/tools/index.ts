@@ -14,6 +14,8 @@ export const getBaseToolDefinitions = () => [
   toolDefinitions.createRuleBlock,
   toolDefinitions.fetchUrlContentTool,
   toolDefinitions.browserQaTool,
+  toolDefinitions.updateTodoListTool,
+  toolDefinitions.runSubagentTool,
 ];
 
 export const getConfigDependentToolDefinitions = async (
@@ -27,12 +29,17 @@ export const getConfigDependentToolDefinitions = async (
 
   tools.push(toolDefinitions.searchWebTool);
 
+  // Token savers, always on: a signature-level code map (built by the startup
+  // and on-save indexer) and line-range reads instead of whole files.
+  tools.push(
+    toolDefinitions.viewRepoMapTool,
+    toolDefinitions.readFileRangeTool,
+  );
+
   if (enableExperimentalTools) {
     tools.push(
-      toolDefinitions.viewRepoMapTool,
       toolDefinitions.viewSubdirectoryTool,
       toolDefinitions.codebaseTool,
-      toolDefinitions.readFileRangeTool,
     );
   }
 

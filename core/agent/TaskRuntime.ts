@@ -60,6 +60,11 @@ const DEFAULT_BUDGET: AgentTaskBudget = {
 };
 
 const MAX_IMPLEMENTATION_SUBAGENTS = 8;
+/**
+ * Runaway-loop safety net per task. The user-facing pause is the GUI's tool
+ * round budget ("Continue" starts a new task), so this is rarely reached.
+ */
+export const MAX_AUTONOMOUS_STEPS = 200;
 
 function canonicalScopePath(value: string): string {
   const normalized = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");
@@ -122,7 +127,7 @@ export class TaskRuntime {
         verification: [],
         executionGuard: {
           autonomousSteps: 0,
-          maxAutonomousSteps: 24,
+          maxAutonomousSteps: MAX_AUTONOMOUS_STEPS,
           repeatedActionLimit: 3,
           actionDigests: {},
           cancelRequested: false,
@@ -649,7 +654,7 @@ export class TaskRuntime {
     if (!task) throw new Error("Task not found");
     task.executionGuard ??= {
       autonomousSteps: 0,
-      maxAutonomousSteps: 24,
+      maxAutonomousSteps: MAX_AUTONOMOUS_STEPS,
       repeatedActionLimit: 3,
       actionDigests: {},
       cancelRequested: false,

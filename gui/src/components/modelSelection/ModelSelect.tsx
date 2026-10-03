@@ -1,9 +1,11 @@
 import {
   ArrowPathIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   Cog6ToothIcon,
   CubeIcon,
   PlusIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -37,7 +39,11 @@ interface Option {
   apiKey?: string;
   sourceFile?: string;
   isAutoDetected?: boolean;
+  /** VynorAI Auto: the backend picks light/normal/heavy models per request. */
+  isAuto?: boolean;
 }
+
+const VYNORAI_AUTO_MODEL = "vynor-auto";
 
 function modelSelectTitle(model: any): string {
   if (model?.title) return model?.title;
@@ -89,9 +95,18 @@ function ModelOption({
     >
       <div className="flex w-full items-center justify-between gap-5">
         <div className="flex items-center gap-2 py-0.5">
-          <CubeIcon className="h-3 w-3 flex-shrink-0" />
+          {option.isAuto ? (
+            <SparklesIcon className="h-3 w-3 flex-shrink-0" />
+          ) : (
+            <CubeIcon className="h-3 w-3 flex-shrink-0" />
+          )}
           <span className="line-clamp-1">
             {option.title}
+            {option.isAuto && (
+              <span className="text-description-muted ml-1.5 text-[10px]">
+                best model per request
+              </span>
+            )}
             {option.isAutoDetected && (
               <span className="text-description-muted ml-1.5 text-[10px] italic">
                 (autodetected)
@@ -127,9 +142,12 @@ function ModelSelect() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [options, setOptions] = useState<Option[]>([]);
   const [sortedOptions, setSortedOptions] = useState<Option[]>([]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const { selectedProfile } = useAuth();
   const profiles = useAppSelector((state) => state.profiles.profiles);
-  const selectedProfileId = useAppSelector((state) => state.profiles.selectedProfileId);
+  const selectedProfileId = useAppSelector(
+    (state) => state.profiles.selectedProfileId,
+  );
   const activeProfile =
     selectedProfile ??
     profiles?.find((p) => p.id === selectedProfileId) ??
@@ -150,15 +168,20 @@ function ModelSelect() {
     allModels = config.modelsByRole.chat;
   }
 
-  // Sort so that options without an API key are at the end
+  // Auto first, then alphabetical; options without an API key go last
   useEffect(() => {
-    const alphaSort = options.sort((a, b) => a.title.localeCompare(b.title));
-    const enabledOptions = alphaSort.filter((option) => option.apiKey !== "");
-    const disabledOptions = alphaSort.filter((option) => option.apiKey === "");
+    const alphaSort = [...options].sort((a, b) =>
+      a.title.localeCompare(b.title),
+    );
+    const autoOptions = alphaSort.filter((option) => option.isAuto);
+    const enabledOptions = alphaSort.filter(
+      (option) => !option.isAuto && option.apiKey !== "",
+    );
+    const disabledOptions = alphaSort.filter(
+      (option) => !option.isAuto && option.apiKey === "",
+    );
 
-    const sorted = [...enabledOptions, ...disabledOptions];
-
-    setSortedOptions(sorted);
+    setSortedOptions([...autoOptions, ...enabledOptions, ...disabledOptions]);
   }, [options]);
 
   useEffect(() => {
@@ -170,10 +193,19 @@ function ModelSelect() {
           apiKey: model.apiKey,
           sourceFile: model.sourceFile,
           isAutoDetected: model.isFromAutoDetect,
+          isAuto: model.model === VYNORAI_AUTO_MODEL,
         };
       }),
     );
   }, [allModels]);
+
+  const autoOptions = sortedOptions.filter((option) => option.isAuto);
+  const advancedOptions = sortedOptions.filter((option) => !option.isAuto);
+  // Without an Auto model there is nothing to collapse; a manual pick stays visible.
+  const advancedExpanded =
+    showAdvanced ||
+    autoOptions.length === 0 ||
+    advancedOptions.some((option) => option.value === selectedModel?.title);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -296,15 +328,46 @@ function ModelSelect() {
                 No models configured
               </div>
             ) : (
-              sortedOptions.map((option, idx) => (
-                <ModelOption
-                  option={option}
-                  idx={idx}
-                  key={idx}
-                  showMissingApiKeyMsg={option.apiKey === ""}
-                  isSelected={option.value === selectedModel?.title}
-                />
-              ))
+              <>
+                {autoOptions.map((option, idx) => (
+                  <ModelOption
+                    option={option}
+                    idx={idx}
+                    key={`auto-${idx}`}
+                    showMissingApiKeyMsg={option.apiKey === ""}
+                    isSelected={option.value === selectedModel?.title}
+                  />
+                ))}
+                {autoOptions.length > 0 && advancedOptions.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="model-select-advanced-toggle"
+                    className="text-description hover:text-foreground flex w-full items-center gap-1 border-none bg-transparent px-2 py-1 text-left text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setShowAdvanced((prev) => !prev);
+                    }}
+                  >
+                    {advancedExpanded ? (
+                      <ChevronDownIcon className="h-2.5 w-2.5" />
+                    ) : (
+                      <ChevronRightIcon className="h-2.5 w-2.5" />
+                    )}
+                    Advanced ({advancedOptions.length})
+                  </button>
+                )}
+                {advancedExpanded &&
+                  advancedOptions.map((option, idx) => (
+                    <ModelOption
+                      option={option}
+                      idx={idx}
+                      key={`model-${idx}`}
+                      showMissingApiKeyMsg={option.apiKey === ""}
+                      isSelected={option.value === selectedModel?.title}
+                    />
+                  ))}
+              </>
             )}
           </div>
 

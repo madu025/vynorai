@@ -3,6 +3,7 @@ import { ContextItem, McpUiState } from "core";
 import { CLIENT_TOOLS_IMPLS } from "core/tools/builtIn";
 import { ContinueError, ContinueErrorReason } from "core/util/errors";
 import { classifyToolRisk } from "core/agent/toolRisk";
+import type { HookRunResult } from "core/hooks/types";
 
 import { callClientTool } from "../../util/clientTools/callClientTool";
 import { selectSelectedChatModel } from "../slices/configSlice";
@@ -18,6 +19,11 @@ import { ThunkApiType } from "../store";
 import { findToolCallById, logToolUsage } from "../util";
 import { streamResponseAfterToolCall } from "./streamResponseAfterToolCall";
 import { verificationFromToolResult } from "../util/verificationEvidence";
+import { runHooks, toolOutputText } from "../util/hooks";
+import {
+  guardErrorForModel,
+  isRecoverableGuardError,
+} from "../util/toolRoundBudget";
 
 export const callToolById = createAsyncThunk<
   void,
@@ -43,6 +49,10 @@ export const callToolById = createAsyncThunk<
     throw new Error("No model selected");
   }
 
+  // A loop or step-limit refusal goes back to the model as this tool's error
+  // so it can change approach; anything else (workspace changed, canceled)
+  // still fails the turn.
+  let guardRefusal: string | undefined;
   if (state.session.activeTaskId) {
     const signature = JSON.stringify({
       tool: toolCallState.toolCall.function.name,
@@ -56,9 +66,12 @@ export const callToolById = createAsyncThunk<
       },
     );
     if (authorization.status === "error") {
-      throw new Error(
-        `Agent safety guard blocked tool execution: ${authorization.error}`,
-      );
+      if (!isRecoverableGuardError(authorization.error)) {
+        throw new Error(
+          `Agent safety guard blocked tool execution: ${authorization.error}`,
+        );
+      }
+      guardRefusal = guardErrorForModel(authorization.error);
     }
   }
 
@@ -87,7 +100,7 @@ export const callToolById = createAsyncThunk<
       );
   }
 
-  if (state.session.activeTaskId) {
+  if (state.session.activeTaskId && !guardRefusal) {
     try {
       await extra.ideMessenger.request("agent/task/recordApproval", {
         taskId: state.session.activeTaskId,
@@ -128,12 +141,37 @@ export const callToolById = createAsyncThunk<
   let error: ContinueError | undefined = undefined;
   let streamResponse: boolean;
 
+  // PreToolUse hooks run for every tool (client and core). A blocking hook
+  // returns its reason to the model as the tool's error so it can adapt.
+  const toolName = toolCallState.toolCall.function.name;
+  const toolInput = {
+    ...(toolCallState.parsedArgs ?? {}),
+    ...(toolCallState.processedArgs ?? {}),
+  };
+  const preHook: HookRunResult = guardRefusal
+    ? { blocked: false, warnings: [], ran: 0 }
+    : await runHooks(extra.ideMessenger, {
+        event: "PreToolUse",
+        sessionId: state.session.id,
+        toolName,
+        toolInput,
+      });
+
   // IMPORTANT:
   // Errors that occur while calling tool call implementations
   // Are caught and passed in output as context items
   // Errors that occur outside specifically calling the tool
   // Should not be caught here - should be handled as normal stream errors
-  if (
+  if (guardRefusal) {
+    error = new ContinueError(ContinueErrorReason.Unspecified, guardRefusal);
+    streamResponse = true;
+  } else if (preHook.blocked) {
+    error = new ContinueError(
+      ContinueErrorReason.Unspecified,
+      `Blocked by a PreToolUse hook: ${preHook.reason}`,
+    );
+    streamResponse = true;
+  } else if (
     CLIENT_TOOLS_IMPLS.find(
       (toolName) => toolName === toolCallState.toolCall.function.name,
     )
@@ -172,6 +210,29 @@ export const callToolById = createAsyncThunk<
     streamResponse = true;
   }
 
+  // PostToolUse hooks see the result; a blocking (exit 2) hook's reason is
+  // fed back to the model alongside the output, e.g. "lint failed: ...".
+  const hookFeedback: ContextItem[] = [];
+  if (!preHook.blocked && !guardRefusal) {
+    const postHook = await runHooks(extra.ideMessenger, {
+      event: "PostToolUse",
+      sessionId: state.session.id,
+      toolName,
+      toolInput,
+      toolOutput: toolOutputText(output),
+      toolError: error?.message,
+    });
+    if (postHook.blocked) {
+      hookFeedback.push({
+        icon: "problems",
+        name: "Hook feedback",
+        description: "PostToolUse hook",
+        content: `A PostToolUse hook reported: ${postHook.reason}`,
+        hidden: false,
+      });
+    }
+  }
+
   if (error) {
     dispatch(
       updateToolCallOutput({
@@ -184,14 +245,15 @@ export const callToolById = createAsyncThunk<
             content: `${toolCallState.toolCall.function.name} failed with the message: ${error.message}\n\nPlease try something else or request further instructions.`,
             hidden: false,
           },
+          ...hookFeedback,
         ],
       }),
     );
-  } else if (output?.length) {
+  } else if (output?.length || hookFeedback.length) {
     dispatch(
       updateToolCallOutput({
         toolCallId,
-        contextItems: output,
+        contextItems: [...(output ?? []), ...hookFeedback],
         mcpUiState,
       }),
     );

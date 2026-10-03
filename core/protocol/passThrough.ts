@@ -62,6 +62,8 @@ export const WEBVIEW_TO_CORE_PASS_THROUGH: (keyof ToCoreFromWebviewProtocol)[] =
     "streamDiffLines",
     "chatDescriber/describe",
     "conversation/compact",
+    "hooks/run",
+    "tools/abort",
     "stats/getTokensPerDay",
     "stats/getTokensPerModel",
     // Codebase

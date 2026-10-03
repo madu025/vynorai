@@ -1,6 +1,7 @@
 import { JSONContent } from "@tiptap/core";
 import { AssistantChatMessage, InputModifiers, PromptLog } from "core";
 import { describe, expect, it, vi } from "vitest";
+import { expectActionSequence } from "../../util/test/actionSequence";
 import { createMockStore } from "../../util/test/mockStore";
 import { streamResponseThunk } from "./streamResponse";
 
@@ -32,7 +33,7 @@ import {
 import { resolveEditorContent } from "../../components/mainInput/TipTapEditor/utils/resolveEditorContent";
 import { MockIdeMessenger } from "../../context/MockIdeMessenger";
 import { RootState } from "../store";
-import { getRootStateWithClaude } from "./streamResponse.test";
+import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
 
 const grepTool = serializeTool(grepSearchTool);
 const grepName = grepTool.function.name;
@@ -250,7 +251,7 @@ describe("streamResponseThunk - tool calls", () => {
 
     // Verify exact action sequence
     const actionTypes = dispatchedActions.map((action: any) => action.type);
-    expect(actionTypes).toEqual([
+    expectActionSequence(actionTypes, [
       "chat/streamResponse/pending",
       "chat/streamWrapper/pending",
       "session/submitEditorAndInitAtIndex",
@@ -258,12 +259,13 @@ describe("streamResponseThunk - tool calls", () => {
       "symbols/updateFromContextItems/pending",
       "session/updateHistoryItemAtIndex",
       "chat/streamNormalInput/pending",
+      "workspace/setWorkspaceSnapshot",
       "session/setAppliedRulesAtIndex",
       "session/setActive",
       "session/setInlineErrorMessage",
+      "symbols/updateFromContextItems/fulfilled",
       "session/setIsPruned",
       "session/setContextPercentage",
-      "symbols/updateFromContextItems/fulfilled",
       "session/streamUpdate",
       "session/streamUpdate",
       "session/addPromptCompletionPair",
@@ -438,6 +440,11 @@ describe("streamResponseThunk - tool calls", () => {
 
     expect(finalState).toEqual({
       ...initialState,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...initialState.session,
         history: [
@@ -647,7 +654,7 @@ describe("streamResponseThunk - tool calls", () => {
 
     // Verify exact action sequence includes tool generation but NO execution
     const dispatchedActions = mockStoreWithManualApproval.getActions();
-    expect(dispatchedActions).toEqual([
+    expectActionSequence(dispatchedActions, [
       {
         type: "chat/streamResponse/pending",
         meta: {
@@ -715,6 +722,10 @@ describe("streamResponseThunk - tool calls", () => {
         payload: undefined,
       },
       {
+        type: "workspace/setWorkspaceSnapshot",
+        payload: expect.objectContaining({ id: "mock-workspace" }),
+      },
+      {
         type: "session/setAppliedRulesAtIndex",
         payload: {
           appliedRules: [],
@@ -730,14 +741,6 @@ describe("streamResponseThunk - tool calls", () => {
         payload: undefined,
       },
       {
-        type: "session/setIsPruned",
-        payload: false,
-      },
-      {
-        type: "session/setContextPercentage",
-        payload: 0.9,
-      },
-      {
         type: "symbols/updateFromContextItems/fulfilled",
         meta: {
           arg: [],
@@ -745,6 +748,14 @@ describe("streamResponseThunk - tool calls", () => {
           requestStatus: "fulfilled",
         },
         payload: undefined,
+      },
+      {
+        type: "session/setIsPruned",
+        payload: false,
+      },
+      {
+        type: "session/setContextPercentage",
+        payload: 0.9,
       },
       {
         type: "session/streamUpdate",
@@ -973,6 +984,11 @@ describe("streamResponseThunk - tool calls", () => {
     const finalState = mockStoreWithManualApproval.getState();
     expect(finalState).toEqual({
       ...initialState,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...initialState.session,
         history: [
@@ -1201,7 +1217,7 @@ describe("streamResponseThunk - tool calls", () => {
     // Verify exact initial action sequence by comparing action types
     const initialActions = mockStoreWithApproval.getActions();
 
-    expect(initialActions).toEqual([
+    expectActionSequence(initialActions, [
       {
         type: "chat/streamResponse/pending",
         meta: {
@@ -1269,6 +1285,10 @@ describe("streamResponseThunk - tool calls", () => {
         payload: undefined,
       },
       {
+        type: "workspace/setWorkspaceSnapshot",
+        payload: expect.objectContaining({ id: "mock-workspace" }),
+      },
+      {
         type: "session/setAppliedRulesAtIndex",
         payload: {
           appliedRules: [],
@@ -1284,14 +1304,6 @@ describe("streamResponseThunk - tool calls", () => {
         payload: undefined,
       },
       {
-        type: "session/setIsPruned",
-        payload: false,
-      },
-      {
-        type: "session/setContextPercentage",
-        payload: 0.85,
-      },
-      {
         type: "symbols/updateFromContextItems/fulfilled",
         meta: {
           arg: [],
@@ -1299,6 +1311,14 @@ describe("streamResponseThunk - tool calls", () => {
           requestStatus: "fulfilled",
         },
         payload: undefined,
+      },
+      {
+        type: "session/setIsPruned",
+        payload: false,
+      },
+      {
+        type: "session/setContextPercentage",
+        payload: 0.85,
       },
       {
         type: "session/streamUpdate",
@@ -1485,7 +1505,7 @@ describe("streamResponseThunk - tool calls", () => {
 
     // Verify exact approval flow actions
     const approvalActions = mockStoreWithApproval.getActions();
-    expect(approvalActions).toEqual([
+    expectActionSequence(approvalActions, [
       {
         type: "chat/callTool/pending",
         meta: {
@@ -1523,7 +1543,7 @@ describe("streamResponseThunk - tool calls", () => {
         type: "chat/streamAfterToolCall/pending",
         meta: {
           arg: {
-            depth: 1,
+            depth: 0, // callToolById passes its own depth; streamResponseAfterToolCall increments
             toolCallId: "tool-approval-flow-1",
           },
           requestId: expect.any(String),
@@ -1558,7 +1578,7 @@ describe("streamResponseThunk - tool calls", () => {
       {
         type: "chat/streamNormalInput/pending",
         meta: {
-          arg: { depth: 2 },
+          arg: { depth: 1 },
           requestId: expect.any(String),
           requestStatus: "pending",
         },
@@ -1616,7 +1636,7 @@ describe("streamResponseThunk - tool calls", () => {
       {
         type: "chat/streamNormalInput/fulfilled",
         meta: {
-          arg: { depth: 2 },
+          arg: { depth: 1 },
           requestId: expect.any(String),
           requestStatus: "fulfilled",
         },
@@ -1720,7 +1740,7 @@ describe("streamResponseThunk - tool calls", () => {
         type: "chat/streamAfterToolCall/fulfilled",
         meta: {
           arg: {
-            depth: 1,
+            depth: 0,
             toolCallId: "tool-approval-flow-1",
           },
           requestId: expect.any(String),
@@ -1758,6 +1778,11 @@ describe("streamResponseThunk - tool calls", () => {
     const finalState = mockStoreWithApproval.getState();
     expect(finalState).toEqual({
       ...initialState,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...initialState.session,
         title: "Session summary",

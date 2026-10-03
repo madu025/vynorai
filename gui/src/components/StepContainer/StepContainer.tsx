@@ -3,13 +3,18 @@ import { renderChatMessage, stripImages } from "core/util/messageContent";
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useAppSelector } from "../../redux/hooks";
-import { selectUIConfig } from "../../redux/slices/configSlice";
+import {
+  selectSelectedChatModel,
+  selectUIConfig,
+} from "../../redux/slices/configSlice";
 import { deleteMessage } from "../../redux/slices/sessionSlice";
 import ThinkingBlockPeek from "../mainInput/belowMainInput/ThinkingBlockPeek";
 import StyledMarkdownPreview from "../StyledMarkdownPreview";
 import ConversationSummary from "./ConversationSummary";
 import ResponseActions from "./ResponseActions";
-import ThinkingIndicator from "./ThinkingIndicator";
+import { estimateTokens, turnUsedThinking } from "./turnStatus";
+
+const VYNORAI_AUTO_MODEL = "vynor-auto";
 
 interface StepContainerProps {
   item: ChatHistoryItem;
@@ -37,6 +42,28 @@ export default function StepContainer(props: StepContainerProps) {
   const showResponseActions =
     (props.isLast || historyItemAfterThis?.message.role === "user") &&
     !(props.isLast && (isStreaming || props.item.toolCallStates));
+
+  // Which Auto route served this turn, from what actually streamed: a turn
+  // that produced reasoning ran with thinking on; otherwise the fast path.
+  const chatModels = useAppSelector(
+    (state) => state.config.config.modelsByRole.chat,
+  );
+  const selectedChatModel = useAppSelector(selectSelectedChatModel);
+  const usedThinking = useAppSelector((state) =>
+    turnUsedThinking(state.session.history, props.index),
+  );
+  const usedTitle = props.item.promptLogs?.at(-1)?.modelTitle;
+  const usedModel = usedTitle
+    ? chatModels.find((m) => m.title === usedTitle)
+    : props.isLast
+      ? selectedChatModel
+      : undefined;
+  const autoRoute =
+    usedModel?.model === VYNORAI_AUTO_MODEL
+      ? usedThinking
+        ? "thinking"
+        : "fast"
+      : null;
 
   useEffect(() => {
     if (!isStreaming) {
@@ -91,6 +118,12 @@ export default function StepContainer(props: StepContainerProps) {
                 index={props.index}
                 prevItem={props.index > 0 ? props.item : null}
                 inProgress={!props.item.reasoning?.endAt}
+                tokens={estimateTokens(props.item.reasoning.text)}
+                durationMs={
+                  props.item.reasoning.endAt
+                    ? props.item.reasoning.endAt - props.item.reasoning.startAt
+                    : undefined
+                }
               />
             )}
 
@@ -101,8 +134,19 @@ export default function StepContainer(props: StepContainerProps) {
             />
           </>
         )}
-        {props.isLast && <ThinkingIndicator historyItem={props.item} />}
       </div>
+
+      {showResponseActions && autoRoute && (
+        <div
+          className="text-description-muted px-2.5 pt-1 text-[10px]"
+          data-testid="auto-route-badge"
+          title="VynorAI Auto picked this based on the request"
+        >
+          {autoRoute === "thinking"
+            ? "Auto · 🧠 Deep thinking"
+            : "Auto · ⚡ Fast"}
+        </div>
+      )}
 
       {showResponseActions && (
         <div

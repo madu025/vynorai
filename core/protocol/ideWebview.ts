@@ -35,6 +35,10 @@ export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
     { taskId: string },
     { restored: boolean; restoredFiles: number; reason?: string },
   ];
+  "checkpoints/restoreTasks": [
+    { taskIds: string[] },
+    { restored: boolean; restoredFiles: number; reason?: string },
+  ];
   openUrl: [string, void];
   applyToFile: [ApplyToFilePayload, void];
   overwriteFile: [{ filepath: string; prevFileContent: string | null }, void];

@@ -15,7 +15,9 @@ type StoredCheckpoint = AgentCheckpointSummary & {
   afterHash?: string;
 };
 
-const MAX_CHECKPOINTS = 20;
+// Per-file snapshots back "Rewind to here" for every prompt in recent
+// sessions; one prompt can touch dozens of files, so keep a deep history.
+const MAX_CHECKPOINTS = 400;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 function hash(content: string | null): string {
@@ -212,10 +214,24 @@ export class AgentCheckpointManager {
   async restoreTask(
     taskId: string,
   ): Promise<{ restored: boolean; restoredFiles: number; reason?: string }> {
+    return this.restoreTasks([taskId]);
+  }
+
+  /**
+   * Restore every file touched by any of the given tasks to its content
+   * before the earliest of those edits. Used by "Rewind to here", which
+   * undoes a prompt and every prompt after it in one step.
+   */
+  async restoreTasks(
+    taskIds: string[],
+  ): Promise<{ restored: boolean; restoredFiles: number; reason?: string }> {
+    const wanted = new Set(taskIds);
     const checkpoints = (
       await Promise.all(
         (await this.list())
-          .filter((checkpoint) => checkpoint.taskId === taskId)
+          .filter(
+            (checkpoint) => checkpoint.taskId && wanted.has(checkpoint.taskId),
+          )
           .map((checkpoint) => this.read(checkpoint.id)),
       )
     ).filter((item): item is StoredCheckpoint => !!item);
@@ -307,16 +323,26 @@ export class AgentCheckpointManager {
     }
   }
 
+  // Orders by file mtime (checkpoint files are written once at creation and
+  // once at finalize) so pruning never has to load stored file contents.
   private async prune(): Promise<void> {
-    const checkpoints = await this.list();
+    const entries = (
+      await vscode.workspace.fs.readDirectory(this.checkpointDir)
+    ).filter(
+      ([name, type]) => type === vscode.FileType.File && name.endsWith(".json"),
+    );
+    if (entries.length <= MAX_CHECKPOINTS) return;
+    const dated = await Promise.all(
+      entries.map(async ([name]) => {
+        const uri = vscode.Uri.joinPath(this.checkpointDir, name);
+        return { uri, mtime: (await vscode.workspace.fs.stat(uri)).mtime };
+      }),
+    );
+    dated.sort((a, b) => b.mtime - a.mtime);
     await Promise.all(
-      checkpoints
+      dated
         .slice(MAX_CHECKPOINTS)
-        .map((checkpoint) =>
-          vscode.workspace.fs.delete(
-            vscode.Uri.joinPath(this.checkpointDir, `${checkpoint.id}.json`),
-          ),
-        ),
+        .map(({ uri }) => vscode.workspace.fs.delete(uri)),
     );
   }
 }

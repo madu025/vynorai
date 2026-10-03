@@ -6,7 +6,9 @@ import {
   PromptLog,
 } from "core";
 import { describe, expect, it, vi } from "vitest";
-import { createMockStore, getEmptyRootState } from "../../util/test/mockStore";
+import { expectActionSequence } from "../../util/test/actionSequence";
+import { createMockStore } from "../../util/test/mockStore";
+import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
 import { streamResponseThunk } from "./streamResponse";
 
 // Mock external dependencies only - let selectors run naturally
@@ -34,23 +36,13 @@ vi.mock(
   }),
 );
 
-import { ModelDescription } from "core";
 import { serializeTool } from "core/tools";
 import { grepSearchTool } from "core/tools/definitions";
 import { resolveEditorContent } from "../../components/mainInput/TipTapEditor/utils/resolveEditorContent";
-import { RootState } from "../store";
 
 const mockGetBaseSystemMessage = vi.mocked(getBaseSystemMessage);
 
 const mockResolveEditorContent = vi.mocked(resolveEditorContent);
-
-const mockClaudeModel: ModelDescription = {
-  title: "Claude 3.5 Sonnet",
-  model: "claude-3-5-sonnet-20241022",
-  provider: "anthropic",
-  underlyingProviderName: "anthropic",
-  completionOptions: { reasoningBudgetTokens: 2048 },
-};
 
 // Mock editor state (what user types in the input)
 const mockEditorState: JSONContent = {
@@ -68,23 +60,6 @@ const mockModifiers: InputModifiers = {
   useCodebase: true,
   noContext: false,
 };
-
-export function getRootStateWithClaude(): RootState {
-  const state = getEmptyRootState();
-  return {
-    ...state,
-    config: {
-      ...state.config,
-      config: {
-        ...state.config.config,
-        selectedModelByRole: {
-          ...state.config.config.selectedModelByRole,
-          chat: mockClaudeModel,
-        },
-      },
-    },
-  };
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -151,7 +126,7 @@ describe("streamResponseThunk", () => {
     // Verify exact sequence of dispatched actions with payloads
     const dispatchedActions = mockStore.getActions();
 
-    expect(dispatchedActions).toEqual([
+    expectActionSequence(dispatchedActions, [
       {
         type: "chat/streamResponse/pending",
         meta: expect.objectContaining({
@@ -209,6 +184,10 @@ describe("streamResponseThunk", () => {
         payload: undefined,
       },
       {
+        type: "workspace/setWorkspaceSnapshot",
+        payload: expect.objectContaining({ id: "mock-workspace" }),
+      },
+      {
         type: "session/setAppliedRulesAtIndex",
         payload: {
           index: 1,
@@ -224,20 +203,20 @@ describe("streamResponseThunk", () => {
         payload: undefined,
       },
       {
-        type: "session/setIsPruned",
-        payload: false,
-      },
-      {
-        type: "session/setContextPercentage",
-        payload: 0.8,
-      },
-      {
         type: "symbols/updateFromContextItems/fulfilled",
         meta: expect.objectContaining({
           arg: [],
           requestStatus: "fulfilled",
         }),
         payload: undefined,
+      },
+      {
+        type: "session/setIsPruned",
+        payload: false,
+      },
+      {
+        type: "session/setContextPercentage",
+        payload: 0.8,
       },
       {
         type: "session/streamUpdate",
@@ -423,6 +402,11 @@ describe("streamResponseThunk", () => {
     const finalState = mockStore.getState();
     expect(finalState).toEqual({
       ...initialState,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...initialState.session,
         streamAborter: expect.any(AbortController),
@@ -588,7 +572,7 @@ describe("streamResponseThunk", () => {
 
     // Verify exact action sequence
     const actionTypes = dispatchedActions.map((action: any) => action.type);
-    expect(actionTypes).toEqual([
+    expectActionSequence(actionTypes, [
       "chat/streamResponse/pending",
       "chat/streamWrapper/pending",
       "session/submitEditorAndInitAtIndex",
@@ -596,12 +580,13 @@ describe("streamResponseThunk", () => {
       "symbols/updateFromContextItems/pending",
       "session/updateHistoryItemAtIndex",
       "chat/streamNormalInput/pending",
+      "workspace/setWorkspaceSnapshot",
       "session/setAppliedRulesAtIndex",
       "session/setActive",
       "session/setInlineErrorMessage",
+      "symbols/updateFromContextItems/fulfilled",
       "session/setIsPruned",
       "session/setContextPercentage",
-      "symbols/updateFromContextItems/fulfilled",
       "session/streamUpdate",
       "session/streamUpdate",
       "session/addPromptCompletionPair",
@@ -764,6 +749,11 @@ describe("streamResponseThunk", () => {
     const finalState = mockStoreWithToolSettings.getState();
     expect(finalState).toEqual({
       ...stateWithToolSettings,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...stateWithToolSettings.session,
         history: [
@@ -942,7 +932,7 @@ describe("streamResponseThunk", () => {
 
     // Verify exact action sequence - should start but then be aborted
     const dispatchedActions = mockStoreWithAbort.getActions();
-    expect(dispatchedActions).toEqual([
+    expectActionSequence(dispatchedActions, [
       {
         type: "chat/streamResponse/pending",
         meta: {
@@ -1010,6 +1000,10 @@ describe("streamResponseThunk", () => {
         payload: undefined,
       },
       {
+        type: "workspace/setWorkspaceSnapshot",
+        payload: expect.objectContaining({ id: "mock-workspace" }),
+      },
+      {
         type: "session/setAppliedRulesAtIndex",
         payload: {
           appliedRules: [],
@@ -1025,14 +1019,6 @@ describe("streamResponseThunk", () => {
         payload: undefined,
       },
       {
-        type: "session/setIsPruned",
-        payload: false,
-      },
-      {
-        type: "session/setContextPercentage",
-        payload: 0.8,
-      },
-      {
         type: "symbols/updateFromContextItems/fulfilled",
         meta: {
           arg: [],
@@ -1040,6 +1026,14 @@ describe("streamResponseThunk", () => {
           requestStatus: "fulfilled",
         },
         payload: undefined,
+      },
+      {
+        type: "session/setIsPruned",
+        payload: false,
+      },
+      {
+        type: "session/setContextPercentage",
+        payload: 0.8,
       },
       {
         type: "session/streamUpdate",
@@ -1233,6 +1227,11 @@ describe("streamResponseThunk", () => {
     const finalState = mockStoreWithAbort.getState();
     expect(finalState).toEqual({
       ...abortState,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...abortState.session,
         history: [

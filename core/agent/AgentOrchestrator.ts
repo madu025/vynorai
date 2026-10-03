@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 
 import { TaskRuntime } from "./TaskRuntime";
 import { redactSecrets } from "./redactSecrets";
+import { classifyToolRisk } from "./toolRisk";
 import type {
   AgentPlanStep,
   AgentPlanStepKind,
@@ -39,6 +40,15 @@ function safeSummary(value: string): string {
     .replace(/[\r\n\t]+/g, " ")
     .trim()
     .slice(0, 160);
+}
+
+function toolNameOf(signature: string): string {
+  try {
+    const parsed = JSON.parse(signature) as { tool?: unknown };
+    return typeof parsed.tool === "string" ? parsed.tool : "";
+  } catch {
+    return "";
+  }
 }
 
 function validateDag(steps: ProposedPlanStep[]): void {
@@ -276,7 +286,14 @@ export class AgentOrchestrator {
         (task.executionGuard.actionDigests[actionDigest] ?? 0) + 1;
       if (repeats > task.executionGuard.repeatedActionLimit)
         throw new Error("Repeated tool action limit reached");
-      task.executionGuard.actionDigests[actionDigest] = repeats;
+      // A file edit changes what reads, tests and builds return, so repeats
+      // only count since the last edit: edit → `npm test` → edit → `npm test`
+      // is a fix loop, not a stuck loop.
+      if (classifyToolRisk(toolNameOf(signature)) === "R2") {
+        task.executionGuard.actionDigests = {};
+      } else {
+        task.executionGuard.actionDigests[actionDigest] = repeats;
+      }
       task.executionGuard.autonomousSteps += 1;
     });
   }

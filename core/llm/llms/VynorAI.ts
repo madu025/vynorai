@@ -19,14 +19,14 @@ import { fromChatCompletionChunk } from "../openaiTypeConverters.js";
 import { streamSse } from "@continuedev/fetch";
 
 // Default to deployed cloud URL; fallback to local dev server
-const VYNORAI_API_BASE =
-  process.env.VYNORAI_API_BASE ||
-  "https://vynor.lk/v1/";
+const VYNORAI_API_BASE = process.env.VYNORAI_API_BASE || "https://vynor.lk/v1/";
 
 class VynorAI extends OpenAI {
   static providerName = "vynorai";
-  protected supportsReasoningField       = true;
+  protected supportsReasoningField = true;
   protected supportsReasoningDetailsField = true;
+  // DeepSeek thinking mode with tools rejects history without reasoning_content.
+  protected supportsReasoningContentField = true;
 
   static defaultOptions: Partial<LLMOptions> = {
     apiBase: VYNORAI_API_BASE,
@@ -40,7 +40,6 @@ class VynorAI extends OpenAI {
   };
 
   constructor(options: LLMOptions) {
-
     super({
       ...options,
       template: "none" as any,
@@ -85,7 +84,10 @@ class VynorAI extends OpenAI {
       try {
         const errorJson = await response.json();
         const errObj = errorJson?.error;
-        if (errObj?.code === "monthly_limit_reached" || errObj?.type === "quota_exceeded") {
+        if (
+          errObj?.code === "monthly_limit_reached" ||
+          errObj?.type === "quota_exceeded"
+        ) {
           const upgradePlan = errObj.upgradePlan;
           const upgradeMsg = upgradePlan
             ? `\n\n⚡ **Upgrade to ${upgradePlan.displayName} Plan** (LKR ${upgradePlan.priceLKR.toLocaleString()}/mo) for **${(upgradePlan.monthlyTokens / 1_000_000).toFixed(0)}M tokens**: [👉 Click here to Upgrade](${errObj.upgradeUrl || "https://vynor.lk/#pricing"})`
@@ -98,7 +100,10 @@ class VynorAI extends OpenAI {
           return;
         }
 
-        if (errObj?.code === "model_locked" || errObj?.type === "plan_restriction") {
+        if (
+          errObj?.code === "model_locked" ||
+          errObj?.type === "plan_restriction"
+        ) {
           yield {
             role: "assistant",
             content: `🔒 **Model Locked (Upgrade Required)**\n\n${errObj.message || "This model requires an upgraded plan."}\n\n👉 [Click here to Upgrade Your Plan](${errObj.upgradeUrl || "https://vynor.lk/#pricing"}) to unlock this Thinking/Premium model.`,

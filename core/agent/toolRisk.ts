@@ -12,6 +12,8 @@ const READ_ONLY = new Set<string>([
   BuiltInToolNames.CodebaseTool,
   BuiltInToolNames.ViewRepoMap,
   BuiltInToolNames.ViewSubdirectory,
+  BuiltInToolNames.UpdateTodoList,
+  BuiltInToolNames.RunSubagent,
 ]);
 
 const WORKSPACE_WRITES = new Set<string>([

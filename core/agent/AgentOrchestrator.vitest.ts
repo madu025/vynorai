@@ -5,7 +5,7 @@ import * as path from "path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AgentOrchestrator } from "./AgentOrchestrator";
-import { TaskRuntime } from "./TaskRuntime";
+import { MAX_AUTONOMOUS_STEPS, TaskRuntime } from "./TaskRuntime";
 
 const temporaryDirectories: string[] = [];
 
@@ -149,7 +149,7 @@ describe("AgentOrchestrator", () => {
       ),
     ).rejects.toThrow("Repeated tool action limit");
 
-    for (let index = 0; index < 21; index += 1) {
+    for (let index = 0; index < MAX_AUTONOMOUS_STEPS - 3; index += 1) {
       await orchestrator.authorizeAction(
         task.id,
         "workspace-1",
@@ -165,6 +165,34 @@ describe("AgentOrchestrator", () => {
         "read_file:overflow.ts",
       ),
     ).rejects.toThrow("Autonomous step limit");
+  });
+
+  it("resets repeat counts after a file edit so fix loops can re-run tests", async () => {
+    const { orchestrator, task } = await createTask();
+    const test = JSON.stringify({
+      tool: "run_terminal_command",
+      arguments: { command: "npm test" },
+    });
+    const edit = (n: number) =>
+      JSON.stringify({
+        tool: "single_find_and_replace",
+        arguments: { filepath: "a.ts", newString: `${n}` },
+      });
+    for (let round = 0; round < 5; round += 1) {
+      await orchestrator.authorizeAction(task.id, "workspace-1", 7, test);
+      await orchestrator.authorizeAction(
+        task.id,
+        "workspace-1",
+        7,
+        edit(round),
+      );
+    }
+    for (let index = 0; index < 3; index += 1) {
+      await orchestrator.authorizeAction(task.id, "workspace-1", 7, test);
+    }
+    await expect(
+      orchestrator.authorizeAction(task.id, "workspace-1", 7, test),
+    ).rejects.toThrow("Repeated tool action limit");
   });
 
   it("cancels all active steps and safely resumes interrupted work", async () => {

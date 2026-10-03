@@ -19,6 +19,7 @@ import { readFileImpl } from "./implementations/readFile";
 import { readFileRangeImpl } from "./implementations/readFileRange";
 import { readSkillImpl } from "./implementations/readSkill";
 import { requestRuleImpl } from "./implementations/requestRule";
+import { runSubagentImpl } from "./implementations/runSubagent";
 import { runTerminalCommandImpl } from "./implementations/runTerminalCommand";
 import { searchWebImpl } from "./implementations/searchWeb";
 import { viewDiffImpl } from "./implementations/viewDiff";
@@ -227,6 +228,8 @@ export async function callBuiltInTool(
       return await viewRepoMapImpl(args, extras);
     case BuiltInToolNames.ViewSubdirectory:
       return await viewSubdirectoryImpl(args, extras);
+    case BuiltInToolNames.RunSubagent:
+      return await runSubagentImpl(args, extras, callTool);
     default:
       throw new Error(`Tool "${functionName}" not found`);
   }

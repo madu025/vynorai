@@ -1,6 +1,7 @@
 import { JSONContent } from "@tiptap/core";
 import { InputModifiers } from "core";
 import { describe, expect, it, vi } from "vitest";
+import { expectActionSequence } from "../../util/test/actionSequence";
 import { createMockStore, getEmptyRootState } from "../../util/test/mockStore";
 import { streamResponseThunk } from "./streamResponse";
 
@@ -32,7 +33,7 @@ vi.mock(
 import { unwrapResult } from "@reduxjs/toolkit";
 import { resolveEditorContent } from "../../components/mainInput/TipTapEditor/utils/resolveEditorContent";
 import { MockIdeMessenger } from "../../context/MockIdeMessenger";
-import { getRootStateWithClaude } from "./streamResponse.test";
+import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
 
 const mockGetBaseSystemMessage = vi.mocked(getBaseSystemMessage);
 
@@ -99,7 +100,7 @@ describe("streamResponseThunk", () => {
 
     // Verify the complete error handling flow
     const dispatchedActions = mockStoreNoModel.getActions();
-    expect(dispatchedActions).toEqual([
+    expectActionSequence(dispatchedActions, [
       {
         type: "chat/streamResponse/pending",
         meta: {
@@ -261,7 +262,7 @@ describe("streamResponseThunk", () => {
       .filter(
         (action) => action.type !== "symbols/updateFromContextItems/fulfilled",
       );
-    expect(dispatchedActions).toEqual([
+    expectActionSequence(dispatchedActions, [
       {
         type: "chat/streamResponse/pending",
         meta: {
@@ -327,6 +328,10 @@ describe("streamResponseThunk", () => {
           requestStatus: "pending",
         },
         payload: undefined,
+      },
+      {
+        type: "workspace/setWorkspaceSnapshot",
+        payload: expect.objectContaining({ id: "mock-workspace" }),
       },
       {
         type: "session/setAppliedRulesAtIndex",
@@ -504,6 +509,11 @@ describe("streamResponseThunk", () => {
     const finalState = mockStore.getState();
     expect(finalState).toEqual({
       ...initialState,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...initialState.session,
         title: "Hello",
@@ -598,7 +608,7 @@ describe("streamResponseThunk", () => {
       .filter(
         (action) => action.type !== "symbols/updateFromContextItems/fulfilled",
       );
-    expect(dispatchedActions).toEqual([
+    expectActionSequence(dispatchedActions, [
       {
         type: "chat/streamResponse/pending",
         meta: {
@@ -664,6 +674,10 @@ describe("streamResponseThunk", () => {
           requestStatus: "pending",
         },
         payload: undefined,
+      },
+      {
+        type: "workspace/setWorkspaceSnapshot",
+        payload: expect.objectContaining({ id: "mock-workspace" }),
       },
       {
         type: "session/setAppliedRulesAtIndex",
@@ -800,6 +814,11 @@ describe("streamResponseThunk", () => {
     const finalState = mockStore.getState();
     expect(finalState).toEqual({
       ...initialState,
+      // The first request of a turn loads the workspace snapshot.
+      workspace: expect.objectContaining({
+        loading: false,
+        snapshot: expect.objectContaining({ id: "mock-workspace" }),
+      }),
       session: {
         ...initialState.session,
         streamAborter: expect.any(AbortController),

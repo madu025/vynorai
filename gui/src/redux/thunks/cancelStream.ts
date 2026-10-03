@@ -26,6 +26,12 @@ export const cancelStream = createAsyncThunk<
       // Canceling the stream must not depend on local audit persistence.
     }
   }
+  // Subagents run inside a core tool call, outside the model stream.
+  try {
+    extra.ideMessenger.post("tools/abort", undefined);
+  } catch {
+    // Older cores without subagents ignore this.
+  }
   dispatch(setInactive());
   dispatch(abortStream());
 

@@ -378,7 +378,7 @@ export function VynorQuotaBar() {
         </BrandBadge>
         <TokenCount>
           <span>{quota.remainingTokens.toLocaleString()}</span> /{" "}
-          {quota.maxTokens.toLocaleString()} left
+          {quota.maxTokens.toLocaleString()} credits left
         </TokenCount>
       </HeaderRow>
 
@@ -386,7 +386,7 @@ export function VynorQuotaBar() {
         <ProgressFill $percent={quota.percentageUsed} $isWarning={isWarning} />
       </ProgressTrack>
 
-      <SavingsRow>
+      <SavingsRow title="Estimated tokens answered from cache, templates and the local engine instead of a paid model. These cost you no credits.">
         <span
           style={{
             color: "#00e676",
@@ -398,13 +398,13 @@ export function VynorQuotaBar() {
         >
           ✨{" "}
           {(quota.tokensSaved || 0) > 0
-            ? `Saved +${(quota.tokensSaved || 0).toLocaleString()} tokens`
-            : "0-Token SLM Shield Active"}
+            ? `~${(quota.tokensSaved || 0).toLocaleString()} tokens answered free`
+            : "Cache & templates active"}
         </span>
         <span style={{ color: "#a0aec0" }}>
           {(quota.tokensSaved || 0) > 0
-            ? `${quota.savingPercentage}% free`
-            : `Real used: ${quota.usedTokens.toLocaleString()}`}
+            ? `~${quota.savingPercentage}% saved`
+            : `Used: ${quota.usedTokens.toLocaleString()}`}
         </span>
       </SavingsRow>
 

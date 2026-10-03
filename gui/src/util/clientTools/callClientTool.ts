@@ -6,6 +6,7 @@ import { AppThunkDispatch, RootState } from "../../redux/store";
 import { editToolImpl } from "./editImpl";
 import { multiEditImpl } from "./multiEditImpl";
 import { singleFindAndReplaceImpl } from "./singleFindAndReplaceImpl";
+import { updateTodoListImpl } from "./updateTodoListImpl";
 
 export interface ClientToolExtras {
   getState: () => RootState;
@@ -48,6 +49,9 @@ export async function callClientTool(
         break;
       case BuiltInToolNames.MultiEdit:
         output = await multiEditImpl(parsedArgs, toolCall.id, extras);
+        break;
+      case BuiltInToolNames.UpdateTodoList:
+        output = await updateTodoListImpl(parsedArgs, toolCall.id, extras);
         break;
       default:
         throw new Error(`Invalid client tool name ${toolCall.function.name}`);

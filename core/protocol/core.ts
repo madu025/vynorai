@@ -13,6 +13,7 @@ import {
 import { ProfileDescription } from "../config/ProfileLifecycleManager";
 import { SharedConfigSchema } from "../config/sharedConfig";
 import { GlobalContextModelSelections } from "../util/GlobalContext";
+import type { HookPayload, HookRunResult } from "../hooks/types";
 
 import {
   BaseSessionMetadata,
@@ -402,6 +403,8 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     },
     string | undefined,
   ];
+  "hooks/run": [HookPayload, HookRunResult];
+  "tools/abort": [undefined, void];
   "conversation/compact": [
     {
       index: number;

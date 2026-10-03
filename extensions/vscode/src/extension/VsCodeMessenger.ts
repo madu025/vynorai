@@ -163,6 +163,9 @@ export class VsCodeMessenger {
     this.onWebview("checkpoints/restoreTask", async ({ data }) =>
       checkpointManager.restoreTask(data.taskId),
     );
+    this.onWebview("checkpoints/restoreTasks", async ({ data }) =>
+      checkpointManager.restoreTasks(data.taskIds),
+    );
     this.onWebview("vynorai/login", async () => {
       await vscode.commands.executeCommand("vynorai.login");
     });

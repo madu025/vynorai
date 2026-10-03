@@ -257,6 +257,8 @@ type SessionState = {
   /** Set only while an implementation subagent model turn owns tool dispatch. */
   activeImplementationSubagentId?: string;
   activeTaskState?: TaskState;
+  /** Tool rounds used when the last turn paused at its round budget; shows "Continue". */
+  toolBudgetPausedAfter?: number;
   isInEdit: boolean;
   codeBlockApplyStates: {
     states: ApplyState[];
@@ -485,6 +487,29 @@ export const sessionSlice = createSlice({
         state.isPruned = false;
         state.contextPercentage = undefined;
       }
+    },
+    /** Link a user prompt to the agent task (and so the checkpoints) it started. */
+    setHistoryItemTaskId: (
+      state,
+      action: PayloadAction<{ messageId: string; taskId: string }>,
+    ) => {
+      const item = state.history.find(
+        (entry) => entry.message.id === action.payload.messageId,
+      );
+      if (item) item.taskId = action.payload.taskId;
+    },
+    /** Drop the user prompt at `index` and everything after it ("Rewind to here"). */
+    rewindHistoryToIndex: (state, action: PayloadAction<number>) => {
+      const index = action.payload;
+      if (index < 0 || index >= state.history.length) return;
+      state.history = state.history.slice(0, index);
+      state.codeBlockApplyStates.curIndex = 0;
+      state.inlineErrorMessage = undefined;
+      state.isPruned = false;
+      state.contextPercentage = undefined;
+      state.subagentRuns = [];
+      state.activeTaskId = undefined;
+      state.toolBudgetPausedAfter = undefined;
     },
     deleteMessage: (state, action: PayloadAction<number>) => {
       // Deletes the current assistant message and the previous user message
@@ -745,6 +770,7 @@ export const sessionSlice = createSlice({
       state.symbols = {};
       state.activeTaskId = undefined;
       state.activeTaskState = undefined;
+      state.toolBudgetPausedAfter = undefined;
 
       state.inlineErrorMessage = undefined;
       state.isPruned = false;
@@ -1057,6 +1083,26 @@ export const sessionSlice = createSlice({
     ) => {
       state.activeTaskState = action.payload;
     },
+    /** Agent-loop prompt (verification gate) plus the response placeholder. */
+    appendAutoPrompt: (state, action: PayloadAction<string>) => {
+      state.history.push(
+        {
+          message: { id: uuidv4(), role: "user", content: action.payload },
+          contextItems: [],
+          isAutoPrompt: true,
+        },
+        {
+          message: { id: uuidv4(), role: "assistant", content: "" },
+          contextItems: [],
+        },
+      );
+    },
+    setToolBudgetPausedAfter: (
+      state,
+      action: PayloadAction<number | undefined>,
+    ) => {
+      state.toolBudgetPausedAfter = action.payload;
+    },
     setProjectMemories: (state, action: PayloadAction<ProjectMemory[]>) => {
       state.projectMemories = action.payload;
     },
@@ -1173,6 +1219,8 @@ export const {
   setActive,
   submitEditorAndInitAtIndex,
   truncateHistoryToMessage,
+  setHistoryItemTaskId,
+  rewindHistoryToIndex,
   updateHistoryItemAtIndex,
   clearDanglingMessages,
   setMainEditorContentTrigger,
@@ -1198,6 +1246,8 @@ export const {
   setActiveTaskId,
   setActiveImplementationSubagentId,
   setActiveTaskState,
+  setToolBudgetPausedAfter,
+  appendAutoPrompt,
   setProjectMemories,
   setSubagentRuns,
   updateSubagentRun,

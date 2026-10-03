@@ -3,15 +3,37 @@ import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { ChevronUpIcon } from "@heroicons/react/24/solid";
 import { ChatHistoryItem } from "core";
 import { useEffect, useMemo, useState } from "react";
-import styled from "styled-components";
+import styled, { keyframes } from "styled-components";
 
-import { AnimatedEllipsis } from "../../AnimatedEllipsis";
 import StyledMarkdownPreview from "../../StyledMarkdownPreview";
 import { Button } from "../../ui";
 
 const MarkdownWrapper = styled.div`
   & > div > *:first-child {
     margin-top: 0 !important;
+  }
+`;
+
+const shimmer = keyframes`
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+`;
+
+const ShimmerLabel = styled.span`
+  background: linear-gradient(
+    90deg,
+    var(--vscode-descriptionForeground, #888) 0%,
+    var(--vscode-foreground, #ddd) 50%,
+    var(--vscode-descriptionForeground, #888) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ${shimmer} 2.4s linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    color: inherit;
   }
 `;
 
@@ -22,58 +44,45 @@ interface ThinkingBlockPeekProps {
   prevItem: ChatHistoryItem | null;
   inProgress?: boolean;
   signature?: string;
+  /** Approximate reasoning tokens streamed so far. */
   tokens?: number;
+  /** Real reasoning duration from the stream's start/end timestamps. */
+  durationMs?: number;
 }
 
+// Only explicit model identifiers are white-labelled. Bare words such as
+// "DeepSeek", "Qwen" or "R1" may be the user's own API, file or cell name.
+const MODEL_NAME_PATTERNS: Array<[RegExp, string]> = [
+  [
+    /\b(?:Local\s+)?Qwen[\s-]*(?:2(?:\.5)?[\s-]*)?(?:Coder[\s-]*)?\d+(?:\.\d+)?B\b/gi,
+    "Architecture Engine",
+  ],
+  [/\b(?:Local\s+)?Qwen[\s-]*2\.5(?:[\s-]*Coder)?\b/gi, "Architecture Engine"],
+  [
+    /\bDeepSeek[\s-]*(?:V\d+(?:\.\d+)?[\s-]*)?(?:Flash|Pro)\b/gi,
+    "Code Synthesis Engine",
+  ],
+  [/\bDeepSeek[\s-]*R1\b/gi, "Deep Reasoning Engine"],
+  [/\bllama\.cpp\b/gi, "Core Local Runtime"],
+];
+
 /**
- * Strips internal model names and technical provider terms from user-facing thought stream
- * to preserve a unified, enterprise-grade VynorAI appearance.
+ * White-label internal model names in the thought stream, leaving fenced and
+ * inline code untouched so identifiers and API names keep their meaning.
  */
-function sanitizeThinkingContent(text: string): string {
+export function sanitizeThinkingContent(text: string): string {
   if (!text) return "";
   return text
-    .replace(/\(?(?:Local\s+)?Qwen(?:\s*2\.5)?(?:\s*Coder)?(?:\s*3B)?\)?/gi, "(Autonomous Architecture Engine)")
-    .replace(/\(?(?:DeepSeek(?:-|\s+))?V4\.1(?:-|\s+)?Flash\)?/gi, "(Code Synthesis Engine)")
-    .replace(/\(?(?:DeepSeek(?:-|\s+))?R1\)?/gi, "(Deep Reasoning Engine)")
-    .replace(/\(?(?:llama\.cpp|ollama)\)?/gi, "(Core Local Runtime)")
-    .replace(/\bQwen\b/gi, "Reasoner")
-    .replace(/\bDeepSeek\b/gi, "Synthesizer");
-}
-
-/**
- * Detects the active operational phase from the thinking stream
- */
-function detectThinkingPhase(text: string): { label: string; icon: string } {
-  if (!text) {
-    return { label: "Thinking", icon: "🧠" };
-  }
-
-  // Look at the latest 400 characters to reflect current activity
-  const recent = text.slice(-400).toLowerCase();
-
-  if (/audit|verif|syntax|check|secur|correct|test|lint|bug/i.test(recent)) {
-    return { label: "Auditing", icon: "🛡️" };
-  }
-  if (/patch|refactor|diff|replac|surgical/i.test(recent)) {
-    return { label: "Patching", icon: "🔧" };
-  }
-  if (/scaffold|boiler|templat|golden/i.test(recent)) {
-    return { label: "Scaffolding", icon: "📦" };
-  }
-  if (/synthesiz|generat|coding|implement|code|writ/i.test(recent)) {
-    return { label: "Synthesizing", icon: "⚡" };
-  }
-  if (/retriev|search|context|index|symbol|fil|workspace/i.test(recent)) {
-    return { label: "Retrieving Context", icon: "📚" };
-  }
-  if (/plan|architect|bluepr|step|breakdown/i.test(recent)) {
-    return { label: "Planning", icon: "🧠" };
-  }
-  if (/analyz|investigat|pars|evaluat|intent|requir/i.test(recent)) {
-    return { label: "Analyzing", icon: "🔍" };
-  }
-
-  return { label: "Thinking", icon: "🧠" };
+    .split(/(```[\s\S]*?```|`[^`\n]*`)/g)
+    .map((part, i) =>
+      i % 2 === 1
+        ? part
+        : MODEL_NAME_PATTERNS.reduce(
+            (acc, [re, label]) => acc.replace(re, label),
+            part,
+          ),
+    )
+    .join("");
 }
 
 function ThinkingBlockPeek({
@@ -83,6 +92,7 @@ function ThinkingBlockPeek({
   prevItem,
   inProgress,
   tokens,
+  durationMs,
 }: ThinkingBlockPeekProps) {
   const [open, setOpen] = useState(false);
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -94,20 +104,24 @@ function ThinkingBlockPeek({
     redactedThinking &&
     prevItem.message.redactedThinking;
 
+  // Fallback timer for streams without start/end timestamps.
   useEffect(() => {
     if (inProgress) {
       setStartTime(Date.now());
       setElapsedTime("");
     } else if (startTime) {
-      const endTime = Date.now();
-      const diff = endTime - startTime;
-      const diffString = `${(diff / 1000).toFixed(1)}s`;
-      setElapsedTime(diffString);
+      setElapsedTime(`${((Date.now() - startTime) / 1000).toFixed(1)}s`);
     }
   }, [inProgress]);
 
-  const sanitizedContent = useMemo(() => sanitizeThinkingContent(content), [content]);
-  const activePhase = useMemo(() => detectThinkingPhase(content), [content]);
+  const shownElapsed =
+    durationMs !== undefined
+      ? `${(durationMs / 1000).toFixed(1)}s`
+      : elapsedTime;
+  const sanitizedContent = useMemo(
+    () => sanitizeThinkingContent(content),
+    [content],
+  );
 
   return duplicateRedactedThinkingBlock ? null : (
     <div className="thread-message">
@@ -123,9 +137,16 @@ function ThinkingBlockPeek({
           >
             {inProgress ? (
               <span className="flex items-center gap-1.5">
-                <span className="text-xs leading-none">{activePhase.icon}</span>
-                <span>{redactedThinking ? "Redacted Thinking" : activePhase.label}</span>
-                <AnimatedEllipsis />
+                {redactedThinking ? (
+                  <span>Redacted Thinking…</span>
+                ) : (
+                  <ShimmerLabel>Thinking…</ShimmerLabel>
+                )}
+                {!!tokens && (
+                  <span className="text-description-muted">
+                    · ~{tokens.toLocaleString()} tokens
+                  </span>
+                )}
               </span>
             ) : redactedThinking ? (
               "Redacted Thinking"
@@ -134,8 +155,8 @@ function ThinkingBlockPeek({
                 <span className="text-xs leading-none">✨</span>
                 <span>
                   {"Thought" +
-                    (elapsedTime ? ` for ${elapsedTime}` : "") +
-                    (tokens ? ` (${tokens} tokens)` : "")}
+                    (shownElapsed ? ` for ${shownElapsed}` : "") +
+                    (tokens ? ` · ~${tokens.toLocaleString()} tokens` : "")}
                 </span>
               </span>
             )}
@@ -172,4 +193,3 @@ function ThinkingBlockPeek({
 }
 
 export default ThinkingBlockPeek;
-

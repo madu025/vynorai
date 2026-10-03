@@ -20,10 +20,12 @@ import Ollama from "./llm/llms/Ollama";
 import { EditAggregator } from "./nextEdit/context/aggregateEdits";
 import { createNewPromptFileV2 } from "./promptFiles/createNewPromptFile";
 import { callTool } from "./tools/callTool";
+import { abortRunningSubagents } from "./tools/implementations/runSubagent";
 import { BuiltInToolNames } from "./tools/builtIn";
 import { safeParseToolCallArgs } from "./tools/parseArgs";
 import { ChatDescriber } from "./util/chatDescriber";
 import { compactConversation } from "./util/conversationCompaction";
+import { HookRunner } from "./hooks/HookRunner";
 import { GlobalContext } from "./util/GlobalContext";
 import historyManager from "./util/history";
 import { editConfigFile, migrateV1DevDataFiles } from "./util/paths";
@@ -113,6 +115,23 @@ export class Core {
   private readonly taskRuntime = new TaskRuntime();
   private readonly agentOrchestrator = new AgentOrchestrator(this.taskRuntime);
   private workspaceRefreshTimer?: ReturnType<typeof setTimeout>;
+  // Lifecycle hooks from ~/.vynorai/hooks.json and .vynorai/hooks.json.
+  // Dependencies are read lazily: they are wired up in the constructor.
+  private readonly hookRunner = new HookRunner({
+    getWorkspaceDirs: () => this.ide.getWorkspaceDirs(),
+    isWorkspaceTrusted: async () =>
+      (await this.workspaceSession.getSnapshot()).trusted,
+    confirmProjectHooks: async (file, commands) => {
+      const preview = commands.slice(0, 3).join(" · ");
+      const choice = await this.ide.showToast(
+        "warning",
+        `This project's ${file} runs shell commands as hooks: ${preview}${commands.length > 3 ? " …" : ""}. Allow them?`,
+        "Allow",
+        "Not now",
+      );
+      return choice === "Allow";
+    },
+  });
 
   private messageAbortControllers = new Map<string, AbortController>();
   private addMessageAbortController(id: string): AbortController {
@@ -772,6 +791,9 @@ export class Core {
 
       return await ChatDescriber.describe(currentModel, {}, msg.data.text);
     });
+
+    on("hooks/run", async (msg) => this.hookRunner.run(msg.data));
+    on("tools/abort", async () => abortRunningSubagents());
 
     on("conversation/compact", async (msg) => {
       const currentModel = (await this.configHandler.loadConfig()).config

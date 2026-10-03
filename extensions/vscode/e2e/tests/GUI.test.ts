@@ -341,7 +341,7 @@ describe.skip("GUI Test", () => {
       );
 
       const text = await statusMessage.getText();
-      expect(text).contain("Continue tried to view the git diff");
+      expect(text).contain("View the git diff · canceled");
     }).timeout(DEFAULT_TIMEOUT.XL);
   });
 

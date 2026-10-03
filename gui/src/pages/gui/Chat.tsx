@@ -20,6 +20,12 @@ import { useFindWidget } from "../../components/find/FindWidget";
 import TimelineItem from "../../components/gui/TimelineItem";
 import { NewSessionButton } from "../../components/mainInput/belowMainInput/NewSessionButton";
 import ThinkingBlockPeek from "../../components/mainInput/belowMainInput/ThinkingBlockPeek";
+import { TurnStatusLine } from "../../components/StepContainer/TurnStatusLine";
+import { useAutoCompaction } from "../../util/autoCompaction";
+import { RewindButton } from "../../components/StepContainer/RewindButton";
+import { ContinueTaskBanner } from "../../components/StepContainer/ContinueTaskBanner";
+import { TodoListPanel } from "../../components/StepContainer/TodoListPanel";
+import { estimateTokens } from "../../components/StepContainer/turnStatus";
 import ContinueInputBox from "../../components/mainInput/ContinueInputBox";
 import { useOnboardingCard } from "../../components/OnboardingCard";
 import StepContainer from "../../components/StepContainer";
@@ -132,6 +138,7 @@ export function Chat() {
   const stepsDivRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const history = useAppSelector((state) => state.session.history);
+  useAutoCompaction();
   const queuedInputs = useAppSelector(
     (state) => state.session.queuedInputs ?? [],
   );
@@ -356,19 +363,34 @@ export function Chat() {
       const isBeforeLatestSummary =
         latestSummaryIndex !== -1 && index < latestSummaryIndex;
 
+      if (message.role === "user" && item.isAutoPrompt) {
+        return (
+          <div
+            className="text-description-muted px-3 py-1 text-[11px]"
+            data-testid="auto-prompt"
+            title={renderChatMessage(message)}
+          >
+            ↻ Checking the changes before finishing
+          </div>
+        );
+      }
+
       if (message.role === "user") {
         return (
-          <ContinueInputBox
-            onEnter={(editorState, modifiers) =>
-              sendInput(editorState, modifiers, index)
-            }
-            isLastUserInput={isLastUserInput(index)}
-            isMainInput={false}
-            editorState={editorState ?? item.message.content}
-            contextItems={contextItems}
-            appliedRules={appliedRules}
-            inputId={message.id}
-          />
+          <>
+            <ContinueInputBox
+              onEnter={(editorState, modifiers) =>
+                sendInput(editorState, modifiers, index)
+              }
+              isLastUserInput={isLastUserInput(index)}
+              isMainInput={false}
+              editorState={editorState ?? item.message.content}
+              contextItems={contextItems}
+              appliedRules={appliedRules}
+              inputId={message.id}
+            />
+            <RewindButton index={index} />
+          </>
         );
       }
 
@@ -426,6 +448,7 @@ export function Chat() {
               prevItem={index > 0 ? history[index - 1] : null}
               inProgress={index === history.length - 1 && isStreaming}
               signature={message.signature}
+              tokens={estimateTokens(thinkingContent)}
             />
           </div>
         );
@@ -491,6 +514,13 @@ export function Chat() {
           ))}
       </StepsDiv>
       <div className={"relative shrink-0"}>
+        <TurnStatusLine />
+        <TodoListPanel />
+        <ContinueTaskBanner
+          onContinue={(editorState) =>
+            submitOrQueue(editorState, { useCodebase: false, noContext: true })
+          }
+        />
         <AgentControlCenter />
         <WorkspaceStatus />
         {queuedInputs.length > 0 && (

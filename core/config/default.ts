@@ -14,8 +14,7 @@ import { ConfigYaml } from "@continuedev/config-yaml";
  * Slash commands available: /fix /explain /test /refactor /docs /review /security /optimize /scaffold
  */
 
-const VYNORAI_API_BASE =
-  process.env.VYNORAI_API_BASE || "https://vynor.lk/v1";
+const VYNORAI_API_BASE = process.env.VYNORAI_API_BASE || "https://vynor.lk/v1";
 // Production: https://vynor.lk/v1 | Local dev: http://localhost:3333/v1
 
 export const defaultConfig: ConfigYaml = {
@@ -24,23 +23,34 @@ export const defaultConfig: ConfigYaml = {
   schema: "v1",
 
   models: [
-    // ── ⚡ Primary Fast Coding Engine (Starter, Pro, Ultra) ──────────────
+    // ── ✨ Default: backend routes light / normal / heavy per request ─────
     {
-      name: "VynorAI ⚡ DeepSeek V3 (Coding)",
+      name: "VynorAI Auto",
       provider: "vynorai",
-      model: "deepseek/deepseek-chat-v3-0324",
+      model: "vynor-auto",
+      apiBase: VYNORAI_API_BASE,
+      roles: ["chat", "edit", "apply", "subagent"],
+      // The backend tier policy caps output; leave room for heavy turns.
+      defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 },
+      capabilities: ["tool_use"],
+    },
+    // ── Advanced: fixed models ───────────────────────────────────────────
+    {
+      name: "VynorAI ⚡ DeepSeek V4.1 Flash",
+      provider: "vynorai",
+      model: "deepseek/deepseek-flash",
       apiBase: VYNORAI_API_BASE,
       roles: ["chat", "edit", "apply", "subagent"],
       defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192 },
       capabilities: ["tool_use"],
     },
-    // ── 🧠 Premier Reasoning Model (Pro & Ultra) ──────────────────────────
+    // ── 🧠 Premium model (Pro & Ultra, 4x credits) ────────────────────────
     {
-      name: "VynorAI 🧠 DeepSeek R1 (Reasoning)",
+      name: "VynorAI 🧠 DeepSeek V4 Pro",
       provider: "vynorai",
-      model: "deepseek/deepseek-r1",
+      model: "deepseek/deepseek-v4-pro",
       apiBase: VYNORAI_API_BASE,
-      roles: ["chat"],
+      roles: ["chat", "edit"],
       defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 },
       capabilities: ["tool_use"],
     },

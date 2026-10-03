@@ -10,6 +10,21 @@ import { ToolCallStatusMessage } from "./ToolCallStatusMessage";
 import { ToolTruncateHistoryIcon } from "./ToolTruncateHistoryIcon";
 import { toolCallStateToContextItems } from "./utils";
 
+/** Timeline dot that mirrors the real call status. */
+function statusDotClass(status: ToolCallState["status"]): string {
+  switch (status) {
+    case "done":
+      return "bg-success";
+    case "generated":
+      return "bg-warning";
+    case "errored":
+    case "canceled":
+      return "bg-error";
+    default:
+      return "bg-description animate-pulse";
+  }
+}
+
 interface SimpleToolCallUIProps {
   toolCallState: ToolCallState;
   tool: Tool | undefined;
@@ -54,6 +69,11 @@ export function SimpleToolCallUI({
           onClick={isClickable ? handleClick : undefined}
           data-testid="context-items-peek"
         >
+          <span
+            aria-hidden="true"
+            data-testid="tool-call-status-dot"
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClass(toolCallState.status)}`}
+          />
           <ToggleWithIcon
             icon={Icon}
             isToggleable={isToggleable}

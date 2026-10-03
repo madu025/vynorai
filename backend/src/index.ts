@@ -6,6 +6,7 @@ import { config, MODEL_ALIASES } from "./config.js";
 import { initDb, initModelRegistry } from "./db.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
+import { googleAuthRouter } from "./routes/googleAuth.js";
 import { memoryRouter } from "./routes/memory.js";
 import { paymentRouter } from "./routes/payment.js";
 import { proxyRouter } from "./routes/proxy.js";
@@ -197,6 +198,7 @@ app.get("/ready", (_req, res) => {
   });
 });
 
+app.use("/api/auth/google", googleAuthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/payment", paymentRouter);
 // More specific mount first so the generic /v1 router can't swallow it

@@ -73,9 +73,13 @@ test("a tool loop re-sending the same turn is classified once", async () => {
 
 test("dropped turns are summarized in the background and reused", async () => {
   const msgs: any[] = [{ role: "system", content: "rules" }];
+  // Big enough to pass the compaction trigger of the pro plan budget.
   for (let i = 0; i < 25; i++) {
-    msgs.push({ role: "user", content: `question ${i}` });
-    msgs.push({ role: "assistant", content: `answer ${i}` });
+    msgs.push({ role: "user", content: `question ${i} ` + "q".repeat(12_000) });
+    msgs.push({
+      role: "assistant",
+      content: `answer ${i} ` + "a".repeat(12_000),
+    });
   }
 
   // First request: no summary yet, turns are dropped and a job is queued.
@@ -119,4 +123,36 @@ test("isMutationRequest: rename/redesign style edits keep the edit tools", async
   );
   assert.equal(isMutationRequest("Redesign the index writes"), true);
   assert.equal(isMutationRequest("what does this regex do"), false);
+});
+
+test("history is append-only below the compaction trigger (prefix stays cache-hot)", async () => {
+  const msgs: any[] = [
+    { role: "system", content: "rules" },
+    { role: "user", content: "refactor the billing module" },
+  ];
+  let prev: string[] = [];
+  for (let i = 0; i < 40; i++) {
+    msgs.push({
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        {
+          id: `c${i}`,
+          type: "function",
+          function: { name: "read_file", arguments: "{}" },
+        },
+      ],
+    });
+    msgs.push({
+      role: "tool",
+      tool_call_id: `c${i}`,
+      content: `file ${i} ` + "x".repeat(1500),
+    });
+    const out = hybrid
+      .applyHybridContext({ messages: msgs }, "pro", "safe")
+      .body.messages.map((m: any) => JSON.stringify(m));
+    // Every earlier prompt is an exact prefix of the next one.
+    assert.deepEqual(out.slice(0, prev.length), prev);
+    prev = out;
+  }
 });

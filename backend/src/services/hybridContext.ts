@@ -16,7 +16,6 @@ import { summarizeConversation } from "./localSlmRouter.js";
 
 const CHARS_PER_TOKEN = 4;
 const SYSTEM_RESERVE = 4000; // always reserve for system prompt
-const WINDOW_TURNS = 12;
 const MIN_COMPRESS_CHARS = 800;
 
 // Per-message cap scales with plan context (25% of total budget per message)
@@ -389,28 +388,24 @@ export function applyReadDedupe(messages: Msg[]): {
   return { messages: out, saved };
 }
 
-// ─── Layer 1: Sticky, turn-aligned window ────────────────────────────────────
-// The window start only moves in WINDOW_STEP jumps, so for WINDOW_STEP turns in
-// a row the prompt prefix is byte-identical and stays provider-cache-hot.
-const WINDOW_MESSAGES = WINDOW_TURNS * 2;
-const WINDOW_STEP = 12;
+// ─── Layer 1: Append-only context with rare, stable compaction ───────────────
+// DeepSeek bills a repeated prompt prefix at ~2% of the normal rate, so the
+// history is never touched until it nears the budget (COMPACT_TRIGGER). Then
+// one large block of the oldest turns is dropped (summarized in the
+// background), leaving room for many more turns before the next drop.
+//
+// Compaction boundaries are computed from the start of the conversation and
+// depend only on earlier messages, so they never move as turns are appended:
+// between boundaries the prompt grows append-only and stays cache-hot.
+const COMPACT_TRIGGER = 0.85; // drop when the conversation exceeds 85% of budget
+const COMPACT_CHUNK = 0.5; // each boundary drops about half the budget
 
-/** Never start mid tool-exchange: a tool result without its call is rejected upstream. */
-function alignWindowStart(
-  convo: Msg[],
-  desired: number,
-): { head: Msg[]; start: number } {
-  for (let i = desired; i < convo.length; i++) {
-    if (convo[i].role === "user") return { head: [], start: i };
+/** First index at or after `from` where a window may start (never a tool result). */
+function nextStart(convo: Msg[], from: number): number {
+  for (let i = from; i < convo.length; i++) {
+    if (convo[i].role === "user" || convo[i].role === "assistant") return i;
   }
-  // Inside one long tool loop: keep the user's request, resume at an assistant turn.
-  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-  if (lastUser < 0) return { head: [], start: desired };
-  for (let i = Math.max(desired, lastUser + 1); i < convo.length; i++) {
-    if (convo[i].role === "assistant")
-      return { head: [convo[lastUser]], start: i };
-  }
-  return { head: [], start: lastUser };
+  return convo.length;
 }
 
 function applyWindowTruncation(
@@ -419,30 +414,40 @@ function applyWindowTruncation(
 ): { messages: Msg[]; saved: number; dropped: Msg[] } {
   const system = messages.filter((m: Msg) => m.role === "system");
   const convo = messages.filter((m: Msg) => m.role !== "system");
-  const budgetChars = budgetTokens * CHARS_PER_TOKEN;
-  const total = (list: Msg[]) =>
-    list.reduce((s: number, m: Msg) => s + charCount(m), 0);
+  const sizes = convo.map(charCount);
+  const systemChars = system.reduce((s: number, m: Msg) => s + charCount(m), 0);
+  const budgetChars = budgetTokens * CHARS_PER_TOKEN - systemChars;
+  const triggerChars = budgetChars * COMPACT_TRIGGER;
+  const chunkChars = Math.max(1, budgetChars * COMPACT_CHUNK);
+  const tailChars = (from: number) =>
+    sizes.slice(from).reduce((s, n) => s + n, 0);
 
-  let desired =
-    convo.length > WINDOW_MESSAGES
-      ? Math.floor((convo.length - WINDOW_MESSAGES) / WINDOW_STEP) * WINDOW_STEP
-      : 0;
-  let { head, start } = alignWindowStart(convo, desired);
-  while (
-    total([...system, ...head, ...convo.slice(start)]) > budgetChars &&
-    desired < convo.length - 1
-  ) {
-    desired += WINDOW_STEP;
-    ({ head, start } = alignWindowStart(
-      convo,
-      Math.min(desired, convo.length - 1),
-    ));
+  // Walk boundaries from the beginning; each depends only on earlier messages.
+  let start = 0;
+  while (tailChars(start) > triggerChars) {
+    let acc = 0;
+    let next = start;
+    while (next < convo.length - 1 && acc < chunkChars) acc += sizes[next++];
+    next = nextStart(convo, next);
+    if (next >= convo.length - 1 || next <= start) break;
+    start = next;
   }
 
+  // A window that resumes mid tool-loop keeps the request that started it.
+  let head: Msg[] = [];
+  if (start > 0 && convo[start].role !== "user") {
+    for (let i = start - 1; i >= 0; i--) {
+      if (convo[i].role === "user") {
+        head = [convo[i]];
+        break;
+      }
+    }
+  }
   const kept = [...head, ...convo.slice(start)];
   const keptSet = new Set(kept);
   const dropped = convo.filter((m) => !keptSet.has(m));
-  return { messages: [...system, ...kept], saved: total(dropped), dropped };
+  const saved = dropped.reduce((s: number, m: Msg) => s + charCount(m), 0);
+  return { messages: [...system, ...kept], saved, dropped };
 }
 
 // ─── Layer 1b: Background compaction of dropped turns ────────────────────────

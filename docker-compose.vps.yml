@@ -1,5 +1,5 @@
-﻿services:
-  # â”€â”€ 0. Caddy: HTTPS for vynor.lk (API) and admin.vynor.lk (admin portal) â”€â”€â”€â”€
+services:
+  # ── 0. Caddy: HTTPS for vynor.lk (API) and admin.vynor.lk (admin portal) ────
   vynor-caddy:
     image: caddy:2-alpine
     container_name: vynor-caddy
@@ -17,7 +17,7 @@
     networks:
       - vynor-net
 
-  # â”€â”€ 1. VynorAI Cloud Backend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # ── 1. VynorAI Cloud Backend ────────────────────────────────────────────────
   vynor-backend:
     build:
       context: ./backend
@@ -54,7 +54,7 @@
     networks:
       - vynor-net
 
-  # â”€â”€ 2. Dedicated Low-Latency Redis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # ── 2. Dedicated Low-Latency Redis ─────────────────────────────────────────
   vynor-redis:
     image: redis:7-alpine
     container_name: vynor-redis
@@ -65,7 +65,7 @@
     networks:
       - vynor-net
 
-  # â”€â”€ 3. Local SLM: tier router + background summarizer (Qwen 2.5 Coder 1.5B) â”€â”€
+  # ── 3. Local SLM: tier router + background summarizer (Qwen 2.5 Coder 1.5B) ──
   # 8192 ctx / 2 slots = 4096 tokens per slot: one slot for routing, one for
   # conversation summaries (~3k-token transcripts). ~1.2 GB RAM incl. KV cache.
   vynor-slm:
@@ -85,7 +85,7 @@
     networks:
       - vynor-net
 
-  # â”€â”€ 4. Embeddings for the semantic cache (bge-small, ~150 MB RAM) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # ── 4. Embeddings for the semantic cache (bge-small, ~150 MB RAM) ──────────
   vynor-embed:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: vynor-embed

@@ -1,0 +1,50 @@
+{"text": "what does this function return", "label": "L"}
+{"text": "fix the typo in the error message", "label": "L"}
+{"text": "add a delete button to each row", "label": "N"}
+{"text": "write tests for the cart reducer", "label": "N"}
+{"text": "our checkout sometimes charges customers twice, investigate the whole payment flow", "label": "H"}
+{"text": "why am I getting a 401 here", "label": "N"}
+{"text": "explain this regex", "label": "L"}
+{"text": "add sorting by date to the orders table", "label": "N"}
+{"text": "re-architect notifications so email, sms and push share one pipeline with retries and user preferences", "label": "H"}
+{"text": "upgrade express to v5", "label": "N"}
+{"text": "what's the difference between git merge and rebase", "label": "L"}
+{"text": "create a CI job that deploys to the VPS on push to main", "label": "N"}
+{"text": "how do I run only one jest test", "label": "L"}
+{"text": "make the api handle 10x traffic, find the bottlenecks first", "label": "H"}
+{"text": "add an env var for the API base url", "label": "L"}
+{"text": "write a hook that debounces a value", "label": "N"}
+{"text": "the websocket disconnects randomly for some users and we can't reproduce it", "label": "H"}
+{"text": "rename the variable x to totalPrice", "label": "L"}
+{"text": "add pagination to the users query in graphql", "label": "N"}
+{"text": "check this function for SQL injection", "label": "N"}
+{"text": "plan the migration of our auth from sessions to OAuth2 with SSO for enterprise customers", "label": "H"}
+{"text": "ok", "label": "L"}
+{"text": "now do the same for the update endpoint", "label": "N"}
+{"text": "login page eka design karanna tailwind walin", "label": "N"}
+{"text": "me error eka mokadda", "label": "L"}
+{"text": "project eke architecture eka review karala improvements kiyanna", "label": "H"}
+{"text": "SyntaxError: Unexpected token '<' in JSON at position 0", "label": "N"}
+{"text": "write a bash script to back up the database every night", "label": "N"}
+{"text": "add a 404 page", "label": "N"}
+{"text": "is it safe to commit the .env file", "label": "L"}
+{"text": "write a function to validate an email", "label": "N"}
+{"text": "decide between postgres and mongodb for our analytics workload and justify it", "label": "H"}
+{"text": "add a tooltip on hover", "label": "L"}
+{"text": "convert this callback code to async/await", "label": "N"}
+{"text": "implement a trie with autocomplete", "label": "N"}
+{"text": "prove this caching layer can never serve data from another user", "label": "H"}
+{"text": "why does this useEffect loop forever", "label": "N"}
+{"text": "generate a migration for the new comments table with foreign keys", "label": "N"}
+{"text": "what is a closure", "label": "L"}
+{"text": "split the monolith's billing module into its own service with its own database", "label": "H"}
+{"text": "remove console.logs", "label": "L"}
+{"text": "add i18n support with english and sinhala", "label": "N"}
+{"text": "the docker build fails at npm install with EACCES", "label": "N"}
+{"text": "design a feature flag system with gradual rollouts and kill switches", "label": "H"}
+{"text": "thanks, that fixed it", "label": "L"}
+{"text": "write a cron that sends a daily sales report email", "label": "N"}
+{"text": "Flutter app eka offline wada karanna hadanna sync ekka", "label": "H"}
+{"text": "add a confirm dialog before delete", "label": "L"}
+{"text": "optimize this React list with 5000 items", "label": "N"}
+{"text": "investigate why memory usage climbs in the image processing worker over a day", "label": "H"}

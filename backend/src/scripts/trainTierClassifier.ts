@@ -25,6 +25,10 @@ const EPOCHS = 40;
 const L2 = 1e-5;
 const DATA = path.resolve("ml/tier-dataset.jsonl"); // run from backend/
 const OUT = path.resolve("src/services/tierModel.generated.ts");
+// Hand-labeled by Claude: gap-filling training examples, and an independent
+// test set written apart from the DeepSeek-generated data.
+const EXTRA = path.resolve("ml/tier-claude.jsonl");
+const EXTERNAL_TEST = path.resolve("ml/tier-claude-test.jsonl");
 
 type Example = { text: string; label: TierLetter };
 
@@ -112,16 +116,24 @@ function evaluate(pred: TierLetter[], gold: TierLetter[]) {
   return { accuracy, macroF1, falseH, missedH, per, confusion };
 }
 
-async function main() {
-  const all: Example[] = fs
-    .readFileSync(DATA, "utf8")
+function readJsonl(file: string): Example[] {
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, "utf8")
     .split("\n")
     .filter(Boolean)
     .map((l) => JSON.parse(l));
+}
+
+async function main() {
+  const all = readJsonl(DATA);
+  const extra = readJsonl(EXTRA);
+  const external = readJsonl(EXTERNAL_TEST);
   const data = shuffle(all, rng(42));
   const nTrain = Math.floor(data.length * 0.7);
   const nVal = Math.floor(data.length * 0.15);
-  const trainSet = data.slice(0, nTrain);
+  // Hand-labeled examples count twice: few, but they cover the gaps.
+  const trainSet = [...data.slice(0, nTrain), ...extra, ...extra];
   const valSet = data.slice(nTrain, nTrain + nVal);
   const testSet = data.slice(nTrain + nVal);
 
@@ -156,7 +168,8 @@ async function main() {
     testGold,
   );
 
-  // Current production fallback (SLM disabled here) on the same test set.
+  // The rule router alone (not the bundled classifier) on the same test set.
+  process.env.ROUTER_MODE = "rules";
   process.env.LOCAL_SLM_ENABLED = "false";
   const { analyzeIntentWithLocalSlm } = await import(
     "../services/localSlmRouter.js"
@@ -169,6 +182,40 @@ async function main() {
     );
   }
   const rules = evaluate(rulesPred, testGold);
+
+  // Independent set: the new model, the bundled (previous) model, and rules.
+  const extGold = external.map((e) => e.label);
+  const extOurs = evaluate(
+    external.map((e) =>
+      decideTier(tierProbabilities(e.text, model, w), model.hThreshold),
+    ),
+    extGold,
+  );
+  const { TIER_MODEL: previous } = await import(
+    "../services/tierModel.generated.js"
+  );
+  const extPrev = previous.weightsB64
+    ? evaluate(
+        external.map((e) => {
+          const pw = new Float32Array(
+            Uint8Array.from(Buffer.from(previous.weightsB64, "base64")).buffer,
+          );
+          return decideTier(
+            tierProbabilities(e.text, previous, pw),
+            previous.hThreshold,
+          );
+        }),
+        extGold,
+      )
+    : null;
+  const extRulesPred: TierLetter[] = [];
+  for (const e of external) {
+    const d = await analyzeIntentWithLocalSlm(e.text);
+    extRulesPred.push(
+      d.complexity === "HARD" ? "H" : d.complexity === "MEDIUM" ? "N" : "L",
+    );
+  }
+  const extRules = evaluate(extRulesPred, extGold);
 
   const fmt = (m: ReturnType<typeof evaluate>) =>
     `acc ${(m.accuracy * 100).toFixed(1)}% | macroF1 ${(m.macroF1 * 100).toFixed(1)} | H P/R ${(m.per.H.precision * 100).toFixed(0)}/${(m.per.H.recall * 100).toFixed(0)} | false-H ${(m.falseH * 100).toFixed(1)}% | missed-H ${(m.missedH * 100).toFixed(1)}%`;
@@ -185,6 +232,15 @@ async function main() {
     "rules confusion      (rows = truth):",
     JSON.stringify(rules.confusion),
   );
+  if (external.length) {
+    console.log(
+      `-- independent Claude-labeled test set (${external.length}) --`,
+    );
+    console.log(`new model : ${fmt(extOurs)}`);
+    if (extPrev) console.log(`previous  : ${fmt(extPrev)}`);
+    console.log(`rules     : ${fmt(extRules)}`);
+    console.log("new model confusion:", JSON.stringify(extOurs.confusion));
+  }
 
   model.metrics = {
     examples: all.length,
@@ -195,6 +251,13 @@ async function main() {
       missedH: ours.missedH,
     },
     rulesBaseline: { accuracy: rules.accuracy, macroF1: rules.macroF1 },
+    independentTest: external.length
+      ? {
+          examples: external.length,
+          accuracy: extOurs.accuracy,
+          macroF1: extOurs.macroF1,
+        }
+      : undefined,
   };
   fs.writeFileSync(
     OUT,

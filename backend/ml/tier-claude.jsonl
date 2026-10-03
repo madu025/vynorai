@@ -1,0 +1,149 @@
+{"text": "bump react to 19 in package.json", "label": "L"}
+{"text": "npm install fails with ERESOLVE could not resolve dependency tree, fix it", "label": "N"}
+{"text": "what does npm ci do differently from npm install", "label": "L"}
+{"text": "add a prettier config that matches our eslint rules", "label": "N"}
+{"text": "why does git say detached HEAD", "label": "L"}
+{"text": "undo my last commit but keep the changes", "label": "L"}
+{"text": "write a GitHub Actions workflow that runs lint, typecheck and tests on every PR", "label": "N"}
+{"text": "add a .gitignore for a node + python project", "label": "L"}
+{"text": "our monorepo build takes 25 minutes, redesign the pipeline with caching and affected-only builds across all packages", "label": "H"}
+{"text": "set up husky with lint-staged", "label": "N"}
+{"text": "tsconfig paths alias @/ not resolving in jest, fix the config", "label": "N"}
+{"text": "explain what this webpack config does", "label": "L"}
+{"text": "migrate the whole repo from webpack to vite without breaking the legacy entry points", "label": "H"}
+{"text": "add a dockerfile for this express app", "label": "N"}
+{"text": "multi-stage dockerfile ekak hadanna image size eka adu karanna", "label": "N"}
+{"text": "resolve this merge conflict in routes.ts", "label": "N"}
+{"text": "squash these 5 commits", "label": "L"}
+{"text": "add an npm script to run the dev server on port 4000", "label": "L"}
+{"text": "Dependabot opened 40 PRs, plan an upgrade strategy for the major versions with breaking changes across our services", "label": "H"}
+{"text": "write a Makefile with build, test and clean targets", "label": "N"}
+{"text": "is this password hashing secure?", "label": "L"}
+{"text": "add helmet to the express app", "label": "L"}
+{"text": "validate the request body with zod in this endpoint", "label": "N"}
+{"text": "add CSRF protection to the forms", "label": "N"}
+{"text": "store the JWT in an httpOnly cookie instead of localStorage", "label": "N"}
+{"text": "do a full security audit of our auth and payment flows and tell me what an attacker could exploit", "label": "H"}
+{"text": "we got a report that users can see other tenants' invoices, find how that's possible across the API and fix it everywhere", "label": "H"}
+{"text": "escape this user input before rendering", "label": "L"}
+{"text": "add rate limiting on the login route to stop brute force", "label": "N"}
+{"text": "design key rotation for our encryption at rest without downtime", "label": "H"}
+{"text": "what is CORS and why is my request blocked", "label": "L"}
+{"text": "fix the CORS error, allow only our frontend origin", "label": "N"}
+{"text": "parameterize this SQL query", "label": "L"}
+{"text": "review this PR diff for security problems before I merge", "label": "H"}
+{"text": "add an index on orders.user_id", "label": "L"}
+{"text": "this query takes 4 seconds, make it faster", "label": "N"}
+{"text": "our API p95 jumped from 200ms to 2s after yesterday's deploy, find out why", "label": "H"}
+{"text": "memoize this expensive selector", "label": "L"}
+{"text": "the page re-renders 50 times on every keystroke, fix it", "label": "N"}
+{"text": "node process memory grows until it crashes every few hours in production, find the leak", "label": "H"}
+{"text": "use Promise.all instead of awaiting in a loop here", "label": "L"}
+{"text": "add caching with redis to the product list endpoint", "label": "N"}
+{"text": "plan how to scale this service from 1k to 100k concurrent websocket connections", "label": "H"}
+{"text": "lazy load the dashboard route", "label": "L"}
+{"text": "compress the images on upload", "label": "N"}
+{"text": "app eka slow, mokakda wenne kiyala hoyala fix karanna", "label": "H"}
+{"text": "rename this file", "label": "L"}
+{"text": "extract this block into a helper function", "label": "L"}
+{"text": "split this 800 line component into smaller components", "label": "N"}
+{"text": "convert this class component to hooks", "label": "N"}
+{"text": "refactor the services folder to use dependency injection throughout and update every caller", "label": "H"}
+{"text": "move these constants to a config file", "label": "L"}
+{"text": "convert this file from JavaScript to TypeScript", "label": "N"}
+{"text": "convert the entire backend from JavaScript to TypeScript with strict mode", "label": "H"}
+{"text": "remove the dead code in utils", "label": "N"}
+{"text": "replace moment with date-fns in this file", "label": "N"}
+{"text": "replace moment with date-fns across the whole project and keep timezone behaviour identical", "label": "H"}
+{"text": "rename getData to fetchOrders everywhere", "label": "L"}
+{"text": "continue", "label": "L"}
+{"text": "yes do it", "label": "L"}
+{"text": "ok go ahead with option 2", "label": "N"}
+{"text": "looks good, now wire it into the router", "label": "N"}
+{"text": "that didn't work, same error", "label": "N"}
+{"text": "still failing", "label": "N"}
+{"text": "thanks!", "label": "L"}
+{"text": "can you explain what you just changed", "label": "L"}
+{"text": "revert that", "label": "L"}
+{"text": "hari, ehenam eka karanna", "label": "N"}
+{"text": "meka hariyata wada karanne naha", "label": "N"}
+{"text": "mokakda me error eka", "label": "L"}
+{"text": "me function eka explain karanna", "label": "L"}
+{"text": "user registration ekata email verification ekak danna", "label": "N"}
+{"text": "PayHere checkout eka integrate karanna laravel app ekata", "label": "N"}
+{"text": "mulu system ekama microservices walata kadanna plan ekak hadanna", "label": "H"}
+{"text": "me code eke security issues tiyenawada balanna saha fix karanna mulu project ekema", "label": "H"}
+{"text": "button eke color eka wenas karanna", "label": "L"}
+{"text": "dark mode ekak add karanna", "label": "N"}
+{"text": "@src/api/orders.ts add input validation to createOrder", "label": "N"}
+{"text": "@src/components/Header.tsx why is the logo blurry", "label": "L"}
+{"text": "in src/utils/date.ts the formatDate function returns the wrong day for Sri Lanka time, fix it", "label": "N"}
+{"text": "look at src/worker/queue.ts and src/worker/processor.ts, jobs are sometimes processed twice, figure out why", "label": "H"}
+{"text": "TypeError: Cannot read properties of undefined (reading 'map') at TodoList.tsx:42", "label": "N"}
+{"text": "Error: listen EADDRINUSE: address already in use :::3000", "label": "L"}
+{"text": "ModuleNotFoundError: No module named 'requests'", "label": "L"}
+{"text": "Deadlock found when trying to get lock; try restarting transaction - happens under load on the checkout endpoint", "label": "H"}
+{"text": "fix the failing test in auth.test.ts", "label": "N"}
+{"text": "all 30 integration tests started failing after the ORM upgrade, figure out what changed and fix them", "label": "H"}
+{"text": "write a unit test for formatLKR", "label": "N"}
+{"text": "add a snapshot test for the Navbar", "label": "N"}
+{"text": "what's the difference between a mock and a stub", "label": "L"}
+{"text": "design our testing strategy for the payments service, unit vs contract vs e2e, and what to mock", "label": "H"}
+{"text": "write a function that returns the nth fibonacci number", "label": "N"}
+{"text": "implement Dijkstra for this graph", "label": "N"}
+{"text": "find the optimal way to batch these delivery routes, it's basically a vehicle routing problem with time windows", "label": "H"}
+{"text": "is this O(n^2)?", "label": "L"}
+{"text": "implement an interval tree that supports insert, delete and overlap queries in O(log n)", "label": "H"}
+{"text": "reverse a linked list", "label": "N"}
+{"text": "center this div", "label": "L"}
+{"text": "make the table responsive on mobile", "label": "N"}
+{"text": "build a responsive pricing section with three tiers in tailwind", "label": "N"}
+{"text": "the layout breaks only in Safari when the sidebar is collapsed", "label": "N"}
+{"text": "create a design system with tokens, theming and dark mode used consistently across all our apps", "label": "H"}
+{"text": "add a migration to add phone_number to users", "label": "N"}
+{"text": "write a query for the top 10 customers by revenue this month", "label": "N"}
+{"text": "what's the difference between inner join and left join", "label": "L"}
+{"text": "redesign the schema so we can support multiple currencies and historical exchange rates without breaking reports", "label": "H"}
+{"text": "we need zero-downtime migration of the 200GB events table to a partitioned layout", "label": "H"}
+{"text": "add a websocket endpoint for live notifications", "label": "N"}
+{"text": "how should we structure a new SaaS backend: monolith or services, which database, how to handle tenants", "label": "H"}
+{"text": "write a cron job that deletes expired sessions", "label": "N"}
+{"text": "should I use useMemo here", "label": "L"}
+{"text": "add a loading spinner while fetching", "label": "L"}
+{"text": "create a login form with email and password validation", "label": "N"}
+{"text": "build the full auth system: signup, login, password reset, email verification, sessions and role-based access", "label": "H"}
+{"text": "add a 'remember me' checkbox", "label": "N"}
+{"text": "generate typescript types from this JSON", "label": "L"}
+{"text": "write an API client for these 6 endpoints with retries and typed responses", "label": "N"}
+{"text": "explain the difference between let and const", "label": "L"}
+{"text": "write a README for this project", "label": "N"}
+{"text": "add JSDoc comments to this file", "label": "N"}
+{"text": "document the architecture of the whole system with diagrams of how the services talk to each other", "label": "H"}
+{"text": "Flutter app eke login screen ekak hadanna firebase auth ekka", "label": "N"}
+{"text": "the Flutter app janks when scrolling a long list with images", "label": "N"}
+{"text": "offline-first sync for the mobile app with conflict resolution when two devices edit the same record", "label": "H"}
+{"text": "add push notifications to the react native app", "label": "N"}
+{"text": "what's the best state management for flutter", "label": "L"}
+{"text": "write a python script to rename all files in a folder by date", "label": "N"}
+{"text": "pandas: group by month and sum amount", "label": "L"}
+{"text": "our ETL job takes 6 hours, redesign it to run incrementally and in parallel safely", "label": "H"}
+{"text": "add a FastAPI endpoint to upload a CSV and return stats", "label": "N"}
+{"text": "why is my python list comprehension slow", "label": "L"}
+{"text": "hi there", "label": "L"}
+{"text": "what can you do?", "label": "L"}
+{"text": "which model are you", "label": "L"}
+{"text": "help", "label": "L"}
+{"text": "write a Go HTTP server with graceful shutdown", "label": "N"}
+{"text": "this Rust code doesn't compile: borrowed value does not live long enough", "label": "N"}
+{"text": "design a lock-free queue in Rust for our ingestion pipeline", "label": "H"}
+{"text": "why does this goroutine never exit", "label": "N"}
+{"text": "add structured logging with request ids across all handlers", "label": "N"}
+{"text": "set up OpenTelemetry tracing across our 5 services and make traces connect end to end", "label": "H"}
+{"text": "write a Spring Boot REST controller for products", "label": "N"}
+{"text": "add a Laravel policy so only owners can edit posts", "label": "N"}
+{"text": "WordPress site got hacked, figure out how they got in and harden it", "label": "H"}
+{"text": "add a custom post type for events", "label": "N"}
+{"text": "validate Sri Lankan NIC numbers, both old and new format", "label": "N"}
+{"text": "format this number as LKR", "label": "L"}
+{"text": "PayHere IPN signature verify karanne kohomada", "label": "L"}
+{"text": "handle PayHere recurring payments, retries, and webhook idempotency in our billing system", "label": "H"}

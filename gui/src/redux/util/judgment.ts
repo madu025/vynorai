@@ -15,6 +15,9 @@ export type JudgmentLevel = "fast" | "careful" | "max";
 
 export const DEFAULT_JUDGMENT_LEVEL: JudgmentLevel = "careful";
 
+/** Above this share of monthly credits the extra review round is skipped. */
+export const JUDGMENT_CREDIT_CEILING = 0.8;
+
 export const PREMORTEM_MARKER = "[pre-mortem]";
 
 export const PREMORTEM_GUIDANCE = `${PREMORTEM_MARKER} Before you finish, review your own change the way a senior engineer would:

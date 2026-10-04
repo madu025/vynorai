@@ -64,8 +64,16 @@ import {
 } from "../util/verificationGate";
 import { turnEdits } from "../util/sideReview";
 import { runSideReview } from "./sideReview";
-import { PREMORTEM_GUIDANCE, pendingPremortem } from "../util/judgment";
-import { fetchCreditsUsed, finalizeTurnCredits } from "./turnCredits";
+import {
+  JUDGMENT_CREDIT_CEILING,
+  PREMORTEM_GUIDANCE,
+  pendingPremortem,
+} from "../util/judgment";
+import {
+  fetchCreditShare,
+  fetchCreditsUsed,
+  finalizeTurnCredits,
+} from "./turnCredits";
 import { CREDIT_CAP_GUIDANCE, creditCapReached } from "../util/turnCredits";
 import {
   alreadyRecovered,
@@ -678,10 +686,14 @@ export const streamNormalInput = createAsyncThunk<
       }
       // Ask for the pre-mortem in the same round as the check, so careful
       // judgment costs no extra round on top of verification.
-      const premortem = pendingPremortem(
-        getState().session.history,
-        getState().ui.judgmentLevel,
-      );
+      // Never spend extra review on an account near its monthly limit.
+      const premortem =
+        pendingPremortem(
+          getState().session.history,
+          getState().ui.judgmentLevel,
+        ) && ((await fetchCreditShare(extra)) ?? 0) < JUDGMENT_CREDIT_CEILING
+          ? true
+          : undefined;
       const gate = verificationGatePrompt(
         pendingVerification.files,
         candidates,
@@ -708,7 +720,10 @@ ${PREMORTEM_GUIDANCE}`
             getState().ui.judgmentLevel,
           )
         : undefined;
-    if (pendingReview) {
+    if (
+      pendingReview &&
+      ((await fetchCreditShare(extra)) ?? 0) < JUDGMENT_CREDIT_CEILING
+    ) {
       if (streamAborter.signal.aborted || !getState().session.isStreaming) {
         return;
       }

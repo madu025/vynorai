@@ -18,6 +18,19 @@ export async function fetchCreditsUsed(
   }
 }
 
+/** Share of the monthly credits already used (0-1), or null if unknown. */
+export async function fetchCreditShare(
+  extra: ThunkApiType["extra"],
+): Promise<number | null> {
+  try {
+    const res = await extra.ideMessenger.request("vynor/usage", undefined);
+    if (res.status !== "success" || !res.content?.limit) return null;
+    return res.content.used / res.content.limit;
+  } catch {
+    return null;
+  }
+}
+
 /** After a prompt ends, record what it cost under its last reply. */
 export const finalizeTurnCredits = createAsyncThunk<
   void,

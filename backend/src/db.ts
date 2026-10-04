@@ -649,6 +649,23 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "016_routing_signals",
+    description:
+      "Router tier, auto flag, keyed prompt hash and tool follow-up flag per request",
+    up: async () => {
+      await addColumnIfNotExists("request_economics", "route_tier VARCHAR(16)");
+      await addColumnIfNotExists(
+        "request_economics",
+        "route_auto INTEGER NOT NULL DEFAULT 0",
+      );
+      await addColumnIfNotExists("request_economics", "prompt_fp VARCHAR(32)");
+      await addColumnIfNotExists(
+        "request_economics",
+        "tool_followup INTEGER NOT NULL DEFAULT 0",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

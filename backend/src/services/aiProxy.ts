@@ -64,6 +64,7 @@ import {
 } from "./scaffoldRegistry.js";
 import { recordRequestEconomics } from "./costLedger.js";
 import type { QuotaContext } from "./monthlyQuota.js";
+import { promptFingerprint } from "./routingSignals.js";
 import {
   analyzeIntentWithLocalSlm,
   isMutationRequest,
@@ -1021,6 +1022,10 @@ export async function handleChatCompletions(
         outcome: dispatch.success ? "success" : "failed",
         creditsCharged,
         offPeak: offPeakFactor < 1,
+        routeTier: tier,
+        routeAuto: route.auto,
+        promptFp: promptFingerprint(user.id, cleanPromptForGating),
+        toolFollowUp: isToolFollowUp,
       });
     } catch (err) {
       console.error("[Merkle Audit] Failed to record audit log:", err);

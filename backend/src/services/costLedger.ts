@@ -92,6 +92,11 @@ export interface EconomicsEvent {
   /** Credits taken from the user's quota for this request. */
   creditsCharged?: number;
   offPeak?: boolean;
+  /** Router decision for this request (see routingSignals.ts). */
+  routeTier?: string | null;
+  routeAuto?: boolean;
+  promptFp?: string | null;
+  toolFollowUp?: boolean;
 }
 
 /**
@@ -131,8 +136,9 @@ export async function recordRequestEconomics(
       resolved_model, provider, input_tokens, output_tokens, provider_cost_usd,
       cost_source, allocated_revenue_usd, gross_margin_usd, cache_status,
       optimization_mode, template_id, estimated_tokens_saved, latency_ms, outcome,
-      cached_input_tokens, estimated_cost_usd, credits_charged, off_peak
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      cached_input_tokens, estimated_cost_usd, credits_charged, off_peak,
+      route_tier, route_auto, prompt_fp, tool_followup
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       uuidv4(),
       event.requestId ?? uuidv4(),
@@ -158,6 +164,10 @@ export async function recordRequestEconomics(
       estimatedCost,
       event.creditsCharged ?? null,
       event.offPeak ? 1 : 0,
+      event.routeTier ?? null,
+      event.routeAuto ? 1 : 0,
+      event.promptFp ?? null,
+      event.toolFollowUp ? 1 : 0,
     ],
   );
 }

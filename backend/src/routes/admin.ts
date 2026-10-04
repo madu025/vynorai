@@ -1,3 +1,4 @@
+import { RoutingRow, summarizeRouting } from "../services/routingSignals.js";
 import {
   AUTH_RATE_LIMIT_PER_MINUTE,
   PROXY_RATE_LIMIT_PER_MINUTE,
@@ -764,6 +765,32 @@ function providerParam(req: Request, res: Response): ManagedProvider | null {
  * Unit economics: real (or list-price) upstream cost vs the plan revenue the
  * charged credits represent, overall, per day, and per user (worst first).
  */
+/**
+ * GET /admin/routing
+ * How well the tier router chose, estimated from per-prompt round counts.
+ */
+adminRouter.get(
+  "/routing",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+    const since = new Date(Date.now() - days * 86400_000)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
+    const rows = await dbAll<RoutingRow>(
+      `SELECT user_id, prompt_fp, route_tier, tool_followup, output_tokens,
+              credits_charged, created_at
+       FROM request_economics
+       WHERE created_at >= ? AND route_auto = 1 AND prompt_fp IS NOT NULL
+       ORDER BY created_at
+       LIMIT 200000`,
+      [since],
+    );
+    res.json({ days, ...summarizeRouting(rows) });
+  },
+);
+
 adminRouter.get(
   "/economics",
   requireAdmin,

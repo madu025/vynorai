@@ -256,6 +256,16 @@ ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS credits_charged BIGINT;
 ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS off_peak SMALLINT NOT NULL DEFAULT 0;
 `,
   },
+  {
+    version: "pg_003_routing_signals",
+    sql: `
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS route_tier VARCHAR(16);
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS route_auto SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS prompt_fp VARCHAR(32);
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS tool_followup SMALLINT NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_request_economics_prompt_fp ON request_economics (user_id, prompt_fp) WHERE prompt_fp IS NOT NULL;
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

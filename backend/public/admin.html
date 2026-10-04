@@ -89,8 +89,6 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
 .loading{color:var(--muted);text-align:center;padding:3rem;font-size:.9rem}
 .ctx-bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:.4rem}
 .ctx-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent3));transition:width .5s ease}
-.rag-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:.8rem}
-.rag-card code{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--accent2)}
 </style>
 </head>
 <body>
@@ -197,9 +195,6 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     </div>
     <div class="nav-item" onclick="showPage('models')" id="nav-models">
       <span class="nav-icon">🤖</span>Model Registry
-    </div>
-    <div class="nav-item" onclick="showPage('rag')" id="nav-rag">
-      <span class="nav-icon">🔍</span>Smart RAG
     </div>
     <div class="nav-item" onclick="showPage('system')" id="nav-system">
       <span class="nav-icon">⚙️</span>System
@@ -486,57 +481,6 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       </div>
     </div>
 
-    <!-- RAG -->
-    <div class="page" id="page-rag">
-      <h1>Smart RAG Engine</h1>
-      <p class="subtitle">TF-IDF based code retrieval — inject only relevant chunks per query</p>
-      <div class="cards">
-        <div class="stat-card">
-          <div class="stat-label">Strategy</div>
-          <div class="stat-value purple" style="font-size:1rem">TF-IDF + Exact Bonus</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Max Chunks (Ultra)</div>
-          <div class="stat-value green">8</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Chunk Size</div>
-          <div class="stat-value amber">80 lines</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Token Reduction</div>
-          <div class="stat-value green">~85-97%</div>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-header"><div class="panel-title">🔬 RAG Context Limits per Plan</div></div>
-        <div class="panel-body">
-          <table class="model-table">
-            <thead><tr><th>Plan</th><th>Context Window</th><th>Top-K Chunks</th><th>Msg Cap</th></tr></thead>
-            <tbody>
-              <tr><td><span class="badge badge-free">Free</span></td><td>32k tokens</td><td>3 chunks</td><td>8k/msg</td></tr>
-              <tr><td><span class="badge badge-starter">Starter</span></td><td>32k tokens</td><td>5 chunks</td><td>8k/msg</td></tr>
-              <tr><td><span class="badge badge-pro">Pro</span></td><td>128k tokens</td><td>6 chunks</td><td>32k/msg</td></tr>
-              <tr><td><span class="badge badge-ultra">Ultra</span></td><td>256k tokens</td><td>8 chunks</td><td>64k/msg</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-header"><div class="panel-title">🧪 RAG Pipeline</div></div>
-        <div class="panel-body">
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;text-align:center;font-size:.8rem">
-            <div class="rag-card"><div style="font-size:1.5rem">📄</div><div style="margin-top:.4rem;font-weight:600">Extract Files</div><code>regex code blocks</code></div>
-            <div class="rag-card"><div style="font-size:1.5rem">✂️</div><div style="margin-top:.4rem;font-weight:600">Chunk</div><code>fn/class/80-line</code></div>
-            <div class="rag-card"><div style="font-size:1.5rem">📊</div><div style="margin-top:.4rem;font-weight:600">TF-IDF Score</div><code>+exact bonus</code></div>
-            <div class="rag-card"><div style="font-size:1.5rem">🏆</div><div style="margin-top:.4rem;font-weight:600">Top-K</div><code>plan-based K</code></div>
-            <div class="rag-card"><div style="font-size:1.5rem">💉</div><div style="margin-top:.4rem;font-weight:600">Inject</div><code>system msg</code></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- SYSTEM -->
     <div class="page" id="page-system">
       <h1>System</h1>
       <p class="subtitle">Cache management and system controls</p>

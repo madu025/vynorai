@@ -60,6 +60,7 @@ const saveSubsetFilters = [
     "ruleSettings",
     "reasoningSettings",
     "historyAccount",
+    "sideReviewEnabled",
   ]),
   createFilter("indexing", []),
   createFilter("tabs", ["tabs"]),

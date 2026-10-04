@@ -31,6 +31,8 @@ type UIState = {
   ttsActive: boolean;
   /** Account whose chats the persisted tabs/session belong to (HistoryManager.accountKey). */
   historyAccount?: string | null;
+  /** "You should know" second look after agent edits (a few credits per task). */
+  sideReviewEnabled?: boolean;
 };
 
 export const DEFAULT_TOOL_SETTING: ToolPolicy = "allowedWithPermission";
@@ -59,6 +61,9 @@ export const uiSlice = createSlice({
   reducers: {
     setHistoryAccount: (state, action: PayloadAction<string | null>) => {
       state.historyAccount = action.payload;
+    },
+    setSideReviewEnabled: (state, action: PayloadAction<boolean>) => {
+      state.sideReviewEnabled = action.payload;
     },
     setOnboardingCard: (
       state,
@@ -159,6 +164,7 @@ export const uiSlice = createSlice({
 
 export const {
   setHistoryAccount,
+  setSideReviewEnabled,
   setOnboardingCard,
   setDialogMessage,
   setShowDialog,

@@ -7,6 +7,7 @@ import { Card, Toggle, useFontSize } from "../../../components/ui";
 import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import { updateConfig } from "../../../redux/slices/configSlice";
+import { setSideReviewEnabled } from "../../../redux/slices/uiSlice";
 import { setLocalStorage } from "../../../util/localStorage";
 import { ConfigHeader } from "../components/ConfigHeader";
 import { UserSetting } from "../components/UserSetting";
@@ -84,6 +85,9 @@ export function UserSettingsSection() {
   };
 
   const disableTelemetryToggle = false;
+  const sideReviewEnabled = useAppSelector(
+    (state) => state.ui.sideReviewEnabled !== false,
+  );
 
   return (
     <div>
@@ -101,6 +105,13 @@ export function UserSettingsSection() {
                   description="Displays tabs above the chat as an alternative way to organize and access your sessions."
                   value={showSessionTabs}
                   onChange={(value) => handleUpdate({ showSessionTabs: value })}
+                />
+                <UserSetting
+                  type="toggle"
+                  title="You Should Know (second look)"
+                  description="After an agent turn that changes files, a quick review of the diff flags secrets, leftover debug code, likely bugs or missing tests. Uses a few credits per task."
+                  value={sideReviewEnabled}
+                  onChange={(value) => dispatch(setSideReviewEnabled(value))}
                 />
                 <UserSetting
                   type="toggle"

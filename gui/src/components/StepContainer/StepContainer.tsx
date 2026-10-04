@@ -12,6 +12,7 @@ import ThinkingBlockPeek from "../mainInput/belowMainInput/ThinkingBlockPeek";
 import StyledMarkdownPreview from "../StyledMarkdownPreview";
 import ConversationSummary from "./ConversationSummary";
 import ResponseActions from "./ResponseActions";
+import SideReviewCard from "./SideReviewCard";
 import { estimateTokens, turnUsedThinking } from "./turnStatus";
 
 const VYNORAI_AUTO_MODEL = "vynor-auto";
@@ -53,6 +54,8 @@ export default function StepContainer(props: StepContainerProps) {
     turnUsedThinking(state.session.history, props.index),
   );
   const usedTitle = props.item.promptLogs?.at(-1)?.modelTitle;
+  // History items carry a message id at runtime (ChatHistoryItemWithMessageId).
+  const messageId = (props.item.message as { id?: string }).id;
   const usedModel = usedTitle
     ? chatModels.find((m) => m.title === usedTitle)
     : props.isLast
@@ -161,6 +164,10 @@ export default function StepContainer(props: StepContainerProps) {
             isLast={props.isLast}
           />
         </div>
+      )}
+
+      {showResponseActions && messageId && (
+        <SideReviewCard messageId={messageId} />
       )}
 
       {/* Show compaction indicator for the latest summary */}

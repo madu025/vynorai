@@ -60,6 +60,8 @@ import {
   unverifiedEdits,
   verificationGatePrompt,
 } from "../util/verificationGate";
+import { turnEdits } from "../util/sideReview";
+import { runSideReview } from "./sideReview";
 import {
   alreadyRecovered,
   isTransientStreamError,
@@ -658,6 +660,16 @@ export const streamNormalInput = createAsyncThunk<
       return;
     }
     if (originalToolCalls.length === 0) {
+      // "You should know": a background second look at what this turn changed.
+      const finalReply = getState().session.history.at(-1);
+      if (
+        getState().session.mode === "agent" &&
+        getState().ui.sideReviewEnabled !== false &&
+        finalReply?.message.role === "assistant" &&
+        turnEdits(getState().session.history).files.length > 0
+      ) {
+        void dispatch(runSideReview({ messageId: finalReply.message.id }));
+      }
       if (taskId) {
         try {
           await extra.ideMessenger.request("agent/plan/completeStep", {

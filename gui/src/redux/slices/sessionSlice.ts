@@ -270,7 +270,14 @@ type SessionState = {
   contextPercentage?: number;
   inlineErrorMessage?: InlineErrorMessageType;
   compactionLoading: Record<number, boolean>; // Track compaction loading by message index
+  /** "You should know" notes, keyed by the assistant message they follow. */
+  sideReviews?: Record<string, SideReviewNote>;
 };
+
+export type SideReviewNote =
+  | { status: "running" }
+  | { status: "done"; text: string | null }
+  | { status: "dismissed" };
 
 export const INITIAL_SESSION_STATE: SessionState = {
   isSessionMetadataLoading: false,
@@ -295,6 +302,7 @@ export const INITIAL_SESSION_STATE: SessionState = {
   lastSessionId: undefined,
   newestToolbarPreviewForInput: {},
   compactionLoading: {},
+  sideReviews: {},
 };
 
 export const sessionSlice = createSlice({
@@ -1084,6 +1092,13 @@ export const sessionSlice = createSlice({
       state.activeTaskState = action.payload;
     },
     /** Agent-loop prompt (verification gate) plus the response placeholder. */
+    setSideReview: (
+      state,
+      action: PayloadAction<{ messageId: string; note: SideReviewNote }>,
+    ) => {
+      state.sideReviews = state.sideReviews ?? {};
+      state.sideReviews[action.payload.messageId] = action.payload.note;
+    },
     appendAutoPrompt: (state, action: PayloadAction<string>) => {
       state.history.push(
         {
@@ -1248,6 +1263,7 @@ export const {
   setActiveTaskState,
   setToolBudgetPausedAfter,
   appendAutoPrompt,
+  setSideReview,
   setProjectMemories,
   setSubagentRuns,
   updateSubagentRun,

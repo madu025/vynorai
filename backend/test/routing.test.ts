@@ -351,3 +351,23 @@ test("cosine of unit vectors", () => {
   assert.equal(cosine(a, a), 1);
   assert.equal(cosine(a, b), 0);
 });
+
+test("legacy DeepSeek ids served by Flash are entitled like Flash (old autocomplete configs)", async () => {
+  const { canPlanUseModel } = await import("../src/services/modelRegistry.ts");
+  for (const id of [
+    "deepseek/deepseek-coder-v2",
+    "deepseek-coder",
+    "deepseek-chat",
+    "deepseek/deepseek-chat-v3-0324",
+    "deepseek-v4-flash",
+  ]) {
+    assert.equal(await canPlanUseModel("free", id), true, id);
+  }
+  // The legacy rule never unlocks Pro.
+  assert.equal(
+    /^(deepseek\/)?deepseek-(coder(-v2)?|chat(-v3[-\w]*)?|v3|v4-flash)$/i.test(
+      "deepseek/deepseek-v4-pro",
+    ),
+    false,
+  );
+});

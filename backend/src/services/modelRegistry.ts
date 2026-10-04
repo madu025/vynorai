@@ -113,6 +113,10 @@ export async function getDefaultAutocompleteModel(): Promise<string> {
 }
 
 /** Check if plan can access model */
+/** DeepSeek ids the direct API now serves with V4.1 Flash (never V4 Pro). */
+const LEGACY_FLASH_IDS =
+  /^(deepseek\/)?deepseek-(coder(-v2)?|chat(-v3[-\w]*)?|v3|v4-flash)$/i;
+
 export async function canPlanUseModel(
   planId: string,
   modelAlias: string,
@@ -126,6 +130,15 @@ export async function canPlanUseModel(
   if (plan.allowedModels.includes(modelAlias)) return true;
   const canonical = resolveModelId(modelAlias);
   if (plan.allowedModels.includes(canonical)) return true;
+  // Older DeepSeek ids (Coder V2, V3, deepseek-chat, V4 Flash) are all served
+  // by V4.1 Flash on the direct API, so they are entitled exactly like it.
+  // Older extension configs still send them (e.g. the autocomplete model).
+  if (
+    LEGACY_FLASH_IDS.test(modelAlias) &&
+    (plan.allowedModels.includes("deepseek/deepseek-flash") ||
+      plan.allowedModels.includes("deepseek-flash"))
+  )
+    return true;
 
   const model =
     (await resolveModel(modelAlias)) || (await resolveModel(canonical));

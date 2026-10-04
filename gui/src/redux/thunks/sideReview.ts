@@ -3,6 +3,7 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import { selectSelectedChatModel } from "../slices/configSlice";
 import { setSideReview } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
+import { reviewerModel } from "../util/judgment";
 import {
   diffForFiles,
   parseSideReview,
@@ -23,8 +24,13 @@ export const runSideReview = createAsyncThunk<
   async ({ messageId }, { dispatch, extra, getState }) => {
     const state = getState();
     if (state.ui.sideReviewEnabled === false) return;
-    const model = selectSelectedChatModel(state);
-    if (!model) return;
+    const selected = selectSelectedChatModel(state);
+    if (!selected) return;
+    const model = reviewerModel(
+      selected,
+      state.config.config?.modelsByRole?.chat ?? [],
+      state.ui.judgmentLevel,
+    );
     const { files, request } = turnEdits(state.session.history);
     if (files.length === 0) return;
 

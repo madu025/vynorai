@@ -1,3 +1,4 @@
+import type { JudgmentLevel } from "../util/judgment";
 import { ToolPolicy } from "@continuedev/terminal-security";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { RuleWithSource, Tool } from "core";
@@ -35,6 +36,8 @@ type UIState = {
   sideReviewEnabled?: boolean;
   /** Stop a single prompt once it has used this many credits (0 or unset: off). */
   taskCreditCap?: number;
+  /** How much review process wraps agent turns (see util/judgment). */
+  judgmentLevel?: JudgmentLevel;
 };
 
 export const DEFAULT_TOOL_SETTING: ToolPolicy = "allowedWithPermission";
@@ -69,6 +72,9 @@ export const uiSlice = createSlice({
     },
     setTaskCreditCap: (state, action: PayloadAction<number>) => {
       state.taskCreditCap = action.payload;
+    },
+    setJudgmentLevel: (state, action: PayloadAction<JudgmentLevel>) => {
+      state.judgmentLevel = action.payload;
     },
     setOnboardingCard: (
       state,
@@ -171,6 +177,7 @@ export const {
   setHistoryAccount,
   setSideReviewEnabled,
   setTaskCreditCap,
+  setJudgmentLevel,
   setOnboardingCard,
   setDialogMessage,
   setShowDialog,

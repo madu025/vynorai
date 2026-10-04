@@ -63,6 +63,16 @@ const TOKEN_ECONOMY_INSTRUCTIONS = `<efficiency>
 - Run independent read-only lookups together in one turn when you can.
 </efficiency>`;
 
+// Process a frontier model follows on its own, spelled out so a cheaper model
+// follows it too. Constant, so it stays in the cached prefix.
+const JUDGMENT_INSTRUCTIONS = `<judgment>
+- Before changing a function, type, config value, route or schema, find its other uses and make sure they keep working.
+- When a check fails, find out whether your change caused it (for example, compare against the code without your change) before fixing it or blaming the environment.
+- Never claim something works unless a check you ran shows it. Say plainly what you did not verify or could not do.
+- If you notice a separate bug or risk while working, mention it at the end under "Noticed". Do not silently fix things that were not asked for.
+- When a request is ambiguous and the choice matters, state the assumption you made.
+</judgment>`;
+
 // ─── VynorAI Agent Mode (FULL AUTONOMOUS) ────────────────────────────────────
 export const DEFAULT_AGENT_SYSTEM_MESSAGE = `\
 ${VYNORAI_XML_SYSTEM_PROMPT}
@@ -74,7 +84,9 @@ Only output codeblocks for suggestion and demonstration purposes.
 For implementing changes, ALWAYS use the edit tools (multi_edit, create_new_file).
 </formatting>
 
-${TOKEN_ECONOMY_INSTRUCTIONS}`;
+${TOKEN_ECONOMY_INSTRUCTIONS}
+
+${JUDGMENT_INSTRUCTIONS}`;
 
 // ─── VynorAI Chat Mode ────────────────────────────────────────────────────────
 export const DEFAULT_CHAT_SYSTEM_MESSAGE = `\

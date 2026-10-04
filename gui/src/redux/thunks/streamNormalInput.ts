@@ -64,6 +64,7 @@ import {
 } from "../util/verificationGate";
 import { turnEdits } from "../util/sideReview";
 import { runSideReview } from "./sideReview";
+import { PREMORTEM_GUIDANCE, pendingPremortem } from "../util/judgment";
 import { fetchCreditsUsed, finalizeTurnCredits } from "./turnCredits";
 import { CREDIT_CAP_GUIDANCE, creditCapReached } from "../util/turnCredits";
 import {
@@ -675,11 +676,43 @@ export const streamNormalInput = createAsyncThunk<
       if (streamAborter.signal.aborted || !getState().session.isStreaming) {
         return;
       }
+      // Ask for the pre-mortem in the same round as the check, so careful
+      // judgment costs no extra round on top of verification.
+      const premortem = pendingPremortem(
+        getState().session.history,
+        getState().ui.judgmentLevel,
+      );
+      const gate = verificationGatePrompt(
+        pendingVerification.files,
+        candidates,
+      );
       dispatch(
         appendAutoPrompt(
-          verificationGatePrompt(pendingVerification.files, candidates),
+          premortem
+            ? `${gate}
+
+${PREMORTEM_GUIDANCE}`
+            : gate,
         ),
       );
+      unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
+      return;
+    }
+    // Already verified: still review impact and risks once before finishing.
+    const pendingReview =
+      originalToolCalls.length === 0 &&
+      state.session.mode === "agent" &&
+      depth + 1 < roundBudget
+        ? pendingPremortem(
+            getState().session.history,
+            getState().ui.judgmentLevel,
+          )
+        : undefined;
+    if (pendingReview) {
+      if (streamAborter.signal.aborted || !getState().session.isStreaming) {
+        return;
+      }
+      dispatch(appendAutoPrompt(PREMORTEM_GUIDANCE));
       unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
       return;
     }

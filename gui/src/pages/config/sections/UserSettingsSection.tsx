@@ -8,9 +8,14 @@ import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import { updateConfig } from "../../../redux/slices/configSlice";
 import {
+  setJudgmentLevel,
   setSideReviewEnabled,
   setTaskCreditCap,
 } from "../../../redux/slices/uiSlice";
+import {
+  DEFAULT_JUDGMENT_LEVEL,
+  JudgmentLevel,
+} from "../../../redux/util/judgment";
 import {
   formatCredits,
   TASK_CREDIT_CAP_OPTIONS,
@@ -93,6 +98,9 @@ export function UserSettingsSection() {
 
   const disableTelemetryToggle = false;
   const taskCreditCap = useAppSelector((state) => state.ui.taskCreditCap ?? 0);
+  const judgmentLevel = useAppSelector(
+    (state) => state.ui.judgmentLevel ?? DEFAULT_JUDGMENT_LEVEL,
+  );
   const sideReviewEnabled = useAppSelector(
     (state) => state.ui.sideReviewEnabled !== false,
   );
@@ -125,6 +133,20 @@ export function UserSettingsSection() {
                   }))}
                   onChange={(value) =>
                     dispatch(setTaskCreditCap(Number(value)))
+                  }
+                />
+                <UserSetting
+                  type="select"
+                  title="Agent Judgment"
+                  description="How carefully the agent reviews its own changes before finishing. Careful and Max check other uses of what changed, think through what could break, and end with an honest report of what was and was not verified."
+                  value={judgmentLevel}
+                  options={[
+                    { value: "fast", label: "Fast (no extra review)" },
+                    { value: "careful", label: "Careful (multi-file changes)" },
+                    { value: "max", label: "Max (every change, Pro reviewer)" },
+                  ]}
+                  onChange={(value) =>
+                    dispatch(setJudgmentLevel(value as JudgmentLevel))
                   }
                 />
                 <UserSetting

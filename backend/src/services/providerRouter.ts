@@ -425,12 +425,39 @@ async function executeWithEndpoint(
     : `${endpoint.baseUrl}/chat/completions`;
 
   const t0 = Date.now();
-  const response = await fetch(fetchUrl, {
-    method: "POST",
-    headers: endpoint.headers,
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(120_000),
-  });
+  // Idle timeout (not a total one: long V4 Pro answers stream past 120s),
+  // and stop the upstream call when the user stops or disconnects so they
+  // are not charged for output nobody reads.
+  const controller = new AbortController();
+  let idle: NodeJS.Timeout | undefined;
+  const touch = () => {
+    if (idle) clearTimeout(idle);
+    idle = setTimeout(
+      () => controller.abort(new Error("upstream idle timeout")),
+      UPSTREAM_IDLE_MS,
+    );
+  };
+  const onClientClose = () => {
+    if (!res.writableEnded) controller.abort(new Error("client disconnected"));
+  };
+  res.on("close", onClientClose);
+  const cleanup = () => {
+    if (idle) clearTimeout(idle);
+    res.off("close", onClientClose);
+  };
+  touch();
+  let response: globalThis.Response;
+  try {
+    response = await fetch(fetchUrl, {
+      method: "POST",
+      headers: endpoint.headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -454,76 +481,100 @@ async function executeWithEndpoint(
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let sseBuffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        sseBuffer += text;
-        const completeLines = sseBuffer.split(/\r?\n/);
-        sseBuffer = completeLines.pop() ?? "";
-        if (endpoint.isAnthropic) {
-          for (const line of completeLines) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const evt = JSON.parse(line.slice(6));
-              if (evt.type === "content_block_delta" && evt.delta?.text) {
-                const chunk = {
-                  id: `chatcmpl-${uuidv4()}`,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model: resolvedModel,
-                  choices: [
-                    {
-                      index: 0,
-                      delta: { content: evt.delta.text },
-                      finish_reason: null,
-                    },
-                  ],
-                };
-                const out = pii?.active ? pii.restoreChunk(chunk) : chunk;
-                collected.push(out);
-                onChunk?.(out);
-                res.write(`data: ${JSON.stringify(out)}\n\n`);
-              } else if (evt.type === "message_stop") {
-                res.write("data: [DONE]\n\n");
-              }
-            } catch {}
-          }
-        } else if (pii?.active) {
-          // Personal data was masked: rewrite each event so the user gets
-          // the real values back (placeholders split across events are held).
-          for (const line of completeLines) {
-            if (!line.startsWith("data: ")) continue;
-            if (line.includes("[DONE]")) {
-              res.write("data: [DONE]\n\n");
-              continue;
-            }
-            try {
-              const c = pii.restoreChunk(JSON.parse(line.slice(6)));
-              collected.push(c);
-              onChunk?.(c);
-              res.write(`data: ${JSON.stringify(c)}\n\n`);
-            } catch {}
-          }
-        } else {
-          // OpenRouter / OpenAI / Groq native SSE passthrough
-          res.write(value);
-          for (const line of completeLines) {
-            if (line.startsWith("data: ") && !line.includes("[DONE]")) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          touch();
+          const text = decoder.decode(value, { stream: true });
+          sseBuffer += text;
+          const completeLines = sseBuffer.split(/\r?\n/);
+          sseBuffer = completeLines.pop() ?? "";
+          if (endpoint.isAnthropic) {
+            for (const line of completeLines) {
+              if (!line.startsWith("data: ")) continue;
               try {
-                const c = JSON.parse(line.slice(6));
+                const evt = JSON.parse(line.slice(6));
+                if (evt.type === "content_block_delta" && evt.delta?.text) {
+                  const chunk = {
+                    id: `chatcmpl-${uuidv4()}`,
+                    object: "chat.completion.chunk",
+                    created: Math.floor(Date.now() / 1000),
+                    model: resolvedModel,
+                    choices: [
+                      {
+                        index: 0,
+                        delta: { content: evt.delta.text },
+                        finish_reason: null,
+                      },
+                    ],
+                  };
+                  const out = pii?.active ? pii.restoreChunk(chunk) : chunk;
+                  collected.push(out);
+                  onChunk?.(out);
+                  res.write(`data: ${JSON.stringify(out)}\n\n`);
+                } else if (evt.type === "message_stop") {
+                  res.write("data: [DONE]\n\n");
+                }
+              } catch {}
+            }
+          } else if (pii?.active) {
+            // Personal data was masked: rewrite each event so the user gets
+            // the real values back (placeholders split across events are held).
+            for (const line of completeLines) {
+              if (!line.startsWith("data: ")) continue;
+              if (line.trim() === "data: [DONE]") {
+                res.write("data: [DONE]\n\n");
+                continue;
+              }
+              try {
+                const c = pii.restoreChunk(JSON.parse(line.slice(6)));
                 collected.push(c);
                 onChunk?.(c);
+                res.write(`data: ${JSON.stringify(c)}\n\n`);
               } catch {}
+            }
+          } else {
+            // OpenRouter / OpenAI / Groq native SSE passthrough
+            res.write(value);
+            for (const line of completeLines) {
+              if (line.startsWith("data: ") && line.trim() !== "data: [DONE]") {
+                try {
+                  const c = JSON.parse(line.slice(6));
+                  collected.push(c);
+                  onChunk?.(c);
+                } catch {}
+              }
             }
           }
         }
+      } catch (err) {
+        cleanup();
+        // Mid-stream failure: headers are already sent, so never fail over
+        // (a second paid call whose output can't be delivered). Tell the
+        // client and end the stream; the caller bills what was streamed.
+        if (!res.writableEnded) {
+          try {
+            res.write(
+              `data: ${JSON.stringify({ error: { message: "The model stream was interrupted. Please retry." } })}\n\n`,
+            );
+            res.write("data: [DONE]\n\n");
+            res.end();
+          } catch {}
+        }
+        throw Object.assign(
+          err instanceof Error ? err : new Error(String(err)),
+          {
+            partial: collected,
+            midStream: true,
+          },
+        );
       }
       // A final event without a trailing newline is still in the buffer.
       if (
         pii?.active &&
         sseBuffer.startsWith("data: ") &&
-        !sseBuffer.includes("[DONE]")
+        sseBuffer.trim() !== "data: [DONE]"
       ) {
         try {
           const c = pii.restoreChunk(JSON.parse(sseBuffer.slice(6)));
@@ -565,6 +616,7 @@ async function executeWithEndpoint(
     }
   }
 
+  cleanup();
   recordSuccess(endpoint.provider, Date.now() - t0);
   return collected;
 }
@@ -578,6 +630,8 @@ export async function dispatchToProvider(
   pii?: PiiStreamRestorer,
 ): Promise<{
   success: boolean;
+  /** Stream cut mid-answer: bill it, but never cache it. */
+  interrupted?: boolean;
   collected: any[];
   provider?: ProviderID;
   resolvedModel?: string;
@@ -621,6 +675,22 @@ export async function dispatchToProvider(
         latencyMs,
       };
     } catch (err: any) {
+      if (err.midStream || res.headersSent) {
+        // The answer already started streaming to the user: stop here and
+        // settle on what was delivered instead of paying for a retry.
+        const partial: any[] = err.partial ?? [];
+        if (!/client disconnected/.test(err.message))
+          recordFailure(providerKey, err.message);
+        return {
+          success: partial.length > 0,
+          interrupted: true,
+          collected: partial,
+          provider: providerKey,
+          resolvedModel:
+            resolveProviderModel(providerKey, resolvedModel) ?? resolvedModel,
+          usage: extractProviderUsage(partial),
+        };
+      }
       if (err.status !== 401 && err.status !== 403)
         recordFailure(providerKey, err.message);
       console.warn(
@@ -655,6 +725,9 @@ export async function dispatchToProvider(
 
   return sendServiceUnavailable(body, resolvedModel, res);
 }
+
+/** No upstream bytes for this long aborts the call (not a total limit). */
+const UPSTREAM_IDLE_MS = 120_000;
 
 const PRO_FALLBACK_MODEL = "deepseek/deepseek-flash";
 

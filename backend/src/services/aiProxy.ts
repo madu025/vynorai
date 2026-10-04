@@ -930,7 +930,7 @@ export async function handleChatCompletions(
   const allChunks = providerChunks.length ? providerChunks : collected;
 
   // ── 5. Async: Save to Cache + Log Usage + Increment Monthly Ledger ──────
-  if (dispatch.success && allChunks.length > 0) {
+  if (dispatch.success && !dispatch.interrupted && allChunks.length > 0) {
     saveToCache(cacheKey, allChunks);
     if (semanticKey) semanticSave(semanticKey, semanticVector, allChunks);
   }

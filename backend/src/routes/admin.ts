@@ -398,6 +398,8 @@ adminRouter.post(
         userId,
       ],
     );
+    // The old (possibly compromised) key must stop working now, not in 60s.
+    invalidateAuthCache();
 
     await logSecurityEvent({
       eventType: "ADMIN_FORCE_KEY_ROTATED",

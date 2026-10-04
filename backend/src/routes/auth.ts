@@ -1014,7 +1014,7 @@ authRouter.get("/export", requireAuth, async (req: Request, res: Response) => {
         [user.id],
       ),
       dbAll<any>(
-        `SELECT plan_name, status, created_at, expires_at FROM subscriptions WHERE user_id = ?`,
+        `SELECT plan_name, status, created_at, valid_until FROM subscriptions WHERE user_id = ?`,
         [user.id],
       ).catch(() => []),
       dbAll<any>(`SELECT * FROM monthly_usage WHERE user_id = ?`, [
@@ -1078,11 +1078,9 @@ authRouter.post(
       .trim()
       .toLowerCase();
     if (!confirm || confirm !== String(user.email).toLowerCase())
-      return res
-        .status(400)
-        .json({
-          error: "Type your account email exactly to confirm deletion.",
-        });
+      return res.status(400).json({
+        error: "Type your account email exactly to confirm deletion.",
+      });
 
     await dbRun(
       `UPDATE security_audit_logs SET actor = 'deleted-user' WHERE actor = ? OR actor = ?`,

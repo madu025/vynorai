@@ -687,6 +687,21 @@ const MIGRATIONS: Migration[] = [
       )`);
     },
   },
+  {
+    version: "019_error_reports",
+    description: "Opt-in client error reports (message and stack only)",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS error_reports (
+        id          VARCHAR(36) PRIMARY KEY,
+        user_id     VARCHAR(36) REFERENCES users(id) ON DELETE CASCADE,
+        source      VARCHAR(32) NOT NULL,
+        message     TEXT NOT NULL,
+        stack       TEXT,
+        client      VARCHAR(64),
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

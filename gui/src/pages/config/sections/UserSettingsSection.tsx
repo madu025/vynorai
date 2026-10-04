@@ -8,6 +8,7 @@ import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import { updateConfig } from "../../../redux/slices/configSlice";
 import {
+  setErrorReportsEnabled,
   setJudgmentLevel,
   setSideReviewEnabled,
   setTaskCreditCap,
@@ -98,6 +99,9 @@ export function UserSettingsSection() {
 
   const disableTelemetryToggle = false;
   const taskCreditCap = useAppSelector((state) => state.ui.taskCreditCap ?? 0);
+  const errorReportsEnabled = useAppSelector(
+    (state) => state.ui.errorReportsEnabled === true,
+  );
   const judgmentLevel = useAppSelector(
     (state) => state.ui.judgmentLevel ?? DEFAULT_JUDGMENT_LEVEL,
   );
@@ -319,6 +323,13 @@ export function UserSettingsSection() {
                     Download or delete my data
                   </a>
                 </div>
+                <UserSetting
+                  type="toggle"
+                  title="Send Error Reports"
+                  description="When the VynorAI panel crashes, send the error message and stack trace so we can fix it. Never includes your code or prompts; secrets and personal data are removed on our server. Off by default."
+                  value={errorReportsEnabled}
+                  onChange={(value) => dispatch(setErrorReportsEnabled(value))}
+                />
               </div>
             </Card>
           </div>

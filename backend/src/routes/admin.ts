@@ -799,6 +799,26 @@ adminRouter.get(
   },
 );
 
+/**
+ * GET /admin/errors
+ * Latest opt-in client error reports, grouped by message.
+ */
+adminRouter.get(
+  "/errors",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    const rows = await dbAll<any>(
+      `SELECT source, message, MAX(created_at) AS last_seen, COUNT(*) AS count,
+            COUNT(DISTINCT user_id) AS users, MAX(stack) AS stack
+     FROM error_reports
+     GROUP BY source, message
+     ORDER BY last_seen DESC
+     LIMIT 50`,
+    ).catch(() => []);
+    res.json({ errors: rows });
+  },
+);
+
 adminRouter.get(
   "/economics",
   requireAdmin,

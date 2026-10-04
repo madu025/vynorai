@@ -127,6 +127,9 @@ function fallbackRender({ error, resetErrorBoundary }: any) {
 export function Chat() {
   const dispatch = useAppDispatch();
   const ideMessenger = useContext(IdeMessengerContext);
+  const errorReportsEnabled = useAppSelector(
+    (state) => state.ui.errorReportsEnabled === true,
+  );
   const reduxStore = useStore<RootState>();
   const onboardingCard = useOnboardingCard();
   const showSessionTabs = useAppSelector(
@@ -503,6 +506,18 @@ export function Chat() {
             >
               <ErrorBoundary
                 FallbackComponent={fallbackRender}
+                onError={(error, info) => {
+                  if (!errorReportsEnabled) return;
+                  ideMessenger.post("vynor/errorReport", {
+                    source: "gui",
+                    message: String(error?.message ?? error).slice(0, 2000),
+                    stack:
+                      `${error?.stack ?? ""}\n${info?.componentStack ?? ""}`.slice(
+                        0,
+                        8000,
+                      ),
+                  });
+                }}
                 onReset={() => {
                   dispatch(newSession());
                 }}

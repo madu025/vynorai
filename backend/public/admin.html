@@ -436,6 +436,15 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       <h1>System</h1>
       <p class="subtitle">Cache management and system controls</p>
       <div class="panel">
+        <div class="panel-header"><div class="panel-title">🐞 Client error reports (opt-in)</div><button class="btn btn-ghost" onclick="loadErrors()">↻ Refresh</button></div>
+        <div class="panel-body">
+          <table class="model-table">
+            <thead><tr><th>Last seen</th><th>Where</th><th>Message</th><th>Count</th><th>Users</th></tr></thead>
+            <tbody id="errorReports"><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
         <div class="panel-header"><div class="panel-title">🗄️ Cache Controls</div></div>
         <div class="panel-body" style="display:flex;gap:1rem;flex-wrap:wrap">
           <button class="btn btn-ghost" onclick="clearCache('models')">Clear Model Cache</button>
@@ -564,6 +573,7 @@ function showPage(id) {
   if (id === 'models')   loadModels();
   if (id === 'providers') loadProviders();
   if (id === 'economics') loadEconomics();
+  if (id === 'system')   loadErrors();
   if (id === 'system')   loadSystem();
 }
 
@@ -885,6 +895,14 @@ async function loadRouting(days) {
   document.getElementById('routingTiers').innerHTML = data.tiers.length
     ? data.tiers.map(t => `<tr><td>${escHtml(t.tier)}</td><td>${econNum(t.prompts)}</td><td>${escHtml(t.avgRounds)}</td><td>${econNum(t.avgCredits)}</td><td>${econNum(t.underrouted)}</td><td>${econNum(t.overrouted)}</td><td>${econNum(t.reasked)}</td><td>${econNum(t.helpful)}</td><td>${econNum(t.unhelpful)}</td></tr>`).join('')
     : '<tr><td colspan="9" class="loading">No Auto prompts recorded yet</td></tr>';
+}
+
+async function loadErrors() {
+  const data = await api('GET', '/admin/errors');
+  if (!data) return;
+  document.getElementById('errorReports').innerHTML = data.errors.length
+    ? data.errors.map(e => `<tr title="${escHtml(e.stack || '')}"><td>${escHtml(e.last_seen)}</td><td>${escHtml(e.source)}</td><td style="max-width:420px;word-break:break-word">${escHtml(e.message)}</td><td>${econNum(e.count)}</td><td>${econNum(e.users)}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="loading">No error reports</td></tr>';
 }
 
 async function loadEconomics() {

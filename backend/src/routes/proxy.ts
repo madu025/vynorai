@@ -1,3 +1,5 @@
+import { PiiMap } from "../services/piiShield.js";
+import { sanitizeText } from "../services/secretSanitizer.js";
 import { dbAll, dbRun } from "../db.js";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -295,6 +297,35 @@ proxyRouter.post(
     await dbRun(
       "INSERT INTO routing_feedback (id, user_id, prompt_fp, signal) VALUES (?, ?, ?, ?)",
       [uuidv4(), user.id, fp, signal],
+    );
+    res.json({ ok: true });
+  },
+);
+
+// ─── POST /v1/errors ──────────────────────────────────────────────────────────
+// Opt-in client error reports: message and stack only, scrubbed of secrets
+// and personal data before storage. Kept 90 days.
+proxyRouter.post(
+  "/errors",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const scrub = (v: unknown, max: number) =>
+      typeof v === "string"
+        ? new PiiMap().mask(sanitizeText(v.slice(0, max)).text)
+        : null;
+    const message = scrub(req.body?.message, 2000);
+    if (!message) return res.status(400).json({ error: "message is required" });
+    await dbRun(
+      "INSERT INTO error_reports (id, user_id, source, message, stack, client) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        uuidv4(),
+        user.id,
+        String(req.body?.source ?? "gui").slice(0, 32),
+        message,
+        scrub(req.body?.stack, 8000),
+        String(req.body?.client ?? "").slice(0, 64) || null,
+      ],
     );
     res.json({ ok: true });
   },

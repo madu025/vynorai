@@ -43,6 +43,7 @@ const DEFAULT_MOCK_CORE_RESPONSES: MockResponses = {
   "history/account": "global",
   "vynor/usage": null,
   "vynor/feedback": undefined,
+  "vynor/errorReport": undefined,
   "config/getSerializedProfileInfo": {
     profileId: "local",
     profiles: [],

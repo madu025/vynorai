@@ -286,6 +286,21 @@ CREATE TABLE IF NOT EXISTS routing_feedback (
 CREATE INDEX IF NOT EXISTS idx_routing_feedback_user_fp ON routing_feedback (user_id, prompt_fp);
 `,
   },
+  {
+    version: "pg_006_error_reports",
+    sql: `
+CREATE TABLE IF NOT EXISTS error_reports (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  source VARCHAR(32) NOT NULL,
+  message TEXT NOT NULL,
+  stack TEXT,
+  client VARCHAR(64),
+  created_at TEXT DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_error_reports_created ON error_reports (created_at);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

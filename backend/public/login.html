@@ -253,15 +253,29 @@
         turnstileWidgetId = window.turnstile.render('#turnstile-container', {
           sitekey: turnstileSiteKey,
           theme: 'dark',
-          callback: function (t) { turnstileToken = t; },
+          callback: function (t) { turnstileToken = t; var h = document.getElementById('turnstile-hint'); if (h) h.remove(); },
           'expired-callback': function () { turnstileToken = ''; },
-          'error-callback': function () { turnstileToken = ''; }
+          'error-callback': function () { turnstileToken = ''; showTurnstileHint(); return true; },
+          'timeout-callback': function () { turnstileToken = ''; showTurnstileHint(); },
+          retry: 'auto',
+          'refresh-expired': 'auto'
         });
+        // If the check has not finished after 20s, offer a way forward.
+        setTimeout(function () { if (!turnstileToken) showTurnstileHint(); }, 20000);
       };
       var s = document.createElement('script');
       s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit';
       s.async = true;
       document.head.appendChild(s);
+    }
+    function showTurnstileHint() {
+      var field = document.getElementById('turnstile-field');
+      if (!field || document.getElementById('turnstile-hint')) return;
+      var hint = document.createElement('div');
+      hint.id = 'turnstile-hint';
+      hint.style.cssText = 'font-size:12px;color:var(--text-muted);text-align:center;margin-top:6px;line-height:1.5;';
+      hint.innerHTML = 'Security check taking long? <a href="#" onclick="location.reload();return false;" style="color:var(--primary)">Refresh</a>, try without browser extensions, or use <strong>Continue with Google</strong> above.';
+      field.appendChild(hint);
     }
     function resetTurnstile() {
       turnstileToken = '';

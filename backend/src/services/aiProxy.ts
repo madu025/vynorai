@@ -874,7 +874,10 @@ export async function handleChatCompletions(
     turnKey(user.id, memBody.messages || []),
     async () => {
       const blocks: string[] = [];
-      const { context: webContext } = await enrichWithWeb(memBody);
+      // Agents have their own fetch tool; never fetch on their behalf.
+      const { context: webContext } = isIdeAgent
+        ? { context: "" }
+        : await enrichWithWeb(memBody);
       if (webContext) blocks.push(webContext);
       const { context: ragContext } = enrichWithRAG(memBody, user.id, planId);
       if (ragContext) blocks.push(ragContext);

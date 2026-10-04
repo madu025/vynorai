@@ -1,4 +1,5 @@
-﻿/**
+import { lookup as dnsLookup } from "node:dns/promises";
+import { isIP } from "node:net"; /**
  * VynorAI @Web Search Service
  * ----------------------------
  * Fills the Cursor "@web" gap: when user types @web <query> or pastes a URL,
@@ -11,7 +12,6 @@
  *
  * All results are injected as a system-level context block (same as RAG).
  */
-
 const MAX_PAGE_CHARS = 8_000; // max chars to keep from a fetched page
 const FETCH_TIMEOUT_MS = 8_000;
 
@@ -29,10 +29,56 @@ export interface WebSearchResult {
 }
 
 // ─── URL fetcher ──────────────────────────────────────────────────────────────
+/** Private, loopback, link-local and metadata addresses are never fetched. */
+export function isPrivateAddress(ip: string): boolean {
+  const v4 = ip.replace(/^::ffff:/, "");
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) {
+    const [a, b] = v4.split(".").map(Number);
+    return (
+      a === 10 ||
+      a === 127 ||
+      a === 0 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127)
+    );
+  }
+  const v6 = ip.toLowerCase();
+  return (
+    v6 === "::1" ||
+    v6 === "::" ||
+    v6.startsWith("fc") ||
+    v6.startsWith("fd") ||
+    v6.startsWith("fe80")
+  );
+}
+
+async function assertPublicUrl(raw: string): Promise<URL> {
+  const url = new URL(raw);
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    throw new Error("only public http(s) URLs");
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  const addresses = isIP(host)
+    ? [{ address: host }]
+    : await dnsLookup(host, { all: true });
+  if (!addresses.length || addresses.some((a) => isPrivateAddress(a.address)))
+    throw new Error("private or internal address");
+  return url;
+}
+
 async function fetchUrlText(url: string): Promise<string> {
+  // SSRF guard: the server must never read its own network for a prompt.
+  await assertPublicUrl(url);
   const res = await fetch(url, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: { "User-Agent": "VynorAI/2.0 (+https://vynorai.com)" },
+    // A redirect could point at an internal host after the check.
+    redirect: "error",
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
@@ -83,17 +129,22 @@ async function ddgSearch(query: string): Promise<WebResult[]> {
 }
 
 // ─── @web pattern detector ────────────────────────────────────────────────────
-const URL_PATTERN = /https?:\/\/[^\s\])"]+/g;
+// Only URLs the user explicitly asks to read (@url <link> or @web <link>);
+// a URL that merely appears in a prompt or stack trace is not fetched.
+const URL_PATTERN = /@(?:url|web)\s+(https?:\/\/[^\s\])"]+)/gi;
 const WEB_AT_PATTERN = /@web\s+(.+?)(?:\n|$)/gi;
 
 export function extractWebMentions(text: string): {
   urls: string[];
   queries: string[];
 } {
-  const urls: string[] = [...(text.match(URL_PATTERN) ?? [])];
+  const urls: string[] = [...text.matchAll(URL_PATTERN)].map((m) => m[1]);
   const queries: string[] = [];
   let m: RegExpExecArray | null;
-  while ((m = WEB_AT_PATTERN.exec(text)) !== null) queries.push(m[1].trim());
+  while ((m = WEB_AT_PATTERN.exec(text)) !== null) {
+    const q = m[1].trim();
+    if (!/^https?:\/\//i.test(q)) queries.push(q);
+  }
   WEB_AT_PATTERN.lastIndex = 0;
   return { urls: [...new Set(urls)], queries: [...new Set(queries)] };
 }

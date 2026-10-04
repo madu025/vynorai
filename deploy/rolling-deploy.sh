@@ -10,6 +10,10 @@ set -euo pipefail
 COMPOSE="docker compose -f docker-compose.vps.yml"
 WORKERS=(vynor-backend vynor-backend-2)
 
+# Tells deploy/watchdog.sh not to restart workers mid-rollout.
+touch /run/vynor-deploying
+trap 'rm -f /run/vynor-deploying' EXIT
+
 wait_healthy() {
   local name=$1
   for _ in $(seq 1 60); do

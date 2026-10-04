@@ -32,7 +32,8 @@ export function verificationFromToolResult(args: {
   let kind: VerificationKind | undefined;
   if (
     normalizedTool.includes("view_diff") ||
-    normalizedTool.includes("browser_qa")
+    normalizedTool.includes("browser_qa") ||
+    normalizedTool === "browser"
   )
     kind = "review";
   else if (args.command) kind = classifyVerificationCommand(args.command);

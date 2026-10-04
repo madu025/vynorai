@@ -162,6 +162,12 @@
     },
     "commands": [
       {
+        "command": "vynorai.openBrowser",
+        "category": "VynorAI",
+        "title": "Open Browser",
+        "icon": "$(globe)"
+      },
+      {
         "command": "vynorai.checkForUpdates",
         "category": "VynorAI",
         "title": "Check for Updates"

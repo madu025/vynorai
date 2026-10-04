@@ -13,7 +13,8 @@ export const getBaseToolDefinitions = () => [
   toolDefinitions.lsTool,
   toolDefinitions.createRuleBlock,
   toolDefinitions.fetchUrlContentTool,
-  toolDefinitions.browserQaTool,
+  // Persistent, live browser (replaces the one-shot browser_qa report).
+  toolDefinitions.browserTool,
   toolDefinitions.updateTodoListTool,
   toolDefinitions.runSubagentTool,
 ];

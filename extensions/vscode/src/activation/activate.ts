@@ -9,6 +9,7 @@ import { VsCodeContinueApi } from "./api";
 import setupInlineTips from "./InlineTipManager";
 import { setupVynorAuth } from "../util/vynorAuth";
 import { setupSelfUpdate } from "../util/selfUpdate";
+import { setupBrowserPanel } from "../browser/BrowserPanel";
 
 export async function activateExtension(context: vscode.ExtensionContext) {
   const platformCheck = isUnsupportedPlatform();
@@ -38,6 +39,9 @@ export async function activateExtension(context: vscode.ExtensionContext) {
 
   // Updates from vynor.lk (no marketplace needed)
   setupSelfUpdate(context);
+
+  // Live view of the agent's browser (VynorAI Browser tab)
+  setupBrowserPanel(context);
 
   const vscodeExtension = new VsCodeExtension(context);
 

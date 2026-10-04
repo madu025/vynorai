@@ -32,6 +32,7 @@ const NETWORK_TOOLS = new Set<string>([
   BuiltInToolNames.SearchWeb,
   BuiltInToolNames.FetchUrlContent,
   BuiltInToolNames.BrowserQa,
+  BuiltInToolNames.Browser,
 ]);
 
 function requiredPath(args: Record<string, unknown>, key: string): string {

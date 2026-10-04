@@ -16,6 +16,7 @@ export enum BuiltInToolNames {
   RequestRule = "request_rule",
   FetchUrlContent = "fetch_url_content",
   BrowserQa = "browser_qa",
+  Browser = "browser",
   CodebaseTool = "codebase",
   ReadSkill = "read_skill",
   UpdateTodoList = "update_todo_list",

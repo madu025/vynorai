@@ -7,6 +7,7 @@ import { BuiltInToolNames } from "./builtIn";
 
 import { codebaseToolImpl } from "./implementations/codebaseTool";
 import { browserQaImpl } from "./implementations/browserQa";
+import { browserImpl } from "./implementations/browser";
 import { createNewFileImpl } from "./implementations/createNewFile";
 import { createRuleBlockImpl } from "./implementations/createRuleBlock";
 import { fetchUrlContentImpl } from "./implementations/fetchUrlContent";
@@ -192,6 +193,8 @@ export async function callBuiltInTool(
   extras: ToolExtras,
 ): Promise<ContextItem[]> {
   switch (functionName) {
+    case BuiltInToolNames.Browser:
+      return await browserImpl(args, extras);
     case BuiltInToolNames.BrowserQa:
       return await browserQaImpl(args, extras);
     case BuiltInToolNames.ReadFile:

@@ -164,10 +164,12 @@ export class PiiStreamRestorer {
   }
 
   private take(key: string, piece: string, final: boolean): string {
-    const text = (this.held.get(key) ?? "") + piece;
+    // Restore complete placeholders first; only then hold back a tail that
+    // may still become one (a lone "__" after "__PII_EMAIL_1" closes it).
+    const text = this.map.restore((this.held.get(key) ?? "") + piece);
     const keep = final ? 0 : pendingTail(text);
     this.held.set(key, text.slice(text.length - keep));
-    return this.map.restore(text.slice(0, text.length - keep));
+    return text.slice(0, text.length - keep);
   }
 
   /** Restores a non-streamed completion. */

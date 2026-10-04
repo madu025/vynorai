@@ -119,3 +119,35 @@ test("non-stream responses are restored", () => {
   );
   assert.equal(out.choices[0].message.content, "hi a@b.co");
 });
+
+test("stream restore handles DeepSeek-style tiny tokens", () => {
+  const { map } = maskRequestBody({
+    messages: [{ role: "user", content: "kasun@gmail.com" }],
+  });
+  const r = new PiiStreamRestorer(map);
+  const pieces = [
+    "mail",
+    " __",
+    "P",
+    "II",
+    "_",
+    "EMAIL",
+    "_",
+    "1",
+    "__",
+    " now",
+  ];
+  let text = "";
+  pieces.forEach((p, i) => {
+    text += r.restoreChunk({
+      choices: [
+        {
+          index: 0,
+          delta: { content: p },
+          finish_reason: i === pieces.length - 1 ? "stop" : null,
+        },
+      ],
+    }).choices[0].delta.content;
+  });
+  assert.equal(text, "mail kasun@gmail.com now");
+});

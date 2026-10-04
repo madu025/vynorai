@@ -971,6 +971,16 @@
           </div>
         </div>
 
+        <!-- Your data: PDPA download and delete -->
+        <div class="glass-card" style="grid-column: 1 / -1;">
+          <h3 style="margin:0 0 4px 0; font-size:16px;">Your data</h3>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">Download everything we hold about you, or delete your account and its data permanently. See our <a href="/privacy.html" target="_blank" style="color:var(--primary);">Privacy Policy</a>.</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-secondary" style="width:auto; padding:8px 16px;" onclick="downloadMyData()">⬇ Download my data</button>
+            <button class="btn btn-secondary" style="width:auto; padding:8px 16px; color:#ff5252; border-color:rgba(255,82,82,0.4);" onclick="deleteMyAccount()">Delete account</button>
+          </div>
+        </div>
+
         <!-- Code & privacy: what is kept and what is never done -->
         <div class="glass-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, rgba(18,22,34,0.85) 0%, rgba(10,14,24,0.95) 100%); border: 1px solid rgba(0,229,255,0.2);">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -1909,6 +1919,39 @@
       const data = await res.json();
       alert(data.message || 'Activated!');
       loadDashboard();
+    }
+
+    async function downloadMyData() {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      if (!token) { window.location.href = '/login.html'; return; }
+      const res = await fetch('/api/auth/export', { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) { alert('Could not download your data. Please sign in again and retry.'); return; }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'vynorai-data-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    }
+
+    async function deleteMyAccount() {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      if (!token) { window.location.href = '/login.html'; return; }
+      const email = prompt('This permanently deletes your account, plan, usage history, memory and API key. It cannot be undone.\n\nType your account email to confirm:');
+      if (!email) return;
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ confirmEmail: email.trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(data.error || 'Could not delete the account.'); return; }
+      localStorage.removeItem('vynor_jwt');
+      localStorage.removeItem('vynorai_token');
+      alert('Your account and data have been deleted.');
+      window.location.href = '/';
     }
 
     function logout() {

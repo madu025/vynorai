@@ -274,11 +274,9 @@ authRouter.post(
           .json({ error: "Please enter a valid email address" });
       }
       if (acceptPrivacy !== true) {
-        return res
-          .status(400)
-          .json({
-            error: "Please accept the Privacy Policy to create an account.",
-          });
+        return res.status(400).json({
+          error: "Please accept the Privacy Policy to create an account.",
+        });
       }
       if (password.length > 128) {
         return res
@@ -985,5 +983,123 @@ authRouter.post(
       console.error("Change password error:", err);
       res.status(500).json({ error: "Failed to change password" });
     }
+  },
+);
+
+// ── Data subject rights (PDPA): download and delete ─────────────────────────
+
+/** Only a signed-in web session may export or delete, never an IDE API key. */
+function isApiKeyRequest(req: Request): boolean {
+  return (req.headers.authorization || "").includes("vynor_live_");
+}
+
+/**
+ * GET /api/auth/export
+ * Everything we hold about the signed-in user, as one JSON download.
+ * Password hashes, API keys and payment secrets are never included.
+ */
+authRouter.get("/export", requireAuth, async (req: Request, res: Response) => {
+  if (isApiKeyRequest(req))
+    return res
+      .status(403)
+      .json({ error: "Sign in on vynor.lk to download your data." });
+  const user = (req as any).user;
+  const since = new Date(Date.now() - 365 * 86400_000).toISOString();
+  const [account, subscriptions, monthlyUsage, usage, rules, memory, security] =
+    await Promise.all([
+      dbGet<any>(
+        `SELECT id, email, name, email_verified, created_at, privacy_accepted_at,
+              privacy_version, api_key_masked
+       FROM users WHERE id = ?`,
+        [user.id],
+      ),
+      dbAll<any>(
+        `SELECT plan_name, status, created_at, expires_at FROM subscriptions WHERE user_id = ?`,
+        [user.id],
+      ).catch(() => []),
+      dbAll<any>(`SELECT * FROM monthly_usage WHERE user_id = ?`, [
+        user.id,
+      ]).catch(() => []),
+      dbAll<any>(
+        `SELECT created_at, requested_model, resolved_model, input_tokens,
+              cached_input_tokens, output_tokens, credits_charged, cache_status
+       FROM request_economics WHERE user_id = ? AND created_at >= ?
+       ORDER BY created_at`,
+        [user.id, since],
+      ).catch(() => []),
+      dbAll<any>(
+        `SELECT scope, rule, created_at FROM user_rules WHERE user_id = ?`,
+        [user.id],
+      ).catch(() => []),
+      dbAll<any>(
+        `SELECT key, value, expires_at, created_at FROM user_memory WHERE user_id = ?`,
+        [user.id],
+      ).catch(() => []),
+      dbAll<any>(
+        `SELECT event_type, details, ip_address, created_at FROM security_audit_logs
+       WHERE actor = ? OR target = ? OR actor = ? OR target = ?
+       ORDER BY created_at`,
+        [user.id, user.id, user.email, user.email],
+      ).catch(() => []),
+    ]);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="vynorai-data-${new Date().toISOString().slice(0, 10)}.json"`,
+  );
+  res.json({
+    exportedAt: new Date().toISOString(),
+    note: "Prompts and code are not stored by VynorAI except in a short-lived answer cache that expires within 30 days.",
+    account,
+    subscriptions,
+    monthlyUsage,
+    usage,
+    rules,
+    memory,
+    securityEvents: security,
+  });
+});
+
+/**
+ * POST /api/auth/delete-account  { confirmEmail }
+ * Deletes the account and everything linked to it (cascades), and removes
+ * the email from security logs. Immediate; backups expire within 14 days.
+ */
+authRouter.post(
+  "/delete-account",
+  authRateLimiter,
+  requireAuth,
+  async (req: Request, res: Response) => {
+    if (isApiKeyRequest(req))
+      return res
+        .status(403)
+        .json({ error: "Sign in on vynor.lk to delete your account." });
+    const user = (req as any).user;
+    const confirm = String(req.body?.confirmEmail ?? "")
+      .trim()
+      .toLowerCase();
+    if (!confirm || confirm !== String(user.email).toLowerCase())
+      return res
+        .status(400)
+        .json({
+          error: "Type your account email exactly to confirm deletion.",
+        });
+
+    await dbRun(
+      `UPDATE security_audit_logs SET actor = 'deleted-user' WHERE actor = ? OR actor = ?`,
+      [user.id, user.email],
+    ).catch(() => {});
+    await dbRun(
+      `UPDATE security_audit_logs SET target = 'deleted-user' WHERE target = ? OR target = ?`,
+      [user.id, user.email],
+    ).catch(() => {});
+    await dbRun(`DELETE FROM users WHERE id = ?`, [user.id]);
+    await logSecurityEvent({
+      eventType: "ACCOUNT_DELETED",
+      severity: "INFO",
+      actor: "deleted-user",
+      details: "User deleted their account and personal data.",
+      ipAddress: getClientIp(req),
+    }).catch(() => {});
+    res.json({ ok: true });
   },
 );

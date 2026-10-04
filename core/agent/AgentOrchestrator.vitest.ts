@@ -82,7 +82,7 @@ describe("AgentOrchestrator", () => {
     await orchestrator.createPlan(task.id, [
       { id: "one", summary: "One", kind: "inspect", risk: "R0" },
     ]);
-    expect(orchestrator.next(task.id, "workspace-1", 8)).toEqual({
+    expect(orchestrator.next(task.id, "workspace-2", 8)).toEqual({
       action: "blocked",
       reason: "Workspace changed since this task was planned",
     });

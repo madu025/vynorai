@@ -130,10 +130,8 @@ export class AgentOrchestrator {
     const task = this.requireTask(taskId);
     if (task.executionGuard.cancelRequested || task.state === "canceled")
       return { action: "canceled" };
-    if (
-      task.workspaceId !== workspaceId ||
-      task.workspaceRevision !== workspaceRevision
-    ) {
+    // Revision moves on the agent's own edits; only another workspace blocks.
+    if (task.workspaceId !== workspaceId) {
       return {
         action: "blocked",
         reason: "Workspace changed since this task was planned",
@@ -332,11 +330,10 @@ export class AgentOrchestrator {
   ): Promise<AgentTask> {
     return this.runtime.mutate(taskId, "task.resumed", {}, (task) => {
       this.assertActive(task);
-      if (
-        task.workspaceId !== workspaceId ||
-        task.workspaceRevision !== workspaceRevision
-      )
-        throw new Error("Cannot resume after workspace revision changed");
+      // Same rule as authorizeAction: only another workspace blocks a resume.
+      if (task.workspaceId !== workspaceId)
+        throw new Error("Cannot resume in a different workspace");
+      task.workspaceRevision = workspaceRevision;
       for (const step of task.plan?.steps ?? []) {
         if (["running", "verifying", "awaiting_approval"].includes(step.state))
           step.state = "pending";

@@ -200,6 +200,27 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
     );
   }
 
+  // VynorAI quota errors come back as 403 but are about credits, not access.
+  if (/quota_exceeded|monthly_limit_reached|credits/i.test(parsedError ?? "")) {
+    errorContent = (
+      <div className="flex flex-col gap-2">
+        <span>
+          Your VynorAI credits for this month are used up. Answers VynorAI
+          already has still work; new requests need more credits.
+        </span>
+        <div className="flex flex-row flex-wrap gap-2">
+          <GhostButton
+            onClick={() =>
+              ideMessenger.post("openUrl", "https://vynor.lk/#pricing")
+            }
+          >
+            Top up or upgrade
+          </GhostButton>
+        </div>
+      </div>
+    );
+  }
+
   if (
     message &&
     (message.toLowerCase().includes("overloaded") ||

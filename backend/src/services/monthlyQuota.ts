@@ -298,6 +298,9 @@ export async function tryConsumeQuotaAtomic(
   return { allowed: true };
 }
 
+/** Below this many credits left, a request is refused rather than reserved. */
+const MIN_RESERVATION_CREDITS = 1_000;
+
 /** Reserve the maximum expected request cost before any provider is called. */
 export async function reserveQuotaAtomic(
   userId: string,
@@ -311,8 +314,24 @@ export async function reserveQuotaAtomic(
     1,
     planName,
   );
-  if (!consumed.allowed) return null;
-  return { userId, reservedTokens, reservedRequests: 1, settled: false };
+  if (consumed.allowed)
+    return { userId, reservedTokens, reservedRequests: 1, settled: false };
+
+  // The estimate assumes no prompt cache, so it is far above what an agent
+  // turn really costs (most input is cached at 0.1). With credits left,
+  // reserve what remains instead of refusing; the request settles at its
+  // actual cost. Only a nearly empty allowance is refused.
+  const usage = await getOrInitMonthlyUsage(userId, planName);
+  const remaining = Math.floor(usage.max_tokens - usage.used_tokens);
+  if (remaining < MIN_RESERVATION_CREDITS) return null;
+  const partial = await tryConsumeQuotaAtomic(userId, remaining, 1, planName);
+  if (!partial.allowed) return null;
+  return {
+    userId,
+    reservedTokens: remaining,
+    reservedRequests: 1,
+    settled: false,
+  };
 }
 
 /**

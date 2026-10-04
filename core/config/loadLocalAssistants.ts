@@ -109,11 +109,12 @@ export function getDotContinueSubDirs(
 ): string[] {
   let fullDirs: string[] = [];
 
-  // Workspace .continue/<subDirName>
+  // Workspace .vynorai/<subDirName> and the inherited .continue/<subDirName>
   if (options.includeWorkspace) {
-    fullDirs = workspaceDirs.map((dir) =>
+    fullDirs = workspaceDirs.flatMap((dir) => [
+      joinPathsToUri(dir, ".vynorai", subDirName),
       joinPathsToUri(dir, ".continue", subDirName),
-    );
+    ]);
   }
 
   // ~/.continue/<subDirName>

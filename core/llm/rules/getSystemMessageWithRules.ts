@@ -133,7 +133,12 @@ const isFileInDirectory = (
  * Checks if a rule is a root-level rule (.continue directory or no file path)
  */
 const isRootLevelRule = (rule: RuleWithSource): boolean => {
-  return !rule.sourceFile || rule.sourceFile.includes(".continue/"); // sourceFile path is absolute - hence we need to check for it in between
+  // sourceFile path is absolute - hence we need to check for it in between
+  return (
+    !rule.sourceFile ||
+    rule.sourceFile.includes(".continue/") ||
+    rule.sourceFile.includes(".vynorai/")
+  );
 };
 
 /**
@@ -278,6 +283,7 @@ export const getApplicableRules = (
   rules: RuleWithSource[],
   contextItems: ContextItemWithId[],
   rulePolicies: RulePolicies = {},
+  extraFilePaths: string[] = [],
 ): RuleWithSource[] => {
   // Get file paths from message and context for rule matching
   const filePathsFromMessage = userMessage
@@ -290,7 +296,13 @@ export const getApplicableRules = (
     .map((item) => item.uri!.value);
 
   // Combine file paths from both sources
-  const allFilePaths = [...filePathsFromMessage, ...filePathsFromContextItems];
+  // Plus files the agent has read or changed through tools, so a rule scoped
+  // to a folder applies when the agent works there, not only on @-mentions.
+  const allFilePaths = [
+    ...filePathsFromMessage,
+    ...filePathsFromContextItems,
+    ...extraFilePaths,
+  ];
 
   // Create a map of file paths to their contents for pattern matching
   const fileContents: Record<string, string> = {};
@@ -335,12 +347,14 @@ export const getSystemMessageWithRules = ({
   availableRules,
   contextItems,
   rulePolicies = {},
+  extraFilePaths = [],
 }: {
   baseSystemMessage?: string;
   userMessage: UserChatMessage | ToolResultChatMessage | undefined;
   availableRules: RuleWithSource[];
   contextItems: ContextItemWithId[];
   rulePolicies?: RulePolicies;
+  extraFilePaths?: string[];
 }): {
   systemMessage: string;
   appliedRules: RuleMetadata[];
@@ -350,6 +364,7 @@ export const getSystemMessageWithRules = ({
     availableRules,
     contextItems,
     rulePolicies,
+    extraFilePaths,
   );
   let systemMessage = baseSystemMessage ?? "";
 

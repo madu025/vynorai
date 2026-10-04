@@ -34,6 +34,27 @@ interface MessageWithContextItems {
   ctxItems: ContextItemWithId[];
   message: ChatMessage;
 }
+/**
+ * Files the agent touched through tools anywhere in the conversation. Taken
+ * over the whole history so the set only grows: folder-scoped rules then join
+ * the system prompt once and stay, instead of flipping per turn (which would
+ * keep breaking the provider prefix cache).
+ */
+export function toolFilePaths(history: ChatHistoryItem[]): string[] {
+  const paths = new Set<string>();
+  for (const item of history) {
+    for (const call of item.toolCallStates ?? []) {
+      const args = call.parsedArgs as
+        | { filepath?: unknown; filepaths?: unknown; dirPath?: unknown }
+        | undefined;
+      if (typeof args?.filepath === "string") paths.add(args.filepath);
+      if (Array.isArray(args?.filepaths))
+        for (const p of args.filepaths) if (typeof p === "string") paths.add(p);
+    }
+  }
+  return [...paths];
+}
+
 export function constructMessages(
   history: ChatHistoryItem[],
   baseSystemMessage: string | undefined,
@@ -83,7 +104,9 @@ export function constructMessages(
       const ctxItemParts = item.contextItems
         .map((ctxItem) => {
           const nameAttr = ctxItem.name ? ` name="${ctxItem.name}"` : "";
-          const uriAttr = ctxItem.uri?.value ? ` uri="${ctxItem.uri.value}"` : "";
+          const uriAttr = ctxItem.uri?.value
+            ? ` uri="${ctxItem.uri.value}"`
+            : "";
           return {
             type: "text",
             text: `<context_item${nameAttr}${uriAttr}>\n${ctxItem.content}\n</context_item>\n`,
@@ -203,6 +226,7 @@ export function constructMessages(
     userMessage: lastUserOrToolMsg,
     contextItems: rulesContextItems,
     rulePolicies,
+    extraFilePaths: toolFilePaths(history),
   });
 
   // Append conversation summary to system message if it exists

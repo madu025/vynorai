@@ -319,7 +319,8 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
 
             if (waitForCompletion) {
               // Normal completion, resolve now
-              if (!code || code === 0) {
+              // A null code means killed by a signal (timeout, cancel): not success.
+              if (code === 0) {
                 const status = "Command completed";
                 resolve([
                   {

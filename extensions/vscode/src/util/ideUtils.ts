@@ -294,14 +294,13 @@ export class VsCodeIdeUtils {
       .map((tab) => (tab.input as vscode.TabInputText).uri);
   }
 
-  saveFile(uri: vscode.Uri) {
-    vscode.window.visibleTextEditors
-      .filter((editor) => this.documentIsCode(editor.document.uri))
-      .forEach((editor) => {
-        if (URI.equal(editor.document.uri.toString(), uri.toString())) {
-          editor.document.save();
-        }
-      });
+  // Saves the document even in a background tab, and waits for the write,
+  // so a following test or build reads what the agent just wrote.
+  async saveFile(uri: vscode.Uri): Promise<void> {
+    const doc = vscode.workspace.textDocuments.find((d) =>
+      URI.equal(d.uri.toString(), uri.toString()),
+    );
+    if (doc?.isDirty) await doc.save();
   }
 
   async readRangeInFile(uri: vscode.Uri, range: vscode.Range): Promise<string> {

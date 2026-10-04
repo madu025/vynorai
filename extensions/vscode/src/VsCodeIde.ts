@@ -356,7 +356,9 @@ class VsCodeIde implements IDE {
       terminal = vscode.window.createTerminal(options?.terminalName);
     }
     terminal.show();
-    terminal.sendText(command, false);
+    // Execute (send Enter): without it remote run_terminal_command never ran
+    // while the agent was told "Command executed".
+    terminal.sendText(command, true);
   }
 
   async saveFile(fileUri: string): Promise<void> {
@@ -403,10 +405,10 @@ class VsCodeIde implements IDE {
         return "";
       }
 
-      // Truncate the buffer to the first MAX_BYTES
-      const truncatedBytes = bytes.slice(0, VsCodeIde.MAX_BYTES);
-      const contents = new TextDecoder().decode(truncatedBytes);
-      return contents;
+      // Return the whole file (up to the 10x cap above). Edit tools rebuild
+      // the file from this text, so a 100KB cut silently deleted the tail of
+      // larger files; read_file applies its own context-size limit.
+      return new TextDecoder().decode(bytes);
     } catch (e) {
       return "";
     }
@@ -451,9 +453,13 @@ class VsCodeIde implements IDE {
       getExtensionUri(),
       "out/node_modules/@vscode/ripgrep/bin/rg",
     );
-    const p = child_process.spawn(ripGrepUri.fsPath, args, {
-      cwd: relativeDir,
-    });
+    // Forward slashes on every OS: the parsers expect "./file", and on
+    // Windows rg printed ".\file", so grep_search reported no results.
+    const p = child_process.spawn(
+      ripGrepUri.fsPath,
+      ["--path-separator", "/", ...args],
+      { cwd: relativeDir },
+    );
     let output = "";
 
     p.stdout.on("data", (data) => {

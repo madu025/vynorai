@@ -220,6 +220,86 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
+// Hard mode: noise files plus subtler uses (destructuring, re-exports, a
+// function passed as a callback, a consumer in a nested folder).
+const HARD = process.env.HARD === "1";
+const NOISE: Files = Object.fromEntries(
+  [
+    "auth/session",
+    "auth/tokens",
+    "ui/button",
+    "ui/modal",
+    "ui/table",
+    "api/users",
+    "api/orders",
+    "api/health",
+    "lib/logger",
+    "lib/dates",
+    "lib/strings",
+    "jobs/emails",
+    "jobs/reports",
+    "db/migrate",
+    "db/seed",
+    "hooks/useUser",
+    "hooks/useCart",
+    "styles/theme",
+  ].map((n) => [
+    `src/${n}.ts`,
+    `// ${n}\nexport function ${n.split("/")[1].replace(/\W/g, "")}Helper(input: string) {\n  return input.trim();\n}\n`,
+  ]),
+);
+const HARD_EXTRA: Record<
+  string,
+  { files: Files; hidden: (f: Files, report: string) => boolean }
+> = {
+  "rename-config-key": {
+    files: {
+      "src/admin/settings.ts": `import { config } from "../config";\n\nconst { maxRetries, timeoutMs } = config;\n\nexport function describeSettings() {\n  return \`retries=\${maxRetries} timeout=\${timeoutMs}\`;\n}\n`,
+      "src/env.ts": `export function fromEnv() {\n  return { maxRetries: Number(process.env.MAX_RETRIES ?? 3) };\n}\n`,
+    },
+    hidden: (f) =>
+      !/maxRetries/.test(f["src/admin/settings.ts"] ?? "") ||
+      /maxRetries:\s*retryLimit|retryLimit:\s*maxRetries/.test(
+        f["src/admin/settings.ts"] ?? "",
+      ),
+  },
+  "signature-change": {
+    files: {
+      "src/utils/index.ts": `export { formatPrice } from "./money";\n`,
+      "src/reports/monthly.ts": `import { formatPrice } from "../utils";\n\nexport function monthlyRows(totals: number[]) {\n  return totals.map(formatPrice);\n}\n`,
+    },
+    hidden: (f) =>
+      !/map\(formatPrice\)/.test(f["src/reports/monthly.ts"] ?? "") &&
+      /formatPrice\([^)]*,/.test(f["src/reports/monthly.ts"] ?? ""),
+  },
+  "second-consumer": {
+    files: {
+      "src/billing/limits.ts": `import { PLANS } from "../plans";\n\nexport function remaining(planId: string, used: number) {\n  return Math.max(0, PLANS[planId].limit - used);\n}\n`,
+    },
+    hidden: (f, report) =>
+      /override|getLimit|effective/i.test(f["src/billing/limits.ts"] ?? "") ||
+      /limits\.ts|remaining\(/i.test(report),
+  },
+  "cache-invalidation": {
+    files: {
+      "src/api/admin.ts": `import { db } from "../db";\n\n// Bulk price import used by the admin panel.\nexport async function importPrices(rows: { id: string; price: number }[]) {\n  for (const r of rows) await db.query("UPDATE products SET price = $1 WHERE id = $2", [r.price, r.id]);\n}\n`,
+    },
+    hidden: (_f, report) =>
+      /api\/admin|importPrices|bulk/i.test(report) ||
+      /priceCache/.test(_f["src/api/admin.ts"] ?? ""),
+  },
+};
+if (HARD) {
+  for (const s of SCENARIOS) {
+    const extra = HARD_EXTRA[s.id];
+    s.files = { ...s.files, ...NOISE, ...(extra?.files ?? {}) };
+    if (extra) {
+      const base = s.hidden;
+      s.hidden = (f, r) => base(f, r) && extra.hidden(f, r);
+    }
+  }
+}
+
 const BASE_PROMPT = `You are an autonomous coding agent working in the user's repository. Use the tools to inspect and change files, then reply with a brief summary when the task is done.
 <efficiency>
 - Read only what you need, and edit with the smallest change that does the job.

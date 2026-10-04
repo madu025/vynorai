@@ -151,3 +151,14 @@ test("stream restore handles DeepSeek-style tiny tokens", () => {
   });
   assert.equal(text, "mail kasun@gmail.com now");
 });
+
+test("completions restore, drop a cut-off placeholder, keep dunder names", () => {
+  const map = new PiiMap();
+  map.mask("a@b.co");
+  const out = (text: string) =>
+    restoreResponse({ choices: [{ text }] }, map).choices[0].text;
+  assert.equal(out("to = '__PII_EMAIL_1__'"), "to = 'a@b.co'");
+  assert.equal(out("x = '__PII_EM"), "x = '");
+  assert.equal(out("def __init__"), "def __init__");
+  assert.equal(out("if __name__"), "if __name__");
+});

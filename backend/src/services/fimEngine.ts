@@ -14,6 +14,7 @@ import { Response } from "express";
 import { AuthenticatedUser } from "./aiProxy.js";
 import { dispatchToProvider } from "./providerRouter.js";
 import { sanitizeText } from "./secretSanitizer.js";
+import { PiiMap, PiiStreamRestorer } from "./piiShield.js";
 import { getPlan } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
 import { billingRun as dbRun } from "./billingDb.js";
@@ -78,7 +79,9 @@ export async function handleFimAutocomplete(
   // 3. Assemble FIM Prompt
   // Format for Qwen 2.5 Coder and DeepSeek:
   // <|fim_prefix|>...<|fim_suffix|>...<|fim_middle|>
-  const fimPrompt = `<|fim_prefix|>${prefix}<|fim_suffix|>${suffix}<|fim_middle|>`;
+  // Personal data is masked before dispatch and restored in the completion.
+  const pii = new PiiMap();
+  const fimPrompt = `<|fim_prefix|>${pii.mask(prefix)}<|fim_suffix|>${pii.mask(suffix)}<|fim_middle|>`;
 
   const model =
     body.model ||
@@ -112,12 +115,18 @@ export async function handleFimAutocomplete(
   res.setHeader("X-VynorAI-Engine", "FIM-UltraFast");
 
   // 4. Dispatch directly to provider
-  const dispatch = await dispatchToProvider(payload, res);
+  const dispatch = await dispatchToProvider(
+    payload,
+    res,
+    undefined,
+    true,
+    new PiiStreamRestorer(pii),
+  );
   const { collected } = dispatch;
 
   const latency = Date.now() - t0;
   console.log(
-    `[VynorAI ⚡ FIM Autocomplete] ${latency}ms | Model: ${model} | User: ${user.email}`,
+    `[VynorAI ⚡ FIM Autocomplete] ${latency}ms | Model: ${model} | User: ${user.id}`,
   );
 
   // 5. Track tokens

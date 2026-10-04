@@ -254,13 +254,22 @@ function restoreMessage(message: any, map: PiiMap): any {
   return out;
 }
 
-/** Restores a non-streamed completion. */
+/** Restores a non-streamed completion (chat `message` or legacy `text`). */
 export function restoreResponse(data: any, map: PiiMap): any {
   if (map.size === 0 || !Array.isArray(data?.choices)) return data;
   return {
     ...data,
-    choices: data.choices.map((c: any) =>
-      c.message ? { ...c, message: restoreMessage(c.message, map) } : c,
-    ),
+    choices: data.choices.map((c: any) => {
+      if (c.message) return { ...c, message: restoreMessage(c.message, map) };
+      if (typeof c.text === "string") {
+        // A completion cut off mid-placeholder must not show it to the user.
+        // Only a tail that already reads "__P..." is cut; "__init__" stays.
+        const text = map.restore(c.text);
+        const tail = pendingTail(text);
+        const cut = tail > 2 && text.slice(-tail).startsWith("__P") ? tail : 0;
+        return { ...c, text: text.slice(0, text.length - cut) };
+      }
+      return c;
+    }),
   };
 }

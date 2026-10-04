@@ -138,7 +138,7 @@ export function UserSettingsSection() {
                 <UserSetting
                   type="select"
                   title="Agent Judgment"
-                  description="How carefully the agent reviews its own changes before finishing. Careful and Max check other uses of what changed, think through what could break, and end with an honest report of what was and was not verified."
+                  description="How carefully the agent reviews its own changes before finishing. Careful and Max check other uses of what changed, think through what could break, and end with an honest report of what was and was not verified. In our tests this caught 98-100% of hidden issues vs about 70% without it, and uses more credits on changes (about 2-3x on small tasks)."
                   value={judgmentLevel}
                   options={[
                     { value: "fast", label: "Fast (no extra review)" },

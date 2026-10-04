@@ -316,7 +316,7 @@ const JUDGMENT_BLOCK = `<judgment>
 
 const PREMORTEM = `[pre-mortem] Before you finish, review your own change the way a senior engineer would:
 1. Impact: for every function, type, config key, route or schema you changed, search for its other uses and confirm they still work.
-2. Risks: think about data that already exists, other processes or workers, caches, backwards compatibility, error paths and unusual inputs.
+2. Risks: if you changed a field name, type, unit or format, check data that already exists (JSON/DB rows, saved settings, caches) and either migrate it or keep reading the old shape. Also think about other processes or workers, backwards compatibility, error paths and unusual inputs.
 3. Fix any real problem you find and re-run the relevant check. Do not add work for purely hypothetical issues.
 Then end with a short report:
 - Done: what changed.

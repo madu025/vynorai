@@ -147,6 +147,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get("/favicon.ico", (_req, res) => res.redirect(301, "/favicon.svg"));
 app.use(express.static(PUBLIC_DIR, { extensions: ["html"] }));
 
 // Public health check — no auth required

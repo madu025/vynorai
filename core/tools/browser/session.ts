@@ -192,7 +192,16 @@ export class BrowserSession extends EventEmitter {
     page.on("console", (m: ConsoleMessage) => {
       const level = m.type();
       if (!["error", "warn", "warning", "log", "info"].includes(level)) return;
-      this.log({ kind: "console", level, text: m.text() });
+      // Name the source: third-party frames (e.g. Cloudflare Turnstile) log
+      // noise that is not the page's own code.
+      let src = "";
+      try {
+        const u = m.location()?.url;
+        const origin = u ? new URL(u).origin : "";
+        if (origin && origin !== new URL(page.url()).origin)
+          src = ` (from ${origin}, third-party)`;
+      } catch {}
+      this.log({ kind: "console", level, text: m.text() + src });
     });
     page.on("pageerror", (e: unknown) =>
       this.log({

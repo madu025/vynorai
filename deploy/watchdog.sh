@@ -93,7 +93,9 @@ for c in vynor-postgres vynor-redis vynor-caddy; do
 done
 
 # ── 3. Public health through Caddy ───────────────────────────────────────────
-code=$(curl -s -m 10 -o /dev/null -w '%{http_code}' --resolve vynor.lk:443:127.0.0.1 https://vynor.lk/health || echo 000)
+# The origin uses Caddy's internal certificate (Cloudflare holds the public
+# one), so the local check skips verification.
+code=$(curl -sk -m 10 -o /dev/null -w '%{http_code}' --resolve vynor.lk:443:127.0.0.1 https://vynor.lk/health || echo 000)
 if [ "$code" = "200" ]; then
   clear_count public
   resolve public "vynor.lk is answering again."
@@ -144,8 +146,10 @@ if due balance 3600; then
 fi
 
 # ── 7. TLS certificate (daily) ───────────────────────────────────────────────
+# The public certificate is Cloudflare's edge certificate; Caddy renews the
+# internal origin certificate on its own.
 if due tls 86400; then
-  end=$(echo | openssl s_client -connect 127.0.0.1:443 -servername vynor.lk 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+  end=$(echo | openssl s_client -connect vynor.lk:443 -servername vynor.lk 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
   if [ -n "$end" ]; then
     days=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
     [ "$days" -lt 14 ] && issue tls "TLS certificate for vynor.lk expires in $days days."

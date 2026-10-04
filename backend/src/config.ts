@@ -165,7 +165,7 @@ export const PLANS: Record<string, PlanDefinition> = {
     features: [
       "55 million credits/month",
       "20,000 requests/month",
-      "Every model, including Claude and GPT (credit-weighted)",
+      "Every model in the VynorAI catalog (credit-weighted)",
       "256k context window",
       "Multi-device support (up to 3 devices)",
       "Priority support",
@@ -190,7 +190,7 @@ export const PLANS: Record<string, PlanDefinition> = {
     features: [
       "55 million credits/month",
       "20,000 requests/month",
-      "Every model, including Claude and GPT (credit-weighted)",
+      "Every model in the VynorAI catalog (credit-weighted)",
       "256k context window",
       "Multi-device support (up to 3 devices)",
       "Priority support",

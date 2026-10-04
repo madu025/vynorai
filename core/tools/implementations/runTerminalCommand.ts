@@ -113,6 +113,15 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
   const waitForCompletion =
     getBooleanArg(args, "waitForCompletion", false) ?? true;
 
+  // Edits land in editor buffers; save them first so tests and builds run
+  // the code the agent just wrote, not the previous version on disk.
+  try {
+    const open = await extras.ide.getOpenFiles();
+    await Promise.all(open.map((f) => extras.ide.saveFile(f).catch(() => {})));
+  } catch {
+    // Saving is best effort; the command still runs.
+  }
+
   const ideInfo = await extras.ide.getIdeInfo();
   const toolCallId = extras.toolCallId || "";
 

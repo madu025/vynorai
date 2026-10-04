@@ -158,13 +158,17 @@
             <!-- Cloudflare Turnstile bot verification widget container -->
             <div id="turnstile-container" style="display:flex; justify-content:center;"></div>
           </div>
+          <label class="field" id="consent-field" style="display:none; font-size:13px; color:var(--text-muted); line-height:1.5; gap:8px; align-items:flex-start; margin-top:10px;">
+            <input type="checkbox" id="inp-consent" style="margin-top:3px; width:auto;">
+            <span>I agree to the <a href="/privacy.html" target="_blank" style="color:var(--primary);">Privacy Policy</a>, including that my prompts and code are sent to DeepSeek (China) to generate answers after personal data and secrets are removed.</span>
+          </label>
           <a href="#" class="forgot-link" id="forgot-link" onclick="handleForgot(event)">Forgot password?</a>
           <button type="submit" class="submit-btn" id="submit-btn">
             <span id="btn-label">Sign In to VynorAI</span>
           </button>
         </form>
         <div class="switch-link" id="switch-link">Don't have an account? <a onclick="switchTab('register')">Create one free</a></div>
-        <div class="terms-note">By continuing you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.</div>
+        <div class="terms-note">By continuing (including with Google) you agree to our <a href="/privacy.html" target="_blank">Privacy Policy</a>.</div>
       </div>
       <div class="auth-card success-view" id="success-card" style="display:none;"></div>
       <div class="rp-footer"><a href="/">Back to homepage</a> | <a href="/admin">Admin Portal</a></div>
@@ -218,6 +222,8 @@
       var turnstileField = document.getElementById('turnstile-field');
       if (turnstileField) turnstileField.style.display = isReg && turnstileSiteKey ? 'block' : 'none';
       if (isReg) loadTurnstile();
+      var consentField = document.getElementById('consent-field');
+      if (consentField) consentField.style.display = isReg ? 'flex' : 'none';
       document.getElementById('inp-password').autocomplete = isReg ? 'new-password' : 'current-password';
       clearAlerts();
     }
@@ -268,11 +274,12 @@
       var name = document.getElementById('inp-name').value.trim();
       if (!email || !password) { showError('Please fill in all required fields.'); return; }
       if (mode === 'register' && password.length < 8) { showError('Password must be at least 8 characters.'); return; }
+      if (mode === 'register' && !document.getElementById('inp-consent').checked) { showError('Please accept the Privacy Policy to create an account.'); return; }
       if (mode === 'register' && turnstileSiteKey && !turnstileToken) { showError('Please complete the security check.'); return; }
       setLoading(true);
       try {
         var endpoint = mode === 'signin' ? '/api/auth/login' : '/api/auth/register';
-        var body = mode === 'signin' ? { email: email, password: password } : { email: email, password: password, name: name || email.split('@')[0], turnstileToken: turnstileToken };
+        var body = mode === 'signin' ? { email: email, password: password } : { email: email, password: password, name: name || email.split('@')[0], turnstileToken: turnstileToken, acceptPrivacy: true };
         var res = await fetch(API + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         var data = await res.json();
         if (!res.ok) {

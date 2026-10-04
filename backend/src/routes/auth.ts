@@ -1,4 +1,7 @@
-import { cleanDisplayName } from "../services/inputValidation.js";
+import {
+  cleanDisplayName,
+  PRIVACY_POLICY_VERSION,
+} from "../services/inputValidation.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { NextFunction, Request, Response, Router } from "express";
@@ -245,7 +248,13 @@ authRouter.post(
   authRateLimiter,
   async (req: Request, res: Response) => {
     try {
-      const { email: rawEmail, password, name, turnstileToken } = req.body;
+      const {
+        email: rawEmail,
+        password,
+        name,
+        turnstileToken,
+        acceptPrivacy,
+      } = req.body;
 
       if (
         !rawEmail ||
@@ -263,6 +272,13 @@ authRouter.post(
         return res
           .status(400)
           .json({ error: "Please enter a valid email address" });
+      }
+      if (acceptPrivacy !== true) {
+        return res
+          .status(400)
+          .json({
+            error: "Please accept the Privacy Policy to create an account.",
+          });
       }
       if (password.length > 128) {
         return res
@@ -301,7 +317,7 @@ authRouter.post(
       const storedApiKey = encryptedApiKey ? `encrypted:${userId}` : apiKey;
 
       await dbRun(
-        "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, api_key_masked, api_key_encrypted, name, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
+        "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, api_key_masked, api_key_encrypted, name, email_verified, privacy_accepted_at, privacy_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, ?)",
         [
           userId,
           email,
@@ -311,6 +327,7 @@ authRouter.post(
           maskApiKey(apiKey),
           encryptedApiKey,
           cleanDisplayName(name),
+          PRIVACY_POLICY_VERSION,
         ],
       );
 

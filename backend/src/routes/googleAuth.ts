@@ -1,4 +1,7 @@
-import { cleanDisplayName } from "../services/inputValidation.js";
+import {
+  cleanDisplayName,
+  PRIVACY_POLICY_VERSION,
+} from "../services/inputValidation.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { Request, Response, Router } from "express";
@@ -350,7 +353,7 @@ async function findOrCreateGoogleUser(
     12,
   );
   await dbRun(
-    "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, api_key_masked, api_key_encrypted, name, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+    "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, api_key_masked, api_key_encrypted, name, email_verified, privacy_accepted_at, privacy_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)",
     [
       userId,
       email,
@@ -360,6 +363,7 @@ async function findOrCreateGoogleUser(
       maskApiKey(apiKey),
       encryptedApiKey,
       cleanDisplayName(name) || email.split("@")[0],
+      PRIVACY_POLICY_VERSION,
     ],
   );
   return { id: userId, is_suspended: 0, created: true };

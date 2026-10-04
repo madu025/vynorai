@@ -266,6 +266,13 @@ ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS tool_followup SMALLINT NO
 CREATE INDEX IF NOT EXISTS idx_request_economics_prompt_fp ON request_economics (user_id, prompt_fp) WHERE prompt_fp IS NOT NULL;
 `,
   },
+  {
+    version: "pg_004_privacy_consent",
+    sql: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_version VARCHAR(16);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

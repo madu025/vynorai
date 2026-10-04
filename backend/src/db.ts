@@ -666,6 +666,14 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "017_privacy_consent",
+    description: "When and which privacy policy version a user accepted",
+    up: async () => {
+      await addColumnIfNotExists("users", "privacy_accepted_at DATETIME");
+      await addColumnIfNotExists("users", "privacy_version VARCHAR(16)");
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

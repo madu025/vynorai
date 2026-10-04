@@ -54,26 +54,6 @@ export const defaultConfig: ConfigYaml = {
       defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 },
       capabilities: ["tool_use"],
     },
-    // ── 🎯 High Performance Open Coder (Starter, Pro, Ultra) ─────────────
-    {
-      name: "VynorAI 🎯 Qwen 2.5 Coder 32B",
-      provider: "vynorai",
-      model: "qwen/qwen-2.5-coder-32b-instruct",
-      apiBase: VYNORAI_API_BASE,
-      roles: ["chat", "edit"],
-      defaultCompletionOptions: { contextLength: 32000, maxTokens: 8192 },
-      capabilities: ["tool_use"],
-    },
-    // ── 🏆 Large Powerhouse Model (Ultra) ─────────────────────────────────
-    {
-      name: "VynorAI 🏆 Llama 3.3 70B Instruct",
-      provider: "vynorai",
-      model: "meta-llama/llama-3.3-70b-instruct",
-      apiBase: VYNORAI_API_BASE,
-      roles: ["chat", "edit"],
-      defaultCompletionOptions: { contextLength: 128000, maxTokens: 8192 },
-      capabilities: ["tool_use"],
-    },
     // ── ⌨️  Code Autocomplete Engine (All Plans) ─────────────────────────
     {
       name: "VynorAI Autocomplete (FIM)",

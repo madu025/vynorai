@@ -7,6 +7,8 @@ import { getConfigJsonPath, getConfigYamlPath } from "core/util/paths";
 import * as vscode from "vscode";
 import { isSeq, parseDocument } from "yaml";
 
+import { migrateVynorModels } from "./vynorModelMigration";
+
 import { SecretStorage } from "../stubs/SecretStorage";
 
 // ─── Per-account chat history ─────────────────────────────────────────────────
@@ -129,6 +131,15 @@ export async function applyVynorConfig(): Promise<boolean> {
       const localBase = entries.find(
         (m) => m?.provider === "vynorai" && isLocalApiBase(m.apiBase),
       )?.apiBase as string | undefined;
+
+      // Bring older VynorAI model lists up to the current lineup.
+      migrateVynorModels(
+        document,
+        models,
+        localBase,
+        VYNORAI_SECRET_REF,
+        VYNORAI_PROD_URL,
+      );
 
       // Auto is first so it is the default for new users; the backend picks
       // the upstream model per request. Existing VynorAI models stay available

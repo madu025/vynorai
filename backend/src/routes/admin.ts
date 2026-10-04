@@ -1,3 +1,7 @@
+import {
+  AUTH_RATE_LIMIT_PER_MINUTE,
+  PROXY_RATE_LIMIT_PER_MINUTE,
+} from "../middleware/security.js";
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import {
@@ -363,95 +367,6 @@ adminRouter.post(
 );
 
 /**
- * GET /admin/staff
- * List authorized admin staff and team members
- */
-adminRouter.get(
-  "/staff",
-  requireAdmin,
-  async (_req: Request, res: Response) => {
-    const staff = await dbAll<any>(
-      "SELECT id, name, email, role, created_by, created_at FROM admin_staff ORDER BY created_at ASC",
-    );
-    res.json({ staff, count: staff.length });
-  },
-);
-
-/**
- * POST /admin/staff
- * Super Admin adds a new authorized staff member (No public registration)
- */
-adminRouter.post(
-  "/staff",
-  requireAdmin,
-  async (req: Request, res: Response) => {
-    const { name, email, role = "admin" } = req.body;
-    if (!name || !email) {
-      return res.status(400).json({ error: "Name and email are required" });
-    }
-
-    const existing = await dbGet<any>(
-      "SELECT id FROM admin_staff WHERE email = ?",
-      [email.toLowerCase().trim()],
-    );
-    if (existing) {
-      return res
-        .status(400)
-        .json({ error: "A staff member with this email already exists" });
-    }
-
-    const id = uuidv4();
-    await dbRun(
-      "INSERT INTO admin_staff (id, name, email, role, created_by) VALUES (?, ?, ?, ?, 'SUPER_ADMIN')",
-      [id, name.trim(), email.toLowerCase().trim(), role],
-    );
-
-    await logSecurityEvent({
-      eventType: "ADMIN_STAFF_ADDED",
-      severity: "WARN",
-      actor: "ADMIN",
-      target: email,
-      details: `New staff member ${name} (${email}) added with role: ${role}`,
-    });
-
-    res.json({ ok: true, message: `Staff member ${name} successfully added` });
-  },
-);
-
-/**
- * DELETE /admin/staff/:staffId
- * Super Admin revokes staff member access
- */
-adminRouter.delete(
-  "/staff/:staffId",
-  requireAdmin,
-  async (req: Request, res: Response) => {
-    const staffId = req.params["staffId"] as string;
-    const staff = await dbGet<any>(
-      "SELECT name, email FROM admin_staff WHERE id = ?",
-      [staffId],
-    );
-    if (!staff)
-      return res.status(404).json({ error: "Staff member not found" });
-
-    await dbRun("DELETE FROM admin_staff WHERE id = ?", [staffId]);
-
-    await logSecurityEvent({
-      eventType: "ADMIN_STAFF_REMOVED",
-      severity: "WARN",
-      actor: "ADMIN",
-      target: staff.email,
-      details: `Staff member ${staff.email} revoked`,
-    });
-
-    res.json({
-      ok: true,
-      message: `Staff member ${staff.name} (${staff.email}) revoked`,
-    });
-  },
-);
-
-/**
  * POST /admin/users/:userId/rotate-key
  * Force-rotate a user's API Key if compromised
  */
@@ -554,23 +469,19 @@ adminRouter.get(
     res.json({
       status: "healthy",
       posture: {
-        zeroDataRetention: {
-          status: "ACTIVE",
-          compliancePct: 100,
+        dataRetention: {
           description:
-            "In-memory inference only; zero prompts or generated code written to persistent storage.",
+            "Cached answers are stored for reuse (0-credit repeats); user memory and rules persist until deleted; prompts go to the model provider. Code is never used to train models.",
         },
         edgeFirewall: {
           provider: "Cloudflare",
           ssl: "Strict TLS 1.3",
           ddosShield: "Armed",
-          turnstile: process.env.TURNSTILE_SECRET_KEY
-            ? "Enforced"
-            : "Configured (Passive)",
+          turnstile: process.env.TURNSTILE_SECRET_KEY ? "enforced" : "off",
         },
         rateLimiting: {
-          authRateLimit: "10 req/min (Brute-Force Guard)",
-          proxyRateLimit: "60 req/min (Concurrency Guard)",
+          authPerMinute: AUTH_RATE_LIMIT_PER_MINUTE,
+          proxyPerMinute: PROXY_RATE_LIMIT_PER_MINUTE,
         },
         dualPortIsolation: {
           customerPort: 3333,

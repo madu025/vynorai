@@ -100,7 +100,7 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
         🛡️
       </div>
       <h2 style="font-size:1.6rem;font-weight:800;color:#fff;letter-spacing:-0.5px;">VynorAI Control Center</h2>
-      <p style="color:var(--muted);font-size:0.85rem;margin-top:6px;">Restricted Super Admin & Staff Portal</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin-top:6px;">Restricted Super Admin Portal</p>
     </div>
 
     <div id="loginError" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:var(--danger);padding:11px 14px;border-radius:10px;font-size:0.82rem;margin-bottom:1.2rem;align-items:center;gap:8px;">
@@ -181,9 +181,6 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item" onclick="showPage('users')" id="nav-users">
       <span class="nav-icon">👥</span>Users & Subs
     </div>
-    <div class="nav-item" onclick="showPage('staff')" id="nav-staff">
-      <span class="nav-icon">🔑</span>Staff & Admins
-    </div>
     <div class="nav-item" onclick="showPage('plans')" id="nav-plans">
       <span class="nav-icon">📦</span>Plans & Pricing
     </div>
@@ -218,23 +215,23 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <!-- SECURITY & THREAT RADAR -->
     <div class="page" id="page-security">
       <h1>🛡️ Security & Threat Radar</h1>
-      <p class="subtitle">Cloudflare WAF, Enterprise Zero Data Retention (ZDR), and Live Security Audit Trails</p>
+      <p class="subtitle">Edge protection, data retention and the live security audit trail</p>
       
       <div class="cards" id="securityCards">
         <div class="stat-card">
           <div class="stat-label">Edge & WAF Defense</div>
           <div class="stat-value green" style="font-size:1.05rem">Cloudflare TLS 1.3</div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">DDoS Shield Armed • Bot Turnstile Active</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem" id="secEdge">Loading…</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Zero Data Retention (ZDR)</div>
-          <div class="stat-value green" style="font-size:1.05rem">100% Enforced</div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">In-Memory Inference Only • 0 Code Logs</div>
+          <div class="stat-label">Data Retention</div>
+          <div class="stat-value amber" style="font-size:1.05rem">Answer cache + memory</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem" id="secRetention">Loading…</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Rate Limiter Engines</div>
           <div class="stat-value purple" style="font-size:1.05rem">Active Guard</div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">10 auth/min • 60 proxy/min per key</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem" id="secRates">Loading…</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Suspended Accounts</div>
@@ -304,63 +301,6 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
             </thead>
             <tbody id="userTableBody">
               <tr><td colspan="7" class="loading">Loading user records...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- STAFF & TEAM MEMBERS (NO PUBLIC REGISTRATION) -->
-    <div class="page" id="page-staff">
-      <h1>🔑 Authorized Admin Staff</h1>
-      <p class="subtitle">Private team access control — public registration is permanently disabled</p>
-      
-      <div class="alert alert-info">
-        🛡️ <b>Security Policy:</b> Only the Super Admin can grant dashboard access. Team members can inspect users and manage support tickets, but cannot alter master AI keys.
-      </div>
-
-      <div style="display:flex;gap:1rem;margin-bottom:1.5rem">
-        <button class="btn btn-primary" onclick="showAddStaffModal()">+ Add Staff Member</button>
-        <button class="btn btn-ghost" onclick="loadStaff()">↻ Refresh</button>
-      </div>
-
-      <div id="addStaffBox" style="display:none;" class="panel">
-        <div class="panel-header"><div class="panel-title">➕ Add Authorized Staff Member</div></div>
-        <div class="panel-body">
-          <div class="field-group">
-            <div><label>Full Name</label><input id="st_name" placeholder="Kamal Perera"/></div>
-            <div><label>Work Email</label><input id="st_email" type="email" placeholder="kamal@vynor.lk"/></div>
-          </div>
-          <div class="field-group">
-            <div>
-              <label>Role</label>
-              <select id="st_role">
-                <option value="admin">Admin (Full Operational Access)</option>
-                <option value="support">Support Agent (Read-only + Key Roll + Email Verify)</option>
-              </select>
-            </div>
-          </div>
-          <button class="btn btn-primary" onclick="submitAddStaff()">Add Team Member</button>
-          <button class="btn btn-ghost" onclick="document.getElementById('addStaffBox').style.display='none'" style="margin-left:.5rem">Cancel</button>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header"><div class="panel-title">👥 Authorized Team Members (<span id="staffCount">0</span>)</div></div>
-        <div class="panel-body" style="padding:0;overflow-x:auto">
-          <table class="model-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Added By</th>
-                <th>Joined</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="staffTableBody">
-              <tr><td colspan="6" class="loading">Loading staff list...</td></tr>
             </tbody>
           </table>
         </div>
@@ -609,7 +549,6 @@ function showPage(id) {
   if (id === 'overview') loadOverview();
   if (id === 'security') loadSecurity();
   if (id === 'users')    loadUsers();
-  if (id === 'staff')    loadStaff();
   if (id === 'plans')    loadPlans();
   if (id === 'models')   loadModels();
   if (id === 'providers') loadProviders();
@@ -751,74 +690,6 @@ async function adminToggleSuspend(userId, isSuspended) {
   }
 }
 
-// Staff & Team Management (Super Admin Exclusive)
-let staffData = [];
-async function loadStaff() {
-  const data = await api('GET', '/admin/staff');
-  if (!data) return;
-  const staff = data.staff || [];
-  staffData = staff;
-  const el = document.getElementById('staffCount');
-  if (el) el.innerText = staff.length;
-
-  const tbody = document.getElementById('staffTableBody');
-  if (!tbody) return;
-  if (staff.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No additional staff members added yet. Super Admin is active via secret key.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = staff.map(s => `
-    <tr>
-      <td><strong>${escHtml(s.name)}</strong></td>
-      <td><span style="font-size:.82rem;color:var(--muted);">${escHtml(s.email)}</span></td>
-      <td><span class="badge ${s.role==='super_admin'?'badge-ultra':'badge-pro'}">${escHtml((s.role||'admin').toUpperCase())}</span></td>
-      <td style="font-size:.8rem;color:var(--muted);">${escHtml(s.created_by || 'Owner')}</td>
-      <td style="font-size:.8rem;color:var(--muted);">${s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
-      <td>
-        <button class="btn btn-danger" style="padding:.25rem .6rem;font-size:.72rem;" onclick="removeStaff('${escId(s.id)}')">Revoke</button>
-      </td>
-    </tr>
-  `).join('');
-}
-
-function showAddStaffModal() {
-  const box = document.getElementById('addStaffBox');
-  box.style.display = box.style.display === 'none' ? 'block' : 'none';
-}
-
-async function submitAddStaff() {
-  const name = document.getElementById('st_name').value.trim();
-  const email = document.getElementById('st_email').value.trim();
-  const role = document.getElementById('st_role').value;
-
-  if (!name || !email) {
-    showToast('Name and email are required', 'err');
-    return;
-  }
-
-  const res = await api('POST', '/admin/staff', { name, email, role });
-  if (res?.ok) {
-    showToast(res.message);
-    document.getElementById('addStaffBox').style.display = 'none';
-    document.getElementById('st_name').value = '';
-    document.getElementById('st_email').value = '';
-    loadStaff();
-  } else {
-    showToast(res?.error || 'Failed to add staff member', 'err');
-  }
-}
-
-async function removeStaff(staffId) {
-  const name = (staffData.find(s => s.id === staffId) || {}).name || staffId;
-  if (!confirm(`Revoke dashboard access for staff member ${name}?`)) return;
-  const res = await api('DELETE', `/admin/staff/${staffId}`);
-  if (res?.ok) {
-    showToast(res.message);
-    loadStaff();
-  } else {
-    showToast(res?.error || 'Failed to revoke access', 'err');
-  }
-}
 
 function filterUsersTable() {
   const q = (document.getElementById('userSearchInp')?.value || '').toLowerCase().trim();
@@ -840,6 +711,11 @@ async function loadSecurity() {
   if (overview) {
     const el = document.getElementById('secSuspendedCount');
     if (el) el.innerText = overview.counts?.suspendedUsers || 0;
+    const p = overview.posture || {};
+    const setText = (id, text) => { const n = document.getElementById(id); if (n) n.textContent = text; };
+    setText('secEdge', `Turnstile ${p.edgeFirewall?.turnstile || 'unknown'} • Cloudflare auth rate rule`);
+    setText('secRetention', p.dataRetention?.description || '');
+    setText('secRates', `${p.rateLimiting?.authPerMinute ?? '?'} auth/min • ${p.rateLimiting?.proxyPerMinute ?? '?'} proxy/min per key`);
   }
 
   if (auditData) {

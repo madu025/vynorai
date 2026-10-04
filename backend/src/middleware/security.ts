@@ -97,9 +97,12 @@ export function createRateLimiter(options: {
 /**
  * 1. Auth Rate Limiter: Max 5 register/login attempts per 1 minute per IP
  */
+export const AUTH_RATE_LIMIT_PER_MINUTE = 10;
+export const PROXY_RATE_LIMIT_PER_MINUTE = 60;
+
 export const authRateLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
-  max: 10,
+  max: AUTH_RATE_LIMIT_PER_MINUTE,
   message:
     "Too many authentication attempts from this IP. Please wait 1 minute before trying again.",
   keyGenerator: (req) => {
@@ -117,7 +120,7 @@ export const authRateLimiter = createRateLimiter({
  */
 export const proxyRateLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
-  max: 60,
+  max: PROXY_RATE_LIMIT_PER_MINUTE,
   message:
     "VynorAI proxy rate limit reached (max 60 calls/minute). Please slow down.",
   keyGenerator: (req) => {

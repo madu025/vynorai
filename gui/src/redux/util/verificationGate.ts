@@ -2,6 +2,8 @@ import { ChatHistoryItem } from "core";
 import { BuiltInToolNames } from "core/tools/builtIn";
 import type { VerificationCommandCandidate } from "core/workspace/types";
 
+import { STREAM_RECOVERY_MARKER } from "./streamRecovery";
+
 const EDIT_TOOLS = new Set<string>([
   BuiltInToolNames.EditExistingFile,
   BuiltInToolNames.SingleFindAndReplace,
@@ -31,6 +33,14 @@ export function unverifiedEdits(
   let start = history.length;
   for (let i = history.length - 1; i >= 0; i--) {
     if (history[i].message.role !== "user") continue;
+    // A network-recovery prompt is not a new request; look past it.
+    const content = history[i].message.content;
+    if (
+      history[i].isAutoPrompt &&
+      typeof content === "string" &&
+      content.startsWith(STREAM_RECOVERY_MARKER)
+    )
+      continue;
     if (history[i].isAutoPrompt) return undefined; // gated once already
     start = i + 1;
     break;

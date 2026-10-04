@@ -60,6 +60,12 @@ import {
   unverifiedEdits,
   verificationGatePrompt,
 } from "../util/verificationGate";
+import {
+  alreadyRecovered,
+  isTransientStreamError,
+  partialReply,
+  streamRecoveryPrompt,
+} from "../util/streamRecovery";
 import type { VerificationCommandCandidate } from "core/workspace/types";
 
 /**
@@ -549,6 +555,20 @@ export const streamNormalInput = createAsyncThunk<
             }),
           );
         }
+      } else if (
+        !streamAborter.signal.aborted &&
+        getState().session.isStreaming &&
+        toolCallsToCancel.length === 0 &&
+        isTransientStreamError(e) &&
+        !alreadyRecovered(getState().session.history) &&
+        depth + 1 < roundBudget
+      ) {
+        // Keep the partial reply and ask the model once to continue from it.
+        const hadPartial =
+          partialReply(getState().session.history).trim() !== "";
+        dispatch(appendAutoPrompt(streamRecoveryPrompt(hadPartial)));
+        unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
+        return;
       } else {
         throw e;
       }

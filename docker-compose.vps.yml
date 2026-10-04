@@ -18,6 +18,8 @@ x-backend: &backend
   # this only holds local files such as the dev SQLite database.
   volumes:
     - vynor-backend-data:/app/data
+    # Extension builds served at /download (deploy/release-extension.sh).
+    - ./releases:/app/releases:ro
   environment:
     - PORT=3333
     - ADMIN_PORT=3334

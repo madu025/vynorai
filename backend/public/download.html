@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download VynorAI</title>
+  <meta name="description" content="Install the VynorAI coding assistant in VS Code, Antigravity, Cursor or Qoder.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#07090f; --card:#0e111c; --border:rgba(255,255,255,0.08); --text:#eef2f8; --muted:#8695ad; --primary:#00e5ff; --accent:#b026ff; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:'Outfit',system-ui,sans-serif; line-height:1.6; }
+    main { max-width:720px; margin:0 auto; padding:48px 16px 80px; }
+    a { color:var(--primary); }
+    .back { font-size:14px; text-decoration:none; }
+    h1 { font-size:34px; margin:24px 0 6px; }
+    .lead { color:var(--muted); margin-bottom:28px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; margin:16px 0; }
+    .btn { display:inline-block; background:linear-gradient(135deg,var(--primary),var(--accent)); color:#06080d; font-weight:700; padding:14px 26px; border-radius:10px; text-decoration:none; font-size:16px; }
+    .meta { color:var(--muted); font-size:13px; margin-top:12px; word-break:break-all; }
+    h2 { font-size:20px; margin-bottom:12px; }
+    ol { padding-left:20px; }
+    li + li { margin-top:8px; }
+    li, p { color:#d3dae6; font-size:15px; }
+    code { background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:5px; font-size:13px; }
+    .editors { color:var(--muted); font-size:14px; margin-top:10px; }
+  </style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← vynor.lk</a>
+  <h1>Download VynorAI</h1>
+  <p class="lead">The AI coding assistant for your editor. Free to start with 100,000 credits.</p>
+
+  <div class="card">
+    <a class="btn" id="download-btn" href="/download/latest">⬇ Download VynorAI</a>
+    <div class="meta" id="release-meta">Checking the latest version…</div>
+    <div class="editors">Works in VS Code, Antigravity, Cursor, Windsurf and Qoder.</div>
+  </div>
+
+  <div class="card">
+    <h2>Install in 3 steps</h2>
+    <ol>
+      <li>Download the <code>.vsix</code> file above.</li>
+      <li>In your editor open <strong>Extensions</strong> (<code>Ctrl+Shift+X</code>), click <strong>⋯</strong> at the top, then <strong>Install from VSIX…</strong>, and choose the file.</li>
+      <li>Click the VynorAI icon in the sidebar and sign in.</li>
+    </ol>
+    <p style="margin-top:14px">Or from a terminal: <code>code --install-extension vynorai-x.y.z.vsix</code></p>
+  </div>
+
+  <div class="card">
+    <h2>Updates</h2>
+    <p>VynorAI checks for new versions itself and asks before installing one. Every download is verified against the checksum published here before it is installed.</p>
+  </div>
+</main>
+<script>
+  fetch('/api/extension/latest').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    var meta = document.getElementById('release-meta');
+    if (!d) { meta.textContent = 'No release published yet.'; return; }
+    document.getElementById('download-btn').textContent = '⬇ Download VynorAI ' + d.version;
+    var mb = d.size ? ' · ' + (d.size / 1048576).toFixed(1) + ' MB' : '';
+    meta.textContent = 'Version ' + d.version + mb + (d.publishedAt ? ' · released ' + d.publishedAt.slice(0, 10) : '') + ' · SHA-256 ' + d.sha256;
+  }).catch(function () {});
+</script>
+</body>
+</html>

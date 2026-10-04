@@ -1,6 +1,7 @@
 import cors from "cors";
 import { warmUpLocalSlm } from "./services/localSlmRouter.js";
 import { scheduleRetention } from "./services/retention.js";
+import { releasesRouter } from "./routes/releases.js";
 import express, { NextFunction, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
@@ -214,6 +215,7 @@ app.use("/api/payment", paymentRouter);
 // More specific mount first so the generic /v1 router can't swallow it
 app.use("/v1/memory", memoryRouter);
 app.use("/v1", proxyRouter);
+app.use(releasesRouter);
 
 // Customer portal /admin redirect to dedicated admin portal
 app.get("/admin", (_req, res) => {

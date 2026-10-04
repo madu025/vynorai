@@ -191,3 +191,6 @@ scratch/
 
 # VPS database backups (docker-compose.vps.yml vynor-pg-backup)
 /backups/
+
+# Extension builds served by the backend (deploy/release-extension.sh)
+/releases/

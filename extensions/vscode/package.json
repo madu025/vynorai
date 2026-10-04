@@ -91,6 +91,11 @@
     "configuration": {
       "title": "VynorAI",
       "properties": {
+        "vynorai.autoUpdateCheck": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Check vynor.lk for new VynorAI versions every 6 hours and offer to install them. Downloads are verified against the published SHA-256 checksum."
+        },
         "continue.telemetryEnabled": {
           "type": "boolean",
           "default": false,
@@ -156,6 +161,11 @@
       }
     },
     "commands": [
+      {
+        "command": "vynorai.checkForUpdates",
+        "category": "VynorAI",
+        "title": "Check for Updates"
+      },
       {
         "command": "continue.applyCodeFromChat",
         "category": "Continue",

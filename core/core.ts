@@ -522,12 +522,14 @@ export class Core {
         const data = (await res.json()) as {
           plan?: string;
           tokens?: { used?: number; limit?: number };
+          taskCredits?: { median: number; p90: number; samples: number } | null;
         };
         if (typeof data.tokens?.used !== "number") return null;
         return {
           used: data.tokens.used,
           limit: data.tokens.limit ?? 0,
           plan: data.plan ?? "",
+          taskCredits: data.taskCredits ?? null,
         };
       } catch {
         return null;

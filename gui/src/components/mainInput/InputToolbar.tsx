@@ -21,6 +21,7 @@ import { getMetaKeyLabel, isMetaEquivalentKeyPressed } from "../../util";
 import { ToolTip } from "../gui/Tooltip";
 import ModelSelect from "../modelSelection/ModelSelect";
 import { ModeSelect } from "../ModeSelect";
+import { TaskCreditHint } from "./TaskCreditHint";
 import { Button } from "../ui";
 import { useFontSize } from "../ui/font";
 import ContextStatus from "./ContextStatus";
@@ -97,6 +98,7 @@ function InputToolbar(props: InputToolbarProps) {
               <ModelSelect />
             </HoverItem>
           </ToolTip>
+          {!isInEdit && <TaskCreditHint />}
           <div className="xs:flex text-description -mb-1 hidden items-center transition-colors duration-200">
             {props.toolbarOptions?.hideImageUpload ||
               (supportsImages && (
@@ -224,7 +226,9 @@ function InputToolbar(props: InputToolbarProps) {
           )}
           <ToolTip
             place="top"
-            content={isStreaming && props.isMainInput ? "Queue prompt" : "Send (⏎)"}
+            content={
+              isStreaming && props.isMainInput ? "Queue prompt" : "Send (⏎)"
+            }
           >
             <Button
               variant={props.isMainInput ? "primary" : "secondary"}
@@ -243,7 +247,8 @@ function InputToolbar(props: InputToolbarProps) {
               disabled={isEnterDisabled}
             >
               <span className="hidden md:inline">
-                ⏎ {isStreaming && props.isMainInput
+                ⏎{" "}
+                {isStreaming && props.isMainInput
                   ? "Queue"
                   : (props.toolbarOptions?.enterText ?? "Enter")}
               </span>

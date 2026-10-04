@@ -1,6 +1,9 @@
-import { dbRun } from "../db.js";
+import { dbAll, dbRun } from "../db.js";
 import { v4 as uuidv4 } from "uuid";
-import { promptFingerprint } from "../services/routingSignals.js";
+import {
+  promptFingerprint,
+  taskCreditStats,
+} from "../services/routingSignals.js";
 import { stripRulesAndPreamble } from "../services/templateVault.js";
 import { Router, Request, Response, NextFunction } from "express";
 import {
@@ -313,9 +316,15 @@ proxyRouter.get(
     const requestLimit =
       plan.monthlyRequests + (monthlyUsage.bonus_requests || 0);
 
+    const taskCredits = await taskCreditStats(user.id, (sql, params) =>
+      dbAll<{ credits: number }>(sql, params),
+    );
+
     res.json({
       plan: planId,
       displayName: plan.displayName,
+      // What this user's prompts typically cost, for a pre-task estimate.
+      taskCredits,
       cycle: {
         periodStart: monthlyUsage.period_start,
         periodEnd: monthlyUsage.period_end,

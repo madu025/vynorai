@@ -154,3 +154,54 @@ export function summarizeRouting(
       .sort((a, b) => b.prompts - a.prompts),
   };
 }
+
+export interface TaskCreditStats {
+  median: number;
+  p90: number;
+  samples: number;
+}
+
+const statsCache = new Map<
+  string,
+  { at: number; value: TaskCreditStats | null }
+>();
+
+/**
+ * Credits a user's own prompts (all rounds of one prompt) cost over the last
+ * 30 days: the basis for "your typical task costs about N credits" before a
+ * task starts. Null until there are at least 5 prompts. Cached 10 minutes.
+ */
+export async function taskCreditStats(
+  userId: string,
+  query: (sql: string, params: any[]) => Promise<Array<{ credits: number }>>,
+): Promise<TaskCreditStats | null> {
+  const hit = statsCache.get(userId);
+  if (hit && Date.now() - hit.at < 600_000) return hit.value;
+  const since = new Date(Date.now() - 30 * 86400_000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+  const rows = await query(
+    `SELECT COALESCE(SUM(credits_charged), 0) AS credits
+     FROM request_economics
+     WHERE user_id = ? AND prompt_fp IS NOT NULL AND created_at >= ?
+     GROUP BY prompt_fp`,
+    [userId, since],
+  ).catch(() => []);
+  const credits = rows
+    .map((r) => Number(r.credits) || 0)
+    .filter((c) => c > 0)
+    .sort((a, b) => a - b);
+  const value =
+    credits.length < 5
+      ? null
+      : {
+          median: credits[Math.floor(credits.length / 2)],
+          p90: credits[
+            Math.min(credits.length - 1, Math.floor(credits.length * 0.9))
+          ],
+          samples: credits.length,
+        };
+  statsCache.set(userId, { at: Date.now(), value });
+  return value;
+}

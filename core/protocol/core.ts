@@ -233,7 +233,13 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   /** VynorAI monthly credit usage for the selected chat model's account (null if not VynorAI). */
   "vynor/usage": [
     undefined,
-    { used: number; limit: number; plan: string } | null,
+    {
+      used: number;
+      limit: number;
+      plan: string;
+      /** Credits this user's prompts typically cost (last 30 days). */
+      taskCredits?: { median: number; p90: number; samples: number } | null;
+    } | null,
   ];
   /** Helpful / unhelpful on a VynorAI answer; trains the Auto router. */
   "vynor/feedback": [{ prompt: string; signal: "helpful" | "unhelpful" }, void];

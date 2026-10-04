@@ -104,7 +104,9 @@ export function createEditorConfig(options: {
   const availableSlashCommandsRef = useUpdatingRef(
     props.availableSlashCommands,
   );
-  const { prevRef, nextRef, addRef } = useInputHistory(props.historyKey);
+  const { prevRef, nextRef, addRef, noteContentRef } = useInputHistory(
+    props.historyKey,
+  );
 
   const enterSubmenu = async (editor: Editor, providerId: string) => {
     const contents = editor.getText();
@@ -148,6 +150,17 @@ export function createEditorConfig(options: {
   };
 
   const editor: Editor | null = useEditor({
+    onUpdate: ({ editor }) => {
+      const hasImage = editor
+        .getJSON()
+        .content?.some((node) =>
+          node.content?.some((child) => child.type === "image"),
+        );
+      noteContentRef.current(
+        editor.getJSON(),
+        editor.getText().trim() === "" && !hasImage,
+      );
+    },
     extensions: [
       Document,
       History,
@@ -292,6 +305,7 @@ export function createEditorConfig(options: {
 
               const previousInput = prevRef.current(
                 this.editor.state.toJSON().doc,
+                this.editor.isEmpty,
               );
               if (previousInput) {
                 this.editor.commands.setContent(previousInput);

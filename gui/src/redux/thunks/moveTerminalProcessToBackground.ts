@@ -42,11 +42,19 @@ export const moveTerminalProcessToBackground = createAsyncThunk<
     const status =
       "Command moved to background. Further output will be ignored.";
 
+    // Tell the model plainly: the command did not fail or finish, it keeps
+    // running (a dev server, a watcher, a long build). Without this it tends
+    // to rerun the command or wait for it.
+    const note =
+      "[The user moved this command to the background. It is still running " +
+      "(for example a dev server or watcher) and further output will not be " +
+      "shown here. Do not run it again or wait for it; continue with the next " +
+      "step.]";
     const contextItems: ContextItem[] = [
       {
         name: "Terminal",
         description: "Terminal command output",
-        content: existingContent,
+        content: existingContent ? `${existingContent}\n\n${note}` : note,
         status: status,
       },
     ];

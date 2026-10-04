@@ -100,6 +100,9 @@ async function callToolByIdImpl(
   if (toolCallState.status !== "generated") {
     return;
   }
+  // Claim the call before any await: a double-click, key repeat, or Approve
+  // on a call that is already auto-running must not run it a second time.
+  dispatch(setToolCallCalling({ toolCallId }));
 
   const selectedChatModel = selectSelectedChatModel(state);
 
@@ -186,12 +189,6 @@ async function callToolByIdImpl(
       // Tool execution remains available if local audit persistence is unavailable.
     }
   }
-
-  dispatch(
-    setToolCallCalling({
-      toolCallId,
-    }),
-  );
 
   let output: ContextItem[] | undefined = undefined;
   let mcpUiState: McpUiState | undefined = undefined;

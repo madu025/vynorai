@@ -780,6 +780,8 @@ export const sessionSlice = createSlice({
       state.streamAborter = new AbortController();
 
       state.isStreaming = false;
+      // A new session starts its own credit count.
+      state.turnCredits = undefined;
       state.queuedInputs = [];
       state.symbols = {};
       state.activeTaskId = undefined;

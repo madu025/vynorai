@@ -1,4 +1,4 @@
-import { MessageModes } from "core";
+import { ChatHistoryItem, MessageModes } from "core";
 
 /**
  * Tool rounds (model call → tool calls → results) a single prompt may run
@@ -34,4 +34,21 @@ export function guardErrorForModel(message: string): string {
     return "This exact tool call has already run 3 times with no file edits in between, so it was not run again. Use the earlier result, or change approach.";
   }
   return "The per-task action limit was reached, so this tool call was not run. Stop calling tools and summarize progress and the remaining steps.";
+}
+
+/**
+ * Model rounds since the user's last real prompt (auto prompts such as the
+ * verification gate don't start a new prompt). Derived from history so every
+ * way of continuing a turn (approve, reject, apply, move to background)
+ * counts toward the same budget; passing `depth` alone reset it to 1 after
+ * each approval, so the budget and the credit cap never triggered.
+ */
+export function roundsSincePrompt(history: ChatHistoryItem[]): number {
+  let rounds = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const { message, isAutoPrompt } = history[i];
+    if (message.role === "user" && !isAutoPrompt) break;
+    if (message.role === "assistant") rounds++;
+  }
+  return rounds;
 }

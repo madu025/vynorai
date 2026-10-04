@@ -57,7 +57,11 @@ import { preprocessToolCalls } from "./preprocessToolCallArgs";
 import { streamResponseAfterToolCall } from "./streamResponseAfterToolCall";
 import { setWorkspaceSnapshot } from "../slices/workspaceSlice";
 import { selectBatchContinuation } from "../util/toolLoopGuards";
-import { TOOL_BUDGET_GUIDANCE, toolRoundBudget } from "../util/toolRoundBudget";
+import {
+  roundsSincePrompt,
+  TOOL_BUDGET_GUIDANCE,
+  toolRoundBudget,
+} from "../util/toolRoundBudget";
 import {
   unverifiedEdits,
   verificationGatePrompt,
@@ -126,10 +130,15 @@ export const streamNormalInput = createAsyncThunk<
 >(
   "chat/streamNormalInput",
   async (
-    { legacySlashCommandData, depth = 0, resumeTaskId },
+    { legacySlashCommandData, depth: passedDepth = 0, resumeTaskId },
     { dispatch, extra, getState },
   ) => {
     const state = getState();
+    // Rounds of this prompt so far, however the turn was continued.
+    const depth = Math.max(
+      passedDepth,
+      roundsSincePrompt(state.session.history),
+    );
     const roundBudget = toolRoundBudget(state.session.mode);
     // At the budget the model answers without tools, so depth can only pass
     // it through a bug; fail loudly rather than loop.
@@ -664,6 +673,7 @@ export const streamNormalInput = createAsyncThunk<
     const pendingVerification =
       originalToolCalls.length === 0 &&
       state.session.mode === "agent" &&
+      !toolBudgetExhausted &&
       depth + 1 < roundBudget &&
       activeTools.some(
         (tool) => tool.function.name === BuiltInToolNames.RunTerminalCommand,
@@ -714,6 +724,7 @@ ${PREMORTEM_GUIDANCE}`
     const pendingReview =
       originalToolCalls.length === 0 &&
       state.session.mode === "agent" &&
+      !toolBudgetExhausted &&
       depth + 1 < roundBudget
         ? pendingPremortem(
             getState().session.history,

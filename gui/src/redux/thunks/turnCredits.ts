@@ -45,7 +45,10 @@ export const finalizeTurnCredits = createAsyncThunk<
     const used = await fetchCreditsUsed(extra);
     if (used === null) return;
     const credits = Math.max(0, used - turn.start);
-    dispatch(setTurnCredits({ start: turn.start, used: credits }));
+    // A new prompt may have started during the settle delay with its own
+    // baseline; never overwrite it with this turn's.
+    if (getState().session.turnCredits?.start === turn.start)
+      dispatch(setTurnCredits({ start: turn.start, used: credits }));
     dispatch(setMessageCredits({ messageId, credits }));
   },
 );

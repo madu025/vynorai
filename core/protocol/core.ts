@@ -230,6 +230,11 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "history/clear": [undefined, void];
   /** Whose history is visible (see HistoryManager.accountKey). */
   "history/account": [undefined, string | null];
+  /** VynorAI monthly credit usage for the selected chat model's account (null if not VynorAI). */
+  "vynor/usage": [
+    undefined,
+    { used: number; limit: number; plan: string } | null,
+  ];
   "devdata/log": [DevDataLogEvent, void];
   "config/addOpenAiKey": [string, void];
   "config/addModel": [

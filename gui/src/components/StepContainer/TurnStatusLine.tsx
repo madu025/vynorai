@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { useAppSelector } from "../../redux/hooks";
+import { formatCredits } from "../../redux/util/turnCredits";
 import { deriveTurnStatus, TurnPhase } from "./turnStatus";
 
 const shimmer = keyframes`
@@ -65,6 +66,10 @@ function formatElapsed(ms: number): string {
 export function TurnStatusLine() {
   const history = useAppSelector((state) => state.session.history);
   const isStreaming = useAppSelector((state) => state.session.isStreaming);
+  // Settled credits of this prompt's finished rounds (refreshed each round).
+  const creditsSoFar = useAppSelector(
+    (state) => state.session.turnCredits?.used ?? 0,
+  );
   const status = deriveTurnStatus(history, isStreaming);
 
   const startedAt = useRef<number | null>(null);
@@ -104,6 +109,7 @@ export function TurnStatusLine() {
       <span className="text-description-muted shrink-0">
         {elapsed >= 1000 && ` · ${formatElapsed(elapsed)}`}
         {status.tokens > 0 && ` · ~${status.tokens.toLocaleString()} tokens`}
+        {creditsSoFar > 0 && ` · ${formatCredits(creditsSoFar)} credits`}
       </span>
     </div>
   );

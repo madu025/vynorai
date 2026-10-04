@@ -502,6 +502,40 @@ export class Core {
 
     on("history/account", () => historyManager.accountKey());
 
+    // Credit usage for the per-turn credit display and task cap. Read from the
+    // backend with the selected VynorAI model's own key; null for other models.
+    on("vynor/usage", async () => {
+      const { config } = await this.configHandler.loadConfig();
+      const llm = config?.selectedModelByRole.chat;
+      if (!llm?.apiKey) return null;
+      const base = llm.apiBase ?? "";
+      if (llm.providerName !== "vynorai" && !base.includes("vynor"))
+        return null;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      try {
+        const res = await fetch(`${base.replace(/\/+$/, "")}/usage`, {
+          headers: { Authorization: `Bearer ${llm.apiKey}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) return null;
+        const data = (await res.json()) as {
+          plan?: string;
+          tokens?: { used?: number; limit?: number };
+        };
+        if (typeof data.tokens?.used !== "number") return null;
+        return {
+          used: data.tokens.used,
+          limit: data.tokens.limit ?? 0,
+          plan: data.plan ?? "",
+        };
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+
     on("devdata/log", async (msg) => {
       void DataLogger.getInstance().logDevData(msg.data);
     });

@@ -2,6 +2,7 @@ import { PlayIcon } from "@heroicons/react/24/outline";
 import { JSONContent } from "@tiptap/react";
 import { useAppSelector } from "../../redux/hooks";
 import { CONTINUE_TASK_PROMPT } from "../../redux/util/toolRoundBudget";
+import { formatCredits } from "../../redux/util/turnCredits";
 
 export const continueEditorState: JSONContent = {
   type: "doc",
@@ -27,6 +28,8 @@ export function ContinueTaskBanner({
     (state) => state.session.toolBudgetPausedAfter,
   );
   const isStreaming = useAppSelector((state) => state.session.isStreaming);
+  const reason = useAppSelector((state) => state.session.toolBudgetPauseReason);
+  const cap = useAppSelector((state) => state.ui.taskCreditCap);
   if (pausedAfter === undefined || isStreaming) return null;
 
   return (
@@ -35,8 +38,9 @@ export function ContinueTaskBanner({
       data-testid="continue-task-banner"
     >
       <span className="text-description min-w-0 flex-1">
-        Paused after {pausedAfter} steps to check in. The plan above lists what
-        is left.
+        {reason === "credits"
+          ? `Paused at your ${formatCredits(cap ?? 0)}-credit task limit. The plan above lists what is left.`
+          : `Paused after ${pausedAfter} steps to check in. The plan above lists what is left.`}
       </span>
       <button
         type="button"

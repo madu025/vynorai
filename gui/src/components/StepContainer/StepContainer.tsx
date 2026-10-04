@@ -13,6 +13,7 @@ import StyledMarkdownPreview from "../StyledMarkdownPreview";
 import ConversationSummary from "./ConversationSummary";
 import ResponseActions from "./ResponseActions";
 import SideReviewCard from "./SideReviewCard";
+import { formatCredits } from "../../redux/util/turnCredits";
 import { estimateTokens, turnUsedThinking } from "./turnStatus";
 
 const VYNORAI_AUTO_MODEL = "vynor-auto";
@@ -56,6 +57,9 @@ export default function StepContainer(props: StepContainerProps) {
   const usedTitle = props.item.promptLogs?.at(-1)?.modelTitle;
   // History items carry a message id at runtime (ChatHistoryItemWithMessageId).
   const messageId = (props.item.message as { id?: string }).id;
+  const promptCredits = useAppSelector((state) =>
+    messageId ? state.session.creditsByMessage?.[messageId] : undefined,
+  );
   const usedModel = usedTitle
     ? chatModels.find((m) => m.title === usedTitle)
     : props.isLast
@@ -139,15 +143,26 @@ export default function StepContainer(props: StepContainerProps) {
         )}
       </div>
 
-      {showResponseActions && autoRoute && (
-        <div
-          className="text-description-muted px-2.5 pt-1 text-[10px]"
-          data-testid="auto-route-badge"
-          title="VynorAI Auto picked this based on the request"
-        >
-          {autoRoute === "thinking"
-            ? "Auto · 🧠 Deep thinking"
-            : "Auto · ⚡ Fast"}
+      {showResponseActions && (autoRoute || promptCredits !== undefined) && (
+        <div className="text-description-muted flex gap-2 px-2.5 pt-1 text-[10px]">
+          {autoRoute && (
+            <span
+              data-testid="auto-route-badge"
+              title="VynorAI Auto picked this based on the request"
+            >
+              {autoRoute === "thinking"
+                ? "Auto · 🧠 Deep thinking"
+                : "Auto · ⚡ Fast"}
+            </span>
+          )}
+          {promptCredits !== undefined && (
+            <span
+              data-testid="prompt-credits"
+              title="Credits this prompt used, including every tool round"
+            >
+              {formatCredits(promptCredits)} credits
+            </span>
+          )}
         </div>
       )}
 

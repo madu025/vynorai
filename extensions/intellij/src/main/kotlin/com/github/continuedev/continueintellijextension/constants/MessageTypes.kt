@@ -79,6 +79,7 @@ class MessageTypes {
             "history/loadRemote",
             "history/clear",
             "history/account",
+            "vynor/usage",
             "devdata/log",
             "config/addModel",
             "config/newPromptFile",

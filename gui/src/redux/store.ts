@@ -61,6 +61,7 @@ const saveSubsetFilters = [
     "reasoningSettings",
     "historyAccount",
     "sideReviewEnabled",
+    "taskCreditCap",
   ]),
   createFilter("indexing", []),
   createFilter("tabs", ["tabs"]),

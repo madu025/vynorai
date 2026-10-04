@@ -33,6 +33,8 @@ type UIState = {
   historyAccount?: string | null;
   /** "You should know" second look after agent edits (a few credits per task). */
   sideReviewEnabled?: boolean;
+  /** Stop a single prompt once it has used this many credits (0 or unset: off). */
+  taskCreditCap?: number;
 };
 
 export const DEFAULT_TOOL_SETTING: ToolPolicy = "allowedWithPermission";
@@ -64,6 +66,9 @@ export const uiSlice = createSlice({
     },
     setSideReviewEnabled: (state, action: PayloadAction<boolean>) => {
       state.sideReviewEnabled = action.payload;
+    },
+    setTaskCreditCap: (state, action: PayloadAction<number>) => {
+      state.taskCreditCap = action.payload;
     },
     setOnboardingCard: (
       state,
@@ -165,6 +170,7 @@ export const uiSlice = createSlice({
 export const {
   setHistoryAccount,
   setSideReviewEnabled,
+  setTaskCreditCap,
   setOnboardingCard,
   setDialogMessage,
   setShowDialog,

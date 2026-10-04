@@ -7,7 +7,14 @@ import { Card, Toggle, useFontSize } from "../../../components/ui";
 import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import { updateConfig } from "../../../redux/slices/configSlice";
-import { setSideReviewEnabled } from "../../../redux/slices/uiSlice";
+import {
+  setSideReviewEnabled,
+  setTaskCreditCap,
+} from "../../../redux/slices/uiSlice";
+import {
+  formatCredits,
+  TASK_CREDIT_CAP_OPTIONS,
+} from "../../../redux/util/turnCredits";
 import { setLocalStorage } from "../../../util/localStorage";
 import { ConfigHeader } from "../components/ConfigHeader";
 import { UserSetting } from "../components/UserSetting";
@@ -85,6 +92,7 @@ export function UserSettingsSection() {
   };
 
   const disableTelemetryToggle = false;
+  const taskCreditCap = useAppSelector((state) => state.ui.taskCreditCap ?? 0);
   const sideReviewEnabled = useAppSelector(
     (state) => state.ui.sideReviewEnabled !== false,
   );
@@ -105,6 +113,19 @@ export function UserSettingsSection() {
                   description="Displays tabs above the chat as an alternative way to organize and access your sessions."
                   value={showSessionTabs}
                   onChange={(value) => handleUpdate({ showSessionTabs: value })}
+                />
+                <UserSetting
+                  type="select"
+                  title="Credit Limit per Task"
+                  description="Pause a single prompt once it has used this many credits. The agent then summarizes what is done and what is left, and Continue resumes it."
+                  value={String(taskCreditCap)}
+                  options={TASK_CREDIT_CAP_OPTIONS.map((n) => ({
+                    value: String(n),
+                    label: n === 0 ? "Off" : `${formatCredits(n)} credits`,
+                  }))}
+                  onChange={(value) =>
+                    dispatch(setTaskCreditCap(Number(value)))
+                  }
                 />
                 <UserSetting
                   type="toggle"

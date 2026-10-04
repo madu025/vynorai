@@ -270,6 +270,12 @@ type SessionState = {
   contextPercentage?: number;
   inlineErrorMessage?: InlineErrorMessageType;
   compactionLoading: Record<number, boolean>; // Track compaction loading by message index
+  /** Credits the current prompt has used so far (VynorAI models only). */
+  turnCredits?: { start: number; used: number };
+  /** Final credits of a finished prompt, keyed by its last assistant message. */
+  creditsByMessage?: Record<string, number>;
+  /** Why the last turn paused: its tool round budget or the task credit cap. */
+  toolBudgetPauseReason?: "rounds" | "credits";
   /** "You should know" notes, keyed by the assistant message they follow. */
   sideReviews?: Record<string, SideReviewNote>;
 };
@@ -1092,6 +1098,25 @@ export const sessionSlice = createSlice({
       state.activeTaskState = action.payload;
     },
     /** Agent-loop prompt (verification gate) plus the response placeholder. */
+    setTurnCredits: (
+      state,
+      action: PayloadAction<{ start: number; used: number } | undefined>,
+    ) => {
+      state.turnCredits = action.payload;
+    },
+    setMessageCredits: (
+      state,
+      action: PayloadAction<{ messageId: string; credits: number }>,
+    ) => {
+      state.creditsByMessage = state.creditsByMessage ?? {};
+      state.creditsByMessage[action.payload.messageId] = action.payload.credits;
+    },
+    setToolBudgetPauseReason: (
+      state,
+      action: PayloadAction<"rounds" | "credits" | undefined>,
+    ) => {
+      state.toolBudgetPauseReason = action.payload;
+    },
     setSideReview: (
       state,
       action: PayloadAction<{ messageId: string; note: SideReviewNote }>,
@@ -1264,6 +1289,9 @@ export const {
   setToolBudgetPausedAfter,
   appendAutoPrompt,
   setSideReview,
+  setTurnCredits,
+  setMessageCredits,
+  setToolBudgetPauseReason,
   setProjectMemories,
   setSubagentRuns,
   updateSubagentRun,

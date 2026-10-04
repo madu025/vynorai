@@ -1,3 +1,4 @@
+import { cleanDisplayName } from "../services/inputValidation.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { NextFunction, Request, Response, Router } from "express";
@@ -38,7 +39,12 @@ const sha256 = (v: string) =>
   crypto.createHash("sha256").update(v).digest("hex");
 const getClientIp = (req: Request) =>
   (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Plain address characters only: no quotes, angle brackets or spaces, so an
+// email can never carry markup into the dashboards that display it.
+const EMAIL_RE =
+  /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+const MAX_EMAIL_LENGTH = 254;
+
 const IDE_AUTH_VALUE_RE = /^[a-f0-9]{64}$/i;
 const ideAuthorizationCodes = new IdeAuthorizationCodeStore(getRedis, {
   requireDistributed: process.env.IDE_AUTH_REQUIRE_REDIS === "true",
@@ -244,10 +250,15 @@ authRouter.post(
       }
 
       const email = rawEmail.toLowerCase().trim();
-      if (!EMAIL_RE.test(email)) {
+      if (email.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email)) {
         return res
           .status(400)
           .json({ error: "Please enter a valid email address" });
+      }
+      if (password.length > 128) {
+        return res
+          .status(400)
+          .json({ error: "Password must be at most 128 characters" });
       }
       if (password.length < 8) {
         return res
@@ -290,7 +301,7 @@ authRouter.post(
           apiKeyHash,
           maskApiKey(apiKey),
           encryptedApiKey,
-          name || "",
+          cleanDisplayName(name),
         ],
       );
 

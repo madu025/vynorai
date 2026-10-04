@@ -9,14 +9,17 @@ interface RateLimitRecord {
 const memoryStore = new Map<string, RateLimitRecord>();
 
 // Periodic cleanup of stale entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, record] of memoryStore.entries()) {
-    if (now > record.resetAt) {
-      memoryStore.delete(key);
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [key, record] of memoryStore.entries()) {
+      if (now > record.resetAt) {
+        memoryStore.delete(key);
+      }
     }
-  }
-}, 5 * 60 * 1000);
+  },
+  5 * 60 * 1000,
+);
 
 /**
  * High-performance, zero-dependency in-memory rate limiter
@@ -97,9 +100,14 @@ export function createRateLimiter(options: {
 export const authRateLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: 10,
-  message: "Too many authentication attempts from this IP. Please wait 1 minute before trying again.",
+  message:
+    "Too many authentication attempts from this IP. Please wait 1 minute before trying again.",
   keyGenerator: (req) => {
-    const ip = req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.ip || "unknown";
+    const ip =
+      req.headers["cf-connecting-ip"] ||
+      req.headers["x-forwarded-for"] ||
+      req.ip ||
+      "unknown";
     return `auth_${ip}`;
   },
 });
@@ -110,7 +118,8 @@ export const authRateLimiter = createRateLimiter({
 export const proxyRateLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: 60,
-  message: "VynorAI proxy rate limit reached (max 60 calls/minute). Please slow down.",
+  message:
+    "VynorAI proxy rate limit reached (max 60 calls/minute). Please slow down.",
   keyGenerator: (req) => {
     const user = (req as any).user;
     if (user?.id) return `proxy_user_${user.id}`;
@@ -124,7 +133,11 @@ export const proxyRateLimiter = createRateLimiter({
 /**
  * 3. Security Headers Middleware (OWASP recommended headers)
  */
-export function securityHeadersMiddleware(_req: Request, res: Response, next: NextFunction) {
+export function securityHeadersMiddleware(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   // Prevent clickjacking
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   // Prevent MIME-sniffing
@@ -134,9 +147,35 @@ export function securityHeadersMiddleware(_req: Request, res: Response, next: Ne
   // Referrer Policy
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   // Permissions Policy
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()",
+  );
   // Strict-Transport-Security (HSTS)
-  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  res.setHeader(
+    "Strict-Transport-Security",
+    "max-age=31536000; includeSubDomains; preload",
+  );
+  // Content Security Policy. The pages still use inline scripts and handlers,
+  // so 'unsafe-inline' stays; the gain is that injected script cannot load
+  // remote code, send data to another host, or post forms anywhere but
+  // PayHere. 127.0.0.1/localhost is the IDE sign-in callback.
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "img-src 'self' data:",
+      "connect-src 'self' http://127.0.0.1:* http://localhost:*",
+      "frame-src https://challenges.cloudflare.com",
+      "form-action 'self' https://www.payhere.lk https://sandbox.payhere.lk",
+      "frame-ancestors 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+    ].join("; "),
+  );
   // Hide Express server footprint
   res.removeHeader("X-Powered-By");
 

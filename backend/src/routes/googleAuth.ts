@@ -1,3 +1,4 @@
+import { cleanDisplayName } from "../services/inputValidation.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { Request, Response, Router } from "express";
@@ -358,7 +359,7 @@ async function findOrCreateGoogleUser(
       crypto.createHash("sha256").update(apiKey).digest("hex"),
       maskApiKey(apiKey),
       encryptedApiKey,
-      (name || email.split("@")[0]).slice(0, 128),
+      cleanDisplayName(name) || email.split("@")[0],
     ],
   );
   return { id: userId, is_suspended: 0, created: true };

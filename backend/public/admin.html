@@ -693,35 +693,35 @@ function renderUsersTable(users) {
   }
   tbody.innerHTML = users.map(u => {
     const isSub = u.subscription_status === 'active';
-    const planBadge = isSub ? `<span class="badge badge-pro">${(u.plan_name||'pro').toUpperCase()}</span>` : '<span class="badge badge-free">FREE</span>';
+    const planBadge = isSub ? `<span class="badge badge-pro">${escHtml((u.plan_name||'pro').toUpperCase())}</span>` : '<span class="badge badge-free">FREE</span>';
     const used = (u.used_tokens || 0).toLocaleString();
     const max = (u.max_tokens || 100000).toLocaleString();
     const statusBadge = u.is_suspended 
       ? '<span class="badge badge-suspended" style="background:rgba(239,68,68,0.2);color:#ef4444;">⛔ SUSPENDED</span>' 
       : '<span class="badge badge-starter">✅ ACTIVE</span>';
-    const ipAccess = u.allowed_ips ? `<code style="font-size:.72rem;color:var(--accent2);">${u.allowed_ips}</code>` : '<span style="color:var(--muted);font-size:.75rem">🌐 Global</span>';
+    const ipAccess = u.allowed_ips ? `<code style="font-size:.72rem;color:var(--accent2);">${escHtml(u.allowed_ips)}</code>` : '<span style="color:var(--muted);font-size:.75rem">🌐 Global</span>';
     const emailStatus = u.email_verified 
       ? '<span style="font-size:.72rem;color:var(--success);font-weight:600;">✅ Verified</span>' 
-      : `<span style="font-size:.72rem;color:var(--warn);font-weight:600;">⚠️ Unverified</span> <button class="btn btn-ghost" style="padding:1px 6px;font-size:.68rem;margin-left:4px;" onclick="adminVerifyEmail('${u.id}','${u.email}')">Verify</button>`;
+      : `<span style="font-size:.72rem;color:var(--warn);font-weight:600;">⚠️ Unverified</span> <button class="btn btn-ghost" style="padding:1px 6px;font-size:.68rem;margin-left:4px;" onclick="adminVerifyEmail('${escId(u.id)}')">Verify</button>`;
 
     return `
       <tr>
         <td>
-          <strong>${u.name || 'Developer'}</strong><br/>
-          <span style="font-size:.78rem;color:var(--muted)">${u.email}</span><br/>
+          <strong>${escHtml(u.name || 'Developer')}</strong><br/>
+          <span style="font-size:.78rem;color:var(--muted)">${escHtml(u.email)}</span><br/>
           ${emailStatus}
         </td>
-        <td><code style="font-size:.75rem;color:var(--muted)">${u.api_key ? u.api_key.slice(0, 16) + '...' : '—'}</code></td>
+        <td><code style="font-size:.75rem;color:var(--muted)">${u.api_key ? escHtml(u.api_key.slice(0, 16)) + '...' : '—'}</code></td>
         <td>${statusBadge}</td>
         <td>${planBadge}</td>
         <td>${used} / ${max}</td>
         <td>${ipAccess}</td>
         <td style="white-space:nowrap;">
           <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
-            <button class="btn btn-primary" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminGrantPlan('${u.id}', '${u.email}')" title="Grant subscription (Bank Transfer)">🎁 Plan</button>
-            <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminAddTokens('${u.id}', '${u.email}')" title="Top-up bonus tokens">⚡ +Tokens</button>
-            <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminRotateKey('${u.id}', '${u.email}')" title="Force rotate key">🔄 Roll</button>
-            <button class="btn ${u.is_suspended ? 'btn-success' : 'btn-danger'}" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminToggleSuspend('${u.id}', '${u.email}', ${u.is_suspended})">
+            <button class="btn btn-primary" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminGrantPlan('${escId(u.id)}')" title="Grant subscription (Bank Transfer)">🎁 Plan</button>
+            <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminAddTokens('${escId(u.id)}')" title="Top-up bonus tokens">⚡ +Tokens</button>
+            <button class="btn btn-ghost" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminRotateKey('${escId(u.id)}')" title="Force rotate key">🔄 Roll</button>
+            <button class="btn ${u.is_suspended ? 'btn-success' : 'btn-danger'}" style="padding:.25rem .6rem;font-size:.72rem;" onclick="adminToggleSuspend('${escId(u.id)}', ${u.is_suspended ? 'true' : 'false'})">
               ${u.is_suspended ? 'Reactivate' : 'Suspend'}
             </button>
           </div>
@@ -731,7 +731,8 @@ function renderUsersTable(users) {
   }).join('');
 }
 
-async function adminVerifyEmail(userId, email) {
+async function adminVerifyEmail(userId) {
+  const email = userEmail(userId);
   if (!confirm(`Manually verify email address for ${email}?`)) return;
   const res = await api('POST', `/admin/users/${userId}/verify-email`);
   if (res?.ok) {
@@ -742,7 +743,8 @@ async function adminVerifyEmail(userId, email) {
   }
 }
 
-async function adminGrantPlan(userId, email) {
+async function adminGrantPlan(userId) {
+  const email = userEmail(userId);
   const plan = prompt(`Grant subscription to ${email}:\nEnter 'starter', 'pro', or 'ultra':`, 'pro');
   if (!plan) return;
   const p = plan.toLowerCase().trim();
@@ -762,7 +764,8 @@ async function adminGrantPlan(userId, email) {
   }
 }
 
-async function adminAddTokens(userId, email) {
+async function adminAddTokens(userId) {
+  const email = userEmail(userId);
   const tokens = prompt(`Add bonus credits to ${email}:\n(1 credit = 1 uncached input token; cached input 0.1, output 4. e.g. 500000 or 1000000):`, '500000');
   if (!tokens) return;
   const amt = parseInt(tokens);
@@ -779,7 +782,8 @@ async function adminAddTokens(userId, email) {
   }
 }
 
-async function adminRotateKey(userId, email) {
+async function adminRotateKey(userId) {
+  const email = userEmail(userId);
   if (!confirm(`Force rotate API Key for ${email}? Their active VS Code extension will stop working until they copy the new key.`)) return;
   const res = await api('POST', `/admin/users/${userId}/rotate-key`);
   if (res?.ok) {
@@ -790,7 +794,8 @@ async function adminRotateKey(userId, email) {
   }
 }
 
-async function adminToggleSuspend(userId, email, isSuspended) {
+async function adminToggleSuspend(userId, isSuspended) {
+  const email = userEmail(userId);
   const action = isSuspended ? 'reactivate' : 'suspend';
   if (!confirm(`Are you sure you want to ${action} ${email}?`)) return;
   const res = await api('POST', `/admin/users/${userId}/toggle-suspend`);
@@ -803,10 +808,12 @@ async function adminToggleSuspend(userId, email, isSuspended) {
 }
 
 // Staff & Team Management (Super Admin Exclusive)
+let staffData = [];
 async function loadStaff() {
   const data = await api('GET', '/admin/staff');
   if (!data) return;
   const staff = data.staff || [];
+  staffData = staff;
   const el = document.getElementById('staffCount');
   if (el) el.innerText = staff.length;
 
@@ -818,13 +825,13 @@ async function loadStaff() {
   }
   tbody.innerHTML = staff.map(s => `
     <tr>
-      <td><strong>${s.name}</strong></td>
-      <td><span style="font-size:.82rem;color:var(--muted);">${s.email}</span></td>
-      <td><span class="badge ${s.role==='super_admin'?'badge-ultra':'badge-pro'}">${(s.role||'admin').toUpperCase()}</span></td>
-      <td style="font-size:.8rem;color:var(--muted);">${s.created_by || 'Owner'}</td>
+      <td><strong>${escHtml(s.name)}</strong></td>
+      <td><span style="font-size:.82rem;color:var(--muted);">${escHtml(s.email)}</span></td>
+      <td><span class="badge ${s.role==='super_admin'?'badge-ultra':'badge-pro'}">${escHtml((s.role||'admin').toUpperCase())}</span></td>
+      <td style="font-size:.8rem;color:var(--muted);">${escHtml(s.created_by || 'Owner')}</td>
       <td style="font-size:.8rem;color:var(--muted);">${s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
       <td>
-        <button class="btn btn-danger" style="padding:.25rem .6rem;font-size:.72rem;" onclick="removeStaff('${s.id}', '${s.name}')">Revoke</button>
+        <button class="btn btn-danger" style="padding:.25rem .6rem;font-size:.72rem;" onclick="removeStaff('${escId(s.id)}')">Revoke</button>
       </td>
     </tr>
   `).join('');
@@ -857,7 +864,8 @@ async function submitAddStaff() {
   }
 }
 
-async function removeStaff(staffId, name) {
+async function removeStaff(staffId) {
+  const name = (staffData.find(s => s.id === staffId) || {}).name || staffId;
   if (!confirm(`Revoke dashboard access for staff member ${name}?`)) return;
   const res = await api('DELETE', `/admin/staff/${staffId}`);
   if (res?.ok) {
@@ -915,12 +923,12 @@ function renderAuditTable(logs) {
     return `
       <tr>
         <td style="font-size:.78rem;color:var(--muted);white-space:nowrap;">${date}</td>
-        <td><strong style="font-size:.8rem;color:var(--accent2);">${l.event_type}</strong></td>
+        <td><strong style="font-size:.8rem;color:var(--accent2);">${escHtml(l.event_type)}</strong></td>
         <td>${sevBadge}</td>
-        <td style="font-size:.82rem;">${l.actor || 'System'}</td>
-        <td style="font-size:.82rem;color:var(--muted);">${l.target || '—'}</td>
-        <td style="font-size:.82rem;">${l.details || '—'}</td>
-        <td><code style="font-size:.75rem;color:var(--muted);">${l.ip_address || '—'}</code></td>
+        <td style="font-size:.82rem;">${escHtml(l.actor || 'System')}</td>
+        <td style="font-size:.82rem;color:var(--muted);">${escHtml(l.target || '—')}</td>
+        <td style="font-size:.82rem;">${escHtml(l.details || '—')}</td>
+        <td><code style="font-size:.75rem;color:var(--muted);">${escHtml(l.ip_address || '—')}</code></td>
       </tr>
     `;
   }).join('');
@@ -981,7 +989,7 @@ async function loadPlans() {
 
   document.getElementById('planGrid').innerHTML = plans.map(([id, p]) => `
     <div class="plan-card" id="plan-card-${id}">
-      <div class="plan-name"><span class="badge ${BADGE[id]||'badge-free'}">${id.toUpperCase()}</span>${p.displayName}</div>
+      <div class="plan-name"><span class="badge ${BADGE[id]||'badge-free'}">${escHtml(id.toUpperCase())}</span>${escHtml(p.displayName)}</div>
       <div class="plan-price">LKR ${p.priceLKR.toLocaleString()}</div>
       <div class="plan-meta">
         Credits: <strong>${(p.monthlyTokens/1e6).toFixed(1)}M</strong>/month<br>
@@ -993,7 +1001,7 @@ async function loadPlans() {
       <div class="form-row"><label>Price (USD)</label><input id="pl_${id}_price_usd" type="number" step="0.01" value="${p.priceUSD}"/></div>
       <div class="form-row"><label>Monthly Credits</label><input id="pl_${id}_tokens" type="number" value="${p.monthlyTokens}"/></div>
       <div class="form-row"><label>Monthly Requests</label><input id="pl_${id}_reqs" type="number" value="${p.monthlyRequests}"/></div>
-      <div class="form-row"><label>Features (one per line)</label><textarea id="pl_${id}_features">${(p.features||[]).join('\n')}</textarea></div>
+      <div class="form-row"><label>Features (one per line)</label><textarea id="pl_${id}_features">${escHtml((p.features||[]).join('\n'))}</textarea></div>
       <div class="plan-actions">
         <button class="btn btn-primary" onclick="savePlan('${id}')">💾 Save</button>
         <button class="btn btn-ghost" onclick="resetPlan('${id}')">↩ Reset</button>
@@ -1023,7 +1031,11 @@ async function resetPlan(id) {
 }
 
 const PROVIDER_LABELS = { deepseek:'DeepSeek', openrouter:'OpenRouter', openai:'OpenAI', anthropic:'Anthropic', groq:'Groq', gemini:'Google Gemini' };
-const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Every value that came from a user or the database is escaped before it
+// reaches innerHTML; inline handlers receive only ids, never names or emails.
+function escHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escId(s) { return String(s ?? '').replace(/[^A-Za-z0-9_.:\/-]/g, ''); }
+function userEmail(id) { return (allUsersData.find(u => u.id === id) || {}).email || id; }
 let editingProvider = null;
 
 const econUsd = v => '$' + (Number(v) || 0).toFixed(Math.abs(Number(v)) < 1 ? 4 : 2);
@@ -1126,8 +1138,8 @@ async function loadModels() {
   document.getElementById('modelBody').innerHTML = data.models.map(m => `
     <tr>
       <td><span class="status-dot ${m.enabled?'on':'off'}"></span></td>
-      <td><strong>${m.id}</strong>${m.is_default_chat?'<span class="tag" style="margin-left:.4rem">CHAT</span>':''}${m.is_default_autocomplete?'<span class="tag" style="margin-left:.3rem">AUTO</span>':''}</td>
-      <td><code style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--muted)">${m.openrouter_id}</code></td>
+      <td><strong>${escHtml(m.id)}</strong>${m.is_default_chat?'<span class="tag" style="margin-left:.4rem">CHAT</span>':''}${m.is_default_autocomplete?'<span class="tag" style="margin-left:.3rem">AUTO</span>':''}</td>
+      <td><code style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--muted)">${escHtml(m.openrouter_id)}</code></td>
       <td><span class="tag">${ctx(m.context_window)}</span></td>
       <td><span class="badge ${BADGE[m.min_plan]||'badge-free'}">${m.min_plan}</span></td>
       <td style="display:flex;gap:.4rem">

@@ -1307,6 +1307,9 @@
       }
     }
 
+    // Text from the server (model ids, log details, IPs) is escaped before innerHTML.
+    function escTxt(s) { return String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+
     function renderModelUsage(models) {
       const container = document.getElementById('model-usage-container');
       if (!container) return;
@@ -1361,7 +1364,7 @@
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <div style="display:flex; align-items:center; gap:8px;">
                   <span style="font-size:16px;">${meta.icon}</span>
-                  <strong style="font-size:13px; color:var(--text);">${meta.name}</strong>
+                  <strong style="font-size:13px; color:var(--text);">${escTxt(meta.name)}</strong>
                 </div>
                 <span style="font-size:11px; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.06); color:${meta.color}; font-weight:700;">${pct}%</span>
               </div>
@@ -1396,7 +1399,7 @@
         const heightPct = Math.max(10, Math.min(100, Math.round(((d.totalTokens || 0) / maxTokens) * 100)));
         const dayLabel = d.date ? d.date.split('-').slice(1).join('/') : '';
         return `
-          <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;" title="${d.date}: ${(d.totalTokens || 0).toLocaleString()} tokens (${d.requestCount} requests)">
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;" title="${escTxt(d.date)}: ${(d.totalTokens || 0).toLocaleString()} tokens (${d.requestCount} requests)">
             <div style="width:100%; max-width:24px; height:${heightPct}%; background:linear-gradient(180deg, #00e5ff 0%, #b026ff 100%); border-radius:4px 4px 0 0; min-height:6px;"></div>
             <span style="font-size:10px; color:var(--text-muted); margin-top:4px;">${dayLabel}</span>
           </div>
@@ -1444,10 +1447,10 @@
         return `
           <tr style="border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.15s ease;">
             <td style="padding:12px; font-weight:600; color:var(--text);">
-              ${item.actionName}
+              ${escTxt(item.actionName)}
             </td>
             <td style="padding:12px; color:var(--text-muted); font-size:12px;">
-              ${modelClean}
+              ${escTxt(modelClean)}
             </td>
             <td style="padding:12px;">
               ${billedTokens}
@@ -1664,9 +1667,9 @@
           return `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px;">
               <div>
-                <strong style="color:var(--primary); font-size:13px;">${e.event_type}</strong>
-                <p style="color:var(--text); margin-top:2px;">${e.details || 'Event logged'}</p>
-                <span style="color:var(--text-muted); font-size:11px;">IP: ${e.ip_address || 'unknown'}</span>
+                <strong style="color:var(--primary); font-size:13px;">${escTxt(e.event_type)}</strong>
+                <p style="color:var(--text); margin-top:2px;">${escTxt(e.details || 'Event logged')}</p>
+                <span style="color:var(--text-muted); font-size:11px;">IP: ${escTxt(e.ip_address || 'unknown')}</span>
               </div>
               <span style="color:var(--text-muted); font-size:11px; white-space:nowrap;">${date}</span>
             </div>

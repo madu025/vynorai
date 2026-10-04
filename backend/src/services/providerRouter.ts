@@ -1,3 +1,4 @@
+import type { PiiStreamRestorer } from "./piiShield.js";
 /**
  * VynorAI Provider Router v3 — OpenRouter as Primary Upstream
  *
@@ -411,6 +412,7 @@ async function executeWithEndpoint(
   body: any,
   res: Response,
   onChunk?: (c: any) => void,
+  pii?: PiiStreamRestorer,
 ): Promise<any[]> {
   const isStream = body.stream !== false;
 
@@ -478,12 +480,29 @@ async function executeWithEndpoint(
                     },
                   ],
                 };
-                collected.push(chunk);
-                onChunk?.(chunk);
-                res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                const out = pii?.active ? pii.restoreChunk(chunk) : chunk;
+                collected.push(out);
+                onChunk?.(out);
+                res.write(`data: ${JSON.stringify(out)}\n\n`);
               } else if (evt.type === "message_stop") {
                 res.write("data: [DONE]\n\n");
               }
+            } catch {}
+          }
+        } else if (pii?.active) {
+          // Personal data was masked: rewrite each event so the user gets
+          // the real values back (placeholders split across events are held).
+          for (const line of completeLines) {
+            if (!line.startsWith("data: ")) continue;
+            if (line.includes("[DONE]")) {
+              res.write("data: [DONE]\n\n");
+              continue;
+            }
+            try {
+              const c = pii.restoreChunk(JSON.parse(line.slice(6)));
+              collected.push(c);
+              onChunk?.(c);
+              res.write(`data: ${JSON.stringify(c)}\n\n`);
             } catch {}
           }
         } else {
@@ -499,6 +518,21 @@ async function executeWithEndpoint(
             }
           }
         }
+      }
+      // A final event without a trailing newline is still in the buffer.
+      if (
+        pii?.active &&
+        sseBuffer.startsWith("data: ") &&
+        !sseBuffer.includes("[DONE]")
+      ) {
+        try {
+          const c = pii.restoreChunk(JSON.parse(sseBuffer.slice(6)));
+          collected.push(c);
+          onChunk?.(c);
+          res.write(`data: ${JSON.stringify(c)}
+
+`);
+        } catch {}
       }
       res.end();
     }
@@ -525,8 +559,9 @@ async function executeWithEndpoint(
       collected.push(norm);
       res.json(norm);
     } else {
-      collected.push(data);
-      res.json(data);
+      const out = pii?.active ? pii.restoreFull(data) : data;
+      collected.push(out);
+      res.json(out);
     }
   }
 
@@ -540,6 +575,7 @@ export async function dispatchToProvider(
   res: Response,
   onChunk?: (c: any) => void,
   allowProFallback = true,
+  pii?: PiiStreamRestorer,
 ): Promise<{
   success: boolean;
   collected: any[];
@@ -572,6 +608,7 @@ export async function dispatchToProvider(
         body,
         res,
         onChunk,
+        pii,
       );
       const latencyMs = Date.now() - startedAt;
       console.log(`[Router] ✅ ${providerKey} → "${resolvedModel}"`);
@@ -612,6 +649,7 @@ export async function dispatchToProvider(
       res,
       onChunk,
       false,
+      pii,
     );
   }
 

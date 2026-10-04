@@ -65,6 +65,7 @@ import {
 import { recordRequestEconomics } from "./costLedger.js";
 import type { QuotaContext } from "./monthlyQuota.js";
 import { promptFingerprint } from "./routingSignals.js";
+import { maskRequestBody, PiiStreamRestorer } from "./piiShield.js";
 import {
   analyzeIntentWithLocalSlm,
   isMutationRequest,
@@ -906,8 +907,16 @@ export async function handleChatCompletions(
   const collected: any[] = [];
 
   // ── 3 & 4. Smart Provider Dispatch with Prompt Caching ──────────────────────
-  const dispatch = await dispatchToProvider(optimised, res, (chunk) =>
-    collected.push(chunk),
+  // Personal data (emails, phones, NIC, cards) never reaches the provider;
+  // the stream is restored to the real values on the way back.
+  const { body: shielded, map: piiMap } = maskRequestBody(optimised);
+  if (piiMap.size) res.setHeader("X-VynorAI-PII-Masked", String(piiMap.size));
+  const dispatch = await dispatchToProvider(
+    shielded,
+    res,
+    (chunk) => collected.push(chunk),
+    true,
+    new PiiStreamRestorer(piiMap),
   );
   const providerChunks = dispatch.collected;
 

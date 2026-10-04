@@ -80,6 +80,7 @@ class MessageTypes {
             "history/clear",
             "history/account",
             "vynor/usage",
+            "vynor/feedback",
             "devdata/log",
             "config/addModel",
             "config/newPromptFile",

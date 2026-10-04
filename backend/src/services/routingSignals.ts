@@ -39,6 +39,12 @@ export interface RoutingRow {
   created_at: string;
 }
 
+export interface FeedbackRow {
+  user_id: string;
+  prompt_fp: string | null;
+  signal: string;
+}
+
 export interface TierSummary {
   tier: string;
   prompts: number;
@@ -47,6 +53,8 @@ export interface TierSummary {
   underrouted: number;
   overrouted: number;
   reasked: number;
+  unhelpful: number;
+  helpful: number;
 }
 
 export interface RoutingSummary {
@@ -59,7 +67,13 @@ export interface RoutingSummary {
 const CHEAP_TIERS = new Set(["light", "normal"]);
 const COSTLY_TIERS = new Set(["heavy", "deep"]);
 
-export function summarizeRouting(rows: RoutingRow[]): RoutingSummary {
+export function summarizeRouting(
+  rows: RoutingRow[],
+  feedback: FeedbackRow[] = [],
+): RoutingSummary {
+  const votes = new Map<string, string>();
+  for (const f of feedback)
+    if (f.prompt_fp) votes.set(`${f.user_id}:${f.prompt_fp}`, f.signal);
   const prompts = new Map<string, RoutingRow[]>();
   for (const row of rows) {
     const key = `${row.user_id}:${row.prompt_fp}`;
@@ -77,10 +91,12 @@ export function summarizeRouting(rows: RoutingRow[]): RoutingSummary {
       under: number;
       over: number;
       reasked: number;
+      unhelpful: number;
+      helpful: number;
     }
   >();
   let misrouted = 0;
-  for (const group of prompts.values()) {
+  for (const [key, group] of prompts) {
     group.sort((a, b) => a.created_at.localeCompare(b.created_at));
     const tier = group[0].route_tier ?? "unknown";
     const rounds = group.length;
@@ -103,6 +119,8 @@ export function summarizeRouting(rows: RoutingRow[]): RoutingSummary {
       under: 0,
       over: 0,
       reasked: 0,
+      unhelpful: 0,
+      helpful: 0,
     };
     t.prompts++;
     t.rounds += rounds;
@@ -110,6 +128,9 @@ export function summarizeRouting(rows: RoutingRow[]): RoutingSummary {
     if (under) t.under++;
     if (over) t.over++;
     if (reasked) t.reasked++;
+    const vote = votes.get(key);
+    if (vote === "unhelpful") t.unhelpful++;
+    if (vote === "helpful") t.helpful++;
     byTier.set(tier, t);
   }
 
@@ -127,6 +148,8 @@ export function summarizeRouting(rows: RoutingRow[]): RoutingSummary {
         underrouted: t.under,
         overrouted: t.over,
         reasked: t.reasked,
+        unhelpful: t.unhelpful,
+        helpful: t.helpful,
       }))
       .sort((a, b) => b.prompts - a.prompts),
   };

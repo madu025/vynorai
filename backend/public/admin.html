@@ -351,7 +351,7 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
           <p style="font-size:.78rem;color:var(--muted);margin-bottom:.6rem">Estimated from round counts per prompt (prompt text is never stored). Underrouted: light/normal prompt that needed 12+ rounds. Overrouted: heavy/deep prompt answered in one short round. Re-asked: the same prompt sent again.</p>
           <div id="routingSummary" style="font-size:.85rem;margin-bottom:.6rem">Loading…</div>
           <table class="model-table">
-            <thead><tr><th>Tier</th><th>Prompts</th><th>Avg rounds</th><th>Avg credits</th><th>Underrouted</th><th>Overrouted</th><th>Re-asked</th></tr></thead>
+            <thead><tr><th>Tier</th><th>Prompts</th><th>Avg rounds</th><th>Avg credits</th><th>Underrouted</th><th>Overrouted</th><th>Re-asked</th><th>👍</th><th>👎</th></tr></thead>
             <tbody id="routingTiers"></tbody>
           </table>
         </div>
@@ -883,8 +883,8 @@ async function loadRouting(days) {
   document.getElementById('routingSummary').textContent =
     `${econNum(data.prompts)} Auto prompts · likely misrouted ${econNum(data.likelyMisrouted)} (${data.misroutePct}%)`;
   document.getElementById('routingTiers').innerHTML = data.tiers.length
-    ? data.tiers.map(t => `<tr><td>${escHtml(t.tier)}</td><td>${econNum(t.prompts)}</td><td>${escHtml(t.avgRounds)}</td><td>${econNum(t.avgCredits)}</td><td>${econNum(t.underrouted)}</td><td>${econNum(t.overrouted)}</td><td>${econNum(t.reasked)}</td></tr>`).join('')
-    : '<tr><td colspan="7" class="loading">No Auto prompts recorded yet</td></tr>';
+    ? data.tiers.map(t => `<tr><td>${escHtml(t.tier)}</td><td>${econNum(t.prompts)}</td><td>${escHtml(t.avgRounds)}</td><td>${econNum(t.avgCredits)}</td><td>${econNum(t.underrouted)}</td><td>${econNum(t.overrouted)}</td><td>${econNum(t.reasked)}</td><td>${econNum(t.helpful)}</td><td>${econNum(t.unhelpful)}</td></tr>`).join('')
+    : '<tr><td colspan="9" class="loading">No Auto prompts recorded yet</td></tr>';
 }
 
 async function loadEconomics() {

@@ -674,6 +674,19 @@ const MIGRATIONS: Migration[] = [
       await addColumnIfNotExists("users", "privacy_version VARCHAR(16)");
     },
   },
+  {
+    version: "018_routing_feedback",
+    description: "Helpful / unhelpful signals per prompt fingerprint (no text)",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS routing_feedback (
+        id          VARCHAR(36) PRIMARY KEY,
+        user_id     VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        prompt_fp   VARCHAR(32),
+        signal      VARCHAR(16) NOT NULL,
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

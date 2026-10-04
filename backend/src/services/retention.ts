@@ -11,6 +11,7 @@ export const RETENTION_DAYS = {
   usage_logs: 365,
   security_audit_logs: 365,
   email_verifications: 30,
+  routing_feedback: 365,
 } as const;
 
 function cutoff(days: number): string {

@@ -16,9 +16,28 @@ export function FeedbackButtons({ item }: FeedbackButtonsProps) {
   const [feedback, setFeedback] = useState<boolean | undefined>(undefined);
   const ideMessenger = useContext(IdeMessengerContext);
   const sessionId = useAppSelector((store) => store.session.id);
+  const history = useAppSelector((store) => store.session.history);
 
   const sendFeedback = (feedback: boolean) => {
     setFeedback(feedback);
+    // The real user prompt this answer belongs to (auto prompts skipped).
+    const at = history.findIndex((h) => h === (item as unknown));
+    const prompt = history
+      .slice(0, at === -1 ? history.length : at)
+      .reverse()
+      .find((h) => h.message.role === "user" && !h.isAutoPrompt);
+    const content = prompt?.message.content;
+    const text =
+      typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content.map((p) => (p.type === "text" ? p.text : "")).join("")
+          : "";
+    if (text)
+      ideMessenger.post("vynor/feedback", {
+        prompt: text,
+        signal: feedback ? "helpful" : "unhelpful",
+      });
     if (item.promptLogs?.length) {
       for (const promptLog of item.promptLogs) {
         const { modelTitle, modelProvider, ...logData } = promptLog;

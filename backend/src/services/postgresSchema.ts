@@ -273,6 +273,19 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_version VARCHAR(16);
 `,
   },
+  {
+    version: "pg_005_routing_feedback",
+    sql: `
+CREATE TABLE IF NOT EXISTS routing_feedback (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  prompt_fp VARCHAR(32),
+  signal VARCHAR(16) NOT NULL,
+  created_at TEXT DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_routing_feedback_user_fp ON routing_feedback (user_id, prompt_fp);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

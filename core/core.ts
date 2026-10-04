@@ -536,6 +536,30 @@ export class Core {
       }
     });
 
+    on("vynor/feedback", async (msg) => {
+      const { config } = await this.configHandler.loadConfig();
+      const llm = config?.selectedModelByRole.chat;
+      const base = llm?.apiBase ?? "";
+      if (
+        !llm?.apiKey ||
+        (llm.providerName !== "vynorai" && !base.includes("vynor"))
+      )
+        return;
+      try {
+        await fetch(`${base.replace(/\/+$/, "")}/feedback`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${llm.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(msg.data),
+          signal: AbortSignal.timeout(4000),
+        });
+      } catch {
+        // Feedback is best effort.
+      }
+    });
+
     on("devdata/log", async (msg) => {
       void DataLogger.getInstance().logDevData(msg.data);
     });

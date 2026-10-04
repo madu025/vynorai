@@ -1,3 +1,7 @@
+import { dbRun } from "../db.js";
+import { v4 as uuidv4 } from "uuid";
+import { promptFingerprint } from "../services/routingSignals.js";
+import { stripRulesAndPreamble } from "../services/templateVault.js";
 import { Router, Request, Response, NextFunction } from "express";
 import {
   authenticateApiKey,
@@ -264,6 +268,32 @@ proxyRouter.post(
           error: { message: "Quick-fix service temporarily unavailable." },
         });
     }
+  },
+);
+
+// ─── POST /v1/feedback ────────────────────────────────────────────────────────
+// Helpful / unhelpful on an answer, linked to the prompt by its keyed hash.
+// The prompt text is used only to compute that hash and is not stored.
+proxyRouter.post(
+  "/feedback",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const signal = String(req.body?.signal ?? "");
+    if (!["helpful", "unhelpful"].includes(signal))
+      return res
+        .status(400)
+        .json({ error: "signal must be helpful or unhelpful" });
+    const prompt =
+      typeof req.body?.prompt === "string"
+        ? req.body.prompt.slice(0, 20_000)
+        : "";
+    const fp = promptFingerprint(user.id, stripRulesAndPreamble(prompt));
+    await dbRun(
+      "INSERT INTO routing_feedback (id, user_id, prompt_fp, signal) VALUES (?, ?, ?, ?)",
+      [uuidv4(), user.id, fp, signal],
+    );
+    res.json({ ok: true });
   },
 );
 

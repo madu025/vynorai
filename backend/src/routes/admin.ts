@@ -1,4 +1,8 @@
-import { RoutingRow, summarizeRouting } from "../services/routingSignals.js";
+import {
+  FeedbackRow,
+  RoutingRow,
+  summarizeRouting,
+} from "../services/routingSignals.js";
 import {
   AUTH_RATE_LIMIT_PER_MINUTE,
   PROXY_RATE_LIMIT_PER_MINUTE,
@@ -787,7 +791,11 @@ adminRouter.get(
        LIMIT 200000`,
       [since],
     );
-    res.json({ days, ...summarizeRouting(rows) });
+    const feedback = await dbAll<FeedbackRow>(
+      `SELECT user_id, prompt_fp, signal FROM routing_feedback WHERE created_at >= ?`,
+      [since],
+    ).catch(() => [] as FeedbackRow[]);
+    res.json({ days, ...summarizeRouting(rows, feedback) });
   },
 );
 

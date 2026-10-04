@@ -235,6 +235,8 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     undefined,
     { used: number; limit: number; plan: string } | null,
   ];
+  /** Helpful / unhelpful on a VynorAI answer; trains the Auto router. */
+  "vynor/feedback": [{ prompt: string; signal: "helpful" | "unhelpful" }, void];
   "devdata/log": [DevDataLogEvent, void];
   "config/addOpenAiKey": [string, void];
   "config/addModel": [

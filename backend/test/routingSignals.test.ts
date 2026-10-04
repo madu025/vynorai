@@ -55,3 +55,16 @@ test("the same prompt from two users counts twice", () => {
   ]);
   assert.equal(s.prompts, 2);
 });
+
+test("helpful / unhelpful votes are counted per tier", () => {
+  const s = summarizeRouting(
+    [...rows("a", "normal", 2), ...rows("b", "deep", 3)],
+    [
+      { user_id: "u1", prompt_fp: "a", signal: "unhelpful" },
+      { user_id: "u1", prompt_fp: "b", signal: "helpful" },
+      { user_id: "u1", prompt_fp: null, signal: "unhelpful" },
+    ],
+  );
+  assert.equal(s.tiers.find((t) => t.tier === "normal")!.unhelpful, 1);
+  assert.equal(s.tiers.find((t) => t.tier === "deep")!.helpful, 1);
+});

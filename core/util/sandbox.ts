@@ -176,10 +176,20 @@ export function buildSandboxedCommand(
         "[Vynor Sandbox Guard] Strict OS isolation is unavailable on this Windows host.",
       );
     }
+    // `& { cmd }` alone always exited 0 and dropped PowerShell errors, so a
+    // failing test or a missing command looked like success. Pass on the
+    // native exit code, and fail on PowerShell errors (command not found,
+    // cmdlet failures); native stderr (git progress, warnings) is passed
+    // through to stderr without failing the command.
     const psScript = [
       `$ProgressPreference = 'SilentlyContinue'`,
       `Set-Location -LiteralPath '${normalizedCwd.replace(/'/g, "''")}'`,
-      `& { ${command} }`,
+      `$global:LASTEXITCODE = 0`,
+      `$__vynorFailed = $false`,
+      `& { ${command}\n} 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { [Console]::Error.WriteLine($_.ToString()); if ($_.FullyQualifiedErrorId -notlike 'NativeCommandError*') { $__vynorFailed = $true } } else { $_ } }`,
+      `if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`,
+      `if ($__vynorFailed) { exit 1 }`,
+      `exit 0`,
     ].join("; ");
 
     const encoded = Buffer.from(psScript, "utf16le").toString("base64");

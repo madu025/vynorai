@@ -86,8 +86,12 @@ describe("AgentOrchestrator", () => {
       action: "blocked",
       reason: "Workspace changed since this task was planned",
     });
+    // The agent's own edits move the revision; only another workspace blocks.
     await expect(
       orchestrator.authorizeAction(task.id, "workspace-1", 8, "read:a"),
+    ).resolves.toBeTruthy();
+    await expect(
+      orchestrator.authorizeAction(task.id, "workspace-2", 8, "read:b"),
     ).rejects.toThrow("Workspace changed");
   });
 

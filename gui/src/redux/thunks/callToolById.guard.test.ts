@@ -85,7 +85,7 @@ describe("callToolById safety guard", () => {
     expect(toolOutput(store)).toContain("already run 3 times");
   });
 
-  it("still fails the turn when the workspace changed", async () => {
+  it("never leaves a blocked call hanging: the refusal goes to the model", async () => {
     const { store, toolCalls } = storeWithGuardError(
       "Workspace changed since task start",
     );
@@ -94,9 +94,8 @@ describe("callToolById safety guard", () => {
       callToolById({ toolCallId: "t1" }),
     );
 
-    expect(result.error?.message).toContain(
-      "Workspace changed since task start",
-    );
+    expect(result.error).toBeUndefined();
     expect(toolCalls).toHaveLength(0);
+    expect(toolOutput(store)).toContain("Workspace changed since task start");
   });
 });

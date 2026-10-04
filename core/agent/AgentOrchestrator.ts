@@ -269,11 +269,12 @@ export class AgentOrchestrator {
   ): Promise<AgentTask> {
     return this.runtime.mutate(taskId, "execution.authorized", {}, (task) => {
       this.assertActive(task);
-      if (
-        task.workspaceId !== workspaceId ||
-        task.workspaceRevision !== workspaceRevision
-      )
+      // Only a different workspace (other folders) stops the task. The
+      // revision also moves when the agent's own edit opens a file or the
+      // index progresses, which blocked every tool after the first edit.
+      if (task.workspaceId !== workspaceId)
         throw new Error("Workspace changed since task start");
+      task.workspaceRevision = workspaceRevision;
       if (task.executionGuard.cancelRequested)
         throw new Error("Agent task was canceled");
       if (

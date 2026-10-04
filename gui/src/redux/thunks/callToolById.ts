@@ -66,12 +66,11 @@ export const callToolById = createAsyncThunk<
       },
     );
     if (authorization.status === "error") {
-      if (!isRecoverableGuardError(authorization.error)) {
-        throw new Error(
-          `Agent safety guard blocked tool execution: ${authorization.error}`,
-        );
-      }
-      guardRefusal = guardErrorForModel(authorization.error);
+      // Never leave the call hanging in "generated": any guard refusal goes
+      // back to the model (and the user sees it) as this tool's error.
+      guardRefusal = isRecoverableGuardError(authorization.error)
+        ? guardErrorForModel(authorization.error)
+        : `Agent safety guard blocked this tool call: ${authorization.error}. Stop and tell the user what happened.`;
     }
   }
 

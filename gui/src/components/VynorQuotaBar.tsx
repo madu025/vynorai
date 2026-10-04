@@ -19,6 +19,7 @@ interface QuotaState {
   isLoggedIn: boolean;
   email: string;
   tokensSaved?: number;
+  cachedRequests?: number;
   savingPercentage?: number;
   estimatedLkrSaved?: number;
 }
@@ -288,6 +289,7 @@ export function VynorQuotaBar() {
         isLoggedIn: true,
         email: data.user?.email || "",
         tokensSaved: slm.tokensSaved || 0,
+        cachedRequests: slm.cachedRequests || 0,
         savingPercentage: slm.savingPercentage || 0,
         estimatedLkrSaved: slm.estimatedLkrSaved || 0,
       };
@@ -409,14 +411,12 @@ export function VynorQuotaBar() {
           }}
         >
           ✨{" "}
-          {(quota.tokensSaved || 0) > 0
-            ? `~${(quota.tokensSaved || 0).toLocaleString()} tokens answered free`
-            : "Cache & templates active"}
+          {(quota.cachedRequests || 0) > 0
+            ? `${(quota.cachedRequests || 0).toLocaleString()} ${quota.cachedRequests === 1 ? "answer" : "answers"} free from cache (0 credits)`
+            : "Repeat questions cost 0 credits"}
         </span>
         <span style={{ color: "#a0aec0" }}>
-          {(quota.tokensSaved || 0) > 0
-            ? `~${quota.savingPercentage}% saved`
-            : `Used: ${quota.usedTokens.toLocaleString()}`}
+          {`${quota.usedTokens.toLocaleString()} credits used`}
         </span>
       </SavingsRow>
 

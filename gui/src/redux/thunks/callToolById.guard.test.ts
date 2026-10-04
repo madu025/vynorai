@@ -99,3 +99,45 @@ describe("callToolById safety guard", () => {
     expect(toolOutput(store)).toContain("Workspace changed since task start");
   });
 });
+
+describe("callToolById never leaves a call hanging", () => {
+  function storeWith(override: (type: string) => unknown) {
+    const { store } = storeWithGuardError("unused");
+    const messenger = store.mockIdeMessenger;
+    const base = messenger.request.bind(messenger);
+    messenger.request = (async (type: string, data: unknown) => {
+      if (type === "agent/task/authorizeAction")
+        return { status: "success", content: {}, done: true };
+      const res = override(type);
+      if (res !== undefined) return res;
+      return base(type as any, data as any);
+    }) as typeof messenger.request;
+    return store;
+  }
+  const status = (store: any) =>
+    store.getState().session.history[1].toolCallStates[0].status;
+
+  it("a failed core tool call becomes the tool's error", async () => {
+    const store = storeWith((type) =>
+      type === "tools/call"
+        ? { status: "error", error: "core crashed", done: true }
+        : undefined,
+    );
+    const result = await (store.dispatch as any)(
+      callToolById({ toolCallId: "t1" }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(status(store)).toBe("errored");
+    expect(toolOutput(store)).toContain("core crashed");
+  });
+
+  it("an unexpected exception still errors the call instead of hanging", async () => {
+    const store = storeWith((type) => {
+      if (type === "hooks/run") throw new Error("hook runner exploded");
+      return undefined;
+    });
+    await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
+    expect(status(store)).not.toBe("generated");
+    expect(status(store)).not.toBe("calling");
+  });
+});

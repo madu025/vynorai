@@ -73,3 +73,21 @@ test("saver mode from 80% of the allowance", async () => {
   const at10 = await run(await userWithUsage(10_000), "/v1/chat/completions");
   assert.equal(at10.info.saver, false);
 });
+
+test("a large estimate with credits left reserves what remains instead of refusing", async () => {
+  // 89,282 of 100,000 used: a cache-blind estimate above 10,718 used to be
+  // refused with 'credits are used up' even though most input is cached.
+  const user = await userWithUsage(89_282);
+  const reservation = await quota.reserveQuotaAtomic(user.id, "free", 50_000);
+  assert.ok(reservation, "request should be allowed");
+  assert.equal(reservation!.reservedTokens, 10_718);
+  // Settling at the real cost releases the unused part.
+  await quota.settleQuotaReservation(reservation!, 3_000);
+  const usage = await quota.getOrInitMonthlyUsage(user.id, "free");
+  assert.equal(usage.used_tokens, 92_282);
+});
+
+test("a nearly empty allowance is still refused", async () => {
+  const user = await userWithUsage(99_500);
+  assert.equal(await quota.reserveQuotaAtomic(user.id, "free", 50_000), null);
+});

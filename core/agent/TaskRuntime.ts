@@ -392,11 +392,10 @@ export class TaskRuntime {
       if (subagent.status !== "queued")
         throw new Error("Subagent is not queued");
       const currentRevision = workspaceRevision ?? task.workspaceRevision;
-      if (
-        currentRevision !== task.workspaceRevision ||
-        currentRevision !== subagent.baseWorkspaceRevision
-      )
-        throw new Error("Workspace changed since subagent delegation");
+      // The revision also moves on the agents' own edits (an opened file,
+      // index progress), so it cannot tell outside changes apart; it is
+      // recorded, not enforced. Workspace identity is checked per action.
+      task.workspaceRevision = currentRevision;
       const incompleteDependency = subagent.dependsOn.find(
         (dependencyId) =>
           this.requireSubagent(task, dependencyId).status !== "completed",
@@ -522,11 +521,10 @@ export class TaskRuntime {
       if (subagent.status !== "running")
         throw new Error("Subagent is not running");
       const currentRevision = input.workspaceRevision ?? task.workspaceRevision;
-      if (
-        currentRevision !== task.workspaceRevision ||
-        currentRevision !== subagent.baseWorkspaceRevision
-      )
-        throw new Error("Workspace changed during delegated implementation");
+      // The revision also moves on the agents' own edits (an opened file,
+      // index progress), so it cannot tell outside changes apart; it is
+      // recorded, not enforced. Workspace identity is checked per action.
+      task.workspaceRevision = currentRevision;
       const changedFiles = [
         ...new Set(input.changedFiles.map(canonicalScopePath)),
       ];

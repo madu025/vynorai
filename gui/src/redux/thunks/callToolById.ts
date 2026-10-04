@@ -25,11 +25,69 @@ import {
   isRecoverableGuardError,
 } from "../util/toolRoundBudget";
 
+type CallToolInputs = {
+  toolCallId: string;
+  isAutoApproved?: boolean;
+  depth?: number;
+};
+
 export const callToolById = createAsyncThunk<
   void,
-  { toolCallId: string; isAutoApproved?: boolean; depth?: number },
+  CallToolInputs,
   ThunkApiType
->("chat/callTool", async (inputs, { dispatch, extra, getState }) => {
+>("chat/callTool", async (inputs, thunkApi) => {
+  try {
+    await callToolByIdImpl(inputs, thunkApi);
+  } catch (e) {
+    // Safety net: an unexpected failure before the tool finished used to
+    // leave it in "generated"/"calling" with the turn silently stopped.
+    // Record it as the tool's error and let the model continue.
+    const { dispatch, getState } = thunkApi;
+    const call = findToolCallById(
+      getState().session.history,
+      inputs.toolCallId,
+    );
+    if (!call || !["generated", "calling"].includes(call.status)) throw e;
+    const message = e instanceof Error ? e.message : String(e);
+    dispatch(
+      updateToolCallOutput({
+        toolCallId: inputs.toolCallId,
+        contextItems: [
+          {
+            icon: "problems",
+            name: "Tool Call Error",
+            description: "Tool Call Failed",
+            content: `${call.toolCall.function.name} could not run: ${message}`,
+            hidden: false,
+          },
+        ],
+      }),
+    );
+    dispatch(errorToolCall({ toolCallId: inputs.toolCallId }));
+    unwrapResult(
+      await dispatch(
+        streamResponseAfterToolCall({
+          toolCallId: inputs.toolCallId,
+          depth: inputs.depth ?? 0,
+        }),
+      ),
+    );
+  }
+});
+
+async function callToolByIdImpl(
+  inputs: CallToolInputs,
+  {
+    dispatch,
+    extra,
+    getState,
+  }: Pick<
+    Parameters<
+      Parameters<typeof createAsyncThunk<void, CallToolInputs, ThunkApiType>>[1]
+    >[1],
+    "dispatch" | "extra" | "getState"
+  >,
+): Promise<void> {
   const { toolCallId, isAutoApproved, depth = 0 } = inputs;
 
   const state = getState();
@@ -93,10 +151,10 @@ export const callToolById = createAsyncThunk<
         },
       },
     );
-    if (authorization.status === "error")
-      throw new Error(
-        `Subagent authority blocked tool execution: ${authorization.error}`,
-      );
+    // Returned to the model as the tool's error, never thrown: a throw here
+    // left the call stuck in "generated" with the turn silently stopped.
+    if (authorization.status === "error" && !guardRefusal)
+      guardRefusal = `Subagent authority blocked this tool call: ${authorization.error}`;
   }
 
   if (state.session.activeTaskId && !guardRefusal) {
@@ -195,7 +253,10 @@ export const callToolById = createAsyncThunk<
       delegation,
     });
     if (result.status === "error") {
-      throw new Error(result.error);
+      // A failed call is the tool's error for the model to handle, not a
+      // thrown exception that leaves the turn hanging.
+      output = [];
+      error = new ContinueError(ContinueErrorReason.Unspecified, result.error);
     } else {
       output = result.content.contextItems;
       mcpUiState = result.content.mcpUiState;
@@ -310,4 +371,4 @@ export const callToolById = createAsyncThunk<
   } else {
     dispatch(setInactive());
   }
-});
+}

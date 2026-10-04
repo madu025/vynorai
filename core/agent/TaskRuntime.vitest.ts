@@ -358,7 +358,7 @@ describe("implementation subagents", () => {
     expect(runtime.get(task.id)?.budget.inputTokens).toBe(100);
   });
 
-  it("enforces dependency order, stale revisions, and deterministic merge order", async () => {
+  it("enforces dependency order and deterministic merge order", async () => {
     const { runtime } = createRuntime();
     const task = await runtime.start({
       sessionId: "s",
@@ -400,10 +400,8 @@ describe("implementation subagents", () => {
     await expect(runtime.startSubagent(task.id, second.id, 9)).rejects.toThrow(
       "dependency",
     );
-    await expect(runtime.startSubagent(task.id, first.id, 10)).rejects.toThrow(
-      "Workspace changed",
-    );
-    await runtime.startSubagent(task.id, first.id, 9);
+    // A moved revision (the agents' own edits) no longer blocks a subagent.
+    await runtime.startSubagent(task.id, first.id, 10);
     const verification = [
       {
         id: "verification-1",

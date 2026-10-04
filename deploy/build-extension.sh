@@ -6,6 +6,15 @@ set -euo pipefail
 VERSION=${1:?usage: build-extension.sh x.y.z}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
+# Release gate: the chat panel and agent runtime tests must pass before a
+# build ships (SKIP_TESTS=1 to bypass in an emergency).
+if [ "${SKIP_TESTS:-0}" != "1" ]; then
+  (cd "$ROOT/gui" && npx vitest run >/tmp/vynor-gui-tests.log 2>&1) \
+    || { grep -E "FAIL|Tests " /tmp/vynor-gui-tests.log | head -20; echo "GUI tests failed; not building." >&2; exit 1; }
+  (cd "$ROOT/core" && npx vitest run agent tools/browser >/tmp/vynor-core-tests.log 2>&1) \
+    || { grep -E "FAIL|Tests " /tmp/vynor-core-tests.log | head -20; echo "Core agent tests failed; not building." >&2; exit 1; }
+fi
+
 (cd "$ROOT/gui" && npm run build >/tmp/vynor-gui-build.log 2>&1) || { tail -20 /tmp/vynor-gui-build.log; exit 1; }
 rm -rf "$ROOT/extensions/vscode/gui/assets"
 mkdir -p "$ROOT/extensions/vscode/gui"

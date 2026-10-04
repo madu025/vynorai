@@ -78,7 +78,7 @@ export const defaultConfig: ConfigYaml = {
     {
       name: "VynorAI Autocomplete (FIM)",
       provider: "vynorai",
-      model: "deepseek/deepseek-coder-v2",
+      model: "deepseek/deepseek-flash",
       apiBase: VYNORAI_API_BASE,
       roles: ["autocomplete"],
       defaultCompletionOptions: {

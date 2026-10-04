@@ -265,7 +265,7 @@ export async function applyVynorConfig(): Promise<boolean> {
     config.tabAutocompleteModel = {
       title: "VynorAI Autocomplete",
       provider: "vynorai",
-      model: "deepseek/deepseek-coder-v2",
+      model: "deepseek/deepseek-flash",
       apiBase: VYNORAI_PROD_URL,
       apiKey: VYNORAI_SECRET_REF,
     };

@@ -41,7 +41,7 @@ const VYNORAI_ONBOARDING_MODELS = (apiKey: string): OnboardingModel[] => [
   {
     name: "VynorAI Code Completion",
     provider: "vynorai",
-    model: "deepseek/deepseek-coder-v2",
+    model: "deepseek/deepseek-flash",
     apiBase: VYNORAI_API_BASE,
     apiKey,
     roles: ["autocomplete"],

@@ -4,8 +4,12 @@ import { selectSelectedChatModel } from "../slices/configSlice";
 import { setSideReview } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
 import { reviewerModel } from "../util/judgment";
+import { resolveRelativePathInDir } from "core/util/ideUtils";
 import {
+  SIDE_REVIEW_MAX_DIFF_CHARS,
   diffForFiles,
+  filesMissingFromDiff,
+  newFileDiff,
   parseSideReview,
   sideReviewPrompt,
   turnEdits,
@@ -39,7 +43,23 @@ export const runSideReview = createAsyncThunk<
       const diffs = await extra.ideMessenger.request("getDiff", {
         includeUnstaged: true,
       });
-      if (diffs.status !== "success" || diffs.content.length === 0) {
+      let diff =
+        diffs.status === "success" ? diffForFiles(diffs.content, files) : "";
+      // New files are untracked, so git diff does not show them: read them.
+      for (const file of filesMissingFromDiff(diff, files).slice(0, 5)) {
+        try {
+          const uri = await resolveRelativePathInDir(
+            file,
+            extra.ideMessenger.ide,
+          );
+          const contents = await extra.ideMessenger.ide.readFile(uri ?? file);
+          diff += `\n${newFileDiff(file, contents)}`;
+        } catch {
+          // Unreadable: the reviewer just doesn't see this file.
+        }
+      }
+      diff = diff.trim().slice(0, SIDE_REVIEW_MAX_DIFF_CHARS);
+      if (!diff) {
         dispatch(
           setSideReview({ messageId, note: { status: "done", text: null } }),
         );
@@ -47,7 +67,7 @@ export const runSideReview = createAsyncThunk<
       }
       const result = await extra.ideMessenger.request("llm/complete", {
         title: model.title,
-        prompt: sideReviewPrompt(request, diffForFiles(diffs.content, files)),
+        prompt: sideReviewPrompt(request, diff),
         completionOptions: { maxTokens: 300, temperature: 0, reasoning: false },
       });
       const text =

@@ -46,6 +46,24 @@ export function turnEdits(history: ChatHistoryItem[]): {
   return { files: [...files], request };
 }
 
+const normalizePath = (f: string) => f.replace(/\\/g, "/").replace(/^\.\//, "");
+
+/** Files of this turn with no hunk in the diff (new, untracked files). */
+export function filesMissingFromDiff(diff: string, files: string[]): string[] {
+  return files.filter((f) => !diff.includes(normalizePath(f)));
+}
+
+/** A new file rendered as an added-file diff so the reviewer sees it. */
+export function newFileDiff(file: string, contents: string): string {
+  const lines = contents.split("\n").slice(0, 200);
+  return [
+    `diff --git a/${file} b/${file}`,
+    "new file",
+    `+++ b/${file}`,
+    ...lines.map((l) => `+${l}`),
+  ].join("\n");
+}
+
 /** Keep the diff hunks for the changed files, capped for a cheap review. */
 export function diffForFiles(diffs: string[], files: string[]): string {
   const wanted = files.map((f) => f.replace(/\\/g, "/").replace(/^\.\//, ""));
@@ -53,7 +71,9 @@ export function diffForFiles(diffs: string[], files: string[]): string {
     .join("\n")
     .split(/(?=^diff --git )/m)
     .filter((part) => wanted.some((f) => part.includes(f)));
-  const diff = (parts.length ? parts : diffs).join("\n");
+  // Only this turn's files: other uncommitted changes in the repo are not
+  // the agent's work and made the review comment on unrelated files.
+  const diff = parts.join("\n");
   return diff.length > SIDE_REVIEW_MAX_DIFF_CHARS
     ? `${diff.slice(0, SIDE_REVIEW_MAX_DIFF_CHARS)}\n[... diff truncated ...]`
     : diff;

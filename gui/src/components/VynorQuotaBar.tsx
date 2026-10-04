@@ -307,6 +307,18 @@ export function VynorQuotaBar() {
     }
   }, [resolveToken]);
 
+  // Refresh as soon as a turn ends (credits settle ~1s after the stream) and
+  // whenever the per-prompt credit total moves, not only every 3 minutes.
+  const isStreaming = useAppSelector((store) => store.session.isStreaming);
+  const turnCreditsUsed = useAppSelector(
+    (store) => store.session.turnCredits?.used ?? 0,
+  );
+  useEffect(() => {
+    if (isStreaming) return;
+    const timer = setTimeout(() => void fetchQuota(), 1500);
+    return () => clearTimeout(timer);
+  }, [isStreaming, turnCreditsUsed, fetchQuota]);
+
   useEffect(() => {
     fetchQuota();
     // Auto-refresh quota every 3 minutes

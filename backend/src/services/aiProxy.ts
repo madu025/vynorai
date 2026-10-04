@@ -866,7 +866,9 @@ export async function handleChatCompletions(
       : Array.isArray(lastUserMsg?.content)
         ? lastUserMsg.content.map((p: any) => p.text ?? "").join("")
         : "";
-  const scaffold = detectTemplateIntent(lastQuery);
+  // Coding-agent turns work on the user's own project; a generic scaffold
+  // (matched on loose keywords) only adds tokens and pulls the agent off task.
+  const scaffold = isIdeAgent ? null : detectTemplateIntent(lastQuery);
   if (scaffold) res.setHeader("X-VynorAI-Scaffold-Match", scaffold.id);
   const turnContext = await memoizeTurnContext(
     turnKey(user.id, memBody.messages || []),

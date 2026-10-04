@@ -67,3 +67,20 @@ describe("side review", () => {
     expect(sideReviewPrompt("x", "diff")).toMatch(/reply exactly: NONE/);
   });
 });
+
+describe("side review scope", () => {
+  it("never falls back to unrelated diffs and finds new untracked files", async () => {
+    const { diffForFiles, filesMissingFromDiff, newFileDiff } = await import(
+      "./sideReview"
+    );
+    const other = "diff --git a/package-lock.json b/package-lock.json\n+x";
+    const diff = diffForFiles([other], ["demo/math.js"]);
+    expect(diff).toBe("");
+    expect(filesMissingFromDiff(diff, ["demo/math.js"])).toEqual([
+      "demo/math.js",
+    ]);
+    expect(newFileDiff("demo/math.js", "a\nb")).toContain(
+      "+++ b/demo/math.js\n+a\n+b",
+    );
+  });
+});

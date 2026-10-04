@@ -406,6 +406,18 @@ function estimateReservation(req: Request): number {
   );
 }
 
+/** From this share of the allowance, Auto stops using thinking (saver mode). */
+export const SAVER_THRESHOLD = 0.8;
+
+/** How the proxy should treat this request's remaining allowance. */
+export interface QuotaContext {
+  /** Allowance at or over 80%: keep Auto on cheap, non-thinking tiers. */
+  saver?: boolean;
+  /** Allowance used up: serve only zero-cost answers, refuse upstream calls. */
+  exhausted?: boolean;
+  creditError?: unknown;
+}
+
 function upgradeOffer(planId: string) {
   const upgrade = getUpgradePlan(planId);
   return upgrade
@@ -454,21 +466,36 @@ export async function monthlyQuotaGuard(
       });
     }
 
-    // 2. Check credit limits
+    // 2. Credit limit. Chat requests are not hard-stopped here: cached and
+    //    template answers cost nothing and can still be served. The proxy
+    //    refuses only when a request would need a paid upstream call.
+    const creditError = {
+      error: {
+        message: `Your ${usage.max_tokens.toLocaleString()} monthly credits on "${plan.displayName}" are used up. Answers VynorAI already has (cached and template replies) still work; new model requests need more credits. Top up or upgrade to continue.`,
+        type: "quota_exceeded",
+        code: "monthly_limit_reached",
+        plan: plan.id,
+        usedTokens: usage.used_tokens,
+        maxTokens: usage.max_tokens,
+        periodEnd: usage.period_end,
+        upgradeUrl: plan.upgradeUrl,
+        upgradePlan: upgradeOffer(plan.id),
+      },
+    };
+    const softLimit = req.path.endsWith("/chat/completions");
+    const saver =
+      usage.max_tokens > 0 &&
+      usage.used_tokens / usage.max_tokens >= SAVER_THRESHOLD;
     if (usage.used_tokens >= usage.max_tokens) {
-      return res.status(403).json({
-        error: {
-          message: `Monthly credit limit of ${usage.max_tokens.toLocaleString()} reached for plan "${plan.displayName}". Upgrade your plan to get more credits instantly.`,
-          type: "quota_exceeded",
-          code: "monthly_limit_reached",
-          plan: plan.id,
-          usedTokens: usage.used_tokens,
-          maxTokens: usage.max_tokens,
-          periodEnd: usage.period_end,
-          upgradeUrl: plan.upgradeUrl,
-          upgradePlan: upgradeOffer(plan.id),
-        },
-      });
+      if (!softLimit) return res.status(403).json(creditError);
+      (req as any).quotaInfo = {
+        plan,
+        usage,
+        exhausted: true,
+        creditError,
+        saver: true,
+      };
+      return next();
     }
 
     // 3. Check model entitlement before reserving paid quota.
@@ -495,6 +522,16 @@ export async function monthlyQuotaGuard(
       estimateReservation(req),
     );
     if (!reservation) {
+      if (softLimit) {
+        (req as any).quotaInfo = {
+          plan,
+          usage,
+          exhausted: true,
+          creditError,
+          saver: true,
+        };
+        return next();
+      }
       return res.status(403).json({
         error: {
           message: "Insufficient monthly credits for this request.",
@@ -512,6 +549,7 @@ export async function monthlyQuotaGuard(
       plan,
       usage,
       reservation,
+      saver,
     };
 
     next();

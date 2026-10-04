@@ -63,6 +63,7 @@ import {
   formatBlueprintPlan,
 } from "./scaffoldRegistry.js";
 import { recordRequestEconomics } from "./costLedger.js";
+import type { QuotaContext } from "./monthlyQuota.js";
 import {
   analyzeIntentWithLocalSlm,
   isMutationRequest,
@@ -191,6 +192,7 @@ export async function handleChatCompletions(
   body: any,
   res: Response,
   quotaReservation?: QuotaReservation,
+  quota: QuotaContext = {},
 ) {
   const {
     model = DEFAULT_CHAT_MODEL,
@@ -731,11 +733,19 @@ export async function handleChatCompletions(
   // Classify the turn on the VPS model (deterministic fallback), then route:
   // light/normal → cheap chat model, heavy → reasoning model (for vynor-auto).
   const slmDecision = await analyzeIntentWithLocalSlm(cleanPromptForGating);
-  const tier = refineTier(
+  let tier = refineTier(
     tierFromComplexity(slmDecision.complexity),
     cleanPromptForGating,
   );
   let route = await resolveRoute(model, tier, planId);
+
+  // Saver mode (80%+ of the allowance used): Auto stays on non-thinking tiers
+  // so the remaining credits last, instead of stopping the user later.
+  if (quota.saver && route.auto && (tier === "heavy" || tier === "deep")) {
+    tier = "normal";
+    route = await resolveRoute(model, tier, planId);
+  }
+  if (quota.saver) res.setHeader("X-VynorAI-Quota-Mode", "saver");
 
   // Screenshots and designs need a model that can see them: V4.1 Flash.
   const imageTurn = hasImageInput(body.messages);
@@ -778,6 +788,14 @@ export async function handleChatCompletions(
     const hit = await semanticLookup(semanticKey, semanticQuestion);
     semanticVector = hit.vector;
     if (hit.chunks) return serveCachedChunks(hit.chunks, "semantic");
+  }
+
+  // Allowance used up: every zero-cost path (exact cache, templates, semantic
+  // cache) has had its chance above. A new upstream call is refused here,
+  // with the upgrade offer, instead of at the door.
+  if (quota.exhausted) {
+    res.setHeader("X-VynorAI-Quota-Mode", "exhausted");
+    return res.status(403).json(quota.creditError);
   }
 
   // Mutation authority comes from the latest user request and persists across

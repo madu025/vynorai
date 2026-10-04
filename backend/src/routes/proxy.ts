@@ -186,11 +186,17 @@ proxyRouter.post(
         );
       }
 
+      const quotaInfo = (req as any).quotaInfo;
       await handleChatCompletions(
         user,
         sanitized,
         res,
-        (req as any).quotaInfo?.reservation,
+        quotaInfo?.reservation,
+        {
+          saver: quotaInfo?.saver,
+          exhausted: quotaInfo?.exhausted,
+          creditError: quotaInfo?.creditError,
+        },
       );
     } catch (err: any) {
       await releaseQuotaReservation((req as any).quotaInfo?.reservation).catch(

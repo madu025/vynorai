@@ -156,7 +156,7 @@
           </div>
           <div class="field" id="turnstile-field" style="display:none; margin-top: 12px; margin-bottom: 8px;">
             <!-- Cloudflare Turnstile bot verification widget container -->
-            <div id="turnstile-container" class="cf-turnstile" data-sitekey="0x4AAAAAAAxxxxSAMPLE" data-theme="dark" style="margin: 0 auto;"></div>
+            <div id="turnstile-container" style="display:flex; justify-content:center;"></div>
           </div>
           <a href="#" class="forgot-link" id="forgot-link" onclick="handleForgot(event)">Forgot password?</a>
           <button type="submit" class="submit-btn" id="submit-btn">
@@ -216,7 +216,8 @@
       document.getElementById('btn-label').textContent = isReg ? 'Create Free Account' : 'Sign In to VynorAI';
       document.getElementById('forgot-link').style.display = isReg ? 'none' : '';
       var turnstileField = document.getElementById('turnstile-field');
-      if (turnstileField) turnstileField.style.display = isReg ? 'block' : 'none';
+      if (turnstileField) turnstileField.style.display = isReg && turnstileSiteKey ? 'block' : 'none';
+      if (isReg) loadTurnstile();
       document.getElementById('inp-password').autocomplete = isReg ? 'new-password' : 'current-password';
       clearAlerts();
     }
@@ -232,6 +233,34 @@
       if (!email) { showError('Enter your email address first.'); return; }
       showSuccess('Reset instructions sent to ' + email);
     }
+    // Cloudflare Turnstile on sign-up, only when the server has keys set.
+    var turnstileSiteKey = '';
+    var turnstileWidgetId = null;
+    var turnstileToken = '';
+    fetch(API + '/api/auth/turnstile-config').then(function (r) { return r.json(); }).then(function (c) {
+      turnstileSiteKey = (c && c.siteKey) || '';
+      if (mode === 'register') switchTab('register');
+    }).catch(function () {});
+    function loadTurnstile() {
+      if (!turnstileSiteKey || turnstileWidgetId !== null) return;
+      window.onTurnstileLoad = function () {
+        turnstileWidgetId = window.turnstile.render('#turnstile-container', {
+          sitekey: turnstileSiteKey,
+          theme: 'dark',
+          callback: function (t) { turnstileToken = t; },
+          'expired-callback': function () { turnstileToken = ''; },
+          'error-callback': function () { turnstileToken = ''; }
+        });
+      };
+      var s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit';
+      s.async = true;
+      document.head.appendChild(s);
+    }
+    function resetTurnstile() {
+      turnstileToken = '';
+      if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+    }
     async function handleSubmit(e) {
       e.preventDefault(); clearAlerts();
       var email = document.getElementById('inp-email').value.trim();
@@ -239,10 +268,11 @@
       var name = document.getElementById('inp-name').value.trim();
       if (!email || !password) { showError('Please fill in all required fields.'); return; }
       if (mode === 'register' && password.length < 8) { showError('Password must be at least 8 characters.'); return; }
+      if (mode === 'register' && turnstileSiteKey && !turnstileToken) { showError('Please complete the security check.'); return; }
       setLoading(true);
       try {
         var endpoint = mode === 'signin' ? '/api/auth/login' : '/api/auth/register';
-        var body = mode === 'signin' ? { email: email, password: password } : { email: email, password: password, name: name || email.split('@')[0] };
+        var body = mode === 'signin' ? { email: email, password: password } : { email: email, password: password, name: name || email.split('@')[0], turnstileToken: turnstileToken };
         var res = await fetch(API + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         var data = await res.json();
         if (!res.ok) {
@@ -252,6 +282,7 @@
           } else if (msg.includes('Email already registered')) {
             msg = "This email is already registered! Please click 'Sign In' to log into your account.";
           }
+          if (mode === 'register') resetTurnstile();
           throw new Error(msg);
         }
         localStorage.setItem('vynorai_token', data.token);

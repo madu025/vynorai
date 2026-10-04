@@ -230,6 +230,15 @@ async function verifyTurnstileToken(
   }
 }
 
+// Public Turnstile site key for the sign-up page. Empty when bot protection
+// is not configured; the page then shows no widget and the server skips it.
+authRouter.get("/turnstile-config", (_req: Request, res: Response) => {
+  const siteKey = process.env.TURNSTILE_SECRET_KEY
+    ? process.env.TURNSTILE_SITE_KEY || ""
+    : "";
+  res.json({ siteKey });
+});
+
 // Register
 authRouter.post(
   "/register",

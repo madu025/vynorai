@@ -84,3 +84,36 @@ describe("side review scope", () => {
     );
   });
 });
+
+describe("turnChanges", () => {
+  it("keeps only this turn's replacements for edited files", async () => {
+    const { turnChanges, editsDiff } = await import("./sideReview");
+    const history: any[] = [
+      { message: { role: "user", content: "add subtract" }, contextItems: [] },
+      {
+        message: { role: "assistant", content: "" },
+        contextItems: [],
+        toolCallStates: [
+          {
+            status: "done",
+            toolCall: { function: { name: "multi_edit" } },
+            parsedArgs: {
+              filepath: "demo/math.js",
+              edits: [
+                {
+                  old_string: "module.exports = { add };",
+                  new_string: "module.exports = { add, subtract };",
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+    const change = turnChanges(history).get("demo/math.js")!;
+    expect(change.created).toBe(false);
+    const diff = editsDiff("demo/math.js", change.edits);
+    expect(diff).toContain("-module.exports = { add };");
+    expect(diff).toContain("+module.exports = { add, subtract };");
+  });
+});

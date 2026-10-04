@@ -8,7 +8,9 @@ import { resolveRelativePathInDir } from "core/util/ideUtils";
 import {
   SIDE_REVIEW_MAX_DIFF_CHARS,
   diffForFiles,
+  editsDiff,
   filesMissingFromDiff,
+  turnChanges,
   newFileDiff,
   parseSideReview,
   sideReviewPrompt,
@@ -46,7 +48,14 @@ export const runSideReview = createAsyncThunk<
       let diff =
         diffs.status === "success" ? diffForFiles(diffs.content, files) : "";
       // New files are untracked, so git diff does not show them: read them.
+      const changes = turnChanges(state.session.history);
       for (const file of filesMissingFromDiff(diff, files).slice(0, 5)) {
+        const change = changes.get(file);
+        if (change && !change.created && change.edits.length) {
+          // Edited but untracked: review only what this turn replaced.
+          diff += `\n${editsDiff(file, change.edits)}`;
+          continue;
+        }
         try {
           const uri = await resolveRelativePathInDir(
             file,

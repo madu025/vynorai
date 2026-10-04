@@ -46,6 +46,56 @@ export function turnEdits(history: ChatHistoryItem[]): {
   return { files: [...files], request };
 }
 
+/**
+ * What this turn did to each file: created it, or the exact replacements it
+ * made. Untracked files have no git diff, so the review uses these instead
+ * of the whole file (which made old code look like new work).
+ */
+export function turnChanges(
+  history: ChatHistoryItem[],
+): Map<string, { created: boolean; edits: string[] }> {
+  let start = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].message.role === "user" && !history[i].isAutoPrompt) {
+      start = i + 1;
+      break;
+    }
+  }
+  const out = new Map<string, { created: boolean; edits: string[] }>();
+  for (const item of history.slice(start)) {
+    for (const call of item.toolCallStates ?? []) {
+      if (call.status !== "done") continue;
+      const name = call.toolCall.function.name;
+      if (!EDIT_TOOLS.has(name)) continue;
+      const args = (call.parsedArgs ?? {}) as Record<string, any>;
+      if (typeof args.filepath !== "string") continue;
+      const entry = out.get(args.filepath) ?? { created: false, edits: [] };
+      if (name === BuiltInToolNames.CreateNewFile) entry.created = true;
+      const pairs: Array<{ old_string?: string; new_string?: string }> =
+        Array.isArray(args.edits) ? args.edits : [args];
+      for (const p of pairs) {
+        if (typeof p.new_string !== "string") continue;
+        const minus = String(p.old_string ?? "")
+          .split("\n")
+          .map((l) => `-${l}`);
+        const plus = p.new_string.split("\n").map((l) => `+${l}`);
+        entry.edits.push([...minus, ...plus].join("\n"));
+      }
+      out.set(args.filepath, entry);
+    }
+  }
+  return out;
+}
+
+/** This turn's replacements in one untracked file, as a diff. */
+export function editsDiff(file: string, edits: string[]): string {
+  return [
+    `diff --git a/${file} b/${file}`,
+    `+++ b/${file}`,
+    ...edits.map((e) => `@@\n${e}`),
+  ].join("\n");
+}
+
 const normalizePath = (f: string) => f.replace(/\\/g, "/").replace(/^\.\//, "");
 
 /** Files of this turn with no hunk in the diff (new, untracked files). */

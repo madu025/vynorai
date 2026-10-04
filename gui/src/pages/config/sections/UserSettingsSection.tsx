@@ -282,6 +282,47 @@ export function UserSettingsSection() {
             </Card>
           </div>
 
+          {/* Privacy & Data */}
+          <div>
+            <ConfigHeader title="Privacy & Data" variant="sm" />
+            <Card>
+              <div className="flex flex-col gap-3 text-sm">
+                <p className="text-description m-0">
+                  Before a prompt leaves VynorAI, secrets and personal data
+                  (emails, phone numbers, NIC and card numbers) are replaced
+                  with placeholders and restored in the answer. Your code is
+                  never used to train models, and this extension sends no
+                  telemetry.
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <a
+                    href="#"
+                    className="text-link cursor-pointer underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      ideMessenger.post(
+                        "openUrl",
+                        "https://vynor.lk/privacy.html",
+                      );
+                    }}
+                  >
+                    Privacy Policy
+                  </a>
+                  <a
+                    href="#"
+                    className="text-link cursor-pointer underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      ideMessenger.post("openUrl", "https://vynor.lk/");
+                    }}
+                  >
+                    Download or delete my data
+                  </a>
+                </div>
+              </div>
+            </Card>
+          </div>
+
           {/* Experimental Settings */}
           <div>
             <ConfigHeader title="Experimental" variant="sm" />

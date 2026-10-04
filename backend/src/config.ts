@@ -77,7 +77,7 @@ export const PLANS: Record<string, PlanDefinition> = {
   starter: {
     id: "starter",
     displayName: "Starter",
-    monthlyTokens: 8_000_000,
+    monthlyTokens: 11_000_000,
     monthlyRequests: 2_500,
     priceLKR: 1_850,
     priceUSD: 5.99,
@@ -97,7 +97,7 @@ export const PLANS: Record<string, PlanDefinition> = {
       "deepseek-coder",
     ],
     features: [
-      "8 million credits/month",
+      "11 million credits/month",
       "2,500 requests/month",
       "VynorAI Auto (DeepSeek V4.1 Flash) + Qwen 2.5 Coder",
       "32k context window",
@@ -153,7 +153,7 @@ export const PLANS: Record<string, PlanDefinition> = {
   enterprise: {
     id: "enterprise",
     displayName: "Ultra",
-    monthlyTokens: 60_000_000,
+    monthlyTokens: 55_000_000,
     monthlyRequests: 20_000,
     priceLKR: 7_900,
     priceUSD: 25.5,
@@ -163,7 +163,7 @@ export const PLANS: Record<string, PlanDefinition> = {
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
     allowedModels: ["*"],
     features: [
-      "60 million credits/month",
+      "55 million credits/month",
       "20,000 requests/month",
       "Every model, including Claude and GPT (credit-weighted)",
       "256k context window",
@@ -178,7 +178,7 @@ export const PLANS: Record<string, PlanDefinition> = {
   ultra: {
     id: "ultra",
     displayName: "Ultra",
-    monthlyTokens: 60_000_000,
+    monthlyTokens: 55_000_000,
     monthlyRequests: 20_000,
     priceLKR: 7_900,
     priceUSD: 25.5,
@@ -188,7 +188,7 @@ export const PLANS: Record<string, PlanDefinition> = {
     defaultAutocompleteModel: "deepseek/deepseek-coder-v2",
     allowedModels: ["*"],
     features: [
-      "60 million credits/month",
+      "55 million credits/month",
       "20,000 requests/month",
       "Every model, including Claude and GPT (credit-weighted)",
       "256k context window",
@@ -299,9 +299,18 @@ export const PLANS: Record<string, PlanDefinition> = {
   },
 };
 
+// Admin edits (plan_overrides) merged over PLANS by planManager. Quota,
+// billing and checkout must all read the same numbers the pricing page shows.
+let planOverlay: Record<string, PlanDefinition> | null = null;
+
+export function setPlanOverlay(plans: Record<string, PlanDefinition> | null) {
+  planOverlay = plans;
+}
+
 /** Get plan definition (fallback to free if unknown) */
 export function getPlan(planId: string): PlanDefinition {
-  return PLANS[planId] || PLANS.free;
+  const plans = planOverlay ?? PLANS;
+  return plans[planId] || plans.free || PLANS.free;
 }
 
 /** Effective price after discount */

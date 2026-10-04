@@ -283,7 +283,7 @@ adminRouter.post(
       Date.now() + durationDays * 86400000,
     ).toISOString();
     const planConfig = (PLANS as any)[plan];
-    const maxTokens = planConfig?.monthlyTokens || 8_000_000;
+    const maxTokens = planConfig?.monthlyTokens || 11_000_000;
 
     // Deactivate any currently active subscriptions for this user
     await dbRun(

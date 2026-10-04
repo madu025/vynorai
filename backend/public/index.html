@@ -639,7 +639,7 @@
               </tr>
               <tr style="border-bottom: 1px solid var(--border);">
                 <td style="padding: 14px 20px; color: var(--text-muted);">Monthly allowance (entry plan)</td>
-                <td style="padding: 14px 20px; text-align: center; color: var(--primary); font-weight: 700;">8M credits, shown live</td>
+                <td style="padding: 14px 20px; text-align: center; color: var(--primary); font-weight: 700;">11M credits, shown live</td>
                 <td style="padding: 14px 20px; text-align: center; color: var(--text-muted);">Rate-limited</td>
                 <td style="padding: 14px 20px; text-align: center; color: var(--text-muted);">500 fast requests</td>
               </tr>
@@ -1035,7 +1035,7 @@
           <div class="glass-card pricing-card">
             <h3>Starter</h3>
             <div class="price">රු. 1,850 <span>/ month</span></div>
-            <ul class="feature-list"><li>8 million credits/month</li><li>2,500 requests/month</li></ul>
+            <ul class="feature-list"><li>11 million credits/month</li><li>2,500 requests/month</li></ul>
             <button class="btn btn-primary" onclick="initiatePayhere('starter')">Get Starter</button>
           </div>
           <div class="glass-card pricing-card featured">
@@ -1047,7 +1047,7 @@
           <div class="glass-card pricing-card">
             <h3>Ultra</h3>
             <div class="price">රු. 7,900 <span>/ month</span></div>
-            <ul class="feature-list"><li>60 million credits/month</li><li>20,000 requests/month</li><li>Every model, including Claude and GPT</li></ul>
+            <ul class="feature-list"><li>55 million credits/month</li><li>20,000 requests/month</li><li>Every model, including Claude and GPT</li></ul>
             <button class="btn btn-secondary" onclick="initiatePayhere('ultra')">Get Ultra</button>
           </div>
         </div>
@@ -1246,12 +1246,12 @@
         const monthly = data.monthlyUsage;
 
         const planNames = {
-          starter: 'Starter · 8M credits/month',
+          starter: 'Starter · 11M credits/month',
           pro: 'Pro · 25M credits/month',
           pro_monthly: 'Pro · 25M credits/month',
           pro_yearly: 'Pro Yearly · 25M credits/month',
-          ultra: 'Ultra · 60M credits/month',
-          enterprise: 'Ultra · 60M credits/month',
+          ultra: 'Ultra · 55M credits/month',
+          enterprise: 'Ultra · 55M credits/month',
           free: 'Free Trial · 100K credits/month'
         };
         for (const p of (window.__vynorPlans || [])) {
@@ -1779,9 +1779,9 @@
       pro_yearly: { badge: '2 Months Free', blurb: '' },
     };
     let PLAN_INFO = {
-      starter: { name: 'Starter', price: 'රු. 1,850 / month', badge: 'Best Starter', features: ['8 million credits/month', '2,500 requests/month'] },
+      starter: { name: 'Starter', price: 'රු. 1,850 / month', badge: 'Best Starter', features: ['11 million credits/month', '2,500 requests/month'] },
       pro: { name: 'Pro', price: 'රු. 3,850 / month', badge: 'Most Popular', features: ['25 million credits/month', '7,500 requests/month', 'Auto uses DeepSeek V4 Pro for deep reasoning'] },
-      ultra: { name: 'Ultra', price: 'රු. 7,900 / month', badge: 'Power User', features: ['60 million credits/month', '20,000 requests/month'] },
+      ultra: { name: 'Ultra', price: 'රු. 7,900 / month', badge: 'Power User', features: ['55 million credits/month', '20,000 requests/month'] },
       topup5m: { name: 'Top-Up Pack (+5M)', price: 'රු. 650 (one-time)', badge: 'Instant Boost', features: ['+5,000,000 credits this cycle', '1,500 additional requests'] },
     };
 

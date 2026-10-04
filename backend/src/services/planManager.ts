@@ -9,7 +9,7 @@
  */
 
 import { dbGet, dbAll, dbRun, usingPostgres } from "../db.js";
-import { PLANS, PlanDefinition } from "../config.js";
+import { PLANS, PlanDefinition, setPlanOverlay } from "../config.js";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 export async function ensurePlanOverrideTable(): Promise<void> {
@@ -45,6 +45,8 @@ const CACHE_TTL = 30_000;
 export function invalidatePlanCache(): void {
   _cache = null;
   _cacheTime = 0;
+  // Reload now so the synchronous getPlan() overlay picks the edit up.
+  void getEffectivePlans().catch(() => {});
 }
 
 export async function getEffectivePlans(): Promise<
@@ -86,6 +88,7 @@ export async function getEffectivePlans(): Promise<
 
   _cache = plans;
   _cacheTime = now;
+  setPlanOverlay(plans);
   return plans;
 }
 
@@ -144,4 +147,9 @@ export async function resetPlanToDefault(planId: string): Promise<void> {
 export async function initPlanManager(): Promise<void> {
   await ensurePlanOverrideTable();
   await getEffectivePlans(); // warm cache
+  // Each worker refreshes on its own, so an admin edit made through one
+  // worker reaches the other within a TTL.
+  setInterval(() => {
+    void getEffectivePlans().catch(() => {});
+  }, CACHE_TTL).unref();
 }

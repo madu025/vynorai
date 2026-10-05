@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 import * as vscode from "vscode";
 import { SecretStorage } from "../stubs/SecretStorage";
-import { classifyBackgroundUploadPath } from "core/agent/backgroundUploadPolicy";
+import {
+  classifyBackgroundPatchPath,
+  classifyBackgroundUploadPath,
+} from "core/agent/backgroundUploadPolicy";
 
 const API_BASE = process.env.VYNORAI_API_BASE || "https://vynor.lk/v1";
 const SECRET_NAME = "VYNORAI_API_KEY";
@@ -87,6 +90,16 @@ export class BackgroundAgentManager {
     return task;
   }
 
+  async availability(): Promise<{ available: boolean; reason?: any }> {
+    try {
+      const result = await this.request("/background/availability", {
+        method: "GET",
+      });
+      return { available: result?.available === true, reason: result?.reason };
+    } catch {
+      return { available: false, reason: "unavailable" };
+    }
+  }
   async list(): Promise<any> {
     return this.request("/background/tasks?limit=50", { method: "GET" });
   }
@@ -176,11 +189,18 @@ export class BackgroundAgentManager {
       throw new Error("Background patch signature verification failed.");
     const root = this.singleWorkspace().uri;
     for (const file of parsed.files) {
-      if (
-        !safeRelative(file.path) ||
-        !["create", "modify", "delete"].includes(file.operation)
-      )
-        throw new Error("Unsafe path in background patch.");
+      if (!["create", "modify", "delete"].includes(file.operation))
+        throw new Error("Unknown operation in background patch.");
+      // The sandboxed agent can be steered by repository content, so a
+      // signed patch is still untrusted: refuse paths that escape the
+      // workspace or would run code / touch credentials on this machine.
+      const decision = classifyBackgroundPatchPath(file.path);
+      if (decision !== "ok")
+        throw new Error(
+          decision === "unsafe"
+            ? `Unsafe path in background patch: ${JSON.stringify(file.path)}`
+            : `Background patch tried to change a ${decision} file (${file.path}); nothing was applied.`,
+        );
       const uri = vscode.Uri.joinPath(root, ...file.path.split("/"));
       let current = Buffer.alloc(0);
       try {
@@ -276,15 +296,6 @@ export class BackgroundAgentManager {
   }
 }
 
-function safeRelative(value: string): boolean {
-  return (
-    Boolean(value) &&
-    !value.startsWith("/") &&
-    !/^[A-Za-z]:\//.test(value) &&
-    !value.split("/").includes("..") &&
-    !value.includes("\0")
-  );
-}
 function sha256(value: crypto.BinaryLike): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }

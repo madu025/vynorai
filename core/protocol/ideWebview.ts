@@ -23,6 +23,10 @@ export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
       reused: boolean;
     },
   ];
+  "background/availability": [
+    undefined,
+    { available: boolean; reason?: "disabled" | "plan" | "unavailable" },
+  ];
   "background/list": [
     undefined,
     { tasks: Array<Record<string, unknown>>; nextCursor?: string | null },

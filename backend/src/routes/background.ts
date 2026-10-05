@@ -27,16 +27,34 @@ import {
 
 export const backgroundRouter = Router();
 
+// Answered even while the feature is off, so the IDE can hide Background
+// mode instead of letting users pick a mode that only returns errors.
+backgroundRouter.get("/availability", requireAuth, async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  if (process.env.BG_ENABLED !== "true")
+    return res.json({ available: false, reason: "disabled" });
+  try {
+    const entitlement = await getBackgroundEntitlement(
+      (req as any).user.id as string,
+    );
+    return res.json({
+      available: Boolean(entitlement.enabled),
+      reason: entitlement.enabled ? undefined : "plan",
+      entitlement,
+    });
+  } catch {
+    return res.json({ available: false, reason: "unavailable" });
+  }
+});
+
 backgroundRouter.use((_req, res, next) => {
   if (process.env.BG_ENABLED !== "true")
-    return res
-      .status(503)
-      .json({
-        error: {
-          code: "BACKGROUND_DISABLED",
-          message: "Background agents are not enabled yet.",
-        },
-      });
+    return res.status(503).json({
+      error: {
+        code: "BACKGROUND_DISABLED",
+        message: "Background agents are not enabled yet.",
+      },
+    });
   next();
 });
 backgroundRouter.use(requireAuth);
@@ -48,23 +66,19 @@ backgroundRouter.use(async (req, res, next) => {
   const userId = (req as any).user.id as string;
   const result = await incrementRateLimit(`background:${userId}`, 60_000);
   if (!result)
-    return res
-      .status(503)
-      .json({
-        error: {
-          code: "BACKGROUND_QUEUE_UNAVAILABLE",
-          message: "Background tasks are temporarily unavailable.",
-        },
-      });
+    return res.status(503).json({
+      error: {
+        code: "BACKGROUND_QUEUE_UNAVAILABLE",
+        message: "Background tasks are temporarily unavailable.",
+      },
+    });
   if (result.count > 120)
-    return res
-      .status(429)
-      .json({
-        error: {
-          code: "RATE_LIMITED",
-          message: "Too many background task requests.",
-        },
-      });
+    return res.status(429).json({
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many background task requests.",
+      },
+    });
   next();
 });
 
@@ -141,14 +155,12 @@ backgroundRouter.put("/tasks/:id/upload", async (req, res) => {
         String(req.headers["content-type"] || ""),
       )
     )
-      return res
-        .status(415)
-        .json({
-          error: {
-            code: "UNSUPPORTED_MEDIA_TYPE",
-            message: "Upload must be application/zip.",
-          },
-        });
+      return res.status(415).json({
+        error: {
+          code: "UNSUPPORTED_MEDIA_TYPE",
+          message: "Upload must be application/zip.",
+        },
+      });
     const result = await uploadBackgroundProject(
       (req as any).user.id,
       String(req.params.id),

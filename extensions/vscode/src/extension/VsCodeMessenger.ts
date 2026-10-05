@@ -219,6 +219,9 @@ export class VsCodeMessenger {
       );
       return created;
     });
+    this.onWebview("background/availability", () =>
+      backgroundAgentManager.availability(),
+    );
     this.onWebview("background/list", () => backgroundAgentManager.list());
     this.onWebview("background/detail", ({ data }) =>
       backgroundAgentManager.detail(data.taskId),

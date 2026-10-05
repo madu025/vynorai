@@ -7,7 +7,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { MessageModes } from "core";
 import { isRecommendedAgentModel } from "core/llm/toolSupport";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { IdeMessengerContext } from "../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
 import { selectSelectedChatModel } from "../../redux/slices/configSlice";
 import { setExpertTeamEnabled, setMode } from "../../redux/slices/sessionSlice";
@@ -32,6 +33,29 @@ export function ModeSelect() {
     return isRecommendedAgentModel(selectedModel.model);
   }, [selectedModel]);
 
+  // Background mode is offered only when the server has it on and the plan
+  // includes it; otherwise picking it would only return errors.
+  const ideMessenger = useContext(IdeMessengerContext);
+  const [backgroundAvailable, setBackgroundAvailable] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void ideMessenger
+      .request("background/availability", undefined)
+      .then((response) => {
+        if (!alive) return;
+        const available =
+          response?.status === "success" && response.content.available;
+        setBackgroundAvailable(available);
+        if (!available && mode === "background") dispatch(setMode("agent"));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // Checked once per panel load; the plan rarely changes mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ideMessenger]);
+
   const { mainEditor } = useMainEditor();
   const metaKeyLabel = useMemo(() => {
     return getMetaKeyLabel();
@@ -43,7 +67,7 @@ export function ModeSelect() {
       dispatch(setMode("plan"));
     } else if (mode === "plan") {
       dispatch(setMode("agent"));
-    } else if (mode === "agent") {
+    } else if (mode === "agent" && backgroundAvailable) {
       dispatch(setMode("background"));
     } else {
       dispatch(setMode("chat"));
@@ -52,7 +76,7 @@ export function ModeSelect() {
     if (!document.activeElement?.classList?.contains("ProseMirror")) {
       mainEditor?.commands.focus();
     }
-  }, [dispatch, mode, mainEditor]);
+  }, [dispatch, mode, mainEditor, backgroundAvailable]);
 
   const selectMode = useCallback(
     (newMode: MessageModes | "expert") => {
@@ -207,21 +231,23 @@ export function ModeSelect() {
             />
           </ListboxOption>
 
-          <ListboxOption value="background">
-            <div className="flex flex-row items-center gap-1.5">
-              <ModeIcon mode="background" />
-              <span>Background</span>
-              <ToolTip
-                style={{ zIndex: 200001 }}
-                content="Run an encrypted project copy in an isolated cloud sandbox"
-              >
-                <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
-              </ToolTip>
-            </div>
-            <CheckIcon
-              className={`ml-auto h-3 w-3 ${mode === "background" ? "" : "opacity-0"}`}
-            />
-          </ListboxOption>
+          {(backgroundAvailable || mode === "background") && (
+            <ListboxOption value="background">
+              <div className="flex flex-row items-center gap-1.5">
+                <ModeIcon mode="background" />
+                <span>Background</span>
+                <ToolTip
+                  style={{ zIndex: 200001 }}
+                  content="Run an encrypted project copy in an isolated cloud sandbox"
+                >
+                  <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
+                </ToolTip>
+              </div>
+              <CheckIcon
+                className={`ml-auto h-3 w-3 ${mode === "background" ? "" : "opacity-0"}`}
+              />
+            </ListboxOption>
+          )}
 
           <div className="text-description-muted px-2 py-1">
             {`${metaKeyLabel} . for next mode`}

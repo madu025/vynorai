@@ -32,6 +32,7 @@ import { mintBackgroundModelToken } from "../services/backgroundModelToken.js";
 import type { BackgroundProofPackV1 } from "../services/backgroundTypes.js";
 import { sendBackgroundPush } from "../services/backgroundNotifications.js";
 import { cancelSandbox, launchSandbox } from "./launcherClient.js";
+import { assertSafePatch, readSandboxFile } from "./outputSafety.js";
 
 const workerId = `${os.hostname()}:${process.pid}`;
 const leaseMs = 90_000;
@@ -160,20 +161,21 @@ async function finalizeTask(
   result: Awaited<ReturnType<typeof launchSandbox>>,
 ) {
   const output = path.join(staging, "output");
-  const proofRaw = await fs.promises.readFile(path.join(output, "proof.json"));
-  if (proofRaw.length > 2 * 1024 * 1024) throw new Error("PROOF_TOO_LARGE");
+  const proofRaw = await readSandboxFile(
+    path.join(output, "proof.json"),
+    2 * 1024 * 1024,
+  );
   const proof = JSON.parse(proofRaw.toString("utf8")) as BackgroundProofPackV1;
   if (proof.version !== 1 || proof.taskId !== task.id)
     throw new Error("INVALID_PROOF_PACK");
-  const unsignedPatchRaw = await fs.promises.readFile(
+  const unsignedPatchRaw = await readSandboxFile(
     path.join(output, "patch.json"),
+    Number(process.env.BG_MAX_PATCH_BYTES || 50 * 1024 * 1024),
   );
-  if (
-    unsignedPatchRaw.length >
-    Number(process.env.BG_MAX_PATCH_BYTES || 50 * 1024 * 1024)
-  )
-    throw new Error("PATCH_TOO_LARGE");
   const patchBundle = JSON.parse(unsignedPatchRaw.toString("utf8"));
+  // Never sign a patch that writes git hooks, editor tasks, CI workflows,
+  // credentials or paths outside the project; the IDE checks again.
+  assertSafePatch(patchBundle);
   const privateKey = Buffer.from(
     requiredWorkerSecret("BG_PATCH_SIGNING_PRIVATE_KEY_BASE64"),
     "base64",

@@ -7,10 +7,14 @@ const modelTarget = new URL(
   process.env.BG_MODEL_RELAY_URL ||
     "http://vynor-backend:3333/internal/background/model/v1/chat/completions",
 );
+// Package downloads only. Plain github.com is left out on purpose: it
+// accepts `git push` over HTTPS, so a prompt-injected agent could send the
+// project to someone else's repository. Tarballs come from codeload and
+// objects.githubusercontent.com, which are read-only.
 const allowedHosts = new Set(
   (
     process.env.BG_EGRESS_ALLOWLIST ||
-    "registry.npmjs.org,npmjs.org,pypi.org,files.pythonhosted.org,repo.packagist.org,packagist.org,rubygems.org,api.rubygems.org,github.com,codeload.github.com,objects.githubusercontent.com"
+    "registry.npmjs.org,npmjs.org,pypi.org,files.pythonhosted.org,repo.packagist.org,packagist.org,rubygems.org,api.rubygems.org,codeload.github.com,objects.githubusercontent.com"
   )
     .split(",")
     .map((host) => host.trim().toLowerCase())

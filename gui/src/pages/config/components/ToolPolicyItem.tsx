@@ -18,7 +18,18 @@ import {
 } from "../../../components/ui";
 import { useFontSize } from "../../../components/ui/font";
 import { useAppSelector } from "../../../redux/hooks";
-import { addTool, setToolPolicy } from "../../../redux/slices/uiSlice";
+import {
+  addTool,
+  DEFAULT_PERMISSION_MODE,
+  setToolPolicy,
+} from "../../../redux/slices/uiSlice";
+
+/** The tool's first sentence; the full text is in the row's tooltip. */
+function firstSentence(text: string | undefined): string {
+  const t = (text ?? "").trim();
+  const end = t.search(/[.!?](\s|$)/);
+  return end > 0 ? t.slice(0, end + 1) : t;
+}
 
 interface ToolPolicyItemProps {
   tool: Tool;
@@ -33,6 +44,14 @@ export function ToolPolicyItem(props: ToolPolicyItemProps) {
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const mode = useAppSelector((state) => state.session.mode);
+  // In Auto/Full permission mode, "ask" on a built-in tool means "decided by
+  // risk": safe calls run, risky ones ask.
+  const byRisk = useAppSelector(
+    (state) =>
+      (state.ui.permissionMode ?? DEFAULT_PERMISSION_MODE) !== "ask" &&
+      props.tool.group === BUILT_IN_GROUP_NAME,
+  );
+  const askLabel = byRisk ? "By risk" : "Ask First";
 
   useEffect(() => {
     if (!policy) {
@@ -111,8 +130,11 @@ export function ToolPolicyItem(props: ToolPolicyItemProps) {
                   {props.tool.originalFunctionName ?? props.tool.function.name}
                 </span>
               </div>
-              <div className="text-description line-clamp-3 text-sm">
-                {props.tool.function.description}
+              <div
+                className="text-description line-clamp-1 text-sm"
+                title={props.tool.function.description}
+              >
+                {firstSentence(props.tool.function.description)}
               </div>
             </div>
           </div>
@@ -143,7 +165,7 @@ export function ToolPolicyItem(props: ToolPolicyItemProps) {
                       ? "Excluded"
                       : policy === "allowedWithoutPermission"
                         ? "Automatic"
-                        : "Ask First"}
+                        : askLabel}
                   </span>
                   <ChevronDownIcon className="h-3 w-3" />
                 </ListboxButton>
@@ -153,7 +175,7 @@ export function ToolPolicyItem(props: ToolPolicyItemProps) {
                       Automatic
                     </ListboxOption>
                     <ListboxOption value="allowedWithPermission">
-                      Ask First
+                      {askLabel}
                     </ListboxOption>
                     <ListboxOption value="disabled">Excluded</ListboxOption>
                   </ListboxOptions>

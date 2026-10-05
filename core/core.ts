@@ -1374,6 +1374,7 @@ export class Core {
             tool,
             toolName,
             permissionMode,
+            basePolicy,
             parsedArgs,
             processedArgs,
             displayValue,
@@ -1470,6 +1471,7 @@ export class Core {
     tool: Tool,
     toolName: string,
     mode: "auto" | "full",
+    basePolicy: ToolPolicy,
     parsedArgs: Record<string, unknown>,
     processedArgs: Record<string, unknown> | undefined,
     displayValue: string | undefined,
@@ -1480,7 +1482,8 @@ export class Core {
       processedArgs,
     );
     if (guarded === "disabled") return { policy: "disabled", displayValue };
-    if (mode === "full") {
+    // Full mode, or a tool the user set to Automatic: no risk check.
+    if (mode === "full" || basePolicy === "allowedWithoutPermission") {
       return { policy: "allowedWithoutPermission", displayValue };
     }
 

@@ -122,20 +122,13 @@ export function UserSettingsSection() {
         <div className="space-y-6">
           {/* Chat Interface Settings */}
           <div>
-            <ConfigHeader title="Chat" variant="sm" />
+            <ConfigHeader title="Agent" variant="sm" />
             <Card>
               <div className="flex flex-col gap-4">
                 <UserSetting
-                  type="toggle"
-                  title="Show Session Tabs"
-                  description="Displays tabs above the chat as an alternative way to organize and access your sessions."
-                  value={showSessionTabs}
-                  onChange={(value) => handleUpdate({ showSessionTabs: value })}
-                />
-                <UserSetting
                   type="select"
                   title="Credit Limit per Task"
-                  description="Pause a single prompt once it has used this many credits. The agent then summarizes what is done and what is left, and Continue resumes it."
+                  description="Pause a task after this many credits; Continue resumes it."
                   value={String(taskCreditCap)}
                   options={TASK_CREDIT_CAP_OPTIONS.map((n) => ({
                     value: String(n),
@@ -148,7 +141,7 @@ export function UserSettingsSection() {
                 <UserSetting
                   type="select"
                   title="Agent Permissions"
-                  description="Auto: reading, editing project files, running tests, builds and scripts, and deleting files inside the project happen on their own; installing packages, git push, deploys, network requests, system changes, secret files (.env, keys) and anything outside the project ask first. Ask: every edit and command asks. Full auto: nothing asks (dangerous commands stay blocked)."
+                  description="Auto asks only for risky actions: installs, git push, deploys, network, secrets and files outside the project."
                   value={permissionMode}
                   options={[
                     {
@@ -167,8 +160,8 @@ export function UserSettingsSection() {
                 />
                 <UserSetting
                   type="select"
-                  title="Agent Judgment"
-                  description="How carefully the agent reviews its own changes before finishing. Careful and Max check other uses of what changed, think through what could break, and end with an honest report of what was and was not verified. In our tests this caught 98-100% of hidden issues vs about 70% without it, and uses more credits on changes (about 2-3x on small tasks)."
+                  title="Judgment"
+                  description="How much the agent double-checks its changes. Careful and Max catch more issues and use more credits."
                   value={judgmentLevel}
                   options={[
                     { value: "fast", label: "Fast (no extra review)" },
@@ -182,49 +175,17 @@ export function UserSettingsSection() {
                 <UserSetting
                   type="toggle"
                   title="You Should Know (second look)"
-                  description="After an agent turn that changes files, a quick review of the diff flags secrets, leftover debug code, likely bugs or missing tests. Uses a few credits per task."
+                  description="A quick review of each change for secrets, debug code and likely bugs."
                   value={sideReviewEnabled}
                   onChange={(value) => dispatch(setSideReviewEnabled(value))}
                 />
                 <UserSetting
                   type="toggle"
-                  title="Wrap Codeblocks"
-                  description="Wraps long lines in code blocks instead of showing horizontal scroll."
-                  value={codeWrap}
-                  onChange={(value) => handleUpdate({ codeWrap: value })}
-                />
-                <UserSetting
-                  type="toggle"
-                  title="Show Chat Scrollbar"
-                  description="Enables a scrollbar in the chat window."
-                  value={showChatScrollbar}
-                  onChange={(value) =>
-                    handleUpdate({ showChatScrollbar: value })
-                  }
-                />
-                <UserSetting
-                  type="toggle"
-                  title="Text-to-Speech Output"
-                  description="Reads LLM responses aloud with TTS."
-                  value={readResponseTTS}
-                  onChange={(value) => handleUpdate({ readResponseTTS: value })}
-                />
-                <UserSetting
-                  type="toggle"
                   title="Enable Session Titles"
-                  description="Generates summary titles for each chat session after the first message, using the current Chat model."
+                  description="Name each chat from its first message."
                   value={!disableSessionTitles}
                   onChange={(value) =>
                     handleUpdate({ disableSessionTitles: !value })
-                  }
-                />
-                <UserSetting
-                  type="toggle"
-                  title="Format Markdown"
-                  description="If off, shows responses as raw text."
-                  value={!displayRawMarkdown}
-                  onChange={(value) =>
-                    handleUpdate({ displayRawMarkdown: !value })
                   }
                 />
               </div>
@@ -239,7 +200,7 @@ export function UserSettingsSection() {
                 <UserSetting
                   type="number"
                   title="Font Size"
-                  description="Specifies base font size for UI elements."
+                  description="Base font size of the panel."
                   value={fontSize}
                   onChange={(val) => {
                     setLocalStorage("fontSize", val);
@@ -252,77 +213,14 @@ export function UserSettingsSection() {
             </Card>
           </div>
 
-          {/* Autocomplete Settings */}
-          <div>
-            <ConfigHeader title="Autocomplete" variant="sm" />
-            <Card>
-              <div className="flex flex-col gap-4">
-                <UserSetting
-                  type="select"
-                  title="Multiline Autocompletions"
-                  description="Controls multiline completions for autocomplete."
-                  value={useAutocompleteMultilineCompletions}
-                  onChange={(value) =>
-                    handleUpdate({
-                      useAutocompleteMultilineCompletions: value as
-                        | "auto"
-                        | "always"
-                        | "never",
-                    })
-                  }
-                  options={[
-                    { label: "Auto", value: "auto" },
-                    { label: "Always", value: "always" },
-                    { label: "Never", value: "never" },
-                  ]}
-                />
-                <UserSetting
-                  type="number"
-                  title="Autocomplete Timeout (ms)"
-                  description="Maximum time in milliseconds for autocomplete request/retrieval."
-                  value={modelTimeout}
-                  onChange={(val) => handleUpdate({ modelTimeout: val })}
-                  min={100}
-                  max={5000}
-                />
-                <UserSetting
-                  type="number"
-                  title="Autocomplete Debounce (ms)"
-                  description="Minimum time in milliseconds to trigger an autocomplete request after a change."
-                  value={debounceDelay}
-                  onChange={(val) => handleUpdate({ debounceDelay: val })}
-                  min={0}
-                  max={2500}
-                />
-                <UserSetting
-                  type="input"
-                  title="Disable autocomplete in files"
-                  description="List of comma-separated glob pattern to disable autocomplete in matching files."
-                  placeholder="**/*.(txt,md)"
-                  value={formDisableAutocomplete}
-                  onChange={setFormDisableAutocomplete}
-                  onSubmit={handleDisableAutocompleteSubmit}
-                  onCancel={cancelChangeDisableAutocomplete}
-                  isDirty={
-                    formDisableAutocomplete !== disableAutocompleteInFiles
-                  }
-                  isValid={formDisableAutocomplete.trim() !== ""}
-                />
-              </div>
-            </Card>
-          </div>
-
           {/* Privacy & Data */}
           <div>
             <ConfigHeader title="Privacy & Data" variant="sm" />
             <Card>
               <div className="flex flex-col gap-3 text-sm">
                 <p className="text-description m-0">
-                  Before a prompt leaves VynorAI, secrets and personal data
-                  (emails, phone numbers, NIC and card numbers) are replaced
-                  with placeholders and restored in the answer. Your code is
-                  never used to train models, and this extension sends no
-                  telemetry.
+                  Secrets and personal data are masked before prompts leave your
+                  machine. Your code is never used for training.
                 </p>
                 <div className="flex flex-wrap gap-4">
                   <a
@@ -352,7 +250,7 @@ export function UserSettingsSection() {
                 <UserSetting
                   type="toggle"
                   title="Send Error Reports"
-                  description="When the VynorAI panel crashes, send the error message and stack trace so we can fix it. Never includes your code or prompts; secrets and personal data are removed on our server. Off by default."
+                  description="Send crash details (never your code or prompts) so we can fix bugs."
                   value={errorReportsEnabled}
                   onChange={(value) => dispatch(setErrorReportsEnabled(value))}
                 />
@@ -362,14 +260,108 @@ export function UserSettingsSection() {
 
           {/* Experimental Settings */}
           <div>
-            <ConfigHeader title="Experimental" variant="sm" />
+            <ConfigHeader title="Advanced" variant="sm" />
             <Card>
               <Toggle
                 isOpen={showExperimental}
                 onToggle={() => setShowExperimental(!showExperimental)}
-                title="Show Experimental Settings"
+                title="Show advanced settings"
               >
                 <div className="flex flex-col gap-x-1 gap-y-4">
+                  <UserSetting
+                    type="toggle"
+                    title="Show Session Tabs"
+                    description="Displays tabs above the chat as an alternative way to organize and access your sessions."
+                    value={showSessionTabs}
+                    onChange={(value) =>
+                      handleUpdate({ showSessionTabs: value })
+                    }
+                  />
+                  <UserSetting
+                    type="toggle"
+                    title="Wrap Codeblocks"
+                    description="Wraps long lines in code blocks instead of showing horizontal scroll."
+                    value={codeWrap}
+                    onChange={(value) => handleUpdate({ codeWrap: value })}
+                  />
+                  <UserSetting
+                    type="toggle"
+                    title="Show Chat Scrollbar"
+                    description="Enables a scrollbar in the chat window."
+                    value={showChatScrollbar}
+                    onChange={(value) =>
+                      handleUpdate({ showChatScrollbar: value })
+                    }
+                  />
+                  <UserSetting
+                    type="toggle"
+                    title="Text-to-Speech Output"
+                    description="Reads LLM responses aloud with TTS."
+                    value={readResponseTTS}
+                    onChange={(value) =>
+                      handleUpdate({ readResponseTTS: value })
+                    }
+                  />
+                  <UserSetting
+                    type="toggle"
+                    title="Format Markdown"
+                    description="If off, shows responses as raw text."
+                    value={!displayRawMarkdown}
+                    onChange={(value) =>
+                      handleUpdate({ displayRawMarkdown: !value })
+                    }
+                  />
+                  <UserSetting
+                    type="select"
+                    title="Multiline Autocompletions"
+                    description="Controls multiline completions for autocomplete."
+                    value={useAutocompleteMultilineCompletions}
+                    onChange={(value) =>
+                      handleUpdate({
+                        useAutocompleteMultilineCompletions: value as
+                          | "auto"
+                          | "always"
+                          | "never",
+                      })
+                    }
+                    options={[
+                      { label: "Auto", value: "auto" },
+                      { label: "Always", value: "always" },
+                      { label: "Never", value: "never" },
+                    ]}
+                  />
+                  <UserSetting
+                    type="number"
+                    title="Autocomplete Timeout (ms)"
+                    description="Maximum time in milliseconds for autocomplete request/retrieval."
+                    value={modelTimeout}
+                    onChange={(val) => handleUpdate({ modelTimeout: val })}
+                    min={100}
+                    max={5000}
+                  />
+                  <UserSetting
+                    type="number"
+                    title="Autocomplete Debounce (ms)"
+                    description="Minimum time in milliseconds to trigger an autocomplete request after a change."
+                    value={debounceDelay}
+                    onChange={(val) => handleUpdate({ debounceDelay: val })}
+                    min={0}
+                    max={2500}
+                  />
+                  <UserSetting
+                    type="input"
+                    title="Disable autocomplete in files"
+                    description="List of comma-separated glob pattern to disable autocomplete in matching files."
+                    placeholder="**/*.(txt,md)"
+                    value={formDisableAutocomplete}
+                    onChange={setFormDisableAutocomplete}
+                    onSubmit={handleDisableAutocompleteSubmit}
+                    onCancel={cancelChangeDisableAutocomplete}
+                    isDirty={
+                      formDisableAutocomplete !== disableAutocompleteInFiles
+                    }
+                    isValid={formDisableAutocomplete.trim() !== ""}
+                  />
                   <UserSetting
                     type="toggle"
                     title="Add Current File by Default"

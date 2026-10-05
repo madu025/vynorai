@@ -1,6 +1,5 @@
 import {
   ArrowLeftIcon,
-  CircleStackIcon,
   Cog6ToothIcon,
   CubeIcon,
   DocumentIcon,
@@ -11,7 +10,6 @@ import {
 import { ConfigSection } from "./components/ConfigSection";
 import { ConfigsSection } from "./sections/ConfigsSection";
 import { HelpSection } from "./sections/HelpSection";
-import { IndexingSettingsSection } from "./sections/IndexingSettingsSection";
 import { ModelsSection } from "./sections/ModelsSection";
 import { RulesSection } from "./sections/RulesSection";
 import { ToolsSection } from "./sections/ToolsSection";
@@ -95,24 +93,6 @@ export const topTabSections: TabSection[] = [
           </ConfigSection>
         ),
         icon: <DocumentIcon className="xs:h-4 xs:w-4 h-3 w-3 flex-shrink-0" />,
-      },
-    ],
-  },
-  {
-    id: "indexing",
-    showTopDivider: true,
-    tabs: [
-      {
-        id: "indexing",
-        label: "Indexing",
-        component: (
-          <ConfigSection>
-            <IndexingSettingsSection />
-          </ConfigSection>
-        ),
-        icon: (
-          <CircleStackIcon className="xs:h-4 xs:w-4 h-3 w-3 flex-shrink-0" />
-        ),
       },
     ],
   },

@@ -58,7 +58,7 @@ const BRIEF_LAZY_INSTRUCTIONS = `For larger codeblocks (>20 lines), use brief la
 const TOKEN_ECONOMY_INSTRUCTIONS = `<efficiency>
 - To find where code lives, call view_repo_map once at the start of a task (files with their signatures) instead of many ls / file_glob_search / read_file calls.
 - Read only what you need: prefer read_file_range for the relevant lines over reading whole large files, and do not re-read a file you already have unless it changed.
-- Edit with multi_edit: keep each old_string to the smallest snippet that is unique in the file, and put all edits to one file in a single call. Never rewrite a whole file to change part of it.
+- Edit with the edit tools: keep each old_string to the smallest snippet that is unique in the file, and put all edits to one file in a single call. Never rewrite a whole file to change part of it.
 - Do not repeat code you have just written or edited in your reply. After changes, summarize what changed in 1-3 sentences.
 - Run independent read-only lookups together in one turn when you can.
 </efficiency>`;
@@ -81,7 +81,7 @@ ${VYNORAI_XML_SYSTEM_PROMPT}
 ${CODEBLOCK_FORMATTING_INSTRUCTIONS}
 ${BRIEF_LAZY_INSTRUCTIONS}
 Only output codeblocks for suggestion and demonstration purposes.
-For implementing changes, ALWAYS use the edit tools (multi_edit, create_new_file).
+For implementing changes, ALWAYS use the edit tools and create_new_file.
 </formatting>
 
 ${TOKEN_ECONOMY_INSTRUCTIONS}

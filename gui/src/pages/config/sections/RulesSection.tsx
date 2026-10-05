@@ -398,7 +398,9 @@ function addDefaultSystemMessage(
   };
 
   const currentMode = modeConfig[mode as keyof typeof modeConfig];
-  if (currentMode) {
+  // The built-in prompt is product internals, not a rule the user wrote or
+  // can act on; only a custom system message is listed.
+  if (currentMode?.customMessage) {
     const message = currentMode.customMessage || currentMode.defaultMessage;
     const source = currentMode.customMessage
       ? currentMode.customSource

@@ -6,6 +6,12 @@ name: Smart E2E (real model)
 # Costs real credits (~1-2M per run), so it runs on demand and weekly.
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which scenarios (basic: ~7 scenarios; advanced: security, refactor, large file, honesty, follow-up, Python; all: both)"
+        type: choice
+        default: basic
+        options: [basic, advanced, all]
   schedule:
     - cron: "0 20 * * 0" # Sunday 20:00 UTC (Monday 01:30 Sri Lanka)
 
@@ -49,11 +55,13 @@ jobs:
         env:
           VYNORAI_E2E_API_KEY: ${{ secrets.VYNOR_E2E_API_KEY }}
           VYNOR_E2E_API_BASE: https://vynor.lk
+          # Scheduled runs cover everything; manual runs pick a suite.
+          SMART_SUITE: ${{ (github.event.inputs.suite == 'basic' && 'Smart') || (github.event.inputs.suite == 'advanced' && 'Smart.advanced') || 'Smart*' }}
         run: |
           if [ -z "$VYNORAI_E2E_API_KEY" ]; then
             echo "::error::Add the VYNOR_E2E_API_KEY repository secret"; exit 1
           fi
-          xvfb-run -a npx extest run-tests ./e2e/_output/tests/Smart.test.js \
+          xvfb-run -a npx extest run-tests "./e2e/_output/tests/${SMART_SUITE:-Smart*}.test.js" \
             --code_settings settings.json \
             --extensions_dir ./e2e/.test-extensions \
             --storage ./e2e/storage

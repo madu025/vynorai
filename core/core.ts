@@ -1,3 +1,9 @@
+import {
+  ApprovalVerdict,
+  classifyCommand,
+  classifyFileEdit,
+} from "./agent/autoApproval";
+import { classifyToolRisk } from "./agent/toolRisk";
 import { fetchwithRequestOptions } from "@continuedev/fetch";
 import * as URI from "uri-js";
 import { v4 as uuidv4 } from "uuid";
@@ -46,10 +52,13 @@ import {
   ModelDescription,
   Position,
   RangeInFile,
+  Tool,
   ToolCall,
   type ContextItem,
   type IDE,
 } from ".";
+import type { ToolPolicy } from "@continuedev/terminal-security";
+import { fileURLToPath } from "node:url";
 
 import { ConfigYaml } from "@continuedev/config-yaml";
 import { getDiffFn, GitDiffCache } from "./autocomplete/snippets/gitDiffCache";
@@ -1325,7 +1334,15 @@ export class Core {
 
     on(
       "tools/evaluatePolicy",
-      async ({ data: { toolName, basePolicy, parsedArgs, processedArgs } }) => {
+      async ({
+        data: {
+          toolName,
+          basePolicy,
+          parsedArgs,
+          processedArgs,
+          permissionMode,
+        },
+      }) => {
         if (WORKSPACE_MUTATING_TOOLS.has(toolName)) {
           const workspace = await this.workspaceSession.getSnapshot();
           if (!workspace.trusted || workspace.roots.length === 0) {
@@ -1350,6 +1367,17 @@ export class Core {
         let displayValue: string | undefined;
         if (toolName === "runTerminalCommand" && parsedArgs.command) {
           displayValue = parsedArgs.command as string;
+        }
+
+        if (permissionMode === "auto" || permissionMode === "full") {
+          return this.evaluateAutoApproval(
+            tool,
+            toolName,
+            permissionMode,
+            parsedArgs,
+            processedArgs,
+            displayValue,
+          );
         }
 
         if (tool.evaluateToolCallPolicy) {
@@ -1430,6 +1458,67 @@ export class Core {
         return [];
       }
     });
+  }
+
+  /**
+   * "Auto" permission mode: reads, workspace edits and ordinary commands run
+   * on their own; publishing, installs, network, system changes, secrets and
+   * paths outside the workspace ask. "Full" asks for nothing. In both, a
+   * command the tool's own guard disables stays disabled.
+   */
+  private async evaluateAutoApproval(
+    tool: Tool,
+    toolName: string,
+    mode: "auto" | "full",
+    parsedArgs: Record<string, unknown>,
+    processedArgs: Record<string, unknown> | undefined,
+    displayValue: string | undefined,
+  ): Promise<{ policy: ToolPolicy; displayValue?: string }> {
+    const guarded = tool.evaluateToolCallPolicy?.(
+      "allowedWithoutPermission",
+      parsedArgs,
+      processedArgs,
+    );
+    if (guarded === "disabled") return { policy: "disabled", displayValue };
+    if (mode === "full") {
+      return { policy: "allowedWithoutPermission", displayValue };
+    }
+
+    const risk = classifyToolRisk(toolName);
+    if (risk === "R0") return { policy: "allowedWithoutPermission" };
+
+    const roots = (await this.ide.getWorkspaceDirs()).flatMap((dir) => {
+      try {
+        return dir.startsWith("file:") ? [fileURLToPath(dir)] : [];
+      } catch {
+        return [];
+      }
+    });
+    let verdict: ApprovalVerdict | undefined;
+    if (toolName === BuiltInToolNames.RunTerminalCommand) {
+      verdict = classifyCommand(String(parsedArgs.command ?? ""), roots);
+    } else if (risk === "R2") {
+      const filepath = parsedArgs.filepath ?? processedArgs?.filepath;
+      verdict = classifyFileEdit(
+        typeof filepath === "string" ? filepath : undefined,
+        roots,
+      );
+    }
+    if (!verdict) {
+      // Other tools (browser, web fetch, MCP) keep their own policy.
+      return {
+        policy: guarded ?? tool.defaultToolPolicy ?? "allowedWithPermission",
+        displayValue,
+      };
+    }
+    return verdict.decision === "auto"
+      ? { policy: "allowedWithoutPermission", displayValue }
+      : {
+          policy: "allowedWithPermission",
+          displayValue: verdict.reason
+            ? `${displayValue ?? toolName} — ${verdict.reason}`
+            : displayValue,
+        };
   }
 
   private async handleToolCall(toolCall: ToolCall) {

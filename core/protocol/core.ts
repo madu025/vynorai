@@ -497,6 +497,8 @@ export type ToCoreFromIdeOrWebviewProtocol = {
       basePolicy: ToolPolicy;
       parsedArgs: Record<string, unknown>;
       processedArgs?: Record<string, unknown>;
+      /** "ask" (default): every non-read tool asks; "auto": risk-based; "full": nothing asks. */
+      permissionMode?: "ask" | "auto" | "full";
     },
     { policy: ToolPolicy; displayValue?: string },
   ];

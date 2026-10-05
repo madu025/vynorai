@@ -8,8 +8,11 @@ import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import { updateConfig } from "../../../redux/slices/configSlice";
 import {
+  DEFAULT_PERMISSION_MODE,
+  PermissionMode,
   setErrorReportsEnabled,
   setJudgmentLevel,
+  setPermissionMode,
   setSideReviewEnabled,
   setTaskCreditCap,
 } from "../../../redux/slices/uiSlice";
@@ -105,6 +108,9 @@ export function UserSettingsSection() {
   const judgmentLevel = useAppSelector(
     (state) => state.ui.judgmentLevel ?? DEFAULT_JUDGMENT_LEVEL,
   );
+  const permissionMode = useAppSelector(
+    (state) => state.ui.permissionMode ?? DEFAULT_PERMISSION_MODE,
+  );
   const sideReviewEnabled = useAppSelector(
     (state) => state.ui.sideReviewEnabled !== false,
   );
@@ -137,6 +143,26 @@ export function UserSettingsSection() {
                   }))}
                   onChange={(value) =>
                     dispatch(setTaskCreditCap(Number(value)))
+                  }
+                />
+                <UserSetting
+                  type="select"
+                  title="Agent Permissions"
+                  description="Auto: reading, editing project files, running tests, builds and scripts, and deleting files inside the project happen on their own; installing packages, git push, deploys, network requests, system changes, secret files (.env, keys) and anything outside the project ask first. Ask: every edit and command asks. Full auto: nothing asks (dangerous commands stay blocked)."
+                  value={permissionMode}
+                  options={[
+                    {
+                      value: "auto",
+                      label: "Auto (ask only for risky actions)",
+                    },
+                    {
+                      value: "ask",
+                      label: "Ask before every edit and command",
+                    },
+                    { value: "full", label: "Full auto (never ask)" },
+                  ]}
+                  onChange={(value) =>
+                    dispatch(setPermissionMode(value as PermissionMode))
                   }
                 />
                 <UserSetting

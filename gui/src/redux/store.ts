@@ -63,6 +63,7 @@ const saveSubsetFilters = [
     "sideReviewEnabled",
     "taskCreditCap",
     "judgmentLevel",
+    "permissionMode",
     "errorReportsEnabled",
   ]),
   createFilter("indexing", []),

@@ -2,6 +2,9 @@ import { ConfigDependentToolParams, Tool } from "..";
 import { isRecommendedAgentModel } from "../llm/toolSupport";
 import * as toolDefinitions from "./definitions";
 
+// Every tool's schema rides on every request, so the list stays lean:
+// read_currently_open_file (read_file covers it) and the rule tools (off by
+// default) were removed.
 // I'm writing these as functions because we've messed up 3 TIMES by pushing to const, causing duplicate tool definitions on subsequent config loads.
 export const getBaseToolDefinitions = () => [
   toolDefinitions.readFileTool,
@@ -9,9 +12,7 @@ export const getBaseToolDefinitions = () => [
   toolDefinitions.runTerminalCommandTool,
   toolDefinitions.globSearchTool,
   toolDefinitions.viewDiffTool,
-  toolDefinitions.readCurrentlyOpenFileTool,
   toolDefinitions.lsTool,
-  toolDefinitions.createRuleBlock,
   toolDefinitions.fetchUrlContentTool,
   // Persistent, live browser (replaces the one-shot browser_qa report).
   toolDefinitions.browserTool,
@@ -25,7 +26,6 @@ export const getConfigDependentToolDefinitions = async (
   const { modelName, enableExperimentalTools, isRemote } = params;
   const tools: Tool[] = [];
 
-  tools.push(await toolDefinitions.requestRuleTool(params));
   tools.push(await toolDefinitions.readSkillTool(params));
 
   tools.push(toolDefinitions.searchWebTool);

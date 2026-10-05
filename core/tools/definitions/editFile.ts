@@ -46,7 +46,7 @@ export const editFileTool: Tool = {
     prefix: `To edit an EXISTING file, use the ${BuiltInToolNames.EditExistingFile} tool with
 - filepath: the relative filepath to the file.
 - changes: ${CHANGES_DESCRIPTION}
-Only use this tool if you already know the contents of the file. Otherwise, use the ${BuiltInToolNames.ReadFile} or ${BuiltInToolNames.ReadCurrentlyOpenFile} tool to read it first.
+Only use this tool if you already know the contents of the file. Otherwise, use the ${BuiltInToolNames.ReadFile} tool to read it first.
 For example:`,
     exampleArgs: [
       ["filepath", "path/to/the_file.ts"],

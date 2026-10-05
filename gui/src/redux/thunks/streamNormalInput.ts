@@ -1,3 +1,4 @@
+import { DEFAULT_PERMISSION_MODE } from "../slices/uiSlice";
 import { createAsyncThunk, unwrapResult } from "@reduxjs/toolkit";
 import { LLMFullCompletionOptions, ModelDescription } from "core";
 import { renderChatMessage } from "core/util/messageContent";
@@ -666,6 +667,7 @@ export const streamNormalInput = createAsyncThunk<
       activeTools,
       generatedCalls3,
       toolPolicies,
+      getState().ui.permissionMode ?? DEFAULT_PERMISSION_MODE,
     );
     const autoApprovedPolicies = policies.filter(
       ({ policy }) => policy === "allowedWithoutPermission",
@@ -835,7 +837,11 @@ ${PREMORTEM_GUIDANCE}`
       const builtInReadonlyAutoApproved = autoApprovedPolicies.filter(
         ({ toolCallState }) =>
           toolCallState.tool?.group === BUILT_IN_GROUP_NAME &&
-          toolCallState.tool?.readonly,
+          // In Auto/Full mode the core already judged these safe to run
+          // while the risky sibling waits for the user.
+          (toolCallState.tool?.readonly ||
+            (getState().ui.permissionMode ?? DEFAULT_PERMISSION_MODE) !==
+              "ask"),
       );
 
       if (builtInReadonlyAutoApproved.length > 0) {

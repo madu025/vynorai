@@ -2,7 +2,11 @@ import { ToolPolicy } from "@continuedev/terminal-security";
 import { Tool, ToolCallState } from "core";
 import { IIdeMessenger } from "../../context/IdeMessenger";
 import { errorToolCall, updateToolCallOutput } from "../slices/sessionSlice";
-import { DEFAULT_TOOL_SETTING, ToolPolicies } from "../slices/uiSlice";
+import {
+  DEFAULT_TOOL_SETTING,
+  PermissionMode,
+  ToolPolicies,
+} from "../slices/uiSlice";
 import { AppThunkDispatch } from "../store";
 
 interface EvaluatedPolicy {
@@ -20,6 +24,7 @@ async function evaluateToolPolicy(
   activeTools: Tool[],
   toolCallState: ToolCallState,
   toolPolicies: ToolPolicies,
+  permissionMode: PermissionMode,
 ): Promise<EvaluatedPolicy> {
   const basePolicy =
     toolPolicies[toolCallState.toolCall.function.name] ??
@@ -34,6 +39,7 @@ async function evaluateToolPolicy(
     basePolicy,
     parsedArgs: toolCallState.parsedArgs,
     processedArgs: toolCallState.processedArgs,
+    permissionMode,
   });
 
   // Evaluate the policy dynamically
@@ -50,7 +56,10 @@ async function evaluateToolPolicy(
   if (basePolicy === "disabled") {
     return { policy: "disabled", displayValue, toolCallState }; // Cannot override disabled
   }
+  // In Auto/Full mode the stored default ("ask") is replaced by the core's
+  // risk check; a tool the user turned off above stays off.
   if (
+    permissionMode === "ask" &&
     basePolicy === "allowedWithPermission" &&
     dynamicPolicy === "allowedWithoutPermission"
   ) {
@@ -71,6 +80,7 @@ export async function evaluateToolPolicies(
   activeTools: Tool[],
   generatedToolCalls: ToolCallState[],
   toolPolicies: ToolPolicies,
+  permissionMode: PermissionMode = "ask",
 ): Promise<EvaluatedPolicy[]> {
   // Check if ALL tool calls are auto-approved using dynamic evaluation
   const policyResults = await Promise.all(
@@ -80,6 +90,7 @@ export async function evaluateToolPolicies(
         activeTools,
         toolCallState,
         toolPolicies,
+        permissionMode,
       ),
     ),
   );

@@ -38,11 +38,16 @@ type UIState = {
   taskCreditCap?: number;
   /** How much review process wraps agent turns (see util/judgment). */
   judgmentLevel?: JudgmentLevel;
+  /** Which tool calls ask first (see core/agent/autoApproval). */
+  permissionMode?: PermissionMode;
   /** Opt-in: send GUI crash messages and stacks (never code or prompts). */
   errorReportsEnabled?: boolean;
 };
 
 export const DEFAULT_TOOL_SETTING: ToolPolicy = "allowedWithPermission";
+
+export type PermissionMode = "ask" | "auto" | "full";
+export const DEFAULT_PERMISSION_MODE: PermissionMode = "auto";
 export const DEFAULT_RULE_SETTING: RulePolicy = "on";
 export const DEFAULT_UI_SLICE: UIState = {
   showDialog: false,
@@ -77,6 +82,9 @@ export const uiSlice = createSlice({
     },
     setJudgmentLevel: (state, action: PayloadAction<JudgmentLevel>) => {
       state.judgmentLevel = action.payload;
+    },
+    setPermissionMode: (state, action: PayloadAction<PermissionMode>) => {
+      state.permissionMode = action.payload;
     },
     setErrorReportsEnabled: (state, action: PayloadAction<boolean>) => {
       state.errorReportsEnabled = action.payload;
@@ -183,6 +191,7 @@ export const {
   setSideReviewEnabled,
   setTaskCreditCap,
   setJudgmentLevel,
+  setPermissionMode,
   setErrorReportsEnabled,
   setOnboardingCard,
   setDialogMessage,

@@ -33,6 +33,26 @@ import { tagToString } from "./utils";
 
 type SnippetChunk = ChunkWithoutID & { title: string; signature: string };
 
+/** The <script> blocks of a Vue/Svelte file, as TS or JS source. */
+export function extractScriptBlocks(
+  contents: string,
+): Array<{ code: string; lang: "ts" | "js"; lineOffset: number }> {
+  const blocks: Array<{ code: string; lang: "ts" | "js"; lineOffset: number }> =
+    [];
+  const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(contents))) {
+    const attrs = match[1];
+    const codeStart = match.index + match[0].indexOf(">") + 1;
+    blocks.push({
+      code: match[2],
+      lang: /lang\s*=\s*["']?(ts|tsx|typescript)/i.test(attrs) ? "ts" : "js",
+      lineOffset: contents.slice(0, codeStart).split("\n").length - 1,
+    });
+  }
+  return blocks;
+}
+
 export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
   relativeExpectedTime: number = 1;
   static artifactId = "codeSnippets";
@@ -183,6 +203,25 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
     filepath: string,
     contents: string,
   ): Promise<SnippetChunk[]> {
+    // Vue and Svelte keep their code in <script> blocks: index those as
+    // TypeScript/JavaScript, with line numbers mapped back to the file.
+    if (/\.(vue|svelte)$/i.test(filepath)) {
+      const snippets: SnippetChunk[] = [];
+      for (const block of extractScriptBlocks(contents)) {
+        const virtualPath = `${filepath}.${block.lang}`;
+        for (const snippet of await this.getSnippetsInFile(
+          virtualPath,
+          block.code,
+        )) {
+          snippets.push({
+            ...snippet,
+            startLine: snippet.startLine + block.lineOffset,
+            endLine: snippet.endLine + block.lineOffset,
+          });
+        }
+      }
+      return snippets;
+    }
     const parser = await getParserForFile(filepath);
 
     if (!parser) {

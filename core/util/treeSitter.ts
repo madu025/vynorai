@@ -33,6 +33,9 @@ export enum LanguageName {
   SYSTEMRDL = "systemrdl",
   TOML = "toml",
   SOLIDITY = "solidity",
+  KOTLIN = "kotlin",
+  SWIFT = "swift",
+  SCALA = "scala",
 }
 
 export const supportedLanguages: { [key: string]: LanguageName } = {
@@ -108,9 +111,11 @@ export const supportedLanguages: { [key: string]: LanguageName } = {
   sol: LanguageName.SOLIDITY,
 
   // jl: LanguageName.JULIA,
-  // swift: LanguageName.SWIFT,
-  // kt: LanguageName.KOTLIN,
-  // scala: LanguageName.SCALA,
+  swift: LanguageName.SWIFT,
+  kt: LanguageName.KOTLIN,
+  kts: LanguageName.KOTLIN,
+  scala: LanguageName.SCALA,
+  sc: LanguageName.SCALA,
 };
 
 export const IGNORE_PATH_PATTERNS: Partial<Record<LanguageName, RegExp[]>> = {

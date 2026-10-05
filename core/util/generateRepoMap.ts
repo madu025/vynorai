@@ -20,6 +20,12 @@ const IMPORT_SCAN_CHARS = 20_000;
 
 export interface RepoMapOptions {
   includeSignatures?: boolean;
+  /**
+   * Folder or feature words the agent is working on ("app/Http/Controllers",
+   * "billing invoice"). Matching files come first, so on a large repository
+   * the budget goes to the code that matters for this task.
+   */
+  focus?: string;
   dirUris?: string[];
   outputRelativeUriPaths: boolean;
 }
@@ -85,6 +91,7 @@ class RepoMapGenerator {
       this.options.outputRelativeUriPaths,
       this.allUris.length,
       this.maxRepoMapTokens,
+      this.options.focus ?? "",
     ]);
     const cached = repoMapCache.get(cacheKey);
     if (cached && Date.now() - cached.at < REPO_MAP_TTL_MS) {
@@ -92,7 +99,11 @@ class RepoMapGenerator {
       return cached.map;
     }
 
-    await this.writeToStream(this.PREAMBLE);
+    await this.writeToStream(
+      this.options.focus?.trim()
+        ? `${this.PREAMBLE}Files matching "${this.options.focus.trim()}" are listed first.\n\n`
+        : this.PREAMBLE,
+    );
 
     if (this.options.includeSignatures) {
       // 1. Collect every file's signatures (and its imports, for ranking).
@@ -151,12 +162,15 @@ class RepoMapGenerator {
 
       // 2. Most important files first, until 85% of the budget (the rest
       //    is kept for the folder outline).
-      const ranked = rankRepoFiles(
-        [...entries.entries()].map(([path, e]) => ({
-          path,
-          content: e.content,
-          signatureCount: e.signatures.length,
-        })),
+      const ranked = focusFirst(
+        rankRepoFiles(
+          [...entries.entries()].map(([path, e]) => ({
+            path,
+            content: e.content,
+            signatureCount: e.signatures.length,
+          })),
+        ),
+        this.options.focus,
       );
       const sectionBudget = this.maxRepoMapTokens * 0.85;
       const leftovers: string[] = [];
@@ -234,6 +248,25 @@ class RepoMapGenerator {
       .map((line: any) => "\t" + line)
       .join("\n");
   }
+}
+
+/**
+ * Stable partition: paths matching any focus word (or under the focus folder)
+ * first, each group keeping its importance order.
+ */
+export function focusFirst(paths: string[], focus?: string): string[] {
+  const words = (focus ?? "")
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .split(/[\s,]+/)
+    .map((w) => w.replace(/^\.\//, "").replace(/\/+$/, ""))
+    .filter((w) => w.length > 1);
+  if (words.length === 0) return paths;
+  const matches = (p: string) => {
+    const lower = p.toLowerCase();
+    return words.some((w) => lower.includes(w));
+  };
+  return [...paths.filter(matches), ...paths.filter((p) => !matches(p))];
 }
 
 export default async function generateRepoMap(

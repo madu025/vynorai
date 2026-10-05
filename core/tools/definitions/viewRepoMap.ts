@@ -14,10 +14,16 @@ export const viewRepoMapTool: Tool = {
   function: {
     name: BuiltInToolNames.ViewRepoMap,
     description:
-      "View a compact map of the repository: every file with the signatures of its classes, methods and functions. Call this first to find where code lives; it replaces many ls, glob and read_file calls.",
+      "View a compact map of the repository: every file with the signatures of its classes, methods and functions. Call this first to find where code lives; it replaces many ls, glob and read_file calls. On a large repository pass focus (the folder or feature words of the task) so those files come first with full signatures.",
     parameters: {
       type: "object",
-      properties: {},
+      properties: {
+        focus: {
+          type: "string",
+          description:
+            'Optional. Folder path or feature words to prioritise, e.g. "app/Http/Controllers" or "billing invoice".',
+        },
+      },
     },
   },
   systemMessageDescription: {

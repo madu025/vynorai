@@ -1477,9 +1477,16 @@
       }).join('');
     }
 
+    // The DB stores UTC without a zone ("2026-10-04 17:25:04"); parsed as
+    // local time it looked 5.5 hours newer in Sri Lanka.
+    function parseServerDate(dateStr) {
+      const s = String(dateStr);
+      return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+    }
+
     function formatTimeAgo(dateStr) {
       if (!dateStr) return 'Just now';
-      const date = new Date(dateStr);
+      const date = parseServerDate(dateStr);
       const now = new Date();
       const seconds = Math.floor((now - date) / 1000);
       if (seconds < 60) return 'Just now';
@@ -1674,7 +1681,7 @@
           return;
         }
         container.innerHTML = events.map(e => {
-          const date = e.created_at ? new Date(e.created_at).toLocaleString() : '—';
+          const date = e.created_at ? parseServerDate(e.created_at).toLocaleString() : '—';
           return `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px;">
               <div>

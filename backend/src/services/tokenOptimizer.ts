@@ -55,16 +55,26 @@ export async function memoizeTurnContext(
   return text;
 }
 
-/** Prepend per-turn context to the last user message, leaving the prefix untouched. */
+/**
+ * Append per-turn context to the end of the last message. Upstream prefix
+ * caching matches from the start, so the block must sit after everything the
+ * next request will resend unchanged. Inside the last *user* message it made
+ * the next turn differ from that message on, and the whole previous tool loop
+ * was billed again as uncached input.
+ */
 export function attachTurnContext(messages: any[], context: string): any[] {
-  if (!context.trim()) return messages;
-  const idx = messages.map((m: any) => m.role).lastIndexOf("user");
-  if (idx < 0) return messages;
-  const block = `<vynor-context>\n${context.trim()}\n</vynor-context>\n\n`;
+  if (!context.trim() || messages.length === 0) return messages;
+  const idx = messages.length - 1;
   const msg = messages[idx];
+  if (msg.role !== "user" && msg.role !== "tool") return messages;
+  const block = `
+
+<vynor-context note="background context added by VynorAI, not part of the message above">
+${context.trim()}
+</vynor-context>`;
   const content = Array.isArray(msg.content)
-    ? [{ type: "text", text: block }, ...msg.content]
-    : block + (msg.content ?? "");
+    ? [...msg.content, { type: "text", text: block }]
+    : (msg.content ?? "") + block;
   const out = [...messages];
   out[idx] = { ...msg, content };
   return out;

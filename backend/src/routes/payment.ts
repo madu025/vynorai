@@ -17,6 +17,8 @@ import {
 import {
   isTopupPlan,
   planDurationDays,
+  planTier,
+  proratedCreditMs,
   StoredOrder,
   validateIpnAgainstOrder,
 } from "../services/billingPolicy.js";
@@ -75,8 +77,9 @@ interface OrderRow extends StoredOrder {
 }
 
 /**
- * Activate a paid plan. Renewing the same plan extends from the current
- * expiry; switching plans supersedes the old one and starts a fresh cycle.
+ * Activate a paid plan. Renewing the same tier (monthly or yearly) extends
+ * from the current expiry; switching tier supersedes the old plan, starts a
+ * fresh cycle and adds the old plan's unused paid time, prorated by price.
  */
 async function activatePlan(order: OrderRow, paymentId: string): Promise<void> {
   const plan = getPlan(order.plan_name);
@@ -85,11 +88,26 @@ async function activatePlan(order: OrderRow, paymentId: string): Promise<void> {
     plan_name: string;
     valid_until: string;
   }>(order.user_id);
-  const isRenewal = current?.plan_name === plan.id;
-  const startsAt = isRenewal ? new Date(current!.valid_until) : new Date();
-  const validUntil = new Date(
-    startsAt.getTime() + planDurationDays(plan.id) * DAY_MS,
-  );
+  const isRenewal =
+    !!current && planTier(getPlan(current.plan_name).id) === planTier(plan.id);
+  const now = Date.now();
+  let validUntil: Date;
+  if (isRenewal) {
+    validUntil = new Date(
+      new Date(current!.valid_until).getTime() +
+        planDurationDays(plan.id) * DAY_MS,
+    );
+  } else {
+    const previous = current ? getPlan(current.plan_name) : undefined;
+    const carried = previous
+      ? proratedCreditMs(
+          previous.priceLKR / planDurationDays(previous.id),
+          plan.priceLKR / planDurationDays(plan.id),
+          new Date(current!.valid_until).getTime() - now,
+        )
+      : 0;
+    validUntil = new Date(now + planDurationDays(plan.id) * DAY_MS + carried);
+  }
 
   const claimed = await dbRun(
     `UPDATE subscriptions SET status = 'active', payment_id = ?, valid_until = ?

@@ -5,6 +5,8 @@ import {
   creditWeight,
   isTopupPlan,
   planDurationDays,
+  planTier,
+  proratedCreditMs,
   UNKNOWN_MODEL_WEIGHT,
   validateIpnAgainstOrder,
 } from "../src/services/billingPolicy.js";
@@ -78,4 +80,18 @@ test("IPN must match the stored order", () => {
     validateIpnAgainstOrder({ ...ipn, payhere_currency: "USD" }, order, "M1"),
     { ok: false, reason: "currency_mismatch" },
   );
+});
+
+test("monthly and yearly billing of one plan are the same tier", () => {
+  assert.equal(planTier("pro_yearly"), "pro");
+  assert.equal(planTier("pro_monthly"), "pro");
+  assert.equal(planTier("starter"), "starter");
+});
+
+test("switching tier carries the unused paid time, prorated by price", () => {
+  const day = 24 * 60 * 60 * 1000;
+  // 100 unused days of a plan half as expensive per day = 50 days of the new one.
+  assert.equal(proratedCreditMs(50, 100, 100 * day), 50 * day);
+  assert.equal(proratedCreditMs(50, 100, -day), 0);
+  assert.equal(proratedCreditMs(0, 100, 10 * day), 0);
 });

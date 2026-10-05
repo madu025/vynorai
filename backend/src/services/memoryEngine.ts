@@ -277,9 +277,13 @@ export async function enrichWithMemory(
   const messages = [...(body.messages ?? [])];
   const sysIdx = messages.findIndex((m: any) => m.role === "system");
   if (sysIdx >= 0) {
+    const existing = messages[sysIdx].content ?? "";
+    // Array content (text parts) would turn into "[object Object]".
     messages[sysIdx] = {
       ...messages[sysIdx],
-      content: prefix + "\n\n---\n\n" + (messages[sysIdx].content ?? ""),
+      content: Array.isArray(existing)
+        ? [{ type: "text", text: prefix + "\n\n---\n\n" }, ...existing]
+        : prefix + "\n\n---\n\n" + existing,
     };
   } else {
     messages.unshift({ role: "system", content: prefix });

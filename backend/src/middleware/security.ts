@@ -19,7 +19,7 @@ setInterval(
     }
   },
   5 * 60 * 1000,
-);
+).unref(); // never keep the process (or a test run) alive
 
 /**
  * High-performance, zero-dependency in-memory rate limiter

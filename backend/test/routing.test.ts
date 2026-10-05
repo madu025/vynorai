@@ -143,6 +143,11 @@ test("thinking is explicitly off except on heavy turns; max_tokens can only be l
     8192,
   );
   assert.equal(applyTierPolicy({ max_tokens: 500 }, "heavy").max_tokens, 500);
+  // Agent turns (tools) can write whole files even on the light tier.
+  assert.equal(
+    applyTierPolicy({ tools: [{ type: "function" }] }, "light").max_tokens,
+    16_384,
+  );
   // Explicit client thinking settings are respected.
   assert.deepEqual(
     applyTierPolicy({ thinking: { type: "disabled" } }, "heavy").thinking,
@@ -165,14 +170,26 @@ const history = [
   { role: "user", content: "second" },
 ];
 
-test("turn context rides on the last user message, prefix untouched", () => {
+test("turn context rides at the end of the last message, prefix untouched", () => {
   const out = attachTurnContext(history, "RAG HITS");
   assert.deepEqual(out.slice(0, 3), history.slice(0, 3));
   assert.match(
     out[3].content,
-    /^<vynor-context>\nRAG HITS\n<\/vynor-context>\n\nsecond$/,
+    /^second\n\n<vynor-context [^>]*>\nRAG HITS\n<\/vynor-context>$/,
   );
   assert.equal(attachTurnContext(history, "  "), history);
+});
+
+test("in a tool loop, context goes on the last tool result, not the prompt", () => {
+  const loop = [
+    ...history,
+    { role: "assistant", content: "", tool_calls: [{ id: "t1" }] },
+    { role: "tool", tool_call_id: "t1", content: "file text" },
+  ];
+  const out = attachTurnContext(loop, "RAG HITS");
+  // Everything the next turn resends unchanged stays byte-identical.
+  assert.deepEqual(out.slice(0, 5), loop.slice(0, 5));
+  assert.match(out[5].content, /^file text\n\n<vynor-context/);
 });
 
 test("turn context is computed once per turn", async () => {

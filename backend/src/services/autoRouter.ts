@@ -131,13 +131,23 @@ export async function resolveRoute(
  * Apply the tier's output cap and reasoning policy to an upstream body.
  * Explicit client settings win, except that max_tokens can only be lowered.
  */
+/**
+ * IDE-agent turns write whole files inside tool calls; a "light" 4k cap cut
+ * the tool-call JSON off, wasting the paid round. Agents get at least this.
+ */
+export const AGENT_MIN_OUTPUT_TOKENS = 16_384;
+
 export function applyTierPolicy(body: any, tier: Tier): any {
   const profile = tierProfile(tier);
+  const isAgent = Array.isArray(body.tools) && body.tools.length > 0;
+  const tierMax = isAgent
+    ? Math.max(profile.maxTokens, AGENT_MIN_OUTPUT_TOKENS)
+    : profile.maxTokens;
   const requestedMax = Number(body.max_tokens);
   const max_tokens =
     Number.isFinite(requestedMax) && requestedMax > 0
-      ? Math.min(Math.floor(requestedMax), profile.maxTokens)
-      : profile.maxTokens;
+      ? Math.min(Math.floor(requestedMax), tierMax)
+      : tierMax;
 
   const { thinking, reasoning_effort, extra_body, ...rest } = body;
   const out: any = { ...rest, max_tokens };

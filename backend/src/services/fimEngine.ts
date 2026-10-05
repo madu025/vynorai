@@ -15,6 +15,7 @@ import { AuthenticatedUser } from "./aiProxy.js";
 import { dispatchToProvider } from "./providerRouter.js";
 import { sanitizeText } from "./secretSanitizer.js";
 import { PiiMap, PiiStreamRestorer } from "./piiShield.js";
+import { sliceFimContext } from "./fimContext.js";
 import { getPlan } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
 import { billingRun as dbRun } from "./billingDb.js";
@@ -33,26 +34,6 @@ export interface FimRequest {
   max_tokens?: number; // Defaults to 64
   temperature?: number; // Defaults to 0.1
   model?: string; // Optional model override
-}
-
-/**
- * Slice context intelligently to keep prompt payload small and fast.
- */
-function sliceFimContext(
-  prefix: string,
-  suffix: string = "",
-): { prefix: string; suffix: string } {
-  const prefixLines = prefix.split("\n");
-  const suffixLines = suffix.split("\n");
-
-  // Keep max 70 lines above cursor and 30 lines below cursor
-  const slicedPrefix = prefixLines.slice(-70).join("\n");
-  const slicedSuffix = suffixLines.slice(0, 30).join("\n");
-
-  return {
-    prefix: slicedPrefix,
-    suffix: slicedSuffix,
-  };
 }
 
 /**

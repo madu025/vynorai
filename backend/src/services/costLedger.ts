@@ -2,6 +2,7 @@ import { billingRun as dbRun } from "./billingDb.js";
 import { getEffectivePrice, getPlan, ProviderID } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
 import { estimateDeepSeekCostUsd } from "./pricing.js";
+import { planDurationDays } from "./billingPolicy.js";
 
 export type CostSource = "provider" | "local-zero" | "unknown";
 
@@ -107,7 +108,10 @@ export async function recordRequestEconomics(
   event: EconomicsEvent,
 ): Promise<void> {
   const plan = getPlan(event.planId);
-  const monthlyRevenue = getEffectivePrice(plan).usd;
+  // A yearly price covers 12 cycles; counting it per cycle overstated
+  // yearly revenue about 12x.
+  const monthlyRevenue =
+    getEffectivePrice(plan).usd / (planDurationDays(plan.id) >= 365 ? 12 : 1);
   const succeeded = event.outcome !== "failed";
   // Credit plans: revenue is the share of the plan price these credits represent.
   const allocatedRevenue =

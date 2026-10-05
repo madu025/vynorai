@@ -189,6 +189,18 @@ export async function authenticateApiKey(
  * 4. Anthropic ephemeral cache headers + code compression
  * 5. Async usage logging
  */
+export function finishedWithStop(chunks: unknown[]): boolean {
+  const text = chunks
+    .map((c) => (typeof c === "string" ? c : JSON.stringify(c)))
+    .join("");
+  return (
+    /finish_reason\\?"\s*:\s*\\?"stop/.test(text) &&
+    !/finish_reason\\?"\s*:\s*\\?"(?:length|tool_calls|content_filter)/.test(
+      text,
+    )
+  );
+}
+
 export async function handleChatCompletions(
   user: AuthenticatedUser,
   body: any,
@@ -212,7 +224,16 @@ export async function handleChatCompletions(
       userId: user.id,
       projectId:
         typeof body.projectRoot === "string" ? body.projectRoot : "default",
-      policyVersion: "2026-10-security-v1",
+      // Streamed and plain answers are stored in different shapes, and the
+      // same prompt with other tools is a different request (v2 also drops
+      // entries cached before truncated answers were excluded).
+      policyVersion: `2026-10-security-v2|stream=${stream !== false}|tools=${
+        Array.isArray(body.tools)
+          ? body.tools
+              .map((t: any) => t?.function?.name ?? t?.name ?? "")
+              .join(",")
+          : ""
+      }`,
     },
     model,
     messages,
@@ -930,7 +951,15 @@ export async function handleChatCompletions(
   const allChunks = providerChunks.length ? providerChunks : collected;
 
   // ── 5. Async: Save to Cache + Log Usage + Increment Monthly Ledger ──────
-  if (dispatch.success && !dispatch.interrupted && allChunks.length > 0) {
+  // Only complete answers are worth replaying: a truncated ("length") or
+  // tool-call answer from the cache would fail the retry the same way again.
+  if (
+    dispatch.success &&
+    !dispatch.interrupted &&
+    !isIdeAgent &&
+    allChunks.length > 0 &&
+    finishedWithStop(allChunks)
+  ) {
     saveToCache(cacheKey, allChunks);
     if (semanticKey) semanticSave(semanticKey, semanticVector, allChunks);
   }

@@ -126,6 +126,25 @@ export function planDurationDays(planId: string): number {
   return planId.endsWith("_yearly") ? 365 : 30;
 }
 
+/** "pro", "pro_monthly" and "pro_yearly" are one tier billed differently. */
+export function planTier(planId: string): string {
+  return planId.replace(/_(?:monthly|yearly)$/, "");
+}
+
+/**
+ * Paid time left on a plan being replaced, converted into days of the new
+ * plan at each plan's daily price. Switching used to drop it: a yearly
+ * subscriber moving tier lost the rest of the year.
+ */
+export function proratedCreditMs(
+  oldDailyPrice: number,
+  newDailyPrice: number,
+  unusedMs: number,
+): number {
+  if (unusedMs <= 0 || oldDailyPrice <= 0 || newDailyPrice <= 0) return 0;
+  return Math.floor((unusedMs * oldDailyPrice) / newDailyPrice);
+}
+
 // ─── PayHere IPN ──────────────────────────────────────────────────────────────
 
 export interface StoredOrder {

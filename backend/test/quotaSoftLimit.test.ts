@@ -91,3 +91,42 @@ test("a nearly empty allowance is still refused", async () => {
   const user = await userWithUsage(99_500);
   assert.equal(await quota.reserveQuotaAtomic(user.id, "free", 50_000), null);
 });
+
+test("a partial hold leaves room for concurrent requests on a large balance", () => {
+  // 10M left: holding all of it refused autocomplete while one turn ran.
+  assert.equal(quota.partialHold(10_000_000), 5_000_000);
+  // Small balances are held whole; the floor keeps a real turn covered.
+  assert.equal(quota.partialHold(10_718), 10_718);
+  assert.equal(quota.partialHold(150_000), 100_000);
+});
+
+test("a free answer gives back its request as well as its credits", async () => {
+  const user = await userWithUsage(1_000);
+  const before = await quota.getOrInitMonthlyUsage(user.id, "free");
+  const reservation = await quota.reserveQuotaAtomic(user.id, "free", 2_000);
+  await quota.settleQuotaReservation(reservation!, 0);
+  const after = await quota.getOrInitMonthlyUsage(user.id, "free");
+  assert.equal(after.used_tokens, 1_000);
+  assert.equal(after.used_requests, before.used_requests);
+});
+
+test("an attached screenshot is estimated as an image, not as its base64 text", () => {
+  const screenshot = `data:image/png;base64,${"A".repeat(1_000_000)}`;
+  const req = {
+    path: "/v1/chat/completions",
+    body: {
+      model: "deepseek-chat",
+      max_tokens: 100,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "what is wrong here?" },
+            { type: "image_url", image_url: { url: screenshot } },
+          ],
+        },
+      ],
+    },
+  } as any;
+  assert.ok(quota.estimateReservation(req) < 5_000);
+});

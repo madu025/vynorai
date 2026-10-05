@@ -8,7 +8,8 @@ import {
   PlanDefinition,
 } from "../config.js";
 import { canPlanUseModel } from "./modelRegistry.js";
-import { creditWeight, isoDate } from "./billingPolicy.js";
+import { creditWeight, isoDate, TOKEN_TYPE_WEIGHTS } from "./billingPolicy.js";
+import { sliceFimContext } from "./fimContext.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = 30;
@@ -300,6 +301,19 @@ export async function tryConsumeQuotaAtomic(
 
 /** Below this many credits left, a request is refused rather than reserved. */
 const MIN_RESERVATION_CREDITS = 1_000;
+/**
+ * A partial hold takes at most half of what is left (but at least this):
+ * holding all of it refused every concurrent request (autocomplete, a second
+ * chat) while one over-estimated request was in flight.
+ */
+const PARTIAL_HOLD_FLOOR = 100_000;
+
+export function partialHold(remaining: number): number {
+  return Math.min(
+    remaining,
+    Math.max(PARTIAL_HOLD_FLOOR, Math.floor(remaining / 2)),
+  );
+}
 
 /** Reserve the maximum expected request cost before any provider is called. */
 export async function reserveQuotaAtomic(
@@ -324,11 +338,12 @@ export async function reserveQuotaAtomic(
   const usage = await getOrInitMonthlyUsage(userId, planName);
   const remaining = Math.floor(usage.max_tokens - usage.used_tokens);
   if (remaining < MIN_RESERVATION_CREDITS) return null;
-  const partial = await tryConsumeQuotaAtomic(userId, remaining, 1, planName);
+  const hold = partialHold(remaining);
+  const partial = await tryConsumeQuotaAtomic(userId, hold, 1, planName);
   if (!partial.allowed) return null;
   return {
     userId,
-    reservedTokens: remaining,
+    reservedTokens: hold,
     reservedRequests: 1,
     settled: false,
   };
@@ -365,14 +380,18 @@ export async function settleQuotaReservation(
 ): Promise<void> {
   if (!reservation || reservation.settled) return;
   reservation.settled = true;
-  const delta =
-    Math.max(0, Math.floor(actualCredits)) - reservation.reservedTokens;
-  if (delta === 0) return;
+  const credits = Math.max(0, Math.floor(actualCredits));
+  const delta = credits - reservation.reservedTokens;
+  // A free answer (cache, template) doesn't count as a request either.
+  const requestRefund = credits === 0 ? reservation.reservedRequests : 0;
+  if (delta === 0 && requestRefund === 0) return;
   await dbRun(
     `UPDATE monthly_usage
-     SET used_tokens = MAX(0, used_tokens + ?), updated_at = CURRENT_TIMESTAMP
+     SET used_tokens = MAX(0, used_tokens + ?),
+         used_requests = MAX(0, used_requests - ?),
+         updated_at = CURRENT_TIMESTAMP
      WHERE user_id = ? AND period_end >= ?`,
-    [delta, reservation.userId, isoDate(new Date())],
+    [delta, requestRefund, reservation.userId, isoDate(new Date())],
   );
 }
 
@@ -397,17 +416,31 @@ export async function releaseQuotaReservation(
   );
 }
 
-function estimateReservation(req: Request): number {
+/** An attached image costs about this many input tokens, whatever its size. */
+const IMAGE_TOKEN_ESTIMATE = 1_500;
+
+export function estimateReservation(req: Request): number {
   const body = req.body || {};
   let chars = 0;
   const collect = (value: unknown) => {
-    if (typeof value === "string") chars += value.length;
+    // A base64 screenshot is not text: counted by length, 1 MB looked like
+    // ~333k tokens and refused or locked the whole allowance.
+    if (typeof value === "string" && value.startsWith("data:"))
+      chars += IMAGE_TOKEN_ESTIMATE * 4;
+    else if (typeof value === "string") chars += value.length;
     else if (Array.isArray(value)) value.forEach(collect);
     else if (value && typeof value === "object")
       Object.values(value as Record<string, unknown>).forEach(collect);
   };
-  collect(body.messages || body.prompt || body.prefix || body.errorLog || "");
-  collect(body.suffix || body.codeContext || "");
+  if (req.path.includes("/fim/") && typeof body.prefix === "string") {
+    // Autocomplete only sends the lines around the cursor upstream.
+    const sliced = sliceFimContext(body.prefix, String(body.suffix ?? ""));
+    collect(sliced.prefix);
+    collect(sliced.suffix);
+  } else {
+    collect(body.messages || body.prompt || body.prefix || body.errorLog || "");
+    collect(body.suffix || body.codeContext || "");
+  }
 
   const inputTokens = Math.ceil(chars / 4);
   const routeMax = req.path.includes("/fim/")
@@ -419,8 +452,11 @@ function estimateReservation(req: Request): number {
   const outputTokens = Number.isFinite(requestedMax)
     ? Math.max(1, Math.min(Math.floor(requestedMax), routeMax))
     : routeMax;
+  // Output is billed at its own (higher) weight; pricing it like input
+  // under-reserved heavy turns.
   return Math.ceil(
-    (inputTokens + outputTokens) *
+    (inputTokens * TOKEN_TYPE_WEIGHTS.input +
+      outputTokens * TOKEN_TYPE_WEIGHTS.output) *
       creditWeight(body.model || DEFAULT_CHAT_MODEL),
   );
 }

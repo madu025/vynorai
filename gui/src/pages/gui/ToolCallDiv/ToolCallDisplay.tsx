@@ -4,7 +4,6 @@ import { openContextItem } from "../../../components/mainInput/belowMainInput/Co
 import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { ToolCallStatusMessage } from "./ToolCallStatusMessage";
 import { toolCallStateToContextItems } from "./utils";
-import { ToolTruncateHistoryIcon } from "./ToolTruncateHistoryIcon";
 
 interface ToolCallDisplayProps {
   children: React.ReactNode;
@@ -52,9 +51,6 @@ export function ToolCallDisplay({
             )}
             <ToolCallStatusMessage tool={tool} toolCallState={toolCallState} />
           </div>
-          {!!toolCallState.output?.length && (
-            <ToolTruncateHistoryIcon historyIndex={historyIndex} />
-          )}
         </div>
       </div>
       <div>{children}</div>

@@ -345,7 +345,11 @@ export function UnifiedTerminalCommand({
   displayLines = 15,
 }: UnifiedTerminalCommandProps) {
   const dispatch = useAppDispatch();
-  const [isExpanded, setIsExpanded] = useState(true);
+  // undefined = follow the status: a tool command that succeeded folds to its
+  // one-line header; running, waiting for approval or failed stays open.
+  const [expandedByUser, setIsExpanded] = useState<boolean | undefined>(
+    undefined,
+  );
   const [outputExpanded, setOutputExpanded] = useState(false);
 
   // Determine running state
@@ -397,6 +401,10 @@ export function UnifiedTerminalCommand({
     statusType = "background";
   }
 
+  const isExpanded =
+    expandedByUser ??
+    !(toolCallState?.status === "done" && statusType !== "failed");
+
   const handleMoveToBackground = () => {
     if (toolCallId) {
       void dispatch(
@@ -432,14 +440,20 @@ export function UnifiedTerminalCommand({
           }`}
           style={{ fontSize: `${getFontSize() - 2}px` }}
         >
-          <div className="flex max-w-[50%] flex-row items-center">
+          <div
+            className="flex min-w-0 flex-1 cursor-pointer flex-row items-center gap-1.5"
+            onClick={() => setIsExpanded(!isExpanded)}
+            data-testid="terminal-toggle"
+          >
             <ChevronDownIcon
-              onClick={() => setIsExpanded(!isExpanded)}
-              className={`text-description h-3.5 w-3.5 flex-shrink-0 cursor-pointer hover:brightness-125 ${
+              className={`text-description h-3.5 w-3.5 flex-shrink-0 hover:brightness-125 ${
                 isExpanded ? "rotate-0" : "-rotate-90"
               }`}
             />
-            <span className="text-description ml-2 select-none">Terminal</span>
+            <StatusIcon status={statusType} />
+            <span className="text-foreground truncate font-mono">
+              {command}
+            </span>
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -457,9 +471,6 @@ export function UnifiedTerminalCommand({
           <TerminalContent>
             <pre className="bg-editor">
               <code>
-                {/* Command is always visible */}
-                <div className="text-terminal pb-2">{command}</div>
-
                 {/* Running state with cursor */}
                 {isRunning && !hasOutput && (
                   <div className="mt-1 flex items-center gap-1">
@@ -507,7 +518,7 @@ export function UnifiedTerminalCommand({
         )}
 
         {/* Status information */}
-        {(statusMessage || isRunning) && (
+        {isExpanded && (statusMessage || isRunning) && (
           <div
             className="text-description flex items-center px-2 pb-2 pt-2 text-xs"
             style={{

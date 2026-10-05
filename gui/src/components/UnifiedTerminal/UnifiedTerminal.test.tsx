@@ -51,9 +51,6 @@ describe("UnifiedTerminalCommand", () => {
     // Should show the command
     expect(screen.getByText(MOCK_COMMAND)).toBeInTheDocument();
 
-    // Should show terminal header
-    expect(screen.getByText("Terminal")).toBeInTheDocument();
-
     // Should show completed status icon (green dot)
     const terminalContainer = screen.getByTestId("terminal-container");
     expect(terminalContainer).toBeInTheDocument();
@@ -359,5 +356,30 @@ describe("UnifiedTerminalCommand", () => {
 
     // Should show collapse option after expansion
     expect(screen.getByText(/Collapse/)).toBeInTheDocument();
+  });
+
+  test("a command that finished OK folds to its header line", async () => {
+    const doneState: ToolCallState = {
+      status: "done",
+      toolCallId: MOCK_TOOL_CALL_ID,
+      toolCall: {
+        id: MOCK_TOOL_CALL_ID,
+        type: "function",
+        function: { name: "run_terminal_command", arguments: "{}" },
+      },
+      parsedArgs: {},
+    };
+    const { user, container } = await renderWithProviders(
+      <UnifiedTerminalCommand
+        command={MOCK_COMMAND}
+        output={MOCK_OUTPUT}
+        status="completed"
+        toolCallState={doneState}
+      />,
+    );
+    expect(screen.getByText(MOCK_COMMAND)).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/Test 1 passed/);
+    await user.click(screen.getByTestId("terminal-toggle"));
+    expect(container.textContent).toMatch(/Test 1 passed/);
   });
 });

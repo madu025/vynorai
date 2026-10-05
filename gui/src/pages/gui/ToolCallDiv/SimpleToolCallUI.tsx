@@ -7,7 +7,6 @@ import {
 import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { ToggleWithIcon } from "./ToggleWithIcon";
 import { ToolCallStatusMessage } from "./ToolCallStatusMessage";
-import { ToolTruncateHistoryIcon } from "./ToolTruncateHistoryIcon";
 import { toolCallStateToContextItems } from "./utils";
 
 /** Timeline dot that mirrors the real call status. */
@@ -82,10 +81,6 @@ export function SimpleToolCallUI({
           />
           <ToolCallStatusMessage tool={tool} toolCallState={toolCallState} />
         </div>
-
-        {!!toolCallState.output?.length && (
-          <ToolTruncateHistoryIcon historyIndex={historyIndex} />
-        )}
       </div>
 
       {isToggleable && (

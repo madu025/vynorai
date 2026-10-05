@@ -38,7 +38,7 @@ test("Chat apply scenarios: handle apply updates and display the accept / reject
   // Wait for the buttons to disappear
   await verifyNotPresentByTestId("edit-accept-button");
   await verifyNotPresentByTestId("edit-reject-button");
-});
+}, 15_000); // renders the whole chat; under full-suite load 5s was flaky
 
 test("Chat apply scenarios: show apply cancellation", async () => {
   const { ideMessenger } = await renderWithProviders(<Chat />);
@@ -77,4 +77,4 @@ test("Chat apply scenarios: show apply cancellation", async () => {
 
   // Cleanup spy
   messengerPostSpy.mockRestore();
-});
+}, 15_000); // renders the whole chat; under full-suite load 5s was flaky

@@ -164,6 +164,52 @@ describe("handleApplyStateUpdate", () => {
   });
 
   describe("closed status handling", () => {
+    it("runs the edit's PostToolUse hook once the edit is applied", async () => {
+      const toolCallState: ToolCallState = {
+        toolCallId: "test-tool-call",
+        status: "calling",
+        ...UNUSED_TOOL_CALL_PARAMS,
+      };
+      vi.mocked(findToolCallById).mockReturnValue(toolCallState);
+      mockGetState.mockReturnValue({
+        session: {
+          id: "session-1",
+          history: [],
+          codeBlockApplyStates: {
+            states: [{ streamId: "chat-stream", originalFileContent: "old" }],
+          },
+        },
+        config: { config: {} },
+        ui: { toolSettings: {} },
+      });
+      mockExtra.ideMessenger.request.mockResolvedValue({
+        status: "success",
+        content: { blocked: true, reason: "lint failed", warnings: [], ran: 1 },
+      });
+
+      await handleApplyStateUpdate({
+        streamId: "chat-stream",
+        toolCallId: "test-tool-call",
+        status: "closed",
+        filepath: "test.txt",
+        fileContent: "new",
+      })(mockDispatch, mockGetState, mockExtra);
+
+      expect(mockExtra.ideMessenger.request).toHaveBeenCalledWith(
+        "hooks/run",
+        expect.objectContaining({
+          event: "PostToolUse",
+          sessionId: "session-1",
+        }),
+      );
+      const items =
+        vi.mocked(updateToolCallOutput).mock.calls[0][0].contextItems;
+      expect(items.map((i: { name: string }) => i.name)).toContain(
+        "Hook feedback",
+      );
+      expect(streamResponseAfterToolCall).toHaveBeenCalled();
+    });
+
     it("reports a rejection in the editor as a failed edit, not a success", async () => {
       const toolCallState: ToolCallState = {
         toolCallId: "test-tool-call",

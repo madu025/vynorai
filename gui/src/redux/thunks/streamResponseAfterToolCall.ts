@@ -15,7 +15,7 @@ import { hasRecordedToolResult } from "../util/toolLoopGuards";
 /**
  * Determines if we should continue streaming based on tool call completion status.
  */
-function areAllToolsDoneStreaming(
+export function areAllToolsDoneStreaming(
   assistantMessage: ChatHistoryItemWithMessageId,
   continueAfterToolRejection: boolean | undefined,
 ): boolean {
@@ -24,15 +24,17 @@ function areAllToolsDoneStreaming(
     return true;
   }
 
-  // Only continue if all tool calls are complete
-  const completedToolCalls = assistantMessage.toolCallStates.filter(
-    (tc) =>
-      tc.status === "done" ||
-      tc.status === "errored" ||
-      (continueAfterToolRejection && tc.status === "canceled"),
-  );
-
-  return completedToolCalls.length === assistantMessage.toolCallStates.length;
+  const states = assistantMessage.toolCallStates;
+  const ran = (tc: (typeof states)[number]) =>
+    tc.status === "done" || tc.status === "errored";
+  // Wait until every call has finished one way or another.
+  if (!states.every((tc) => ran(tc) || tc.status === "canceled")) {
+    return false;
+  }
+  // A rejection alone ends the turn (unless configured otherwise). But when
+  // some calls in the batch did run, their results must reach the model:
+  // stopping silently threw them away.
+  return continueAfterToolRejection || states.some(ran);
 }
 
 export const streamResponseAfterToolCall = createAsyncThunk<

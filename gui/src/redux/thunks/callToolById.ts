@@ -274,7 +274,11 @@ async function callToolByIdImpl(
   // PostToolUse hooks see the result; a blocking (exit 2) hook's reason is
   // fed back to the model alongside the output, e.g. "lint failed: ...".
   const hookFeedback: ContextItem[] = [];
-  if (!preHook.blocked && !guardRefusal) {
+  // An edit still being applied has not changed the file yet: its
+  // PostToolUse hook runs when the apply closes (handleApplyStateUpdate), so
+  // a lint hook checks the edited file, not the old one.
+  const editStillApplying = !streamResponse && !error;
+  if (!preHook.blocked && !guardRefusal && !editStillApplying) {
     const postHook = await runHooks(extra.ideMessenger, {
       event: "PostToolUse",
       sessionId: state.session.id,

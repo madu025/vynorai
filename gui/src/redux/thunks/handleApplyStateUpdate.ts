@@ -15,6 +15,7 @@ import {
 } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
 import { findToolCallById, logToolUsage } from "../util";
+import { runHooks } from "../util/hooks";
 import { exitEdit } from "./edit";
 import { streamResponseAfterToolCall } from "./streamResponseAfterToolCall";
 
@@ -122,6 +123,26 @@ export const handleApplyStateUpdate = createAsyncThunk<
               );
             } else if (accepted) {
               if (toolCallState.status !== "errored") {
+                // The edit is now on disk: run its PostToolUse hook here.
+                const postHook = await runHooks(extra.ideMessenger, {
+                  event: "PostToolUse",
+                  sessionId: getState().session.id,
+                  toolName: toolCallState.toolCall.function.name,
+                  toolInput: {
+                    ...(toolCallState.parsedArgs ?? {}),
+                    ...(toolCallState.processedArgs ?? {}),
+                  },
+                  toolOutput: `Successfully edited ${applyState.filepath}`,
+                });
+                if (postHook.blocked) {
+                  hookFeedback.push({
+                    icon: "problems",
+                    name: "Hook feedback",
+                    description: "PostToolUse hook",
+                    content: `A PostToolUse hook reported: ${postHook.reason}`,
+                    hidden: false,
+                  });
+                }
                 dispatch(
                   acceptToolCall({
                     toolCallId: applyState.toolCallId,

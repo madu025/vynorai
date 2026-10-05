@@ -1,6 +1,7 @@
 import cors from "cors";
 import { warmUpLocalSlm } from "./services/localSlmRouter.js";
 import { scheduleRetention } from "./services/retention.js";
+import { scheduleReservationReconcile } from "./services/monthlyQuota.js";
 import { releasesRouter } from "./routes/releases.js";
 import express, { NextFunction, Request, Response } from "express";
 import fs from "fs";
@@ -347,6 +348,7 @@ async function start() {
   // Prime the local SLM so the first routed request does not time out.
   void warmUpLocalSlm();
   scheduleRetention();
+  scheduleReservationReconcile();
 
   // ── Main API server ──────────────────────────────────────────────────────────
   const server = app.listen(config.port, () => {

@@ -388,3 +388,19 @@ test("legacy DeepSeek ids served by Flash are entitled like Flash (old autocompl
     false,
   );
 });
+
+test("the backend prompt is added only when the client sends none", async () => {
+  const { systemPromptFor } = await import("../src/services/aiProxy.js");
+  const ide = {
+    messages: [
+      { role: "system", content: "IDE agent prompt" },
+      { role: "user", content: "hi" },
+    ],
+  };
+  assert.equal(systemPromptFor(ide), undefined);
+  assert.equal(systemPromptFor({ system: "custom", messages: [] }), "custom");
+  assert.match(
+    String(systemPromptFor({ messages: [{ role: "user", content: "hi" }] })),
+    /VynorAI/,
+  );
+});

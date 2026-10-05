@@ -130,3 +130,37 @@ test("an attached screenshot is estimated as an image, not as its base64 text", 
   } as any;
   assert.ok(quota.estimateReservation(req) < 5_000);
 });
+
+test("an open hold is recorded and closed when settled", async () => {
+  const user = await userWithUsage(0);
+  const r = await quota.reserveQuotaAtomic(user.id, "free", 5_000);
+  assert.ok(r?.id);
+  const open = await dbm.dbGet<{ tokens: number }>(
+    "SELECT tokens FROM quota_reservations WHERE id = ?",
+    [r!.id],
+  );
+  assert.equal(Number(open?.tokens), 5_000);
+  await quota.settleQuotaReservation(r!, 1_200);
+  assert.equal(
+    await dbm.dbGet("SELECT id FROM quota_reservations WHERE id = ?", [r!.id]),
+    undefined,
+  );
+});
+
+test("a hold stranded by a restart is given back, a live one is not", async () => {
+  const user = await userWithUsage(10_000);
+  const stranded = await quota.reserveQuotaAtomic(user.id, "free", 4_000);
+  const live = await quota.reserveQuotaAtomic(user.id, "free", 3_000);
+  // The stranded request started long ago and its process died.
+  await dbm.dbRun("UPDATE quota_reservations SET created_at = ? WHERE id = ?", [
+    new Date(Date.now() - quota.STALE_RESERVATION_MS - 60_000).toISOString(),
+    stranded!.id,
+  ]);
+  assert.equal(await quota.reconcileStaleReservations(), 1);
+  const usage = await quota.getOrInitMonthlyUsage(user.id, "free");
+  // 10,000 + 4,000 + 3,000 held, the stranded 4,000 returned.
+  assert.equal(usage.used_tokens, 13_000);
+  // Running again (another instance) never refunds twice.
+  assert.equal(await quota.reconcileStaleReservations(), 0);
+  await quota.releaseQuotaReservation(live!);
+});

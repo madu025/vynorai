@@ -702,6 +702,22 @@ const MIGRATIONS: Migration[] = [
       )`);
     },
   },
+  {
+    version: "020_quota_reservations",
+    description: "Durable quota holds, so a restart cannot strand them",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS quota_reservations (
+        id          VARCHAR(36) PRIMARY KEY,
+        user_id     VARCHAR(36) NOT NULL,
+        tokens      INTEGER NOT NULL,
+        requests    INTEGER NOT NULL,
+        created_at  VARCHAR(32) NOT NULL
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_quota_reservations_created ON quota_reservations (created_at)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

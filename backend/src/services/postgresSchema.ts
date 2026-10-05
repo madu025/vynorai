@@ -301,6 +301,19 @@ CREATE TABLE IF NOT EXISTS error_reports (
 CREATE INDEX IF NOT EXISTS idx_error_reports_created ON error_reports (created_at);
 `,
   },
+  {
+    version: "pg_007_quota_reservations",
+    sql: `
+CREATE TABLE IF NOT EXISTS quota_reservations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  tokens BIGINT NOT NULL,
+  requests INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quota_reservations_created ON quota_reservations (created_at);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

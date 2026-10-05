@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { billingGet as dbGet, billingRun as dbRun } from "./billingDb.js";
+import {
+  billingAll as dbAll,
+  billingGet as dbGet,
+  billingRun as dbRun,
+} from "./billingDb.js";
 import {
   DEFAULT_CHAT_MODEL,
   getPlan,
@@ -34,10 +38,101 @@ export interface MonthlyUsageRow {
 }
 
 export interface QuotaReservation {
+  /** Row in quota_reservations while the hold is open. */
+  id?: string;
   userId: string;
   reservedTokens: number;
   reservedRequests: number;
   settled: boolean;
+}
+
+// ─── Durable holds ─────────────────────────────────────────────────────────
+// A hold lived only in the request's memory: if the server restarted
+// mid-request it was never settled or released, and the user lost those
+// credits for the rest of the cycle. Each open hold is now a row, and
+// reconcileStaleReservations() returns holds older than any real request.
+
+/** Longer than any request can run (idle timeout 120s; long agent streams). */
+export const STALE_RESERVATION_MS = 30 * 60_000;
+
+async function persistReservation(r: QuotaReservation): Promise<void> {
+  r.id = uuidv4();
+  try {
+    await dbRun(
+      "INSERT INTO quota_reservations (id, user_id, tokens, requests, created_at) VALUES (?, ?, ?, ?, ?)",
+      [
+        r.id,
+        r.userId,
+        r.reservedTokens,
+        r.reservedRequests,
+        new Date().toISOString(),
+      ],
+    );
+  } catch (err) {
+    // Billing goes on without the safety net rather than failing the request.
+    console.warn("[Quota] could not record hold:", (err as Error).message);
+    r.id = undefined;
+  }
+}
+
+async function closeReservationRecord(r: QuotaReservation): Promise<void> {
+  if (!r.id) return;
+  try {
+    await dbRun("DELETE FROM quota_reservations WHERE id = ?", [r.id]);
+  } catch (err) {
+    // Rare (the DB just served this request). A row left behind would be
+    // refunded again by the reconcile job, so make it visible.
+    console.error(
+      `[Quota] could not close hold ${r.id}:`,
+      (err as Error).message,
+    );
+  }
+}
+
+/**
+ * Release holds that outlived any request (the server died before settling).
+ * Each row is claimed by deleting it first, so two backend instances never
+ * refund the same hold twice.
+ */
+export async function reconcileStaleReservations(
+  now: Date = new Date(),
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - STALE_RESERVATION_MS).toISOString();
+  const stale = await dbAll<{
+    id: string;
+    user_id: string;
+    tokens: number;
+    requests: number;
+  }>(
+    "SELECT id, user_id, tokens, requests FROM quota_reservations WHERE created_at < ?",
+    [cutoff],
+  );
+  let released = 0;
+  for (const row of stale) {
+    const claimed = await dbRun("DELETE FROM quota_reservations WHERE id = ?", [
+      row.id,
+    ]);
+    if (claimed.changes === 0) continue;
+    await dbRun(
+      `UPDATE monthly_usage
+       SET used_tokens = MAX(0, used_tokens - ?),
+           used_requests = MAX(0, used_requests - ?),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND period_end >= ?`,
+      [Number(row.tokens), Number(row.requests), row.user_id, isoDate(now)],
+    );
+    released++;
+  }
+  if (released > 0) {
+    console.warn(`[Quota] released ${released} stale hold(s)`);
+  }
+  return released;
+}
+
+export function scheduleReservationReconcile(): void {
+  const run = () => void reconcileStaleReservations().catch(() => {});
+  setTimeout(run, 60_000).unref();
+  setInterval(run, 10 * 60_000).unref();
 }
 
 /**
@@ -328,8 +423,16 @@ export async function reserveQuotaAtomic(
     1,
     planName,
   );
-  if (consumed.allowed)
-    return { userId, reservedTokens, reservedRequests: 1, settled: false };
+  if (consumed.allowed) {
+    const reservation: QuotaReservation = {
+      userId,
+      reservedTokens,
+      reservedRequests: 1,
+      settled: false,
+    };
+    await persistReservation(reservation);
+    return reservation;
+  }
 
   // The estimate assumes no prompt cache, so it is far above what an agent
   // turn really costs (most input is cached at 0.1). With credits left,
@@ -341,12 +444,14 @@ export async function reserveQuotaAtomic(
   const hold = partialHold(remaining);
   const partial = await tryConsumeQuotaAtomic(userId, hold, 1, planName);
   if (!partial.allowed) return null;
-  return {
+  const reservation: QuotaReservation = {
     userId,
     reservedTokens: hold,
     reservedRequests: 1,
     settled: false,
   };
+  await persistReservation(reservation);
+  return reservation;
 }
 
 /**
@@ -370,6 +475,12 @@ export async function topUpReservation(
   );
   if (result.changes === 0) return false;
   reservation.reservedTokens += extra;
+  if (reservation.id) {
+    await dbRun("UPDATE quota_reservations SET tokens = ? WHERE id = ?", [
+      reservation.reservedTokens,
+      reservation.id,
+    ]).catch(() => {});
+  }
   return true;
 }
 
@@ -380,6 +491,7 @@ export async function settleQuotaReservation(
 ): Promise<void> {
   if (!reservation || reservation.settled) return;
   reservation.settled = true;
+  await closeReservationRecord(reservation);
   const credits = Math.max(0, Math.floor(actualCredits));
   const delta = credits - reservation.reservedTokens;
   // A free answer (cache, template) doesn't count as a request either.
@@ -401,6 +513,7 @@ export async function releaseQuotaReservation(
 ): Promise<void> {
   if (!reservation || reservation.settled) return;
   reservation.settled = true;
+  await closeReservationRecord(reservation);
   await dbRun(
     `UPDATE monthly_usage
      SET used_tokens = MAX(0, used_tokens - ?),

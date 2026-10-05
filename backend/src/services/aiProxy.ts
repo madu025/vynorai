@@ -189,6 +189,19 @@ export async function authenticateApiKey(
  * 4. Anthropic ephemeral cache headers + code compression
  * 5. Async usage logging
  */
+/**
+ * The backend prompt is only a default. The IDE sends its own system message;
+ * adding this one on top gave the model two conflicting instructions on every
+ * agent turn.
+ */
+export function systemPromptFor(body: any): string | undefined {
+  if (body?.system) return body.system;
+  const hasOwn =
+    Array.isArray(body?.messages) &&
+    body.messages.some((m: any) => m?.role === "system");
+  return hasOwn ? undefined : VYNORAI_AGENT_SYSTEM_PROMPT;
+}
+
 export function finishedWithStop(chunks: unknown[]): boolean {
   const text = chunks
     .map((c) => (typeof c === "string" ? c : JSON.stringify(c)))
@@ -860,7 +873,7 @@ export async function handleChatCompletions(
       stream,
       user: zkUserId,
       tools: gatedTools,
-      system: body.system ?? VYNORAI_AGENT_SYSTEM_PROMPT,
+      system: systemPromptFor(body),
     },
     tier,
   );

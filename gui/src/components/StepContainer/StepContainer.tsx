@@ -109,7 +109,7 @@ export default function StepContainer(props: StepContainerProps) {
   }
 
   return (
-    <div>
+    <div data-testid="assistant-message">
       <div
         className={`bg-background p-1 px-1.5 ${isBeforeLatestSummary ? "opacity-35" : ""}`}
       >

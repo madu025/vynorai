@@ -1,0 +1,69 @@
+name: Smart E2E (real model)
+
+# Drives the real extension in VS Code against vynor.lk with the dedicated
+# e2e-bot@vynor.lk account. Checks are outcome-based with an AI judge, and
+# each scenario is retried once and classified (extensions/vscode/e2e/smart).
+# Costs real credits (~1-2M per run), so it runs on demand and weekly.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 20 * * 0" # Sunday 20:00 UTC (Monday 01:30 Sri Lanka)
+
+concurrency:
+  group: smart-e2e
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  smart-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build VS Code extension
+        uses: ./.github/actions/build-vscode-extension
+        with:
+          platform: linux
+          arch: x64
+          npm_config_arch: x64
+          pre-release: false
+          commit-sha: ${{ github.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare VS Code and install the build
+        working-directory: extensions/vscode
+        run: |
+          npm run e2e:compile
+          mkdir -p ./e2e/storage
+          npx extest get-vscode --storage ./e2e/storage --code_version 1.95.0
+          npx extest get-chromedriver --storage ./e2e/storage --code_version 1.95.0
+          VSIX=$(ls -t ./*.vsix ./build/*.vsix 2>/dev/null | head -1)
+          echo "Installing $VSIX"
+          npx extest install-vsix -f "$VSIX" --extensions_dir ./e2e/.test-extensions --storage ./e2e/storage
+
+      - name: Run smart scenarios
+        working-directory: extensions/vscode
+        env:
+          VYNORAI_E2E_API_KEY: ${{ secrets.VYNOR_E2E_API_KEY }}
+          VYNOR_E2E_API_BASE: https://vynor.lk
+        run: |
+          if [ -z "$VYNORAI_E2E_API_KEY" ]; then
+            echo "::error::Add the VYNOR_E2E_API_KEY repository secret"; exit 1
+          fi
+          xvfb-run -a npx extest run-tests ./e2e/_output/tests/Smart.test.js \
+            --code_settings settings.json \
+            --extensions_dir ./e2e/.test-extensions \
+            --storage ./e2e/storage
+
+      - name: Upload report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smart-e2e-report
+          path: |
+            extensions/vscode/e2e/smart-report
+            extensions/vscode/e2e/storage/screenshots
+          if-no-files-found: ignore

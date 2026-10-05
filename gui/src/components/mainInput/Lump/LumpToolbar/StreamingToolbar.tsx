@@ -17,6 +17,7 @@ export function StreamingToolbar({
       <GeneratingIndicator />
       <div
         onClick={onStop}
+        data-testid="stop-button"
         className="text-2xs cursor-pointer px-1.5 py-0.5 hover:brightness-125"
       >
         <span className="text-description">{displayText}</span>

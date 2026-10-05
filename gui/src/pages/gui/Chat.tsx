@@ -515,6 +515,8 @@ export function Chat() {
 
       <StepsDiv
         ref={stepsDivRef}
+        data-testid="chat-steps"
+        data-streaming={isStreaming ? "true" : "false"}
         className={`pt-[8px] ${showScrollbar ? "thin-scrollbar" : "no-scrollbar"} ${history.length > 0 ? "min-h-0 flex-1 overflow-y-scroll" : "shrink-0"}`}
       >
         {highlights}

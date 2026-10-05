@@ -194,3 +194,6 @@ scratch/
 
 # Extension builds served by the backend (deploy/release-extension.sh)
 /releases/
+
+# Smart E2E output
+extensions/vscode/e2e/smart-report/

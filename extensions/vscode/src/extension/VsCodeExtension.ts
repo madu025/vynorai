@@ -501,6 +501,8 @@ export class VsCodeExtension {
       if (editInfo) this.core.invoke("files/smallEdit", editInfo);
     });
 
+    this.watchFilesOnDisk();
+
     vscode.workspace.onDidSaveTextDocument(async (event) => {
       this.core.invoke("files/changed", {
         uris: [event.uri.toString()],
@@ -679,5 +681,59 @@ export class VsCodeExtension {
 
   public deactivateNextEdit() {
     this.completionProvider.deactivateNextEdit();
+  }
+
+  /**
+   * Keep the code map current for changes made outside the editor: git pull
+   * or checkout, other tools and agents, generators run in a terminal. Only
+   * editor saves, creates and deletes were indexed before, so those files
+   * kept stale signatures until a full re-index.
+   */
+  private watchFilesOnDisk() {
+    const IGNORED =
+      /[\\/](?:node_modules|\.git|dist|out|build|vendor|\.next|\.nuxt|coverage|__pycache__|\.venv|venv|target)[\\/]/;
+    const BULK_THRESHOLD = 500;
+    const pending = {
+      changed: new Set<string>(),
+      created: new Set<string>(),
+      deleted: new Set<string>(),
+    };
+    let timer: NodeJS.Timeout | undefined;
+
+    const flush = () => {
+      timer = undefined;
+      const total =
+        pending.changed.size + pending.created.size + pending.deleted.size;
+      if (total >= BULK_THRESHOLD) {
+        // A branch switch or large pull: one incremental re-index is
+        // cheaper than hundreds of single-file refreshes.
+        this.core.invoke("index/forceReIndex", undefined);
+      } else {
+        const send = (
+          type: "files/changed" | "files/created" | "files/deleted",
+          set: Set<string>,
+        ) => {
+          if (set.size > 0) this.core.invoke(type, { uris: [...set] });
+        };
+        send("files/created", pending.created);
+        send("files/deleted", pending.deleted);
+        send("files/changed", pending.changed);
+      }
+      pending.changed.clear();
+      pending.created.clear();
+      pending.deleted.clear();
+    };
+
+    const queue = (set: Set<string>) => (uri: vscode.Uri) => {
+      if (uri.scheme !== "file" || IGNORED.test(uri.fsPath)) return;
+      set.add(uri.toString());
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, 1500);
+    };
+
+    const watcher = vscode.workspace.createFileSystemWatcher("**/*");
+    watcher.onDidChange(queue(pending.changed));
+    watcher.onDidCreate(queue(pending.created));
+    watcher.onDidDelete(queue(pending.deleted));
   }
 }

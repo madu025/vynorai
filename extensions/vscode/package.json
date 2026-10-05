@@ -2,7 +2,7 @@
   "name": "vynorai",
   "icon": "media/icon.png",
   "author": "VynorAI",
-  "version": "1.2.25",
+  "version": "1.2.26",
   "repository": {
     "type": "git",
     "url": "https://github.com/vynorai/vynorai"
@@ -328,14 +328,14 @@
       },
       {
         "command": "continue.codebaseForceReIndex",
-        "category": "Continue",
-        "title": "Codebase Force Re-Index",
+        "category": "VynorAI",
+        "title": "Update Code Map",
         "group": "Continue"
       },
       {
         "command": "continue.rebuildCodebaseIndex",
-        "category": "Continue",
-        "title": "Rebuild codebase index",
+        "category": "VynorAI",
+        "title": "Rebuild Code Map From Scratch",
         "group": "Continue"
       },
       {

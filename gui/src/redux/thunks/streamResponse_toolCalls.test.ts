@@ -275,9 +275,9 @@ describe("streamResponseThunk - tool calls", () => {
       "session/updateToolCallOutput",
       "session/acceptToolCall",
       "chat/streamAfterToolCall/pending",
-      "chat/streamWrapper/pending",
       "session/resetNextCodeBlockToApplyIndex",
       "session/streamUpdate",
+      "chat/streamWrapper/pending",
       "chat/streamNormalInput/pending",
       "session/setAppliedRulesAtIndex",
       "session/setActive",
@@ -1552,15 +1552,6 @@ describe("streamResponseThunk - tool calls", () => {
         payload: undefined,
       },
       {
-        type: "chat/streamWrapper/pending",
-        meta: {
-          arg: expect.any(Function),
-          requestId: expect.any(String),
-          requestStatus: "pending",
-        },
-        payload: undefined,
-      },
-      {
         type: "session/resetNextCodeBlockToApplyIndex",
         payload: undefined,
       },
@@ -1574,6 +1565,15 @@ describe("streamResponseThunk - tool calls", () => {
             toolCallId: "tool-approval-flow-1",
           },
         ],
+      },
+      {
+        type: "chat/streamWrapper/pending",
+        meta: {
+          arg: expect.any(Function),
+          requestId: expect.any(String),
+          requestStatus: "pending",
+        },
+        payload: undefined,
       },
       {
         type: "chat/streamNormalInput/pending",

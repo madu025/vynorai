@@ -164,6 +164,44 @@ describe("handleApplyStateUpdate", () => {
   });
 
   describe("closed status handling", () => {
+    it("reports a rejection in the editor as a failed edit, not a success", async () => {
+      const toolCallState: ToolCallState = {
+        toolCallId: "test-tool-call",
+        status: "calling",
+        ...UNUSED_TOOL_CALL_PARAMS,
+      };
+      vi.mocked(findToolCallById).mockReturnValue(toolCallState);
+      mockGetState.mockReturnValue({
+        session: {
+          history: [],
+          codeBlockApplyStates: {
+            states: [{ streamId: "chat-stream", originalFileContent: "old" }],
+          },
+        },
+        config: { config: {} },
+        ui: { toolSettings: {} },
+      });
+
+      const thunk = handleApplyStateUpdate({
+        streamId: "chat-stream",
+        toolCallId: "test-tool-call",
+        status: "closed",
+        filepath: "test.txt",
+        fileContent: "old",
+        rejected: true,
+      });
+      await thunk(mockDispatch, mockGetState, mockExtra);
+
+      expect(acceptToolCall).not.toHaveBeenCalled();
+      expect(errorToolCall).toHaveBeenCalledWith({
+        toolCallId: "test-tool-call",
+      });
+      const output = vi.mocked(updateToolCallOutput).mock.calls[0][0];
+      expect(output.contextItems[0].name).toBe("Edit Rejected");
+      // The model is told, so it can ask the user instead of moving on.
+      expect(streamResponseAfterToolCall).toHaveBeenCalled();
+    });
+
     it("should handle accepted tool call closure", async () => {
       const toolCallState: ToolCallState = {
         toolCallId: "test-tool-call",

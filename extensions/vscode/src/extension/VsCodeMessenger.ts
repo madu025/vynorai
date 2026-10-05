@@ -149,8 +149,11 @@ export class VsCodeMessenger {
       const checkpointId = checkpointFilepath
         ? await checkpointManager.create(checkpointFilepath, "Agent apply")
         : undefined;
-      await applyManager.applyToFile(data);
-      await checkpointManager.finalize(checkpointId);
+      try {
+        await applyManager.applyToFile(data);
+      } finally {
+        await checkpointManager.finalize(checkpointId);
+      }
     });
 
     this.onWebview("checkpoints/list", async () => checkpointManager.list());

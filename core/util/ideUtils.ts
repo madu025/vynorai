@@ -82,7 +82,12 @@ export async function inferResolvedUriFromRelativePath(
   // Sometimes the model will decide to only output the base name or small number of path parts
   // in which case we shouldn't create a new file if it matches the current file
   const activeFile = await ide.getCurrentFile();
-  if (activeFile && activeFile.path.endsWith(relativePath)) {
+  // Match whole path segments: "util.ts" must not match "fooutil.ts".
+  const bare = relativePath.replace(/^\.?\//, "");
+  if (
+    activeFile &&
+    (activeFile.path === bare || activeFile.path.endsWith(`/${bare}`))
+  ) {
     return activeFile.path;
   }
 

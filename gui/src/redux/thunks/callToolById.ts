@@ -6,6 +6,7 @@ import { classifyToolRisk } from "core/agent/toolRisk";
 import type { HookRunResult } from "core/hooks/types";
 
 import { callClientTool } from "../../util/clientTools/callClientTool";
+import { selectCurrentToolCalls } from "../selectors/selectToolCalls";
 import { selectSelectedChatModel } from "../slices/configSlice";
 import {
   acceptToolCall,
@@ -103,6 +104,9 @@ async function callToolByIdImpl(
   // Claim the call before any await: a double-click, key repeat, or Approve
   // on a call that is already auto-running must not run it a second time.
   dispatch(setToolCallCalling({ toolCallId }));
+  // Stop aborts (and replaces) this aborter. A tool that finishes after Stop
+  // records its result but must not start another billed round.
+  const turnAborter = state.session.streamAborter;
 
   const selectedChatModel = selectSelectedChatModel(state);
 
@@ -357,6 +361,8 @@ async function callToolByIdImpl(
       );
     }
 
+    if (turnAborter.signal.aborted) return;
+
     // Send to the LLM to continue the conversation
     const wrapped = await dispatch(
       streamResponseAfterToolCall({
@@ -366,6 +372,18 @@ async function callToolByIdImpl(
     );
     unwrapResult(wrapped);
   } else {
-    dispatch(setInactive());
+    // Edit tools continue from the apply path. Go idle only while this edit
+    // is still applying and no sibling is running: going idle mid-batch let a
+    // queued message start, and once the apply has closed its continuation
+    // owns the stream.
+    const current = selectCurrentToolCalls(getState());
+    const stillApplying =
+      current.find((tc) => tc.toolCallId === toolCallId)?.status === "calling";
+    const siblingRunning = current.some(
+      (tc) => tc.toolCallId !== toolCallId && tc.status === "calling",
+    );
+    if (stillApplying && !siblingRunning) {
+      dispatch(setInactive());
+    }
   }
 }

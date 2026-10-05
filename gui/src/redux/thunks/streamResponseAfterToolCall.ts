@@ -42,58 +42,60 @@ export const streamResponseAfterToolCall = createAsyncThunk<
 >(
   "chat/streamAfterToolCall",
   async ({ toolCallId, depth = 0 }, { dispatch, getState }) => {
-    await dispatch(
-      streamThunkWrapper(async () => {
-        const state = getState();
-        const currentToolCalls = selectCurrentToolCalls(state);
-        const toolCallState = currentToolCalls.find(
-          (tc) => tc.toolCallId === toolCallId,
-        );
-
-        if (!toolCallState) {
-          return; // in cases where edit tool is cancelled mid apply, this will be triggered
-        }
-
-        // A tool callback may be delivered more than once (especially for a
-        // parallel batch). Never append the same result or continue twice.
-        const toolResultAlreadyRecorded = hasRecordedToolResult(
-          state.session.history,
-          toolCallId,
-        );
-        if (toolResultAlreadyRecorded) {
-          return;
-        }
-
-        const toolOutput = toolCallState.output ?? [];
-
-        dispatch(resetNextCodeBlockToApplyIndex());
-
-        // Create and dispatch the tool message
-        const newMessage: ChatMessage = {
-          role: "tool",
-          content: renderContextItems(toolOutput),
-          toolCallId,
-        };
-        dispatch(streamUpdate([newMessage]));
-
-        // Check if we should continue streaming based on tool call completion
-        const history = getState().session.history;
-        const assistantMessage = history.findLast(
-          (item) =>
-            item.message.role === "assistant" &&
-            item.toolCallStates?.some((tc) => tc.toolCallId === toolCallId),
-        );
-
-        if (
-          assistantMessage &&
-          areAllToolsDoneStreaming(
-            assistantMessage,
-            state.config.config.ui?.continueAfterToolRejection,
-          )
-        ) {
-          unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
-        }
-      }),
+    const state = getState();
+    const currentToolCalls = selectCurrentToolCalls(state);
+    const toolCallState = currentToolCalls.find(
+      (tc) => tc.toolCallId === toolCallId,
     );
+
+    if (!toolCallState) {
+      return; // in cases where edit tool is cancelled mid apply, this will be triggered
+    }
+
+    // A tool callback may be delivered more than once (especially for a
+    // parallel batch). Never append the same result or continue twice.
+    const toolResultAlreadyRecorded = hasRecordedToolResult(
+      state.session.history,
+      toolCallId,
+    );
+    if (toolResultAlreadyRecorded) {
+      return;
+    }
+
+    const toolOutput = toolCallState.output ?? [];
+
+    dispatch(resetNextCodeBlockToApplyIndex());
+
+    // Create and dispatch the tool message
+    const newMessage: ChatMessage = {
+      role: "tool",
+      content: renderContextItems(toolOutput),
+      toolCallId,
+    };
+    dispatch(streamUpdate([newMessage]));
+
+    // Check if we should continue streaming based on tool call completion
+    const history = getState().session.history;
+    const assistantMessage = history.findLast(
+      (item) =>
+        item.message.role === "assistant" &&
+        item.toolCallStates?.some((tc) => tc.toolCallId === toolCallId),
+    );
+
+    if (
+      assistantMessage &&
+      areAllToolsDoneStreaming(
+        assistantMessage,
+        state.config.config.ui?.continueAfterToolRejection,
+      )
+    ) {
+      // Only the model round is retried on "overloaded": retrying the whole
+      // thunk found the tool result already recorded and ended the turn.
+      await dispatch(
+        streamThunkWrapper(async () => {
+          unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
+        }),
+      );
+    }
   },
 );

@@ -310,11 +310,16 @@ export class VsCodeIdeUtils {
     }
     const contents = new TextDecoder().decode(buffer);
     const lines = contents.split("\n");
+    // A range starting past the end is empty, not the file's last line.
+    if (range.start.line >= lines.length) {
+      return "";
+    }
+    if (range.end.line >= lines.length) {
+      return lines.slice(range.start.line).join("\n");
+    }
     return `${lines
       .slice(range.start.line, range.end.line)
-      .join("\n")}\n${lines[
-      range.end.line < lines.length - 1 ? range.end.line : lines.length - 1
-    ].slice(0, range.end.character)}`;
+      .join("\n")}\n${lines[range.end.line].slice(0, range.end.character)}`;
   }
 
   async getTerminalContents(commands = -1): Promise<string> {

@@ -440,10 +440,10 @@ class VsCodeIde implements IDE {
   }
 
   async getPinnedFiles(): Promise<string[]> {
-    const tabArray = vscode.window.tabGroups.all[0].tabs;
-
-    return tabArray
-      .filter((t) => t.isPinned)
+    // Pinned webviews and settings tabs have no uri.
+    return vscode.window.tabGroups.all
+      .flatMap((group) => group.tabs)
+      .filter((t) => t.isPinned && t.input instanceof vscode.TabInputText)
       .map((t) => (t.input as vscode.TabInputText).uri.toString());
   }
 
@@ -465,10 +465,20 @@ class VsCodeIde implements IDE {
     p.stdout.on("data", (data) => {
       output += data.toString();
     });
+    // Drain stderr so a full pipe can't block rg, and never wait forever.
+    let stderr = "";
+    p.stderr.on("data", (data) => {
+      if (stderr.length < 4000) stderr += data.toString();
+    });
+    const timer = setTimeout(() => p.kill(), 60_000);
 
     return new Promise<string>((resolve, reject) => {
-      p.on("error", reject);
+      p.on("error", (e) => {
+        clearTimeout(timer);
+        reject(e);
+      });
       p.on("close", (code) => {
+        clearTimeout(timer);
         if (code === 0) {
           resolve(output);
         } else if (code === 1) {
@@ -477,7 +487,11 @@ class VsCodeIde implements IDE {
             "No matches found. Build, secrets, etc. dirs and files are not included.",
           );
         } else {
-          reject(new Error(`Process exited with code ${code}`));
+          reject(
+            new Error(
+              `Search failed (rg exit ${code})${stderr ? `: ${stderr.trim()}` : ""}`,
+            ),
+          );
         }
       });
     });
@@ -580,10 +594,16 @@ class VsCodeIde implements IDE {
           ...(maxResults ? ["--max-count", String(maxResults)] : []),
         ]);
 
-        results.push(dirResults);
+        // Exit code 1 (nothing found) comes back as a message, not a file.
+        if (!dirResults.startsWith("No matches found")) {
+          results.push(dirResults);
+        }
       }
 
-      const allResults = results.join("\n").split("\n");
+      const allResults = results
+        .join("\n")
+        .split("\n")
+        .filter((line) => line.trim() !== "");
       if (maxResults) {
         // In the case of multiple workspaces, maxResults will be applied to each workspace
         // And then the combined results will also be truncated

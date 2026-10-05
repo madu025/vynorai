@@ -216,7 +216,7 @@ export class VerticalDiffManager {
     // Get the current editor fileUri/range
     let editor = vscode.window.activeTextEditor;
     if (!editor) {
-      return;
+      throw new Error("No active editor to show the diff in");
     }
     const fileUri = editor.document.uri.toString();
     const startLine = 0;
@@ -253,8 +253,7 @@ export class VerticalDiffManager {
     );
 
     if (!diffHandler) {
-      console.warn("Issue occurred while creating new vertical diff handler");
-      return;
+      throw new Error("Could not create a diff view for this file");
     }
 
     if (editor.selection) {
@@ -305,7 +304,7 @@ export class VerticalDiffManager {
 
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
-      return;
+      throw new Error("No active editor to show the diff in");
     }
 
     const fileUri = editor.document.uri.toString();
@@ -332,8 +331,7 @@ export class VerticalDiffManager {
     );
 
     if (!diffHandler) {
-      console.warn("Issue occurred while creating vertical diff handler");
-      return;
+      throw new Error("Could not create a diff view for this file");
     }
 
     await diffHandler.reapplyWithMyersDiff(myersDiffs);
@@ -384,6 +382,7 @@ export class VerticalDiffManager {
     let editor = vscode.window.activeTextEditor;
 
     if (!editor) {
+      if (toolCallId) throw new Error("No active editor to apply edits to");
       return undefined;
     }
 
@@ -461,6 +460,8 @@ export class VerticalDiffManager {
     );
 
     if (!diffHandler) {
+      if (toolCallId)
+        throw new Error("Could not create a diff view for this file");
       console.warn("Issue occurred while creating new vertical diff handler");
       return undefined;
     }

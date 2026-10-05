@@ -64,6 +64,20 @@ export const handleApplyStateUpdate = createAsyncThunk<
         if (applyState.status === "closed") {
           if (toolCallState) {
             const accepted = toolCallState.status !== "canceled";
+            // Rejected in the editor (all at once, or block by block until
+            // nothing changed): the file is as it was, so this is no success.
+            const stored = getState().session.codeBlockApplyStates.states.find(
+              (s) => s.streamId === applyState.streamId,
+            );
+            // PostToolUse hook feedback is recorded before the apply closes.
+            const hookFeedback = (toolCallState.output ?? []).filter(
+              (item) => item.name === "Hook feedback",
+            );
+            const rejectedInEditor =
+              applyState.rejected === true ||
+              (applyState.fileContent !== undefined &&
+                stored?.originalFileContent !== undefined &&
+                applyState.fileContent === stored.originalFileContent);
 
             logToolUsage(toolCallState, accepted, true, extra.ideMessenger);
 
@@ -84,7 +98,29 @@ export const handleApplyStateUpdate = createAsyncThunk<
               );
             }
 
-            if (accepted) {
+            if (accepted && rejectedInEditor) {
+              dispatch(errorToolCall({ toolCallId: applyState.toolCallId }));
+              dispatch(
+                updateToolCallOutput({
+                  toolCallId: applyState.toolCallId,
+                  contextItems: [
+                    {
+                      icon: "problems",
+                      name: "Edit Rejected",
+                      description: "The user rejected this edit",
+                      content: `The user rejected this edit to ${applyState.filepath} in the editor; the file is unchanged. Do not retry the same edit. Ask the user what they want instead.`,
+                      hidden: false,
+                    },
+                    ...hookFeedback,
+                  ],
+                }),
+              );
+              void dispatch(
+                streamResponseAfterToolCall({
+                  toolCallId: applyState.toolCallId,
+                }),
+              );
+            } else if (accepted) {
               if (toolCallState.status !== "errored") {
                 dispatch(
                   acceptToolCall({
@@ -105,6 +141,7 @@ export const handleApplyStateUpdate = createAsyncThunk<
                           content: `Along with your edits, the editor applied the following auto-formatting:\n\n${applyState.autoFormattingDiff}\n\n(Note: Pay close attention to changes such as single quotes being converted to double quotes, semicolons being removed or added, long lines being broken into multiple lines, adjusting indentation style, adding/removing trailing commas, etc. This will help you ensure future SEARCH/REPLACE operations to this file are accurate.)`,
                           hidden: false,
                         },
+                        ...hookFeedback,
                       ],
                     }),
                   );
@@ -119,6 +156,7 @@ export const handleApplyStateUpdate = createAsyncThunk<
                           description: "",
                           hidden: true,
                         },
+                        ...hookFeedback,
                       ],
                     }),
                   );
@@ -134,6 +172,7 @@ export const handleApplyStateUpdate = createAsyncThunk<
                         description: "",
                         hidden: true,
                       },
+                      ...hookFeedback,
                     ],
                   }),
                 );

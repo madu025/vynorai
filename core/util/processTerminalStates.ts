@@ -1,4 +1,4 @@
-import { ChildProcess } from "child_process";
+import { ChildProcess, spawn } from "child_process";
 
 // Track which processes have been backgrounded
 const processTerminalBackgroundStates = new Map<string, boolean>();
@@ -67,17 +67,37 @@ export function removeRunningProcess(toolCallId: string): void {
   processTerminalForegroundStates.delete(toolCallId);
 }
 
+// On Windows, kill() ends only powershell.exe; children such as a node dev
+// server keep the output pipe open, so the command never finished.
+export function killProcessTree(
+  proc: ChildProcess,
+  signal: "SIGTERM" | "SIGKILL" = "SIGTERM",
+): void {
+  if (process.platform === "win32" && proc.pid) {
+    try {
+      spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      }).on("error", () => proc.kill(signal));
+      return;
+    } catch {
+      // Fall back to killing the shell alone.
+    }
+  }
+  proc.kill(signal);
+}
+
 export async function killTerminalProcess(toolCallId: string): Promise<void> {
   const processInfo = processTerminalForegroundStates.get(toolCallId);
   if (processInfo && !processInfo.process.killed) {
     const { process } = processInfo;
 
-    process.kill("SIGTERM");
+    killProcessTree(process, "SIGTERM");
 
     // Force kill after 5 seconds if still running
     setTimeout(() => {
-      if (!process.killed) {
-        process.kill("SIGKILL");
+      if (process.exitCode === null && process.signalCode === null) {
+        killProcessTree(process, "SIGKILL");
       }
     }, 5000);
 

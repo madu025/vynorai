@@ -91,6 +91,7 @@ export async function processDiff(
       numDiffs: 0,
       toolCallId,
       autoFormattingDiff, // Include autoformatting diff
+      rejected: action === "reject",
     });
   } else {
     // Save the file even if no streamId

@@ -9,7 +9,11 @@ const OVERLOADED_DELAY_MS = 2000;
 function isOverloadedErrorMessage(message?: string): boolean {
   if (!message) return false;
   const lower = message.toLowerCase();
-  return lower.includes("overloaded") || lower.includes("529");
+  // A bare "529" (a line number, a count) is not an overload status.
+  return (
+    lower.includes("overloaded") ||
+    /(?:^|\b(?:status|http|code|error)\D{0,3})529\b/.test(lower)
+  );
 }
 import { selectSelectedChatModel } from "../slices/configSlice";
 import { setDialogMessage, setShowDialog } from "../slices/uiSlice";
@@ -45,10 +49,12 @@ export const streamThunkWrapper = createAsyncThunk<
         isOverloadedErrorMessage(message) && attempt < OVERLOADED_RETRIES;
 
       if (shouldRetry) {
-        await dispatch(cancelStream());
+        // Retrying continues the same agent task; only the stream stops.
+        await dispatch(cancelStream({ cancelTask: false }));
         const delayMs = OVERLOADED_DELAY_MS * 2 ** attempt;
         await new Promise((resolve) => setTimeout(resolve, delayMs));
-        await dispatch(cancelStream());
+        // A new message was sent while waiting: don't stream over it.
+        if (getState().session.isStreaming) return;
       } else {
         await dispatch(cancelStream());
         dispatch(setDialogMessage(<StreamErrorDialog error={e} />));

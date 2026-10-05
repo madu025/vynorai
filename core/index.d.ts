@@ -1497,6 +1497,8 @@ export interface ApplyState {
   originalFileContent?: string;
   toolCallId?: string;
   autoFormattingDiff?: string;
+  /** The user rejected the diff in the editor. */
+  rejected?: boolean;
 }
 
 export type StreamDiffLinesType = "edit" | "apply";

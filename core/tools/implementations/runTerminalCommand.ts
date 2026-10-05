@@ -1,27 +1,26 @@
 import iconv from "iconv-lite";
 import childProcess from "node:child_process";
 import os from "node:os";
+import { StringDecoder } from "node:string_decoder";
 import { ContinueError, ContinueErrorReason } from "../../util/errors";
 import { buildSandboxedCommand } from "../../util/sandbox.js";
 
 // Default timeout for terminal commands (2 minutes)
 const DEFAULT_TOOL_TIMEOUT_MS = 120_000;
 
-// Automatically decode the buffer according to the platform to avoid garbled Chinese
-function getDecodedOutput(data: Buffer): string {
-  if (process.platform === "win32") {
-    try {
-      let out = iconv.decode(data, "utf-8");
-      if (/�/.test(out)) {
-        out = iconv.decode(data, "gbk");
-      }
-      return out;
-    } catch {
+// Decode a stream's chunks with one stateful decoder: a UTF-8 character split
+// across two chunks (e.g. "✔" in test output) decoded per chunk turned into
+// "�", and the whole chunk was then re-decoded as GBK. Windows still falls
+// back to GBK for output that is not UTF-8 at all.
+export function createOutputDecoder(): (data: Buffer) => string {
+  const utf8 = new StringDecoder("utf8");
+  return (data: Buffer) => {
+    const out = utf8.write(data);
+    if (process.platform === "win32" && out.includes("\uFFFD")) {
       return iconv.decode(data, "gbk");
     }
-  } else {
-    return data.toString();
-  }
+    return out;
+  };
 } // Simple helper function to use login shell on Unix/macOS and PowerShell on Windows
 function getShellCommand(command: string): { shell: string; args: string[] } {
   if (process.platform === "win32") {
@@ -41,6 +40,7 @@ import { fileURLToPath } from "node:url";
 import { ToolImpl } from ".";
 import {
   isProcessBackgrounded,
+  killProcessTree,
   markProcessAsRunning,
   removeBackgroundedProcess,
   removeRunningProcess,
@@ -59,7 +59,10 @@ function resolveWorkingDirectory(workspaceDirs: string[]): string {
   );
   if (fileWorkspaceDir) {
     try {
-      return fileURLToPath(fileWorkspaceDir);
+      // "d:\..." breaks case-sensitive tooling (tsc, jest, webpack).
+      return fileURLToPath(fileWorkspaceDir).replace(/^[a-z]:/, (d) =>
+        d.toUpperCase(),
+      );
     } catch {
       // fileURLToPath can fail on malformed URIs or in some remote environments
       // Fall through to default handling
@@ -213,23 +216,25 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
                 }
 
                 // Try graceful termination first
-                childProc.kill("SIGTERM");
+                killProcessTree(childProc, "SIGTERM");
 
                 // Force kill after 5 seconds if still running
                 sigkillTimeoutId = setTimeout(() => {
                   if (isRunning()) {
-                    childProc.kill("SIGKILL");
+                    killProcessTree(childProc, "SIGKILL");
                   }
                 }, 5_000);
               }
             }, DEFAULT_TOOL_TIMEOUT_MS);
           }
 
+          const decodeStdout = createOutputDecoder();
+          const decodeStderr = createOutputDecoder();
           childProc.stdout?.on("data", (data) => {
             // Skip if this process has been backgrounded
             if (isProcessBackgrounded(toolCallId)) return;
 
-            const newOutput = getDecodedOutput(data);
+            const newOutput = decodeStdout(data);
             terminalOutput += newOutput;
 
             // Update the tracked output for potential cancellation notifications
@@ -260,7 +265,7 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
             // Skip if this process has been backgrounded
             if (isProcessBackgrounded(toolCallId)) return;
 
-            const newOutput = getDecodedOutput(data);
+            const newOutput = decodeStderr(data);
             terminalOutput += newOutput;
 
             // Update the tracked output for potential cancellation notifications
@@ -441,23 +446,25 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
                   stderr += "\n[Timeout: process killed after 2 minutes]\n";
 
                   // Try graceful termination first
-                  childProc.kill("SIGTERM");
+                  killProcessTree(childProc, "SIGTERM");
 
                   // Force kill after 5 seconds if still running
                   sigkillTimeoutId = setTimeout(() => {
                     if (isRunning()) {
-                      childProc.kill("SIGKILL");
+                      killProcessTree(childProc, "SIGKILL");
                     }
                   }, 5_000);
                 }
               }, DEFAULT_TOOL_TIMEOUT_MS);
 
+              const decodeStdout = createOutputDecoder();
+              const decodeStderr = createOutputDecoder();
               childProc.stdout?.on("data", (data) => {
-                stdout += getDecodedOutput(data);
+                stdout += decodeStdout(data);
               });
 
               childProc.stderr?.on("data", (data) => {
-                stderr += getDecodedOutput(data);
+                stderr += decodeStderr(data);
               });
 
               childProc.on("close", (code) => {

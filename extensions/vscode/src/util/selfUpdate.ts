@@ -108,7 +108,15 @@ async function checkForUpdate(
 ): Promise<void> {
   const current = String(context.extension.packageJSON.version ?? "0.0.0");
   const latest = await fetchLatest();
-  if (!latest || !isNewer(latest.version, current)) {
+  if (!latest) {
+    // Unreachable server: don't claim the installed version is the latest.
+    if (manual)
+      void vscode.window.showWarningMessage(
+        "Couldn't reach vynor.lk to check for updates. Try again later.",
+      );
+    return;
+  }
+  if (!isNewer(latest.version, current)) {
     if (manual)
       void vscode.window.showInformationMessage(
         `VynorAI ${current} is the latest version.`,

@@ -27,11 +27,12 @@ export function getExtensionUri(): vscode.Uri {
     vscode.extensions.getExtension("Continue.continue") ||
     vscode.extensions.all.find(
       (e) =>
-        e.packageJSON?.name === "vynorai" ||
-        e.packageJSON?.name === "continue",
+        e.packageJSON?.name === "vynorai" || e.packageJSON?.name === "continue",
     );
   if (!ext) {
-    throw new Error("Could not find VynorAI extension in vscode.extensions registry");
+    throw new Error(
+      "Could not find VynorAI extension in vscode.extensions registry",
+    );
   }
   return ext.extensionUri;
 }
@@ -78,7 +79,10 @@ export function getRightViewColumn(): vscode.ViewColumn {
   return column;
 }
 
-let showTextDocumentInProcess = false;
+// Opening two documents at once throws inside VS Code, so opens are chained.
+// A failed open (binary or huge file) rejects and frees the chain; it used
+// to leave the promise pending and block every later open.
+let showTextDocumentChain: Promise<unknown> = Promise.resolve();
 
 export function openEditorAndRevealRange(
   uri: vscode.Uri,
@@ -86,35 +90,19 @@ export function openEditorAndRevealRange(
   viewColumn?: vscode.ViewColumn,
   preview?: boolean,
 ): Promise<vscode.TextEditor> {
-  return new Promise((resolve, _) => {
-    vscode.workspace.openTextDocument(uri).then(async (doc) => {
-      try {
-        // An error is thrown mysteriously if you open two documents in parallel, hence this
-        while (showTextDocumentInProcess) {
-          await new Promise((resolve) => {
-            setInterval(() => {
-              resolve(null);
-            }, 200);
-          });
-        }
-        showTextDocumentInProcess = true;
-        vscode.window
-          .showTextDocument(doc, {
-            viewColumn: getViewColumnOfFile(uri) || viewColumn,
-            preview,
-          })
-          .then((editor) => {
-            if (range) {
-              editor.revealRange(range);
-            }
-            resolve(editor);
-            showTextDocumentInProcess = false;
-          });
-      } catch (err) {
-        console.log(err);
-      }
+  const opened = showTextDocumentChain.then(async () => {
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(doc, {
+      viewColumn: getViewColumnOfFile(uri) || viewColumn,
+      preview,
     });
+    if (range) {
+      editor.revealRange(range);
+    }
+    return editor;
   });
+  showTextDocumentChain = opened.catch(() => undefined);
+  return opened;
 }
 
 export function getUniqueId() {

@@ -36,10 +36,18 @@ export class ApplyManager {
       await this.ensureFileOpen(filepath);
     }
 
+    // Every early exit throws: a silent return left the edit tool waiting
+    // forever for an apply state that never came.
     const { activeTextEditor } = vscode.window;
     if (!activeTextEditor) {
-      void vscode.window.showErrorMessage("No active editor to apply edits to");
-      return;
+      throw new Error("No active editor to apply edits to");
+    }
+    if (
+      filepath &&
+      activeTextEditor.document.uri.toString() !==
+        vscode.Uri.parse(filepath).toString()
+    ) {
+      throw new Error(`Could not open ${filepath} to apply edits`);
     }
 
     // Capture the original file content before applying changes
@@ -122,17 +130,13 @@ export class ApplyManager {
   ) {
     const { config } = await this.configHandler.loadConfig();
     if (!config) {
-      void vscode.window.showErrorMessage("Config not loaded");
-      return;
+      throw new Error("Config not loaded");
     }
 
     const llm =
       config.selectedModelByRole.apply ?? config.selectedModelByRole.chat;
     if (!llm) {
-      void vscode.window.showErrorMessage(
-        `No model with roles "apply" or "chat" found in config.`,
-      );
-      return;
+      throw new Error(`No model with roles "apply" or "chat" found in config.`);
     }
 
     const fileUri = editor.document.uri.toString();
@@ -216,8 +220,7 @@ export class ApplyManager {
   ) {
     const { config } = await this.configHandler.loadConfig();
     if (!config) {
-      void vscode.window.showErrorMessage("Config not loaded");
-      return;
+      throw new Error("Config not loaded");
     }
 
     const prompt = this.getApplyPrompt(text);
@@ -252,18 +255,19 @@ export class ApplyManager {
         text,
       );
 
-      if (finalContent) {
-        const diffLinesGenerator = generateLines(
-          myersDiff(editor.document.getText(), finalContent),
-        );
-
-        await verticalDiffManager.streamDiffLines(
-          diffLinesGenerator,
-          true, // Apply instantly since we accumulated all content
-          streamId,
-          toolCallId,
-        );
+      if (finalContent === undefined) {
+        throw new Error("Applying the edit was canceled or failed");
       }
+      const diffLinesGenerator = generateLines(
+        myersDiff(editor.document.getText(), finalContent),
+      );
+
+      await verticalDiffManager.streamDiffLines(
+        diffLinesGenerator,
+        true, // Apply instantly since we accumulated all content
+        streamId,
+        toolCallId,
+      );
     }
   }
 

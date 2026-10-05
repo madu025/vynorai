@@ -334,6 +334,17 @@ export async function fetchVynorQuota(
 }
 
 let loopbackServer: http.Server | null = null;
+// One expiry for the latest login attempt: a retry reuses the server, and the
+// first attempt's timer used to close it and clear the retry's state early.
+let loopbackExpiryTimer: ReturnType<typeof setTimeout> | undefined;
+
+function restartLoopbackExpiry() {
+  clearTimeout(loopbackExpiryTimer);
+  loopbackExpiryTimer = setTimeout(() => {
+    pendingAuthState = null;
+    closeLoopbackServer();
+  }, AUTH_STATE_TTL_MS);
+}
 const LOOPBACK_PORT = 41403;
 const AUTH_STATE_TTL_MS = 5 * 60_000;
 const LEGACY_API_KEY_SECRET = "vynorai_api_key";
@@ -385,7 +396,10 @@ function startLoopbackServer(
     token?: string,
   ) => Promise<void>,
 ) {
-  if (loopbackServer) return;
+  if (loopbackServer) {
+    restartLoopbackExpiry();
+    return;
+  }
 
   try {
     loopbackServer = http.createServer(async (req, res) => {
@@ -484,10 +498,7 @@ function startLoopbackServer(
       );
     });
 
-    const expiryTimer = setTimeout(() => {
-      pendingAuthState = null;
-      closeLoopbackServer();
-    }, AUTH_STATE_TTL_MS);
+    restartLoopbackExpiry();
 
     loopbackServer.on("error", (err: any) => {
       console.warn(
@@ -500,7 +511,7 @@ function startLoopbackServer(
     context.subscriptions.push({
       dispose: () => {
         try {
-          clearTimeout(expiryTimer);
+          clearTimeout(loopbackExpiryTimer);
           closeLoopbackServer();
         } catch (_) {}
       },

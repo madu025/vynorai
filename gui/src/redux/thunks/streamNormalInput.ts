@@ -134,6 +134,9 @@ export const streamNormalInput = createAsyncThunk<
     { dispatch, extra, getState },
   ) => {
     const state = getState();
+    // Stop aborts (and replaces) the store's aborter; holding this turn's
+    // copy lets the pre-stream steps notice a Stop pressed before streaming.
+    const turnAborter = state.session.streamAborter;
     // Rounds of this prompt so far, however the turn was continued.
     const depth = Math.max(
       passedDepth,
@@ -393,7 +396,8 @@ export const streamNormalInput = createAsyncThunk<
       state.session.expertCouncilDepth !== "off" &&
       depth === 0 &&
       latestUserRequest &&
-      subagentModel
+      subagentModel &&
+      !turnAborter.signal.aborted
     ) {
       dispatch(setActive());
       const council = await runExpertCouncil({
@@ -474,6 +478,9 @@ export const streamNormalInput = createAsyncThunk<
       }),
     );
 
+    // Stopped during setup: cancelStream already went idle, and a new
+    // prompt may own the panel now, so just leave.
+    if (turnAborter.signal.aborted) return;
     dispatch(setActive());
     dispatch(setInlineErrorMessage(undefined));
 
@@ -497,9 +504,10 @@ export const streamNormalInput = createAsyncThunk<
 
     dispatch(setIsPruned(didPrune));
     dispatch(setContextPercentage(contextPercentage));
+    if (turnAborter.signal.aborted) return;
 
     const start = Date.now();
-    const streamAborter = state.session.streamAborter;
+    const streamAborter = turnAborter;
     try {
       let gen = extra.ideMessenger.llmStreamChat(
         {

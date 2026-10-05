@@ -19,6 +19,7 @@ import * as vscode from "vscode";
 
 import { ApplyManager } from "../apply";
 import { AgentCheckpointManager } from "../checkpoints/AgentCheckpointManager";
+import { BackgroundAgentManager } from "../background/BackgroundAgentManager";
 import { VerticalDiffManager } from "../diff/vertical/manager";
 import { addCurrentSelectionToEdit } from "../quickEdit/AddCurrentSelection";
 import EditDecorationManager from "../quickEdit/EditDecorationManager";
@@ -84,6 +85,45 @@ export class VsCodeMessenger {
     private readonly vsCodeExtension: VsCodeExtension,
   ) {
     const checkpointManager = new AgentCheckpointManager(context);
+    const backgroundAgentManager = new BackgroundAgentManager(context);
+    const openBackgroundReview = async (taskId: string) => {
+      const bundle =
+        await backgroundAgentManager.downloadValidatedPatch(taskId);
+      const [verticalDiffManager, configHandler] = await Promise.all([
+        verticalDiffManagerPromise,
+        configHandlerPromise,
+      ]);
+      const applyManager = new ApplyManager(
+        this.ide,
+        webviewProtocol,
+        verticalDiffManager,
+        configHandler,
+      );
+      const conflicts: string[] = [];
+      let opened = 0;
+      for (const file of bundle.files as Array<any>) {
+        if (file.conflicted) {
+          conflicts.push(file.path);
+          continue;
+        }
+        const root = vscode.workspace.workspaceFolders?.[0];
+        if (!root) break;
+        const uri = vscode.Uri.joinPath(root.uri, ...file.path.split("/"));
+        await applyManager.applyToFile({
+          streamId: `background:${taskId}:${opened}`,
+          filepath: uri.toString(),
+          text: file.operation === "delete" ? "" : String(file.content),
+          toolCallId: `background:${taskId}`,
+          isSearchAndReplace: true,
+        });
+        opened += 1;
+      }
+      if (conflicts.length)
+        void vscode.window.showWarningMessage(
+          `${conflicts.length} background change(s) conflict with local edits and were not opened.`,
+        );
+      return { opened, conflicts };
+    };
     /** WEBVIEW ONLY LISTENERS **/
     this.onWebview("showFile", (msg) => {
       this.ide.openFile(msg.data.filepath);
@@ -171,6 +211,23 @@ export class VsCodeMessenger {
     );
     this.onWebview("vynorai/login", async () => {
       await vscode.commands.executeCommand("vynorai.login");
+    });
+    this.onWebview("background/create", async ({ data }) => {
+      const created = await backgroundAgentManager.create(data.prompt);
+      backgroundAgentManager.watch(created.task.id, () =>
+        openBackgroundReview(created.task.id),
+      );
+      return created;
+    });
+    this.onWebview("background/list", () => backgroundAgentManager.list());
+    this.onWebview("background/detail", ({ data }) =>
+      backgroundAgentManager.detail(data.taskId),
+    );
+    this.onWebview("background/cancel", ({ data }) =>
+      backgroundAgentManager.cancel(data.taskId),
+    );
+    this.onWebview("background/review", async ({ data }) => {
+      return openBackgroundReview(data.taskId);
     });
 
     this.onWebview("showTutorial", async (msg) => {

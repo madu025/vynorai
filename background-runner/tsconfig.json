@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "../core/agent/AgentOrchestrator.ts",
+    "../core/agent/HeadlessAgentRunner.ts",
+    "../core/agent/TaskJournal.ts",
+    "../core/agent/TaskRuntime.ts",
+    "../core/agent/SubagentToolPolicy.ts",
+    "../core/agent/redactSecrets.ts",
+    "../core/agent/toolRisk.ts",
+    "../core/agent/types.ts",
+    "../core/llm/vynorai-system-prompt.ts"
+  ]
+}

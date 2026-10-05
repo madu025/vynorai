@@ -70,6 +70,7 @@ import { VynorQuotaBar } from "../../components/VynorQuotaBar";
 import { ExpertTeamPanel } from "../../components/AgentWorkspace/ExpertTeamPanel";
 import { WorkspaceStatus } from "../../components/WorkspaceStatus/WorkspaceStatus";
 import { AgentControlCenter } from "../../components/AgentWorkspace/AgentControlCenter";
+import { BackgroundModeView } from "../../components/BackgroundMode/BackgroundModeView";
 
 // Helper function to find the index of the latest conversation summary
 function findLatestSummaryIndex(history: ChatHistoryItem[]): number {
@@ -136,6 +137,8 @@ export function Chat() {
     (store) => store.config.config.ui?.showSessionTabs,
   );
   const isStreaming = useAppSelector((state) => state.session.isStreaming);
+  const mode = useAppSelector((state) => state.session.mode);
+  const [isCreatingBackground, setIsCreatingBackground] = useState(false);
   const [stepsOpen] = useState<(boolean | undefined)[]>([]);
   const mainTextInputRef = useRef<HTMLInputElement>(null);
   const stepsDivRef = useRef<HTMLDivElement>(null);
@@ -201,6 +204,26 @@ export function Chat() {
         stateSnapshot.config.config.selectedModelByRole;
       const currentMode = stateSnapshot.session.mode;
 
+      if (currentMode === "background") {
+        const prompt = editorText(editorState);
+        if (!prompt || isCreatingBackground) return;
+        setIsCreatingBackground(true);
+        void ideMessenger
+          .request("background/create", { prompt }, 180_000)
+          .then((response) => {
+            if (response.status === "error") throw new Error(response.error);
+            editorToClearOnSend?.commands.clearContent();
+          })
+          .catch((error) => {
+            dispatch(
+              setDialogMessage(<div>{String(error.message || error)}</div>),
+            );
+            dispatch(setShowDialog(true));
+          })
+          .finally(() => setIsCreatingBackground(false));
+        return;
+      }
+
       // Cancel all pending tool calls
       latestPendingToolCalls.forEach((toolCallState) => {
         dispatch(
@@ -255,7 +278,7 @@ export function Chat() {
         setLocalStorage("mainTextEntryCounter", 1);
       }
     },
-    [dispatch, ideMessenger, reduxStore],
+    [dispatch, ideMessenger, isCreatingBackground, reduxStore],
   );
 
   const submitOrQueue = useCallback(
@@ -495,38 +518,42 @@ export function Chat() {
         className={`pt-[8px] ${showScrollbar ? "thin-scrollbar" : "no-scrollbar"} ${history.length > 0 ? "min-h-0 flex-1 overflow-y-scroll" : "shrink-0"}`}
       >
         {highlights}
-        {history
-          .filter((item) => item.message.role !== "system")
-          .map((item, index: number) => (
-            <div
-              key={item.message.id}
-              style={{
-                minHeight: index === history.length - 1 ? "200px" : 0,
-              }}
-            >
-              <ErrorBoundary
-                FallbackComponent={fallbackRender}
-                onError={(error, info) => {
-                  if (!errorReportsEnabled) return;
-                  ideMessenger.post("vynor/errorReport", {
-                    source: "gui",
-                    message: String(error?.message ?? error).slice(0, 2000),
-                    stack:
-                      `${error?.stack ?? ""}\n${info?.componentStack ?? ""}`.slice(
-                        0,
-                        8000,
-                      ),
-                  });
-                }}
-                onReset={() => {
-                  dispatch(newSession());
+        {mode === "background" ? (
+          <BackgroundModeView isCreatingAgent={isCreatingBackground} />
+        ) : (
+          history
+            .filter((item) => item.message.role !== "system")
+            .map((item, index: number) => (
+              <div
+                key={item.message.id}
+                style={{
+                  minHeight: index === history.length - 1 ? "200px" : 0,
                 }}
               >
-                {renderChatHistoryItem(item, index)}
-              </ErrorBoundary>
-              {index === history.length - 1 && <InlineErrorMessage />}
-            </div>
-          ))}
+                <ErrorBoundary
+                  FallbackComponent={fallbackRender}
+                  onError={(error, info) => {
+                    if (!errorReportsEnabled) return;
+                    ideMessenger.post("vynor/errorReport", {
+                      source: "gui",
+                      message: String(error?.message ?? error).slice(0, 2000),
+                      stack:
+                        `${error?.stack ?? ""}\n${info?.componentStack ?? ""}`.slice(
+                          0,
+                          8000,
+                        ),
+                    });
+                  }}
+                  onReset={() => {
+                    dispatch(newSession());
+                  }}
+                >
+                  {renderChatHistoryItem(item, index)}
+                </ErrorBoundary>
+                {index === history.length - 1 && <InlineErrorMessage />}
+              </div>
+            ))
+        )}
       </StepsDiv>
       <div className={"relative shrink-0"}>
         <TurnStatusLine />

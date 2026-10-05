@@ -12,8 +12,9 @@ export function BackgroundModeView({
     <div className="flex flex-col gap-4 py-4">
       <div className="px-2">
         <div className="text-description text-sm">
-          Submit a task above to run a background agent. Your task will appear
-          below in ~30 seconds once the container starts.
+          Send the prompt below to upload a filtered, encrypted project copy.
+          Work runs in an isolated cloud sandbox and returns reviewable changes
+          with a Proof Pack.
         </div>
         {isCreatingAgent && (
           <div className="text-description-muted mt-2 flex items-center gap-2 text-xs">

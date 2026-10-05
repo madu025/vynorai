@@ -810,6 +810,20 @@
           </div>
         </div>
 
+        <!-- Background Agents: mobile-friendly task status and Proof Pack summaries -->
+        <div class="glass-card" style="grid-column:1 / -1; margin-top:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div>
+              <h3 style="margin:0;">Background Agents</h3>
+              <p style="color:var(--text-muted);font-size:12px;margin-top:4px;">Encrypted cloud tasks, verification evidence and reviewable patches.</p>
+            </div>
+            <button class="btn btn-secondary" onclick="enableBackgroundPush()" style="font-size:12px;padding:7px 12px;width:auto;">Enable notifications</button>
+          </div>
+          <div id="background-task-list" style="display:grid;gap:10px;margin-top:14px;">
+            <div style="color:var(--text-muted);font-size:13px;">Loading background tasksâ€¦</div>
+          </div>
+        </div>
+
         <!-- SLM & Semantic Cache Efficiency Shield (0-Token Savings) -->
         <div class="glass-card" style="grid-column: 1 / -1; margin-top: 6px; background: linear-gradient(135deg, rgba(0,230,118,0.08) 0%, rgba(0,229,255,0.06) 100%); border: 1px solid rgba(0,230,118,0.3);">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
@@ -1052,13 +1066,13 @@
           <div class="glass-card pricing-card featured">
             <h3>Pro</h3>
             <div class="price">රු. 3,850 <span>/ month</span></div>
-            <ul class="feature-list"><li>25 million credits/month</li><li>7,500 requests/month</li><li>Auto uses DeepSeek V4 Pro for deep reasoning</li></ul>
+            <ul class="feature-list"><li>25 million credits/month</li><li>7,500 requests/month</li><li>20 Background Agent tasks/month</li><li>Auto uses DeepSeek V4 Pro for deep reasoning</li></ul>
             <button class="btn btn-primary" onclick="initiatePayhere('pro')">Get Pro</button>
           </div>
           <div class="glass-card pricing-card">
             <h3>Ultra</h3>
             <div class="price">රු. 7,900 <span>/ month</span></div>
-            <ul class="feature-list"><li>55 million credits/month</li><li>20,000 requests/month</li><li>Every model in the VynorAI catalog</li></ul>
+            <ul class="feature-list"><li>55 million credits/month</li><li>20,000 requests/month</li><li>60 Background Agent tasks/month</li><li>2 concurrent background tasks</li><li>Every model in the VynorAI catalog</li></ul>
             <button class="btn btn-secondary" onclick="initiatePayhere('ultra')">Get Ultra</button>
           </div>
         </div>
@@ -1300,6 +1314,7 @@
         renderModelUsage(data.modelUsage || []);
         renderDailyUsage(data.dailyUsage || []);
         renderRecentActivity(data.recentActivity || []);
+        loadBackgroundTasks();
 
         // Render SLM Savings Metrics
         if (data.slmSavings) {
@@ -1320,6 +1335,61 @@
 
     // Text from the server (model ids, log details, IPs) is escaped before innerHTML.
     function escTxt(s) { return String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+
+    async function loadBackgroundTasks() {
+      const container = document.getElementById('background-task-list');
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      if (!container || !token) return;
+      try {
+        const response = await fetch('/v1/background/tasks?limit=20', { headers: { Authorization: `Bearer ${token}` } });
+        const payload = await response.json();
+        if (!response.ok) {
+          container.innerHTML = `<div style="color:var(--text-muted);font-size:13px;">${escTxt(payload?.error?.message || 'Background Agents are not enabled for this account yet.')}</div>`;
+          return;
+        }
+        if (!payload.tasks?.length) {
+          container.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No background tasks yet. Create one from the VynorAI IDE extension.</div>';
+          return;
+        }
+        container.innerHTML = payload.tasks.map(task => {
+          const proof = task.proof || {};
+          const checks = proof.verification || [];
+          const passed = checks.filter(item => item.classification === 'passed').length;
+          const risk = (proof.risks || []).find(item => item.severity === 'high');
+          return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:rgba(0,0,0,.2);">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+              <div><strong style="font-size:13px;">${escTxt(proof.summary || `Task ${task.id.slice(0,8)}`)}</strong>
+                <div style="color:var(--text-muted);font-size:11px;margin-top:4px;">${escTxt(task.status)}${checks.length ? ` Â· ${passed}/${checks.length} checks passed` : ''}${risk ? ` Â· High risk: ${escTxt(risk.summary)}` : ''}</div>
+              </div>
+              <span class="status-pill ${task.status === 'completed' ? 'status-active' : 'status-inactive'}" style="font-size:10px;">${escTxt(task.status)}</span>
+            </div>
+          </div>`;
+        }).join('');
+      } catch (_) {
+        container.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Could not load background tasks.</div>';
+      }
+    }
+
+    function base64UrlBytes(value) {
+      const padding = '='.repeat((4 - value.length % 4) % 4);
+      const raw = atob((value + padding).replace(/-/g, '+').replace(/_/g, '/'));
+      return Uint8Array.from([...raw].map(ch => ch.charCodeAt(0)));
+    }
+
+    async function enableBackgroundPush() {
+      const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
+      if (!token || !('serviceWorker' in navigator) || !('PushManager' in window)) return alert('Push notifications are not supported in this browser.');
+      try {
+        const keyResponse = await fetch('/v1/background/push/public-key', { headers: { Authorization: `Bearer ${token}` } });
+        const keyPayload = await keyResponse.json();
+        if (!keyResponse.ok) throw new Error(keyPayload?.error?.message || 'Push is not configured.');
+        const registration = await navigator.serviceWorker.register('/background-sw.js');
+        const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlBytes(keyPayload.publicKey) });
+        const response = await fetch('/v1/background/push/subscriptions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(subscription) });
+        if (!response.ok) throw new Error('Could not save push subscription.');
+        alert('Background task notifications enabled.');
+      } catch (error) { alert(error.message || 'Could not enable notifications.'); }
+    }
 
     function renderModelUsage(models) {
       const container = document.getElementById('model-usage-container');

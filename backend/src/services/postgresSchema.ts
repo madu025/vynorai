@@ -314,6 +314,120 @@ CREATE TABLE IF NOT EXISTS quota_reservations (
 CREATE INDEX IF NOT EXISTS idx_quota_reservations_created ON quota_reservations (created_at);
 `,
   },
+  {
+    version: "pg_008_background_agents",
+    sql: `
+ALTER TABLE plan_overrides ADD COLUMN IF NOT EXISTS background_enabled SMALLINT;
+ALTER TABLE plan_overrides ADD COLUMN IF NOT EXISTS background_tasks_per_month INTEGER;
+ALTER TABLE plan_overrides ADD COLUMN IF NOT EXISTS background_max_concurrency INTEGER;
+ALTER TABLE plan_overrides ADD COLUMN IF NOT EXISTS background_priority VARCHAR(16);
+ALTER TABLE quota_reservations ADD COLUMN IF NOT EXISTS owner_type VARCHAR(32);
+ALTER TABLE quota_reservations ADD COLUMN IF NOT EXISTS owner_id TEXT;
+
+CREATE TABLE IF NOT EXISTS background_tasks (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status VARCHAR(32) NOT NULL CHECK (status IN ('awaiting_upload','queued','running','cancel_requested','completed','failed','canceled','purged')),
+  prompt TEXT,
+  language VARCHAR(16) NOT NULL DEFAULT 'en',
+  project_fingerprint VARCHAR(64) NOT NULL,
+  manifest_digest VARCHAR(64) NOT NULL,
+  estimate_credits BIGINT NOT NULL,
+  cap_credits BIGINT NOT NULL,
+  used_credits BIGINT NOT NULL DEFAULT 0,
+  model_credits BIGINT NOT NULL DEFAULT 0,
+  compute_credits BIGINT NOT NULL DEFAULT 0,
+  refund_credits BIGINT NOT NULL DEFAULT 0,
+  quota_reservation_id TEXT,
+  quote_id TEXT NOT NULL,
+  idempotency_key VARCHAR(128) NOT NULL,
+  priority SMALLINT NOT NULL DEFAULT 0,
+  worker_id TEXT,
+  lease_id TEXT,
+  heartbeat_at TEXT,
+  queued_at TEXT,
+  started_at TEXT,
+  ended_at TEXT,
+  failure_reason VARCHAR(128),
+  proof TEXT,
+  upload_artifact_id TEXT,
+  patch_artifact_id TEXT,
+  proof_artifact_id TEXT,
+  workspace_deleted_at TEXT,
+  deleted_at TEXT,
+  purge_after TEXT,
+  purged_at TEXT,
+  created_at TEXT NOT NULL DEFAULT ${NOW},
+  updated_at TEXT NOT NULL DEFAULT ${NOW},
+  UNIQUE(user_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_background_tasks_user_created ON background_tasks(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_background_tasks_dispatch ON background_tasks(status, priority DESC, queued_at);
+CREATE INDEX IF NOT EXISTS idx_background_tasks_heartbeat ON background_tasks(heartbeat_at);
+CREATE INDEX IF NOT EXISTS idx_background_tasks_purge ON background_tasks(purge_after);
+
+CREATE TABLE IF NOT EXISTS background_task_events (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES background_tasks(id) ON DELETE CASCADE,
+  sequence BIGINT NOT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  message TEXT NOT NULL,
+  data TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT ${NOW},
+  UNIQUE(task_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_background_events_task_sequence ON background_task_events(task_id, sequence);
+
+CREATE TABLE IF NOT EXISTS background_artifacts (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES background_tasks(id) ON DELETE CASCADE,
+  artifact_type VARCHAR(32) NOT NULL,
+  storage_path TEXT NOT NULL,
+  sha256 VARCHAR(64) NOT NULL,
+  bytes BIGINT NOT NULL,
+  key_version VARCHAR(32) NOT NULL,
+  expires_at TEXT NOT NULL,
+  deleted_at TEXT,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_background_artifacts_expiry ON background_artifacts(expires_at, deleted_at);
+
+CREATE TABLE IF NOT EXISTS background_billing_ledger (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  event_type VARCHAR(32) NOT NULL,
+  credits BIGINT NOT NULL,
+  idempotency_key VARCHAR(160) NOT NULL UNIQUE,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_background_ledger_task ON background_billing_ledger(task_id, created_at);
+
+CREATE TABLE IF NOT EXISTS background_consent (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  policy_version VARCHAR(32) NOT NULL,
+  client VARCHAR(64) NOT NULL,
+  ip_digest VARCHAR(64) NOT NULL,
+  accepted_at TEXT NOT NULL DEFAULT ${NOW},
+  PRIMARY KEY(user_id, policy_version)
+);
+
+CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint_digest VARCHAR(64) NOT NULL,
+  endpoint_ciphertext TEXT NOT NULL,
+  p256dh_ciphertext TEXT NOT NULL,
+  auth_ciphertext TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT ${NOW},
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_web_push_user ON web_push_subscriptions(user_id, revoked_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_push_endpoint ON web_push_subscriptions(user_id, endpoint_digest);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

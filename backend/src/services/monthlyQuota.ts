@@ -44,6 +44,8 @@ export interface QuotaReservation {
   reservedTokens: number;
   reservedRequests: number;
   settled: boolean;
+  ownerType?: "request" | "background_task";
+  ownerId?: string;
 }
 
 // ─── Durable holds ─────────────────────────────────────────────────────────
@@ -59,13 +61,15 @@ async function persistReservation(r: QuotaReservation): Promise<void> {
   r.id = uuidv4();
   try {
     await dbRun(
-      "INSERT INTO quota_reservations (id, user_id, tokens, requests, created_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO quota_reservations (id, user_id, tokens, requests, created_at, owner_type, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         r.id,
         r.userId,
         r.reservedTokens,
         r.reservedRequests,
         new Date().toISOString(),
+        r.ownerType || "request",
+        r.ownerId || null,
       ],
     );
   } catch (err) {
@@ -104,7 +108,7 @@ export async function reconcileStaleReservations(
     tokens: number;
     requests: number;
   }>(
-    "SELECT id, user_id, tokens, requests FROM quota_reservations WHERE created_at < ?",
+    "SELECT id, user_id, tokens, requests FROM quota_reservations WHERE created_at < ? AND COALESCE(owner_type, 'request') != 'background_task'",
     [cutoff],
   );
   let released = 0;
@@ -415,6 +419,7 @@ export async function reserveQuotaAtomic(
   userId: string,
   planName: string,
   tokensToReserve: number,
+  owner?: { type: "request" | "background_task"; id: string },
 ): Promise<QuotaReservation | null> {
   const reservedTokens = Math.max(1, Math.floor(tokensToReserve));
   const consumed = await tryConsumeQuotaAtomic(
@@ -429,6 +434,8 @@ export async function reserveQuotaAtomic(
       reservedTokens,
       reservedRequests: 1,
       settled: false,
+      ownerType: owner?.type,
+      ownerId: owner?.id,
     };
     await persistReservation(reservation);
     return reservation;
@@ -449,6 +456,8 @@ export async function reserveQuotaAtomic(
     reservedTokens: hold,
     reservedRequests: 1,
     settled: false,
+    ownerType: owner?.type,
+    ownerId: owner?.id,
   };
   await persistReservation(reservation);
   return reservation;
@@ -584,6 +593,8 @@ export interface QuotaContext {
   /** Allowance used up: serve only zero-cost answers, refuse upstream calls. */
   exhausted?: boolean;
   creditError?: unknown;
+  /** Internal metering hook used by scoped background-task model relays. */
+  onUsage?: (credits: number) => Promise<void> | void;
 }
 
 function upgradeOffer(planId: string) {

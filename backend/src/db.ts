@@ -718,6 +718,100 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "021_background_agents",
+    description:
+      "Background agent tasks, events, artifacts, billing, and consent",
+    up: async () => {
+      for (const column of [
+        "background_enabled INTEGER",
+        "background_tasks_per_month INTEGER",
+        "background_max_concurrency INTEGER",
+        "background_priority VARCHAR(16)",
+      ])
+        await addColumnIfNotExists("plan_overrides", column);
+      await addColumnIfNotExists(
+        "quota_reservations",
+        "owner_type VARCHAR(32)",
+      );
+      await addColumnIfNotExists("quota_reservations", "owner_id TEXT");
+
+      await execSchema(`CREATE TABLE IF NOT EXISTS background_tasks (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(32) NOT NULL CHECK (status IN ('awaiting_upload','queued','running','cancel_requested','completed','failed','canceled','purged')),
+        prompt TEXT, language VARCHAR(16) NOT NULL DEFAULT 'en',
+        project_fingerprint VARCHAR(64) NOT NULL, manifest_digest VARCHAR(64) NOT NULL,
+        estimate_credits INTEGER NOT NULL, cap_credits INTEGER NOT NULL,
+        used_credits INTEGER NOT NULL DEFAULT 0, model_credits INTEGER NOT NULL DEFAULT 0,
+        compute_credits INTEGER NOT NULL DEFAULT 0, refund_credits INTEGER NOT NULL DEFAULT 0,
+        quota_reservation_id TEXT, quote_id TEXT NOT NULL, idempotency_key VARCHAR(128) NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 0, worker_id TEXT, lease_id TEXT, heartbeat_at DATETIME,
+        queued_at DATETIME, started_at DATETIME, ended_at DATETIME, failure_reason VARCHAR(128),
+        proof TEXT, upload_artifact_id TEXT, patch_artifact_id TEXT, proof_artifact_id TEXT,
+        workspace_deleted_at DATETIME, deleted_at DATETIME, purge_after DATETIME, purged_at DATETIME,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, idempotency_key)
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_background_tasks_user_created ON background_tasks(user_id, created_at DESC)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_background_tasks_dispatch ON background_tasks(status, priority, queued_at)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_background_tasks_heartbeat ON background_tasks(heartbeat_at)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_background_tasks_purge ON background_tasks(purge_after)",
+      );
+      await execSchema(`CREATE TABLE IF NOT EXISTS background_task_events (
+        id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES background_tasks(id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL, event_type VARCHAR(64) NOT NULL, message TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(task_id, sequence)
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_background_events_task_sequence ON background_task_events(task_id, sequence)",
+      );
+      await execSchema(`CREATE TABLE IF NOT EXISTS background_artifacts (
+        id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES background_tasks(id) ON DELETE CASCADE,
+        artifact_type VARCHAR(32) NOT NULL, storage_path TEXT NOT NULL, sha256 VARCHAR(64) NOT NULL,
+        bytes INTEGER NOT NULL, key_version VARCHAR(32) NOT NULL, expires_at DATETIME NOT NULL,
+        deleted_at DATETIME, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_background_artifacts_expiry ON background_artifacts(expires_at, deleted_at)",
+      );
+      await execSchema(`CREATE TABLE IF NOT EXISTS background_billing_ledger (
+        id TEXT PRIMARY KEY, task_id TEXT NOT NULL, user_id TEXT NOT NULL,
+        event_type VARCHAR(32) NOT NULL, credits INTEGER NOT NULL,
+        idempotency_key VARCHAR(160) NOT NULL UNIQUE, metadata TEXT NOT NULL DEFAULT '{}',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_background_ledger_task ON background_billing_ledger(task_id, created_at)",
+      );
+      await execSchema(`CREATE TABLE IF NOT EXISTS background_consent (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        policy_version VARCHAR(32) NOT NULL, client VARCHAR(64) NOT NULL, ip_digest VARCHAR(64) NOT NULL,
+        accepted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, policy_version)
+      )`);
+      await execSchema(`CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint_digest VARCHAR(64) NOT NULL,
+        endpoint_ciphertext TEXT NOT NULL, p256dh_ciphertext TEXT NOT NULL, auth_ciphertext TEXT NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_used_at DATETIME, revoked_at DATETIME
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_web_push_user ON web_push_subscriptions(user_id, revoked_at)",
+      );
+      await execSchema(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_web_push_endpoint ON web_push_subscriptions(user_id, endpoint_digest)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

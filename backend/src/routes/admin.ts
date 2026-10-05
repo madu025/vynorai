@@ -662,6 +662,10 @@ adminRouter.get(
         "features",
         "payhere_item_id",
         "upgrade_url",
+        "background_enabled",
+        "background_tasks_per_month",
+        "background_max_concurrency",
+        "background_priority",
       ],
       note: "Changes take effect in <30s with no server restart",
     });
@@ -699,6 +703,10 @@ adminRouter.patch(
       "features",
       "payhere_item_id",
       "upgrade_url",
+      "background_enabled",
+      "background_tasks_per_month",
+      "background_max_concurrency",
+      "background_priority",
       "is_active",
     ];
 
@@ -711,6 +719,26 @@ adminRouter.patch(
       return res
         .status(400)
         .json({ error: "No valid fields provided", allowed });
+    }
+
+    if (
+      (fields.background_enabled != null &&
+        ![0, 1].includes(Number(fields.background_enabled))) ||
+      (fields.background_tasks_per_month != null &&
+        (!Number.isInteger(Number(fields.background_tasks_per_month)) ||
+          Number(fields.background_tasks_per_month) < 0 ||
+          Number(fields.background_tasks_per_month) > 60)) ||
+      (fields.background_max_concurrency != null &&
+        (!Number.isInteger(Number(fields.background_max_concurrency)) ||
+          Number(fields.background_max_concurrency) < 0 ||
+          Number(fields.background_max_concurrency) > 2)) ||
+      (fields.background_priority != null &&
+        !["normal", "high"].includes(String(fields.background_priority)))
+    ) {
+      return res.status(400).json({
+        error:
+          "Invalid background entitlement. Host maxima are 60 tasks/month and concurrency 2.",
+      });
     }
 
     await updatePlanField(planId, fields);

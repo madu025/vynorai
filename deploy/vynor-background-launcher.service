@@ -1,0 +1,23 @@
+[Unit]
+Description=VynorAI root-owned gVisor background sandbox launcher
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/vynor
+Environment=NODE_ENV=production
+Environment=BG_RUNNER_IMAGE=vynor-background-runner:local
+ExecStart=/usr/bin/node /opt/vynor/deploy/background-launcher.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/vynor-bg /var/lib/vynor-background
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

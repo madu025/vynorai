@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "crypto";
+import * as os from "os";
 import * as path from "path";
 
 import { Mutex } from "async-mutex";
 
-import { getContinueGlobalPath } from "../util/paths";
 import { TaskJournal } from "./TaskJournal";
 import { classifyDelegatedToolCall } from "./SubagentToolPolicy";
 import type {
@@ -99,7 +99,12 @@ export class TaskRuntime {
   private readonly tasks = new Map<string, AgentTask>();
   private sequence: number;
 
-  constructor(directory = path.join(getContinueGlobalPath(), "agent-tasks")) {
+  constructor(
+    directory = path.join(
+      process.env.VYNORAI_GLOBAL_DIR || path.join(os.homedir(), ".vynorai"),
+      "agent-tasks",
+    ),
+  ) {
     this.journal = new TaskJournal(directory);
     this.sequence = this.journal.maxEventSequence();
   }

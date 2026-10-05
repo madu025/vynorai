@@ -14,6 +14,25 @@ import {
 } from "../";
 
 export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
+  "background/create": [
+    { prompt: string },
+    {
+      task: Record<string, unknown>;
+      uploadUrl: string;
+      uploadExpiresAt: string;
+      reused: boolean;
+    },
+  ];
+  "background/list": [
+    undefined,
+    { tasks: Array<Record<string, unknown>>; nextCursor?: string | null },
+  ];
+  "background/detail": [{ taskId: string }, Record<string, unknown>];
+  "background/cancel": [{ taskId: string }, Record<string, unknown>];
+  "background/review": [
+    { taskId: string },
+    { opened: number; conflicts: string[] },
+  ];
   "vynorai/login": [undefined, void];
   "checkpoints/list": [
     undefined,

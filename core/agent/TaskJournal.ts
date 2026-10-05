@@ -1,11 +1,19 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { setConfigFilePermissions } from "../util/paths";
 import { redactEventData } from "./redactSecrets";
 import type { AgentTask, AgentTaskEvent } from "./types";
 
 const TASK_ID_PATTERN = /^[0-9a-f-]{36}$/i;
+
+function setPrivatePermissions(filePath: string): void {
+  if (process.platform === "win32") return;
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch {
+    // The containing sandbox may enforce permissions at the mount layer.
+  }
+}
 
 export class TaskJournal {
   constructor(private readonly directory: string) {
@@ -22,7 +30,7 @@ export class TaskJournal {
       mode: 0o600,
     });
     fs.renameSync(temporary, target);
-    setConfigFilePermissions(target);
+    setPrivatePermissions(target);
   }
 
   load(taskId: string): AgentTask | undefined {
@@ -61,7 +69,7 @@ export class TaskJournal {
       encoding: "utf8",
       mode: 0o600,
     });
-    setConfigFilePermissions(target);
+    setPrivatePermissions(target);
   }
 
   maxEventSequence(): number {

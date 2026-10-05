@@ -33,7 +33,7 @@
 <main>
   <a class="back" href="/">← vynor.lk</a>
   <h1>Privacy Policy</h1>
-  <p class="updated">Last updated: 4 October 2026</p>
+  <p class="updated">Last updated: 5 October 2026</p>
 
   <div class="card">
     <p><strong>In short:</strong> we keep your account details and usage records on our server, send your prompts and code to an AI model provider so it can answer, remove personal data and secrets from them first, never sell your data, and never use your code to train models. You can download or delete your data at any time from your dashboard.</p>
@@ -50,6 +50,7 @@
       <tr><td>Plan, payment status and order records (card details are handled by PayHere and never reach us)</td><td>To provide your subscription</td></tr>
       <tr><td>Usage records: time, model, token and credit counts, cost, and a one-way hash of each prompt (not its text)</td><td>Billing, your usage dashboard, abuse prevention and improving model routing</td></tr>
       <tr><td>Prompts, code and files you send through the extension</td><td>To generate the answer you asked for</td></tr>
+      <tr><td>Background Agent task prompts, filtered project uploads, execution logs, patches, Proof Packs and optional screenshots</td><td>To run a task you explicitly submit in an isolated cloud sandbox and let you review its result</td></tr>
       <tr><td>Cached answers</td><td>So a repeated question costs you 0 credits</td></tr>
       <tr><td>Memory and rules you ask VynorAI to remember</td><td>To personalise answers</td></tr>
       <tr><td>IP address and security events (sign-ins, key changes)</td><td>Security and fraud prevention</td></tr>
@@ -65,6 +66,10 @@
   </ul>
   <p>These transfers outside Sri Lanka are necessary to provide the service. By creating an account you agree to them. We do not sell or rent your personal data, and we do not use your code to train or fine-tune any model.</p>
 
+  <h2>Background Agents</h2>
+  <p>Background Agents are optional and require separate first-run consent. Before upload, the extension excludes Git data, dependency and build folders, environment files, private keys, package-registry credentials and other common secret files. The remaining project copy is encrypted in transit and at rest, then processed inside a time-limited gVisor sandbox with fixed CPU, memory, process and network limits. Your local credentials are not sent to the sandbox.</p>
+  <p>The sandbox can contact only an allowlisted dependency registry proxy and a short-lived VynorAI model relay. It cannot reach VynorAI's database, Redis, administration systems or other users' tasks. Results are returned as a reviewable patch and a Proof Pack; they are never applied to your local project without your review.</p>
+
   <h2>How long we keep it</h2>
   <table>
     <thead><tr><th>Data</th><th>Kept for</th></tr></thead>
@@ -74,6 +79,8 @@
       <tr><td>Usage records and security events</td><td>12 months</td></tr>
       <tr><td>Memory and rules</td><td>Until you delete them or your account</td></tr>
       <tr><td>Prompts and code</td><td>Not stored by us beyond the cache above. The model provider processes them under its own terms.</td></tr>
+      <tr><td>Background task upload</td><td>Deleted after execution or cancellation; temporary workspace deletion is recorded in the Proof Pack</td></tr>
+      <tr><td>Background task patch, Proof Pack and screenshots</td><td>7 days, or earlier when you delete the task</td></tr>
       <tr><td>Backups</td><td>14 days, then deleted</td></tr>
     </tbody>
   </table>

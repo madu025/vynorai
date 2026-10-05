@@ -43,6 +43,8 @@ export function ModeSelect() {
       dispatch(setMode("plan"));
     } else if (mode === "plan") {
       dispatch(setMode("agent"));
+    } else if (mode === "agent") {
+      dispatch(setMode("background"));
     } else {
       dispatch(setMode("chat"));
     }
@@ -117,7 +119,9 @@ export function ModeSelect() {
                 ? "Chat"
                 : mode === "agent"
                   ? "Agent"
-                  : "Plan"}
+                  : mode === "background"
+                    ? "Background"
+                    : "Plan"}
           </span>
           <ChevronDownIcon
             className="h-2 w-2 flex-shrink-0"
@@ -200,6 +204,22 @@ export function ModeSelect() {
             {!isGoodAtAgentMode && notGreatAtAgent("Expert Team")}
             <CheckIcon
               className={`ml-auto h-3 w-3 ${expertTeamEnabled ? "" : "opacity-0"}`}
+            />
+          </ListboxOption>
+
+          <ListboxOption value="background">
+            <div className="flex flex-row items-center gap-1.5">
+              <ModeIcon mode="background" />
+              <span>Background</span>
+              <ToolTip
+                style={{ zIndex: 200001 }}
+                content="Run an encrypted project copy in an isolated cloud sandbox"
+              >
+                <InformationCircleIcon className="h-2.5 w-2.5 flex-shrink-0" />
+              </ToolTip>
+            </div>
+            <CheckIcon
+              className={`ml-auto h-3 w-3 ${mode === "background" ? "" : "opacity-0"}`}
             />
           </ListboxOption>
 

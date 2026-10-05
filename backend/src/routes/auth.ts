@@ -35,6 +35,7 @@ import {
   IdeAuthorizationCodeStore,
   IdeAuthStoreUnavailableError,
 } from "../services/ideAuthCodes.js";
+import { deleteBackgroundArtifact } from "../services/backgroundArtifacts.js";
 
 export const authRouter = Router();
 
@@ -1005,43 +1006,59 @@ authRouter.get("/export", requireAuth, async (req: Request, res: Response) => {
       .json({ error: "Sign in on vynor.lk to download your data." });
   const user = (req as any).user;
   const since = new Date(Date.now() - 365 * 86400_000).toISOString();
-  const [account, subscriptions, monthlyUsage, usage, rules, memory, security] =
-    await Promise.all([
-      dbGet<any>(
-        `SELECT id, email, name, email_verified, created_at, privacy_accepted_at,
+  const [
+    account,
+    subscriptions,
+    monthlyUsage,
+    usage,
+    backgroundTasks,
+    rules,
+    memory,
+    security,
+  ] = await Promise.all([
+    dbGet<any>(
+      `SELECT id, email, name, email_verified, created_at, privacy_accepted_at,
               privacy_version, api_key_masked
        FROM users WHERE id = ?`,
-        [user.id],
-      ),
-      dbAll<any>(
-        `SELECT plan_name, status, created_at, valid_until FROM subscriptions WHERE user_id = ?`,
-        [user.id],
-      ).catch(() => []),
-      dbAll<any>(`SELECT * FROM monthly_usage WHERE user_id = ?`, [
-        user.id,
-      ]).catch(() => []),
-      dbAll<any>(
-        `SELECT created_at, requested_model, resolved_model, input_tokens,
+      [user.id],
+    ),
+    dbAll<any>(
+      `SELECT plan_name, status, created_at, valid_until FROM subscriptions WHERE user_id = ?`,
+      [user.id],
+    ).catch(() => []),
+    dbAll<any>(`SELECT * FROM monthly_usage WHERE user_id = ?`, [
+      user.id,
+    ]).catch(() => []),
+    dbAll<any>(
+      `SELECT created_at, requested_model, resolved_model, input_tokens,
               cached_input_tokens, output_tokens, credits_charged, cache_status
        FROM request_economics WHERE user_id = ? AND created_at >= ?
        ORDER BY created_at`,
-        [user.id, since],
-      ).catch(() => []),
-      dbAll<any>(
-        `SELECT scope, rule, created_at FROM user_rules WHERE user_id = ?`,
-        [user.id],
-      ).catch(() => []),
-      dbAll<any>(
-        `SELECT key, value, expires_at, created_at FROM user_memory WHERE user_id = ?`,
-        [user.id],
-      ).catch(() => []),
-      dbAll<any>(
-        `SELECT event_type, details, ip_address, created_at FROM security_audit_logs
+      [user.id, since],
+    ).catch(() => []),
+    dbAll<any>(
+      `SELECT id, status, language, project_fingerprint, manifest_digest,
+                estimate_credits, cap_credits, used_credits, model_credits,
+                compute_credits, refund_credits, failure_reason, proof,
+                workspace_deleted_at, purged_at, created_at, ended_at
+         FROM background_tasks WHERE user_id = ? ORDER BY created_at`,
+      [user.id],
+    ).catch(() => []),
+    dbAll<any>(
+      `SELECT scope, rule, created_at FROM user_rules WHERE user_id = ?`,
+      [user.id],
+    ).catch(() => []),
+    dbAll<any>(
+      `SELECT key, value, expires_at, created_at FROM user_memory WHERE user_id = ?`,
+      [user.id],
+    ).catch(() => []),
+    dbAll<any>(
+      `SELECT event_type, details, ip_address, created_at FROM security_audit_logs
        WHERE actor = ? OR target = ? OR actor = ? OR target = ?
        ORDER BY created_at`,
-        [user.id, user.id, user.email, user.email],
-      ).catch(() => []),
-    ]);
+      [user.id, user.id, user.email, user.email],
+    ).catch(() => []),
+  ]);
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="vynorai-data-${new Date().toISOString().slice(0, 10)}.json"`,
@@ -1056,6 +1073,10 @@ authRouter.get("/export", requireAuth, async (req: Request, res: Response) => {
     rules,
     memory,
     securityEvents: security,
+    backgroundTasks: backgroundTasks.map((task: any) => ({
+      ...task,
+      proof: task.proof ? JSON.parse(task.proof) : null,
+    })),
   });
 });
 
@@ -1081,6 +1102,19 @@ authRouter.post(
       return res.status(400).json({
         error: "Type your account email exactly to confirm deletion.",
       });
+
+    const artifacts = await dbAll<{ id: string }>(
+      `SELECT a.id FROM background_artifacts a
+       JOIN background_tasks t ON t.id = a.task_id
+       WHERE t.user_id = ? AND a.deleted_at IS NULL`,
+      [user.id],
+    ).catch(() => []);
+    for (const artifact of artifacts)
+      await deleteBackgroundArtifact(artifact.id).catch(() => {});
+    await dbRun(
+      "UPDATE background_billing_ledger SET user_id = ? WHERE user_id = ?",
+      [`deleted:${sha256(user.id).slice(0, 24)}`, user.id],
+    ).catch(() => {});
 
     await dbRun(
       `UPDATE security_audit_logs SET actor = 'deleted-user' WHERE actor = ? OR actor = ?`,

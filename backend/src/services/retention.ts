@@ -3,7 +3,8 @@
  * public/privacy.html. Runs on every worker shortly after start and then
  * daily; the deletes are idempotent, so two workers running it is harmless.
  */
-import { dbRun } from "../db.js";
+import { dbAll, dbRun } from "../db.js";
+import { deleteBackgroundArtifact } from "./backgroundArtifacts.js";
 
 export const RETENTION_DAYS = {
   cache_entries: 30,
@@ -35,6 +36,25 @@ export async function runRetention(): Promise<Record<string, number | null>> {
       console.warn(`[Retention] ${table}: ${err.message}`);
       removed[table] = null;
     }
+  }
+  try {
+    const expired = await dbAll<{ id: string; task_id: string }>(
+      "SELECT id, task_id FROM background_artifacts WHERE expires_at < ? AND deleted_at IS NULL LIMIT 500",
+      [new Date().toISOString()],
+    );
+    for (const artifact of expired)
+      await deleteBackgroundArtifact(artifact.id).catch(() => {});
+    await dbRun(
+      `UPDATE background_tasks SET prompt = NULL, proof = NULL, purged_at = COALESCE(purged_at, CURRENT_TIMESTAMP),
+       status = CASE WHEN status IN ('completed','failed','canceled') THEN 'purged' ELSE status END,
+       updated_at = CURRENT_TIMESTAMP
+       WHERE purge_after < ? AND status IN ('completed','failed','canceled','purged')`,
+      [new Date().toISOString()],
+    );
+    removed.background_artifacts = expired.length;
+  } catch (err: any) {
+    console.warn(`[Retention] background artifacts: ${err.message}`);
+    removed.background_artifacts = null;
   }
   console.log("[Retention] removed:", JSON.stringify(removed));
   return removed;

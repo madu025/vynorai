@@ -35,11 +35,17 @@
 vynor.lk {
 	tls internal
 	encode zstd gzip
-	reverse_proxy vynor-backend:3333 vynor-backend-2:3333 {
-		import backend_pool
-		import cloudflare_client_ip
-		# Model responses stream over SSE; never buffer them.
-		flush_interval -1
+	# Worker/model-relay endpoints are reachable only on vynor-net. Never route
+	# them from the public origin, even when a caller has a scoped token.
+	@internal path /internal/*
+	respond @internal 404
+	handle {
+		reverse_proxy vynor-backend:3333 vynor-backend-2:3333 {
+			import backend_pool
+			import cloudflare_client_ip
+			# Model responses stream over SSE; never buffer them.
+			flush_interval -1
+		}
 	}
 }
 

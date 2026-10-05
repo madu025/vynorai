@@ -39,12 +39,26 @@ export interface PlanDefinition {
   features: string[];
   payhereItemId: string;
   upgradeUrl: string;
+  background: BackgroundEntitlement;
+}
+
+export interface BackgroundEntitlement {
+  enabled: boolean;
+  tasksPerMonth: number;
+  maxConcurrency: number;
+  priority: "normal" | "high";
 }
 
 export const PLANS: Record<string, PlanDefinition> = {
   free: {
     id: "free",
     displayName: "Free Trial",
+    background: {
+      enabled: false,
+      tasksPerMonth: 0,
+      maxConcurrency: 0,
+      priority: "normal",
+    },
     monthlyTokens: 100_000,
     // Each agent tool round is a request; 100 ran out after a few tasks. A
     // free user's worst case is ~$0.03 of upstream cost (100K credits).
@@ -77,6 +91,12 @@ export const PLANS: Record<string, PlanDefinition> = {
   starter: {
     id: "starter",
     displayName: "Starter",
+    background: {
+      enabled: false,
+      tasksPerMonth: 0,
+      maxConcurrency: 0,
+      priority: "normal",
+    },
     monthlyTokens: 11_000_000,
     monthlyRequests: 2_500,
     priceLKR: 1_850,
@@ -111,6 +131,12 @@ export const PLANS: Record<string, PlanDefinition> = {
   pro: {
     id: "pro",
     displayName: "Pro",
+    background: {
+      enabled: true,
+      tasksPerMonth: 20,
+      maxConcurrency: 1,
+      priority: "normal",
+    },
     monthlyTokens: 25_000_000,
     monthlyRequests: 7_500,
     priceLKR: 3_850,
@@ -145,6 +171,7 @@ export const PLANS: Record<string, PlanDefinition> = {
       "128k context window",
       "Llama 3.3 70B, Gemini 2.5 Flash and more in Advanced",
       "Full agent mode with subagents",
+      "20 Background Agent tasks/month",
     ],
     payhereItemId: "vynorai_pro",
     upgradeUrl: "https://vynor.lk/#pricing",
@@ -153,6 +180,12 @@ export const PLANS: Record<string, PlanDefinition> = {
   enterprise: {
     id: "enterprise",
     displayName: "Ultra",
+    background: {
+      enabled: true,
+      tasksPerMonth: 60,
+      maxConcurrency: 2,
+      priority: "high",
+    },
     monthlyTokens: 55_000_000,
     monthlyRequests: 20_000,
     priceLKR: 7_900,
@@ -169,6 +202,7 @@ export const PLANS: Record<string, PlanDefinition> = {
       "256k context window",
       "Multi-device support (up to 3 devices)",
       "Priority support",
+      "60 Background Agent tasks/month (2 concurrent)",
     ],
     payhereItemId: "vynorai_ultra",
     upgradeUrl: "https://vynor.lk/#pricing",
@@ -178,6 +212,12 @@ export const PLANS: Record<string, PlanDefinition> = {
   ultra: {
     id: "ultra",
     displayName: "Ultra",
+    background: {
+      enabled: true,
+      tasksPerMonth: 60,
+      maxConcurrency: 2,
+      priority: "high",
+    },
     monthlyTokens: 55_000_000,
     monthlyRequests: 20_000,
     priceLKR: 7_900,
@@ -194,6 +234,7 @@ export const PLANS: Record<string, PlanDefinition> = {
       "256k context window",
       "Multi-device support (up to 3 devices)",
       "Priority support",
+      "60 Background Agent tasks/month (2 concurrent)",
     ],
     payhereItemId: "vynorai_ultra",
     upgradeUrl: "https://vynor.lk/#pricing",
@@ -201,6 +242,12 @@ export const PLANS: Record<string, PlanDefinition> = {
   topup5m: {
     id: "topup5m",
     displayName: "Top-Up Pack (5M)",
+    background: {
+      enabled: false,
+      tasksPerMonth: 0,
+      maxConcurrency: 0,
+      priority: "normal",
+    },
     monthlyTokens: 5_000_000,
     monthlyRequests: 1_500,
     priceLKR: 650,
@@ -222,6 +269,12 @@ export const PLANS: Record<string, PlanDefinition> = {
   pro_monthly: {
     id: "pro_monthly",
     displayName: "Pro Monthly",
+    background: {
+      enabled: true,
+      tasksPerMonth: 20,
+      maxConcurrency: 1,
+      priority: "normal",
+    },
     monthlyTokens: 25_000_000,
     monthlyRequests: 7_500,
     priceLKR: 3_850,
@@ -254,6 +307,7 @@ export const PLANS: Record<string, PlanDefinition> = {
       "25 million credits/month",
       "128k context window",
       "Auto with DeepSeek V4 Pro reasoning",
+      "20 Background Agent tasks/month",
     ],
     payhereItemId: "vynorai_pro",
     upgradeUrl: "https://vynor.lk/#pricing",
@@ -261,6 +315,12 @@ export const PLANS: Record<string, PlanDefinition> = {
   pro_yearly: {
     id: "pro_yearly",
     displayName: "Pro Yearly (2 months free)",
+    background: {
+      enabled: true,
+      tasksPerMonth: 20,
+      maxConcurrency: 1,
+      priority: "normal",
+    },
     monthlyTokens: 25_000_000,
     monthlyRequests: 7_500,
     priceLKR: 38_500,
@@ -293,6 +353,7 @@ export const PLANS: Record<string, PlanDefinition> = {
       "128k context window",
       "Auto with DeepSeek V4 Pro reasoning",
       "2 months free (17% off)",
+      "20 Background Agent tasks/month",
     ],
     payhereItemId: "vynorai_pro_yearly",
     upgradeUrl: "https://vynor.lk/#pricing",

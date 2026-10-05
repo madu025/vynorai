@@ -31,6 +31,10 @@ export async function ensurePlanOverrideTable(): Promise<void> {
         features              TEXT,   -- JSON array string
         payhere_item_id       TEXT,
         upgrade_url           TEXT,
+        background_enabled    INTEGER,
+        background_tasks_per_month INTEGER,
+        background_max_concurrency INTEGER,
+        background_priority   TEXT,
         is_active             INTEGER DEFAULT 1,
         updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -81,6 +85,17 @@ export async function getEffectivePlans(): Promise<
       if (row.features) p.features = JSON.parse(row.features);
       if (row.payhere_item_id) p.payhereItemId = row.payhere_item_id;
       if (row.upgrade_url) p.upgradeUrl = row.upgrade_url;
+      if (row.background_enabled != null)
+        p.background.enabled = Boolean(row.background_enabled);
+      if (row.background_tasks_per_month != null)
+        p.background.tasksPerMonth = row.background_tasks_per_month;
+      if (row.background_max_concurrency != null)
+        p.background.maxConcurrency = row.background_max_concurrency;
+      if (
+        row.background_priority === "normal" ||
+        row.background_priority === "high"
+      )
+        p.background.priority = row.background_priority;
     }
   } catch {
     /* table may not exist yet */
@@ -116,6 +131,10 @@ export async function updatePlanField(
     features: string[];
     payhere_item_id: string;
     upgrade_url: string;
+    background_enabled: number;
+    background_tasks_per_month: number;
+    background_max_concurrency: number;
+    background_priority: "normal" | "high";
     is_active: number;
   }>,
 ): Promise<void> {

@@ -1023,6 +1023,7 @@ export async function handleChatCompletions(
         outputTokens: finalOutputTokens,
       })
     : 0;
+  await quota.onUsage?.(creditsCharged);
 
   // Insert granular log with Blockchain Merkle Audit Chain
   const usageLogId = uuidv4();

@@ -51,7 +51,11 @@ x-backend: &backend
   # Agent responses stream for minutes; let them finish on deploy.
   stop_grace_period: 75s
   healthcheck:
-    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3333/ready > /dev/null || exit 1"]
+    test:
+      [
+        "CMD-SHELL",
+        "curl -fsS http://127.0.0.1:3333/ready > /dev/null || exit 1",
+      ]
     interval: 5s
     timeout: 3s
     start_period: 20s
@@ -95,6 +99,74 @@ services:
   vynor-backend-2:
     <<: *backend
     container_name: vynor-backend-2
+
+  # Claims durable Redis tasks and asks the root-owned host launcher to create
+  # fixed-policy runsc sandboxes. It deliberately has no Docker socket.
+  vynor-background-worker:
+    profiles: ["background"]
+    image: vynor-backend:local
+    container_name: vynor-background-worker
+    command: ["node", "dist/worker/index.js"]
+    logging: *default-logging
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=production
+      - BG_ENABLED=${BG_ENABLED:-false}
+      - BG_MAX_CONCURRENCY=2
+      - BG_STAGING_DIR=/var/lib/vynor-background/staging
+      - BG_LAUNCHER_SOCKET=/run/vynor-bg/launcher.sock
+      - BG_SANDBOX_MODEL_URL=http://vynor-bg-egress:8080/model/v1/chat/completions
+      - REDIS_URL=redis://vynor-redis:6379
+    volumes:
+      - /var/lib/vynor-background:/var/lib/vynor-background
+      - /run/vynor-bg:/run/vynor-bg
+      - vynor-backend-data:/app/data
+    group_add:
+      - "${BG_LAUNCHER_GID:-65534}"
+    depends_on:
+      vynor-postgres:
+        condition: service_healthy
+      vynor-redis:
+        condition: service_started
+      vynor-bg-egress:
+        condition: service_started
+    mem_limit: 256m
+    cpus: 0.25
+    networks:
+      - vynor-net
+
+  # The only dual-homed component. It exposes a fixed model-relay path and an
+  # HTTPS CONNECT allowlist; it is not a general bridge to vynor-net.
+  vynor-bg-egress:
+    profiles: ["background"]
+    image: vynor-backend:local
+    container_name: vynor-bg-egress
+    command: ["node", "dist/worker/egressProxy.js"]
+    logging: *default-logging
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - BG_EGRESS_PORT=8080
+      - BG_MODEL_RELAY_URL=http://vynor-backend:3333/internal/background/model/v1/chat/completions
+    depends_on:
+      vynor-backend:
+        condition: service_healthy
+    mem_limit: 96m
+    cpus: 0.10
+    networks:
+      - vynor-net
+      - vynor-bg-sandbox
+
+  # Build target only; the host launcher starts this image with --runtime=runsc.
+  vynor-background-runner-image:
+    profiles: ["background-image"]
+    image: vynor-background-runner:local
+    build:
+      context: .
+      dockerfile: background-runner/Dockerfile
+    entrypoint: ["/bin/true"]
 
   # ── 1b. PostgreSQL: the system of record (users, billing, usage, admin) ─────
   # Private to vynor-net; never published. DATABASE_URL in backend/.env.
@@ -233,3 +305,7 @@ volumes:
 networks:
   vynor-net:
     driver: bridge
+  vynor-bg-sandbox:
+    name: vynor-bg-sandbox
+    driver: bridge
+    internal: true

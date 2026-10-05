@@ -14,11 +14,14 @@ import { googleAuthRouter } from "./routes/googleAuth.js";
 import { memoryRouter } from "./routes/memory.js";
 import { paymentRouter } from "./routes/payment.js";
 import { proxyRouter } from "./routes/proxy.js";
+import { backgroundRouter } from "./routes/background.js";
+import { backgroundInternalRouter } from "./routes/backgroundInternal.js";
 import { initCacheTable } from "./services/cacheEngine.js";
 import { startHealthMonitor } from "./services/healthMonitor.js";
 import { getRedis, redisStatus } from "./services/redisStore.js";
 import { billingDbStatus } from "./services/billingDb.js";
 import { loadProviderCredentials } from "./services/providerCredentials.js";
+import { scheduleBackgroundReconciliation } from "./services/backgroundTasks.js";
 
 import { securityHeadersMiddleware } from "./middleware/security.js";
 
@@ -216,6 +219,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/payment", paymentRouter);
 // More specific mount first so the generic /v1 router can't swallow it
 app.use("/v1/memory", memoryRouter);
+app.use("/v1/background", backgroundRouter);
+app.use("/internal/background", backgroundInternalRouter);
 app.use("/v1", proxyRouter);
 app.use(releasesRouter);
 
@@ -321,6 +326,21 @@ async function start() {
     if (!process.env.DATA_ENCRYPTION_KEY) {
       throw new Error("DATA_ENCRYPTION_KEY must be configured in production");
     }
+    if (process.env.BG_ENABLED === "true") {
+      for (const name of [
+        "BG_ARTIFACT_MASTER_KEY",
+        "BG_QUOTE_SECRET",
+        "BG_MODEL_TOKEN_SECRET",
+        "BG_IP_HASH_SALT",
+        "BG_PATCH_SIGNING_PRIVATE_KEY_BASE64",
+        "BG_PATCH_SIGNING_PUBLIC_KEY_BASE64",
+      ]) {
+        if (!process.env[name] || process.env[name]!.length < 32)
+          throw new Error(
+            `${name} must be configured with at least 32 characters when Background Agents are enabled`,
+          );
+      }
+    }
   }
   // Fail loudly at boot if the static pages are missing
   for (const f of [LOGIN_PAGE, ADMIN_PAGE]) {
@@ -349,6 +369,7 @@ async function start() {
   void warmUpLocalSlm();
   scheduleRetention();
   scheduleReservationReconcile();
+  scheduleBackgroundReconciliation();
 
   // ── Main API server ──────────────────────────────────────────────────────────
   const server = app.listen(config.port, () => {

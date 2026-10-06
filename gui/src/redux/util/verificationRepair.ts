@@ -21,6 +21,13 @@ function failedOutput(output: ContextItem[] | undefined): boolean {
   );
 }
 
+function verificationFailed(call: {
+  status?: string;
+  output?: ContextItem[];
+}): boolean {
+  return call.status === "errored" || failedOutput(call.output);
+}
+
 function outputExcerpt(output: ContextItem[] | undefined): string {
   return (output ?? [])
     .map((item) => `${item.description ?? ""}\n${item.content ?? ""}`.trim())
@@ -34,6 +41,42 @@ export interface VerificationRepair {
   output: string;
   attempt: number;
   limitReached: boolean;
+}
+
+/**
+ * Returns verification commands that failed and were not later rerun
+ * successfully in the current user turn. Completion must never be journaled
+ * as verified while this list is non-empty.
+ */
+export function unresolvedVerificationFailures(
+  history: ChatHistoryItem[],
+): string[] {
+  let start = 0;
+  for (let index = history.length - 1; index >= 0; index--) {
+    const item = history[index];
+    if (item.message.role === "user" && !item.isAutoPrompt) {
+      start = index + 1;
+      break;
+    }
+  }
+
+  const latestStatus = new Map<string, boolean>();
+  for (const item of history.slice(start)) {
+    for (const call of item.toolCallStates ?? []) {
+      const command = commandOf(call.processedArgs ?? call.parsedArgs);
+      if (
+        call.toolCall.function.name !== BuiltInToolNames.RunTerminalCommand ||
+        !command ||
+        !classifyVerificationCommand(command)
+      ) {
+        continue;
+      }
+      latestStatus.set(command, verificationFailed(call));
+    }
+  }
+  return [...latestStatus].flatMap(([command, failed]) =>
+    failed ? [command] : [],
+  );
 }
 
 /**
@@ -70,7 +113,7 @@ export function pendingVerificationRepair(
     ({ call, command }) =>
       call.toolCall.function.name === BuiltInToolNames.RunTerminalCommand &&
       Boolean(command && classifyVerificationCommand(command)) &&
-      (call.status === "errored" || failedOutput(call.output)),
+      verificationFailed(call),
   );
   const latest = failed.at(-1);
   if (!latest?.command) return undefined;

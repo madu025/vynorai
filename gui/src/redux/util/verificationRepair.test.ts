@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   pendingVerificationRepair,
+  unresolvedVerificationFailures,
   verificationRepairPrompt,
 } from "./verificationRepair";
 
@@ -67,5 +68,27 @@ describe("verification repair gate", () => {
     ] as any);
     expect(repair).toMatchObject({ attempt: 2, limitReached: true });
     expect(verificationRepairPrompt(repair!)).toContain("Do not claim");
+  });
+
+  test("keeps a failed check unverified until the same command passes", () => {
+    const history = [
+      { message: { role: "user", content: "fix the test" } },
+      {
+        message: { role: "assistant", content: "" },
+        toolCallStates: [failedTest],
+      },
+    ] as any;
+    expect(unresolvedVerificationFailures(history)).toEqual(["npm test"]);
+
+    history.push({
+      message: { role: "assistant", content: "" },
+      toolCallStates: [
+        {
+          ...failedTest,
+          output: [{ name: "Terminal", description: "Exit code 0" }],
+        },
+      ],
+    });
+    expect(unresolvedVerificationFailures(history)).toEqual([]);
   });
 });

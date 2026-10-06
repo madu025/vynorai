@@ -69,6 +69,7 @@ import {
 } from "../util/verificationGate";
 import {
   pendingVerificationRepair,
+  unresolvedVerificationFailures,
   verificationRepairPrompt,
 } from "../util/verificationRepair";
 import { turnEdits } from "../util/sideReview";
@@ -770,6 +771,9 @@ ${PREMORTEM_GUIDANCE}`
       return;
     }
     if (originalToolCalls.length === 0) {
+      const unresolvedVerification = unresolvedVerificationFailures(
+        getState().session.history,
+      );
       // "You should know": a background second look at what this turn changed.
       const finalReply = getState().session.history.at(-1);
       if (
@@ -809,19 +813,29 @@ ${PREMORTEM_GUIDANCE}`
             taskId,
             result: {
               kind: "response",
-              status: "passed",
-              summary: "Model response completed without pending tool calls.",
+              status: unresolvedVerification.length > 0 ? "failed" : "passed",
+              summary:
+                unresolvedVerification.length > 0
+                  ? `Unresolved verification failure: ${unresolvedVerification.join(", ")}`
+                  : "Model response completed without pending tool calls.",
             },
           });
-          await extra.ideMessenger.request("agent/plan/completeStep", {
-            taskId,
-            stepId: "verify",
-          });
+          if (unresolvedVerification.length === 0) {
+            await extra.ideMessenger.request("agent/plan/completeStep", {
+              taskId,
+              stepId: "verify",
+            });
+          }
         } catch {
           // Completion is not blocked by an unavailable local audit journal.
         }
       }
-      await transitionTask("completed");
+      await transitionTask(
+        unresolvedVerification.length > 0 ? "failed" : "completed",
+        unresolvedVerification.length > 0
+          ? `Verification still failing: ${unresolvedVerification.join(", ")}`
+          : undefined,
+      );
       // Stop hooks run once the agent has finished the turn (e.g. tests or a
       // notification). A blocking hook's reason is shown to the user; the
       // turn is not auto-resumed, so a failing hook can never loop the agent.

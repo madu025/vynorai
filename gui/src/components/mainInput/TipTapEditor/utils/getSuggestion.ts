@@ -8,6 +8,7 @@ import { MutableRefObject } from "react";
 import tippy from "tippy.js";
 import { IIdeMessenger } from "../../../../context/IdeMessenger";
 import { AppDispatch } from "../../../../redux/store";
+import { VYNOR_SUPPORT_URL } from "../../../../util/vynorLinks";
 import AtMentionDropdown from "../../AtMentionDropdown";
 import { ComboBoxItem, ComboBoxItemType, ComboBoxSubAction } from "../../types";
 import { TIPPY_DIV_ID } from "../TipTapEditor";
@@ -167,10 +168,7 @@ export function getContextProviderDropdownOptions(
         title: "Add more context providers",
         type: "action",
         action: () => {
-          ideMessenger.post(
-            "openUrl",
-            "https://docs.continue.dev/customization/context-providers#built-in-context-providers",
-          );
+          ideMessenger.post("openUrl", VYNOR_SUPPORT_URL);
         },
         description: "",
       });

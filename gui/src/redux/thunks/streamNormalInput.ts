@@ -67,6 +67,10 @@ import {
   unverifiedEdits,
   verificationGatePrompt,
 } from "../util/verificationGate";
+import {
+  pendingVerificationRepair,
+  verificationRepairPrompt,
+} from "../util/verificationRepair";
 import { turnEdits } from "../util/sideReview";
 import { runSideReview } from "./sideReview";
 import {
@@ -680,6 +684,19 @@ export const streamNormalInput = createAsyncThunk<
     // Verification gate: an agent turn that edited files must not finish
     // without a test/type check/lint/build after the last edit. Asked once per
     // prompt; the model may decline in one line when no check applies.
+    const pendingRepair =
+      originalToolCalls.length === 0 &&
+      state.session.mode === "agent" &&
+      !toolBudgetExhausted &&
+      depth + 1 < roundBudget
+        ? pendingVerificationRepair(getState().session.history)
+        : undefined;
+    if (pendingRepair) {
+      dispatch(appendAutoPrompt(verificationRepairPrompt(pendingRepair)));
+      unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
+      return;
+    }
+
     const pendingVerification =
       originalToolCalls.length === 0 &&
       state.session.mode === "agent" &&

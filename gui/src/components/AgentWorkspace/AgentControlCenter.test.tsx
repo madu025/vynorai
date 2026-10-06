@@ -18,7 +18,15 @@ const task: AgentTask = {
   goalDigest: "digest",
   approvals: [],
   checkpoints: [],
-  verification: [],
+  verification: [
+    {
+      id: "verification-1",
+      kind: "test",
+      status: "passed",
+      summary: "test evidence from run_terminal_command: passed",
+      createdAt: now,
+    },
+  ],
   budget: {
     inputTokens: 10,
     outputTokens: 5,
@@ -118,6 +126,10 @@ describe("AgentControlCenter", () => {
     expect(screen.getByText(/50% · 2\/24 actions/)).toBeInTheDocument();
     expect(screen.getByText("npm run test")).toBeInTheDocument();
     expect(screen.getByText(/approval required/i)).toBeInTheDocument();
+    expect(screen.getByText("Run evidence")).toBeInTheDocument();
+    expect(
+      screen.getByText("test evidence from run_terminal_command: passed"),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(requestSpy).toHaveBeenCalledWith(
         "workspace/getVerificationPlan",

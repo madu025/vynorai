@@ -9,6 +9,7 @@ import { useContext, useState } from "react";
 import { GhostButton } from "../../../../components";
 import { IdeMessengerContext } from "../../../../context/IdeMessenger";
 import { useAppSelector } from "../../../../redux/hooks";
+import { VYNOR_SUPPORT_URL } from "../../../../util/vynorLinks";
 
 export interface IndexingProgressErrorTextProps {
   update: IndexingProgressUpdate;
@@ -34,11 +35,11 @@ function IndexingProgressErrorText({ update }: IndexingProgressErrorTextProps) {
           Add an Embeddings model to enable codebase indexing. See the docs for
           examples:
           <a
-            href="https://docs.continue.dev/walkthroughs/codebase-embeddings#embeddings-providers"
+            href={VYNOR_SUPPORT_URL}
             target="_blank"
             className="cursor-pointer text-inherit underline hover:text-inherit"
           >
-            https://docs.continue.dev/walkthroughs/codebase-embeddings#embeddings-providers
+            contact VynorAI support
           </a>
         </span>
       </div>

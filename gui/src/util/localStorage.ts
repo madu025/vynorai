@@ -6,7 +6,6 @@ type LocalStorageTypes = {
   hasDismissedExploreDialog: boolean;
   onboardingStatus?: OnboardingStatus;
   hasDismissedOnboardingCard: boolean;
-  mainTextEntryCounter: number;
   ide: "vscode" | "jetbrains";
   vsCodeUriScheme: string;
   fontSize: number;
@@ -15,7 +14,6 @@ type LocalStorageTypes = {
   showTutorialCard: boolean;
   shownProfilesIntroduction: boolean;
   disableIndexing: boolean;
-  hasDismissedDeprecationBanner: boolean;
 };
 
 export enum LocalStorageKey {

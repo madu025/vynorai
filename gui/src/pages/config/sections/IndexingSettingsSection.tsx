@@ -9,6 +9,7 @@ import { IdeMessengerContext } from "../../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 import { updateConfig } from "../../../redux/slices/configSlice";
 import { ConfigHeader } from "../components/ConfigHeader";
+import { VYNOR_SUPPORT_URL } from "../../../util/vynorLinks";
 import { UserSetting } from "../components/UserSetting";
 import IndexingProgress from "../features/indexing";
 import { DocsSection } from "./DocsSection";
@@ -91,7 +92,7 @@ export function IndexingSettingsSection() {
             <div className="mt-1 text-xs">
               Learn how to{" "}
               <a
-                href="https://docs.continue.dev/guides/codebase-documentation-awareness"
+                href={VYNOR_SUPPORT_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-inherit underline hover:brightness-125"

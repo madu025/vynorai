@@ -12,8 +12,10 @@
  */
 const API = "https://api.deepseek.com/chat/completions";
 const KEY = process.env.DEEPSEEK_API_KEY;
-const RUNS = Number(process.argv[2] ?? 3);
+const runsArgument = process.argv.slice(2).find((value) => /^\d+$/.test(value));
+const RUNS = Number(runsArgument ?? 3);
 const MAX_ROUNDS = 20;
+const DRY_RUN = process.argv.includes("--dry-run");
 
 type Files = Record<string, string>;
 interface Scenario {
@@ -536,8 +538,24 @@ async function runOnce(scenario: Scenario, condition: Condition) {
 const PRICE = { miss: 0.3, hit: 0.006, out: 1.2 }; // $/M, peak
 
 async function main() {
-  if (!KEY) throw new Error("Set DEEPSEEK_API_KEY");
   const conditions: Condition[] = ["baseline", "careful", "max"];
+  if (DRY_RUN) {
+    console.log(
+      JSON.stringify(
+        {
+          scenarios: SCENARIOS.map((scenario) => scenario.id),
+          conditions,
+          defaultRuns: RUNS,
+          maxRounds: MAX_ROUNDS,
+          note: "Dry run: no model request was made. Set DEEPSEEK_API_KEY and run npm run eval:judgment for measured results.",
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  if (!KEY) throw new Error("Set DEEPSEEK_API_KEY");
   const jobs: { s: Scenario; c: Condition }[] = [];
   for (const s of SCENARIOS)
     for (const c of conditions)

@@ -4,6 +4,7 @@ import { useAuth } from "../../context/Auth";
 import { IdeMessengerContext } from "../../context/IdeMessenger";
 import { useAppSelector } from "../../redux/hooks";
 import { CONFIG_ROUTES } from "../../util/navigation";
+import { VYNOR_SUPPORT_URL } from "../../util/vynorLinks";
 import Alert from "../gui/Alert";
 
 export const FatalErrorIndicator = () => {
@@ -43,10 +44,7 @@ export const FatalErrorIndicator = () => {
       <div className="mt-2 flex flex-row flex-wrap items-center gap-x-3 gap-y-1.5">
         <div
           onClick={() => {
-            ideMessenger.post(
-              "openUrl",
-              "https://docs.continue.dev/troubleshooting",
-            );
+            ideMessenger.post("openUrl", VYNOR_SUPPORT_URL);
           }}
           className="cursor-pointer underline"
         >

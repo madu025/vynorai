@@ -1,4 +1,5 @@
 import { providers } from "../pages/AddNewModel/configs/providers";
+import { VYNOR_SUPPORT_URL } from "./vynorLinks";
 
 export interface ErrorAnalysis {
   parsedError: string;
@@ -144,7 +145,7 @@ export function analyzeError(
 
   // Missing authentication header (no API key configured)
   if (errorText.includes("missing bearer or basic authentication")) {
-    helpUrl = "https://docs.continue.dev/reference#models";
+    helpUrl = VYNOR_SUPPORT_URL;
     customErrorMessage =
       'No API key was sent with the request. Add "apiKey" to your model config.';
   }

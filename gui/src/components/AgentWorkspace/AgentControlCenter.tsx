@@ -373,6 +373,48 @@ export function AgentControlCenter() {
               </div>
             </div>
           )}
+          {(visibleTask?.verification.length ?? 0) > 0 && (
+            <div className="mt-2">
+              <div className="text-description-muted mb-1 text-[9px] font-medium uppercase tracking-wide">
+                Run evidence
+              </div>
+              <div
+                className="space-y-1"
+                aria-label="Agent verification evidence"
+              >
+                {visibleTask!.verification
+                  .slice(-4)
+                  .reverse()
+                  .map((result) => (
+                    <div
+                      key={result.id}
+                      className="bg-lightgray/5 flex min-w-0 items-center gap-2 rounded px-2 py-1 text-[9px]"
+                    >
+                      <span
+                        className={
+                          result.status === "passed"
+                            ? "text-success"
+                            : result.status === "failed"
+                              ? "text-error"
+                              : "text-description"
+                        }
+                      >
+                        {result.status}
+                      </span>
+                      <span className="text-description-muted uppercase">
+                        {result.kind}
+                      </span>
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        title={result.summary}
+                      >
+                        {result.summary}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
           {error && (
             <div className="text-error mt-2 text-[9px]" role="alert">
               {error}

@@ -15,6 +15,7 @@ import { setOnboardingCard } from "../../../redux/slices/uiSlice";
 import { saveCurrentSession } from "../../../redux/thunks/session";
 import { isJetBrains } from "../../../util";
 import { ROUTES } from "../../../util/navigation";
+import { VYNOR_SUPPORT_URL } from "../../../util/vynorLinks";
 import { ConfigHeader } from "../components/ConfigHeader";
 import { ConfigRow } from "../components/ConfigRow";
 
@@ -181,11 +182,9 @@ export function HelpSection() {
             <div className="flex flex-col">
               <ConfigRow
                 title="Documentation"
-                description="Learn how to configure and use Continue"
+                description="Get VynorAI setup and troubleshooting help"
                 icon={LinkIcon}
-                onClick={() =>
-                  ideMessenger.post("openUrl", "https://docs.continue.dev/")
-                }
+                onClick={() => ideMessenger.post("openUrl", VYNOR_SUPPORT_URL)}
               />
             </div>
           </Card>

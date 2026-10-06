@@ -49,6 +49,7 @@ export class WorkspaceSessionService {
   constructor(
     private readonly ide: IDE,
     private readonly getIndexState: () => IndexingProgressUpdate | undefined,
+    private readonly resumeRetryDelayMs = 500,
   ) {}
 
   invalidate(): void {
@@ -58,7 +59,16 @@ export class WorkspaceSessionService {
   async getSnapshot(force = false): Promise<WorkspaceSnapshot> {
     if (!force && !this.invalidated && this.snapshot) return this.snapshot;
 
-    const workspaceDirs = [...(await this.ide.getWorkspaceDirs())].sort();
+    let workspaceDirs = [...(await this.ide.getWorkspaceDirs())].sort();
+    // VS Code can briefly report no folders immediately after laptop resume
+    // while the extension host reconnects. Do not replace a known workspace
+    // with an empty snapshot until it has had one short chance to recover.
+    if (force && workspaceDirs.length === 0 && this.snapshot?.roots.length) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, this.resumeRetryDelayMs),
+      );
+      workspaceDirs = [...(await this.ide.getWorkspaceDirs())].sort();
+    }
     const currentFile = await this.ide.getCurrentFile().catch(() => undefined);
     const trusted = this.ide.isWorkspaceTrusted
       ? await this.ide.isWorkspaceTrusted().catch(() => false)

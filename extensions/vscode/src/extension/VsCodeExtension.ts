@@ -77,6 +77,7 @@ export class VsCodeExtension {
   private core: Core;
   private battery: Battery;
   private fileSearch: FileSearch;
+  private workspaceResumeRefreshTimer?: ReturnType<typeof setTimeout>;
   private uriHandler = new UriEventHandler();
   private completionProvider: ContinueCompletionProvider;
 
@@ -551,6 +552,26 @@ export class VsCodeExtension {
         reason: "workspace-folders-changed",
       });
     });
+
+    // Laptop sleep can briefly leave the VS Code extension host connected
+    // before workspace folders are restored. Refresh after focus returns so a
+    // transient empty snapshot cannot leave the VynorAI panel at "No workspace".
+    if (typeof vscode.window.onDidChangeWindowState === "function") {
+      context.subscriptions.push(
+        vscode.window.onDidChangeWindowState((state) => {
+          if (!state.focused) return;
+          if (this.workspaceResumeRefreshTimer) {
+            clearTimeout(this.workspaceResumeRefreshTimer);
+          }
+          this.workspaceResumeRefreshTimer = setTimeout(() => {
+            this.workspaceResumeRefreshTimer = undefined;
+            void this.core.invoke("workspace/invalidate", {
+              reason: "window-focus-resume",
+            });
+          }, 500);
+        }),
+      );
+    }
 
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       void this.core.invoke("workspace/invalidate", {

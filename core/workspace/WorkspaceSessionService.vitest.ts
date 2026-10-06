@@ -86,4 +86,25 @@ describe("WorkspaceSessionService", () => {
     expect(snapshot.trusted).toBe(false);
     expect(snapshot.capabilities).not.toContain("workspace-tools");
   });
+
+  it("keeps a known workspace through a transient empty resume response", async () => {
+    const getWorkspaceDirs = vi
+      .fn()
+      .mockResolvedValueOnce(["file:///workspace/VynorAI"])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(["file:///workspace/VynorAI"]);
+    const service = new WorkspaceSessionService(
+      createIde({ getWorkspaceDirs }),
+      () => undefined,
+      0,
+    );
+
+    await service.getSnapshot();
+    service.invalidate();
+    const recovered = await service.getSnapshot(true);
+
+    expect(recovered.roots).toHaveLength(1);
+    expect(recovered.roots[0]?.name).toBe("VynorAI");
+    expect(getWorkspaceDirs).toHaveBeenCalledTimes(3);
+  });
 });

@@ -341,20 +341,36 @@ export const streamNormalInput = createAsyncThunk<
             },
           );
           if (planned.status === "success") {
-            await extra.ideMessenger.request("agent/plan/startStep", {
+            const first = await extra.ideMessenger.request("agent/plan/next", {
               taskId,
-              stepId: "understand",
             });
-            await extra.ideMessenger.request("agent/plan/completeStep", {
-              taskId,
-              stepId: "understand",
-            });
-            const executing = await extra.ideMessenger.request(
-              "agent/plan/startStep",
-              { taskId, stepId: "act" },
-            );
-            if (executing.status === "success") {
-              dispatch(setActiveTaskState(executing.content.state));
+            if (
+              first.status === "success" &&
+              first.content.action === "execute"
+            ) {
+              await extra.ideMessenger.request("agent/plan/startStep", {
+                taskId,
+                stepId: first.content.step.id,
+              });
+              await extra.ideMessenger.request("agent/plan/completeStep", {
+                taskId,
+                stepId: first.content.step.id,
+              });
+              const next = await extra.ideMessenger.request("agent/plan/next", {
+                taskId,
+              });
+              if (
+                next.status === "success" &&
+                next.content.action === "execute"
+              ) {
+                const executing = await extra.ideMessenger.request(
+                  "agent/plan/startStep",
+                  { taskId, stepId: next.content.step.id },
+                );
+                if (executing.status === "success") {
+                  dispatch(setActiveTaskState(executing.content.state));
+                }
+              }
             }
           }
         }
@@ -794,14 +810,33 @@ ${PREMORTEM_GUIDANCE}`
       }
       if (taskId) {
         try {
-          await extra.ideMessenger.request("agent/plan/completeStep", {
+          const task = await extra.ideMessenger.request("agent/task/get", {
             taskId,
-            stepId: "act",
           });
-          await extra.ideMessenger.request("agent/plan/startStep", {
-            taskId,
-            stepId: "verify",
-          });
+          const activeStep =
+            task.status === "success"
+              ? task.content?.plan?.steps.find(
+                  (step) => step.state === "running",
+                )
+              : undefined;
+          if (activeStep) {
+            await extra.ideMessenger.request("agent/plan/completeStep", {
+              taskId,
+              stepId: activeStep.id,
+            });
+            const next = await extra.ideMessenger.request("agent/plan/next", {
+              taskId,
+            });
+            if (
+              next.status === "success" &&
+              next.content.action === "execute"
+            ) {
+              await extra.ideMessenger.request("agent/plan/startStep", {
+                taskId,
+                stepId: next.content.step.id,
+              });
+            }
+          }
         } catch {
           // Older task journals may not contain the lifecycle plan.
         }
@@ -821,10 +856,22 @@ ${PREMORTEM_GUIDANCE}`
             },
           });
           if (unresolvedVerification.length === 0) {
-            await extra.ideMessenger.request("agent/plan/completeStep", {
+            const task = await extra.ideMessenger.request("agent/task/get", {
               taskId,
-              stepId: "verify",
             });
+            const activeStep =
+              task.status === "success"
+                ? task.content?.plan?.steps.find(
+                    (step) =>
+                      step.state === "running" || step.state === "verifying",
+                  )
+                : undefined;
+            if (activeStep) {
+              await extra.ideMessenger.request("agent/plan/completeStep", {
+                taskId,
+                stepId: activeStep.id,
+              });
+            }
           }
         } catch {
           // Completion is not blocked by an unavailable local audit journal.

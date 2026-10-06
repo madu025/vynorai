@@ -131,6 +131,53 @@ describe("callToolById never leaves a call hanging", () => {
     expect(toolOutput(store)).toContain("core crashed");
   });
 
+  it("reports a failed tool to the active persisted plan step and starts its retry", async () => {
+    const calls: string[] = [];
+    const store = storeWith((type) => {
+      calls.push(type);
+      if (type === "tools/call")
+        return { status: "error", error: "core crashed", done: true };
+      if (type === "agent/task/get")
+        return {
+          status: "success",
+          done: true,
+          content: {
+            plan: { steps: [{ id: "act", state: "running" }] },
+          },
+        };
+      if (type === "agent/plan/failStep")
+        return {
+          status: "success",
+          done: true,
+          content: { state: "planning" },
+        };
+      if (type === "agent/plan/next")
+        return {
+          status: "success",
+          done: true,
+          content: { action: "execute", step: { id: "act" } },
+        };
+      if (type === "agent/plan/startStep")
+        return {
+          status: "success",
+          done: true,
+          content: { state: "executing" },
+        };
+      return undefined;
+    });
+
+    await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
+
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        "agent/task/get",
+        "agent/plan/failStep",
+        "agent/plan/next",
+        "agent/plan/startStep",
+      ]),
+    );
+  });
+
   it("an unexpected exception still errors the call instead of hanging", async () => {
     const store = storeWith((type) => {
       if (type === "hooks/run") throw new Error("hook runner exploded");

@@ -348,6 +348,61 @@ async function callToolByIdImpl(
         // Verification journaling must not hide the actual tool result.
       }
     }
+
+    // The persisted plan, not the prose response, owns retry and blocked
+    // decisions. A failed tool must therefore fail the currently running plan
+    // step before the model receives its error and attempts another action.
+    if (error || evidence?.status === "failed") {
+      try {
+        const taskResult = await extra.ideMessenger.request("agent/task/get", {
+          taskId: state.session.activeTaskId,
+        });
+        const activeStep =
+          taskResult.status === "success"
+            ? taskResult.content?.plan?.steps.find(
+                (step) =>
+                  step.state === "running" || step.state === "verifying",
+              )
+            : undefined;
+        if (activeStep) {
+          const failureCode =
+            error?.message ??
+            evidence?.summary ??
+            `${toolCallState.toolCall.function.name} failed`;
+          const failedStep = await extra.ideMessenger.request(
+            "agent/plan/failStep",
+            {
+              taskId: state.session.activeTaskId,
+              stepId: activeStep.id,
+              failureCode,
+            },
+          );
+          if (failedStep.status === "success") {
+            dispatch(setActiveTaskState(failedStep.content.state));
+            const next = await extra.ideMessenger.request("agent/plan/next", {
+              taskId: state.session.activeTaskId,
+            });
+            if (
+              next.status === "success" &&
+              next.content.action === "execute"
+            ) {
+              const restarted = await extra.ideMessenger.request(
+                "agent/plan/startStep",
+                {
+                  taskId: state.session.activeTaskId,
+                  stepId: next.content.step.id,
+                },
+              );
+              if (restarted.status === "success") {
+                dispatch(setActiveTaskState(restarted.content.state));
+              }
+            }
+          }
+        }
+      } catch {
+        // A journal failure must not hide the actual tool failure from the model.
+      }
+    }
   }
 
   if (streamResponse) {

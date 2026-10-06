@@ -23,6 +23,28 @@ interface Release {
   notes?: string;
 }
 
+const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+export function isValidRelease(data: unknown): data is Release {
+  if (!data || typeof data !== "object") return false;
+  const release = data as Partial<Release>;
+  if (
+    typeof release.version !== "string" ||
+    !VERSION_PATTERN.test(release.version) ||
+    typeof release.url !== "string" ||
+    typeof release.sha256 !== "string"
+  ) {
+    return false;
+  }
+
+  const expectedUrl = `https://vynor.lk/download/vynorai-${release.version}.vsix`;
+  return (
+    release.url === expectedUrl &&
+    /^[a-f0-9]{64}$/.test(release.sha256) &&
+    (release.notes === undefined || typeof release.notes === "string")
+  );
+}
+
 /** True when `a` is a newer x.y.z than `b`. */
 export function isNewer(a: string, b: string): boolean {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -39,16 +61,8 @@ async function fetchLatest(): Promise<Release | null> {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as Release;
-    if (
-      typeof data.version !== "string" ||
-      !/^https:\/\/vynor\.lk\/download\/vynorai-\d+\.\d+\.\d+\.vsix$/.test(
-        data.url,
-      ) ||
-      !/^[a-f0-9]{64}$/.test(data.sha256)
-    )
-      return null;
-    return data;
+    const data: unknown = await res.json();
+    return isValidRelease(data) ? data : null;
   } catch {
     return null;
   }

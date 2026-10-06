@@ -6,6 +6,7 @@ vi.mock("./util/errorHandling", () => ({
 }));
 
 import { VsCodeWebviewProtocol } from "./webviewProtocol";
+import { handleLLMError } from "./util/errorHandling";
 
 describe("VsCodeWebviewProtocol startup queue", () => {
   let receive: (message: unknown) => Promise<void>;
@@ -56,6 +57,31 @@ describe("VsCodeWebviewProtocol startup queue", () => {
           content: expect.objectContaining({ id: "workspace-id" }),
         }),
       });
+    });
+  });
+
+  it("ignores malformed webview messages without crashing the extension host", async () => {
+    await expect(receive(null)).resolves.toBeUndefined();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends one safe response when a model error is handled by VS Code", async () => {
+    vi.mocked(handleLLMError).mockResolvedValueOnce(true);
+    protocol.on("workspace/getSnapshot", async () => {
+      throw new Error("Ollama may not be running");
+    });
+
+    await receive({
+      messageId: "handled-model-error",
+      messageType: "workspace/getSnapshot",
+      data: undefined,
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith({
+      messageType: "workspace/getSnapshot",
+      messageId: "handled-model-error",
+      data: { done: true, status: "error" },
     });
   });
 });

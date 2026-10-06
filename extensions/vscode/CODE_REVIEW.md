@@ -118,3 +118,39 @@ Impact: user-visible and security/reliability consequence
 Fix: smallest safe change
 Verification: exact automated/manual test
 ```
+
+## Audit log
+
+### 2026-10-06 — Webview protocol
+
+**Fixed — medium: invalid webview messages could throw in the extension host.**
+
+- Boundary: GUI to extension host.
+- Evidence: `src/webviewProtocol.ts` used the `in` operator before checking
+  that an incoming VS Code webview event was an object. A `null` or primitive
+  event could throw instead of being safely ignored.
+- Fix: validate the message shape before reading protocol fields; log a safe
+  warning and return.
+- Verification: `src/webviewProtocol.vitest.ts` covers a `null` message.
+
+**Fixed — medium: handled model failures produced duplicate UI responses.**
+
+- Boundary: GUI to extension-host model-error handling.
+- Evidence: after `handleLLMError()` handled an Ollama/Lemonade error and
+  sent its safe terminal response, execution continued and sent a second
+  generic error response.
+- Fix: return immediately after the handled response.
+- Verification: `src/webviewProtocol.vitest.ts` asserts exactly one response.
+
+### 2026-10-06 — Self-update metadata
+
+**Fixed — medium: release metadata did not bind the claimed version to its artifact URL.**
+
+- Boundary: update service to extension installer.
+- Evidence: the response validated that a URL and a version were individually
+  well-formed, but did not require the URL's VSIX version to equal the claimed
+  version.
+- Fix: accept only strict semantic versions, the exact Vynor download URL for
+  that version, a 64-character SHA-256, and string release notes.
+- Verification: `src/util/selfUpdate.vitest.ts` covers valid metadata,
+  malformed versions, mismatched URLs, and invalid checksums.

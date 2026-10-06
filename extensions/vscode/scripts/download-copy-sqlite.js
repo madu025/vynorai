@@ -16,25 +16,44 @@ async function downloadFile(url, outputPath) {
   // Use proxy if set in environment variables
   const proxy = process.env.https_proxy || process.env.HTTPS_PROXY;
   const agent = proxy ? new ProxyAgent(proxy) : undefined;
+  const attempts = 3;
+  let lastError;
 
-  const response = await fetch(url, {
-    redirect: "follow", // Automatically follow redirects
-    dispatcher: agent,
-  });
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(url, {
+        redirect: "follow", // Automatically follow redirects
+        dispatcher: agent,
+      });
 
-  if (!response.ok) {
-    throw new Error(`Failed to download file, status code: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download file, status code: ${response.status}`,
+        );
+      }
+
+      // Create output directory if it doesn't exist
+      const outputDir = path.dirname(outputPath);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      // Get the response as an array buffer and write it to the file
+      const buffer = await response.arrayBuffer();
+      fs.writeFileSync(outputPath, Buffer.from(buffer));
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        console.warn(
+          `[warn] Download attempt ${attempt}/${attempts} failed; retrying...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    }
   }
 
-  // Create output directory if it doesn't exist
-  const outputDir = path.dirname(outputPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  // Get the response as an array buffer and write it to the file
-  const buffer = await response.arrayBuffer();
-  fs.writeFileSync(outputPath, Buffer.from(buffer));
+  throw lastError;
 }
 
 /**

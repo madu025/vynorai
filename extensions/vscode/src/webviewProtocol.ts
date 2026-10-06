@@ -69,8 +69,14 @@ export class VsCodeWebviewProtocol
   }
 
   private readonly handleMessage = async (msg: Message): Promise<void> => {
-    if (!("messageType" in msg) || !("messageId" in msg)) {
-      throw new Error(`Invalid webview protocol msg: ${JSON.stringify(msg)}`);
+    if (
+      !msg ||
+      typeof msg !== "object" ||
+      !("messageType" in msg) ||
+      !("messageId" in msg)
+    ) {
+      console.warn("Ignoring invalid webview protocol message");
+      return;
     }
 
     const respond = (message: any) =>
@@ -126,6 +132,7 @@ export class VsCodeWebviewProtocol
         if (await handleLLMError(e)) {
           // Respond without an error, so the UI doesn't show the error component
           respond({ done: true, status: "error" });
+          return;
         }
         let message = e.message;
         respond({ done: true, error: message, status: "error" });

@@ -1,4 +1,7 @@
 const { spawnSync } = require("child_process");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 
 // Codex and some Electron-based tools set this for their own child processes.
 // If it reaches the VS Code binary, Electron starts as Node instead of the
@@ -11,6 +14,51 @@ const extensionsDir =
   process.env.VYNOR_E2E_EXTENSIONS_DIR || "./e2e/.test-extensions";
 const storage = process.env.VYNOR_E2E_STORAGE || "./e2e/storage";
 const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+
+function sha256(file) {
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(file))
+    .digest("hex");
+}
+
+function assertCanonicalE2eInstall() {
+  const packageJson = JSON.parse(fs.readFileSync("./package.json", "utf8"));
+  const version = packageJson.version;
+  const artifact = path.resolve(`./build/vynorai-${version}.vsix`);
+  const installedRoot = path.resolve(extensionsDir);
+  const installedPackage = path.join(
+    installedRoot,
+    `vynorai.vynorai-${version}`,
+    "package.json",
+  );
+  const markerFile = path.join(installedRoot, ".vynor-canonical-vsix.json");
+
+  if (!fs.existsSync(artifact)) {
+    throw new Error(`Canonical VSIX is missing: ${artifact}`);
+  }
+  if (!fs.existsSync(installedPackage) || !fs.existsSync(markerFile)) {
+    throw new Error(
+      `E2E does not have canonical VynorAI ${version}. Run npm run e2e:install-vsix.`,
+    );
+  }
+  const installedVersion = JSON.parse(
+    fs.readFileSync(installedPackage, "utf8"),
+  ).version;
+  const marker = JSON.parse(fs.readFileSync(markerFile, "utf8"));
+  const artifactHash = sha256(artifact);
+  if (
+    installedVersion !== version ||
+    marker.version !== version ||
+    marker.sha256 !== artifactHash
+  ) {
+    throw new Error(
+      `E2E VSIX drift detected (source=${version}, installed=${installedVersion}, expected sha256=${artifactHash}, installed sha256=${marker.sha256}). Run npm run e2e:install-vsix.`,
+    );
+  }
+}
+
+assertCanonicalE2eInstall();
 
 const result = spawnSync(
   npx,

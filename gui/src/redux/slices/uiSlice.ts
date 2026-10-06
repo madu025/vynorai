@@ -2,12 +2,19 @@ import type { JudgmentLevel } from "../util/judgment";
 import { ToolPolicy } from "@continuedev/terminal-security";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { RuleWithSource, Tool } from "core";
+import { OnboardingModes } from "core/protocol/core";
 import { BUILT_IN_GROUP_NAME } from "core/tools/builtIn";
-import {
-  defaultOnboardingCardState,
-  OnboardingCardState,
-} from "../../components/OnboardingCard";
 import { getLocalStorage, LocalStorageKey } from "../../util/localStorage";
+
+type OnboardingCardState = {
+  show?: boolean;
+  activeTab?: OnboardingModes;
+};
+
+const defaultOnboardingCardState: OnboardingCardState = {
+  show: false,
+  activeTab: undefined,
+};
 
 export type RulePolicy = "on" | "off";
 

@@ -1,5 +1,4 @@
 import {
-  CubeIcon,
   ExclamationTriangleIcon,
   PencilIcon,
   WrenchScrewdriverIcon,
@@ -57,16 +56,6 @@ export function BlockSettingsTopToolbar() {
     navigate(CONFIG_ROUTES.TOOLS);
   };
 
-  const handleModelsClick = () => {
-    if (selectedProfile) {
-      dispatch(setSelectedProfile(selectedProfile.id));
-      ideMessenger.post("didChangeSelectedProfile", {
-        id: selectedProfile.id,
-      });
-    }
-    navigate(CONFIG_ROUTES.MODELS);
-  };
-
   return (
     <div className="flex flex-1 items-center justify-between gap-3">
       <div className="flex items-center gap-1">
@@ -104,12 +93,6 @@ export function BlockSettingsTopToolbar() {
             <ToolTip content="Configure tools">
               <HoverItem onClick={handleToolsClick} px={2}>
                 <WrenchScrewdriverIcon className="text-description-muted h-3 w-3 hover:brightness-125" />
-              </HoverItem>
-            </ToolTip>
-
-            <ToolTip content="Configure models">
-              <HoverItem onClick={handleModelsClick} px={2}>
-                <CubeIcon className="text-description-muted h-3 w-3 hover:brightness-125" />
               </HoverItem>
             </ToolTip>
           </div>

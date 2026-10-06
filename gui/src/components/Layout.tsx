@@ -1,4 +1,3 @@
-import { OnboardingModes } from "core/protocol/core";
 import { useContext, useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import styled from "styled-components";
@@ -16,15 +15,10 @@ import {
   syncHistoryAccount,
 } from "../redux/thunks/session";
 import { fontSize, isMetaEquivalentKeyPressed } from "../util";
-import { ROUTES } from "../util/navigation";
+import { CONFIG_ROUTES, ROUTES } from "../util/navigation";
 import { FatalErrorIndicator } from "./config/FatalErrorNotice";
 import TextDialog from "./dialogs";
 import { useMainEditor } from "./mainInput/TipTapEditor";
-import {
-  isNewUserOnboarding,
-  OnboardingCard,
-  useOnboardingCard,
-} from "./OnboardingCard";
 import OSRContextMenu from "./OSRContextMenu";
 
 const LayoutTopDiv = styled(CustomScrollbarDiv)`
@@ -46,7 +40,6 @@ const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const onboardingCard = useOnboardingCard();
   const ideMessenger = useContext(IdeMessengerContext);
 
   const { mainEditor } = useMainEditor();
@@ -133,7 +126,7 @@ const Layout = () => {
   useWebviewListener(
     "addModel",
     async () => {
-      navigate("/models");
+      navigate(CONFIG_ROUTES.SETTINGS);
     },
     [navigate],
   );
@@ -153,17 +146,17 @@ const Layout = () => {
   useWebviewListener(
     "setupLocalConfig",
     async () => {
-      onboardingCard.open(OnboardingModes.LOCAL);
+      navigate(CONFIG_ROUTES.SETTINGS);
     },
-    [],
+    [navigate],
   );
 
   useWebviewListener(
     "setupApiKey",
     async () => {
-      onboardingCard.open(OnboardingModes.API_KEY);
+      navigate(CONFIG_ROUTES.SETTINGS);
     },
-    [],
+    [navigate],
   );
 
   useWebviewListener(
@@ -214,12 +207,6 @@ const Layout = () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
-
-  useEffect(() => {
-    if (isNewUserOnboarding() && isHome) {
-      onboardingCard.open();
-    }
-  }, [isHome]);
 
   return (
     <LocalStorageProvider>

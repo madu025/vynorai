@@ -53,6 +53,16 @@ export async function openPanel(): Promise<{
   await retry(() =>
     new Workbench().executeCommand("continue.focusContinueInput"),
   );
+  return attachToPanel();
+}
+
+/** Attach to an already-open VynorAI panel without changing its route. */
+export async function attachToPanel(
+  readySelector = "[data-testid='mode-select-button']",
+): Promise<{
+  view: WebView;
+  driver: WebDriver;
+}> {
   const view = new WebView();
   const driver = view.getDriver();
   await driver.switchTo().defaultContent();
@@ -64,17 +74,23 @@ export async function openPanel(): Promise<{
     throw new Error("VynorAI webview not found");
   }, 30_000);
   await driver.switchTo().frame(frame);
-  await driver.switchTo().frame(await driver.findElement(By.css("iframe")));
+  const appFrame = await retry(
+    () => driver.findElement(By.css("iframe")),
+    30_000,
+  );
+  await driver.switchTo().frame(appFrame);
   // A new session/sign-in can reload the React app asynchronously. Do not
   // query controls while the webview is still on its loading/config state.
-  await waitForUiReady(view);
+  await waitForUiReady(view, readySelector);
   return { view, driver };
 }
 
-async function waitForUiReady(view: WebView) {
+async function waitForUiReady(view: WebView, readySelector: string) {
   await retry(async () => {
-    await view.findWebElement(By.css("[data-testid='mode-select-button']"));
-    await view.findWebElement(By.className("tiptap"));
+    await view.findWebElement(By.css(readySelector));
+    if (readySelector === "[data-testid='mode-select-button']") {
+      await view.findWebElement(By.className("tiptap"));
+    }
   }, 60_000);
 }
 
@@ -141,9 +157,15 @@ export async function waitForTurnEnd(
   const deadline = Date.now() + timeoutMs;
   let started = false;
   let idleSince = 0;
+  let lastSnapshot = "";
+  let lastSnapshotAt = 0;
   while (Date.now() < deadline) {
     const streaming = await isStreaming(view).catch(() => false);
     const approvals = await approvalCount(view);
+    if (Date.now() - lastSnapshotAt >= 2_000) {
+      lastSnapshot = await turnStateSnapshot(view);
+      lastSnapshotAt = Date.now();
+    }
     if (streaming) {
       started = true;
       idleSince = 0;
@@ -155,7 +177,34 @@ export async function waitForTurnEnd(
     }
     await sleep(500);
   }
-  throw new Error(`turn did not finish within ${timeoutMs / 1000}s`);
+  throw new Error(
+    `turn did not finish within ${timeoutMs / 1000}s; state=${lastSnapshot}`,
+  );
+}
+
+/** Compact, redacted state captured when a real-agent turn does not settle. */
+export async function turnStateSnapshot(view: WebView): Promise<string> {
+  const steps = await withTimeout(
+    view.findWebElement(By.css("[data-testid='chat-steps']")),
+    2_000,
+    "reading chat steps for diagnostics",
+  ).catch(() => undefined);
+  const streaming = steps
+    ? await steps.getAttribute("data-streaming").catch(() => "unreadable")
+    : "missing";
+  const approvals = await approvalCount(view);
+  const replies = await view
+    .findWebElements(By.css("[data-testid='assistant-message']"))
+    .catch(() => [] as WebElement[]);
+  const lastReplyText = replies.length
+    ? (await replies[replies.length - 1].getText().catch(() => ""))
+        .replace(/\s+/g, " ")
+        .slice(-240)
+    : "";
+  const stepText = steps
+    ? (await steps.getText().catch(() => "")).replace(/\s+/g, " ").slice(-240)
+    : "";
+  return JSON.stringify({ streaming, approvals, stepText, lastReplyText });
 }
 
 export async function approvalCount(view: WebView): Promise<number> {

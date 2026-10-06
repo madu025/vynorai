@@ -1,5 +1,25 @@
-import { providers } from "../pages/AddNewModel/configs/providers";
 import { VYNOR_SUPPORT_URL } from "./vynorLinks";
+
+// Error diagnostics only need a few display labels. Importing the full legacy
+// provider catalogue here pulled every BYOK model definition into the startup
+// bundle even though VynorAI owns end-user model routing.
+const PROVIDER_DIAGNOSTICS: Record<
+  string,
+  { title: string; apiKeyUrl?: string }
+> = {
+  openai: {
+    title: "OpenAI",
+    apiKeyUrl: "https://platform.openai.com/account/api-keys",
+  },
+  anthropic: {
+    title: "Anthropic",
+    apiKeyUrl: "https://console.anthropic.com/account/keys",
+  },
+  groq: { title: "Groq", apiKeyUrl: "https://console.groq.com/keys" },
+  deepseek: { title: "DeepSeek" },
+  ollama: { title: "Ollama" },
+  vynorai: { title: "VynorAI" },
+};
 
 export interface ErrorAnalysis {
   parsedError: string;
@@ -56,9 +76,8 @@ export function analyzeError(
 
     // If there's a matching provider from add model form provider info
     // We can get more info
-    const foundProvider = Object.values(providers).find(
-      (p) => p?.provider === selectedModel.underlyingProviderName,
-    );
+    const foundProvider =
+      PROVIDER_DIAGNOSTICS[selectedModel.underlyingProviderName];
     if (foundProvider) {
       providerName = foundProvider.title;
       if (foundProvider.apiKeyUrl) {

@@ -64,7 +64,7 @@ describe("LocalProfileLoader", () => {
 
     const loader = new LocalProfileLoader(testIde, llmLogger);
 
-    expect(loader.description.title).toBe("Main Config");
+    expect(loader.description.title).toBe("VynorAI");
 
     await loader.doLoadConfig();
 
@@ -82,6 +82,6 @@ describe("LocalProfileLoader", () => {
 
     await loader.doLoadConfig();
 
-    expect(loader.description.title).toBe("Main Config");
+    expect(loader.description.title).toBe("VynorAI");
   });
 });

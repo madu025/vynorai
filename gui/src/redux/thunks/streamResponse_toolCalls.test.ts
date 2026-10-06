@@ -1760,16 +1760,21 @@ describe("streamResponseThunk - tool calls", () => {
     ]);
 
     // Verify IDE messenger calls for tool execution
-    expect(requestSpy).toHaveBeenCalledWith("tools/call", {
-      toolCall: {
-        id: "tool-approval-flow-1",
-        type: "function",
-        function: {
-          name: grepName,
-          arguments: JSON.stringify({ query: "test function" }),
+    expect(requestSpy).toHaveBeenCalledWith(
+      "tools/call",
+      {
+        toolCall: {
+          id: "tool-approval-flow-1",
+          type: "function",
+          function: {
+            name: grepName,
+            arguments: JSON.stringify({ query: "test function" }),
+          },
         },
+        delegation: undefined,
       },
-    });
+      expect.any(Number),
+    );
 
     // Verify second streaming call was made for continuation
     expect(streamCallCount).toBe(2);

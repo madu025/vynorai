@@ -31,7 +31,7 @@ export default class LocalProfileLoader implements IProfileLoader {
       iconUrl: "",
       title: overrideAssistantFile?.path
         ? getUriPathBasename(overrideAssistantFile.path)
-        : "Main Config",
+        : "VynorAI",
       errors: undefined,
       uri:
         overrideAssistantFile?.path ??

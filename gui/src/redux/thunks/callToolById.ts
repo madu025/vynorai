@@ -32,6 +32,12 @@ type CallToolInputs = {
   depth?: number;
 };
 
+// A core tool can involve an external process. Never leave the webview in a
+// streaming state forever if that process or its protocol response stalls.
+// The normal error path below records the failure and lets the persisted plan
+// decide whether to retry, block, or fail the task.
+const CORE_TOOL_TIMEOUT_MS = 120_000;
+
 export const callToolById = createAsyncThunk<
   void,
   CallToolInputs,
@@ -249,10 +255,14 @@ async function callToolByIdImpl(
     streamResponse = respondImmediately;
   } else {
     // Tool is called on core side
-    const result = await extra.ideMessenger.request("tools/call", {
-      toolCall: toolCallState.toolCall,
-      delegation,
-    });
+    const result = await extra.ideMessenger.request(
+      "tools/call",
+      {
+        toolCall: toolCallState.toolCall,
+        delegation,
+      },
+      CORE_TOOL_TIMEOUT_MS,
+    );
     if (result.status === "error") {
       // A failed call is the tool's error for the model to handle, not a
       // thrown exception that leaves the turn hanging.

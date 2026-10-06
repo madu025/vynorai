@@ -2,13 +2,10 @@ import {
   ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
   ClipboardIcon,
-  Cog6ToothIcon,
-  KeyIcon,
 } from "@heroicons/react/24/outline";
 import { useContext, useEffect, useMemo, useRef } from "react";
 
 import { GhostButton } from "../../components";
-import { useEditModel } from "../../components/mainInput/Lump/useEditBlock";
 import { useMainEditor } from "../../components/mainInput/TipTapEditor";
 import ToggleDiv from "../../components/ToggleDiv";
 import { useAuth } from "../../context/Auth";
@@ -41,7 +38,6 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
     message,
     modelTitle,
     providerName,
-    apiKeyUrl,
     helpUrl,
     customErrorMessage,
   } = useMemo(() => analyzeError(error, selectedModel), [error, selectedModel]);
@@ -112,33 +108,15 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
     dispatch(setDialogMessage(undefined));
   };
 
-  const chooseAnotherModel = () => {
-    closeDialog();
-    window.setTimeout(
-      () => window.dispatchEvent(new Event("vynorai:open-model-select")),
-      0,
-    );
-  };
-
-  const checkKeysButton = apiKeyUrl ? (
+  const signInButton = (
     <GhostButton
       className="flex items-center"
-      onClick={() => ideMessenger.ide.openUrl(apiKeyUrl)}
+      onClick={() => {
+        closeDialog();
+        ideMessenger.post("vynorai/login", undefined);
+      }}
     >
-      <KeyIcon className="mr-1.5 h-3.5 w-3.5" />
-      <span>Check API key</span>
-    </GhostButton>
-  ) : null;
-
-  const handleEditModel = useEditModel();
-
-  const configButton = (
-    <GhostButton
-      className="flex items-center"
-      onClick={() => handleEditModel(selectedModel)}
-    >
-      <Cog6ToothIcon className="mr-1.5 h-3.5 w-3.5" />
-      <span>View config</span>
+      <span>Sign in again</span>
     </GhostButton>
   );
 
@@ -202,13 +180,9 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
     errorContent = (
       <div className="flex flex-col gap-2">
         <span>
-          {`This might mean your ${modelTitle} usage has been rate limited
-                by ${providerName}.`}
+          {`VynorAI is temporarily rate limited. Please retry in a moment.`}
         </span>
-        <div className="flex flex-row flex-wrap justify-start gap-3 py-4">
-          {checkKeysButton}
-          {configButton}
-        </div>
+        <div className="pt-2">{resubmitButton}</div>
       </div>
     );
   }
@@ -216,29 +190,8 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
   if (statusCode === 404) {
     errorContent = (
       <div className="flex flex-col gap-2">
-        <span>Likely causes:</span>
-        <ul className="m-0">
-          <li>
-            <span>Invalid</span>
-            <code>apiBase</code>
-            {selectedModel && (
-              <>
-                <span>{`: `}</span>
-                <code>{selectedModel.apiBase}</code>
-              </>
-            )}
-          </li>
-          <li>
-            <span>Model/deployment not found</span>
-            {selectedModel && (
-              <>
-                <span>{` for: `}</span>
-                <code>{selectedModel.model}</code>
-              </>
-            )}
-          </li>
-        </ul>
-        <div>{configButton}</div>
+        <span>The requested VynorAI service is temporarily unavailable.</span>
+        <div>{resubmitButton}</div>
       </div>
     );
   }
@@ -246,11 +199,8 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
   if (statusCode === 401) {
     errorContent = (
       <div className="flex flex-col gap-2">
-        <span>{`It's possible that your API key is invalid.`}</span>
-        <div className="flex flex-row flex-wrap gap-2">
-          {checkKeysButton}
-          {configButton}
-        </div>
+        <span>Your VynorAI session has expired or is invalid.</span>
+        <div>{signInButton}</div>
       </div>
     );
   }
@@ -258,11 +208,8 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
   if (statusCode === 403) {
     errorContent = (
       <div className="flex flex-col gap-2">
-        <span>{`Likely cause: not authorized to access the model deployment.`}</span>
-        <div className="flex flex-row flex-wrap gap-2">
-          {checkKeysButton}
-          {configButton}
-        </div>
+        <span>Your VynorAI account is not authorized for this request.</span>
+        <div>{signInButton}</div>
       </div>
     );
   }
@@ -276,14 +223,10 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
           this month. The current task has been stopped safely.
         </span>
         <span className="text-description text-xs">
-          Choose another configured model, upgrade this account, or cancel and
-          continue later. Switching models will not automatically repeat the
-          failed request.
+          Upgrade this account, or cancel and continue later. The failed request
+          will not be repeated automatically.
         </span>
         <div className="flex flex-row flex-wrap gap-2 pt-2">
-          <GhostButton onClick={chooseAnotherModel}>
-            Choose another model
-          </GhostButton>
           <GhostButton
             onClick={() =>
               ideMessenger.post("openUrl", "https://vynor.lk/#pricing")
@@ -330,16 +273,6 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
               <span>View help documentation</span>
             </GhostButton>
           )}
-          {apiKeyUrl && (
-            <GhostButton
-              className="flex items-center"
-              onClick={() => ideMessenger.ide.openUrl(apiKeyUrl)}
-            >
-              <KeyIcon className="mr-1.5 h-3.5 w-3.5" />
-              <span>Check API key</span>
-            </GhostButton>
-          )}
-          {configButton}
         </div>
       </div>
     );

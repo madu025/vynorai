@@ -4,6 +4,8 @@
  * checks, AI judge for free text, one retry, classified failures.
  */
 import { WebView, Workbench } from "vscode-extension-tester";
+import * as fs from "fs";
+import * as path from "path";
 import {
   creditsUsed,
   lastReply,
@@ -28,7 +30,7 @@ import {
 } from "../smart/project";
 import { CheckFailed, smartScenario } from "../smart/runner";
 
-const TURN = 6 * 60_000;
+const TURN = Number(process.env.VYNOR_E2E_TURN_TIMEOUT_MS ?? 6 * 60_000);
 const CREDIT_CEILING = 900_000;
 
 describe("VynorAI smart E2E: advanced (real model)", function () {
@@ -151,6 +153,37 @@ describe("VynorAI smart E2E: advanced (real model)", function () {
             throw new CheckFailed("the end of the file was lost", evidence);
           if (helpersAfter !== helpersBefore)
             throw new CheckFailed("helper functions were dropped", evidence);
+        });
+      },
+    );
+  });
+
+  it("large repository: edits the target without dropping modules", async () => {
+    await smartScenario(
+      "large-repository",
+      "src/catalog.js returns the VynorAI product, catalog tests pass, and all 120 unrelated modules remain.",
+      async () => {
+        const v = await fresh("large-repo");
+        const { WORKSPACE } = await import("../smart/project");
+        const moduleDir = path.join(WORKSPACE, "src", "modules");
+        const modulesBefore = fs.readdirSync(moduleDir).length;
+        return measured(async () => {
+          await turn(
+            v,
+            'In this large repository, update src/catalog.js so findProduct("vynor") returns { id: "vynor", name: "VynorAI" }. Preserve every unrelated module and run the tests.',
+          );
+          const catalog = loadModule("src/catalog.js");
+          const modulesAfter = fs.readdirSync(moduleDir).length;
+          const evidence = `modules ${modulesBefore}->${modulesAfter}\n${snapshot()}`;
+          if (
+            JSON.stringify(catalog.findProduct("vynor")) !==
+            JSON.stringify({ id: "vynor", name: "VynorAI" })
+          )
+            throw new CheckFailed("catalog lookup is incorrect", evidence);
+          if (modulesAfter !== modulesBefore)
+            throw new CheckFailed("unrelated modules were dropped", evidence);
+          const tests = runProjectTests();
+          if (!tests.ok) throw new CheckFailed("tests fail", tests.output);
         });
       },
     );

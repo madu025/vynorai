@@ -119,4 +119,18 @@ describe("callToolById lifecycle hooks", () => {
       "A PostToolUse hook reported: lint: unused export a",
     );
   });
+
+  it("bounds a core tool request so an unresponsive extension host cannot strand the UI", async () => {
+    const { store } = storeWithPendingTool();
+    const request = store.mockIdeMessenger.request.bind(store.mockIdeMessenger);
+    const calls: unknown[][] = [];
+    store.mockIdeMessenger.request = (async (...args: unknown[]) => {
+      calls.push(args);
+      return (request as any)(...args);
+    }) as typeof store.mockIdeMessenger.request;
+
+    await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
+
+    expect(calls.find(([type]) => type === "tools/call")?.[2]).toBe(120_000);
+  });
 });

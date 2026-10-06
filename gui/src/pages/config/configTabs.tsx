@@ -1,7 +1,6 @@
 import {
   ArrowLeftIcon,
   Cog6ToothIcon,
-  CubeIcon,
   DocumentIcon,
   PencilIcon,
   QuestionMarkCircleIcon,
@@ -10,7 +9,6 @@ import {
 import { ConfigSection } from "./components/ConfigSection";
 import { ConfigsSection } from "./sections/ConfigsSection";
 import { HelpSection } from "./sections/HelpSection";
-import { ModelsSection } from "./sections/ModelsSection";
 import { RulesSection } from "./sections/RulesSection";
 import { ToolsSection } from "./sections/ToolsSection";
 import { UserSettingsSection } from "./sections/UserSettingsSection";
@@ -46,16 +44,6 @@ export const topTabSections: TabSection[] = [
     id: "blocks",
     showTopDivider: true,
     tabs: [
-      {
-        id: "models",
-        label: "Models",
-        component: (
-          <ConfigSection>
-            <ModelsSection />
-          </ConfigSection>
-        ),
-        icon: <CubeIcon className="xs:h-4 xs:w-4 h-3 w-3 flex-shrink-0" />,
-      },
       {
         id: "rules",
         label: "Rules",

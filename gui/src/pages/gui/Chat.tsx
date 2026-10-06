@@ -27,7 +27,6 @@ import { ContinueTaskBanner } from "../../components/StepContainer/ContinueTaskB
 import { TodoListPanel } from "../../components/StepContainer/TodoListPanel";
 import { estimateTokens } from "../../components/StepContainer/turnStatus";
 import ContinueInputBox from "../../components/mainInput/ContinueInputBox";
-import { useOnboardingCard } from "../../components/OnboardingCard";
 import StepContainer from "../../components/StepContainer";
 import { TabBar } from "../../components/TabBar/TabBar";
 import { IdeMessengerContext } from "../../context/IdeMessenger";
@@ -128,7 +127,6 @@ export function Chat() {
     (state) => state.ui.errorReportsEnabled === true,
   );
   const reduxStore = useStore<RootState>();
-  const onboardingCard = useOnboardingCard();
   const showSessionTabs = useAppSelector(
     (store) => store.config.config.ui?.showSessionTabs,
   );
@@ -620,9 +618,7 @@ export function Chat() {
             </div>
           </div>
           <FatalErrorIndicator />
-          {history.length === 0 && (
-            <EmptyChatBody showOnboardingCard={onboardingCard.show} />
-          )}
+          {history.length === 0 && <EmptyChatBody />}
         </div>
       </div>
     </>

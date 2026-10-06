@@ -12,7 +12,14 @@ import {
 import type { JSONContent } from "@tiptap/react";
 import type { AgentTask, AgentPlanStepState } from "core/agent/types";
 import type { VerificationCommandCandidate } from "core/workspace/types";
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { IdeMessengerContext } from "../../context/IdeMessenger";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
@@ -71,40 +78,123 @@ export function AgentControlCenter() {
   const [expanded, setExpanded] = useState(true);
   const [busyTaskId, setBusyTaskId] = useState<string>();
   const [error, setError] = useState<string>();
+  const [refreshError, setRefreshError] = useState<string>();
   const [taskCheckpointCount, setTaskCheckpointCount] = useState(0);
+  const mountedRef = useRef(true);
+  const taskRefreshInFlight = useRef(false);
+  const taskRefreshQueued = useRef(false);
+  const taskRefreshVersion = useRef(0);
+  const supportingRefreshInFlight = useRef(false);
+  const supportingRefreshQueued = useRef(false);
+  const supportingRefreshVersion = useRef(0);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   const refreshTask = useCallback(async () => {
+    const version = ++taskRefreshVersion.current;
     if (!activeTaskId) {
-      setTask(undefined);
+      if (mountedRef.current) setTask(undefined);
       return;
     }
-    const taskResult = await ideMessenger.request("agent/task/get", {
-      taskId: activeTaskId,
-    });
-    if (taskResult.status === "success") setTask(taskResult.content);
+
+    if (taskRefreshInFlight.current) {
+      taskRefreshQueued.current = true;
+      return;
+    }
+
+    taskRefreshInFlight.current = true;
+    try {
+      const taskResult = await ideMessenger.request("agent/task/get", {
+        taskId: activeTaskId,
+      });
+      if (!mountedRef.current || version !== taskRefreshVersion.current) return;
+      if (taskResult.status === "success") {
+        setTask(taskResult.content);
+        setRefreshError(undefined);
+      } else {
+        setRefreshError("Unable to refresh the agent task. Open diagnostics.");
+      }
+    } catch {
+      if (mountedRef.current && version === taskRefreshVersion.current) {
+        setRefreshError("Unable to refresh the agent task. Open diagnostics.");
+      }
+    } finally {
+      taskRefreshInFlight.current = false;
+      if (taskRefreshQueued.current && mountedRef.current) {
+        taskRefreshQueued.current = false;
+        void refreshTask();
+      }
+    }
   }, [activeTaskId, ideMessenger]);
 
   const refreshSupportingData = useCallback(async () => {
-    const [resumableResult, verificationResult, checkpointResult] =
-      await Promise.all([
-        ideMessenger.request("agent/task/listResumable", { sessionId }),
-        ideMessenger.request("workspace/getVerificationPlan", undefined),
-        ideMessenger.request("checkpoints/list", undefined),
-      ]);
-    if (resumableResult.status === "success") {
-      setResumable(
-        resumableResult.content.filter((item) => item.id !== activeTaskId),
-      );
+    const version = ++supportingRefreshVersion.current;
+    if (supportingRefreshInFlight.current) {
+      supportingRefreshQueued.current = true;
+      return;
     }
-    if (verificationResult.status === "success") {
-      setVerification(verificationResult.content);
-    }
-    if (checkpointResult.status === "success") {
-      setTaskCheckpointCount(
-        checkpointResult.content.filter(
-          (checkpoint) => checkpoint.taskId === activeTaskId,
-        ).length,
-      );
+
+    supportingRefreshInFlight.current = true;
+    try {
+      const [resumableResult, verificationResult, checkpointResult] =
+        await Promise.allSettled([
+          ideMessenger.request("agent/task/listResumable", { sessionId }),
+          ideMessenger.request("workspace/getVerificationPlan", undefined),
+          ideMessenger.request("checkpoints/list", undefined),
+        ]);
+      if (!mountedRef.current || version !== supportingRefreshVersion.current) {
+        return;
+      }
+
+      if (
+        resumableResult.status === "fulfilled" &&
+        resumableResult.value.status === "success"
+      ) {
+        setResumable(
+          resumableResult.value.content.filter(
+            (item) => item.id !== activeTaskId,
+          ),
+        );
+      }
+      if (
+        verificationResult.status === "fulfilled" &&
+        verificationResult.value.status === "success"
+      ) {
+        setVerification(verificationResult.value.content);
+      }
+      if (
+        checkpointResult.status === "fulfilled" &&
+        checkpointResult.value.status === "success"
+      ) {
+        setTaskCheckpointCount(
+          checkpointResult.value.content.filter(
+            (checkpoint) => checkpoint.taskId === activeTaskId,
+          ).length,
+        );
+      }
+
+      if (
+        [resumableResult, verificationResult, checkpointResult].some(
+          (result) =>
+            result.status === "rejected" ||
+            (result.status === "fulfilled" && result.value.status === "error"),
+        )
+      ) {
+        setRefreshError("Unable to refresh agent details. Open diagnostics.");
+      } else {
+        setRefreshError(undefined);
+      }
+    } finally {
+      supportingRefreshInFlight.current = false;
+      if (supportingRefreshQueued.current && mountedRef.current) {
+        supportingRefreshQueued.current = false;
+        void refreshSupportingData();
+      }
     }
   }, [activeTaskId, ideMessenger, sessionId]);
 
@@ -415,9 +505,9 @@ export function AgentControlCenter() {
               </div>
             </div>
           )}
-          {error && (
+          {(error || refreshError) && (
             <div className="text-error mt-2 text-[9px]" role="alert">
-              {error}
+              {error ?? refreshError}
             </div>
           )}
         </div>

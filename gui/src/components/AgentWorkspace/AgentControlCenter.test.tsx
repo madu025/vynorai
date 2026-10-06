@@ -141,4 +141,42 @@ describe("AgentControlCenter", () => {
       expect.anything(),
     );
   });
+
+  it("contains a supporting-data request failure and shows a diagnostic alert", async () => {
+    const messenger = new MockIdeMessenger();
+    messenger.responses["agent/task/get"] = task;
+    messenger.responseHandlers["workspace/getVerificationPlan"] = async () => {
+      throw new Error("extension host unavailable");
+    };
+    const initial = getEmptyRootState();
+    const store = createMockStore(
+      {
+        session: {
+          ...initial.session,
+          id: "session-1",
+          mode: "agent",
+          activeTaskId: task.id,
+          activeTaskState: "executing",
+        },
+        workspace: {
+          loading: false,
+          snapshot: messenger.responses["workspace/getSnapshot"],
+        },
+      },
+      messenger,
+    );
+
+    render(
+      <Provider store={store}>
+        <IdeMessengerContext.Provider value={messenger}>
+          <AgentControlCenter />
+        </IdeMessengerContext.Provider>
+      </Provider>,
+    );
+
+    expect(await screen.findByText("Implement change")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to refresh agent details. Open diagnostics.",
+    );
+  });
 });

@@ -55,6 +55,18 @@ const ADVANCED: Record<string, Record<string, string>> = {
       ).join("\n") +
       `\nfunction lastFunction() {\n  return "END-MARKER";\n}\n\nmodule.exports = { first, lastFunction };\n`,
   },
+  // A multi-directory repository: the target change is small, but the agent
+  // must locate it without dropping unrelated modules during the edit.
+  "large-repo": {
+    "src/catalog.js": `function findProduct(id) {\n  return null;\n}\n\nmodule.exports = { findProduct };\n`,
+    "src/catalog.test.js": `const test = require("node:test");\nconst assert = require("node:assert");\nconst { findProduct } = require("./catalog");\n\ntest("findProduct returns the VynorAI product", () => {\n  assert.deepStrictEqual(findProduct("vynor"), { id: "vynor", name: "VynorAI" });\n});\n`,
+    ...Object.fromEntries(
+      Array.from({ length: 120 }, (_, index) => [
+        `src/modules/module-${String(index + 1).padStart(3, "0")}.js`,
+        `module.exports = { id: ${index + 1}, value: "module-${index + 1}" };\n`,
+      ]),
+    ),
+  },
   python: {
     "calc.py": `def add(a, b):\n    return a + b\n`,
     "test_calc.py": `import unittest\nfrom calc import add\n\n\nclass CalcTest(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n\n\nif __name__ == "__main__":\n    unittest.main()\n`,
@@ -86,6 +98,8 @@ export function resetWorkspace(fixture: Fixture = "basic"): string {
       : fixture === "python"
         ? ADVANCED.python
         : { ...FILES, ...ADVANCED[fixture] };
+  for (const [name, content] of Object.entries(files))
+    fs.mkdirSync(path.dirname(path.join(WORKSPACE, name)), { recursive: true });
   for (const [name, content] of Object.entries(files))
     fs.writeFileSync(path.join(WORKSPACE, name), content);
   return WORKSPACE;

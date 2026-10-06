@@ -10,9 +10,18 @@ class EmbeddingsPipeline {
   static task: PipelineType = "feature-extraction";
   static model = "all-MiniLM-L6-v2";
   static instance: any | null = null;
+  private static initialization: Promise<any> | null = null;
 
   static async getInstance() {
-    if (EmbeddingsPipeline.instance === null) {
+    if (EmbeddingsPipeline.instance !== null) {
+      return EmbeddingsPipeline.instance;
+    }
+
+    // A missing native backend is permanent for the lifetime of an extension
+    // host. Retrying initialization for every retrieval request blocks the
+    // host repeatedly and can leave an agent turn stuck. Keep both successful
+    // and failed initialization outcomes so callers fail fast until reload.
+    EmbeddingsPipeline.initialization ??= (async () => {
       // @ts-ignore
       // prettier-ignore
       const { env, pipeline } = await import("../../vendor/modules/@xenova/transformers/src/transformers.js");
@@ -32,9 +41,10 @@ class EmbeddingsPipeline {
         EmbeddingsPipeline.task,
         EmbeddingsPipeline.model,
       );
-    }
+      return EmbeddingsPipeline.instance;
+    })();
 
-    return EmbeddingsPipeline.instance;
+    return EmbeddingsPipeline.initialization;
   }
 }
 

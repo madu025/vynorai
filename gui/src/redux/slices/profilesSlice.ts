@@ -23,7 +23,7 @@ export const INITIAL_PROFILES_STATE: ProfilesState = {
   selectedProfileId: null,
   profiles: [
     {
-      title: "Main Config",
+      title: "VynorAI",
       id: "local",
       errors: [],
       uri: "",

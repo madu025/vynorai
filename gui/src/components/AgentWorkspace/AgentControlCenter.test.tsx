@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AgentTask } from "core/agent/types";
 import { Provider } from "react-redux";
 import { describe, expect, it, vi } from "vitest";
@@ -178,5 +178,46 @@ describe("AgentControlCenter", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Unable to refresh agent details. Open diagnostics.",
     );
+  });
+
+  it("contains a cancellation request failure and keeps the task visible", async () => {
+    const messenger = new MockIdeMessenger();
+    messenger.responses["agent/task/get"] = task;
+    messenger.responseHandlers["agent/task/cancel"] = async () => {
+      throw new Error("extension host unavailable");
+    };
+    const initial = getEmptyRootState();
+    const store = createMockStore(
+      {
+        session: {
+          ...initial.session,
+          id: "session-1",
+          mode: "agent",
+          activeTaskId: task.id,
+          activeTaskState: "executing",
+        },
+        workspace: {
+          loading: false,
+          snapshot: messenger.responses["workspace/getSnapshot"],
+        },
+      },
+      messenger,
+    );
+
+    render(
+      <Provider store={store}>
+        <IdeMessengerContext.Provider value={messenger}>
+          <AgentControlCenter />
+        </IdeMessengerContext.Provider>
+      </Provider>,
+    );
+
+    expect(await screen.findByText("Implement change")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel agent task" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not cancel agent task. Try again.",
+    );
+    expect(screen.getByText("Implement change")).toBeInTheDocument();
   });
 });

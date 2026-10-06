@@ -6,6 +6,7 @@ import { Mutex } from "async-mutex";
 
 import { TaskJournal } from "./TaskJournal";
 import { classifyDelegatedToolCall } from "./SubagentToolPolicy";
+import { hasPassedRequiredVerification } from "./verification";
 import type {
   AgentTask,
   AgentTaskBudget,
@@ -198,15 +199,7 @@ export class TaskRuntime {
           throw new Error(
             "Task cannot complete while an implementation subagent is running",
           );
-        const mutated = task.approvals.some(
-          (receipt) =>
-            receipt.decision === "approved" &&
-            (receipt.risk === "R2" || receipt.risk === "R3"),
-        );
-        const hasPassedEvidence = task.verification.some(
-          (result) => result.status === "passed" && result.kind !== "response",
-        );
-        if (mutated && !hasPassedEvidence) {
+        if (!hasPassedRequiredVerification(task)) {
           throw new Error(
             "Mutation task cannot complete without passed test, typecheck, lint, build, or diff-review evidence",
           );

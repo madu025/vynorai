@@ -92,6 +92,7 @@ import {
   streamRecoveryPrompt,
 } from "../util/streamRecovery";
 import type { VerificationCommandCandidate } from "core/workspace/types";
+import { hasPassedRequiredVerification } from "core/agent/verification";
 
 /**
  * Builds completion options with reasoning configuration based on session state and model capabilities.
@@ -312,8 +313,8 @@ export const streamNormalInput = createAsyncThunk<
               taskId,
               steps: [
                 {
-                  id: "understand",
-                  summary: "Bind and inspect the active workspace context",
+                  id: "bind",
+                  summary: "Bind the workspace snapshot captured at task start",
                   kind: "inspect",
                   risk: "R0",
                   maxAttempts: 1,
@@ -324,7 +325,7 @@ export const streamNormalInput = createAsyncThunk<
                   summary: "Execute the requested work under tool policy",
                   kind: "act",
                   risk: "R0",
-                  dependsOn: ["understand"],
+                  dependsOn: ["bind"],
                   maxAttempts: 2,
                   verificationRequired: true,
                 },
@@ -790,6 +791,7 @@ ${PREMORTEM_GUIDANCE}`
       const unresolvedVerification = unresolvedVerificationFailures(
         getState().session.history,
       );
+      let verificationSatisfied = !taskId;
       // "You should know": a background second look at what this turn changed.
       const finalReply = getState().session.history.at(-1);
       if (
@@ -819,7 +821,11 @@ ${PREMORTEM_GUIDANCE}`
                   (step) => step.state === "running",
                 )
               : undefined;
-          if (activeStep) {
+          const hasRequiredEvidence =
+            task.status === "success" && task.content
+              ? hasPassedRequiredVerification(task.content)
+              : false;
+          if (activeStep && hasRequiredEvidence) {
             await extra.ideMessenger.request("agent/plan/completeStep", {
               taskId,
               stepId: activeStep.id,
@@ -844,21 +850,34 @@ ${PREMORTEM_GUIDANCE}`
       await transitionTask("verifying");
       if (taskId) {
         try {
+          const task = await extra.ideMessenger.request("agent/task/get", {
+            taskId,
+          });
+          const hasRequiredEvidence =
+            task.status === "success" && task.content
+              ? hasPassedRequiredVerification(task.content)
+              : false;
+          verificationSatisfied =
+            unresolvedVerification.length === 0 && hasRequiredEvidence;
           await extra.ideMessenger.request("agent/task/recordVerification", {
             taskId,
             result: {
               kind: "response",
-              status: unresolvedVerification.length > 0 ? "failed" : "passed",
+              status:
+                unresolvedVerification.length > 0
+                  ? "failed"
+                  : hasRequiredEvidence
+                    ? "passed"
+                    : "skipped",
               summary:
                 unresolvedVerification.length > 0
                   ? `Unresolved verification failure: ${unresolvedVerification.join(", ")}`
-                  : "Model response completed without pending tool calls.",
+                  : hasRequiredEvidence
+                    ? "Required verification evidence passed."
+                    : "A mutation task requires real verification evidence before completion.",
             },
           });
-          if (unresolvedVerification.length === 0) {
-            const task = await extra.ideMessenger.request("agent/task/get", {
-              taskId,
-            });
+          if (verificationSatisfied) {
             const activeStep =
               task.status === "success"
                 ? task.content?.plan?.steps.find(
@@ -878,10 +897,16 @@ ${PREMORTEM_GUIDANCE}`
         }
       }
       await transitionTask(
-        unresolvedVerification.length > 0 ? "failed" : "completed",
+        unresolvedVerification.length > 0
+          ? "failed"
+          : verificationSatisfied
+            ? "completed"
+            : "verifying",
         unresolvedVerification.length > 0
           ? `Verification still failing: ${unresolvedVerification.join(", ")}`
-          : undefined,
+          : !verificationSatisfied
+            ? "Verification evidence is required before task completion."
+            : undefined,
       );
       // Stop hooks run once the agent has finished the turn (e.g. tests or a
       // notification). A blocking hook's reason is shown to the user; the

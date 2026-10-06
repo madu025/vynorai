@@ -65,20 +65,19 @@ export async function attachToPanel(
 }> {
   const view = new WebView();
   const driver = view.getDriver();
-  await driver.switchTo().defaultContent();
-  const frame = await retry(async () => {
+  await retry(async () => {
+    await driver.switchTo().defaultContent();
     for (const iframe of await driver.findElements(By.css("iframe"))) {
       const src = (await iframe.getAttribute("src")) || "";
-      if (/extensionId=vynorai\.vynorai/i.test(src)) return iframe;
+      if (/extensionId=vynorai\.vynorai/i.test(src)) {
+        await driver.switchTo().frame(iframe);
+        const appFrame = await driver.findElement(By.css("iframe"));
+        await driver.switchTo().frame(appFrame);
+        return;
+      }
     }
     throw new Error("VynorAI webview not found");
   }, 30_000);
-  await driver.switchTo().frame(frame);
-  const appFrame = await retry(
-    () => driver.findElement(By.css("iframe")),
-    30_000,
-  );
-  await driver.switchTo().frame(appFrame);
   // A new session/sign-in can reload the React app asynchronously. Do not
   // query controls while the webview is still on its loading/config state.
   await waitForUiReady(view, readySelector);

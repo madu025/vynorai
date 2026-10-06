@@ -45,6 +45,7 @@ describe("AgentOrchestrator", () => {
         kind: "edit",
         risk: "R2",
         dependsOn: ["inspect"],
+        verificationRequired: false,
       },
     ]);
 
@@ -62,6 +63,63 @@ describe("AgentOrchestrator", () => {
     await orchestrator.completeStep(task.id, "edit", "src/service.ts");
     expect(orchestrator.next(task.id, "workspace-1", 7)).toEqual({
       action: "complete",
+    });
+  });
+
+  it("requires fresh verification before completing a verification step", async () => {
+    const { orchestrator, runtime, task } = await createTask();
+    await orchestrator.createPlan(task.id, [
+      {
+        id: "edit",
+        summary: "Apply focused changes",
+        kind: "edit",
+        risk: "R2",
+        verificationRequired: false,
+      },
+      {
+        id: "verify",
+        summary: "Run the focused test suite",
+        kind: "test",
+        risk: "R0",
+        dependsOn: ["edit"],
+        verificationRequired: true,
+      },
+    ]);
+
+    await runtime.recordApproval({
+      taskId: task.id,
+      toolCallId: "call-edit",
+      toolName: "multi_edit",
+      risk: "R2",
+      decision: "approved",
+      scope: "src/service.ts",
+    });
+    await orchestrator.startStep(task.id, "edit", true);
+    await orchestrator.completeStep(task.id, "edit", "src/service.ts");
+    await orchestrator.startStep(task.id, "verify");
+    await runtime.recordVerification(task.id, {
+      kind: "test",
+      status: "failed",
+      summary: "Focused test failed",
+    });
+
+    await expect(orchestrator.completeStep(task.id, "verify")).rejects.toThrow(
+      "Verification step cannot complete",
+    );
+
+    await runtime.recordVerification(task.id, {
+      kind: "test",
+      status: "passed",
+      summary: "Focused test passed",
+    });
+    await orchestrator.completeStep(task.id, "verify");
+    expect(orchestrator.next(task.id, "workspace-1", 7)).toEqual({
+      action: "complete",
+    });
+    await expect(
+      runtime.transition(task.id, "completed"),
+    ).resolves.toMatchObject({
+      state: "completed",
     });
   });
 

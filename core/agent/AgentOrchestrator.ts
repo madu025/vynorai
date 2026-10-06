@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { TaskRuntime } from "./TaskRuntime";
 import { redactSecrets } from "./redactSecrets";
 import { classifyToolRisk } from "./toolRisk";
+import { hasPassedRequiredVerification } from "./verification";
 import type {
   AgentPlanStep,
   AgentPlanStepKind,
@@ -213,6 +214,11 @@ export class AgentOrchestrator {
         const step = this.requireStep(task, stepId);
         if (step.state !== "running" && step.state !== "verifying")
           throw new Error("Plan step is not active");
+        if (step.verificationRequired && !hasPassedRequiredVerification(task)) {
+          throw new Error(
+            "Verification step cannot complete without passed test, typecheck, lint, build, or diff-review evidence",
+          );
+        }
         step.state = "succeeded";
         step.scopeDigest = scope ? digest(scope) : step.scopeDigest;
         step.updatedAt = Date.now();

@@ -26,6 +26,10 @@ import { RewindButton } from "../../components/StepContainer/RewindButton";
 import { ContinueTaskBanner } from "../../components/StepContainer/ContinueTaskBanner";
 import { TodoListPanel } from "../../components/StepContainer/TodoListPanel";
 import { estimateTokens } from "../../components/StepContainer/turnStatus";
+import {
+  createRuntimeDiagnostic,
+  saveRuntimeDiagnostic,
+} from "../../util/runtimeDiagnostics";
 import ContinueInputBox from "../../components/mainInput/ContinueInputBox";
 import StepContainer from "../../components/StepContainer";
 import { TabBar } from "../../components/TabBar/TabBar";
@@ -109,12 +113,14 @@ function fallbackRender({ error, resetErrorBoundary }: any) {
       className="px-2"
       style={{ backgroundColor: vscBackground }}
     >
-      <p>Something went wrong:</p>
+      <p>
+        This message could not be rendered. Your session and task were kept.
+      </p>
       <pre style={{ color: "red" }}>{error.message}</pre>
       <pre style={{ color: lightGray }}>{error.stack}</pre>
 
       <div className="text-center">
-        <Button onClick={resetErrorBoundary}>Restart</Button>
+        <Button onClick={resetErrorBoundary}>Try again</Button>
       </div>
     </div>
   );
@@ -132,12 +138,14 @@ export function Chat() {
   );
   const isStreaming = useAppSelector((state) => state.session.isStreaming);
   const mode = useAppSelector((state) => state.session.mode);
+  const sessionId = useAppSelector((state) => state.session.id);
   const [isCreatingBackground, setIsCreatingBackground] = useState(false);
   const [stepsOpen] = useState<(boolean | undefined)[]>([]);
   const mainTextInputRef = useRef<HTMLInputElement>(null);
   const stepsDivRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const history = useAppSelector((state) => state.session.history);
+  const workspaceSnapshot = useAppSelector((state) => state.workspace.snapshot);
   useAutoCompaction();
   const queuedInputs = useAppSelector(
     (state) => state.session.queuedInputs ?? [],
@@ -516,20 +524,30 @@ export function Chat() {
               >
                 <ErrorBoundary
                   FallbackComponent={fallbackRender}
-                  onError={(error, info) => {
+                  onError={(error) => {
+                    const diagnostic = createRuntimeDiagnostic({
+                      error,
+                      sessionId,
+                      mode,
+                      historyLength: history.length,
+                      workspace: workspaceSnapshot
+                        ? {
+                            connected:
+                              (workspaceSnapshot.roots ?? []).length > 0,
+                            rootCount: (workspaceSnapshot.roots ?? []).length,
+                            trusted: workspaceSnapshot.trusted,
+                            revision: workspaceSnapshot.revision,
+                          }
+                        : undefined,
+                      toolStatusCounts: {},
+                    });
+                    saveRuntimeDiagnostic(diagnostic);
                     if (!errorReportsEnabled) return;
                     ideMessenger.post("vynor/errorReport", {
                       source: "gui",
-                      message: String(error?.message ?? error).slice(0, 2000),
-                      stack:
-                        `${error?.stack ?? ""}\n${info?.componentStack ?? ""}`.slice(
-                          0,
-                          8000,
-                        ),
+                      message: diagnostic.error.message,
+                      stack: diagnostic.error.stack,
                     });
-                  }}
-                  onReset={() => {
-                    dispatch(newSession());
                   }}
                 >
                   {renderChatHistoryItem(item, index)}

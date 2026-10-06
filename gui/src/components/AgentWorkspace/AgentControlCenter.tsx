@@ -254,19 +254,24 @@ export function AgentControlCenter() {
 
   const cancel = async () => {
     if (!visibleTask) return;
-    if (isStreaming) {
-      await dispatch(cancelStream());
-      return;
-    }
-    const result = await ideMessenger.request("agent/task/cancel", {
-      taskId: visibleTask.id,
-      reason: "Canceled from Agent Control Center",
-    });
-    if (result.status === "success") {
-      setTask(result.content);
-      dispatch(setActiveTaskState(result.content.state));
-    } else {
-      setError(result.error);
+    setError(undefined);
+    try {
+      if (isStreaming) {
+        await dispatch(cancelStream());
+        return;
+      }
+      const result = await ideMessenger.request("agent/task/cancel", {
+        taskId: visibleTask.id,
+        reason: "Canceled from Agent Control Center",
+      });
+      if (result.status === "success") {
+        setTask(result.content);
+        dispatch(setActiveTaskState(result.content.state));
+      } else {
+        setError(result.error);
+      }
+    } catch {
+      setError("Could not cancel agent task. Try again.");
     }
   };
 

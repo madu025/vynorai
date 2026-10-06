@@ -23,13 +23,17 @@ export function WorkspaceStatus() {
   const instructions = snapshot?.instructions ?? [];
 
   const refresh = async () => {
-    const result = await ideMessenger.request(
-      "workspace/refreshSnapshot",
-      undefined,
-    );
-    if (result.status === "success") {
-      dispatch(setWorkspaceSnapshot(result.content));
-    } else {
+    try {
+      const result = await ideMessenger.request(
+        "workspace/refreshSnapshot",
+        undefined,
+      );
+      if (result.status === "success") {
+        dispatch(setWorkspaceSnapshot(result.content));
+      } else {
+        dispatch(setWorkspaceError("Could not refresh workspace state."));
+      }
+    } catch {
       dispatch(setWorkspaceError("Could not refresh workspace state."));
     }
   };

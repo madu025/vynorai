@@ -177,7 +177,8 @@ export function McpAppRenderer({
     };
 
     bridge.onmessage = async (params: { role: string; content: unknown[] }) => {
-      const text = params.content
+      const content = Array.isArray(params?.content) ? params.content : [];
+      const text = content
         .filter((item: any) => item.type === "text" && item.text)
         .map((item: any) => item.text)
         .join("\n");
@@ -231,7 +232,7 @@ export function McpAppRenderer({
         throw new Error(`Failed to call tool from MCP UI: ${output.error}`);
       }
       return {
-        content: output.content.contextItems.map((ci) => ({
+        content: (output.content?.contextItems ?? []).map((ci) => ({
           type: "text",
           text: renderContextItems([ci]),
         })),
@@ -327,7 +328,7 @@ export function McpAppRenderer({
 
   useEffect(() => {
     const bridge = appBridgeRef.current;
-    if (!bridge || !isInitialized || !toolResult) return;
+    if (!bridge || !isInitialized || !Array.isArray(toolResult)) return;
     try {
       bridge.sendToolResult({
         content: toolResult.map((o) => ({

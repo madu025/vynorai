@@ -30,4 +30,12 @@ describe("selectActiveTools", () => {
   test("keeps mutating tools available in agent mode", () => {
     expect(selectActiveTools(state("agent"))).toHaveLength(2);
   });
+
+  test("survives incomplete config during an asynchronous reload", () => {
+    const incomplete = state("agent");
+    incomplete.config.config.tools = undefined;
+    incomplete.ui.toolSettings = undefined;
+    incomplete.ui.toolGroupSettings = undefined;
+    expect(selectActiveTools(incomplete)).toEqual([]);
+  });
 });

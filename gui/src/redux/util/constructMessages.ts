@@ -101,7 +101,11 @@ export function constructMessages(
       // Gather context items for user messages
       let content = normalizeToMessageParts(item.message);
 
-      const ctxItemParts = item.contextItems
+      // Persisted sessions created by older builds may not have contextItems.
+      // A malformed history entry must not prevent a model response from being
+      // rendered or recovered after a tool call.
+      const contextItems = item.contextItems ?? [];
+      const ctxItemParts = contextItems
         .map((ctxItem) => {
           const nameAttr = ctxItem.name ? ` name="${ctxItem.name}"` : "";
           const uriAttr = ctxItem.uri?.value
@@ -116,7 +120,7 @@ export function constructMessages(
 
       content = [...ctxItemParts, ...content];
       msgs.push({
-        ctxItems: item.contextItems,
+        ctxItems: contextItems,
         message: {
           ...item.message,
           content,
@@ -124,7 +128,7 @@ export function constructMessages(
       });
     } else if (item.message.role === "thinking") {
       msgs.push({
-        ctxItems: item.contextItems,
+        ctxItems: item.contextItems ?? [],
         message: item.message,
       });
     } else if (item.message.role === "assistant") {
@@ -148,7 +152,7 @@ export function constructMessages(
       }
 
       msgs.push({
-        ctxItems: item.contextItems,
+        ctxItems: item.contextItems ?? [],
         message: item.message,
       });
 

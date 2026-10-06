@@ -21,8 +21,9 @@ export function ToolCallDiv({
   historyIndex,
 }: ToolCallDivProps) {
   const [open, setOpen] = useState(true);
+  // While config reloads (sign-in, new session) tools can be briefly absent.
   const availableTools = useAppSelector(
-    (state: RootState) => state.config.config.tools,
+    (state: RootState) => state.config?.config?.tools ?? [],
   );
 
   if (!toolCallStates?.length) return null;

@@ -155,6 +155,13 @@ function ModelSelect() {
     null;
   const tinyFont = useFontSize(-4);
 
+  useEffect(() => {
+    const openFromRecovery = () => buttonRef.current?.click();
+    window.addEventListener("vynorai:open-model-select", openFromRecovery);
+    return () =>
+      window.removeEventListener("vynorai:open-model-select", openFromRecovery);
+  }, []);
+
   let selectedModel = null;
   let allModels = null;
   if (isInEdit) {

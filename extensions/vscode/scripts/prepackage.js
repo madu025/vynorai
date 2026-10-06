@@ -100,7 +100,8 @@ void (async () => {
   );
 
   const indexHtmlPath = path.join(intellijExtensionWebviewPath, "index.html");
-  fs.copyFileSync(indexHtmlPath, "tmp_index.html");
+  const tempIndexHtmlPath = ".vynor-build-index.tmp.html";
+  fs.copyFileSync(indexHtmlPath, tempIndexHtmlPath);
   rimrafSync(intellijExtensionWebviewPath);
   fs.mkdirSync(intellijExtensionWebviewPath, { recursive: true });
 
@@ -126,9 +127,9 @@ void (async () => {
   if (fs.existsSync(indexHtmlPath)) {
     rimrafSync(indexHtmlPath);
   }
-  fs.copyFileSync("tmp_index.html", indexHtmlPath);
+  fs.copyFileSync(tempIndexHtmlPath, indexHtmlPath);
   try {
-    fs.unlinkSync("tmp_index.html");
+    fs.unlinkSync(tempIndexHtmlPath);
   } catch (e) {
     // Non-fatal on Windows if antivirus or indexer holds temporary handle
   }

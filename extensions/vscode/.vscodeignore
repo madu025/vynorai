@@ -21,6 +21,10 @@ esbuild.js
 importMetaUrl.js
 scripts
 e2e
+*.log
+settings.json
+tsconfig.e2e.json
+entitlements.plist
 
 server/exe/**
 !out/node_modules/**

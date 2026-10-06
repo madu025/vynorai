@@ -64,10 +64,9 @@ export function toolCallStateToContextItems(
   if (!toolCallState) {
     return [];
   }
-  return (
-    toolCallState.output?.map((ctxItem) =>
-      toolCallCtxItemToCtxItemWithId(ctxItem, toolCallState.toolCallId),
-    ) ?? []
+  if (!Array.isArray(toolCallState.output)) return [];
+  return toolCallState.output.map((ctxItem) =>
+    toolCallCtxItemToCtxItemWithId(ctxItem, toolCallState.toolCallId),
   );
 }
 

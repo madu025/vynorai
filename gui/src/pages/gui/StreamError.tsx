@@ -5,7 +5,7 @@ import {
   Cog6ToothIcon,
   KeyIcon,
 } from "@heroicons/react/24/outline";
-import { useContext, useMemo } from "react";
+import { useContext, useEffect, useMemo, useRef } from "react";
 
 import { GhostButton } from "../../components";
 import { useEditModel } from "../../components/mainInput/Lump/useEditBlock";
@@ -18,6 +18,11 @@ import { selectSelectedChatModel } from "../../redux/slices/configSlice";
 import { setDialogMessage, setShowDialog } from "../../redux/slices/uiSlice";
 import { streamResponseThunk } from "../../redux/thunks/streamResponse";
 import { analyzeError } from "../../util/errorAnalysis";
+import {
+  createRuntimeDiagnostic,
+  RuntimeDiagnostic,
+  saveRuntimeDiagnostic,
+} from "../../util/runtimeDiagnostics";
 
 interface StreamErrorProps {
   error: unknown;
@@ -40,6 +45,9 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
     helpUrl,
     customErrorMessage,
   } = useMemo(() => analyzeError(error, selectedModel), [error, selectedModel]);
+  const isQuotaError = /quota_exceeded|monthly_limit_reached|credits/i.test(
+    parsedError ?? "",
+  );
 
   const handleRefreshProfiles = () => {
     void refreshProfiles("Clicked reload config from stream error dialog");
@@ -52,6 +60,65 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
   };
 
   const history = useAppSelector((store) => store.session.history);
+  const sessionId = useAppSelector((store) => store.session.id);
+  const mode = useAppSelector((store) => store.session.mode);
+  const workspaceSnapshot = useAppSelector((store) => store.workspace.snapshot);
+  const diagnosticRef = useRef<RuntimeDiagnostic | null>(null);
+  if (!diagnosticRef.current) {
+    diagnosticRef.current = createRuntimeDiagnostic({
+      error,
+      modelTitle: selectedModel?.title,
+      provider: selectedModel?.underlyingProviderName,
+      sessionId,
+      mode,
+      historyLength: history.length,
+      workspace: workspaceSnapshot
+        ? {
+            connected: (workspaceSnapshot.roots ?? []).length > 0,
+            rootCount: (workspaceSnapshot.roots ?? []).length,
+            trusted: workspaceSnapshot.trusted,
+            revision: workspaceSnapshot.revision,
+          }
+        : undefined,
+      toolStatusCounts: history.reduce<Record<string, number>>(
+        (counts, item) => {
+          for (const toolCall of item.toolCallStates ?? []) {
+            counts[toolCall.status] = (counts[toolCall.status] ?? 0) + 1;
+          }
+          return counts;
+        },
+        {},
+      ),
+    });
+  }
+  const diagnostic = diagnosticRef.current;
+
+  useEffect(() => {
+    saveRuntimeDiagnostic(diagnostic);
+    ideMessenger.post("diagnostics/record", {
+      report: JSON.stringify(diagnostic),
+    });
+    if (isQuotaError) {
+      window.dispatchEvent(new Event("vynorai:quota-exhausted"));
+    }
+  }, [diagnostic, ideMessenger, isQuotaError]);
+
+  const copyDiagnosticToClipboard = () => {
+    void navigator.clipboard.writeText(JSON.stringify(diagnostic, null, 2));
+  };
+
+  const closeDialog = () => {
+    dispatch(setShowDialog(false));
+    dispatch(setDialogMessage(undefined));
+  };
+
+  const chooseAnotherModel = () => {
+    closeDialog();
+    window.setTimeout(
+      () => window.dispatchEvent(new Event("vynorai:open-model-select")),
+      0,
+    );
+  };
 
   const checkKeysButton = apiKeyUrl ? (
     <GhostButton
@@ -201,21 +268,30 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
   }
 
   // VynorAI quota errors come back as 403 but are about credits, not access.
-  if (/quota_exceeded|monthly_limit_reached|credits/i.test(parsedError ?? "")) {
+  if (isQuotaError) {
     errorContent = (
       <div className="flex flex-col gap-2">
         <span>
-          Your VynorAI credits for this month are used up. Answers VynorAI
-          already has still work; new requests need more credits.
+          The account used by the selected VynorAI model has no credits left for
+          this month. The current task has been stopped safely.
         </span>
-        <div className="flex flex-row flex-wrap gap-2">
+        <span className="text-description text-xs">
+          Choose another configured model, upgrade this account, or cancel and
+          continue later. Switching models will not automatically repeat the
+          failed request.
+        </span>
+        <div className="flex flex-row flex-wrap gap-2 pt-2">
+          <GhostButton onClick={chooseAnotherModel}>
+            Choose another model
+          </GhostButton>
           <GhostButton
             onClick={() =>
               ideMessenger.post("openUrl", "https://vynor.lk/#pricing")
             }
           >
-            Top up or upgrade
+            Upgrade plan
           </GhostButton>
+          <GhostButton onClick={closeDialog}>Cancel</GhostButton>
         </div>
       </div>
     );
@@ -273,7 +349,9 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
     <div className="flex flex-col gap-4 px-3 pb-3 pt-3">
       {/* Concise error title */}
       <h3 className="text-error m-0 p-0 text-lg font-medium">
-        Error handling model response
+        {isQuotaError
+          ? "VynorAI credits used up"
+          : "Error handling model response"}
       </h3>
 
       {errorContent}
@@ -298,6 +376,14 @@ const StreamErrorDialog = ({ error }: StreamErrorProps) => {
                 >
                   <ClipboardIcon className="mr-1.5 h-3.5 w-3.5" />
                   <span>Copy output</span>
+                </GhostButton>
+
+                <GhostButton
+                  onClick={copyDiagnosticToClipboard}
+                  className="flex items-center"
+                >
+                  <ClipboardIcon className="mr-1.5 h-3.5 w-3.5" />
+                  <span>Copy diagnostic</span>
                 </GhostButton>
 
                 <GhostButton

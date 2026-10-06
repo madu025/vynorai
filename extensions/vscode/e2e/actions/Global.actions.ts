@@ -106,7 +106,7 @@ export class GlobalActions {
       }
 
       const element = await statusBar.findElement(
-        By.xpath("//*[contains(text(), 'Continue')]"),
+        By.xpath("//*[contains(., 'VynorAI') or contains(., 'Continue')]"),
       );
 
       // Validate we can get text

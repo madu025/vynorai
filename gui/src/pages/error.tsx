@@ -24,9 +24,10 @@ const ErrorPage: React.FC = () => {
   const [initialLoad, setInitialLoad] = useState(true);
 
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setInitialLoad(false);
     }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -34,8 +35,22 @@ const ErrorPage: React.FC = () => {
       <h1 className="mb-4 text-3xl font-bold">Oops! Something went wrong</h1>
 
       <code className="whitespace-wrap mx-2 mb-4 max-w-full break-words py-2">
-        {error.statusText || error.message}
+        {error?.statusText || error?.message || "Unknown interface error"}
       </code>
+      {/* Where it broke: without this a crash report says only the message. */}
+      {typeof error?.stack === "string" && (
+        <details className="mx-2 mb-4 max-w-full text-left">
+          <summary className="text-description cursor-pointer text-xs">
+            Details
+          </summary>
+          <pre
+            data-testid="error-stack"
+            className="text-description whitespace-pre-wrap break-words text-[10px]"
+          >
+            {error.stack.split("\n").slice(0, 8).join("\n")}
+          </pre>
+        </details>
+      )}
 
       <Button
         className="flex flex-row items-center gap-2"

@@ -28,5 +28,5 @@ npm run package >/tmp/vynor-package.log 2>&1 || { tail -20 /tmp/vynor-package.lo
 VSIX="build/vynorai-$VERSION.vsix"
 # Guard: the packaged chat panel must be this build's GUI.
 hits=$(unzip -p "$VSIX" extension/gui/assets/index.js | grep -c "Agent Permissions" || true)
-[ "${hits:-0}" -gt 0 ] ||{ echo "Packaged GUI is stale (no 'Agent Permissions' in index.js)" >&2; exit 1; }
+[ "${hits:-0}" -gt 0 ] || { echo "Packaged GUI is stale (no 'Agent Permissions' in index.js)" >&2; exit 1; }
 echo "Built $ROOT/extensions/vscode/$VSIX"

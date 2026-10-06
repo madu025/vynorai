@@ -4,16 +4,37 @@ import { InputModifiers } from "core";
 
 import { v4 as uuidv4 } from "uuid";
 import { resolveEditorContent } from "../../components/mainInput/TipTapEditor/utils/resolveEditorContent";
+import { diagnoseAgentRun } from "../../util/agentRunDiagnostics";
 import { selectSelectedChatModel } from "../slices/configSlice";
 import {
   resetNextCodeBlockToApplyIndex,
   submitEditorAndInitAtIndex,
   updateHistoryItemAtIndex,
 } from "../slices/sessionSlice";
-import { ThunkApiType } from "../store";
+import { RootState, ThunkApiType } from "../store";
 import { streamNormalInput } from "./streamNormalInput";
 import { streamThunkWrapper } from "./streamThunkWrapper";
 import { updateFileSymbolsFromFiles } from "./updateFileSymbols";
+
+function newDiagnosticId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
+}
+
+function summarizeTools(history: RootState["session"]["history"]) {
+  const statusCounts: Record<string, number> = {};
+  const nameCounts: Record<string, number> = {};
+  for (const item of history) {
+    for (const state of item.toolCallStates ?? []) {
+      statusCounts[state.status] = (statusCounts[state.status] ?? 0) + 1;
+      const name = state.toolCall.function?.name ?? "unknown";
+      nameCounts[name] = (nameCounts[name] ?? 0) + 1;
+    }
+  }
+  return { statusCounts, nameCounts };
+}
 
 export const streamResponseThunk = createAsyncThunk<
   void,
@@ -30,7 +51,42 @@ export const streamResponseThunk = createAsyncThunk<
     { editorState, modifiers, index, resumeTaskId },
     { dispatch, extra, getState },
   ) => {
-    await dispatch(
+    const startedAt = Date.now();
+    const runId = newDiagnosticId();
+    const initialState = getState();
+    const initialModel = selectSelectedChatModel(initialState);
+    const inputIndex = index ?? initialState.session.history.length;
+    const initialWorkspace = initialState.workspace.snapshot;
+    extra.ideMessenger.post("diagnostics/record", {
+      report: JSON.stringify({
+        schemaVersion: 1,
+        id: `${runId}:start`,
+        recordedAt: new Date(startedAt).toISOString(),
+        category: "agent-lifecycle",
+        phase: "started",
+        model: {
+          title: initialModel?.title,
+          provider: initialModel?.underlyingProviderName,
+        },
+        session: {
+          id: initialState.session.id,
+          mode: initialState.session.mode,
+          historyLength: initialState.session.history.length,
+        },
+        workspace: initialWorkspace
+          ? {
+              connected: (initialWorkspace.roots ?? []).length > 0,
+              rootCount: (initialWorkspace.roots ?? []).length,
+              trusted: initialWorkspace.trusted,
+              revision: initialWorkspace.revision,
+            }
+          : undefined,
+        privacy:
+          "No prompt, file content, absolute path, or credential is included.",
+      }),
+    });
+
+    const wrapperResult = await dispatch(
       streamThunkWrapper(async () => {
         const state = getState();
         const selectedChatModel = selectSelectedChatModel(state);
@@ -90,7 +146,7 @@ export const streamResponseThunk = createAsyncThunk<
         unwrapResult(
           await dispatch(
             streamNormalInput({
-              resumeTaskId,
+              ...(resumeTaskId !== undefined ? { resumeTaskId } : {}),
               legacySlashCommandData: legacyCommandWithInput
                 ? {
                     command: legacyCommandWithInput.command,
@@ -105,5 +161,60 @@ export const streamResponseThunk = createAsyncThunk<
         );
       }),
     );
+
+    const finalState = getState();
+    const turnHistory = finalState.session.history.slice(inputIndex);
+    const tools = summarizeTools(turnHistory);
+    const qualitySignals = diagnoseAgentRun(
+      tools.nameCounts,
+      finalState.session.turnCredits?.used,
+      finalState.ui.taskCreditCap,
+    );
+    const outcome =
+      !initialState.ui.showDialog && finalState.ui.showDialog
+        ? "failed"
+        : streamThunkWrapper.rejected.match(wrapperResult)
+          ? "failed"
+          : "completed";
+    extra.ideMessenger.post("diagnostics/record", {
+      report: JSON.stringify({
+        schemaVersion: 1,
+        id: `${runId}:finish`,
+        recordedAt: new Date().toISOString(),
+        category: "agent-lifecycle",
+        phase: "finished",
+        outcome,
+        durationMs: Date.now() - startedAt,
+        model: {
+          title: initialModel?.title,
+          provider: initialModel?.underlyingProviderName,
+        },
+        session: {
+          id: finalState.session.id,
+          mode: finalState.session.mode,
+          historyLength: finalState.session.history.length,
+        },
+        toolStatusCounts: tools.statusCounts,
+        toolNameCounts: tools.nameCounts,
+        creditsUsed: finalState.session.turnCredits?.used,
+        taskCreditCap: finalState.ui.taskCreditCap,
+        qualitySignals,
+        pauseReason: finalState.session.toolBudgetPauseReason,
+        analysis:
+          outcome === "failed"
+            ? {
+                likelyCause:
+                  "The agent run ended in the model-response error path.",
+                recovery:
+                  "Inspect the paired model-response diagnostic before retrying.",
+              }
+            : {
+                likelyCause: "No runtime failure was recorded for this run.",
+                recovery: "No recovery action is required.",
+              },
+        privacy:
+          "No prompt, file content, absolute path, or credential is included.",
+      }),
+    });
   },
 );

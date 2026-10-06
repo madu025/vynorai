@@ -1,4 +1,5 @@
 import { Tool, ToolCallState } from "core";
+import { BuiltInToolNames } from "core/tools/builtIn";
 import Mustache from "mustache";
 
 interface ToolCallStatusMessageProps {
@@ -6,9 +7,30 @@ interface ToolCallStatusMessageProps {
   toolCallState: ToolCallState;
 }
 
-/** "142 lines" / "3 results" for a finished call, from its real output. */
+function lineSummary(content: string): string {
+  if (content.length === 0) return "0 lines";
+  const lines = content
+    .replace(/(?:\r\n|\r|\n)$/, "")
+    .split(/\r\n|\r|\n/).length;
+  return lines === 1 ? "1 line" : `${lines} lines`;
+}
+
+/** "142 lines" / "3 results" for a finished call, from its real result. */
 export function toolOutputSummary(toolCallState: ToolCallState): string | null {
-  if (toolCallState.status !== "done" || !toolCallState.output?.length) {
+  if (toolCallState.status !== "done") {
+    return null;
+  }
+
+  // create_new_file returns a one-line success message. The useful size is the
+  // content that was actually written, which is already present in parsedArgs.
+  if (
+    toolCallState.toolCall.function.name === BuiltInToolNames.CreateNewFile &&
+    typeof toolCallState.parsedArgs?.contents === "string"
+  ) {
+    return lineSummary(toolCallState.parsedArgs.contents);
+  }
+
+  if (!Array.isArray(toolCallState.output) || !toolCallState.output.length) {
     return null;
   }
   const visible = toolCallState.output.filter((item) => !item.hidden);
@@ -16,8 +38,7 @@ export function toolOutputSummary(toolCallState: ToolCallState): string | null {
   if (visible.length > 1) return `${visible.length} results`;
   const content = visible[0].content ?? "";
   if (!content.trim()) return "no output";
-  const lines = content.replace(/\n$/, "").split("\n").length;
-  return lines === 1 ? "1 line" : `${lines} lines`;
+  return lineSummary(content);
 }
 
 function statusSuffix(toolCallState: ToolCallState): string | null {

@@ -2,7 +2,7 @@
   "name": "vynorai",
   "icon": "media/icon.png",
   "author": "VynorAI",
-  "version": "1.2.26",
+  "version": "1.2.35",
   "repository": {
     "type": "git",
     "url": "https://github.com/vynorai/vynorai"
@@ -171,6 +171,11 @@
         "command": "vynorai.checkForUpdates",
         "category": "VynorAI",
         "title": "Check for Updates"
+      },
+      {
+        "command": "vynorai.copyDiagnostics",
+        "category": "VynorAI",
+        "title": "Copy Runtime Diagnostics"
       },
       {
         "command": "continue.applyCodeFromChat",
@@ -348,12 +353,6 @@
         "command": "continue.docsReIndex",
         "category": "Continue",
         "title": "Docs Force Re-Index",
-        "group": "Continue"
-      },
-      {
-        "command": "continue.focusContinueInput",
-        "category": "Continue",
-        "title": "Focus Continue Chat",
         "group": "Continue"
       },
       {

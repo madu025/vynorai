@@ -7,8 +7,12 @@ import * as crypto from "crypto";
 
 const API_BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
 
+function e2eApiKey() {
+  return process.env.VYNORAI_E2E_API_KEY || process.env.VYNOR_E2E_API_KEY || "";
+}
+
 function apiKey(): string {
-  const key = process.env.VYNORAI_E2E_API_KEY || "";
+  const key = e2eApiKey();
   if (!/^vynor_live_[a-f0-9]{32}$/i.test(key))
     throw new Error("VYNORAI_E2E_API_KEY is missing or malformed");
   return key;

@@ -48,7 +48,7 @@ export default function StepContainer(props: StepContainerProps) {
   // Which Auto route served this turn, from what actually streamed: a turn
   // that produced reasoning ran with thinking on; otherwise the fast path.
   const chatModels = useAppSelector(
-    (state) => state.config.config.modelsByRole.chat,
+    (state) => state.config.config.modelsByRole?.chat ?? [],
   );
   const selectedChatModel = useAppSelector(selectSelectedChatModel);
   const usedThinking = useAppSelector((state) =>

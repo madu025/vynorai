@@ -43,7 +43,8 @@ async function buildGui(isGhAction) {
   );
 
   const indexHtmlPath = path.join(intellijExtensionWebviewPath, "index.html");
-  fs.copyFileSync(indexHtmlPath, "tmp_index.html");
+  const tempIndexHtmlPath = ".vynor-build-index.tmp.html";
+  fs.copyFileSync(indexHtmlPath, tempIndexHtmlPath);
   rimrafSync(intellijExtensionWebviewPath);
   fs.mkdirSync(intellijExtensionWebviewPath, { recursive: true });
 
@@ -64,8 +65,8 @@ async function buildGui(isGhAction) {
   if (fs.existsSync(indexHtmlPath)) {
     rimrafSync(indexHtmlPath);
   }
-  fs.copyFileSync("tmp_index.html", indexHtmlPath);
-  fs.unlinkSync("tmp_index.html");
+  fs.copyFileSync(tempIndexHtmlPath, indexHtmlPath);
+  fs.unlinkSync(tempIndexHtmlPath);
 
   console.log("[info] Copied gui build to JetBrains extension");
 

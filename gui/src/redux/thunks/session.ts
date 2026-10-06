@@ -289,7 +289,7 @@ export const saveCurrentSession = createAsyncThunk<
     }
     // More fallbacks in case of no title
     if (!title.length) {
-      const metadata = session.allSessionMetadata.find(
+      const metadata = session.allSessionMetadata?.find(
         (m) => m.sessionId === session.id,
       );
       if (metadata?.title) {

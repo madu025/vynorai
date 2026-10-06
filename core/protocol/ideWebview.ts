@@ -68,6 +68,7 @@ export type ToIdeFromWebviewProtocol = ToIdeFromWebviewOrCoreProtocol & {
   showTutorial: [undefined, void];
   showFile: [ShowFilePayload, void];
   toggleDevTools: [undefined, void];
+  "diagnostics/record": [{ report: string }, void];
   reloadWindow: [undefined, void];
   focusEditor: [undefined, void];
   toggleFullScreen: [{ newWindow?: boolean } | undefined, void];

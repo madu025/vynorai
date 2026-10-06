@@ -28,7 +28,7 @@ async function evaluateToolPolicy(
 ): Promise<EvaluatedPolicy> {
   const basePolicy =
     toolPolicies[toolCallState.toolCall.function.name] ??
-    activeTools.find(
+    activeTools?.find(
       (tool) => tool.function.name === toolCallState.toolCall.function.name,
     )?.defaultToolPolicy ??
     DEFAULT_TOOL_SETTING;

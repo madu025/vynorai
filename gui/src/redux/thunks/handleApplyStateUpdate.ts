@@ -13,6 +13,7 @@ import {
   updateApplyState,
   updateToolCallOutput,
 } from "../slices/sessionSlice";
+import { DEFAULT_PERMISSION_MODE } from "../slices/uiSlice";
 import { ThunkApiType } from "../store";
 import { findToolCallById, logToolUsage } from "../util";
 import { runHooks } from "../util/hooks";
@@ -50,11 +51,18 @@ export const handleApplyStateUpdate = createAsyncThunk<
           applyState.toolCallId,
         );
 
+        // The edit already passed the permission check (run on its own in
+        // Auto/Full mode, or approved by the user), so its diff is applied
+        // right away. Only Ask mode keeps the separate Accept/Reject step.
+        // Without this, Auto mode ran the edit and then stalled the agent on
+        // an unaccepted diff.
         if (
           applyState.status === "done" &&
           toolCallState?.toolCall.function.name &&
-          getState().ui.toolSettings[toolCallState.toolCall.function.name] ===
-            "allowedWithoutPermission"
+          ((getState().ui.permissionMode ?? DEFAULT_PERMISSION_MODE) !==
+            "ask" ||
+            getState().ui.toolSettings[toolCallState.toolCall.function.name] ===
+              "allowedWithoutPermission")
         ) {
           extra.ideMessenger.post("acceptDiff", {
             streamId: applyState.streamId,

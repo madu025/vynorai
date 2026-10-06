@@ -14,6 +14,13 @@ export function WorkspaceStatus() {
     (state) => state.workspace,
   );
   const taskState = useAppSelector((state) => state.session.activeTaskState);
+  // Snapshot updates arrive in stages while the workspace is opening or
+  // refreshing. Treat missing collections as empty until the full snapshot
+  // is available instead of crashing the whole webview.
+  const roots = snapshot?.roots ?? [];
+  const indexItems = snapshot?.index ?? [];
+  const manifests = snapshot?.manifests ?? [];
+  const instructions = snapshot?.instructions ?? [];
 
   const refresh = async () => {
     const result = await ideMessenger.request(
@@ -27,16 +34,14 @@ export function WorkspaceStatus() {
     }
   };
 
-  const activeRoot = snapshot?.roots.find(
-    (root) => root.id === snapshot.activeRootId,
-  );
-  const indexState = snapshot?.index.find(
-    (item) => item.rootId === snapshot.activeRootId,
+  const activeRoot = roots.find((root) => root.id === snapshot?.activeRootId);
+  const indexState = indexItems.find(
+    (item) => item.rootId === snapshot?.activeRootId,
   );
   const evidence =
-    !snapshot || snapshot.roots.length === 0
+    roots.length === 0
       ? "No workspace"
-      : snapshot.manifests.length + snapshot.instructions.length > 0
+      : manifests.length + instructions.length > 0
         ? "Grounded"
         : "Workspace ready";
 
@@ -68,7 +73,7 @@ export function WorkspaceStatus() {
         {taskState && !["completed", "failed", "canceled"].includes(taskState)
           ? taskState.replace("_", " ")
           : (indexState?.status ?? evidence)}
-        {!snapshot?.trusted && snapshot?.roots.length ? " · restricted" : ""}
+        {!snapshot?.trusted && roots.length ? " · restricted" : ""}
       </span>
     </button>
   );

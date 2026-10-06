@@ -14,7 +14,9 @@ describe("Prompt file", () => {
   let editor: TextEditor;
 
   before(async function () {
-    this.timeout(DEFAULT_TIMEOUT.MD);
+    // Opening a workspace restarts the extension host on slower Windows CI
+    // machines. Fifteen seconds regularly expires before activation settles.
+    this.timeout(DEFAULT_TIMEOUT.XL);
     await GlobalActions.disableNextEdit();
   });
 

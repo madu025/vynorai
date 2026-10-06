@@ -64,8 +64,22 @@ const ADVANCED: Record<string, Record<string, string>> = {
 export type Fixture = keyof typeof ADVANCED | "basic";
 
 export function resetWorkspace(fixture: Fixture = "basic"): string {
-  fs.rmSync(WORKSPACE, { recursive: true, force: true });
+  // The folder stays open in VS Code (Windows locks it: EBUSY), so empty it
+  // instead of deleting it. Editor state folders are left alone.
   fs.mkdirSync(WORKSPACE, { recursive: true });
+  for (const entry of fs.readdirSync(WORKSPACE)) {
+    if (entry === ".vscode") continue;
+    try {
+      fs.rmSync(path.join(WORKSPACE, entry), {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 200,
+      });
+    } catch {
+      // A file held open by the editor is overwritten below instead.
+    }
+  }
   const files =
     fixture === "basic"
       ? FILES

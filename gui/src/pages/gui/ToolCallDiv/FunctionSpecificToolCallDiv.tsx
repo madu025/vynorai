@@ -55,13 +55,14 @@ function FunctionSpecificToolCallDiv({
         />
       );
     case BuiltInToolNames.MultiEdit:
+      const multiEdits = processedArgs?.edits ?? args?.edits;
       return (
         <FindAndReplaceDisplay
           editingFileContents={processedArgs?.editingFileContents}
           relativeFilePath={processedArgs?.filepath ?? args?.filepath ?? ""}
           fileUri={processedArgs?.fileUri ?? ""}
           newFileContents={processedArgs?.newFileContents}
-          edits={processedArgs?.edits ?? args?.edits ?? []}
+          edits={Array.isArray(multiEdits) ? multiEdits : []}
           toolCallId={toolCall.id}
           historyIndex={historyIndex}
         />

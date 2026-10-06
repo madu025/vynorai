@@ -9,7 +9,7 @@ import { useAppSelector } from "../redux/hooks";
 
 const VYNOR_API_URL = "https://vynor.lk";
 
-interface QuotaState {
+export interface QuotaState {
   planName: string;
   maxTokens: number;
   usedTokens: number;
@@ -22,6 +22,26 @@ interface QuotaState {
   cachedRequests?: number;
   savingPercentage?: number;
   estimatedLkrSaved?: number;
+}
+
+export function isQuotaState(value: unknown): value is QuotaState {
+  if (!value || typeof value !== "object") return false;
+  const quota = value as Record<string, unknown>;
+  return (
+    typeof quota.planName === "string" &&
+    typeof quota.maxTokens === "number" &&
+    Number.isFinite(quota.maxTokens) &&
+    quota.maxTokens > 0 &&
+    typeof quota.usedTokens === "number" &&
+    Number.isFinite(quota.usedTokens) &&
+    typeof quota.remainingTokens === "number" &&
+    Number.isFinite(quota.remainingTokens) &&
+    typeof quota.percentageUsed === "number" &&
+    Number.isFinite(quota.percentageUsed) &&
+    typeof quota.periodEnd === "string" &&
+    typeof quota.isLoggedIn === "boolean" &&
+    typeof quota.email === "string"
+  );
 }
 
 const BarContainer = styled.div`
@@ -189,12 +209,8 @@ export function VynorQuotaBar() {
   const config = useAppSelector((store) => store.config.config);
 
   const resolveToken = useCallback(() => {
-    const local =
-      localStorage.getItem("vynorai_token") ||
-      localStorage.getItem("vynor_jwt") ||
-      localStorage.getItem("vynorai_api_key");
-    if (local) return local;
-
+    // The quota must describe the key used by the selected chat model. A
+    // browser-login token may belong to a different account or plan.
     const chatModel = config?.selectedModelByRole?.chat;
     if (
       chatModel?.apiKey &&
@@ -204,6 +220,12 @@ export function VynorQuotaBar() {
     ) {
       return chatModel.apiKey;
     }
+
+    const local =
+      localStorage.getItem("vynorai_token") ||
+      localStorage.getItem("vynor_jwt") ||
+      localStorage.getItem("vynorai_api_key");
+    if (local) return local;
 
     const allChatModels = config?.modelsByRole?.chat || [];
     for (const m of allChatModels) {
@@ -222,7 +244,10 @@ export function VynorQuotaBar() {
   const [quota, setQuota] = useState<QuotaState>(() => {
     try {
       const cached = localStorage.getItem("vynorai_cached_quota");
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (isQuotaState(parsed)) return parsed;
+      }
     } catch (e) {}
     return {
       planName: "FREE",
@@ -326,6 +351,7 @@ export function VynorQuotaBar() {
     // Auto-refresh quota every 3 minutes
     const interval = setInterval(fetchQuota, 180_000);
     const handleStorage = () => fetchQuota();
+    const handleQuotaExhausted = () => void fetchQuota();
     const handleMsg = (e: MessageEvent) => {
       if (
         e.data?.type === "vynorAuthSuccess" ||
@@ -337,10 +363,15 @@ export function VynorQuotaBar() {
     };
     window.addEventListener("storage", handleStorage);
     window.addEventListener("message", handleMsg);
+    window.addEventListener("vynorai:quota-exhausted", handleQuotaExhausted);
     return () => {
       clearInterval(interval);
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("message", handleMsg);
+      window.removeEventListener(
+        "vynorai:quota-exhausted",
+        handleQuotaExhausted,
+      );
     };
   }, [fetchQuota]);
 
@@ -396,7 +427,13 @@ export function VynorQuotaBar() {
         </TokenCount>
       </HeaderRow>
 
-      <ProgressTrack>
+      <ProgressTrack
+        role="progressbar"
+        aria-label="Monthly VynorAI credit usage"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={quota.percentageUsed}
+      >
         <ProgressFill $percent={quota.percentageUsed} $isWarning={isWarning} />
       </ProgressTrack>
 
@@ -428,6 +465,7 @@ export function VynorQuotaBar() {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
             onClick={fetchQuota}
+            aria-label="Refresh credit balance"
             style={{
               background: "none",
               border: "none",

@@ -25,6 +25,7 @@ import { addCurrentSelectionToEdit } from "../quickEdit/AddCurrentSelection";
 import EditDecorationManager from "../quickEdit/EditDecorationManager";
 import { handleLLMError } from "../util/errorHandling";
 import { showTutorial } from "../util/tutorial";
+import { recordRuntimeDiagnostic } from "../diagnostics/runtimeDiagnostics";
 import { getExtensionUri } from "../util/vscode";
 import { VsCodeIde } from "../VsCodeIde";
 import { VsCodeWebviewProtocol } from "../webviewProtocol";
@@ -142,6 +143,10 @@ export class VsCodeMessenger {
 
     this.onWebview("toggleDevTools", (msg) => {
       vscode.commands.executeCommand("continue.viewLogs");
+    });
+
+    this.onWebview("diagnostics/record", async ({ data }) => {
+      await recordRuntimeDiagnostic(this.context, data.report);
     });
 
     this.onWebview("reloadWindow", (msg) => {

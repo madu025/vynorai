@@ -13,15 +13,20 @@ const readTool: any = {
   hasAlready: "read {{{ filepath }}}",
 };
 
-function state(status: string, output?: any[]): any {
+function state(
+  status: string,
+  output?: any[],
+  toolName = "read_file",
+  parsedArgs: Record<string, unknown> = { filepath: "src/auth.ts" },
+): any {
   return {
     toolCallId: "t1",
     status,
-    parsedArgs: { filepath: "src/auth.ts" },
+    parsedArgs,
     toolCall: {
       id: "t1",
       type: "function",
-      function: { name: "read_file", arguments: "{}" },
+      function: { name: toolName, arguments: "{}" },
     },
     output,
   };
@@ -57,6 +62,28 @@ describe("ToolCallStatusMessage", () => {
 });
 
 describe("toolOutputSummary", () => {
+  it("counts the content written by create_new_file instead of its status message", () => {
+    const success = [
+      { name: "", description: "", content: "File created successfully" },
+    ];
+    expect(
+      toolOutputSummary(
+        state("done", success, "create_new_file", {
+          filepath: "src/new.ts",
+          contents: "one\ntwo\nthree\nfour\n",
+        }),
+      ),
+    ).toBe("4 lines");
+    expect(
+      toolOutputSummary(
+        state("done", success, "create_new_file", {
+          filepath: "src/new.ts",
+          contents: "one\r\ntwo\r\n",
+        }),
+      ),
+    ).toBe("2 lines");
+  });
+
   it("summarizes multiple results and empty output", () => {
     const many = [1, 2, 3].map((n) => ({
       name: `${n}`,
@@ -70,5 +97,6 @@ describe("toolOutputSummary", () => {
       ),
     ).toBe("no output");
     expect(toolOutputSummary(state("calling", many))).toBeNull();
+    expect(toolOutputSummary(state("done", {} as any))).toBeNull();
   });
 });

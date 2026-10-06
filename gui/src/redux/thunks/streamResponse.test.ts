@@ -393,6 +393,26 @@ describe("streamResponseThunk", () => {
       },
     });
 
+    const lifecycleReports = postSpy.mock.calls
+      .filter(([type]) => type === "diagnostics/record")
+      .map(([, payload]) => JSON.parse((payload as { report: string }).report));
+    expect(lifecycleReports).toEqual([
+      expect.objectContaining({
+        category: "agent-lifecycle",
+        phase: "started",
+      }),
+      expect.objectContaining({
+        category: "agent-lifecycle",
+        phase: "finished",
+        outcome: "completed",
+        toolNameCounts: {},
+        toolStatusCounts: {},
+      }),
+    ]);
+    expect(JSON.stringify(lifecycleReports)).not.toContain(
+      "Hello, please help me",
+    );
+
     // Verify session save was called
     expect(requestSpy).toHaveBeenCalledWith("history/save", expect.anything());
 

@@ -319,6 +319,34 @@ describe("sessionSlice streamUpdate", () => {
   });
 
   describe("Edge Cases", () => {
+    it("does not crash when tools are temporarily missing during reload", () => {
+      const initialState: any = createInitialState();
+      initialState.history.push({
+        message: { role: "assistant", content: "", id: "assistant-1" },
+        contextItems: [],
+        toolCallStates: [
+          {
+            toolCallId: "call-1",
+            status: "calling",
+            toolCall: {
+              id: "call-1",
+              type: "function",
+              function: { name: "read_file", arguments: "{}" },
+            },
+          },
+        ],
+      });
+
+      const result = sessionSlice.reducer(initialState, {
+        type: "session/setToolGenerated",
+        payload: { toolCallId: "call-1", tools: undefined },
+      });
+
+      expect((result.history[1].toolCallStates as any)[0].status).toBe(
+        "generated",
+      );
+    });
+
     it("should handle empty history gracefully", () => {
       const initialState = createInitialState();
       initialState.history = [];

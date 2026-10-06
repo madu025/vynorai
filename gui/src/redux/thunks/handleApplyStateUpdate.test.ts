@@ -163,6 +163,60 @@ describe("handleApplyStateUpdate", () => {
     });
   });
 
+  describe("auto-accept in Auto permission mode", () => {
+    it("accepts a finished diff in Auto mode even when the tool's own setting is Ask", async () => {
+      vi.mocked(findToolCallById).mockReturnValue({
+        toolCallId: "t1",
+        status: "calling",
+        ...UNUSED_TOOL_CALL_PARAMS,
+      });
+      mockGetState.mockReturnValue({
+        session: { history: [], codeBlockApplyStates: { states: [] } },
+        ui: {
+          permissionMode: "auto",
+          toolSettings: { unused: "allowedWithPermission" },
+        },
+        config: { config: {} },
+      });
+      await handleApplyStateUpdate({
+        streamId: "s1",
+        toolCallId: "t1",
+        status: "done",
+        filepath: "math.js",
+      })(mockDispatch, mockGetState, mockExtra);
+      expect(mockExtra.ideMessenger.post).toHaveBeenCalledWith("acceptDiff", {
+        streamId: "s1",
+        filepath: "math.js",
+      });
+    });
+
+    it("keeps the Accept/Reject step in Ask mode", async () => {
+      vi.mocked(findToolCallById).mockReturnValue({
+        toolCallId: "t1",
+        status: "calling",
+        ...UNUSED_TOOL_CALL_PARAMS,
+      });
+      mockGetState.mockReturnValue({
+        session: { history: [], codeBlockApplyStates: { states: [] } },
+        ui: {
+          permissionMode: "ask",
+          toolSettings: { unused: "allowedWithPermission" },
+        },
+        config: { config: {} },
+      });
+      await handleApplyStateUpdate({
+        streamId: "s1",
+        toolCallId: "t1",
+        status: "done",
+        filepath: "math.js",
+      })(mockDispatch, mockGetState, mockExtra);
+      expect(mockExtra.ideMessenger.post).not.toHaveBeenCalledWith(
+        "acceptDiff",
+        expect.anything(),
+      );
+    });
+  });
+
   describe("closed status handling", () => {
     it("runs the edit's PostToolUse hook once the edit is applied", async () => {
       const toolCallState: ToolCallState = {

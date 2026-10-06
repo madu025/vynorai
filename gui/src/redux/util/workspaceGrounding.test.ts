@@ -35,3 +35,18 @@ test("does not fabricate visibility without a snapshot", () => {
   expect(result).toContain("not available");
   expect(result).toContain("Do not pretend that files were inspected");
 });
+
+test("tolerates an incomplete snapshot while the IDE refresh is in flight", () => {
+  const partialSnapshot = {
+    id: "workspace-1",
+    revision: 3,
+    trusted: true,
+    createdAt: 2,
+  } as WorkspaceSnapshot;
+
+  const result = formatWorkspaceGrounding(partialSnapshot);
+
+  expect(result).toContain("Connected: no workspace folder open");
+  expect(result).toContain("Roots: none detected");
+  expect(result).toContain("Available IDE capabilities: none detected");
+});

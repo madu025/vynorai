@@ -36,6 +36,7 @@ import {
 import { ContinueConsoleWebviewViewProvider } from "./ContinueConsoleWebviewViewProvider";
 import { ContinueGUIWebviewViewProvider } from "./ContinueGUIWebviewViewProvider";
 import { processDiff } from "./diff/processDiff";
+import { copyRuntimeDiagnostics } from "./diagnostics/runtimeDiagnostics";
 import { VerticalDiffManager } from "./diff/vertical/manager";
 import EditDecorationManager from "./quickEdit/EditDecorationManager";
 import { QuickEdit, QuickEditShowParams } from "./quickEdit/QuickEditQuickPick";
@@ -355,6 +356,9 @@ const getCommandsMap: (
     },
     "continue.viewLogs": async () => {
       vscode.commands.executeCommand("workbench.action.toggleDevTools");
+    },
+    "vynorai.copyDiagnostics": async () => {
+      await copyRuntimeDiagnostics(extensionContext);
     },
     "continue.debugTerminal": async () => {
       const terminalContents = await ide.getTerminalContents();

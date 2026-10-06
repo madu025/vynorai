@@ -30,11 +30,17 @@ function migrateToolPolicies(dispatch: AppDispatch) {
     [BuiltInToolNames.ViewSubdirectory]: ["builtin_view_subdirectory"],
   };
   const persistedRedux = localStorage.getItem("persist:root");
-  if (persistedRedux) {
+  if (!persistedRedux) return;
+
+  try {
     const uiState = JSON.parse(persistedRedux)?.ui;
-    if (uiState) {
+    if (typeof uiState === "string") {
       const parsedSettings = JSON.parse(uiState)?.toolSettings;
-      if (parsedSettings) {
+      if (
+        parsedSettings &&
+        typeof parsedSettings === "object" &&
+        !Array.isArray(parsedSettings)
+      ) {
         let migratedToolSettings = 0;
         Object.entries(toFromMap).forEach(([newToolName, oldToolNames]) => {
           for (const tool of oldToolNames) {
@@ -60,6 +66,10 @@ function migrateToolPolicies(dispatch: AppDispatch) {
         }
       }
     }
+  } catch {
+    // A corrupt value from an older build must not prevent the webview from
+    // loading. Redux persistence can replace it with valid state later.
+    console.warn("Skipped malformed persisted tool-policy state");
   }
 }
 

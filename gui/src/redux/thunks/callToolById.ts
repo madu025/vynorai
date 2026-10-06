@@ -259,7 +259,9 @@ async function callToolByIdImpl(
       output = [];
       error = new ContinueError(ContinueErrorReason.Unspecified, result.error);
     } else {
-      output = result.content.contextItems;
+      output = Array.isArray(result.content?.contextItems)
+        ? result.content.contextItems
+        : [];
       mcpUiState = result.content.mcpUiState;
       error = result.content.errorMessage
         ? new ContinueError(

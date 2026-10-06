@@ -940,7 +940,7 @@ export const sessionSlice = createSlice({
       if (toolCallState) {
         toolCallState.status = "generated";
 
-        const tool = action.payload.tools.find(
+        const tool = (action.payload.tools ?? []).find(
           (t) => t.function.name === toolCallState.toolCall.function.name,
         );
         if (tool) {

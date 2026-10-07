@@ -460,6 +460,26 @@ CREATE INDEX IF NOT EXISTS idx_cache_user ON cache_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_cache_expiry ON cache_entries(expires_at);
 `,
   },
+  {
+    version: "pg_011_provider_api_keys",
+    sql: `
+CREATE TABLE IF NOT EXISTS provider_api_keys (
+  id VARCHAR(64) PRIMARY KEY,
+  provider VARCHAR(32) NOT NULL,
+  label VARCHAR(128) NOT NULL,
+  key_encrypted TEXT NOT NULL,
+  key_masked VARCHAR(32) NOT NULL,
+  is_active SMALLINT NOT NULL DEFAULT 1,
+  balance_usd DOUBLE PRECISION,
+  balance_currency VARCHAR(16) DEFAULT 'USD',
+  balance_details TEXT,
+  last_checked_at TEXT,
+  updated_by VARCHAR(128),
+  updated_at TEXT DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_provider_keys_provider ON provider_api_keys(provider, is_active);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

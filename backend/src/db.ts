@@ -832,6 +832,29 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "023_provider_api_keys",
+    description: "Multi-key pool and balance tracking per upstream provider",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS provider_api_keys (
+        id VARCHAR(64) PRIMARY KEY,
+        provider VARCHAR(32) NOT NULL,
+        label VARCHAR(128) NOT NULL,
+        key_encrypted TEXT NOT NULL,
+        key_masked VARCHAR(32) NOT NULL,
+        is_active SMALLINT NOT NULL DEFAULT 1,
+        balance_usd REAL,
+        balance_currency VARCHAR(16) DEFAULT 'USD',
+        balance_details TEXT,
+        last_checked_at DATETIME,
+        updated_by VARCHAR(128),
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_provider_keys_provider ON provider_api_keys(provider, is_active)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

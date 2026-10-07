@@ -376,20 +376,118 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     </div>
 
     <div class="page" id="page-providers">
-      <h1>Provider Keys</h1>
-      <p class="subtitle">API keys VynorAI uses to call DeepSeek, OpenRouter and other providers for every customer. Saved keys are encrypted and apply immediately.</p>
-      <div class="alert alert-info">🔒 Keys are tested before saving and only ever shown masked. A key saved here overrides the server's .env value; removing it falls back to .env.</div>
+      <h1>Provider Keys &amp; Upstream Quota</h1>
+      <p class="subtitle">API keys VynorAI uses to call DeepSeek, OpenRouter and other providers for every customer. Saved keys are encrypted, balance-monitored, and apply immediately.</p>
+      
+      <!-- Upstream Radar & Balances -->
+      <div class="cards" id="providerBalanceCards" style="margin-bottom:1.5rem;">
+        <div class="stat-card">
+          <div class="stat-label">DeepSeek Live Balance</div>
+          <div class="stat-value green" id="dsLiveBalanceVal" style="display:flex;align-items:center;gap:6px;">
+            <span class="status-dot on" style="width:10px;height:10px;"></span> Loading…
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem" id="dsLiveBalanceSub">Querying upstream balance…</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Multi-Key Pool Size</div>
+          <div class="stat-value purple" id="activeKeysCountVal">0 Keys</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Multi-key failover &amp; rotation ready</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Account Quota Status</div>
+          <div class="stat-value green" id="accountQuotaStatusVal">🟢 Operational</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem" id="accountQuotaSub">Upstream models ready for traffic</div>
+        </div>
+      </div>
+
+      <div class="alert alert-info">🔒 Keys are tested before saving and only ever shown masked. A key saved here overrides the server's .env value; removing it falls back to .env. Live balance queries are encrypted and connect directly to provider balance APIs.</div>
+      
+      <!-- Primary Providers Overview -->
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">🔐 Providers</div>
-          <button class="btn btn-ghost" onclick="loadProviders()">↻ Refresh</button></div>
+        <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center">
+          <div class="panel-title">🔐 Primary Provider Status &amp; Balances</div>
+          <div style="display:flex;gap:.5rem">
+            <button class="btn btn-ghost" onclick="checkLiveBalance('deepseek')">⚡ Check DeepSeek Balance</button>
+            <button class="btn btn-ghost" onclick="loadProviders()">↻ Refresh</button>
+          </div>
+        </div>
         <div class="panel-body" style="padding:0">
           <table class="model-table">
-            <thead><tr><th>Status</th><th>Provider</th><th>Key</th><th>Source</th><th>Updated</th><th>Actions</th></tr></thead>
-            <tbody id="providerBody"><tr><td colspan="6" class="loading">Loading...</td></tr></tbody>
+            <thead><tr><th>Status</th><th>Provider</th><th>Active Key</th><th>Live Balance / Quota</th><th>Source</th><th>Updated</th><th>Actions</th></tr></thead>
+            <tbody id="providerBody"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
           </table>
         </div>
       </div>
-      <div id="providerForm" style="display:none" class="panel">
+
+      <!-- Multi-Key Pool & Failover Manager -->
+      <div class="panel" style="margin-top:1.5rem">
+        <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="panel-title">🔑 Provider Multi-Key Pool &amp; Load Balancing</div>
+            <div style="font-size:.78rem;color:var(--muted);margin-top:2px">Configure multiple DeepSeek or upstream API keys. Requests rotate across active keys with automatic fallback on rate limits or empty quota.</div>
+          </div>
+          <div style="display:flex;gap:.5rem">
+            <button class="btn btn-primary" onclick="openAddPoolKeyForm()">+ Add Key to Pool</button>
+            <button class="btn btn-ghost" onclick="loadProviders()">↻ Refresh Pool</button>
+          </div>
+        </div>
+        <div class="panel-body" style="padding:0">
+          <table class="model-table">
+            <thead>
+              <tr>
+                <th>State</th>
+                <th>Provider</th>
+                <th>Key Label / Name</th>
+                <th>Key (Masked)</th>
+                <th>Live Account Balance</th>
+                <th>Last Checked</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="poolBody"><tr><td colspan="7" class="loading">Loading multi-key pool...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Add Key to Multi-Key Pool Form -->
+      <div id="poolKeyForm" style="display:none;margin-top:1.5rem" class="panel">
+        <div class="panel-header"><div class="panel-title" id="poolKeyFormTitle">Add Key to Multi-Key Pool</div></div>
+        <div class="panel-body">
+          <div class="field-group">
+            <div>
+              <label>Provider</label>
+              <select id="poolKeyProvider">
+                <option value="deepseek">DeepSeek (Direct)</option>
+                <option value="openrouter">OpenRouter (Wholesale)</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="groq">Groq</option>
+              </select>
+            </div>
+            <div>
+              <label>Key Label / Alias</label>
+              <input id="poolKeyLabel" placeholder="e.g. DeepSeek Production Key 2 / Backup Org"/>
+            </div>
+          </div>
+          <div style="margin-top:.8rem">
+            <label>API Key</label>
+            <input id="poolKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"/>
+          </div>
+          <div style="margin-top:.8rem;display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="poolKeyActive" checked style="width:auto;margin:0"/>
+            <label for="poolKeyActive" style="margin:0;cursor:pointer">Set as Active in Routing Pool immediately</label>
+          </div>
+          <div style="margin-top:1.2rem;display:flex;gap:.6rem">
+            <button class="btn btn-primary" id="poolKeySaveBtn" onclick="savePoolKey()">Save Key to Pool</button>
+            <button class="btn btn-ghost" onclick="testPoolKeyInput()">Test &amp; Check Balance</button>
+            <button class="btn btn-ghost" onclick="closePoolKeyForm()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legacy Single Key Form -->
+      <div id="providerForm" style="display:none;margin-top:1.5rem" class="panel">
         <div class="panel-header"><div class="panel-title" id="providerFormTitle">Set key</div></div>
         <div class="panel-body">
           <label>API key</label>
@@ -1389,23 +1487,218 @@ async function loadEconomics() {
     : '<tr><td colspan="9" class="loading">No requests in this period</td></tr>';
 }
 
+function formatBalanceBadge(bal) {
+  if (!bal) return '<span style="font-size:.75rem;color:var(--muted)">Not checked</span>';
+  if (bal.error) return `<span class="badge" style="background:#ef444422;color:#f87171;font-size:.75rem;" title="${escHtml(bal.error)}">⚠️ Check failed</span>`;
+  if (bal.totalBalance !== null && bal.totalBalance !== undefined) {
+    const val = Number(bal.totalBalance);
+    const color = val > 1.0 ? 'badge-pro' : (val > 0.05 ? 'badge-starter' : 'badge-free');
+    const dot = val > 1.0 ? '🟢' : (val > 0.05 ? '🟡' : '🔴');
+    const currency = bal.currency || 'USD';
+    let extra = '';
+    if (bal.toppedUpBalance !== undefined && bal.toppedUpBalance !== null) {
+      extra = ` title="Topped-up: $${bal.toppedUpBalance} | Granted: $${bal.grantedBalance || 0}"`;
+    }
+    return `<span class="badge ${color}" style="font-size:.8rem;padding:3px 8px;font-weight:600;"${extra}>${dot} $${val.toFixed(2)} ${currency}</span>`;
+  }
+  if (bal.isAvailable) {
+    return `<span class="badge badge-pro" style="font-size:.78rem">🟢 Connected</span>`;
+  }
+  return '<span style="font-size:.75rem;color:var(--muted)">Unknown</span>';
+}
+
 async function loadProviders() {
   const data = await api('GET', '/admin/provider-keys');
   if (!data) return;
   const SOURCE = { admin:'Admin portal', env:'Server .env', none:'—' };
-  document.getElementById('providerBody').innerHTML = data.providers.map(p => `
+
+  // 1. Update Top Radar Cards
+  const dsProv = (data.providers || []).find(p => p.provider === 'deepseek');
+  const dsKeys = (data.keys || []).filter(k => k.provider === 'deepseek');
+  const dsBal = dsProv?.balance || (dsKeys.length > 0 ? dsKeys[0].balanceDetails : null);
+  
+  const dsValEl = document.getElementById('dsLiveBalanceVal');
+  const dsSubEl = document.getElementById('dsLiveBalanceSub');
+  if (dsValEl && dsSubEl) {
+    if (dsBal && dsBal.totalBalance !== null && dsBal.totalBalance !== undefined) {
+      const amt = Number(dsBal.totalBalance);
+      const isHealthy = amt > 0.50;
+      dsValEl.innerHTML = `<span class="status-dot ${isHealthy ? 'on' : 'off'}" style="width:10px;height:10px;"></span> $${amt.toFixed(2)} ${dsBal.currency || 'USD'}`;
+      dsValEl.className = 'stat-value ' + (amt > 1 ? 'green' : (amt > 0 ? 'amber' : ''));
+      dsSubEl.innerText = `Topped-up: $${dsBal.toppedUpBalance || '0.00'} · Granted: $${dsBal.grantedBalance || '0.00'} · Active in routing`;
+    } else if (dsProv && dsProv.source !== 'none') {
+      dsValEl.innerHTML = `<span class="status-dot on" style="width:10px;height:10px;"></span> Configured`;
+      dsSubEl.innerHTML = `Key is active. <a href="javascript:void(0)" onclick="checkLiveBalance('deepseek')" style="color:var(--accent2);text-decoration:underline">Fetch live balance</a>`;
+    } else {
+      dsValEl.innerHTML = `<span class="status-dot off" style="width:10px;height:10px;"></span> Not Set`;
+      dsValEl.className = 'stat-value amber';
+      dsSubEl.innerText = `DeepSeek direct key not configured`;
+    }
+  }
+
+  const poolKeys = data.keys || [];
+  const activeCountEl = document.getElementById('activeKeysCountVal');
+  if (activeCountEl) {
+    const activeCount = poolKeys.filter(k => k.isActive).length;
+    activeCountEl.innerText = `${activeCount} / ${poolKeys.length} Active`;
+  }
+
+  // 2. Render Primary Providers Table
+  document.getElementById('providerBody').innerHTML = (data.providers || []).map(p => `
     <tr>
       <td><span class="status-dot ${p.source !== 'none' ? 'on' : 'off'}"></span></td>
       <td><strong>${escHtml(PROVIDER_LABELS[p.provider] || p.provider)}</strong></td>
       <td><code style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--muted)">${escHtml(p.masked || 'not set')}</code></td>
+      <td>${formatBalanceBadge(p.balance)}</td>
       <td><span class="tag">${SOURCE[p.source]}</span></td>
-      <td style="font-size:.75rem;color:var(--muted)">${escHtml(p.updatedAt || '')}</td>
-      <td style="display:flex;gap:.4rem">
-        <button class="btn btn-primary" style="padding:.3rem .6rem;font-size:.75rem" onclick="openProviderForm('${p.provider}')">${p.source === 'admin' ? 'Replace' : 'Set key'}</button>
-        ${p.source !== 'none' ? `<button class="btn btn-ghost" style="padding:.3rem .6rem;font-size:.75rem" onclick="testStoredProviderKey('${p.provider}')">Test</button>` : ''}
-        ${p.source === 'admin' ? `<button class="btn btn-danger" style="padding:.3rem .6rem;font-size:.75rem" onclick="removeProviderKey('${p.provider}')">Remove</button>` : ''}
+      <td style="font-size:.75rem;color:var(--muted)">${escHtml(p.updatedAt || '—')}</td>
+      <td style="display:flex;gap:.35rem;flex-wrap:wrap">
+        <button class="btn btn-primary" style="padding:.25rem .55rem;font-size:.75rem" onclick="openProviderForm('${p.provider}')">${p.source === 'admin' ? 'Replace' : 'Set key'}</button>
+        ${p.source !== 'none' ? `<button class="btn btn-ghost" style="padding:.25rem .55rem;font-size:.75rem;color:var(--accent2);border-color:var(--accent)" onclick="checkLiveBalance('${p.provider}')">Balance</button>` : ''}
+        ${p.source !== 'none' ? `<button class="btn btn-ghost" style="padding:.25rem .55rem;font-size:.75rem" onclick="testStoredProviderKey('${p.provider}')">Test</button>` : ''}
+        ${p.source === 'admin' ? `<button class="btn btn-danger" style="padding:.25rem .55rem;font-size:.75rem" onclick="removeProviderKey('${p.provider}')">Remove</button>` : ''}
       </td>
     </tr>`).join('');
+
+  // 3. Render Multi-Key Pool Table
+  const poolEl = document.getElementById('poolBody');
+  if (poolEl) {
+    if (poolKeys.length === 0) {
+      poolEl.innerHTML = '<tr><td colspan="7" class="loading">No extra keys in pool yet. Click "+ Add Key to Pool" above to add backup DeepSeek or provider keys.</td></tr>';
+    } else {
+      poolEl.innerHTML = poolKeys.map(k => `
+        <tr>
+          <td><span class="status-dot ${k.isActive ? 'on' : 'off'}"></span> <span style="font-size:.75rem;color:var(--muted)">${k.isActive ? 'Active' : 'Standby'}</span></td>
+          <td><strong>${escHtml(PROVIDER_LABELS[k.provider] || k.provider)}</strong></td>
+          <td><span style="font-weight:600;color:var(--accent2)">${escHtml(k.label)}</span></td>
+          <td><code style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--muted)">${escHtml(k.masked)}</code></td>
+          <td>${formatBalanceBadge(k.balanceDetails || (k.balanceUsd !== null ? { totalBalance: k.balanceUsd, currency: k.balanceCurrency } : null))}</td>
+          <td style="font-size:.75rem;color:var(--muted)">${escHtml(k.lastCheckedAt ? k.lastCheckedAt.slice(0, 19).replace('T', ' ') : (k.updatedAt || '—'))}</td>
+          <td style="display:flex;gap:.35rem;flex-wrap:wrap">
+            <button class="btn btn-ghost" style="padding:.25rem .5rem;font-size:.75rem;color:var(--accent2);border-color:var(--accent)" onclick="checkPoolKeyBalance('${k.id}', '${escHtml(k.label)}')">↻ Balance</button>
+            <button class="btn btn-ghost" style="padding:.25rem .5rem;font-size:.75rem" onclick="togglePoolKeyActive('${k.id}', ${k.isActive})">${k.isActive ? 'Disable' : 'Enable'}</button>
+            <button class="btn btn-danger" style="padding:.25rem .5rem;font-size:.75rem" onclick="deletePoolKey('${k.id}', '${escHtml(k.label)}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+  }
+}
+
+async function checkLiveBalance(provider) {
+  showToast(`Checking live ${PROVIDER_LABELS[provider] || provider} balance…`);
+  const r = await api('GET', `/admin/provider-keys/${provider}/balance`);
+  if (!r || !r.balance) {
+    showToast('Failed to check balance', 'err');
+    return;
+  }
+  const b = r.balance;
+  if (b.error) {
+    showToast(`${PROVIDER_LABELS[provider] || provider}: ${b.error}`, 'err');
+  } else if (b.totalBalance !== null && b.totalBalance !== undefined) {
+    showToast(`🟢 ${PROVIDER_LABELS[provider]}: Balance is $${Number(b.totalBalance).toFixed(2)} ${b.currency || 'USD'} (Topped-up: $${b.toppedUpBalance || '0.00'})`);
+  } else if (b.isAvailable) {
+    showToast(`🟢 ${PROVIDER_LABELS[provider]}: Connected and active`);
+  } else {
+    showToast(`${PROVIDER_LABELS[provider]}: Key inactive or unavailable`, 'err');
+  }
+  await loadProviders();
+}
+
+async function checkPoolKeyBalance(id, label) {
+  showToast(`Checking balance for ${label}…`);
+  const r = await api('POST', `/admin/provider-keys/pool/${id}/balance`, {});
+  if (!r || !r.balance) {
+    showToast('Failed to verify balance', 'err');
+    return;
+  }
+  const b = r.balance;
+  if (b.error) {
+    showToast(`${label}: ${b.error}`, 'err');
+  } else if (b.totalBalance !== null && b.totalBalance !== undefined) {
+    showToast(`🟢 ${label}: Balance is $${Number(b.totalBalance).toFixed(2)} ${b.currency || 'USD'}`);
+  } else {
+    showToast(`🟢 ${label}: Verified healthy`);
+  }
+  await loadProviders();
+}
+
+function openAddPoolKeyForm() {
+  document.getElementById('poolKeyLabel').value = '';
+  document.getElementById('poolKeyInput').value = '';
+  document.getElementById('poolKeyActive').checked = true;
+  document.getElementById('poolKeyForm').style.display = 'block';
+  document.getElementById('poolKeyLabel').focus();
+}
+
+function closePoolKeyForm() {
+  document.getElementById('poolKeyForm').style.display = 'none';
+}
+
+async function savePoolKey() {
+  const provider = document.getElementById('poolKeyProvider').value;
+  const label = document.getElementById('poolKeyLabel').value.trim() || `${PROVIDER_LABELS[provider] || provider} Key`;
+  const key = document.getElementById('poolKeyInput').value.trim();
+  const isActive = document.getElementById('poolKeyActive').checked;
+
+  if (!key) { showToast('Paste an API key first', 'err'); return; }
+
+  const btn = document.getElementById('poolKeySaveBtn');
+  btn.disabled = true; btn.innerText = 'Verifying & Saving…';
+  const r = await api('POST', '/admin/provider-keys/pool', { provider, label, key, isActive });
+  btn.disabled = false; btn.innerText = 'Save Key to Pool';
+
+  if (r?.ok) {
+    showToast(`Added ${label} to ${PROVIDER_LABELS[provider]} pool!`);
+    closePoolKeyForm();
+    await loadProviders();
+  } else {
+    showToast(r?.error || 'Failed to save key', 'err');
+  }
+}
+
+async function testPoolKeyInput() {
+  const provider = document.getElementById('poolKeyProvider').value;
+  const key = document.getElementById('poolKeyInput').value.trim();
+  if (!key) { showToast('Paste an API key first', 'err'); return; }
+
+  showToast('Testing key connectivity & live balance…');
+  const r = await api('POST', '/admin/provider-keys/balance/check', { provider, key });
+  if (r?.balance) {
+    const b = r.balance;
+    if (b.error) {
+      showToast(`Key error: ${b.error}`, 'err');
+    } else if (b.totalBalance !== null && b.totalBalance !== undefined) {
+      showToast(`✅ Valid! Remaining balance: $${Number(b.totalBalance).toFixed(2)} ${b.currency || 'USD'}`);
+    } else if (b.isAvailable) {
+      showToast('✅ Key verified & ready to use!');
+    } else {
+      showToast('❌ Provider rejected this key', 'err');
+    }
+  } else {
+    showToast('Failed to reach provider', 'err');
+  }
+}
+
+async function togglePoolKeyActive(id, currentActive) {
+  const r = await api('PATCH', `/admin/provider-keys/pool/${id}`, { isActive: !currentActive });
+  if (r?.ok) {
+    showToast(`Key status updated to ${!currentActive ? 'Active' : 'Standby'}`);
+    await loadProviders();
+  } else {
+    showToast(r?.error || 'Failed to toggle status', 'err');
+  }
+}
+
+async function deletePoolKey(id, label) {
+  if (!confirm(`Remove "${label}" from the provider pool?`)) return;
+  const r = await api('DELETE', `/admin/provider-keys/pool/${id}`);
+  if (r?.ok) {
+    showToast(`Key removed from pool`);
+    await loadProviders();
+  } else {
+    showToast(r?.error || 'Failed to delete key', 'err');
+  }
 }
 
 function openProviderForm(provider) {

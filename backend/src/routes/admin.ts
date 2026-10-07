@@ -214,12 +214,18 @@ import {
   DEEPSEEK_PRICING_VERIFIED_AT,
 } from "../services/pricing.js";
 import {
+  addProviderApiKey,
+  deleteProviderApiKey,
   deleteProviderKey,
+  fetchProviderBalance,
   isManagedProvider,
+  listMultiProviderKeys,
   listProviderKeys,
   ManagedProvider,
+  refreshKeyBalance,
   setProviderKey,
   testProviderKey,
+  updateProviderApiKey,
 } from "../services/providerCredentials.js";
 
 adminRouter.get(
@@ -1070,12 +1076,141 @@ adminRouter.get(
   },
 );
 
-/** GET /admin/provider-keys — which providers have a key, and from where */
+/** GET /admin/provider-keys — which providers have a key, and multi-key pool */
 adminRouter.get(
   "/provider-keys",
   requireAdmin,
-  (_req: Request, res: Response) => {
-    res.json({ providers: listProviderKeys() });
+  async (_req: Request, res: Response) => {
+    const providers = listProviderKeys();
+    const keys = await listMultiProviderKeys();
+    res.json({ providers, keys });
+  },
+);
+
+/** GET /admin/provider-keys/:provider/balance — real-time live account balance */
+adminRouter.get(
+  "/provider-keys/:provider/balance",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const provider = providerParam(req, res);
+    if (!provider) return;
+    const balance = await fetchProviderBalance(provider);
+    res.json({ provider, balance });
+  },
+);
+
+/** POST /admin/provider-keys/balance/check — checks live balance for a given key */
+adminRouter.post(
+  "/provider-keys/balance/check",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const provider = req.body?.provider;
+    if (!isManagedProvider(provider)) {
+      return res.status(400).json({ error: `Unknown provider ${provider}` });
+    }
+    const key =
+      typeof req.body?.key === "string" ? req.body.key.trim() : undefined;
+    const balance = await fetchProviderBalance(provider, key);
+    res.json({ provider, balance });
+  },
+);
+
+/** POST /admin/provider-keys/pool — add key to multi-key pool */
+adminRouter.post(
+  "/provider-keys/pool",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const provider = req.body?.provider;
+    if (!isManagedProvider(provider)) {
+      return res.status(400).json({ error: `Unknown provider ${provider}` });
+    }
+    const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+    if (!key) return res.status(400).json({ error: "key is required" });
+    const label =
+      typeof req.body?.label === "string"
+        ? req.body.label.trim()
+        : `${provider} Key`;
+    const isActive = req.body?.isActive !== false;
+
+    try {
+      const item = await addProviderApiKey(
+        provider,
+        key,
+        label,
+        "ADMIN",
+        isActive,
+      );
+      await logSecurityEvent({
+        eventType: "ADMIN_PROVIDER_KEY_POOL_ADDED",
+        severity: "WARN",
+        actor: "ADMIN",
+        target: provider,
+        details: `Added key "${label}" for ${provider} (${item.masked}) to pool`,
+        ipAddress: req.ip,
+      });
+      res.json({ ok: true, key: item });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+);
+
+/** PATCH /admin/provider-keys/pool/:id — update label or active status */
+adminRouter.patch(
+  "/provider-keys/pool/:id",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    const label =
+      typeof req.body?.label === "string" ? req.body.label : undefined;
+    const isActive =
+      typeof req.body?.isActive === "boolean" ? req.body.isActive : undefined;
+
+    try {
+      const item = await updateProviderApiKey(id, { label, isActive });
+      if (!item) return res.status(404).json({ error: "Key not found" });
+      res.json({ ok: true, key: item });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+);
+
+/** DELETE /admin/provider-keys/pool/:id — delete a key from the pool */
+adminRouter.delete(
+  "/provider-keys/pool/:id",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    try {
+      await deleteProviderApiKey(id);
+      await logSecurityEvent({
+        eventType: "ADMIN_PROVIDER_KEY_POOL_DELETED",
+        severity: "WARN",
+        actor: "ADMIN",
+        target: id,
+        details: `Deleted key ${id} from pool`,
+        ipAddress: req.ip,
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  },
+);
+
+/** POST /admin/provider-keys/pool/:id/balance — refresh balance for specific key in pool */
+adminRouter.post(
+  "/provider-keys/pool/:id/balance",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    try {
+      const balance = await refreshKeyBalance(id);
+      res.json({ ok: true, balance });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   },
 );
 

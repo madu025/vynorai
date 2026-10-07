@@ -31,6 +31,7 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { extractProviderUsage, ProviderUsage } from "./costLedger.js";
 import { acquireProviderAdmission } from "./admissionControl.js";
+import { getRotatedProviderKey } from "./providerCredentials.js";
 
 // ─── Endpoint Info ────────────────────────────────────────────────────────────
 interface EndpointInfo {
@@ -46,11 +47,12 @@ function buildEndpoints(): Partial<Record<ProviderID, EndpointInfo>> {
   const eps: Partial<Record<ProviderID, EndpointInfo>> = {};
 
   // ── OpenRouter (primary – buy wholesale, sell retail) ─────────────────
-  if (k.openrouter) {
+  const openrouterKey = getRotatedProviderKey("openrouter") || k.openrouter;
+  if (openrouterKey) {
     eps.openrouter = {
       baseUrl: "https://openrouter.ai/api/v1",
       headers: {
-        Authorization: `Bearer ${k.openrouter}`,
+        Authorization: `Bearer ${openrouterKey}`,
         "HTTP-Referer": "https://vynorai.com",
         "X-Title": "VynorAI Enterprise",
         "Content-Type": "application/json",
@@ -62,11 +64,12 @@ function buildEndpoints(): Partial<Record<ProviderID, EndpointInfo>> {
   }
 
   // ── Direct providers (optional – override specific model families) ─────
-  if (k.deepseek)
+  const deepseekKey = getRotatedProviderKey("deepseek") || k.deepseek;
+  if (deepseekKey)
     eps.deepseek = {
       baseUrl: "https://api.deepseek.com/v1",
       headers: {
-        Authorization: `Bearer ${k.deepseek}`,
+        Authorization: `Bearer ${deepseekKey}`,
         "Content-Type": "application/json",
       },
       isAnthropic: false,

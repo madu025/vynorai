@@ -113,7 +113,7 @@ services:
       - ./backend/.env
     environment:
       - NODE_ENV=production
-      - BG_ENABLED=${BG_ENABLED:-false}
+      - BG_ENABLED=${BG_ENABLED:-true}
       - BG_MAX_CONCURRENCY=2
       - BG_STAGING_DIR=/var/lib/vynor-background/staging
       - BG_LAUNCHER_SOCKET=/run/vynor-bg/launcher.sock

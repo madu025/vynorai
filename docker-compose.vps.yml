@@ -106,6 +106,8 @@ services:
     profiles: ["background"]
     image: vynor-backend:local
     container_name: vynor-background-worker
+    healthcheck:
+      disable: true
     command: ["node", "dist/worker/index.js"]
     logging: *default-logging
     restart: unless-stopped
@@ -143,6 +145,8 @@ services:
     profiles: ["background"]
     image: vynor-backend:local
     container_name: vynor-bg-egress
+    healthcheck:
+      disable: true
     command: ["node", "dist/worker/egressProxy.js"]
     logging: *default-logging
     restart: unless-stopped

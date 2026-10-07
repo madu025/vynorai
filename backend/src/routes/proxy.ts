@@ -35,6 +35,62 @@ import {
 import { releaseQuotaReservation } from "../services/monthlyQuota.js";
 import { creditWeight } from "../services/billingPolicy.js";
 import { AUTO_MODEL_ID } from "../services/autoRouter.js";
+import { z, validateBody, validateParams } from "../middleware/validate.js";
+
+export const ChatCompletionsBodySchema = z
+  .object({
+    model: z.string().optional(),
+    messages: z.array(z.any()).min(1, "messages must be a non-empty array"),
+    stream: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const FimCompletionsBodySchema = z
+  .object({
+    prompt: z.string().optional(),
+    prefix: z.string().optional(),
+    suffix: z.string().optional(),
+    model: z.string().optional(),
+    max_tokens: z.number().optional(),
+    temperature: z.number().optional(),
+  })
+  .passthrough();
+
+export const QuickFixBodySchema = z
+  .object({
+    error: z.string({ error: "error is required" }),
+    file: z.string().optional(),
+    code: z.string().optional(),
+    language: z.string().optional(),
+  })
+  .passthrough();
+
+export const FeedbackBodySchema = z.object({
+  signal: z.enum(["helpful", "unhelpful"] as const, {
+    error: "signal must be helpful or unhelpful",
+  }),
+  prompt: z.string().optional().default(""),
+});
+
+export const ErrorReportBodySchema = z.object({
+  message: z
+    .string({ error: "message is required" })
+    .min(1, "message is required"),
+  source: z.string().optional().default("gui"),
+  stack: z.string().optional(),
+  client: z.string().optional(),
+});
+
+export const ProjectIndexBodySchema = z.object({
+  projectRoot: z.string().optional().default("workspace"),
+  files: z
+    .array(z.any())
+    .min(1, "files array is required and must not be empty"),
+});
+
+export const ProxyIdParamSchema = z.object({
+  id: z.string().min(1, "id is required"),
+});
 
 export const proxyRouter = Router();
 
@@ -157,6 +213,7 @@ proxyRouter.post(
   "/chat/completions",
   requireValidSubscriber,
   proxyRateLimiter,
+  validateBody(ChatCompletionsBodySchema, { shape: "nested" }),
   quotaGuard,
   async (req: Request, res: Response) => {
     try {
@@ -195,6 +252,39 @@ proxyRouter.post(
         );
       }
 
+      // ── Enterprise Air-Gapped Zero-Knowledge Mode ───────────────────────────
+      const {
+        isAirGappedZkRequested,
+        recordZkComplianceAuditLog,
+        computeSha256,
+      } = await import("../services/enterpriseZkEngine.js");
+      const { generateZKUserId } = await import("../services/zkShield.js");
+
+      const isZkMode =
+        isAirGappedZkRequested(req.headers) || Boolean(req.body.zkMode);
+      if (isZkMode) {
+        sanitized.zkMode = true;
+        sanitized.store = false;
+        res.setHeader("X-VynorAI-ZK-Mode", "Air-Gapped");
+        res.setHeader("X-VynorAI-Zero-Retention", "Verified");
+
+        const surrogateId = generateZKUserId(user.id);
+        const promptFingerprint = computeSha256(
+          JSON.stringify(sanitized.messages || []),
+        );
+        res.setHeader("X-VynorAI-Prompt-Fingerprint", promptFingerprint);
+
+        recordZkComplianceAuditLog({
+          userSurrogateId: surrogateId,
+          requestType: "chat_completion",
+          action: "ephemeral_chat_completion",
+          promptFingerprint,
+          filesCount: 0,
+        }).catch((err) =>
+          console.error("[EnterpriseZK] Audit log error:", err),
+        );
+      }
+
       const quotaInfo = (req as any).quotaInfo;
       await handleChatCompletions(
         user,
@@ -220,11 +310,12 @@ proxyRouter.post(
   },
 );
 
-// ─── POST /v1/fim/completions (Ultra-Fast Inline Tab Autocomplete) ────────────
+// ─── POST /v1/fim/completions & /v1/completions (Ultra-Fast Inline Tab Autocomplete) ──
 proxyRouter.post(
-  "/fim/completions",
+  ["/fim/completions", "/completions"],
   requireValidSubscriber,
   proxyRateLimiter,
+  validateBody(FimCompletionsBodySchema, { shape: "nested" }),
   quotaGuard,
   async (req: Request, res: Response) => {
     try {
@@ -253,6 +344,7 @@ proxyRouter.post(
   "/agent/fix-error",
   requireValidSubscriber,
   proxyRateLimiter,
+  validateBody(QuickFixBodySchema, { shape: "nested" }),
   quotaGuard,
   async (req: Request, res: Response) => {
     try {
@@ -282,18 +374,11 @@ proxyRouter.post(
 proxyRouter.post(
   "/feedback",
   requireValidSubscriber,
+  validateBody(FeedbackBodySchema),
   async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const signal = String(req.body?.signal ?? "");
-    if (!["helpful", "unhelpful"].includes(signal))
-      return res
-        .status(400)
-        .json({ error: "signal must be helpful or unhelpful" });
-    const prompt =
-      typeof req.body?.prompt === "string"
-        ? req.body.prompt.slice(0, 20_000)
-        : "";
-    const fp = promptFingerprint(user.id, stripRulesAndPreamble(prompt));
+    const { signal, prompt } = req.body;
+    const fp = promptFingerprint(user.id, stripRulesAndPreamble(prompt || ""));
     await dbRun(
       "INSERT INTO routing_feedback (id, user_id, prompt_fp, signal) VALUES (?, ?, ?, ?)",
       [uuidv4(), user.id, fp, signal],
@@ -308,6 +393,7 @@ proxyRouter.post(
 proxyRouter.post(
   "/errors",
   requireValidSubscriber,
+  validateBody(ErrorReportBodySchema),
   async (req: Request, res: Response) => {
     const user = (req as any).user;
     const scrub = (v: unknown, max: number) =>
@@ -407,15 +493,11 @@ proxyRouter.get(
 proxyRouter.post(
   "/project/index",
   requireValidSubscriber,
+  validateBody(ProjectIndexBodySchema, { shape: "nested" }),
   async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const { projectRoot, files = [] } = req.body;
-      if (!Array.isArray(files) || files.length === 0) {
-        return res.status(400).json({
-          error: { message: "files array is required and must not be empty" },
-        });
-      }
       const pMap = indexProjectFiles(
         user.id,
         projectRoot || "workspace",
@@ -543,6 +625,7 @@ proxyRouter.get(
 proxyRouter.get(
   "/templates/:id",
   requireValidSubscriber,
+  validateParams(ProxyIdParamSchema, { shape: "nested" }),
   async (req: Request, res: Response) => {
     const templateId = String(req.params.id);
     const { GOLDEN_TEMPLATES } = await import("../services/templateVault.js");
@@ -572,6 +655,7 @@ proxyRouter.get(
 proxyRouter.get(
   "/scaffolds/:id",
   requireValidSubscriber,
+  validateParams(ProxyIdParamSchema, { shape: "nested" }),
   async (req: Request, res: Response) => {
     const scaffoldId = String(req.params.id);
     const { resolveCompoundScaffold } = await import(
@@ -586,5 +670,286 @@ proxyRouter.get(
       });
     }
     res.json(pkg);
+  },
+);
+
+// ─── POST /v1/diff/apply & POST /v1/diff/preview (High-Speed Speculative Diff) ──
+proxyRouter.post(
+  ["/diff/apply", "/diff/preview"],
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    const { applySpeculativeDiff } = await import(
+      "../services/speculativeDiffEngine.js"
+    );
+    const { isAirGappedZkRequested, recordZkComplianceAuditLog } = await import(
+      "../services/enterpriseZkEngine.js"
+    );
+    const { generateZKUserId } = await import("../services/zkShield.js");
+
+    const isPreview = req.path.includes("/preview") || Boolean(req.body.dryRun);
+    const isZkMode =
+      isAirGappedZkRequested(req.headers) || Boolean(req.body.zkMode);
+    const diff = typeof req.body.diff === "string" ? req.body.diff : "";
+    if (!diff.trim()) {
+      return res.status(400).json({
+        error: { message: "Missing required 'diff' string in request body." },
+      });
+    }
+
+    const result = await applySpeculativeDiff(diff, {
+      workspaceRoot: req.body.workspaceRoot,
+      virtualFiles: req.body.virtualFiles,
+      dryRun: isPreview,
+      validateSyntax: req.body.validateSyntax ?? true,
+      allowFuzzyMatch: req.body.allowFuzzyMatch ?? true,
+      zkMode: isZkMode,
+    });
+
+    if (isZkMode) {
+      res.setHeader("X-VynorAI-ZK-Mode", "Air-Gapped");
+      res.setHeader("X-VynorAI-Zero-Retention", "Verified");
+      if (result.zkFingerprint?.diffFingerprint) {
+        res.setHeader(
+          "X-VynorAI-Diff-Fingerprint",
+          result.zkFingerprint.diffFingerprint,
+        );
+      }
+
+      const user = (req as any).user;
+      const surrogateId = generateZKUserId(user?.id || "anon");
+      recordZkComplianceAuditLog({
+        userSurrogateId: surrogateId,
+        requestType: isPreview ? "diff_preview" : "diff_apply",
+        action: result.success
+          ? "speculative_diff_success"
+          : `speculative_diff_${result.status}`,
+        diffFingerprint: result.zkFingerprint?.diffFingerprint,
+        filesCount:
+          result.zkFingerprint?.filesCount ?? result.modifiedFiles?.length ?? 0,
+        linesAdded: result.linesAdded ?? 0,
+        linesDeleted: result.linesDeleted ?? 0,
+      }).catch((err) => console.error("[EnterpriseZK] Audit log error:", err));
+    }
+
+    if (!result.success) {
+      const statusCode =
+        result.status === "syntax_error"
+          ? 422
+          : result.status === "conflict"
+            ? 409
+            : 500;
+      return res.status(statusCode).json(result);
+    }
+
+    res.json(result);
+  },
+);
+
+// ─── GET /v1/zk/compliance-report (SOC2 / ISO27001 Cryptographic Proof) ─────────
+proxyRouter.get(
+  "/zk/compliance-report",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    const { generateZkComplianceReport } = await import(
+      "../services/enterpriseZkEngine.js"
+    );
+    const { generateZKUserId } = await import("../services/zkShield.js");
+    const user = (req as any).user;
+    const surrogateId = user?.id ? generateZKUserId(user.id) : undefined;
+    const report = await generateZkComplianceReport(surrogateId);
+    res.json(report);
+  },
+);
+
+// ─── POST /v1/zk/verify-chain (Verify Tamper-Evident Merkle Hash Chain) ─────────
+proxyRouter.post(
+  "/zk/verify-chain",
+  requireValidSubscriber,
+  async (_req: Request, res: Response) => {
+    const { verifyZkAuditChainIntegrity } = await import(
+      "../services/enterpriseZkEngine.js"
+    );
+    const verification = await verifyZkAuditChainIntegrity();
+    res.json(verification);
+  },
+);
+
+// ─── POST /v1/codebase/index (Index Repository Files into Symbol Graph) ──────
+proxyRouter.post(
+  "/codebase/index",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    try {
+      const { repoId = "default", files } = req.body;
+      if (!files || typeof files !== "object") {
+        return res
+          .status(400)
+          .json({ error: "Missing or invalid 'files' map in request body" });
+      }
+
+      const { codebaseGraphManager } = await import(
+        "../services/codebaseGraphIndexer.js"
+      );
+      const user = (req as any).user;
+      const effectiveRepoId = `${user?.id || "anon"}:${repoId}`;
+
+      const index = codebaseGraphManager.indexRepository(
+        effectiveRepoId,
+        files,
+      );
+
+      res.json({
+        success: true,
+        repoId: effectiveRepoId,
+        fileCount: index.fileCount,
+        symbolCount: index.symbolCount,
+        chunkCount: index.chunkCount,
+        callGraphEdgesCount: index.callGraph.edges.length,
+        indexedAt: index.indexedAt,
+      });
+    } catch (err: any) {
+      console.error("[CodebaseGraph] Index error:", err);
+      res
+        .status(500)
+        .json({ error: err.message || "Failed to index codebase" });
+    }
+  },
+);
+
+// ─── POST /v1/codebase/query (Hybrid BM25 + Vector + Graph Retrieval) ────────
+proxyRouter.post(
+  "/codebase/query",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        repoId = "default",
+        query,
+        topK = 5,
+        bm25Weight = 1.0,
+        vectorWeight = 1.0,
+        graphBonusWeight = 0.5,
+      } = req.body;
+
+      if (!query || typeof query !== "string") {
+        return res
+          .status(400)
+          .json({ error: "Missing 'query' string parameter" });
+      }
+
+      const { codebaseGraphManager } = await import(
+        "../services/codebaseGraphIndexer.js"
+      );
+      const user = (req as any).user;
+      const effectiveRepoId = `${user?.id || "anon"}:${repoId}`;
+
+      const results = codebaseGraphManager.query(effectiveRepoId, query, {
+        topK: Number(topK) || 5,
+        bm25Weight: Number(bm25Weight) || 1.0,
+        vectorWeight: Number(vectorWeight) || 1.0,
+        graphBonusWeight: Number(graphBonusWeight) || 0.5,
+      });
+
+      res.json({
+        success: true,
+        query,
+        repoId: effectiveRepoId,
+        resultsCount: results.length,
+        results,
+      });
+    } catch (err: any) {
+      console.error("[CodebaseGraph] Query error:", err);
+      res
+        .status(500)
+        .json({ error: err.message || "Failed to query codebase" });
+    }
+  },
+);
+
+// ─── GET /v1/codebase/symbol/:symbolName (Retrieve Symbol Call Graph Context) ─
+proxyRouter.get(
+  "/codebase/symbol/:symbolName",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    try {
+      const rawSymbolName = req.params.symbolName;
+      const symbolName = Array.isArray(rawSymbolName)
+        ? rawSymbolName[0]
+        : String(rawSymbolName || "");
+      const repoId = (req.query.repoId as string) || "default";
+
+      const { codebaseGraphManager } = await import(
+        "../services/codebaseGraphIndexer.js"
+      );
+      const user = (req as any).user;
+      const effectiveRepoId = `${user?.id || "anon"}:${repoId}`;
+
+      const symbol = codebaseGraphManager.getSymbolDetails(
+        effectiveRepoId,
+        symbolName,
+      );
+
+      if (!symbol) {
+        return res.status(404).json({
+          error: `Symbol '${symbolName}' not found in codebase '${effectiveRepoId}'`,
+        });
+      }
+
+      res.json({
+        success: true,
+        repoId: effectiveRepoId,
+        symbol,
+      });
+    } catch (err: any) {
+      console.error("[CodebaseGraph] Symbol lookup error:", err);
+      res.status(500).json({ error: err.message || "Failed to lookup symbol" });
+    }
+  },
+);
+
+// ─── POST /v1/terminal/self-heal (Autonomous Terminal Self-Healing Loop) ─────
+proxyRouter.post(
+  "/terminal/self-heal",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        command,
+        cwd,
+        maxAttempts = 4,
+        timeoutMs = 30000,
+        virtualFiles,
+      } = req.body;
+
+      if (!command || typeof command !== "string") {
+        return res
+          .status(400)
+          .json({
+            error: "Missing or invalid 'command' string in request body",
+          });
+      }
+
+      const { runAutonomousSelfHealingLoop } = await import(
+        "../services/terminalSelfHealingEngine.js"
+      );
+
+      const result = await runAutonomousSelfHealingLoop({
+        command,
+        cwd,
+        maxAttempts: Number(maxAttempts) || 4,
+        timeoutMs: Number(timeoutMs) || 30000,
+        virtualFiles,
+      });
+
+      const statusCode = result.success ? 200 : 422;
+      res.status(statusCode).json(result);
+    } catch (err: any) {
+      console.error("[TerminalSelfHeal] Error in loop execution:", err);
+      res
+        .status(500)
+        .json({
+          error: err.message || "Terminal self-healing execution failed",
+        });
+    }
   },
 );

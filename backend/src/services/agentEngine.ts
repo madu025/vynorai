@@ -75,6 +75,30 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
   {
     type: "function",
     function: {
+      name: "apply_multi_file_diff",
+      description:
+        "High-speed speculative multi-file atomic diff applicator. Applies unified diffs or search/replace blocks across multiple files with pre-flight AST syntax validation and atomic rollback on syntax errors.",
+      parameters: {
+        type: "object",
+        properties: {
+          diff: {
+            type: "string",
+            description:
+              "Unified diff or search/replace block patch covering one or more workspace files",
+          },
+          dryRun: {
+            type: "boolean",
+            description:
+              "If true, validates syntax and preview in memory without touching disk files",
+          },
+        },
+        required: ["diff"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "write_file",
       description:
         "Create a new file. For an existing file use edit_file instead; overwrite only when most of the file changes.",
@@ -106,6 +130,29 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
           command: {
             type: "string",
             description: "The exact shell command to execute",
+          },
+        },
+        required: ["command"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "auto_heal_terminal_command",
+      description:
+        "Autonomous terminal self-healing loop: executes a terminal command, captures stderr/compiler diagnostics, parses stack traces, auto-generates surgical fixes with pre-flight AST validation, and loops until exit code 0.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: {
+            type: "string",
+            description:
+              "The command to run and heal (e.g. 'npm test', 'npm run build', 'pytest')",
+          },
+          maxAttempts: {
+            type: "number",
+            description: "Maximum repair loop iterations (default: 4)",
           },
         },
         required: ["command"],
@@ -148,6 +195,35 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_codebase_graph",
+      description:
+        "High-speed hybrid semantic query across the AST symbol graph. Uses BM25 + dense vector embeddings with Reciprocal Rank Fusion (RRF) and call graph authority traversal (caller <-> callee dependencies).",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Natural language query or code symbol to search across the codebase",
+          },
+          repoId: {
+            type: "string",
+            description:
+              "Identifier for the project / workspace (default: current workspace)",
+          },
+          topK: {
+            type: "number",
+            description:
+              "Maximum number of relevant symbol/code chunks to return (default: 5)",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
 ];
 
 /**
@@ -164,6 +240,7 @@ export const READ_ONLY_TOOL_NAMES = new Set([
   "file_glob_search",
   "view_diff",
   "codebase",
+  "search_codebase_graph",
   "read_skill",
   "browser_qa",
   "get_golden_template",

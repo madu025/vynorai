@@ -182,16 +182,40 @@ export async function getOrInitMonthlyUsage(
     const periodStart = todayStr;
     const periodEnd = isoDate(new Date(now.getTime() + CYCLE_DAYS * DAY_MS));
 
+    // Carry over unspent top-up bonus tokens from the previous cycle
+    const previous = await dbGet<MonthlyUsageRow>(
+      "SELECT * FROM monthly_usage WHERE user_id = ? ORDER BY period_end DESC LIMIT 1",
+      [userId],
+    );
+    let bonusTokens = 0;
+    let bonusRequests = 0;
+    if (previous) {
+      const prevPlan = getPlan(previous.plan_name);
+      const remainingTokens = Math.max(
+        0,
+        previous.max_tokens - previous.used_tokens,
+      );
+      const remainingRequests = Math.max(
+        0,
+        requestLimit(prevPlan, previous) - previous.used_requests,
+      );
+      bonusTokens = Math.min(previous.bonus_tokens || 0, remainingTokens);
+      bonusRequests = Math.min(previous.bonus_requests || 0, remainingRequests);
+    }
+    const maxTokens = planDef.monthlyTokens + bonusTokens;
+
     await dbRun(
       `INSERT INTO monthly_usage
        (id, user_id, plan_name, max_tokens, used_tokens, used_requests, bonus_tokens, bonus_requests, period_start, period_end)
-       VALUES (?, ?, ?, ?, 0, 0, 0, 0, ?, ?)
+       VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
        ON CONFLICT(user_id, period_start) DO NOTHING`,
       [
         uuidv4(),
         userId,
         planDef.id,
-        planDef.monthlyTokens,
+        maxTokens,
+        bonusTokens,
+        bonusRequests,
         periodStart,
         periodEnd,
       ],

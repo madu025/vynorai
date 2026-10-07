@@ -27,53 +27,57 @@ function quoteSecret(): string {
   return value;
 }
 
+import { z } from "zod";
+
+export const BackgroundEstimateInputSchema = z.object({
+  prompt: z
+    .string({ error: "INVALID_PROMPT" })
+    .trim()
+    .min(3, "INVALID_PROMPT")
+    .max(20_000, "INVALID_PROMPT"),
+  projectFingerprint: z
+    .string({ error: "INVALID_DIGEST" })
+    .regex(SHA256_RE, "INVALID_DIGEST"),
+  manifestDigest: z
+    .string({ error: "INVALID_DIGEST" })
+    .regex(SHA256_RE, "INVALID_DIGEST"),
+  fileCount: z
+    .number({ error: "INVALID_FILE_COUNT" })
+    .int("INVALID_FILE_COUNT")
+    .min(1, "INVALID_FILE_COUNT")
+    .max(20_000, "INVALID_FILE_COUNT"),
+  uploadBytes: z
+    .number({ error: "INVALID_UPLOAD_SIZE" })
+    .int("INVALID_UPLOAD_SIZE")
+    .min(1, "INVALID_UPLOAD_SIZE"),
+  language: z.enum(["si", "en", "other"]).optional().default("other"),
+  stacks: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .transform((items) =>
+      [...new Set(items.map((v) => v.slice(0, 32)))].slice(0, 12),
+    ),
+});
+
 export function validateEstimateInput(value: unknown): BackgroundEstimateInput {
-  const input = value as Partial<BackgroundEstimateInput>;
-  if (!input || typeof input !== "object") throw new Error("INVALID_INPUT");
-  if (
-    typeof input.prompt !== "string" ||
-    input.prompt.trim().length < 3 ||
-    input.prompt.length > 20_000
-  )
-    throw new Error("INVALID_PROMPT");
-  if (
-    !SHA256_RE.test(input.projectFingerprint || "") ||
-    !SHA256_RE.test(input.manifestDigest || "")
-  )
-    throw new Error("INVALID_DIGEST");
-  if (
-    !Number.isInteger(input.fileCount) ||
-    input.fileCount! < 1 ||
-    input.fileCount! > 20_000
-  )
-    throw new Error("INVALID_FILE_COUNT");
+  if (!value || typeof value !== "object") throw new Error("INVALID_INPUT");
+  const parsed = BackgroundEstimateInputSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message || "INVALID_INPUT");
+  }
   const maxUpload = Number(
     process.env.BG_MAX_UPLOAD_BYTES || 100 * 1024 * 1024,
   );
-  if (
-    !Number.isInteger(input.uploadBytes) ||
-    input.uploadBytes! < 1 ||
-    input.uploadBytes! > maxUpload
-  )
+  if (parsed.data.uploadBytes > maxUpload) {
     throw new Error("INVALID_UPLOAD_SIZE");
-  const language = ["si", "en", "other"].includes(input.language || "")
-    ? input.language!
-    : "other";
-  const stacks = Array.isArray(input.stacks)
-    ? [
-        ...new Set(
-          input.stacks
-            .filter((v): v is string => typeof v === "string")
-            .map((v) => v.slice(0, 32)),
-        ),
-      ].slice(0, 12)
-    : [];
+  }
   return {
-    ...input,
-    prompt: input.prompt.trim(),
-    language,
-    stacks,
-  } as BackgroundEstimateInput;
+    ...parsed.data,
+    prompt: parsed.data.prompt.trim(),
+    language: parsed.data.language,
+    stacks: parsed.data.stacks,
+  };
 }
 
 export function estimateInputDigest(input: BackgroundEstimateInput): string {

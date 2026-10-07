@@ -17,6 +17,7 @@ import { ChatMessage, CompletionOptions, LLMOptions } from "../../index.js";
 import { osModelsEditPrompt } from "../templates/edit.js";
 import { fromChatCompletionChunk } from "../openaiTypeConverters.js";
 import { streamSse } from "@continuedev/fetch";
+import { retryAsync } from "../utils/retry.js";
 
 // Default to deployed cloud URL; fallback to local dev server
 const VYNORAI_API_BASE = process.env.VYNORAI_API_BASE || "https://vynor.lk/v1/";
@@ -61,7 +62,8 @@ class VynorAI extends OpenAI {
   }
 
   /**
-   * Override _streamChat to intercept VynorAI quota limits and show actionable upgrade messages.
+   * Override _streamChat to intercept VynorAI quota limits, show actionable upgrade messages,
+   * and auto-reconnect on transient network dropouts.
    */
   protected async *_streamChat(
     messages: ChatMessage[],
@@ -70,15 +72,44 @@ class VynorAI extends OpenAI {
   ): AsyncGenerator<ChatMessage> {
     const body = this._convertArgs(options, messages);
 
-    const response = await this.fetch(this._getEndpoint("chat/completions"), {
-      method: "POST",
-      headers: this._getHeaders(),
-      body: JSON.stringify({
-        ...body,
-        ...this.extraBodyProperties(),
-      }),
-      signal,
-    });
+    const response = await retryAsync(
+      () =>
+        this.fetch(this._getEndpoint("chat/completions"), {
+          method: "POST",
+          headers: this._getHeaders(),
+          body: JSON.stringify({
+            ...body,
+            ...this.extraBodyProperties(),
+          }),
+          signal,
+        }),
+      {
+        maxAttempts: 3,
+        baseDelay: 500,
+        maxDelay: 3000,
+        shouldRetry: (error: any) => {
+          if (signal?.aborted) return false;
+          const status =
+            error?.status || error?.statusCode || error?.response?.status;
+          if (status === 401 || status === 403 || status === 400) return false;
+          if (status === 429 || (status >= 500 && status < 600)) return true;
+          const code = error?.code || error?.errno;
+          if (
+            code === "ECONNRESET" ||
+            code === "ECONNREFUSED" ||
+            code === "ETIMEDOUT" ||
+            code === "ENOTFOUND" ||
+            code === "EAI_AGAIN"
+          ) {
+            return true;
+          }
+          return Boolean(
+            error instanceof TypeError &&
+              error.message.includes("fetch failed"),
+          );
+        },
+      },
+    );
 
     if (response.status === 403 || response.status === 429) {
       try {
@@ -102,11 +133,18 @@ class VynorAI extends OpenAI {
 
         if (
           errObj?.code === "model_locked" ||
-          errObj?.type === "plan_restriction"
+          errObj?.code === "model_not_allowed" ||
+          errObj?.type === "plan_restriction" ||
+          errObj?.type === "tier_restricted"
         ) {
+          const upgradePlan = errObj.upgradePlan;
+          const upgradeMsg = upgradePlan
+            ? `\n\n⚡ **Upgrade to ${upgradePlan.displayName} Plan** (LKR ${upgradePlan.priceLKR.toLocaleString()}/mo): [👉 Click here to Upgrade](${errObj.upgradeUrl || "https://vynor.lk/#pricing"})`
+            : `\n\n👉 [Click here to Upgrade Your Plan](${errObj.upgradeUrl || "https://vynor.lk/#pricing"}) to unlock this Thinking/Premium model.`;
+
           yield {
             role: "assistant",
-            content: `🔒 **Model Locked (Upgrade Required)**\n\n${errObj.message || "This model requires an upgraded plan."}\n\n👉 [Click here to Upgrade Your Plan](${errObj.upgradeUrl || "https://vynor.lk/#pricing"}) to unlock this Thinking/Premium model.`,
+            content: `🔒 **Model Locked (Upgrade Required)**\n\n${errObj.message || "This model requires an upgraded plan."}${upgradeMsg}`,
           };
           return;
         }
@@ -129,6 +167,72 @@ class VynorAI extends OpenAI {
       const chunk = fromChatCompletionChunk(value);
       if (chunk) {
         yield chunk;
+      }
+    }
+  }
+
+  /**
+   * Override _streamFim to route FIM completions to VynorAI proxy with resilient retry.
+   */
+  protected async *_streamFim(
+    prefix: string,
+    suffix: string,
+    signal: AbortSignal,
+    options: CompletionOptions,
+  ): AsyncGenerator<string> {
+    const endpoint = new URL("fim/completions", this.apiBase);
+    const resp = await retryAsync(
+      () =>
+        this.fetch(endpoint, {
+          method: "POST",
+          body: JSON.stringify({
+            model: options.model,
+            prompt: prefix,
+            prefix,
+            suffix,
+            max_tokens: options.maxTokens,
+            temperature: options.temperature,
+            top_p: options.topP,
+            frequency_penalty: options.frequencyPenalty,
+            presence_penalty: options.presencePenalty,
+            stop: options.stop,
+            stream: true,
+            ...this.extraBodyProperties(),
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "x-api-key": this.apiKey ?? "",
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          signal,
+        }),
+      {
+        maxAttempts: 3,
+        baseDelay: 300,
+        maxDelay: 2000,
+        shouldRetry: (error: any) => {
+          if (signal?.aborted) return false;
+          const status =
+            error?.status || error?.statusCode || error?.response?.status;
+          if (status === 401 || status === 403 || status === 400) return false;
+          if (status === 429 || (status >= 500 && status < 600)) return true;
+          const code = error?.code || error?.errno;
+          return (
+            code === "ECONNRESET" ||
+            code === "ECONNREFUSED" ||
+            code === "ETIMEDOUT" ||
+            code === "ENOTFOUND"
+          );
+        },
+      },
+    );
+
+    for await (const chunk of streamSse(resp)) {
+      if (chunk.choices?.[0]?.delta?.content) {
+        yield chunk.choices[0].delta.content;
+      } else if (chunk.choices?.[0]?.text) {
+        yield chunk.choices[0].text;
       }
     }
   }

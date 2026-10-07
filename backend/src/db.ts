@@ -855,6 +855,34 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "024_enterprise_zk_compliance_ledger",
+    description:
+      "Enterprise Air-Gapped Zero-Knowledge cryptographic audit trail with Merkle verification",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS zk_compliance_audit_logs (
+        id VARCHAR(64) PRIMARY KEY,
+        user_surrogate_id VARCHAR(64) NOT NULL,
+        request_type VARCHAR(64) NOT NULL,
+        action VARCHAR(64) NOT NULL,
+        diff_fingerprint VARCHAR(64),
+        prompt_fingerprint VARCHAR(64),
+        files_count INTEGER DEFAULT 0,
+        lines_added INTEGER DEFAULT 0,
+        lines_deleted INTEGER DEFAULT 0,
+        zero_retention_verified INTEGER DEFAULT 1,
+        merkle_prev_hash VARCHAR(64) NOT NULL,
+        merkle_hash VARCHAR(64) NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_zk_audit_surrogate ON zk_compliance_audit_logs(user_surrogate_id, created_at DESC)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_zk_audit_diff_hash ON zk_compliance_audit_logs(diff_fingerprint)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

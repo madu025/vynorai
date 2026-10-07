@@ -8,6 +8,16 @@ interface RateLimitRecord {
 
 const memoryStore = new Map<string, RateLimitRecord>();
 
+export function resetRateLimitMemoryStore(): void {
+  memoryStore.clear();
+}
+
+export function getRateLimitMemoryRecord(
+  key: string,
+): RateLimitRecord | undefined {
+  return memoryStore.get(key);
+}
+
 // Periodic cleanup of stale entries every 5 minutes
 setInterval(
   () => {
@@ -106,11 +116,12 @@ export const authRateLimiter = createRateLimiter({
   message:
     "Too many authentication attempts from this IP. Please wait 1 minute before trying again.",
   keyGenerator: (req) => {
-    const ip =
-      req.headers["cf-connecting-ip"] ||
-      req.headers["x-forwarded-for"] ||
-      req.ip ||
-      "unknown";
+    const cfIp = req.headers["cf-connecting-ip"];
+    if (typeof cfIp === "string" && cfIp.trim()) return `auth_${cfIp.trim()}`;
+    const xff = req.headers["x-forwarded-for"];
+    if (typeof xff === "string" && xff.trim())
+      return `auth_${xff.split(",")[0].trim()}`;
+    const ip = req.ip || req.socket?.remoteAddress || "unknown";
     return `auth_${ip}`;
   },
 });

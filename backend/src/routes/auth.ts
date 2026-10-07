@@ -42,6 +42,8 @@ import { deleteBackgroundArtifact } from "../services/backgroundArtifacts.js";
 import { purgeUserCache } from "../services/cacheEngine.js";
 import { semanticPurgeUser } from "../services/semanticCache.js";
 
+import { z, validateBody, validateQuery } from "../middleware/validate.js";
+
 export const authRouter = Router();
 
 const sha256 = (v: string) =>
@@ -58,6 +60,100 @@ const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 const IDE_AUTH_VALUE_RE = /^[a-f0-9]{64}$/i;
 const ideAuthorizationCodes = new IdeAuthorizationCodeStore(getRedis, {
   requireDistributed: process.env.IDE_AUTH_REQUIRE_REDIS === "true",
+});
+
+export const ForgotPasswordBodySchema = z.object({
+  email: z.string().optional().default(""),
+});
+
+export const ResetPasswordBodySchema = z.object({
+  token: z
+    .string({ error: "Invalid or expired reset link." })
+    .regex(/^[a-f0-9]{64}$/i, "Invalid or expired reset link."),
+  newPassword: z
+    .string({ error: "Password must be between 8 and 128 characters." })
+    .min(8, "Password must be between 8 and 128 characters.")
+    .max(128, "Password must be between 8 and 128 characters."),
+});
+
+export const IdeCodeBodySchema = z.object({
+  state: z
+    .string({ error: "Invalid IDE authentication state" })
+    .regex(IDE_AUTH_VALUE_RE, "Invalid IDE authentication state"),
+});
+
+export const IdeExchangeBodySchema = z.object({
+  code: z
+    .string({ error: "Invalid IDE authorization code" })
+    .regex(IDE_AUTH_VALUE_RE, "Invalid IDE authorization code"),
+  state: z
+    .string({ error: "Invalid IDE authentication state" })
+    .regex(IDE_AUTH_VALUE_RE, "Invalid IDE authentication state"),
+});
+
+export const RegisterBodySchema = z.object({
+  email: z
+    .string({ error: "Email and password are required" })
+    .min(1, "Email and password are required")
+    .transform((v) => v.toLowerCase().trim())
+    .refine((v) => v.length <= MAX_EMAIL_LENGTH && EMAIL_RE.test(v), {
+      message: "Please enter a valid email address",
+    }),
+  password: z
+    .string({ error: "Email and password are required" })
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be at most 128 characters"),
+  name: z.string().optional().default(""),
+  turnstileToken: z.string().optional(),
+  acceptPrivacy: z.literal(true, {
+    error: "Please accept the Privacy Policy to create an account.",
+  }),
+});
+
+export const LoginBodySchema = z.object({
+  email: z
+    .string({ error: "Email and password are required" })
+    .trim()
+    .toLowerCase()
+    .min(1, "Email and password are required"),
+  password: z
+    .string({ error: "Email and password are required" })
+    .min(1, "Email and password are required"),
+});
+
+export const VerifyEmailOtpBodySchema = z.object({
+  otp: z
+    .string({ error: "A valid 6-digit verification code is required." })
+    .trim()
+    .regex(/^\d{6}$/, "A valid 6-digit verification code is required."),
+});
+
+export const VerifyEmailTokenQuerySchema = z.object({
+  token: z
+    .string({ error: "Verification token is required." })
+    .min(1, "Verification token is required."),
+});
+
+export const AllowedIpsBodySchema = z.object({
+  allowedIps: z.string().optional().default(""),
+});
+
+export const ChangePasswordBodySchema = z.object({
+  currentPassword: z
+    .string({ error: "Current password and new password are required" })
+    .min(1, "Current password and new password are required"),
+  newPassword: z
+    .string({ error: "Current password and new password are required" })
+    .min(8, "New password must be at least 8 characters")
+    .max(128, "Password must be at most 128 characters"),
+});
+
+export const DeleteAccountBodySchema = z.object({
+  confirmEmail: z
+    .string({ error: "Type your account email exactly to confirm deletion." })
+    .trim()
+    .toLowerCase()
+    .min(1, "Type your account email exactly to confirm deletion."),
 });
 
 // Middleware to authenticate JWT or API Key
@@ -178,17 +274,10 @@ authRouter.post(
 authRouter.post(
   "/reset-password",
   authRateLimiter,
+  validateBody(ResetPasswordBodySchema),
   async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store");
-    const token = typeof req.body?.token === "string" ? req.body.token : "";
-    const newPassword =
-      typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
-    if (!/^[a-f0-9]{64}$/i.test(token))
-      return res.status(400).json({ error: "Invalid or expired reset link." });
-    if (newPassword.length < 8 || newPassword.length > 128)
-      return res
-        .status(400)
-        .json({ error: "Password must be between 8 and 128 characters." });
+    const { token, newPassword } = req.body;
 
     const record = await dbGet<{ id: string; user_id: string; email: string }>(
       `SELECT p.id, p.user_id, u.email
@@ -236,15 +325,11 @@ authRouter.post(
   "/ide-code",
   authRateLimiter,
   requireAuth,
+  validateBody(IdeCodeBodySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.setHeader("Cache-Control", "no-store");
-      const state = typeof req.body?.state === "string" ? req.body.state : "";
-      if (!IDE_AUTH_VALUE_RE.test(state)) {
-        return res
-          .status(400)
-          .json({ error: "Invalid IDE authentication state" });
-      }
+      const { state } = req.body;
       const user = (req as any).user as { id: string } | undefined;
       if (!user?.id)
         return res.status(401).json({ error: "Authentication required" });
@@ -267,16 +352,11 @@ authRouter.post(
 authRouter.post(
   "/ide-exchange",
   authRateLimiter,
+  validateBody(IdeExchangeBodySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.setHeader("Cache-Control", "no-store");
-      const code = typeof req.body?.code === "string" ? req.body.code : "";
-      const state = typeof req.body?.state === "string" ? req.body.state : "";
-      if (!IDE_AUTH_VALUE_RE.test(code) || !IDE_AUTH_VALUE_RE.test(state)) {
-        return res
-          .status(400)
-          .json({ error: "Invalid IDE authorization code" });
-      }
+      const { code, state } = req.body;
 
       const authorization = await ideAuthorizationCodes.consume(code, state);
       if (!authorization) {
@@ -317,14 +397,39 @@ authRouter.post(
 );
 
 // Helper to verify Cloudflare Turnstile token if configured
-async function verifyTurnstileToken(
+export async function verifyTurnstileToken(
   token?: string,
   remoteIp?: string,
 ): Promise<boolean> {
   const secretKey = process.env.TURNSTILE_SECRET_KEY;
-  // If not configured in environment, allow to pass smoothly (doesn't break existing dev/prod)
-  if (!secretKey) return true;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // In production mode, Turnstile bot protection must be enforced.
+  if (!secretKey) {
+    if (isProduction) {
+      console.warn(
+        "[Turnstile] WARNING: Running in production without TURNSTILE_SECRET_KEY! Bot protection enforced: rejecting unverified requests.",
+      );
+      return false;
+    }
+    // In dev/test without secret, allow bypass
+    return true;
+  }
+
   if (!token) return false;
+
+  // Cloudflare test tokens support (deterministic, offline-safe testing)
+  // '1x00000000000000000000AA' -> passes (Cloudflare official dummy)
+  // '2x00000000000000000000AB' -> fails (Cloudflare official dummy)
+  if (
+    token === "1x00000000000000000000AA" &&
+    (secretKey.startsWith("1x") || process.env.NODE_ENV === "test")
+  ) {
+    return true;
+  }
+  if (token === "2x00000000000000000000AB") {
+    return false;
+  }
 
   try {
     const formData = new URLSearchParams();
@@ -360,48 +465,10 @@ authRouter.get("/turnstile-config", (_req: Request, res: Response) => {
 authRouter.post(
   "/register",
   authRateLimiter,
+  validateBody(RegisterBodySchema),
   async (req: Request, res: Response) => {
     try {
-      const {
-        email: rawEmail,
-        password,
-        name,
-        turnstileToken,
-        acceptPrivacy,
-      } = req.body;
-
-      if (
-        !rawEmail ||
-        !password ||
-        typeof rawEmail !== "string" ||
-        typeof password !== "string"
-      ) {
-        return res
-          .status(400)
-          .json({ error: "Email and password are required" });
-      }
-
-      const email = rawEmail.toLowerCase().trim();
-      if (email.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email)) {
-        return res
-          .status(400)
-          .json({ error: "Please enter a valid email address" });
-      }
-      if (acceptPrivacy !== true) {
-        return res.status(400).json({
-          error: "Please accept the Privacy Policy to create an account.",
-        });
-      }
-      if (password.length > 128) {
-        return res
-          .status(400)
-          .json({ error: "Password must be at most 128 characters" });
-      }
-      if (password.length < 8) {
-        return res
-          .status(400)
-          .json({ error: "Password must be at least 8 characters" });
-      }
+      const { email, password, name, turnstileToken, acceptPrivacy } = req.body;
 
       // Verify Turnstile bot protection if token/secret present
       const clientIp = getClientIp(req);
@@ -511,22 +578,11 @@ authRouter.get("/login", (req: Request, res: Response) => {
 authRouter.post(
   "/login",
   authRateLimiter,
+  validateBody(LoginBodySchema),
   async (req: Request, res: Response) => {
     const clientIp = getClientIp(req);
     try {
-      const { email: rawEmail, password } = req.body;
-
-      if (
-        !rawEmail ||
-        !password ||
-        typeof rawEmail !== "string" ||
-        typeof password !== "string"
-      ) {
-        return res
-          .status(400)
-          .json({ error: "Email and password are required" });
-      }
-      const email = rawEmail.toLowerCase().trim();
+      const { email, password } = req.body;
 
       const user = await dbGet<any>("SELECT * FROM users WHERE email = ?", [
         email,
@@ -804,16 +860,11 @@ authRouter.post(
   "/verify-email",
   authRateLimiter,
   requireAuth,
+  validateBody(VerifyEmailOtpBodySchema),
   async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { otp } = req.body;
     const clientIp = getClientIp(req);
-
-    if (!otp || typeof otp !== "string" || !/^\d{6}$/.test(otp.trim())) {
-      return res
-        .status(400)
-        .json({ error: "A valid 6-digit verification code is required." });
-    }
 
     try {
       // Fetch the latest active record first (NOT filtered by OTP), so failed
@@ -976,6 +1027,7 @@ authRouter.post(
 authRouter.post(
   "/allowed-ips",
   requireAuth,
+  validateBody(AllowedIpsBodySchema),
   async (req: Request, res: Response) => {
     const clientIp = getClientIp(req);
     try {
@@ -1033,27 +1085,12 @@ authRouter.get(
 authRouter.post(
   "/change-password",
   requireAuth,
+  validateBody(ChangePasswordBodySchema),
   async (req: Request, res: Response) => {
     const clientIp = getClientIp(req);
     try {
       const user = (req as any).user;
       const { currentPassword, newPassword } = req.body;
-
-      if (
-        !currentPassword ||
-        !newPassword ||
-        typeof currentPassword !== "string" ||
-        typeof newPassword !== "string"
-      ) {
-        return res
-          .status(400)
-          .json({ error: "Current password and new password are required" });
-      }
-      if (newPassword.length < 8) {
-        return res
-          .status(400)
-          .json({ error: "New password must be at least 8 characters" });
-      }
 
       const dbUser = await dbGet<any>(
         "SELECT password_hash FROM users WHERE id = ?",
@@ -1202,16 +1239,15 @@ authRouter.post(
   "/delete-account",
   authRateLimiter,
   requireAuth,
+  validateBody(DeleteAccountBodySchema),
   async (req: Request, res: Response) => {
     if (isApiKeyRequest(req))
       return res
         .status(403)
         .json({ error: "Sign in on vynor.lk to delete your account." });
     const user = (req as any).user;
-    const confirm = String(req.body?.confirmEmail ?? "")
-      .trim()
-      .toLowerCase();
-    if (!confirm || confirm !== String(user.email).toLowerCase())
+    const confirm = req.body.confirmEmail;
+    if (confirm !== String(user.email).toLowerCase())
       return res.status(400).json({
         error: "Type your account email exactly to confirm deletion.",
       });

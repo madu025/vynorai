@@ -2,7 +2,7 @@
 
 <!-- Competitive gap roadmap vs Claude Code / Codex: docs/VYNORAI_COMPETITIVE_ROADMAP.md -->
 
-> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Autonomous Maintenance Swarm, Cloud GitHub Integration Provider, Self-Healing Engine, 4-Pillar Senior Staff /review, Long-running /goal mode, Redis admission control backpressure, transactional email OTP services, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy with zero-downtime rolling deploys, cost-weighted credits).
+> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
 
 ---
 
@@ -179,6 +179,18 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
   - Quick-fix code diagnostics endpoint (`/v1/quick-fix`).
   - Golden template registry and compound scaffolding endpoints (`/v1/templates`, `/v1/scaffolds/catalog`, `/v1/scaffolds/:id`).
   - Cryptographic Merkle chain audit verification endpoint (`/v1/security/merkle-verify`).
+  - **Codebase Symbol Graph Endpoints**:
+    - `POST /v1/codebase/index`: AST & bidirectional call graph indexing for workspace files.
+    - `POST /v1/codebase/query`: Hybrid BM25 + dense vector semantic retrieval with call graph authority boosting.
+    - `GET /v1/codebase/symbol/:symbolName`: Symbol lookup with callers/callees context.
+  - **Autonomous Terminal Self-Healing Endpoint**:
+    - `POST /v1/terminal/self-heal`: Runs terminal commands, parses compiler/runtime diagnostics, auto-patches with pre-flight AST validation, looping until exit code 0.
+  - **Speculative Multi-File Diff Endpoints**:
+    - `POST /v1/diff/preview`: Dry-run speculative diff parsing, symbol matching, and pre-flight AST syntax check.
+    - `POST /v1/diff/apply`: Speculative diff application with atomic rollback on syntax errors.
+  - **Enterprise Zero-Knowledge Compliance Endpoints**:
+    - `GET /v1/zk/compliance-report`: Verifiable SOC2/ISO27001 zero-retention cryptographic audit report.
+    - `POST /v1/zk/verify-chain`: Merkle hash chain integrity proof.
 - [backend/src/routes/admin.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/admin.ts):
   - Enterprise administration panel endpoints for user management, plan overrides, quota manual adjustments, system logs, and security monitoring.
 - [backend/src/routes/payment.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/payment.ts):
@@ -234,6 +246,7 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
 
 - [backend/src/services/secretSanitizer.ts](file:///d:/My%20Project/VynorAI/backend/src/services/secretSanitizer.ts): Scans and redacts AWS keys, private RSA/SSH keys, GitHub tokens, and sensitive credentials before prompts leave the server.
 - [backend/src/services/zkShield.ts](file:///d:/My%20Project/VynorAI/backend/src/services/zkShield.ts): Zero-Knowledge privacy shield ensuring prompt bodies are anonymized.
+- [backend/src/services/enterpriseZkEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/enterpriseZkEngine.ts): **Enterprise Air-Gapped Zero-Knowledge Mode**. Enforces local-only diff hashing (SHA-256 blind fingerprints), guarantees zero plaintext retention in databases, forces upstream zero-retention (`store: false`, `X-Zero-Retention`), and maintains a tamper-evident cryptographic Merkle hash audit chain.
 - [backend/src/services/securityAudit.ts](file:///d:/My%20Project/VynorAI/backend/src/services/securityAudit.ts): Records and analyzes suspicious patterns or prompt-injection attempts.
 - [backend/src/services/credentialVault.ts](file:///d:/My%20Project/VynorAI/backend/src/services/credentialVault.ts): Encrypted storage for external service credentials and keys.
 
@@ -248,6 +261,26 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
 - [backend/src/services/ideAuthCodes.ts](file:///d:/My%20Project/VynorAI/backend/src/services/ideAuthCodes.ts): Generates and tracks short-lived cryptographically random codes for IDE authentication.
 - [backend/src/services/webSearch.ts](file:///d:/My%20Project/VynorAI/backend/src/services/webSearch.ts): Web search query integration for real-time documentation retrieval.
 - [backend/src/services/emailService.ts](file:///d:/My%20Project/VynorAI/backend/src/services/emailService.ts): Multi-provider transactional email engine (Resend HTTP API + SMTP via Nodemailer) powering OTP verification codes, password resets, welcome onboarding, and payment receipts with safe local fallback.
+
+#### F. Speculative Editing, AST Symbol Graph & Autonomous Self-Healing Engines
+
+- [backend/src/services/codebaseGraphIndexer.ts](file:///d:/My%20Project/VynorAI/backend/src/services/codebaseGraphIndexer.ts): **Codebase Symbol Graph Indexer (`@codebase` Engine)**.
+  - Multi-language AST parser: TypeScript Compiler API (`ts.createSourceFile`) for TS/JS, plus Python (`def`, `class`), Go (`func`), Rust (`fn`, `struct`), and Java boundary parsers.
+  - Bidirectional call graph constructor: extracts caller $\leftrightarrow$ callee relationships and in-degree centrality (PageRank authority boost for core architectural hubs).
+  - Hybrid retrieval: Okapi BM25 ($k_1=1.2, b=0.75$) + 64D dense vector embeddings with Reciprocal Rank Fusion (RRF) and 1-hop caller/callee neighborhood expansion.
+  - In-memory index manager with incremental single-file re-indexing (`CodebaseSymbolGraphManager`).
+- [backend/src/services/terminalSelfHealingEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/terminalSelfHealingEngine.ts): **Autonomous Terminal Self-Healing Engine**.
+  - Universal diagnostic parser: captures TypeScript errors (TS2345, TS2304), Node.js stack traces (`ReferenceError`, `TypeError`, `AssertionError`), Python tracebacks, and test runner failures.
+  - Surgical heuristic repair: automatically resolves missing standard imports (`path`, `fs`, `crypto`, `assert`), signature discrepancies, undeclared variables, and strict-equality assertion drift.
+  - Pre-flight AST syntax verification: checks patches through `validateCodeSyntax` before writing to disk, ensuring zero syntax corruption.
+  - Loop controller: runs commands iteratively until `exitCode === 0` with circuit breaker guards preventing infinite cycles.
+- [backend/src/services/speculativeDiffEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/speculativeDiffEngine.ts): **Multi-File Speculative Diff Engine**.
+  - Parses and speculatively applies unified diff patches and search/replace blocks across multiple files in memory.
+  - Pre-flight syntax validation with atomic rollback: if any single file in a multi-file batch fails syntax checks, 100% of files are rolled back atomically with zero disk pollution.
+- [backend/src/services/symbolChunkMatcher.ts](file:///d:/My%20Project/VynorAI/backend/src/services/symbolChunkMatcher.ts): **High-Precision Symbol & Chunk Matcher**.
+  - Multi-tier matching strategies: exact position, sliding window line-shift tolerance, whitespace/indentation normalized fuzzy match, and AST symbol-anchored boundary matching.
+- [backend/src/services/unifiedDiffParser.ts](file:///d:/My%20Project/VynorAI/backend/src/services/unifiedDiffParser.ts): Universal diff parser for standard Git unified diffs (`diff --git`, `---`, `+++`, `@@`) and search/replace blocks.
+- [backend/src/services/syntaxValidator.ts](file:///d:/My%20Project/VynorAI/backend/src/services/syntaxValidator.ts): High-speed pre-flight syntax validator analyzing TypeScript, JavaScript, TSX, JSX, JSON, Python, and CSS before disk writes.
 
 ---
 

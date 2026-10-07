@@ -12,6 +12,17 @@ import { dbGet, dbRun } from "../db.js";
 import { authRateLimiter } from "../middleware/security.js";
 import { encryptCredential, maskApiKey } from "../services/credentialVault.js";
 import { logSecurityEvent } from "../services/securityAudit.js";
+import { z, validateQuery } from "../middleware/validate.js";
+
+export const GoogleOAuthStartQuerySchema = z.object({
+  return: z.string().optional(),
+});
+
+export const GoogleOAuthCallbackQuerySchema = z.object({
+  code: z.string().optional(),
+  state: z.string().optional(),
+  error: z.string().optional(),
+});
 
 /**
  * "Continue with Google" (OpenID Connect authorization code flow with PKCE).
@@ -158,50 +169,56 @@ googleAuthRouter.get("/config", (_req, res) => {
   res.json({ enabled: googleAuthConfigured() });
 });
 
-googleAuthRouter.get("/", authRateLimiter, (req: Request, res: Response) => {
-  const returnQuery = sanitizeReturnQuery(req.query.return);
-  if (!googleAuthConfigured()) {
-    return failRedirect(
-      res,
-      returnQuery,
-      "Google sign-in is not available yet.",
+googleAuthRouter.get(
+  "/",
+  authRateLimiter,
+  validateQuery(GoogleOAuthStartQuerySchema),
+  (req: Request, res: Response) => {
+    const returnQuery = sanitizeReturnQuery(req.query.return);
+    if (!googleAuthConfigured()) {
+      return failRedirect(
+        res,
+        returnQuery,
+        "Google sign-in is not available yet.",
+      );
+    }
+    const state = b64url(crypto.randomBytes(24));
+    const nonce = b64url(crypto.randomBytes(24));
+    const verifier = b64url(crypto.randomBytes(48));
+    const challenge = b64url(
+      crypto.createHash("sha256").update(verifier).digest(),
     );
-  }
-  const state = b64url(crypto.randomBytes(24));
-  const nonce = b64url(crypto.randomBytes(24));
-  const verifier = b64url(crypto.randomBytes(48));
-  const challenge = b64url(
-    crypto.createHash("sha256").update(verifier).digest(),
-  );
 
-  const payload = Buffer.from(
-    JSON.stringify({
+    const payload = Buffer.from(
+      JSON.stringify({
+        state,
+        nonce,
+        verifier,
+        returnQuery,
+        exp: Date.now() + COOKIE_TTL_MS,
+      }),
+    ).toString("base64url");
+    res.setHeader("Set-Cookie", cookieHeader(sign(payload), COOKIE_TTL_MS));
+
+    const params = new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      redirect_uri: redirectUri(),
+      response_type: "code",
+      scope: "openid email profile",
       state,
       nonce,
-      verifier,
-      returnQuery,
-      exp: Date.now() + COOKIE_TTL_MS,
-    }),
-  ).toString("base64url");
-  res.setHeader("Set-Cookie", cookieHeader(sign(payload), COOKIE_TTL_MS));
-
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: redirectUri(),
-    response_type: "code",
-    scope: "openid email profile",
-    state,
-    nonce,
-    code_challenge: challenge,
-    code_challenge_method: "S256",
-    prompt: "select_account",
-  });
-  res.redirect(302, `https://accounts.google.com/o/oauth2/v2/auth?${params}`);
-});
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      prompt: "select_account",
+    });
+    res.redirect(302, `https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  },
+);
 
 googleAuthRouter.get(
   "/callback",
   authRateLimiter,
+  validateQuery(GoogleOAuthCallbackQuerySchema),
   async (req: Request, res: Response) => {
     const raw = unsign(readCookie(req, COOKIE));
     res.setHeader("Set-Cookie", cookieHeader("", 0));

@@ -242,6 +242,12 @@ export async function handleChatCompletions(
       typeof body.projectRoot === "string" ? body.projectRoot : "default",
   };
 
+  const isZkMode = Boolean(body.zkMode || body.store === false);
+  if (isZkMode) {
+    res.setHeader("X-VynorAI-ZK-Mode", "Air-Gapped");
+    res.setHeader("X-VynorAI-Zero-Retention", "Verified");
+  }
+
   // ── 1. Cache Lookup ─────────────────────────────────────────────────────────
   const cacheKey = generateCacheKey(
     {
@@ -262,7 +268,7 @@ export async function handleChatCompletions(
     messages,
     temperature,
   );
-  const cached = await getFromCache(cacheKey, cacheOwner);
+  const cached = isZkMode ? null : await getFromCache(cacheKey, cacheOwner);
 
   /** Serve a stored answer at zero upstream cost (exact or semantic cache hit). */
   const serveCachedChunks = async (
@@ -1006,6 +1012,7 @@ export async function handleChatCompletions(
       dispatch.success &&
       !dispatch.interrupted &&
       !isIdeAgent &&
+      !isZkMode &&
       allChunks.length > 0 &&
       finishedWithStop(allChunks)
     ) {

@@ -449,13 +449,19 @@ async function executeWithEndpoint(
     if (idle) clearTimeout(idle);
     res.off("close", onClientClose);
   };
-  touch();
+  const forwardHeaders = { ...endpoint.headers };
+  const forwardPayload = { ...payload };
+  if (body?.zkMode || body?.store === false) {
+    forwardHeaders["X-Zero-Retention"] = "true";
+    forwardPayload.store = false;
+  }
+
   let response: globalThis.Response;
   try {
     response = await fetch(fetchUrl, {
       method: "POST",
-      headers: endpoint.headers,
-      body: JSON.stringify(payload),
+      headers: forwardHeaders,
+      body: JSON.stringify(forwardPayload),
       signal: controller.signal,
     });
   } catch (err) {

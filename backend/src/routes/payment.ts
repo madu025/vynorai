@@ -27,6 +27,33 @@ import {
   getEffectivePlan,
   getEffectivePlans,
 } from "../services/planManager.js";
+import { z, validateBody } from "../middleware/validate.js";
+
+export const CheckoutBodySchema = z.object({
+  plan: z.string().optional().default("starter"),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+});
+
+export const PayhereIpnSchema = z
+  .object({
+    order_id: z.string({ error: "order_id is required" }),
+    payment_id: z
+      .union([z.string(), z.number()])
+      .optional()
+      .transform((v) => (v !== undefined ? String(v) : "")),
+    status_code: z.union([z.string(), z.number()]).transform(String),
+    merchant_id: z.string().optional(),
+    payhere_amount: z.union([z.string(), z.number()]).optional(),
+    payhere_currency: z.string().optional(),
+    md5sig: z.string().optional(),
+  })
+  .passthrough();
+
+export const TestActivateSchema = z.object({
+  plan: z.string().optional().default("pro"),
+});
 
 export const paymentRouter = Router();
 
@@ -187,6 +214,7 @@ async function applyChargeback(order: OrderRow): Promise<void> {
 paymentRouter.post(
   "/checkout",
   requireAuth,
+  validateBody(CheckoutBodySchema),
   async (req: Request, res: Response) => {
     try {
       if (config.nodeEnv === "production" && config.payhere.env !== "live") {
@@ -278,64 +306,71 @@ paymentRouter.post(
  * It may deliver the same notification more than once; every transition is
  * conditional on the order's current status, so replays are no-ops.
  */
-paymentRouter.post("/notify", async (req: Request, res: Response) => {
-  try {
-    const body = req.body;
-    const { order_id, payment_id, status_code } = body;
-    console.log(`[PayHere IPN] order=${order_id} status=${status_code}`);
+paymentRouter.post(
+  "/notify",
+  validateBody(PayhereIpnSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body;
+      const { order_id, payment_id, status_code } = body;
+      console.log(`[PayHere IPN] order=${order_id} status=${status_code}`);
 
-    if (!verifyPayhereIpn(body)) {
-      console.warn("[PayHere IPN] Invalid MD5 signature received!");
-      return res.status(400).send("Invalid signature");
-    }
+      if (!verifyPayhereIpn(body)) {
+        console.warn("[PayHere IPN] Invalid MD5 signature received!");
+        return res.status(400).send("Invalid signature");
+      }
 
-    const order = await dbGet<OrderRow>(
-      "SELECT id, order_id, user_id, plan_name, status, amount_minor, currency, valid_until FROM subscriptions WHERE order_id = ?",
-      [order_id],
-    );
-    const check = validateIpnAgainstOrder(
-      body,
-      order,
-      config.payhere.merchantId,
-    );
-    if (!check.ok) {
-      console.warn(`[PayHere IPN] Rejected order=${order_id}: ${check.reason}`);
-      return res.status(400).send("Order mismatch");
-    }
-
-    // Status code: 2 = Success, 0 = Pending, -1 = Canceled, -2 = Failed, -3 = Chargeback
-    switch (String(status_code)) {
-      case "2":
-        if (isTopupPlan(order!.plan_name)) await applyTopup(order!, payment_id);
-        else await activatePlan(order!, payment_id);
-        console.log(
-          `[PayHere IPN] Paid order=${order_id} user=${order!.user_id} plan=${order!.plan_name}`,
-        );
-        break;
-      case "-1":
-      case "-2":
-        await dbRun(
-          "UPDATE subscriptions SET status = ? WHERE order_id = ? AND status = 'pending'",
-          [String(status_code) === "-1" ? "cancelled" : "failed", order_id],
-        );
-        break;
-      case "-3":
-        await applyChargeback(order!);
+      const order = await dbGet<OrderRow>(
+        "SELECT id, order_id, user_id, plan_name, status, amount_minor, currency, valid_until FROM subscriptions WHERE order_id = ?",
+        [order_id],
+      );
+      const check = validateIpnAgainstOrder(
+        body,
+        order,
+        config.payhere.merchantId,
+      );
+      if (!check.ok) {
         console.warn(
-          `[PayHere IPN] Chargeback order=${order_id} user=${order!.user_id}`,
+          `[PayHere IPN] Rejected order=${order_id}: ${check.reason}`,
         );
-        break;
-      default:
-        break; // "0" (pending) — wait for the final notification.
-    }
+        return res.status(400).send("Order mismatch");
+      }
 
-    invalidateAuthCache();
-    res.status(200).send("OK");
-  } catch (err: any) {
-    console.error("PayHere IPN processing error:", err);
-    res.status(500).send("Server error");
-  }
-});
+      // Status code: 2 = Success, 0 = Pending, -1 = Canceled, -2 = Failed, -3 = Chargeback
+      switch (String(status_code)) {
+        case "2":
+          if (isTopupPlan(order!.plan_name))
+            await applyTopup(order!, payment_id);
+          else await activatePlan(order!, payment_id);
+          console.log(
+            `[PayHere IPN] Paid order=${order_id} user=${order!.user_id} plan=${order!.plan_name}`,
+          );
+          break;
+        case "-1":
+        case "-2":
+          await dbRun(
+            "UPDATE subscriptions SET status = ? WHERE order_id = ? AND status = 'pending'",
+            [String(status_code) === "-1" ? "cancelled" : "failed", order_id],
+          );
+          break;
+        case "-3":
+          await applyChargeback(order!);
+          console.warn(
+            `[PayHere IPN] Chargeback order=${order_id} user=${order!.user_id}`,
+          );
+          break;
+        default:
+          break; // "0" (pending) — wait for the final notification.
+      }
+
+      invalidateAuthCache();
+      res.status(200).send("OK");
+    } catch (err: any) {
+      console.error("PayHere IPN processing error:", err);
+      res.status(500).send("Server error");
+    }
+  },
+);
 
 /**
  * Manual test endpoint to simulate PayHere activation in sandbox / test mode
@@ -343,6 +378,7 @@ paymentRouter.post("/notify", async (req: Request, res: Response) => {
 paymentRouter.post(
   "/test-activate",
   requireAuth,
+  validateBody(TestActivateSchema),
   async (req: Request, res: Response) => {
     // Hardened security: Require ADMIN_SECRET or enforce development environment
     const adminSecret = req.headers["x-admin-secret"];

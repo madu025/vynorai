@@ -61,7 +61,7 @@ export async function renewBackgroundLease(
     (await redis.zAdd(
       PROCESSING_KEY,
       [{ score: Date.now() + leaseMs, value: taskId }],
-      { XX: true },
+      { XX: true, CH: true },
     )) > 0
   );
 }

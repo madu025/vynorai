@@ -24,6 +24,34 @@ import {
   revokePushSubscription,
   savePushSubscription,
 } from "../services/backgroundNotifications.js";
+import {
+  z,
+  validateBody,
+  validateParams,
+  validateQuery,
+} from "../middleware/validate.js";
+
+export const TaskIdParamSchema = z.object({
+  id: z.string().min(1, "Task id is required"),
+});
+
+export const ListTasksQuerySchema = z.object({
+  limit: z.coerce.number().optional().default(20),
+  status: z.string().optional(),
+  cursor: z.string().optional(),
+});
+
+export const PushSubscriptionSchema = z.object({
+  endpoint: z.string().url("Valid endpoint URL required"),
+  keys: z.object({
+    p256dh: z.string().min(1, "p256dh key required"),
+    auth: z.string().min(1, "auth key required"),
+  }),
+});
+
+export const DeletePushSubscriptionSchema = z.object({
+  endpoint: z.string().min(1, "Endpoint is required"),
+});
 
 export const backgroundRouter = Router();
 
@@ -148,138 +176,166 @@ backgroundRouter.post("/tasks", async (req, res) => {
   }
 });
 
-backgroundRouter.put("/tasks/:id/upload", async (req, res) => {
-  try {
-    if (
-      !/^(application\/zip|application\/octet-stream)(;|$)/i.test(
-        String(req.headers["content-type"] || ""),
-      )
-    )
-      return res.status(415).json({
-        error: {
-          code: "UNSUPPORTED_MEDIA_TYPE",
-          message: "Upload must be application/zip.",
-        },
-      });
-    const result = await uploadBackgroundProject(
-      (req as any).user.id,
-      String(req.params.id),
-      req,
-    );
-    return res.json(result);
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
-
-backgroundRouter.get("/tasks", async (req, res) => {
-  try {
-    return res.json(
-      await listBackgroundTasks(
-        (req as any).user.id,
-        Number(req.query.limit || 20),
-        typeof req.query.status === "string" ? req.query.status : undefined,
-        typeof req.query.cursor === "string" ? req.query.cursor : undefined,
-      ),
-    );
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
-
-backgroundRouter.get("/tasks/:id", async (req, res) => {
-  try {
-    return res.json(
-      await getBackgroundTask(
-        (req as any).user.id,
-        String(req.params.id),
-        Number(req.query.afterSequence || 0),
-      ),
-    );
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
-
-backgroundRouter.get("/tasks/:id/events", async (req, res) => {
-  res.status(200);
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-  let sequence = Number(
-    req.headers["last-event-id"] || req.query.afterSequence || 0,
-  );
-  let closed = false;
-  req.on("close", () => {
-    closed = true;
-  });
-  const send = async () => {
-    if (closed) return;
+backgroundRouter.put(
+  "/tasks/:id/upload",
+  validateParams(TaskIdParamSchema, { shape: "nested" }),
+  async (req, res) => {
     try {
-      const detail = await getBackgroundTask(
+      if (
+        !/^(application\/zip|application\/octet-stream)(;|$)/i.test(
+          String(req.headers["content-type"] || ""),
+        )
+      )
+        return res.status(415).json({
+          error: {
+            code: "UNSUPPORTED_MEDIA_TYPE",
+            message: "Upload must be application/zip.",
+          },
+        });
+      const result = await uploadBackgroundProject(
         (req as any).user.id,
         String(req.params.id),
-        sequence,
+        req,
       );
-      for (const event of detail.events as any[]) {
-        sequence = Number(event.sequence);
-        res.write(
-          `id: ${sequence}\nevent: ${event.event_type}\ndata: ${JSON.stringify(event)}\n\n`,
-        );
-      }
-      res.write(`: heartbeat ${Date.now()}\n\n`);
+      return res.json(result);
     } catch (error) {
-      res.write(
-        `event: error\ndata: ${JSON.stringify({ code: errorCode(error) })}\n\n`,
-      );
-      res.end();
-      closed = true;
+      return sendBackgroundError(res, error);
     }
-  };
-  await send();
-  const timer = setInterval(() => void send(), 2_000);
-  timer.unref();
-  req.on("close", () => clearInterval(timer));
-});
+  },
+);
 
-backgroundRouter.post("/tasks/:id/cancel", async (req, res) => {
-  try {
-    return res.json(
-      await cancelBackgroundTask((req as any).user.id, String(req.params.id)),
-    );
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
+backgroundRouter.get(
+  "/tasks",
+  validateQuery(ListTasksQuerySchema, { shape: "nested" }),
+  async (req, res) => {
+    try {
+      return res.json(
+        await listBackgroundTasks(
+          (req as any).user.id,
+          Number(req.query.limit || 20),
+          typeof req.query.status === "string" ? req.query.status : undefined,
+          typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+        ),
+      );
+    } catch (error) {
+      return sendBackgroundError(res, error);
+    }
+  },
+);
 
-backgroundRouter.get("/tasks/:id/patch", async (req, res) => {
-  try {
-    const patch = await getBackgroundPatch(
-      (req as any).user.id,
-      String(req.params.id),
-    );
-    const etag = `"${(await import("crypto")).createHash("sha256").update(patch).digest("hex")}"`;
-    if (req.headers["if-none-match"] === etag) return res.status(304).end();
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.vynor.background-patch+json",
-    );
-    res.setHeader("ETag", etag);
-    return res.send(patch);
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
+backgroundRouter.get(
+  "/tasks/:id",
+  validateParams(TaskIdParamSchema, { shape: "nested" }),
+  async (req, res) => {
+    try {
+      return res.json(
+        await getBackgroundTask(
+          (req as any).user.id,
+          String(req.params.id),
+          Number(req.query.afterSequence || 0),
+        ),
+      );
+    } catch (error) {
+      return sendBackgroundError(res, error);
+    }
+  },
+);
 
-backgroundRouter.delete("/tasks/:id", async (req, res) => {
-  try {
-    return res.json(
-      await purgeBackgroundTask((req as any).user.id, String(req.params.id)),
+backgroundRouter.get(
+  "/tasks/:id/events",
+  validateParams(TaskIdParamSchema, { shape: "nested" }),
+  async (req, res) => {
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    let sequence = Number(
+      req.headers["last-event-id"] || req.query.afterSequence || 0,
     );
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
+    let closed = false;
+    req.on("close", () => {
+      closed = true;
+    });
+    const send = async () => {
+      if (closed) return;
+      try {
+        const detail = await getBackgroundTask(
+          (req as any).user.id,
+          String(req.params.id),
+          sequence,
+        );
+        for (const event of detail.events as any[]) {
+          sequence = Number(event.sequence);
+          res.write(
+            `id: ${sequence}\nevent: ${event.event_type}\ndata: ${JSON.stringify(event)}\n\n`,
+          );
+        }
+        res.write(`: heartbeat ${Date.now()}\n\n`);
+      } catch (error) {
+        res.write(
+          `event: error\ndata: ${JSON.stringify({ code: errorCode(error) })}\n\n`,
+        );
+        res.end();
+        closed = true;
+      }
+    };
+    await send();
+    const timer = setInterval(() => void send(), 2_000);
+    timer.unref();
+    req.on("close", () => clearInterval(timer));
+  },
+);
+
+backgroundRouter.post(
+  "/tasks/:id/cancel",
+  validateParams(TaskIdParamSchema, { shape: "nested" }),
+  async (req, res) => {
+    try {
+      return res.json(
+        await cancelBackgroundTask((req as any).user.id, String(req.params.id)),
+      );
+    } catch (error) {
+      return sendBackgroundError(res, error);
+    }
+  },
+);
+
+backgroundRouter.get(
+  "/tasks/:id/patch",
+  validateParams(TaskIdParamSchema, { shape: "nested" }),
+  async (req, res) => {
+    try {
+      const patch = await getBackgroundPatch(
+        (req as any).user.id,
+        String(req.params.id),
+      );
+      const etag = `"${(await import("crypto")).createHash("sha256").update(patch).digest("hex")}"`;
+      if (req.headers["if-none-match"] === etag) return res.status(304).end();
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.vynor.background-patch+json",
+      );
+      res.setHeader("ETag", etag);
+      return res.send(patch);
+    } catch (error) {
+      return sendBackgroundError(res, error);
+    }
+  },
+);
+
+backgroundRouter.delete(
+  "/tasks/:id",
+  validateParams(TaskIdParamSchema, { shape: "nested" }),
+  async (req, res) => {
+    try {
+      return res.json(
+        await purgeBackgroundTask((req as any).user.id, String(req.params.id)),
+      );
+    } catch (error) {
+      return sendBackgroundError(res, error);
+    }
+  },
+);
 
 backgroundRouter.get("/push/public-key", (_req, res) => {
   const publicKey = pushPublicKey();
@@ -288,27 +344,37 @@ backgroundRouter.get("/push/public-key", (_req, res) => {
     : res.status(503).json({ error: { code: "PUSH_NOT_CONFIGURED" } });
 });
 
-backgroundRouter.post("/push/subscriptions", async (req, res) => {
-  try {
-    return res
-      .status(201)
-      .json({ id: await savePushSubscription((req as any).user.id, req.body) });
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
+backgroundRouter.post(
+  "/push/subscriptions",
+  validateBody(PushSubscriptionSchema, { shape: "nested" }),
+  async (req, res) => {
+    try {
+      return res
+        .status(201)
+        .json({
+          id: await savePushSubscription((req as any).user.id, req.body),
+        });
+    } catch (error) {
+      return sendBackgroundError(res, error);
+    }
+  },
+);
 
-backgroundRouter.delete("/push/subscriptions", async (req, res) => {
-  try {
-    await revokePushSubscription(
-      (req as any).user.id,
-      String(req.body?.endpoint || ""),
-    );
-    return res.status(204).end();
-  } catch (error) {
-    return sendBackgroundError(res, error);
-  }
-});
+backgroundRouter.delete(
+  "/push/subscriptions",
+  validateBody(DeletePushSubscriptionSchema, { shape: "nested" }),
+  async (req, res) => {
+    try {
+      await revokePushSubscription(
+        (req as any).user.id,
+        String(req.body?.endpoint || ""),
+      );
+      return res.status(204).end();
+    } catch (error) {
+      return sendBackgroundError(res, error);
+    }
+  },
+);
 
 function errorCode(error: unknown): string {
   return error instanceof Error ? error.message : "BACKGROUND_INTERNAL_ERROR";

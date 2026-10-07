@@ -10,8 +10,15 @@ const localCacheFillLocks = new Map<
   { token: string; expiresAt: number }
 >();
 
+export function setRedisClientForTesting(mockClient: any): void {
+  client = mockClient;
+  connectPromise = null;
+  lastError = null;
+  nextRetryAt = 0;
+}
+
 export function redisConfigured(): boolean {
-  return Boolean(process.env.REDIS_URL);
+  return Boolean(process.env.REDIS_URL || client);
 }
 
 export function redisStatus(): {
@@ -27,8 +34,8 @@ export function redisStatus(): {
 }
 
 export async function getRedis(): Promise<RedisClientType | null> {
-  if (!redisConfigured()) return null;
   if (client?.isReady) return client;
+  if (!redisConfigured()) return null;
   if (Date.now() < nextRetryAt) return null;
   if (connectPromise) return connectPromise;
 

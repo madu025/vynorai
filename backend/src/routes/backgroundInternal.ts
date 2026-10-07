@@ -19,6 +19,19 @@ import {
 } from "../services/monthlyQuota.js";
 import { verifyBackgroundModelToken } from "../services/backgroundModelToken.js";
 import { getPlan } from "../config.js";
+import { z, validateBody } from "../middleware/validate.js";
+
+export const BackgroundChatCompletionsSchema = z
+  .object({
+    model: z.string().optional(),
+    messages: z
+      .array(z.record(z.string(), z.unknown()))
+      .min(1, "messages array is required"),
+    temperature: z.number().optional(),
+    max_tokens: z.number().optional(),
+    stream: z.boolean().optional(),
+  })
+  .passthrough();
 
 export const backgroundInternalRouter = Router();
 
@@ -34,20 +47,19 @@ async function requireScopedModelToken(
     (req as any).backgroundClaims = verifyBackgroundModelToken(auth.slice(7));
     next();
   } catch {
-    res
-      .status(401)
-      .json({
-        error: {
-          code: "INVALID_BACKGROUND_MODEL_TOKEN",
-          message: "Invalid scoped task token.",
-        },
-      });
+    res.status(401).json({
+      error: {
+        code: "INVALID_BACKGROUND_MODEL_TOKEN",
+        message: "Invalid scoped task token.",
+      },
+    });
   }
 }
 
 backgroundInternalRouter.post(
   "/model/v1/chat/completions",
   requireScopedModelToken,
+  validateBody(BackgroundChatCompletionsSchema, { shape: "nested" }),
   async (req, res) => {
     try {
       const claims = (req as any).backgroundClaims as {
@@ -59,26 +71,22 @@ backgroundInternalRouter.post(
         [claims.taskId, claims.userId],
       );
       if (!task || task.status === "cancel_requested")
-        return res
-          .status(409)
-          .json({
-            error: {
-              code: "BACKGROUND_TASK_NOT_RUNNING",
-              message: "Task is not running.",
-            },
-          });
+        return res.status(409).json({
+          error: {
+            code: "BACKGROUND_TASK_NOT_RUNNING",
+            message: "Task is not running.",
+          },
+        });
       req.body.stream = false;
       const projected = estimateReservation(req);
       const remaining = Number(task.cap_credits) - Number(task.used_credits);
       if (projected > remaining)
-        return res
-          .status(402)
-          .json({
-            error: {
-              code: "BACKGROUND_CREDIT_CAP",
-              message: "Task credit cap reached.",
-            },
-          });
+        return res.status(402).json({
+          error: {
+            code: "BACKGROUND_CREDIT_CAP",
+            message: "Task credit cap reached.",
+          },
+        });
 
       const hold = await dbGet<{ tokens: number }>(
         "SELECT tokens FROM quota_reservations WHERE id = ?",
@@ -101,14 +109,12 @@ backgroundInternalRouter.post(
             requiredHold - Number(hold.tokens),
           ))
         )
-          return res
-            .status(402)
-            .json({
-              error: {
-                code: "INSUFFICIENT_CREDITS",
-                message: "Unable to extend task credit hold.",
-              },
-            });
+          return res.status(402).json({
+            error: {
+              code: "INSUFFICIENT_CREDITS",
+              message: "Unable to extend task credit hold.",
+            },
+          });
       }
 
       const subscription = await dbGet<{
@@ -120,14 +126,12 @@ backgroundInternalRouter.post(
       );
       const planId = subscription?.plan_name || "free";
       if (!getPlan(planId).background.enabled)
-        return res
-          .status(403)
-          .json({
-            error: {
-              code: "BACKGROUND_NOT_INCLUDED",
-              message: "Background entitlement is no longer active.",
-            },
-          });
+        return res.status(403).json({
+          error: {
+            code: "BACKGROUND_NOT_INCLUDED",
+            message: "Background entitlement is no longer active.",
+          },
+        });
       const account = await dbGet<{ email: string; name?: string }>(
         "SELECT email, name FROM users WHERE id = ?",
         [claims.userId],

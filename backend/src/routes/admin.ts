@@ -26,6 +26,136 @@ import {
 } from "../services/planManager.js";
 import { getAdmissionSnapshot } from "../services/admissionControl.js";
 import { sendEmail } from "../services/emailService.js";
+import {
+  z,
+  validateBody,
+  validateParams,
+  validateQuery,
+} from "../middleware/validate.js";
+
+export const AdminProviderParamSchema = z.object({
+  provider: z.string().min(1),
+});
+
+export const AdminUserParamSchema = z.object({
+  userId: z.string().min(1),
+});
+
+export const AdminModelParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const AdminPlanParamSchema = z.object({
+  planId: z.string().min(1),
+});
+
+export const AdminPoolIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const AdminGrantSubscriptionSchema = z.object({
+  plan: z.enum(["starter", "pro", "ultra"]).default("starter"),
+  days: z
+    .union([
+      z.number().int().positive(),
+      z.string().regex(/^\d+$/).transform(Number),
+    ])
+    .default(30),
+});
+
+export const AdminAddTokensSchema = z.object({
+  tokens: z.union([
+    z.number().int().positive(),
+    z.string().regex(/^\d+$/).transform(Number),
+  ]),
+});
+
+export const AdminAuditLogsQuerySchema = z.object({
+  type: z.string().optional(),
+  limit: z
+    .union([z.number(), z.string().regex(/^\d+$/).transform(Number)])
+    .optional(),
+});
+
+export const AdminUpsertModelSchema = z.object({
+  id: z.string().min(1, "Missing required fields: id"),
+  openrouter_id: z.string().min(1, "Missing required fields: openrouter_id"),
+  display_name: z.string().min(1, "Missing required fields: display_name"),
+  context_window: z.union([
+    z.number().positive(),
+    z.string().regex(/^\d+$/).transform(Number),
+  ]),
+  min_plan: z.enum(["free", "starter", "pro", "ultra"]),
+  is_default_chat: z.boolean().optional(),
+  is_default_autocomplete: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+});
+
+export const AdminPatchPlanSchema = z.object({
+  display_name: z.string().optional(),
+  monthly_tokens: z.number().optional(),
+  monthly_requests: z.number().optional(),
+  price_lkr: z.number().optional(),
+  price_usd: z.number().optional(),
+  discount_pct: z.number().optional(),
+  context_window: z.number().optional(),
+  default_chat_model: z.string().optional(),
+  default_autocomplete_model: z.string().optional(),
+  allowed_models: z.array(z.string()).optional(),
+  features: z.array(z.string()).optional(),
+  payhere_item_id: z.string().optional(),
+  upgrade_url: z.string().optional(),
+  background_enabled: z.union([z.literal(0), z.literal(1)]).optional(),
+  background_tasks_per_month: z.number().int().min(0).max(60).optional(),
+  background_max_concurrency: z.number().int().min(0).max(2).optional(),
+  background_priority: z.enum(["normal", "high"]).optional(),
+  is_active: z.union([z.boolean(), z.number()]).optional(),
+});
+
+export const AdminDaysQuerySchema = z.object({
+  days: z
+    .union([z.number(), z.string().regex(/^\d+$/).transform(Number)])
+    .optional(),
+});
+
+export const AdminProviderBalanceCheckSchema = z.object({
+  provider: z.string().min(1),
+  key: z.string().optional(),
+});
+
+export const AdminProviderKeyPoolSchema = z.object({
+  provider: z.string().min(1),
+  key: z.string().min(1),
+  label: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const AdminUpdateProviderKeyPoolSchema = z.object({
+  label: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const AdminSetProviderKeySchema = z.object({
+  key: z.string().min(1),
+  skipTest: z.boolean().optional(),
+});
+
+export const AdminTestProviderKeySchema = z
+  .object({
+    key: z.string().optional(),
+  })
+  .optional()
+  .default({});
+
+export const AdminEmailTestSchema = z.object({
+  to: z.string().email("Valid email address is required"),
+});
+
+export const AdminEmailBroadcastSchema = z.object({
+  subject: z.string().min(1, "Subject and message are required"),
+  message: z.string().min(1, "Subject and message are required"),
+  targetPlan: z.string().optional(),
+});
 
 export const adminRouter = Router();
 
@@ -177,6 +307,7 @@ adminRouter.get("/health", requireAdmin, (_req: Request, res: Response) => {
 adminRouter.post(
   "/circuit/:provider/reset",
   requireAdmin,
+  validateParams(AdminProviderParamSchema),
   (req: Request, res: Response) => {
     const provider = req.params.provider as ProviderID;
     resetCircuit(provider);
@@ -342,6 +473,7 @@ adminRouter.get(
 adminRouter.post(
   "/users/:userId/verify-email",
   requireAdmin,
+  validateParams(AdminUserParamSchema),
   async (req: Request, res: Response) => {
     const userId = req.params["userId"] as string;
     const user = await dbGet<any>("SELECT email FROM users WHERE id = ?", [
@@ -371,6 +503,8 @@ adminRouter.post(
 adminRouter.post(
   "/users/:userId/grant-subscription",
   requireAdmin,
+  validateParams(AdminUserParamSchema),
+  validateBody(AdminGrantSubscriptionSchema),
   async (req: Request, res: Response) => {
     const userId = req.params["userId"] as string;
     const { plan = "starter", days = 30 } = req.body;
@@ -439,6 +573,8 @@ adminRouter.post(
 adminRouter.post(
   "/users/:userId/add-tokens",
   requireAdmin,
+  validateParams(AdminUserParamSchema),
+  validateBody(AdminAddTokensSchema),
   async (req: Request, res: Response) => {
     const userId = req.params["userId"] as string;
     const { tokens } = req.body;
@@ -479,6 +615,7 @@ adminRouter.post(
 adminRouter.post(
   "/users/:userId/rotate-key",
   requireAdmin,
+  validateParams(AdminUserParamSchema),
   async (req: Request, res: Response) => {
     const userId = req.params["userId"] as string;
     const user = await dbGet<any>("SELECT email FROM users WHERE id = ?", [
@@ -525,6 +662,7 @@ adminRouter.post(
 adminRouter.post(
   "/users/:userId/toggle-suspend",
   requireAdmin,
+  validateParams(AdminUserParamSchema),
   async (req: Request, res: Response) => {
     const userId = req.params["userId"] as string;
     const user = await dbGet<any>(
@@ -614,6 +752,7 @@ adminRouter.get(
 adminRouter.get(
   "/security/audit-logs",
   requireAdmin,
+  validateQuery(AdminAuditLogsQuerySchema),
   async (req: Request, res: Response) => {
     const type = req.query.type as string | undefined;
     const limit = Math.min(200, parseInt(req.query.limit as string) || 100);
@@ -649,27 +788,10 @@ adminRouter.get(
 adminRouter.put(
   "/models",
   requireAdmin,
+  validateBody(AdminUpsertModelSchema),
   async (req: Request, res: Response) => {
     const { id, openrouter_id, display_name, context_window, min_plan } =
       req.body;
-    if (
-      !id ||
-      !openrouter_id ||
-      !display_name ||
-      !context_window ||
-      !min_plan
-    ) {
-      return res.status(400).json({
-        error:
-          "Missing required fields: id, openrouter_id, display_name, context_window, min_plan",
-      });
-    }
-    const validPlans = ["free", "starter", "pro", "ultra"];
-    if (!validPlans.includes(min_plan)) {
-      return res
-        .status(400)
-        .json({ error: `min_plan must be one of: ${validPlans.join(", ")}` });
-    }
     await upsertModel({
       id,
       openrouter_id,
@@ -694,6 +816,7 @@ adminRouter.put(
 adminRouter.post(
   "/models/:id/disable",
   requireAdmin,
+  validateParams(AdminModelParamSchema),
   async (req: Request, res: Response) => {
     const id = req.params["id"] as string;
     await disableModel(id);
@@ -711,6 +834,7 @@ adminRouter.post(
 adminRouter.post(
   "/models/:id/enable",
   requireAdmin,
+  validateParams(AdminModelParamSchema),
   async (req: Request, res: Response) => {
     const id = req.params["id"] as string;
     await enableModel(id);
@@ -781,6 +905,7 @@ adminRouter.get(
 adminRouter.patch(
   "/plans/:planId",
   requireAdmin,
+  validateParams(AdminPlanParamSchema),
   async (req: Request, res: Response) => {
     const planId = req.params["planId"] as string;
     const validPlanIds = Object.keys(PLANS);
@@ -859,6 +984,7 @@ adminRouter.patch(
 adminRouter.delete(
   "/plans/:planId/override",
   requireAdmin,
+  validateParams(AdminPlanParamSchema),
   async (req: Request, res: Response) => {
     const planId = req.params["planId"] as string;
     await resetPlanToDefault(planId);
@@ -907,6 +1033,7 @@ function providerParam(req: Request, res: Response): ManagedProvider | null {
 adminRouter.get(
   "/routing",
   requireAdmin,
+  validateQuery(AdminDaysQuerySchema),
   async (req: Request, res: Response) => {
     const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
     const since = new Date(Date.now() - days * 86400_000)
@@ -953,6 +1080,7 @@ adminRouter.get(
 adminRouter.get(
   "/economics",
   requireAdmin,
+  validateQuery(AdminDaysQuerySchema),
   async (req: Request, res: Response) => {
     const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
     const since = new Date(Date.now() - days * 86400_000)
@@ -1091,6 +1219,7 @@ adminRouter.get(
 adminRouter.get(
   "/provider-keys/:provider/balance",
   requireAdmin,
+  validateParams(AdminProviderParamSchema),
   async (req: Request, res: Response) => {
     const provider = providerParam(req, res);
     if (!provider) return;
@@ -1103,6 +1232,7 @@ adminRouter.get(
 adminRouter.post(
   "/provider-keys/balance/check",
   requireAdmin,
+  validateBody(AdminProviderBalanceCheckSchema),
   async (req: Request, res: Response) => {
     const provider = req.body?.provider;
     if (!isManagedProvider(provider)) {
@@ -1119,6 +1249,7 @@ adminRouter.post(
 adminRouter.post(
   "/provider-keys/pool",
   requireAdmin,
+  validateBody(AdminProviderKeyPoolSchema),
   async (req: Request, res: Response) => {
     const provider = req.body?.provider;
     if (!isManagedProvider(provider)) {
@@ -1159,6 +1290,8 @@ adminRouter.post(
 adminRouter.patch(
   "/provider-keys/pool/:id",
   requireAdmin,
+  validateParams(AdminPoolIdParamSchema),
+  validateBody(AdminUpdateProviderKeyPoolSchema),
   async (req: Request, res: Response) => {
     const id = String(req.params.id);
     const label =
@@ -1180,6 +1313,7 @@ adminRouter.patch(
 adminRouter.delete(
   "/provider-keys/pool/:id",
   requireAdmin,
+  validateParams(AdminPoolIdParamSchema),
   async (req: Request, res: Response) => {
     const id = String(req.params.id);
     try {
@@ -1203,6 +1337,7 @@ adminRouter.delete(
 adminRouter.post(
   "/provider-keys/pool/:id/balance",
   requireAdmin,
+  validateParams(AdminPoolIdParamSchema),
   async (req: Request, res: Response) => {
     const id = String(req.params.id);
     try {
@@ -1218,6 +1353,8 @@ adminRouter.post(
 adminRouter.put(
   "/provider-keys/:provider",
   requireAdmin,
+  validateParams(AdminProviderParamSchema),
+  validateBody(AdminSetProviderKeySchema),
   async (req: Request, res: Response) => {
     const provider = providerParam(req, res);
     if (!provider) return;
@@ -1251,6 +1388,7 @@ adminRouter.put(
 adminRouter.delete(
   "/provider-keys/:provider",
   requireAdmin,
+  validateParams(AdminProviderParamSchema),
   async (req: Request, res: Response) => {
     const provider = providerParam(req, res);
     if (!provider) return;
@@ -1271,6 +1409,8 @@ adminRouter.delete(
 adminRouter.post(
   "/provider-keys/:provider/test",
   requireAdmin,
+  validateParams(AdminProviderParamSchema),
+  validateBody(AdminTestProviderKeySchema),
   async (req: Request, res: Response) => {
     const provider = providerParam(req, res);
     if (!provider) return;
@@ -1384,6 +1524,7 @@ adminRouter.get(
 adminRouter.post(
   "/email/test",
   requireAdmin,
+  validateBody(AdminEmailTestSchema),
   async (req: Request, res: Response) => {
     const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
     if (!to || !to.includes("@")) {
@@ -1414,6 +1555,7 @@ adminRouter.post(
 adminRouter.post(
   "/email/broadcast",
   requireAdmin,
+  validateBody(AdminEmailBroadcastSchema),
   async (req: Request, res: Response) => {
     const { subject, message, targetPlan } = req.body || {};
     if (!subject || !message) {

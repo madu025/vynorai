@@ -158,16 +158,28 @@ app.use((_req, res, next) => {
 // Login routes MUST be registered before static / 404 handling
 app.get(LOGIN_PATHS, serveLoginPage);
 
-// If request arrives on admin.vynor.lk, serve admin.html directly
-app.use((req, res, next) => {
+// ── Dual-Port Isolation: Customer Port (3333) vs Admin Port (3334) ─────────────
+// Admin endpoints and dashboard MUST NOT run on the customer port.
+// Root /admin redirects to the dedicated admin portal; sub-routes return 404 with isolation code.
+app.all(/^\/admin(\/.*|\.html)?$/, (req: Request, res: Response) => {
   const host = (req.headers.host || "").toLowerCase();
   if (
     host.startsWith("admin.") &&
-    (req.path === "/" || req.path === "/admin")
+    (req.path === "/" || req.path === "/admin" || req.path === "/admin.html")
   ) {
     return res.sendFile(ADMIN_PAGE);
   }
-  next();
+  if (
+    req.path === "/admin" ||
+    req.path === "/admin/" ||
+    req.path === "/admin.html"
+  ) {
+    return res.redirect(302, "https://admin.vynor.lk");
+  }
+  return res.status(404).json({
+    error: "Admin API is strictly isolated to the admin port.",
+    code: "ADMIN_PORT_ISOLATED",
+  });
 });
 
 app.get("/favicon.ico", (_req, res) => res.redirect(301, "/favicon.svg"));
@@ -248,11 +260,6 @@ app.use("/internal/background", backgroundInternalRouter);
 app.use("/v1", proxyRouter);
 app.use(releasesRouter);
 
-// Customer portal /admin redirect to dedicated admin portal
-app.get("/admin", (_req, res) => {
-  res.redirect("https://admin.vynor.lk");
-});
-
 // 404 fallback (JSON for API paths, plain text for pages)
 app.use((req: Request, res: Response) => {
   if (req.path.startsWith("/api/") || req.path.startsWith("/v1")) {
@@ -298,6 +305,15 @@ adminApp.get(LOGIN_PATHS, (req, res) => {
   const qIndex = req.originalUrl.indexOf("?");
   const qs = qIndex >= 0 ? req.originalUrl.substring(qIndex) : "";
   res.redirect(302, `https://vynor.lk/login${qs}`);
+});
+
+// Dual-Port Isolation: Customer API endpoints MUST NOT run on the admin port.
+adminApp.all(/^\/(api|v1)(\/.*)?$/, (_req: Request, res: Response) => {
+  return res.status(404).json({
+    error:
+      "Customer API is strictly isolated to customer port (dual-port isolation).",
+    code: "CUSTOMER_PORT_ISOLATED",
+  });
 });
 
 // Root routes for admin portal (https://admin.vynor.lk/)
@@ -474,7 +490,15 @@ async function start() {
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 }
 
-start().catch((err) => {
-  console.error("Fatal startup error:", err);
-  process.exit(1);
-});
+const isTestRun =
+  process.env.NODE_ENV === "test" ||
+  process.argv.some((a) => a.includes(".test.ts") || a.includes("--test"));
+
+if (!isTestRun) {
+  start().catch((err) => {
+    console.error("Fatal startup error:", err);
+    process.exit(1);
+  });
+}
+
+export { app, adminApp, start };

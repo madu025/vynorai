@@ -28,12 +28,14 @@ import { usageCredits } from "./billingPolicy.js";
 import { recordRequestEconomics } from "./costLedger.js";
 
 export interface FimRequest {
-  prefix: string; // Code before cursor
+  prefix?: string; // Code before cursor
+  prompt?: string; // Alternative parameter name from OpenAI/Continue
   suffix?: string; // Code after cursor
   language?: string; // e.g. "typescript", "python", "html"
   max_tokens?: number; // Defaults to 64
   temperature?: number; // Defaults to 0.1
   model?: string; // Optional model override
+  stream?: boolean; // Streaming mode
 }
 
 /**
@@ -47,7 +49,7 @@ export async function handleFimAutocomplete(
 ) {
   const t0 = Date.now();
   const plan = getPlan(user.subscriptionPlan || "free");
-  const rawPrefix = body.prefix || "";
+  const rawPrefix = body.prefix ?? body.prompt ?? "";
   const rawSuffix = body.suffix || "";
 
   // 1. Scrub sensitive secrets in-flight
@@ -70,6 +72,7 @@ export async function handleFimAutocomplete(
     "qwen/qwen-2.5-coder-32b-instruct";
   const maxTokens = Math.min(body.max_tokens || 64, 128);
   const temperature = body.temperature ?? 0.1;
+  const isStream = Boolean(body.stream);
 
   const payload = {
     model,
@@ -82,7 +85,7 @@ export async function handleFimAutocomplete(
     ],
     max_tokens: maxTokens,
     temperature,
-    stream: false, // Fast 1-shot completion for autocomplete
+    stream: isStream, // Follow client streaming preference
     stop: [
       "\n\n\n",
       "<|fim_prefix|>",

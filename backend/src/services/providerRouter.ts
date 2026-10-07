@@ -30,6 +30,7 @@ import {
 } from "./circuitBreaker.js";
 import { v4 as uuidv4 } from "uuid";
 import { extractProviderUsage, ProviderUsage } from "./costLedger.js";
+import { acquireProviderAdmission } from "./admissionControl.js";
 
 // ─── Endpoint Info ────────────────────────────────────────────────────────────
 interface EndpointInfo {
@@ -642,6 +643,7 @@ export async function dispatchToProvider(
   const resolvedModel = resolveModelId(rawModel); // "deepseek-v3" → "deepseek/deepseek-chat-v3-0324"
   const chain = selectProviderChain(resolvedModel);
   const endpoints = buildEndpoints();
+  let capacityExhausted = false;
 
   for (const providerKey of chain) {
     const endpoint = endpoints[providerKey];
@@ -655,15 +657,26 @@ export async function dispatchToProvider(
     try {
       const providerModel = resolveProviderModel(providerKey, resolvedModel);
       if (!providerModel) continue;
+      const admission = await acquireProviderAdmission(providerKey);
+      if (!admission) {
+        capacityExhausted = true;
+        console.warn(`[Router] Capacity full for ${providerKey} - trying next`);
+        continue;
+      }
       const startedAt = Date.now();
-      const collected = await executeWithEndpoint(
-        endpoint,
-        providerModel,
-        body,
-        res,
-        onChunk,
-        pii,
-      );
+      let collected: any[];
+      try {
+        collected = await executeWithEndpoint(
+          endpoint,
+          providerModel,
+          body,
+          res,
+          onChunk,
+          pii,
+        );
+      } finally {
+        await admission.release();
+      }
       const latencyMs = Date.now() - startedAt;
       console.log(`[Router] ✅ ${providerKey} → "${resolvedModel}"`);
       return {
@@ -699,6 +712,9 @@ export async function dispatchToProvider(
     }
   }
 
+  if (capacityExhausted && !res.headersSent)
+    return sendCapacityUnavailable(body, resolvedModel, res);
+
   // DeepSeek keeps V4 Pro "until further notice". If it is unavailable, run
   // the turn on V4.1 Flash at maximum thinking instead of failing it.
   if (
@@ -730,6 +746,29 @@ export async function dispatchToProvider(
 const UPSTREAM_IDLE_MS = 120_000;
 
 const PRO_FALLBACK_MODEL = "deepseek/deepseek-flash";
+
+async function sendCapacityUnavailable(
+  body: any,
+  resolvedModel: string,
+  res: Response,
+): Promise<{ success: boolean; collected: any[] }> {
+  res.setHeader("Retry-After", "5");
+  const error = {
+    message: `VynorAI is busy serving other requests for ${resolvedModel}. Please retry in a few seconds.`,
+    type: "capacity_exceeded",
+    code: "upstream_capacity_full",
+  };
+  if (body.stream !== false) {
+    res.status(503);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.write(`data: ${JSON.stringify({ error })}\n\n`);
+    res.write("data: [DONE]\n\n");
+    res.end();
+  } else {
+    res.status(503).json({ error });
+  }
+  return { success: false, collected: [] };
+}
 
 /** Models that cannot read image input. DeepSeek V4.1 Flash can; V4 Pro cannot. */
 export function isTextOnlyModel(model: string): boolean {

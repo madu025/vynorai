@@ -26,7 +26,16 @@ npm run esbuild >/tmp/vynor-esbuild.log 2>&1 || { tail -20 /tmp/vynor-esbuild.lo
 npm run package >/tmp/vynor-package.log 2>&1 || { tail -20 /tmp/vynor-package.log; exit 1; }
 
 VSIX="build/vynorai-$VERSION.vsix"
-# Guard: the packaged chat panel must be this build's GUI.
-hits=$(unzip -p "$VSIX" extension/gui/assets/index.js | grep -c "Agent Permissions" || true)
-[ "${hits:-0}" -gt 0 ] || { echo "Packaged GUI is stale (no 'Agent Permissions' in index.js)" >&2; exit 1; }
+# Guard: the packaged chat panel must be byte-for-byte this build's GUI.
+# A UI label is not a stable build marker: removing or renaming that label made
+# valid releases fail this gate. Hash both JS and CSS so stale assets cannot
+# pass merely because an old bundle happens to contain a marker string.
+for asset in index.js index.css; do
+  expected=$(sha256sum "gui/assets/$asset" | awk '{print $1}')
+  packaged=$(unzip -p "$VSIX" "extension/gui/assets/$asset" | sha256sum | awk '{print $1}')
+  [ "$expected" = "$packaged" ] || {
+    echo "Packaged GUI is stale ($asset hash mismatch)" >&2
+    exit 1
+  }
+done
 echo "Built $ROOT/extensions/vscode/$VSIX"

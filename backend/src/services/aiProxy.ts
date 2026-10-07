@@ -2,7 +2,12 @@ import crypto from "crypto";
 import { Response } from "express";
 import { billingGet as dbGet, billingRun as dbRun } from "./billingDb.js";
 import { v4 as uuidv4 } from "uuid";
-import { generateCacheKey, getFromCache, saveToCache } from "./cacheEngine.js";
+import {
+  generateCacheKey,
+  getFromCache,
+  saveToCache,
+  waitForCacheFill,
+} from "./cacheEngine.js";
 import {
   VYNORAI_AGENT_TOOLS,
   VYNORAI_AGENT_SYSTEM_PROMPT,
@@ -70,6 +75,7 @@ import {
   analyzeIntentWithLocalSlm,
   isMutationRequest,
 } from "./localSlmRouter.js";
+import { acquireCacheFillLock, releaseCacheFillLock } from "./redisStore.js";
 
 // Screenshots and designs are read by DeepSeek V4.1 Flash (V4 Pro is text-only).
 const IMAGE_MODEL = "deepseek/deepseek-flash";
@@ -230,17 +236,21 @@ export async function handleChatCompletions(
   const planId = user.subscriptionPlan || "free";
   const requestId = uuidv4();
   const requestStartedAt = Date.now();
+  const cacheOwner = {
+    userId: user.id,
+    projectId:
+      typeof body.projectRoot === "string" ? body.projectRoot : "default",
+  };
 
   // ── 1. Cache Lookup ─────────────────────────────────────────────────────────
   const cacheKey = generateCacheKey(
     {
       userId: user.id,
-      projectId:
-        typeof body.projectRoot === "string" ? body.projectRoot : "default",
+      projectId: cacheOwner.projectId,
       // Streamed and plain answers are stored in different shapes, and the
       // same prompt with other tools is a different request (v2 also drops
       // entries cached before truncated answers were excluded).
-      policyVersion: `2026-10-security-v2|stream=${stream !== false}|tools=${
+      policyVersion: `2026-10-security-v3|stream=${stream !== false}|tools=${
         Array.isArray(body.tools)
           ? body.tools
               .map((t: any) => t?.function?.name ?? t?.name ?? "")
@@ -252,7 +262,7 @@ export async function handleChatCompletions(
     messages,
     temperature,
   );
-  const cached = await getFromCache(cacheKey);
+  const cached = await getFromCache(cacheKey, cacheOwner);
 
   /** Serve a stored answer at zero upstream cost (exact or semantic cache hit). */
   const serveCachedChunks = async (
@@ -950,13 +960,38 @@ export async function handleChatCompletions(
   // the stream is restored to the real values on the way back.
   const { body: shielded, map: piiMap } = maskRequestBody(optimised);
   if (piiMap.size) res.setHeader("X-VynorAI-PII-Masked", String(piiMap.size));
-  const dispatch = await dispatchToProvider(
-    shielded,
-    res,
-    (chunk) => collected.push(chunk),
-    true,
-    new PiiStreamRestorer(piiMap),
-  );
+  let cacheFillToken: string | undefined;
+  if (!isIdeAgent) {
+    const lock = await acquireCacheFillLock(cacheKey, 150_000).catch(
+      () => undefined,
+    );
+    if (lock === null) {
+      const coalesced = await waitForCacheFill(cacheKey, cacheOwner).catch(
+        () => null,
+      );
+      if (coalesced?.responseChunks?.length) {
+        res.setHeader("X-VynorAI-Cache-Coalesced", "true");
+        return serveCachedChunks(coalesced.responseChunks, "exact");
+      }
+    } else if (typeof lock === "string") {
+      cacheFillToken = lock;
+    }
+  }
+
+  let dispatch: Awaited<ReturnType<typeof dispatchToProvider>>;
+  try {
+    dispatch = await dispatchToProvider(
+      shielded,
+      res,
+      (chunk) => collected.push(chunk),
+      true,
+      new PiiStreamRestorer(piiMap),
+    );
+  } catch (error) {
+    if (cacheFillToken)
+      await releaseCacheFillLock(cacheKey, cacheFillToken).catch(() => {});
+    throw error;
+  }
   const providerChunks = dispatch.collected;
 
   // If dispatchToProvider already wrote the response (most cases), we're done.
@@ -966,15 +1001,20 @@ export async function handleChatCompletions(
   // ── 5. Async: Save to Cache + Log Usage + Increment Monthly Ledger ──────
   // Only complete answers are worth replaying: a truncated ("length") or
   // tool-call answer from the cache would fail the retry the same way again.
-  if (
-    dispatch.success &&
-    !dispatch.interrupted &&
-    !isIdeAgent &&
-    allChunks.length > 0 &&
-    finishedWithStop(allChunks)
-  ) {
-    saveToCache(cacheKey, allChunks);
-    if (semanticKey) semanticSave(semanticKey, semanticVector, allChunks);
+  try {
+    if (
+      dispatch.success &&
+      !dispatch.interrupted &&
+      !isIdeAgent &&
+      allChunks.length > 0 &&
+      finishedWithStop(allChunks)
+    ) {
+      await saveToCache(cacheKey, allChunks, cacheOwner);
+      if (semanticKey) semanticSave(semanticKey, semanticVector, allChunks);
+    }
+  } finally {
+    if (cacheFillToken)
+      await releaseCacheFillLock(cacheKey, cacheFillToken).catch(() => {});
   }
 
   // Extract exact provider usage if returned in stream / response

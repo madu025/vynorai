@@ -167,6 +167,11 @@ app.get("/health", (_req, res) => {
     service: "VynorAI Cloud API",
     version: "2.0.0",
     payhereEnv: config.payhere.env,
+    checkoutAvailable:
+      config.nodeEnv !== "production" ||
+      (config.payhere.env === "live" &&
+        Boolean(config.payhere.merchantId && config.payhere.merchantSecret)),
+    backgroundEnabled: process.env.BG_ENABLED === "true",
     activeProviders: activeProviders.length
       ? activeProviders
       : ["ollama (local)"],

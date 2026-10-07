@@ -76,6 +76,14 @@ adminRouter.get("/health", requireAdmin, (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     activeProviders,
     supportedModels: Object.keys(MODEL_ALIASES).length,
+    payment: {
+      environment: config.payhere.env,
+      checkoutAvailable:
+        config.nodeEnv !== "production" ||
+        (config.payhere.env === "live" &&
+          Boolean(config.payhere.merchantId && config.payhere.merchantSecret)),
+    },
+    backgroundEnabled: process.env.BG_ENABLED === "true",
     circuitBreakers: providerStatus,
   });
 });
@@ -118,6 +126,11 @@ import {
 import { encryptCredential, maskApiKey } from "../services/credentialVault.js";
 import { invalidateAuthCache } from "../services/aiProxy.js";
 import { creditTopup, startPaidCycle } from "../services/monthlyQuota.js";
+import {
+  DEEPSEEK_COST_METHOD,
+  DEEPSEEK_PRICING_SOURCE_URL,
+  DEEPSEEK_PRICING_VERIFIED_AT,
+} from "../services/pricing.js";
 import {
   deleteProviderKey,
   isManagedProvider,
@@ -860,6 +873,7 @@ adminRouter.get(
       .replace("T", " ");
     const sums = (t = "") => {
       const cost = `COALESCE(${t}provider_cost_usd, ${t}estimated_cost_usd)`;
+      const deepSeek = `(${t}provider = 'deepseek' OR LOWER(COALESCE(${t}resolved_model, ${t}requested_model, '')) LIKE '%deepseek%')`;
       return `
       COUNT(*) AS requests,
       COALESCE(SUM(${t}input_tokens), 0) AS inputTokens,
@@ -867,6 +881,11 @@ adminRouter.get(
       COALESCE(SUM(${t}output_tokens), 0) AS outputTokens,
       COALESCE(SUM(${t}credits_charged), 0) AS credits,
       COALESCE(SUM(${cost}), 0) AS costUsd,
+      COALESCE(SUM(CASE WHEN ${deepSeek} THEN ${cost} ELSE 0 END), 0) AS deepSeekCostUsd,
+      COALESCE(SUM(CASE WHEN ${t}provider_cost_usd IS NOT NULL THEN ${t}provider_cost_usd ELSE 0 END), 0) AS providerReportedCostUsd,
+      COALESCE(SUM(CASE WHEN ${t}provider_cost_usd IS NULL THEN ${t}estimated_cost_usd ELSE 0 END), 0) AS publishedRateCostUsd,
+      SUM(CASE WHEN ${deepSeek} THEN 1 ELSE 0 END) AS deepSeekRequests,
+      SUM(CASE WHEN ${deepSeek} AND ${cost} IS NOT NULL THEN 1 ELSE 0 END) AS deepSeekPricedRequests,
       COALESCE(SUM(${t}allocated_revenue_usd), 0) AS revenueUsd,
       SUM(CASE WHEN ${cost} IS NULL THEN 1 ELSE 0 END) AS unpricedRequests,
       SUM(CASE WHEN ${t}cache_status = 'hit' THEN 1 ELSE 0 END) AS cacheHits,
@@ -875,22 +894,50 @@ adminRouter.get(
     const SUMS = sums();
     const WHERE = "WHERE created_at >= ? AND outcome = 'success'";
 
-    const [totals, daily, users] = await Promise.all([
-      dbGet<any>(`SELECT ${SUMS} FROM request_economics ${WHERE}`, [since]),
-      dbAll<any>(
-        `SELECT SUBSTR(created_at, 1, 10) AS day, ${SUMS}
-         FROM request_economics ${WHERE}
-         GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
-        [since],
-      ),
-      dbAll<any>(
-        `SELECT e.user_id AS userId, u.email AS email, MAX(e.plan_id) AS planId, ${sums("e.")}
-         FROM request_economics e LEFT JOIN users u ON u.id = e.user_id
-         WHERE e.created_at >= ? AND e.outcome = 'success'
-         GROUP BY e.user_id, u.email`,
-        [since],
-      ),
-    ]);
+    const [totals, daily, users, paymentSummary, paymentUsers, paymentDaily] =
+      await Promise.all([
+        dbGet<any>(`SELECT ${SUMS} FROM request_economics ${WHERE}`, [since]),
+        dbAll<any>(
+          `SELECT SUBSTR(created_at, 1, 10) AS day, ${SUMS}
+           FROM request_economics ${WHERE}
+           GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
+          [since],
+        ),
+        dbAll<any>(
+          `SELECT e.user_id AS userId, u.email AS email, MAX(e.plan_id) AS planId, ${sums("e.")}
+           FROM request_economics e LEFT JOIN users u ON u.id = e.user_id
+           WHERE e.created_at >= ? AND e.outcome = 'success'
+           GROUP BY e.user_id, u.email`,
+          [since],
+        ),
+        dbGet<any>(
+          `SELECT
+            SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited','chargedback') THEN 1 ELSE 0 END) AS processedOrders,
+            SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN 1 ELSE 0 END) AS successfulOrders,
+            SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pendingOrders,
+            SUM(CASE WHEN status IN ('failed','cancelled') THEN 1 ELSE 0 END) AS failedOrCancelledOrders,
+            COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited','chargedback') THEN amount_minor ELSE 0 END), 0) / 100.0 AS grossProcessedLkr,
+            COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status = 'chargedback' THEN amount_minor ELSE 0 END), 0) / 100.0 AS chargebackLkr,
+            COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN amount_minor ELSE 0 END), 0) / 100.0 AS netCollectedLkr
+           FROM subscriptions WHERE created_at >= ?`,
+          [since],
+        ),
+        dbAll<any>(
+          `SELECT user_id AS userId,
+            COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN amount_minor ELSE 0 END), 0) / 100.0 AS netCollectedLkr,
+            SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN 1 ELSE 0 END) AS successfulOrders
+           FROM subscriptions WHERE created_at >= ? GROUP BY user_id`,
+          [since],
+        ),
+        dbAll<any>(
+          `SELECT SUBSTR(created_at, 1, 10) AS day,
+            COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN amount_minor ELSE 0 END), 0) / 100.0 AS netCollectedLkr,
+            SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN 1 ELSE 0 END) AS successfulOrders
+           FROM subscriptions WHERE created_at >= ?
+           GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
+          [since],
+        ),
+      ]);
 
     const withMargin = (r: any) => {
       const costUsd = Number(r.costUsd) || 0;
@@ -907,8 +954,17 @@ adminRouter.get(
           Number(r.credits) > 0 ? (costUsd / Number(r.credits)) * 1e6 : null,
       };
     };
+    const paymentByUser = new Map(
+      paymentUsers.map((row) => [String(row.userId), row]),
+    );
     const perUser = users
-      .map(withMargin)
+      .map((row) => ({
+        ...withMargin(row),
+        netCollectedLkr:
+          Number(paymentByUser.get(String(row.userId))?.netCollectedLkr) || 0,
+        successfulOrders:
+          Number(paymentByUser.get(String(row.userId))?.successfulOrders) || 0,
+      }))
       .sort((a, b) => a.marginUsd - b.marginUsd);
 
     res.json({
@@ -919,6 +975,14 @@ adminRouter.get(
       negativeMarginUsers: perUser.filter(
         (u) => u.planId !== "free" && u.marginUsd < 0,
       ).length,
+      payments: paymentSummary || {},
+      paymentDaily,
+      deepSeekPricing: {
+        method: DEEPSEEK_COST_METHOD,
+        sourceUrl: DEEPSEEK_PRICING_SOURCE_URL,
+        verifiedAt: DEEPSEEK_PRICING_VERIFIED_AT,
+        note: "DeepSeek does not return a money-cost field. Cost uses provider-reported token counts and the published tariff; Chinese public-holiday discounts may make the estimate conservative.",
+      },
       users: perUser.slice(0, 100),
     });
   },

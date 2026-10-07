@@ -84,4 +84,98 @@ describe("VsCodeWebviewProtocol startup queue", () => {
       data: { done: true, status: "error" },
     });
   });
+
+  it("routes an outbound response to its pending request instead of the startup queue", async () => {
+    const responsePromise = protocol.request(
+      "setTheme",
+      { theme: {} as never },
+      false,
+    );
+    const outbound = postMessage.mock.calls.at(-1)?.[0];
+
+    await receive({
+      messageId: outbound.messageId,
+      messageType: "setTheme",
+      data: { done: true, status: "success", content: undefined },
+    });
+
+    await expect(responsePromise).resolves.toEqual({
+      done: true,
+      status: "success",
+      content: undefined,
+    });
+    expect((protocol as any).pendingMessages).toHaveLength(0);
+    expect((protocol as any).pendingRequests.size).toBe(0);
+  });
+
+  it("rejects unsupported messages immediately after startup is sealed", async () => {
+    protocol.sealStartupQueue();
+
+    await receive({
+      messageId: "unknown-request",
+      messageType: "future/unknown",
+      data: undefined,
+    });
+
+    expect(postMessage).toHaveBeenCalledWith({
+      messageId: "unknown-request",
+      messageType: "future/unknown",
+      data: {
+        done: true,
+        status: "error",
+        error: "Unsupported webview protocol message: future/unknown",
+      },
+    });
+    expect((protocol as any).pendingMessages).toHaveLength(0);
+  });
+
+  it("keeps earlier startup requests when the bounded queue is full", async () => {
+    await receive({
+      messageId: "oldest-request",
+      messageType: "workspace/getSnapshot",
+      data: undefined,
+    });
+    for (let index = 1; index < 100; index++) {
+      await receive({
+        messageId: `queued-${index}`,
+        messageType: `startup/${index}`,
+        data: undefined,
+      });
+    }
+
+    await receive({
+      messageId: "overflow-request",
+      messageType: "startup/overflow",
+      data: undefined,
+    });
+    protocol.on("workspace/getSnapshot", async () => ({
+      id: "preserved-workspace",
+      revision: 1,
+      roots: [],
+      manifests: [],
+      instructions: [],
+      index: [],
+      trusted: true,
+      capabilities: ["workspace-context"],
+      createdAt: 1,
+    }));
+
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: "overflow-request",
+          data: expect.objectContaining({ status: "error" }),
+        }),
+      );
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: "oldest-request",
+          data: expect.objectContaining({
+            status: "success",
+            content: expect.objectContaining({ id: "preserved-workspace" }),
+          }),
+        }),
+      );
+    });
+  });
 });

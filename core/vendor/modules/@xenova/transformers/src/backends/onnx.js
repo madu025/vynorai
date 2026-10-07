@@ -29,7 +29,16 @@ export const executionProviders = [
   "wasm",
 ];
 
-if (typeof process !== "undefined" && process?.release?.name === "node") {
+// VS Code's extension host is an Electron process. Some hosts do not expose
+// `process.release.name` as exactly "node" even though the Node runtime and
+// packaged native ONNX binding are available. Detect the actual Node runtime
+// the same way ONNX Runtime itself does, otherwise Transformers.js selects the
+// WASM backend and looks for unpackaged `out/dist/ort-wasm-*.wasm` files.
+const IS_NODE_RUNTIME =
+  typeof process !== "undefined" &&
+  typeof process?.versions?.node === "string";
+
+if (IS_NODE_RUNTIME) {
   // Running in a node-like environment.
   ONNX = ONNX_NODE.default ?? ONNX_NODE;
 

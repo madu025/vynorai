@@ -10,9 +10,14 @@ export interface EmailOptions {
 /**
  * Send an email using configured SMTP or Resend API, with safe fallback to console.
  */
-export async function sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; simulated?: boolean }> {
+export async function sendEmail(
+  options: EmailOptions,
+): Promise<{ success: boolean; messageId?: string; simulated?: boolean }> {
   const { to, subject, html, text } = options;
-  const from = process.env.SMTP_FROM || process.env.EMAIL_FROM || "VynorAI Security <security@vynor.lk>";
+  const from =
+    process.env.SMTP_FROM ||
+    process.env.EMAIL_FROM ||
+    "VynorAI Security <security@vynor.lk>";
 
   // 1. Resend API (HTTP-based, extremely reliable in production)
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -21,7 +26,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
+          Authorization: `Bearer ${resendApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -32,7 +37,7 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
           text,
         }),
       });
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       if (res.ok) {
         console.log(`[Email] Sent via Resend to ${to} (id: ${data.id})`);
         return { success: true, messageId: data.id };
@@ -53,7 +58,8 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
       const transporter = nodemailer.createTransport({
         host: smtpHost,
         port: parseInt(process.env.SMTP_PORT || "587"),
-        secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+        secure:
+          process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
         auth: {
           user: smtpUser,
           pass: smtpPass,
@@ -75,19 +81,25 @@ export async function sendEmail(options: EmailOptions): Promise<{ success: boole
     }
   }
 
-  // 3. Fallback: Log to console in development or when SMTP is not configured
-  console.log(`[Email-Simulated] ==========================================`);
-  console.log(`[Email-Simulated] To: ${to}`);
-  console.log(`[Email-Simulated] Subject: ${subject}`);
-  console.log(`[Email-Simulated] Content Preview: ${text || html.slice(0, 150)}...`);
-  console.log(`[Email-Simulated] ==========================================`);
+  // 3. Development fallback. Never print email bodies because verification and
+  // password-reset messages contain bearer secrets.
+  if (process.env.NODE_ENV === "production") {
+    console.error("[Email] Delivery is not configured; message was not sent.");
+    return { success: false };
+  }
+  console.log(`[Email-Simulated] To: ${to}; Subject: ${subject}`);
   return { success: true, simulated: true };
 }
 
 /**
  * Send 6-Digit Email Verification Code with a branded HTML template
  */
-export async function sendVerificationEmail(email: string, name: string, otpCode: string, token: string): Promise<boolean> {
+export async function sendVerificationEmail(
+  email: string,
+  name: string,
+  otpCode: string,
+  token: string,
+): Promise<boolean> {
   const verifyUrl = `${process.env.BASE_URL || "https://vynor.lk"}/api/auth/verify-email?token=${token}`;
 
   const html = `
@@ -137,4 +149,42 @@ export async function sendVerificationEmail(email: string, name: string, otpCode
   });
 
   return res.success;
+}
+
+/** Send a short-lived password reset link. The raw token is never stored. */
+export async function sendPasswordResetEmail(
+  email: string,
+  name: string,
+  token: string,
+): Promise<boolean> {
+  const resetUrl = `${process.env.BASE_URL || "https://vynor.lk"}/login?reset=${encodeURIComponent(token)}`;
+  const safeName = (name || "Developer").replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character]!,
+  );
+  const html = `
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"/></head>
+    <body style="background:#090b10;color:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:40px 20px">
+      <div style="max-width:520px;margin:0 auto;background:#121622;border:1px solid rgba(0,229,255,.3);border-radius:16px;padding:36px">
+        <h2 style="color:#fff">Reset your VynorAI password</h2>
+        <p style="color:#8e9bb0;line-height:1.6">Hi ${safeName}, use the button below to choose a new password. This link expires in 30 minutes and works once.</p>
+        <p style="text-align:center;margin:28px 0"><a href="${resetUrl}" style="background:#00e5ff;color:#000;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:10px;display:inline-block">Reset password</a></p>
+        <p style="color:#64748b;font-size:12px">If you did not request this, ignore this email. Your password will not change.</p>
+      </div>
+    </body></html>`;
+  const result = await sendEmail({
+    to: email,
+    subject: "Reset your VynorAI password",
+    html,
+    text: `Reset your VynorAI password within 30 minutes: ${resetUrl}`,
+  });
+  return result.success;
 }

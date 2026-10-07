@@ -306,6 +306,13 @@ test("the public price list reflects admin price overrides, the same source chec
     ["free", "starter", "pro", "ultra", "topup5m", "pro_yearly"],
   );
   assert.ok(before.plans.find((p: any) => p.id === "topup5m").topup);
+  assert.equal(before.backgroundEnabled, false);
+  assert.equal(
+    before.plans.some((p: any) =>
+      p.features.some((feature: string) => /background agent/i.test(feature)),
+    ),
+    false,
+  );
 
   const {
     initPlanManager,

@@ -17,6 +17,12 @@ export class VsCodeWebviewProtocol
     ((message: Message) => any)[]
   >();
   private pendingMessages: Message[] = [];
+  private pendingRequests = new Map<
+    string,
+    (value: ToWebviewProtocol[keyof ToWebviewProtocol][1] | undefined) => void
+  >();
+  private startupComplete = false;
+  private warnedUnsupportedTypes = new Set<string>();
 
   send(messageType: string, data: any, messageId?: string): string {
     const id = messageId ?? uuidv4();
@@ -60,6 +66,12 @@ export class VsCodeWebviewProtocol
   }
 
   set webview(webView: vscode.Webview) {
+    if (this._webview && this._webview !== webView) {
+      // Responses registered on the old webview can never arrive. Resolve
+      // them instead of leaking one listener and one promise per request.
+      for (const resolve of this.pendingRequests.values()) resolve(undefined);
+      this.pendingRequests.clear();
+    }
     this._webview = webView;
     this._webviewListener?.dispose();
 
@@ -79,28 +91,51 @@ export class VsCodeWebviewProtocol
       return;
     }
 
+    // A response to an extension -> webview request is delivered to the same
+    // VS Code message event as a webview -> extension request. Previously the
+    // permanent listener treated each response as a new request and queued it
+    // as an unregistered startup message. Long agent sessions eventually
+    // filled that queue and evicted real workspace requests.
+    const pendingRequest = this.pendingRequests.get(msg.messageId);
+    if (pendingRequest) {
+      this.pendingRequests.delete(msg.messageId);
+      pendingRequest(msg.data);
+      return;
+    }
+
     const respond = (message: any) =>
       this.send(msg.messageType, message, msg.messageId);
 
     const handlers =
       this.listeners.get(msg.messageType as keyof FromWebviewProtocol) || [];
     if (handlers.length === 0) {
+      if (this.startupComplete) {
+        if (!this.warnedUnsupportedTypes.has(msg.messageType)) {
+          this.warnedUnsupportedTypes.add(msg.messageType);
+          console.warn(
+            `Ignoring unsupported webview protocol message: ${msg.messageType}`,
+          );
+        }
+        respond({
+          done: true,
+          error: `Unsupported webview protocol message: ${msg.messageType}`,
+          status: "error",
+        });
+        return;
+      }
       if (
         this.pendingMessages.length >=
         VsCodeWebviewProtocol.MAX_PENDING_MESSAGES
       ) {
-        const dropped = this.pendingMessages.shift();
-        if (dropped) {
-          this.send(
-            dropped.messageType,
-            {
-              done: true,
-              error: "VynorAI core startup queue exceeded its safe limit.",
-              status: "error",
-            },
-            dropped.messageId,
-          );
-        }
+        // Preserve the earliest startup requests because their handlers may
+        // still be registering. Reject the newest request instead of evicting
+        // an older, valid workspace request.
+        respond({
+          done: true,
+          error: "VynorAI core startup queue exceeded its safe limit.",
+          status: "error",
+        });
+        return;
       }
       this.pendingMessages.push(msg);
       return;
@@ -162,6 +197,28 @@ export class VsCodeWebviewProtocol
 
   constructor() {}
 
+  /**
+   * Core and extension protocol handlers register synchronously during
+   * activation. After that point, an unhandled type is a version/protocol
+   * mismatch, not a startup race, and must not remain queued forever.
+   */
+  sealStartupQueue(): void {
+    this.startupComplete = true;
+    const unsupported = this.pendingMessages;
+    this.pendingMessages = [];
+    for (const message of unsupported) {
+      this.send(
+        message.messageType,
+        {
+          done: true,
+          error: `Unsupported webview protocol message: ${message.messageType}`,
+          status: "error",
+        },
+        message.messageId,
+      );
+    }
+  }
+
   invoke<T extends keyof FromWebviewProtocol>(
     messageType: T,
     data: FromWebviewProtocol[T][0],
@@ -194,20 +251,15 @@ export class VsCodeWebviewProtocol
         }
       }
 
-      this.send(messageType, data, messageId);
-
-      if (this.webview) {
-        const disposable = this.webview.onDidReceiveMessage(
-          (msg: Message<ToWebviewProtocol[T][1]>) => {
-            if (msg.messageId === messageId) {
-              resolve(msg.data);
-              disposable?.dispose();
-            }
-          },
-        );
-      } else if (!retry) {
+      if (!this.webview) {
         resolve(undefined);
+        return;
       }
+
+      // Register before posting so even a synchronous test webview cannot
+      // race the response ahead of its resolver.
+      this.pendingRequests.set(messageId, resolve as never);
+      this.send(messageType, data, messageId);
     });
   }
 }

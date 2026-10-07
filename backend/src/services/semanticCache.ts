@@ -22,6 +22,7 @@ interface Entry {
 const MAX_ENTRIES = 3000;
 const TTL_MS = 7 * 24 * 60 * 60_000;
 const entries: Entry[] = [];
+let embeddingsInFlight = 0;
 
 function textOf(msg: any): string {
   if (typeof msg?.content === "string") return msg.content;
@@ -68,6 +69,14 @@ function normalize(values: number[]): Float32Array {
 }
 
 async function embed(text: string): Promise<Float32Array | null> {
+  const maxInFlight = Math.max(
+    1,
+    Number(process.env.SEMANTIC_CACHE_MAX_INFLIGHT || 4),
+  );
+  // The VPS embedding server has one CPU thread. Under a burst, skip this
+  // optional optimization instead of building an unbounded timeout queue.
+  if (embeddingsInFlight >= maxInFlight) return null;
+  embeddingsInFlight++;
   const { embedUrl, embedModel, timeoutMs } = config.semanticCache;
   try {
     const res = await fetch(`${embedUrl}/embeddings`, {
@@ -82,6 +91,8 @@ async function embed(text: string): Promise<Float32Array | null> {
     return Array.isArray(vector) && vector.length ? normalize(vector) : null;
   } catch {
     return null;
+  } finally {
+    embeddingsInFlight--;
   }
 }
 
@@ -137,4 +148,17 @@ export function semanticSave(
   if (callsTools) return;
   if (entries.length >= MAX_ENTRIES) entries.shift();
   entries.push({ scope, vector, chunks, at: Date.now() });
+}
+
+/** Remove process-local semantic answers associated with an account. */
+export function semanticPurgeUser(userId: string): number {
+  const prefix = `user:${userId}:`;
+  let removed = 0;
+  for (let i = entries.length - 1; i >= 0; i--) {
+    if (entries[i].scope.startsWith(prefix)) {
+      entries.splice(i, 1);
+      removed++;
+    }
+  }
+  return removed;
 }

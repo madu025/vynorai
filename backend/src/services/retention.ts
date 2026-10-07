@@ -7,7 +7,8 @@ import { dbAll, dbRun } from "../db.js";
 import { deleteBackgroundArtifact } from "./backgroundArtifacts.js";
 
 export const RETENTION_DAYS = {
-  cache_entries: 30,
+  // Exact responses are usable for 24 hours; keep the fallback table bounded.
+  cache_entries: 1,
   request_economics: 365,
   usage_logs: 365,
   security_audit_logs: 365,

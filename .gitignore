@@ -197,3 +197,8 @@ scratch/
 
 # Smart E2E output
 extensions/vscode/e2e/smart-report/
+
+# Vynor runtime artifacts, worktrees, and briefings
+.vynor/
+**/.vynor/
+.vynor-worktrees/

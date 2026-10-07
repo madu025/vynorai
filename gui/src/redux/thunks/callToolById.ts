@@ -37,6 +37,7 @@ type CallToolInputs = {
 // The normal error path below records the failure and lets the persisted plan
 // decide whether to retry, block, or fail the task.
 const CORE_TOOL_TIMEOUT_MS = 120_000;
+const AGENT_RUNTIME_REQUEST_TIMEOUT_MS = 15_000;
 
 export const callToolById = createAsyncThunk<
   void,
@@ -135,6 +136,7 @@ async function callToolByIdImpl(
         taskId: state.session.activeTaskId,
         signature,
       },
+      AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
     );
     if (authorization.status === "error") {
       // Never leave the call hanging in "generated": any guard refusal goes
@@ -163,6 +165,7 @@ async function callToolByIdImpl(
           ...(toolCallState.processedArgs ?? {}),
         },
       },
+      AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
     );
     // Returned to the model as the tool's error, never thrown: a throw here
     // left the call stuck in "generated" with the turn silently stopped.
@@ -172,16 +175,20 @@ async function callToolByIdImpl(
 
   if (state.session.activeTaskId && !guardRefusal) {
     try {
-      await extra.ideMessenger.request("agent/task/recordApproval", {
-        taskId: state.session.activeTaskId,
-        toolCallId,
-        toolName: toolCallState.toolCall.function.name,
-        risk: classifyToolRisk(toolCallState.toolCall.function.name),
-        decision: "approved",
-        scope: JSON.stringify(
-          toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {},
-        ),
-      });
+      await extra.ideMessenger.request(
+        "agent/task/recordApproval",
+        {
+          taskId: state.session.activeTaskId,
+          toolCallId,
+          toolName: toolCallState.toolCall.function.name,
+          risk: classifyToolRisk(toolCallState.toolCall.function.name),
+          decision: "approved",
+          scope: JSON.stringify(
+            toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {},
+          ),
+        },
+        AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+      );
       if (!isAutoApproved) {
         const transition = await extra.ideMessenger.request(
           "agent/task/transition",
@@ -190,6 +197,7 @@ async function callToolByIdImpl(
             state: "executing",
             reason: "Approved tool execution started",
           },
+          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
         );
         if (transition.status === "success") {
           dispatch(setActiveTaskState(transition.content.state));
@@ -350,10 +358,14 @@ async function callToolByIdImpl(
     });
     if (evidence) {
       try {
-        await extra.ideMessenger.request("agent/task/recordVerification", {
-          taskId: state.session.activeTaskId,
-          result: evidence,
-        });
+        await extra.ideMessenger.request(
+          "agent/task/recordVerification",
+          {
+            taskId: state.session.activeTaskId,
+            result: evidence,
+          },
+          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+        );
       } catch {
         // Verification journaling must not hide the actual tool result.
       }
@@ -364,9 +376,13 @@ async function callToolByIdImpl(
     // step before the model receives its error and attempts another action.
     if (error || evidence?.status === "failed") {
       try {
-        const taskResult = await extra.ideMessenger.request("agent/task/get", {
-          taskId: state.session.activeTaskId,
-        });
+        const taskResult = await extra.ideMessenger.request(
+          "agent/task/get",
+          {
+            taskId: state.session.activeTaskId,
+          },
+          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+        );
         const activeStep =
           taskResult.status === "success"
             ? taskResult.content?.plan?.steps.find(
@@ -386,12 +402,17 @@ async function callToolByIdImpl(
               stepId: activeStep.id,
               failureCode,
             },
+            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
           );
           if (failedStep.status === "success") {
             dispatch(setActiveTaskState(failedStep.content.state));
-            const next = await extra.ideMessenger.request("agent/plan/next", {
-              taskId: state.session.activeTaskId,
-            });
+            const next = await extra.ideMessenger.request(
+              "agent/plan/next",
+              {
+                taskId: state.session.activeTaskId,
+              },
+              AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+            );
             if (
               next.status === "success" &&
               next.content.action === "execute"
@@ -402,6 +423,7 @@ async function callToolByIdImpl(
                   taskId: state.session.activeTaskId,
                   stepId: next.content.step.id,
                 },
+                AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
               );
               if (restarted.status === "success") {
                 dispatch(setActiveTaskState(restarted.content.state));

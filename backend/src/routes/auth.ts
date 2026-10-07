@@ -14,7 +14,10 @@ import {
   billingRun as dbRun,
 } from "../services/billingDb.js";
 import { authRateLimiter } from "../middleware/security.js";
-import { sendVerificationEmail } from "../services/emailService.js";
+import {
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from "../services/emailService.js";
 import {
   getUserSecurityEvents,
   logSecurityEvent,
@@ -36,6 +39,8 @@ import {
   IdeAuthStoreUnavailableError,
 } from "../services/ideAuthCodes.js";
 import { deleteBackgroundArtifact } from "../services/backgroundArtifacts.js";
+import { purgeUserCache } from "../services/cacheEngine.js";
+import { semanticPurgeUser } from "../services/semanticCache.js";
 
 export const authRouter = Router();
 
@@ -48,6 +53,7 @@ const getClientIp = (req: Request) =>
 const EMAIL_RE =
   /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 const MAX_EMAIL_LENGTH = 254;
+const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 
 const IDE_AUTH_VALUE_RE = /^[a-f0-9]{64}$/i;
 const ideAuthorizationCodes = new IdeAuthorizationCodeStore(getRedis, {
@@ -116,6 +122,113 @@ export async function requireAuth(
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
+
+// Always return the same response so this endpoint cannot enumerate accounts.
+authRouter.post(
+  "/forgot-password",
+  authRateLimiter,
+  async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    const generic = {
+      success: true,
+      message:
+        "If that email belongs to a VynorAI account, a reset link has been sent.",
+    };
+    const email =
+      typeof req.body?.email === "string"
+        ? req.body.email.trim().toLowerCase()
+        : "";
+    if (!EMAIL_RE.test(email) || email.length > MAX_EMAIL_LENGTH)
+      return res.json(generic);
+
+    try {
+      const user = await dbGet<{ id: string; email: string; name?: string }>(
+        "SELECT id, email, name FROM users WHERE LOWER(email) = ? LIMIT 1",
+        [email],
+      );
+      if (!user) return res.json(generic);
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(
+        Date.now() + PASSWORD_RESET_TTL_MS,
+      ).toISOString();
+      await dbRun("DELETE FROM password_reset_tokens WHERE user_id = ?", [
+        user.id,
+      ]);
+      await dbRun(
+        "INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+        [uuidv4(), user.id, sha256(token), expiresAt],
+      );
+      await sendPasswordResetEmail(user.email, user.name || "", token);
+      await logSecurityEvent({
+        eventType: "PASSWORD_RESET_REQUESTED",
+        severity: "INFO",
+        actor: user.email,
+        target: user.id,
+        details: "Password reset link requested",
+        ipAddress: getClientIp(req),
+      });
+    } catch (error) {
+      console.error("Password reset request failed:", error);
+    }
+    return res.json(generic);
+  },
+);
+
+authRouter.post(
+  "/reset-password",
+  authRateLimiter,
+  async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    const token = typeof req.body?.token === "string" ? req.body.token : "";
+    const newPassword =
+      typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+    if (!/^[a-f0-9]{64}$/i.test(token))
+      return res.status(400).json({ error: "Invalid or expired reset link." });
+    if (newPassword.length < 8 || newPassword.length > 128)
+      return res
+        .status(400)
+        .json({ error: "Password must be between 8 and 128 characters." });
+
+    const record = await dbGet<{ id: string; user_id: string; email: string }>(
+      `SELECT p.id, p.user_id, u.email
+       FROM password_reset_tokens p JOIN users u ON u.id = p.user_id
+       WHERE p.token_hash = ? AND p.used_at IS NULL AND p.expires_at > ? LIMIT 1`,
+      [sha256(token), new Date().toISOString()],
+    );
+    if (!record)
+      return res.status(400).json({ error: "Invalid or expired reset link." });
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const claimed = await dbRun(
+      "UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ? AND used_at IS NULL AND expires_at > ?",
+      [record.id, new Date().toISOString()],
+    );
+    if (claimed.changes === 0)
+      return res.status(400).json({ error: "Invalid or expired reset link." });
+    await dbRun("UPDATE users SET password_hash = ? WHERE id = ?", [
+      passwordHash,
+      record.user_id,
+    ]);
+    await dbRun(
+      "UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND id != ? AND used_at IS NULL",
+      [record.user_id, record.id],
+    );
+    invalidateAuthCache();
+    await logSecurityEvent({
+      eventType: "PASSWORD_RESET_COMPLETED",
+      severity: "WARN",
+      actor: record.email,
+      target: record.user_id,
+      details: "Password changed using a single-use reset link",
+      ipAddress: getClientIp(req),
+    });
+    return res.json({
+      success: true,
+      message: "Password updated. You can now sign in.",
+    });
+  },
+);
 
 // Browser creates a short-lived, single-use code. Raw API credentials never
 // enter custom URI query strings, browser history, or OS protocol logs.
@@ -1124,6 +1237,10 @@ authRouter.post(
       `UPDATE security_audit_logs SET target = 'deleted-user' WHERE target = ? OR target = ?`,
       [user.id, user.email],
     ).catch(() => {});
+    // Cache rows are keyed by a one-way prompt hash, so they need an explicit
+    // tenant index rather than relying on the users-table cascade.
+    await purgeUserCache(user.id);
+    semanticPurgeUser(user.id);
     await dbRun(`DELETE FROM users WHERE id = ?`, [user.id]);
     await logSecurityEvent({
       eventType: "ACCOUNT_DELETED",

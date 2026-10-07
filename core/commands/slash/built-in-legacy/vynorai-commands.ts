@@ -26,7 +26,7 @@ import { renderChatMessage } from "../../../util/messageContent.js";
 async function* streamLLM(
   llm: any,
   prompt: string,
-  abortController: AbortController
+  abortController: AbortController,
 ): AsyncGenerator<string> {
   for await (const chunk of llm.streamChat(
     [{ role: "user", content: prompt }],
@@ -41,9 +41,12 @@ export const FixCommand: SlashCommand = {
   name: "fix",
   description: "Debug and auto-fix the error or selected code",
   run: async function* ({ ide, llm, input, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
-    const currentFile = await (ide as any).getCurrentFile?.() || { path: "", contents: "" };
-    const errorText     = (input || "").replace("/fix", "").trim();
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
+    const currentFile = (await (ide as any).getCurrentFile?.()) || {
+      path: "",
+      contents: "",
+    };
+    const errorText = (input || "").replace("/fix", "").trim();
 
     const prompt = `<vynorai_task type="fix">
   <instruction>
@@ -70,8 +73,8 @@ export const ExplainCommand: SlashCommand = {
   name: "explain",
   description: "Explain selected code step by step",
   run: async function* ({ ide, llm, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
-    const currentFile  = await (ide as any).getCurrentFile?.() || { path: "" };
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
+    const currentFile = (await (ide as any).getCurrentFile?.()) || { path: "" };
 
     if (!selectedCode) {
       yield "⚠️ Select some code first, then run **/explain**.";
@@ -106,8 +109,11 @@ export const TestCommand: SlashCommand = {
   name: "test",
   description: "Generate comprehensive unit tests for selected code",
   run: async function* ({ ide, llm, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
-    const currentFile  = await (ide as any).getCurrentFile?.() || { path: "", contents: "" };
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
+    const currentFile = (await (ide as any).getCurrentFile?.()) || {
+      path: "",
+      contents: "",
+    };
 
     if (!selectedCode) {
       yield "⚠️ Select the function/class to test, then run **/test**.";
@@ -141,7 +147,7 @@ export const RefactorCommand: SlashCommand = {
   name: "refactor",
   description: "Refactor selected code for clarity and performance",
   run: async function* ({ ide, llm, input, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
     const focus = (input || "").replace("/refactor", "").trim();
 
     if (!selectedCode) {
@@ -175,8 +181,8 @@ export const DocsCommand: SlashCommand = {
   name: "docs",
   description: "Generate JSDoc/documentation for selected code",
   run: async function* ({ ide, llm, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
-    const currentFile  = await (ide as any).getCurrentFile?.() || { path: "" };
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
+    const currentFile = (await (ide as any).getCurrentFile?.()) || { path: "" };
 
     if (!selectedCode) {
       yield "⚠️ Select a function or class, then run **/docs**.";
@@ -185,8 +191,12 @@ export const DocsCommand: SlashCommand = {
 
     // Detect language from file extension
     const ext = currentFile.path.split(".").pop() || "ts";
-    const docStyle = ext === "py" ? "Google-style docstring" :
-                     ["java", "kt"].includes(ext) ? "Javadoc" : "JSDoc";
+    const docStyle =
+      ext === "py"
+        ? "Google-style docstring"
+        : ["java", "kt"].includes(ext)
+          ? "Javadoc"
+          : "JSDoc";
 
     const prompt = `<vynorai_task type="docs">
   <instruction>
@@ -207,8 +217,8 @@ export const ReviewCommand: SlashCommand = {
   name: "review",
   description: "Professional code review with actionable feedback",
   run: async function* ({ ide, llm, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
-    const diff = await ide.getDiff?.(false) || [];
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
+    const diff = (await ide.getDiff?.(false)) || [];
 
     const codeToReview = selectedCode || diff.join("\n");
     if (!codeToReview) {
@@ -242,8 +252,11 @@ export const SecurityCommand: SlashCommand = {
   name: "security",
   description: "Security audit — find vulnerabilities in selected code",
   run: async function* ({ ide, llm, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
-    const currentFile  = await (ide as any).getCurrentFile?.() || { path: "", contents: "" };
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
+    const currentFile = (await (ide as any).getCurrentFile?.()) || {
+      path: "",
+      contents: "",
+    };
 
     const code = selectedCode || currentFile.contents?.slice(0, 10000) || "";
     if (!code) {
@@ -282,8 +295,8 @@ export const OptimizeCommand: SlashCommand = {
   name: "optimize",
   description: "Identify and fix performance bottlenecks",
   run: async function* ({ ide, llm, abortController }) {
-    const selectedCode = await (ide as any).getSelectedText?.() || "";
-    const currentFile  = await (ide as any).getCurrentFile?.() || { path: "" };
+    const selectedCode = (await (ide as any).getSelectedText?.()) || "";
+    const currentFile = (await (ide as any).getCurrentFile?.()) || { path: "" };
 
     if (!selectedCode) {
       yield "⚠️ Select the code to optimize, then run **/optimize**.";
@@ -322,7 +335,7 @@ export const ScaffoldCommand: SlashCommand = {
   description: "Scaffold a new component/feature from description",
   run: async function* ({ ide, llm, input, abortController }) {
     const description = (input || "").replace("/scaffold", "").trim();
-    const currentFile = await (ide as any).getCurrentFile?.() || { path: "" };
+    const currentFile = (await (ide as any).getCurrentFile?.()) || { path: "" };
 
     if (!description) {
       yield "⚠️ Describe what to scaffold: **/scaffold** a React auth form with email and password";
@@ -331,10 +344,15 @@ export const ScaffoldCommand: SlashCommand = {
 
     // Try to detect framework from open file
     const ext = currentFile.path.split(".").pop() || "ts";
-    const lang = ["tsx", "jsx"].includes(ext) ? "React/TypeScript" :
-                 ext === "vue" ? "Vue 3" :
-                 ext === "svelte" ? "Svelte" :
-                 ext === "py" ? "Python" : "TypeScript";
+    const lang = ["tsx", "jsx"].includes(ext)
+      ? "React/TypeScript"
+      : ext === "vue"
+        ? "Vue 3"
+        : ext === "svelte"
+          ? "Svelte"
+          : ext === "py"
+            ? "Python"
+            : "TypeScript";
 
     const prompt = `<vynorai_task type="scaffold">
   <instruction>
@@ -367,12 +385,13 @@ export const ScaffoldCommand: SlashCommand = {
 // ─── /commit — Generate Conventional Git Commit ──────────────────────────────
 export const CommitCommand: SlashCommand = {
   name: "commit",
-  description: "Analyze git diff and generate an accurate Conventional Commit message",
+  description:
+    "Analyze git diff and generate an accurate Conventional Commit message",
   run: async function* ({ ide, llm, abortController }) {
     yield "🔍 Reading git diff...\n\n";
     let diffs: string[] = [];
     try {
-      diffs = await (ide as any).getDiff?.(true) || [];
+      diffs = (await (ide as any).getDiff?.(true)) || [];
     } catch {
       diffs = [];
     }
@@ -416,23 +435,37 @@ ${diffText}
 // ─── /errors — Auto-Inspect & Fix IDE Diagnostic Errors ────────────────────────
 export const ErrorsCommand: SlashCommand = {
   name: "errors",
-  description: "Inspect compiler/linter diagnostics in the current file and auto-fix them",
+  description:
+    "Inspect compiler/linter diagnostics in the current file and auto-fix them",
   run: async function* ({ ide, llm, abortController }) {
     yield "🩺 Inspecting IDE diagnostics & problems...\n\n";
     let problems: any[] = [];
     try {
-      problems = await (ide as any).getProblems?.() || [];
+      problems = (await (ide as any).getProblems?.()) || [];
     } catch {
       problems = [];
     }
 
-    const currentFile = await (ide as any).getCurrentFile?.() || { path: "", contents: "" };
-    const relevantProblems = problems.filter((p: any) =>
-      !currentFile.path || (p.filepath && p.filepath.endsWith(currentFile.path.split(/[/\\]/).pop() || ""))
-    ).slice(0, 10);
+    const currentFile = (await (ide as any).getCurrentFile?.()) || {
+      path: "",
+      contents: "",
+    };
+    const relevantProblems = problems
+      .filter(
+        (p: any) =>
+          !currentFile.path ||
+          (p.filepath &&
+            p.filepath.endsWith(currentFile.path.split(/[/\\]/).pop() || "")),
+      )
+      .slice(0, 10);
 
-    const problemSummary = (relevantProblems.length > 0 ? relevantProblems : problems.slice(0, 8))
-      .map((p: any) => `- [Line ${p.range?.start?.line ?? "?"}] ${p.message} (${p.source || "linter"})`)
+    const problemSummary = (
+      relevantProblems.length > 0 ? relevantProblems : problems.slice(0, 8)
+    )
+      .map(
+        (p: any) =>
+          `- [Line ${p.range?.start?.line ?? "?"}] ${p.message} (${p.source || "linter"})`,
+      )
       .join("\n");
 
     if (!problemSummary.trim()) {
@@ -462,7 +495,8 @@ ${problemSummary}
 // ─── /architect — Multi-File Coordinated Fullstack Planning ───────────────────
 export const ArchitectCommand: SlashCommand = {
   name: "architect",
-  description: "Plan multi-file coordinated architecture (DB, Backend, Frontend, Types)",
+  description:
+    "Plan multi-file coordinated architecture (DB, Backend, Frontend, Types)",
   run: async function* ({ ide, llm, input, abortController }) {
     const feature = (input || "").replace("/architect", "").trim();
     if (!feature) {
@@ -508,8 +542,13 @@ export const ArchitectCommand: SlashCommand = {
   },
 };
 
+import { InitCommand } from "./init.js";
+import { SwarmCommand } from "./swarm.js";
+
 // ─── Export All VynorAI Slash Commands ────────────────────────────────────────
 export const VYNORAI_SLASH_COMMANDS: SlashCommand[] = [
+  InitCommand,
+  SwarmCommand,
   FixCommand,
   ExplainCommand,
   TestCommand,
@@ -524,3 +563,4 @@ export const VYNORAI_SLASH_COMMANDS: SlashCommand[] = [
   ArchitectCommand,
 ];
 
+export { InitCommand, SwarmCommand };

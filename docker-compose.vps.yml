@@ -239,6 +239,7 @@ services:
     logging: *default-logging
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    mem_limit: 384m
     volumes:
       - vynor-redis-data:/data
     networks:

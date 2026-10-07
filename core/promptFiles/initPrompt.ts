@@ -78,9 +78,12 @@ After creating the .continue/rules/${initFilename} file, provide a summary of wh
 Also inform the user that they can create additional ${RULES_MARKDOWN_FILENAME} files in subdirectories for more specific documentation related to those components.
 `.trim();
 
+import { InitCommand } from "../commands/slash/built-in-legacy/init";
+
 export const initSlashCommand: SlashCommandWithSource = {
-  name: "Init",
-  description: "Initialize Codebase",
-  source: "built-in",
-  prompt: INIT_PROMPT_CONTENT,
+  name: "init",
+  description:
+    "Initialize AGENTS.md project memory and architecture guidelines",
+  source: "built-in-legacy",
+  run: InitCommand.run,
 };

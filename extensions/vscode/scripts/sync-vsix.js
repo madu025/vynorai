@@ -123,7 +123,18 @@ function installE2e() {
   ]);
 
   const expectedDir = path.join(extensionsDir, `vynorai.vynorai-${version}`);
-  const installedPackage = path.join(expectedDir, "package.json");
+  let installedPackage = path.join(expectedDir, "package.json");
+  if (!fs.existsSync(installedPackage)) {
+    const defaultInstall = path.join(
+      os.homedir(),
+      ".vscode",
+      "extensions",
+      `vynorai.vynorai-${version}`,
+    );
+    if (fs.existsSync(path.join(defaultInstall, "package.json"))) {
+      fs.cpSync(defaultInstall, expectedDir, { recursive: true });
+    }
+  }
   if (!fs.existsSync(installedPackage)) {
     fail(`extest did not install ${version} at ${expectedDir}`);
   }
@@ -159,6 +170,20 @@ function defaultEditorCli() {
     path.join(
       process.env.LOCALAPPDATA || "",
       "Programs",
+      "Antigravity IDE",
+      "bin",
+      "antigravity-ide.cmd",
+    ),
+    path.join(
+      process.env.LOCALAPPDATA || "",
+      "Programs",
+      "Antigravity",
+      "bin",
+      "antigravity.cmd",
+    ),
+    path.join(
+      process.env.LOCALAPPDATA || "",
+      "Programs",
       "Microsoft VS Code",
       "bin",
       "code.cmd",
@@ -189,6 +214,7 @@ function localExtensionRoots() {
     ".cursor/extensions",
     ".windsurf/extensions",
     ".antigravity/extensions",
+    ".antigravity-ide/extensions",
   ].map((relative) => path.join(os.homedir(), relative));
   return candidates.filter((candidate) => {
     if (!fs.existsSync(candidate)) return false;
@@ -210,10 +236,16 @@ function cleanOldVynorVersions(extensionsDir) {
       /^vynorai\.vynorai-\d+\.\d+\.\d+$/.test(entry.name) &&
       entry.name !== `vynorai.vynorai-${version}`
     ) {
-      fs.rmSync(path.join(safeDir, entry.name), {
-        recursive: true,
-        force: true,
-      });
+      try {
+        fs.rmSync(path.join(safeDir, entry.name), {
+          recursive: true,
+          force: true,
+        });
+      } catch (err) {
+        console.warn(
+          `Could not remove old version ${entry.name}: ${err.message}`,
+        );
+      }
     }
   }
 }

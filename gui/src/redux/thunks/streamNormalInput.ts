@@ -94,6 +94,11 @@ import {
 import type { VerificationCommandCandidate } from "core/workspace/types";
 import { hasPassedRequiredVerification } from "core/agent/verification";
 
+// Agent lifecycle persistence is local bookkeeping. It must never hold the
+// visible turn open indefinitely if the extension host is restarting or
+// unresponsive; model and tool requests keep their own, longer lifetimes.
+const AGENT_RUNTIME_REQUEST_TIMEOUT_MS = 15_000;
+
 /**
  * Builds completion options with reasoning configuration based on session state and model capabilities.
  *
@@ -282,16 +287,24 @@ export const streamNormalInput = createAsyncThunk<
 
     let taskId = resumeTaskId ?? state.session.activeTaskId;
     if (resumeTaskId && state.session.mode === "agent") {
-      await extra.ideMessenger.request("checkpoints/setActiveTask", {
-        taskId: resumeTaskId,
-      });
+      await extra.ideMessenger.request(
+        "checkpoints/setActiveTask",
+        {
+          taskId: resumeTaskId,
+        },
+        AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+      );
     }
     if (depth === 0 && !resumeTaskId && latestUserRequest) {
       try {
-        const started = await extra.ideMessenger.request("agent/task/start", {
-          sessionId: state.session.id,
-          goal: renderChatMessage(latestUserRequest.message),
-        });
+        const started = await extra.ideMessenger.request(
+          "agent/task/start",
+          {
+            sessionId: state.session.id,
+            goal: renderChatMessage(latestUserRequest.message),
+          },
+          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+        );
         if (started.status === "success") {
           taskId = started.content.id;
           dispatch(setActiveTaskId(taskId));
@@ -304,9 +317,13 @@ export const streamNormalInput = createAsyncThunk<
           );
           // Tag checkpoints in every mode: chat-mode "Apply" edits must be
           // rewindable too, not only agent tool edits.
-          await extra.ideMessenger.request("checkpoints/setActiveTask", {
-            taskId,
-          });
+          await extra.ideMessenger.request(
+            "checkpoints/setActiveTask",
+            {
+              taskId,
+            },
+            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+          );
           const planned = await extra.ideMessenger.request(
             "agent/plan/create",
             {
@@ -340,26 +357,43 @@ export const streamNormalInput = createAsyncThunk<
                 },
               ],
             },
+            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
           );
           if (planned.status === "success") {
-            const first = await extra.ideMessenger.request("agent/plan/next", {
-              taskId,
-            });
+            const first = await extra.ideMessenger.request(
+              "agent/plan/next",
+              {
+                taskId,
+              },
+              AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+            );
             if (
               first.status === "success" &&
               first.content.action === "execute"
             ) {
-              await extra.ideMessenger.request("agent/plan/startStep", {
-                taskId,
-                stepId: first.content.step.id,
-              });
-              await extra.ideMessenger.request("agent/plan/completeStep", {
-                taskId,
-                stepId: first.content.step.id,
-              });
-              const next = await extra.ideMessenger.request("agent/plan/next", {
-                taskId,
-              });
+              await extra.ideMessenger.request(
+                "agent/plan/startStep",
+                {
+                  taskId,
+                  stepId: first.content.step.id,
+                },
+                AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+              );
+              await extra.ideMessenger.request(
+                "agent/plan/completeStep",
+                {
+                  taskId,
+                  stepId: first.content.step.id,
+                },
+                AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+              );
+              const next = await extra.ideMessenger.request(
+                "agent/plan/next",
+                {
+                  taskId,
+                },
+                AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+              );
               if (
                 next.status === "success" &&
                 next.content.action === "execute"
@@ -367,6 +401,7 @@ export const streamNormalInput = createAsyncThunk<
                 const executing = await extra.ideMessenger.request(
                   "agent/plan/startStep",
                   { taskId, stepId: next.content.step.id },
+                  AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
                 );
                 if (executing.status === "success") {
                   dispatch(setActiveTaskState(executing.content.state));
@@ -397,6 +432,7 @@ export const streamNormalInput = createAsyncThunk<
             state: taskState,
             reason,
           },
+          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
         );
         if (result.status === "error") {
           console.warn(`Could not transition agent task to ${taskState}`);
@@ -567,17 +603,21 @@ export const streamNormalInput = createAsyncThunk<
 
         if (taskId) {
           try {
-            await extra.ideMessenger.request("agent/task/consumeBudget", {
-              taskId,
-              inputTokens: countTokens(
-                next.value.prompt,
-                selectedChatModel.model,
-              ),
-              outputTokens: countTokens(
-                next.value.completion,
-                selectedChatModel.model,
-              ),
-            });
+            await extra.ideMessenger.request(
+              "agent/task/consumeBudget",
+              {
+                taskId,
+                inputTokens: countTokens(
+                  next.value.prompt,
+                  selectedChatModel.model,
+                ),
+                outputTokens: countTokens(
+                  next.value.completion,
+                  selectedChatModel.model,
+                ),
+              },
+              AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+            );
           } catch {
             // Usage accounting is local metadata and must not corrupt the response.
           }
@@ -812,9 +852,13 @@ ${PREMORTEM_GUIDANCE}`
       }
       if (taskId) {
         try {
-          const task = await extra.ideMessenger.request("agent/task/get", {
-            taskId,
-          });
+          const task = await extra.ideMessenger.request(
+            "agent/task/get",
+            {
+              taskId,
+            },
+            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+          );
           const activeStep =
             task.status === "success"
               ? task.content?.plan?.steps.find(
@@ -826,21 +870,33 @@ ${PREMORTEM_GUIDANCE}`
               ? hasPassedRequiredVerification(task.content)
               : false;
           if (activeStep && hasRequiredEvidence) {
-            await extra.ideMessenger.request("agent/plan/completeStep", {
-              taskId,
-              stepId: activeStep.id,
-            });
-            const next = await extra.ideMessenger.request("agent/plan/next", {
-              taskId,
-            });
+            await extra.ideMessenger.request(
+              "agent/plan/completeStep",
+              {
+                taskId,
+                stepId: activeStep.id,
+              },
+              AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+            );
+            const next = await extra.ideMessenger.request(
+              "agent/plan/next",
+              {
+                taskId,
+              },
+              AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+            );
             if (
               next.status === "success" &&
               next.content.action === "execute"
             ) {
-              await extra.ideMessenger.request("agent/plan/startStep", {
-                taskId,
-                stepId: next.content.step.id,
-              });
+              await extra.ideMessenger.request(
+                "agent/plan/startStep",
+                {
+                  taskId,
+                  stepId: next.content.step.id,
+                },
+                AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+              );
             }
           }
         } catch {
@@ -850,33 +906,41 @@ ${PREMORTEM_GUIDANCE}`
       await transitionTask("verifying");
       if (taskId) {
         try {
-          const task = await extra.ideMessenger.request("agent/task/get", {
-            taskId,
-          });
+          const task = await extra.ideMessenger.request(
+            "agent/task/get",
+            {
+              taskId,
+            },
+            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+          );
           const hasRequiredEvidence =
             task.status === "success" && task.content
               ? hasPassedRequiredVerification(task.content)
               : false;
           verificationSatisfied =
             unresolvedVerification.length === 0 && hasRequiredEvidence;
-          await extra.ideMessenger.request("agent/task/recordVerification", {
-            taskId,
-            result: {
-              kind: "response",
-              status:
-                unresolvedVerification.length > 0
-                  ? "failed"
-                  : hasRequiredEvidence
-                    ? "passed"
-                    : "skipped",
-              summary:
-                unresolvedVerification.length > 0
-                  ? `Unresolved verification failure: ${unresolvedVerification.join(", ")}`
-                  : hasRequiredEvidence
-                    ? "Required verification evidence passed."
-                    : "A mutation task requires real verification evidence before completion.",
+          await extra.ideMessenger.request(
+            "agent/task/recordVerification",
+            {
+              taskId,
+              result: {
+                kind: "response",
+                status:
+                  unresolvedVerification.length > 0
+                    ? "failed"
+                    : hasRequiredEvidence
+                      ? "passed"
+                      : "skipped",
+                summary:
+                  unresolvedVerification.length > 0
+                    ? `Unresolved verification failure: ${unresolvedVerification.join(", ")}`
+                    : hasRequiredEvidence
+                      ? "Required verification evidence passed."
+                      : "A mutation task requires real verification evidence before completion.",
+              },
             },
-          });
+            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+          );
           if (verificationSatisfied) {
             const activeStep =
               task.status === "success"
@@ -886,10 +950,14 @@ ${PREMORTEM_GUIDANCE}`
                   )
                 : undefined;
             if (activeStep) {
-              await extra.ideMessenger.request("agent/plan/completeStep", {
-                taskId,
-                stepId: activeStep.id,
-              });
+              await extra.ideMessenger.request(
+                "agent/plan/completeStep",
+                {
+                  taskId,
+                  stepId: activeStep.id,
+                },
+                AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+              );
             }
           }
         } catch {

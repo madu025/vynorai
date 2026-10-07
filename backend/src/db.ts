@@ -812,6 +812,26 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "022_password_resets",
+    description: "Single-use, expiring password reset tokens",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash VARCHAR(64) NOT NULL UNIQUE,
+        expires_at DATETIME NOT NULL,
+        used_at DATETIME,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id, created_at DESC)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_password_reset_expiry ON password_reset_tokens(expires_at, used_at)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {
@@ -866,12 +886,15 @@ export async function initDb(): Promise<void> {
   startVerificationCleanup();
 }
 
-/** Hourly purge of expired email verification tokens. */
+/** Hourly purge of expired authentication tokens. */
 function startVerificationCleanup(): void {
   setInterval(async () => {
     try {
       await dbRun(
         "DELETE FROM email_verifications WHERE expires_at < CURRENT_TIMESTAMP",
+      );
+      await dbRun(
+        "DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at IS NOT NULL",
       );
     } catch (e) {}
   }, 3600_000).unref();

@@ -71,6 +71,53 @@ const ADVANCED: Record<string, Record<string, string>> = {
     "calc.py": `def add(a, b):\n    return a + b\n`,
     "test_calc.py": `import unittest\nfrom calc import add\n\n\nclass CalcTest(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n\n\nif __name__ == "__main__":\n    unittest.main()\n`,
   },
+  "concurrent-transfer": {
+    "package.json": JSON.stringify(
+      {
+        name: "concurrent-transfer-fixture",
+        private: true,
+        type: "commonjs",
+        scripts: { test: "node --test" },
+      },
+      null,
+      2,
+    ),
+    "src/accountStore.js": `class AccountStore {
+  constructor(initialBalances, checkpoint = async () => {}) {
+    this.balances = new Map(Object.entries(initialBalances));
+    this.checkpoint = checkpoint;
+  }
+
+  balance(account) {
+    return this.balances.get(account) || 0;
+  }
+
+  async transfer(from, to, amount) {
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("invalid amount");
+    const fromBalance = this.balance(from);
+    const toBalance = this.balance(to);
+    await this.checkpoint(from, to);
+    if (fromBalance < amount) return false;
+    this.balances.set(from, fromBalance - amount);
+    this.balances.set(to, toBalance + amount);
+    return true;
+  }
+}
+
+module.exports = { AccountStore };
+`,
+    "test/accountStore.test.js": `const test = require("node:test");
+const assert = require("node:assert/strict");
+const { AccountStore } = require("../src/accountStore");
+
+test("a sequential transfer moves money", async () => {
+  const store = new AccountStore({ alice: 100, bob: 0 });
+  assert.equal(await store.transfer("alice", "bob", 30), true);
+  assert.equal(store.balance("alice"), 70);
+  assert.equal(store.balance("bob"), 30);
+});
+`,
+  },
 };
 
 export type Fixture = keyof typeof ADVANCED | "basic";

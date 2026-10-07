@@ -46,8 +46,16 @@ const PUBLIC_PLAN_IDS = [
  */
 paymentRouter.get("/plans", async (_req: Request, res: Response) => {
   const plans = await getEffectivePlans();
+  const backgroundEnabled = process.env.BG_ENABLED === "true";
+  const checkoutAvailable =
+    config.nodeEnv !== "production" ||
+    (config.payhere.env === "live" &&
+      Boolean(config.payhere.merchantId && config.payhere.merchantSecret));
   res.setHeader("Cache-Control", "public, max-age=60");
   res.json({
+    paymentMode: config.payhere.env,
+    checkoutAvailable,
+    backgroundEnabled,
     creditUnit:
       "Credits follow real cost: new input 1, cached input 0.1, output 4 per token; other models use more credits",
     plans: PUBLIC_PLAN_IDS.filter((id) => plans[id]).map((id) => {
@@ -60,7 +68,9 @@ paymentRouter.get("/plans", async (_req: Request, res: Response) => {
         monthlyCredits: p.monthlyTokens,
         monthlyRequests: p.monthlyRequests,
         contextWindow: p.contextWindow,
-        features: p.features,
+        features: backgroundEnabled
+          ? p.features
+          : p.features.filter((feature) => !/background agent/i.test(feature)),
         topup: isTopupPlan(p.id),
         yearly: p.id.endsWith("_yearly"),
       };
@@ -179,6 +189,12 @@ paymentRouter.post(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
+      if (config.nodeEnv === "production" && config.payhere.env !== "live") {
+        return res.status(503).json({
+          error:
+            "Online payments are temporarily unavailable while the payment gateway is in test mode.",
+        });
+      }
       const user = (req as any).user;
       const { plan = "starter", phone, address, city } = req.body;
 

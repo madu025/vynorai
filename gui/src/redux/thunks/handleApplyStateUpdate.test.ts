@@ -14,6 +14,7 @@ import {
   updateToolCallOutput,
 } from "../slices/sessionSlice";
 import { findToolCallById, logToolUsage } from "../util";
+import { HOOK_REQUEST_TIMEOUT_MS } from "../util/hooks";
 import { exitEdit } from "./edit";
 import {
   applyForEditTool,
@@ -255,6 +256,7 @@ describe("handleApplyStateUpdate", () => {
           event: "PostToolUse",
           sessionId: "session-1",
         }),
+        HOOK_REQUEST_TIMEOUT_MS,
       );
       const items =
         vi.mocked(updateToolCallOutput).mock.calls[0][0].contextItems;

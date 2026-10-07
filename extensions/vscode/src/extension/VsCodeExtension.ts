@@ -283,6 +283,7 @@ export class VsCodeExtension {
     );
 
     this.core = new Core(inProcessMessenger, this.ide);
+    this.sidebar.webviewProtocol.sealStartupQueue();
     this.configHandler = this.core.configHandler;
     resolveConfigHandler?.(this.configHandler);
 

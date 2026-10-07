@@ -523,11 +523,11 @@
 
       <!-- ── Hero ─────────────────────────────────────────────────────── -->
       <div class="hero" style="padding-top: 16px; margin-bottom: 80px;">
-        <div class="badge">🇱🇰 Built for Sri Lanka &amp; Global Developers • PayHere Enabled</div>
+        <div class="badge">🇱🇰 Built for Sri Lanka &amp; Global Developers • LKR Plans</div>
         <h1>Your AI Pair Programmer,<br><span>Without the Subscription Trap</span></h1>
         <p style="max-width: 680px; font-size: 19px; line-height: 1.7;">
-          VynorAI brings unlimited AI coding power — DeepSeek, Qwen, Llama — straight into VS Code. 
-          Pay in Sri Lankan Rupees. Cancel anytime. No USD credit card needed.
+          VynorAI brings agentic AI coding with clear monthly limits straight into VS Code.
+          Start free, then buy 30-day access in Sri Lankan Rupees. No USD credit card needed.
         </p>
         <div style="margin-top: 36px; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
           <a href="/login.html?mode=register" class="btn btn-primary" style="width: auto; padding: 15px 40px; font-size: 17px; text-decoration: none; box-shadow: 0 0 40px rgba(0,229,255,0.4);">
@@ -693,7 +693,7 @@
         <a href="/login.html?mode=register" class="btn btn-primary" style="width: auto; display: inline-block; padding: 16px 48px; font-size: 18px; text-decoration: none; box-shadow: 0 0 50px rgba(0,229,255,0.35);">
           🚀 Start Free Today →
         </a>
-        <p style="color: var(--text-muted); font-size: 13px; margin-top: 16px;">100,000 free credits • No credit card • Cancel anytime</p>
+        <p style="color: var(--text-muted); font-size: 13px; margin-top: 16px;">100,000 free credits • No credit card • Upgrade only when you need more</p>
       </div>
 
     </div>
@@ -1039,14 +1039,15 @@
         <div style="text-align: center; max-width: 700px; margin: 0 auto 36px auto;">
           <h2 style="font-size: 32px; font-weight: 800; letter-spacing: -0.5px;">Choose Your VynorAI Plan</h2>
           <p style="color: var(--text-muted); margin-top: 8px; font-size: 16px;">
-            One subscription for every model. <b>VynorAI Auto</b> sends everyday coding to DeepSeek V4.1 Flash and only deep reasoning to V4 Pro, so your credits last longer. Instant PayHere activation.
+            One VynorAI plan with automatic model routing. <b>VynorAI Auto</b> sends everyday coding to DeepSeek V4.1 Flash and only deep reasoning to V4 Pro, so your credits last longer. Instant activation after a successful PayHere payment.
           </p>
           <div style="display: flex; justify-content: center; gap: 16px; margin-top: 14px; font-size: 13px; color: var(--primary);">
-            <span>🔒 PayHere Verified</span>
+            <span>🔒 Secure PayHere Checkout</span>
             <span>⚡ Credit/Debit Card</span>
             <span>📱 Genie / EzCash / Frimi</span>
             <span>🏦 Sampath Vishwa</span>
           </div>
+          <p id="paymentAvailability" style="display:none;margin-top:14px;padding:10px 14px;border-radius:10px;background:rgba(255,171,0,.1);border:1px solid rgba(255,171,0,.3);color:#ffca5c;font-size:13px"></p>
         </div>
 
         <div class="pricing-grid" id="pricingGrid">
@@ -1066,13 +1067,13 @@
           <div class="glass-card pricing-card featured">
             <h3>Pro</h3>
             <div class="price">රු. 3,850 <span>/ month</span></div>
-            <ul class="feature-list"><li>25 million credits/month</li><li>7,500 requests/month</li><li>20 Background Agent tasks/month</li><li>Auto uses DeepSeek V4 Pro for deep reasoning</li></ul>
+            <ul class="feature-list"><li>25 million credits/month</li><li>7,500 requests/month</li><li>Auto uses DeepSeek V4 Pro for deep reasoning</li></ul>
             <button class="btn btn-primary" onclick="initiatePayhere('pro')">Get Pro</button>
           </div>
           <div class="glass-card pricing-card">
             <h3>Ultra</h3>
             <div class="price">රු. 7,900 <span>/ month</span></div>
-            <ul class="feature-list"><li>55 million credits/month</li><li>20,000 requests/month</li><li>60 Background Agent tasks/month</li><li>2 concurrent background tasks</li><li>Every model in the VynorAI catalog</li></ul>
+            <ul class="feature-list"><li>55 million credits/month</li><li>20,000 requests/month</li><li>VynorAI Auto with deep reasoning</li><li>Priority support</li></ul>
             <button class="btn btn-secondary" onclick="initiatePayhere('ultra')">Get Ultra</button>
           </div>
         </div>
@@ -1116,7 +1117,7 @@
         🔒 Secure payment via <strong style="color:var(--primary)">PayHere</strong> — Card, Genie, EzCash, Frimi, Bank Transfer accepted.
       </div>
       <button id="plan-modal-confirm-btn" class="btn btn-primary" style="font-size:16px;padding:14px;" onclick="confirmPayhere()">Proceed to Payment →</button>
-      <p style="text-align:center;color:var(--text-muted);font-size:12px;margin-top:12px;">Cancel anytime. Subscription is monthly.</p>
+      <p style="text-align:center;color:var(--text-muted);font-size:12px;margin-top:12px;">One-time payment for the access period shown. Renew manually when it ends.</p>
     </div>
   </div>
 
@@ -1875,6 +1876,7 @@
       ultra: { name: 'Ultra', price: 'රු. 7,900 / month', badge: 'Power User', features: ['55 million credits/month', '20,000 requests/month'] },
       topup5m: { name: 'Top-Up Pack (+5M)', price: 'රු. 650 (one-time)', badge: 'Instant Boost', features: ['+5,000,000 credits this cycle', '1,500 additional requests'] },
     };
+    let CHECKOUT_AVAILABLE = true;
 
     function formatCredits(n) {
       return n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n);
@@ -1887,7 +1889,13 @@
         const res = await fetch('/api/payment/plans');
         if (!res.ok) return;
         const data = await res.json();
+        CHECKOUT_AVAILABLE = data.checkoutAvailable !== false;
         window.__vynorPlans = data.plans;
+        const paymentAvailability = document.getElementById('paymentAvailability');
+        if (paymentAvailability && !CHECKOUT_AVAILABLE) {
+          paymentAvailability.style.display = 'block';
+          paymentAvailability.textContent = 'Online payments are temporarily unavailable while PayHere production activation is being completed. Free accounts still work.';
+        }
         const info = {};
         for (const p of data.plans) {
           const style = PLAN_STYLE[p.id] || {};
@@ -1914,7 +1922,7 @@
         const free = p.priceLKR === 0;
         const button = free
           ? `<a class="btn btn-secondary" href="/login.html?mode=register" style="text-decoration:none;text-align:center;">Start free</a>`
-          : `<button class="btn ${style.featured ? 'btn-primary' : 'btn-secondary'}" onclick="initiatePayhere('${p.id}')">Get ${escapeHtml(p.name)} • ${lkr(p.priceLKR)}</button>`;
+          : `<button class="btn ${style.featured ? 'btn-primary' : 'btn-secondary'}" ${CHECKOUT_AVAILABLE ? `onclick="initiatePayhere('${p.id}')"` : 'disabled title="Online payments are temporarily unavailable"'}>${CHECKOUT_AVAILABLE ? `Get ${escapeHtml(p.name)} • ${lkr(p.priceLKR)}` : 'Payments temporarily unavailable'}</button>`;
         return `
           <div class="glass-card pricing-card${style.featured ? ' featured' : ''}">
             ${style.badge ? `<span class="plan-badge">${escapeHtml(style.badge)}</span>` : ''}
@@ -1930,6 +1938,10 @@
     loadPlans();
 
     function initiatePayhere(plan) {
+      if (!CHECKOUT_AVAILABLE) {
+        alert('Online payments are temporarily unavailable. Please try again later or contact support@vynor.lk.');
+        return;
+      }
       const token = localStorage.getItem('vynor_jwt') || localStorage.getItem('vynorai_token');
       if (!token) { window.location.href = '/login.html'; return; }
       const info = PLAN_INFO[plan];

@@ -140,7 +140,7 @@
               <input type="text" id="inp-name" placeholder="Kamal Perera" autocomplete="name">
             </div>
           </div>
-          <div class="field">
+          <div class="field" id="field-email">
             <label for="inp-email">Email Address</label>
             <div class="input-wrap">
               <span class="icon">@</span>
@@ -148,7 +148,7 @@
             </div>
           </div>
           <div class="field">
-            <label for="inp-password">Password</label>
+            <label for="inp-password" id="password-label">Password</label>
             <div class="input-wrap">
               <span class="icon">*</span>
               <input type="password" id="inp-password" placeholder="Enter password" autocomplete="current-password" required>
@@ -178,10 +178,14 @@
   <script>
     const API = '';
     let mode = 'signin';
+    let resetToken = '';
     document.addEventListener('DOMContentLoaded', function() {
       var params = new URLSearchParams(window.location.search);
+      resetToken = params.get('reset') || '';
       var reqMode = params.get('mode') || params.get('tab');
-      if (reqMode === 'register' || reqMode === 'signup') {
+      if (/^[a-f0-9]{64}$/i.test(resetToken)) {
+        showResetMode();
+      } else if (reqMode === 'register' || reqMode === 'signup') {
         switchTab('register');
       } else {
         switchTab('signin');
@@ -200,11 +204,11 @@
       }
 
       fetch(API + '/api/auth/google/config').then(function(r) { return r.json(); }).then(function(c) {
-        if (c && c.enabled) document.getElementById('google-block').style.display = 'block';
+        if (c && c.enabled && mode !== 'reset') document.getElementById('google-block').style.display = 'block';
       }).catch(function() {});
 
       var token = localStorage.getItem('vynorai_token') || localStorage.getItem('vynor_jwt');
-      if (token) verifyAndRedirect(token);
+      if (token && mode !== 'reset') verifyAndRedirect(token);
     });
     function startGoogle() {
       // Carry the IDE login parameters (source, state, callback…) through Google.
@@ -228,17 +232,53 @@
       document.getElementById('inp-password').autocomplete = isReg ? 'new-password' : 'current-password';
       clearAlerts();
     }
+    function showResetMode() {
+      mode = 'reset';
+      document.querySelector('.tab-group').style.display = 'none';
+      document.getElementById('google-block').style.display = 'none';
+      document.getElementById('field-name').classList.add('hidden');
+      document.getElementById('field-email').classList.add('hidden');
+      document.getElementById('turnstile-field').style.display = 'none';
+      document.getElementById('consent-field').style.display = 'none';
+      document.getElementById('forgot-link').style.display = 'none';
+      document.getElementById('switch-link').style.display = 'none';
+      document.getElementById('auth-title').textContent = 'Choose a new password';
+      document.getElementById('auth-subtitle').textContent = 'This secure reset link works once and expires after 30 minutes.';
+      document.getElementById('password-label').textContent = 'New password';
+      document.getElementById('inp-password').placeholder = 'At least 8 characters';
+      document.getElementById('inp-password').autocomplete = 'new-password';
+      document.getElementById('btn-label').textContent = 'Update Password';
+      clearAlerts();
+    }
     function togglePassword() {
       var inp = document.getElementById('inp-password');
       var btn = document.getElementById('eye-toggle');
       if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
       else { inp.type = 'password'; btn.textContent = 'Show'; }
     }
-    function handleForgot(e) {
+    async function handleForgot(e) {
       e.preventDefault();
       var email = document.getElementById('inp-email').value.trim();
       if (!email) { showError('Enter your email address first.'); return; }
-      showSuccess('Reset instructions sent to ' + email);
+      var link = document.getElementById('forgot-link');
+      link.style.pointerEvents = 'none';
+      link.textContent = 'Sending reset link...';
+      clearAlerts();
+      try {
+        var res = await fetch(API + '/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not request a reset link.');
+        showSuccess(data.message || 'If the account exists, a reset link has been sent.');
+      } catch (err) {
+        showError(err.message || 'Network error. Please try again.');
+      } finally {
+        link.style.pointerEvents = '';
+        link.textContent = 'Forgot password?';
+      }
     }
     // Cloudflare Turnstile on sign-up, only when the server has keys set.
     var turnstileSiteKey = '';
@@ -287,6 +327,31 @@
       var email = document.getElementById('inp-email').value.trim();
       var password = document.getElementById('inp-password').value;
       var name = document.getElementById('inp-name').value.trim();
+      if (mode === 'reset') {
+        if (password.length < 8 || password.length > 128) { showError('Password must be between 8 and 128 characters.'); return; }
+        setLoading(true);
+        try {
+          var resetRes = await fetch(API + '/api/auth/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: resetToken, newPassword: password })
+          });
+          var resetData = await resetRes.json();
+          if (!resetRes.ok) throw new Error(resetData.error || 'Could not reset password.');
+          resetToken = '';
+          history.replaceState(null, '', '/login');
+          document.querySelector('.tab-group').style.display = 'flex';
+          document.getElementById('field-email').classList.remove('hidden');
+          document.getElementById('switch-link').style.display = '';
+          document.getElementById('password-label').textContent = 'Password';
+          document.getElementById('inp-password').value = '';
+          switchTab('signin');
+          showSuccess(resetData.message || 'Password updated. You can now sign in.');
+        } catch (err) {
+          showError(err.message || 'Network error. Please try again.');
+        } finally { setLoading(false); }
+        return;
+      }
       if (!email || !password) { showError('Please fill in all required fields.'); return; }
       if (mode === 'register' && password.length < 8) { showError('Password must be at least 8 characters.'); return; }
       if (mode === 'register' && !document.getElementById('inp-consent').checked) { showError('Please accept the Privacy Policy to create an account.'); return; }

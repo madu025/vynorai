@@ -14,6 +14,12 @@ interface PricePerMillion {
   output: number;
 }
 
+export const DEEPSEEK_PRICING_SOURCE_URL =
+  "https://api-docs.deepseek.com/quick_start/pricing/";
+export const DEEPSEEK_PRICING_VERIFIED_AT = "2026-10-06";
+export const DEEPSEEK_COST_METHOD =
+  "Recorded provider tokens multiplied by DeepSeek's published cache-hit, cache-miss, output, peak and off-peak rates";
+
 // Peak prices, USD per 1M tokens. First match wins.
 const DEEPSEEK_PEAK_PRICES: Array<[RegExp, PricePerMillion]> = [
   [/deepseek-v4-pro/, { miss: 1.32, hit: 0.0264, output: 3.96 }],

@@ -6,16 +6,18 @@ import {
 import GenerateTerminalCommand from "./cmd";
 import CommitMessageCommand from "./commit";
 import HttpSlashCommand from "./http";
+import InitCommand from "./init";
 import OnboardSlashCommand from "./onboard";
-import ReviewMessageCommand from "./review";
+import ReviewCommand from "./review";
 import ShareSlashCommand from "./share";
+import SwarmCommand from "./swarm";
+import GoalCommand from "./goal";
 import {
   FixCommand,
   ExplainCommand,
   TestCommand,
   RefactorCommand,
   DocsCommand,
-  ReviewCommand,
   SecurityCommand,
   OptimizeCommand,
   ScaffoldCommand,
@@ -23,12 +25,15 @@ import {
 
 const LegacyBuiltInSlashCommands: SlashCommand[] = [
   // ── VynorAI Exclusive Commands (listed first) ──────────────────────────
+  InitCommand,
+  GoalCommand,
+  SwarmCommand,
+  ReviewCommand,
   FixCommand,
   ExplainCommand,
   TestCommand,
   RefactorCommand,
   DocsCommand,
-  ReviewCommand,
   SecurityCommand,
   OptimizeCommand,
   ScaffoldCommand,
@@ -38,7 +43,6 @@ const LegacyBuiltInSlashCommands: SlashCommand[] = [
   ShareSlashCommand,
   HttpSlashCommand,
   OnboardSlashCommand,
-  ReviewMessageCommand,
 ];
 
 export function getLegacyBuiltInSlashCommandFromDescription(

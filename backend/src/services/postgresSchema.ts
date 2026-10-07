@@ -194,10 +194,16 @@ CREATE TABLE IF NOT EXISTS plan_overrides (
 
 CREATE TABLE IF NOT EXISTS cache_entries (
   cache_key TEXT PRIMARY KEY,
+  user_id TEXT,
+  project_id TEXT,
   response_data TEXT NOT NULL,
+  response_bytes BIGINT NOT NULL DEFAULT 0,
+  expires_at TEXT,
   created_at TEXT DEFAULT ${NOW}
 );
 CREATE INDEX IF NOT EXISTS idx_cache_created ON cache_entries(created_at);
+CREATE INDEX IF NOT EXISTS idx_cache_user ON cache_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_cache_expiry ON cache_entries(expires_at);
 
 CREATE TABLE IF NOT EXISTS user_rules (
   id TEXT PRIMARY KEY,
@@ -426,6 +432,32 @@ CREATE TABLE IF NOT EXISTS web_push_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_web_push_user ON web_push_subscriptions(user_id, revoked_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_web_push_endpoint ON web_push_subscriptions(user_id, endpoint_digest);
+`,
+  },
+  {
+    version: "pg_009_password_resets",
+    sql: `
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(64) NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_password_reset_expiry ON password_reset_tokens(expires_at, used_at);
+`,
+  },
+  {
+    version: "pg_010_tenant_cache",
+    sql: `
+ALTER TABLE cache_entries ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE cache_entries ADD COLUMN IF NOT EXISTS project_id TEXT;
+ALTER TABLE cache_entries ADD COLUMN IF NOT EXISTS response_bytes BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE cache_entries ADD COLUMN IF NOT EXISTS expires_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_cache_user ON cache_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_cache_expiry ON cache_entries(expires_at);
 `,
   },
 ];

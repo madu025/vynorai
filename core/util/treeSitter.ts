@@ -4,6 +4,7 @@ import path from "path";
 import Parser, { Language } from "web-tree-sitter";
 import { FileSymbolMap, IDE, SymbolWithRange } from "..";
 import { getUriFileExtension } from "./uri";
+import { DynamicGrammarSynthesizer } from "../syntax/DynamicGrammarSynthesizer.js";
 
 export enum LanguageName {
   CPP = "cpp",
@@ -235,7 +236,27 @@ export async function getSymbolsForFile(
 ): Promise<SymbolWithRange[] | undefined> {
   const parser = await getParserForFile(filepath);
   if (!parser) {
-    return;
+    const ext = getUriFileExtension(filepath);
+    const synthesized = DynamicGrammarSynthesizer.extractSymbols(ext, contents);
+    if (synthesized.length > 0) {
+      return synthesized.map((s) => ({
+        filepath,
+        type: s.type,
+        name: s.name,
+        range: {
+          start: {
+            character: s.range.start.character,
+            line: s.range.start.line,
+          },
+          end: {
+            character: s.range.end.character,
+            line: s.range.end.line,
+          },
+        },
+        content: contents.split("\n")[s.range.start.line] || s.name,
+      }));
+    }
+    return undefined;
   }
 
   let tree: Parser.Tree;

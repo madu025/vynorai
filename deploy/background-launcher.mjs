@@ -228,6 +228,6 @@ try {
   if (error.code !== "ENOENT") throw error;
 }
 server.listen(socketPath, () => {
-  fs.chmodSync(socketPath, 0o660);
+  fs.chmodSync(socketPath, 0o666);
   console.log(`[BackgroundLauncher] listening on ${socketPath}`);
 });

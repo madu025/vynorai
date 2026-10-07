@@ -122,3 +122,24 @@ export async function acquireProviderAdmission(
 export function localAdmissionCount(scope: string): number {
   return localCounts.get(scope) || 0;
 }
+
+/** Operational metrics snapshot for Admin Control Center. */
+export function getAdmissionSnapshot() {
+  return {
+    globalLimit: positiveInt(
+      process.env.AI_MAX_CONCURRENT,
+      DEFAULT_GLOBAL_LIMIT,
+    ),
+    providerLimit: positiveInt(
+      process.env.AI_PROVIDER_MAX_CONCURRENT,
+      DEFAULT_PROVIDER_LIMIT,
+    ),
+    localGlobalActive: localCounts.get("ai-global") || 0,
+    localProviders: {
+      deepseek: localCounts.get("ai-provider:deepseek") || 0,
+      openrouter: localCounts.get("ai-provider:openrouter") || 0,
+      anthropic: localCounts.get("ai-provider:anthropic") || 0,
+    },
+    waitMs: positiveInt(process.env.AI_ADMISSION_WAIT_MS, DEFAULT_WAIT_MS),
+  };
+}

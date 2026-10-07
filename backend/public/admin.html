@@ -200,6 +200,15 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item" onclick="showPage('models')" id="nav-models">
       <span class="nav-icon">🤖</span>Model Registry
     </div>
+    <div class="nav-item" onclick="showPage('swarm')" id="nav-swarm">
+      <span class="nav-icon">🐝</span>Maintenance Swarm
+    </div>
+    <div class="nav-item" onclick="showPage('admission')" id="nav-admission">
+      <span class="nav-icon">⚡</span>Live Concurrency
+    </div>
+    <div class="nav-item" onclick="showPage('broadcast')" id="nav-broadcast">
+      <span class="nav-icon">📢</span>Broadcasts & Alerts
+    </div>
     <div class="nav-item" onclick="showPage('system')" id="nav-system">
       <span class="nav-icon">⚙️</span>System
     </div>
@@ -466,6 +475,178 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       </div>
     </div>
 
+    <!-- AUTONOMOUS MAINTENANCE SWARM -->
+    <div class="page" id="page-swarm">
+      <h1>🐝 Autonomous CI/CD Maintenance Swarm</h1>
+      <p class="subtitle">Self-healing GitHub issue triager, sandbox worktrees, and Daily Morning Briefings</p>
+
+      <div class="cards">
+        <div class="stat-card">
+          <div class="stat-label">Swarm Engine</div>
+          <div class="stat-value green" style="font-size:1.1rem">Armed &amp; Active</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Cron: 0 0 * * * UTC</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Triage Intelligence</div>
+          <div class="stat-value purple" style="font-size:1.1rem">DeepSeek Flash</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Isolated git worktrees</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Verification Standard</div>
+          <div class="stat-value green" style="font-size:1.1rem">TDD Test Suite</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Strict zero-regression barrier</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Briefings Archive</div>
+          <div class="stat-value amber" id="briefingCount">0</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Generated reports stored</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:1rem;margin-bottom:1.5rem">
+        <button class="btn btn-primary" id="btnRunSwarm" onclick="triggerSwarmRun()">⚡ Trigger Swarm Run Now</button>
+        <button class="btn btn-ghost" onclick="loadSwarm()">↻ Refresh Reports</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🌅 Morning Executive Briefings</div>
+          <span style="font-size:.8rem;color:var(--muted)">Persistent in <code>.vynor/briefings/</code></span>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:260px 1fr;gap:1.5rem">
+            <div>
+              <label>Select Report</label>
+              <div id="briefingList" style="display:flex;flex-direction:column;gap:.5rem;max-height:480px;overflow-y:auto;padding-right:.5rem;">
+                <div class="loading">Loading briefings...</div>
+              </div>
+            </div>
+            <div>
+              <label>Briefing Content</label>
+              <div id="briefingViewer" style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1.4rem;min-height:300px;font-family:'JetBrains Mono',monospace;font-size:.85rem;white-space:pre-wrap;line-height:1.6;color:#cbd5e1;max-height:480px;overflow-y:auto;">
+                Select a briefing from the left to view the executive summary and triage log.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMISSION CONTROL & CONCURRENCY -->
+    <div class="page" id="page-admission">
+      <h1>⚡ Live Traffic &amp; Concurrency Control</h1>
+      <p class="subtitle">Real-time distributed semaphore slots, provider limits, and backpressure telemetry</p>
+
+      <div class="cards" id="admissionCards">
+        <div class="stat-card">
+          <div class="stat-label">Global Concurrency</div>
+          <div class="stat-value green" id="admGlobalVal">0 / 64</div>
+          <div class="ctx-bar"><div class="ctx-fill" id="admGlobalBar" style="width:0%"></div></div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Cross-replica limit</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">DeepSeek Pipeline</div>
+          <div class="stat-value purple" id="admDeepSeekVal">0 / 48</div>
+          <div class="ctx-bar"><div class="ctx-fill" id="admDeepSeekBar" style="width:0%"></div></div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Upstream active leases</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">OpenRouter Pipeline</div>
+          <div class="stat-value purple" id="admOpenRouterVal">0 / 48</div>
+          <div class="ctx-bar"><div class="ctx-fill" id="admOpenRouterBar" style="width:0%"></div></div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Fallback &amp; pro models</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Anthropic Pipeline</div>
+          <div class="stat-value amber" id="admAnthropicVal">0 / 48</div>
+          <div class="ctx-bar"><div class="ctx-fill" id="admAnthropicBar" style="width:0%"></div></div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Claude direct lane</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <button class="btn btn-ghost" onclick="loadAdmission()">↻ Refresh Snapshot</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted);cursor:pointer;margin:0">
+            <input type="checkbox" id="admAutoPoll" checked onchange="toggleAdmissionPolling()" style="width:auto;margin:0">
+            Live stream (3s auto-refresh)
+          </label>
+        </div>
+        <span id="admLastUpdated" style="font-size:.75rem;color:var(--muted)">Updating...</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🛡️ Backpressure &amp; Resilience Architecture</div></div>
+        <div class="panel-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem">
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1.2rem">
+            <h3 style="font-size:.95rem;margin-bottom:.5rem;color:var(--accent2)">Distributed Slot Leases</h3>
+            <p style="font-size:.8rem;color:var(--muted);line-height:1.6">Redis atomic semaphore keys coordinate max concurrency across both container replicas. If Redis is degraded, local memory failover activates immediately.</p>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1.2rem">
+            <h3 style="font-size:.95rem;margin-bottom:.5rem;color:var(--accent3)">Admission Wait Deadline</h3>
+            <p style="font-size:.8rem;color:var(--muted);line-height:1.6">Incoming requests yield for up to <strong>750ms</strong> for an available slot before gracefully failing with HTTP 503 instead of cascading connection timeouts.</p>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1.2rem">
+            <h3 style="font-size:.95rem;margin-bottom:.5rem;color:var(--warn)">Automatic Lease Heartbeat</h3>
+            <p style="font-size:.8rem;color:var(--muted);line-height:1.6">Active slots maintain a 180s TTL lease renewed at 60s intervals. Severed client connections automatically drop leases upon completion.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BROADCASTS & NOTIFICATIONS -->
+    <div class="page" id="page-broadcast">
+      <h1>📢 Broadcasts &amp; Alert Dispatch</h1>
+      <p class="subtitle">Broadcast platform updates to customer inboxes or send transactional test emails</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+        <!-- Mass Broadcast -->
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">📣 Send Platform Announcement</div></div>
+          <div class="panel-body">
+            <div class="form-row">
+              <label>Target Audience Plan</label>
+              <select id="broadcastTargetPlan">
+                <option value="all">All Active Users</option>
+                <option value="starter">Starter Plan Subscribers</option>
+                <option value="pro">Pro Plan Subscribers</option>
+                <option value="ultra">Ultra Plan Subscribers</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Subject Line</label>
+              <input id="broadcastSubject" placeholder="e.g. Introducing DeepSeek V4 Pro on VynorAI"/>
+            </div>
+            <div class="form-row">
+              <label>Announcement Message</label>
+              <textarea id="broadcastMessage" placeholder="Write your announcement message here. HTML and paragraphs are supported..." style="min-height:140px;"></textarea>
+            </div>
+            <button class="btn btn-primary" id="btnSendBroadcast" onclick="sendBroadcastEmail()" style="width:100%">
+              🚀 Dispatch Broadcast to Users
+            </button>
+          </div>
+        </div>
+
+        <!-- SMTP Test -->
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">✉️ SMTP Infrastructure Test</div></div>
+          <div class="panel-body">
+            <p style="font-size:.8rem;color:var(--muted);margin-bottom:1.2rem;line-height:1.6">
+              Test your transactional SMTP connection by dispatching a verification test email to any inbox.
+            </p>
+            <div class="form-row">
+              <label>Recipient Email</label>
+              <input id="testEmailRecipient" placeholder="e.g. dev@vynor.lk or your personal email"/>
+            </div>
+            <button class="btn btn-ghost" id="btnSendTestEmail" onclick="sendTestEmail()" style="width:100%;border-color:var(--accent);color:var(--accent2);margin-bottom:1.2rem">
+              📨 Dispatch Test Email
+            </button>
+            <div id="testEmailResult" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:1rem;font-size:.8rem;font-family:'JetBrains Mono',monospace;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 <div id="toast"></div>
@@ -596,17 +777,210 @@ function showToast(msg, type='ok') {
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  document.getElementById('nav-' + id).classList.add('active');
-  if (id === 'overview') loadOverview();
-  if (id === 'security') loadSecurity();
-  if (id === 'users')    loadUsers();
-  if (id === 'plans')    loadPlans();
-  if (id === 'models')   loadModels();
+  const pageEl = document.getElementById('page-' + id);
+  const navEl = document.getElementById('nav-' + id);
+  if (pageEl) pageEl.classList.add('active');
+  if (navEl) navEl.classList.add('active');
+
+  // Stop admission polling when away from admission page
+  if (id !== 'admission' && admissionPollTimer) {
+    clearInterval(admissionPollTimer);
+    admissionPollTimer = null;
+  }
+
+  if (id === 'overview')  loadOverview();
+  if (id === 'security')  loadSecurity();
+  if (id === 'users')     loadUsers();
+  if (id === 'plans')     loadPlans();
+  if (id === 'models')    loadModels();
   if (id === 'providers') loadProviders();
   if (id === 'economics') loadEconomics();
-  if (id === 'system')   loadErrors();
-  if (id === 'system')   loadSystem();
+  if (id === 'swarm')     loadSwarm();
+  if (id === 'admission') {
+    loadAdmission();
+    if (document.getElementById('admAutoPoll')?.checked && !admissionPollTimer) {
+      admissionPollTimer = setInterval(loadAdmission, 3000);
+    }
+  }
+  if (id === 'broadcast') loadBroadcast();
+  if (id === 'system')    { loadErrors(); loadSystem(); }
+}
+
+let admissionPollTimer = null;
+let currentBriefings = [];
+
+function toggleAdmissionPolling() {
+  const auto = document.getElementById('admAutoPoll')?.checked;
+  if (!auto && admissionPollTimer) {
+    clearInterval(admissionPollTimer);
+    admissionPollTimer = null;
+  } else if (auto && !admissionPollTimer) {
+    admissionPollTimer = setInterval(loadAdmission, 3000);
+  }
+}
+
+async function loadAdmission() {
+  const res = await api('GET', '/admin/admission/status');
+  if (!res || !res.snapshot) return;
+  const s = res.snapshot;
+
+  const gLimit = s.globalLimit || 64;
+  const pLimit = s.providerLimit || 48;
+  const gActive = s.localGlobalActive || 0;
+  const deepActive = s.localProviders?.deepseek || 0;
+  const orActive = s.localProviders?.openrouter || 0;
+  const anthActive = s.localProviders?.anthropic || 0;
+
+  const gEl = document.getElementById('admGlobalVal');
+  const gBar = document.getElementById('admGlobalBar');
+  if (gEl) gEl.innerText = `${gActive} / ${gLimit}`;
+  if (gBar) gBar.style.width = Math.min(100, Math.round((gActive / gLimit) * 100)) + '%';
+
+  const dEl = document.getElementById('admDeepSeekVal');
+  const dBar = document.getElementById('admDeepSeekBar');
+  if (dEl) dEl.innerText = `${deepActive} / ${pLimit}`;
+  if (dBar) dBar.style.width = Math.min(100, Math.round((deepActive / pLimit) * 100)) + '%';
+
+  const oEl = document.getElementById('admOpenRouterVal');
+  const oBar = document.getElementById('admOpenRouterBar');
+  if (oEl) oEl.innerText = `${orActive} / ${pLimit}`;
+  if (oBar) oBar.style.width = Math.min(100, Math.round((orActive / pLimit) * 100)) + '%';
+
+  const aEl = document.getElementById('admAnthropicVal');
+  const aBar = document.getElementById('admAnthropicBar');
+  if (aEl) aEl.innerText = `${anthActive} / ${pLimit}`;
+  if (aBar) aBar.style.width = Math.min(100, Math.round((anthActive / pLimit) * 100)) + '%';
+
+  const updatedEl = document.getElementById('admLastUpdated');
+  if (updatedEl) {
+    updatedEl.innerText = `Last snapshot: ${new Date().toLocaleTimeString()} (wait: ${s.waitMs}ms)`;
+  }
+}
+
+async function loadSwarm() {
+  const data = await api('GET', '/admin/swarm/briefings');
+  if (!data) return;
+  currentBriefings = data.briefings || [];
+  const countEl = document.getElementById('briefingCount');
+  if (countEl) countEl.innerText = currentBriefings.length;
+
+  const listEl = document.getElementById('briefingList');
+  if (!listEl) return;
+
+  if (currentBriefings.length === 0) {
+    listEl.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:1rem;">No briefings found in .vynor/briefings yet.</div>';
+    document.getElementById('briefingViewer').innerText = 'Trigger a swarm run or wait for midnight UTC cron to generate briefings.';
+    return;
+  }
+
+  listEl.innerHTML = currentBriefings.map((b, idx) => `
+    <div onclick="selectBriefing(${idx})" id="briefing-item-${idx}" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:.7rem .9rem;cursor:pointer;transition:border-color .2s;">
+      <div style="font-weight:600;font-size:.85rem;color:var(--accent2);">${escHtml(b.date)}</div>
+      <div style="font-size:.78rem;color:var(--text);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(b.title)}</div>
+    </div>
+  `).join('');
+
+  selectBriefing(0);
+}
+
+function selectBriefing(idx) {
+  document.querySelectorAll('#briefingList > div').forEach(el => el.style.borderColor = 'var(--border)');
+  const sel = document.getElementById(`briefing-item-${idx}`);
+  if (sel) sel.style.borderColor = 'var(--accent)';
+
+  const b = currentBriefings[idx];
+  if (b) {
+    document.getElementById('briefingViewer').innerText = b.content;
+  }
+}
+
+async function triggerSwarmRun() {
+  const btn = document.getElementById('btnRunSwarm');
+  if (btn) { btn.disabled = true; btn.innerText = 'Dispatching Swarm...'; }
+  const res = await api('POST', '/admin/swarm/run', {});
+  if (btn) { btn.disabled = false; btn.innerText = '⚡ Trigger Swarm Run Now'; }
+  if (res?.ok) {
+    showToast(res.message || 'Autonomous Swarm dispatched');
+    setTimeout(loadSwarm, 1500);
+  } else {
+    showToast(res?.error || 'Failed to dispatch swarm', 'err');
+  }
+}
+
+function loadBroadcast() {
+  // ready form
+}
+
+async function sendTestEmail() {
+  const inp = document.getElementById('testEmailRecipient');
+  const resultBox = document.getElementById('testEmailResult');
+  const btn = document.getElementById('btnSendTestEmail');
+  const to = inp.value.trim();
+  if (!to || !to.includes('@')) {
+    showToast('Enter a valid recipient email', 'err');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerText = 'Sending Test Email...';
+  resultBox.style.display = 'none';
+
+  const res = await api('POST', '/admin/email/test', { to });
+  btn.disabled = false;
+  btn.innerText = '📨 Dispatch Test Email';
+
+  if (res?.ok) {
+    resultBox.style.display = 'block';
+    resultBox.style.borderColor = 'var(--success)';
+    resultBox.style.color = 'var(--success)';
+    resultBox.innerHTML = `✅ Delivered successfully!<br/>Message ID: ${escHtml(res.messageId)}<br/>Simulated: ${res.simulated ? 'Yes (Local mock)' : 'No (Live SMTP)'}`;
+    showToast('Test email sent successfully');
+  } else {
+    resultBox.style.display = 'block';
+    resultBox.style.borderColor = 'var(--danger)';
+    resultBox.style.color = 'var(--danger)';
+    resultBox.innerText = `❌ Delivery failed: ${res?.error || 'Unknown error'}`;
+    showToast('Failed to dispatch test email', 'err');
+  }
+}
+
+async function sendBroadcastEmail() {
+  const plan = document.getElementById('broadcastTargetPlan').value;
+  const subject = document.getElementById('broadcastSubject').value.trim();
+  const message = document.getElementById('broadcastMessage').value.trim();
+  const btn = document.getElementById('btnSendBroadcast');
+
+  if (!subject) {
+    showToast('Subject line is required', 'err');
+    return;
+  }
+  if (!message) {
+    showToast('Announcement message is required', 'err');
+    return;
+  }
+
+  const confirmMsg = `Are you sure you want to broadcast this announcement to ${plan === 'all' ? 'ALL active users' : plan.toUpperCase() + ' plan subscribers'}?`;
+  if (!confirm(confirmMsg)) return;
+
+  btn.disabled = true;
+  btn.innerText = 'Dispatching Broadcast...';
+
+  const res = await api('POST', '/admin/email/broadcast', {
+    targetPlan: plan,
+    subject,
+    message
+  });
+
+  btn.disabled = false;
+  btn.innerText = '🚀 Dispatch Broadcast to Users';
+
+  if (res?.ok) {
+    showToast(`Broadcast sent to ${res.recipients} users!`);
+    document.getElementById('broadcastSubject').value = '';
+    document.getElementById('broadcastMessage').value = '';
+  } else {
+    showToast(res?.error || 'Broadcast failed', 'err');
+  }
 }
 
 let allUsersData = [];

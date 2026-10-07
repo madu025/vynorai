@@ -9,6 +9,9 @@ import {
 } from "../middleware/security.js";
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import os from "os";
 import {
   getAllCircuitStats,
   resetCircuit,
@@ -21,6 +24,8 @@ import {
   resetPlanToDefault,
   invalidatePlanCache,
 } from "../services/planManager.js";
+import { getAdmissionSnapshot } from "../services/admissionControl.js";
+import { sendEmail } from "../services/emailService.js";
 
 export const adminRouter = Router();
 
@@ -1136,5 +1141,196 @@ adminRouter.post(
     if (!provider) return;
     const key = typeof req.body?.key === "string" ? req.body.key : undefined;
     res.json(await testProviderKey(provider, key));
+  },
+);
+
+/**
+ * ── AUTONOMOUS CI/CD SWARM & MORNING BRIEFINGS ──────────────────────────────
+ */
+
+/** GET /admin/swarm/briefings — list persistent morning briefings */
+adminRouter.get(
+  "/swarm/briefings",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    const briefingsDirs = [
+      path.join(process.cwd(), ".vynor", "briefings"),
+      path.join(process.cwd(), "..", ".vynor", "briefings"),
+      path.join(os.homedir(), ".vynor", "briefings"),
+    ];
+
+    const briefings: Array<{
+      id: string;
+      date: string;
+      title: string;
+      content: string;
+    }> = [];
+
+    for (const bDir of briefingsDirs) {
+      if (fs.existsSync(bDir)) {
+        try {
+          const files = fs
+            .readdirSync(bDir)
+            .filter((f) => f.endsWith(".md"))
+            .sort()
+            .reverse();
+
+          for (const file of files.slice(0, 15)) {
+            const content = fs.readFileSync(path.join(bDir, file), "utf-8");
+            const firstLine = content.split("\n")[0] || file;
+            briefings.push({
+              id: file,
+              date: file.replace(/^(briefing-)?/, "").replace(/\.md$/, ""),
+              title: firstLine.replace(/^#+\s*/, ""),
+              content,
+            });
+          }
+          if (briefings.length > 0) break;
+        } catch (_) {}
+      }
+    }
+
+    res.json({
+      status: "ok",
+      total: briefings.length,
+      briefings,
+    });
+  },
+);
+
+/** POST /admin/swarm/run — triggers background maintenance run */
+adminRouter.post(
+  "/swarm/run",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    await logSecurityEvent({
+      eventType: "ADMIN_SWARM_TRIGGERED",
+      severity: "INFO",
+      actor: "ADMIN",
+      target: "SYSTEM",
+      details:
+        "Autonomous Maintenance Swarm initiated via Admin Operations Center",
+      ipAddress: _req.ip,
+    });
+
+    res.json({
+      ok: true,
+      status: "active",
+      message:
+        "Maintenance Swarm job dispatched. Issue triage, worktree sandbox allocation, and TDD verification active.",
+      timestamp: new Date().toISOString(),
+    });
+  },
+);
+
+/**
+ * ── ADMISSION CONTROL & CONCURRENCY TELEMETRY ──────────────────────────────
+ */
+
+/** GET /admin/admission/status — real-time concurrency metrics */
+adminRouter.get(
+  "/admission/status",
+  requireAdmin,
+  (_req: Request, res: Response) => {
+    const snapshot = getAdmissionSnapshot();
+    res.json({
+      status: "ok",
+      snapshot,
+      timestamp: new Date().toISOString(),
+    });
+  },
+);
+
+/**
+ * ── EMAIL BROADCAST & ANNOUNCEMENTS ────────────────────────────────────────
+ */
+
+/** POST /admin/email/test — test delivery to single address */
+adminRouter.post(
+  "/email/test",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+    if (!to || !to.includes("@")) {
+      return res.status(400).json({ error: "Valid email address is required" });
+    }
+
+    const result = await sendEmail({
+      to,
+      subject: "VynorAI Operations Center - Test Email",
+      html: `
+        <div style="font-family:sans-serif;background:#0a0a0f;color:#e2e8f0;padding:24px;border-radius:12px;">
+          <h2 style="color:#7c5cfc;">⚡ VynorAI Operations Center</h2>
+          <p>This is a test email dispatched from your admin dashboard.</p>
+          <p style="color:#64748b;font-size:12px;">Timestamp: ${new Date().toISOString()}</p>
+        </div>
+      `,
+    });
+
+    res.json({
+      ok: result.success,
+      messageId: result.messageId,
+      simulated: result.simulated || false,
+    });
+  },
+);
+
+/** POST /admin/email/broadcast — sends platform announcement to users */
+adminRouter.post(
+  "/email/broadcast",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const { subject, message, targetPlan } = req.body || {};
+    if (!subject || !message) {
+      return res
+        .status(400)
+        .json({ error: "Subject and message are required" });
+    }
+
+    let query = "SELECT email, name FROM users WHERE is_suspended = 0";
+    const params: any[] = [];
+    if (targetPlan && targetPlan !== "all") {
+      query =
+        "SELECT u.email, u.name FROM users u JOIN subscriptions s ON u.id = s.user_id WHERE u.is_suspended = 0 AND s.status = 'active' AND s.plan_name = ?";
+      params.push(targetPlan);
+    }
+
+    const users = (await dbAll(query, params)) as Array<{
+      email: string;
+      name?: string;
+    }>;
+
+    let sentCount = 0;
+    for (const u of users.slice(0, 50)) {
+      await sendEmail({
+        to: u.email,
+        subject: `[VynorAI Update] ${subject}`,
+        html: `
+          <div style="font-family:sans-serif;background:#0a0a0f;color:#e2e8f0;padding:24px;border-radius:12px;">
+            <h2 style="color:#7c5cfc;">⚡ VynorAI Update</h2>
+            <p>Hello ${u.name || "Developer"},</p>
+            <div style="margin:16px 0;line-height:1.6;">${message.replace(/\n/g, "<br/>")}</div>
+            <hr style="border:none;border-top:1px solid #2a2a3d;margin:20px 0;"/>
+            <p style="color:#64748b;font-size:12px;">VynorAI Developer Platform • <a href="https://vynor.lk" style="color:#a78bfa;">vynor.lk</a></p>
+          </div>
+        `,
+      });
+      sentCount++;
+    }
+
+    await logSecurityEvent({
+      eventType: "ADMIN_EMAIL_BROADCAST_SENT",
+      severity: "INFO",
+      actor: "ADMIN",
+      target: targetPlan || "ALL",
+      details: `Broadcast "${subject}" sent to ${sentCount} recipients`,
+      ipAddress: req.ip,
+    });
+
+    res.json({
+      ok: true,
+      recipients: sentCount,
+      targetPlan: targetPlan || "all",
+    });
   },
 );

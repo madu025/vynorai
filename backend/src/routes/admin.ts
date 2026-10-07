@@ -24,25 +24,100 @@ import {
 
 export const adminRouter = Router();
 
-// Cryptographically timing-safe admin secret check (set ADMIN_SECRET in .env)
-function requireAdmin(req: Request, res: Response, next: Function) {
+/**
+ * Cryptographically timing-safe admin check:
+ * 1. Cloudflare Zero Trust (Cloudflare Access):
+ *    If incoming request carries `cf-access-authenticated-user-email`
+ *    (optionally with `cf-access-jwt-assertion`), trust the Cloudflare Zero Trust perimeter.
+ * 2. Fallback / Direct / Local Development:
+ *    Inspect `x-admin-secret` header against process.env.ADMIN_SECRET.
+ */
+export function verifyAdminAccess(req: Request): {
+  ok: boolean;
+  authMethod: "cloudflare_zero_trust" | "secret_key" | "unauthorized";
+  email?: string;
+} {
+  const cfEmail = (req.headers["cf-access-authenticated-user-email"] || "")
+    .toString()
+    .trim();
+  const cfJwt = (req.headers["cf-access-jwt-assertion"] || "")
+    .toString()
+    .trim();
+
+  // If request arrived through Cloudflare Access Zero Trust
+  if (
+    cfEmail &&
+    (cfJwt ||
+      process.env.NODE_ENV === "production" ||
+      process.env.NODE_ENV === "test")
+  ) {
+    return {
+      ok: true,
+      authMethod: "cloudflare_zero_trust",
+      email: cfEmail,
+    };
+  }
+
+  // Fallback: x-admin-secret header check
   const secret =
     typeof req.headers["x-admin-secret"] === "string"
       ? req.headers["x-admin-secret"]
       : "";
   const expected = process.env.ADMIN_SECRET || "";
-  if (!expected || expected.length < 32)
+  if (
+    expected &&
+    expected.length >= 32 &&
+    secret.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(expected))
+  ) {
+    return {
+      ok: true,
+      authMethod: "secret_key",
+    };
+  }
+
+  return { ok: false, authMethod: "unauthorized" };
+}
+
+function requireAdmin(req: Request, res: Response, next: Function) {
+  const check = verifyAdminAccess(req);
+  if (check.ok) {
+    (req as any).adminUser = {
+      email: check.email,
+      authMethod: check.authMethod,
+    };
+    return next();
+  }
+
+  const expected = process.env.ADMIN_SECRET || "";
+  if (!expected || expected.length < 32) {
     return res
       .status(503)
       .json({ error: "Admin authentication is not configured" });
-  if (
-    secret.length !== expected.length ||
-    !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(expected))
-  ) {
-    return res.status(401).json({ error: "Unauthorized" });
   }
-  next();
+
+  return res.status(401).json({ error: "Unauthorized" });
 }
+
+/**
+ * GET /admin/session
+ * Returns authentication status. Used by admin UI to detect Cloudflare Zero Trust session on boot.
+ */
+adminRouter.get("/session", (req: Request, res: Response) => {
+  const check = verifyAdminAccess(req);
+  if (check.ok) {
+    return res.json({
+      authenticated: true,
+      authMethod: check.authMethod,
+      email: check.email || null,
+      serverTime: new Date().toISOString(),
+    });
+  }
+  return res.status(401).json({
+    authenticated: false,
+    authMethod: "unauthorized",
+  });
+});
 
 /**
  * GET /admin/health

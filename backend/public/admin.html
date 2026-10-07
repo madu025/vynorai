@@ -134,6 +134,12 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
             👁️
           </button>
         </div>
+        <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
+          <label style="display:flex;align-items:center;gap:7px;font-size:0.78rem;color:var(--muted);cursor:pointer;margin:0;">
+            <input type="checkbox" id="rememberSecretCheckbox" style="width:auto;margin:0;cursor:pointer;" checked>
+            Remember this device
+          </label>
+        </div>
       </div>
 
       <button 
@@ -161,7 +167,7 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
 <div class="header" id="adminHeader" style="display:none;">
   <div class="logo">⚡ VynorAI Operations Center</div>
   <div class="header-right">
-    <span class="badge" style="background:rgba(6,214,160,0.15);color:var(--accent3);display:flex;align-items:center;gap:6px;padding:.4rem .8rem;font-size:.78rem;">
+    <span class="badge" id="adminSessionBadge" style="background:rgba(6,214,160,0.15);color:var(--accent3);display:flex;align-items:center;gap:6px;padding:.4rem .8rem;font-size:.78rem;">
       <span class="status-dot on" style="margin:0"></span> Active Session: Super Admin
     </span>
     <button class="btn btn-ghost" onclick="adminLogout()" style="padding:.4rem .9rem;font-size:.8rem;border-color:rgba(239,68,68,0.3);color:#ef4444;display:flex;align-items:center;gap:6px;">
@@ -508,16 +514,16 @@ async function handleAdminLogin(e) {
       return;
     }
 
-    // Success! Save secret to sessionStorage
+    // Success! Save secret
     currentAdminSecret = secret;
-    sessionStorage.setItem('vynor_admin_secret', secret);
+    const rememberMe = document.getElementById('rememberSecretCheckbox')?.checked;
+    if (rememberMe) {
+      localStorage.setItem('vynor_admin_secret', secret);
+    } else {
+      sessionStorage.setItem('vynor_admin_secret', secret);
+    }
 
-    // Reveal Dashboard
-    document.getElementById('adminLoginGate').style.display = 'none';
-    document.getElementById('adminHeader').style.display = 'flex';
-    document.getElementById('adminLayout').style.display = 'grid';
-
-    loadAll();
+    unlockDashboard('secret_key', null);
     showToast('Admin session authenticated');
   } catch (err) {
     errText.innerText = 'Connection error: ' + err.message;
@@ -528,7 +534,27 @@ async function handleAdminLogin(e) {
   }
 }
 
+function unlockDashboard(authMethod, email) {
+  document.getElementById('adminLoginGate').style.display = 'none';
+  document.getElementById('adminHeader').style.display = 'flex';
+  document.getElementById('adminLayout').style.display = 'grid';
+
+  const badge = document.getElementById('adminSessionBadge');
+  if (badge) {
+    if (authMethod === 'cloudflare_zero_trust') {
+      badge.style.background = 'rgba(6,214,160,0.18)';
+      badge.style.color = 'var(--accent3)';
+      badge.innerHTML = `<span class="status-dot on" style="margin:0"></span> 🛡️ Zero Trust: ${escHtml(email || 'Authorized Staff')}`;
+    } else {
+      badge.innerHTML = `<span class="status-dot on" style="margin:0"></span> Active Session: Super Admin`;
+    }
+  }
+
+  loadAll();
+}
+
 function adminLogout() {
+  localStorage.removeItem('vynor_admin_secret');
   sessionStorage.removeItem('vynor_admin_secret');
   currentAdminSecret = '';
   document.getElementById('adminLayout').style.display = 'none';
@@ -540,9 +566,13 @@ function adminLogout() {
 
 async function api(method, path, body) {
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    const sec = S();
+    if (sec) headers['x-admin-secret'] = sec;
+
     const r = await fetch(API + path, {
       method,
-      headers: { 'x-admin-secret': S(), 'Content-Type': 'application/json' },
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
     if (r.status === 401) {
@@ -1077,23 +1107,36 @@ async function clearCache(type) {
 
 // Session check on load
 window.onload = async () => {
-  const saved = sessionStorage.getItem('vynor_admin_secret');
+  // 1. First: Test Cloudflare Zero Trust Access session (sends CF cookies/headers automatically)
+  try {
+    const cfRes = await fetch(API + '/admin/session');
+    if (cfRes.ok) {
+      const sess = await cfRes.json();
+      if (sess.authenticated && sess.authMethod === 'cloudflare_zero_trust') {
+        unlockDashboard('cloudflare_zero_trust', sess.email);
+        return;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Second: Check saved secret in localStorage or sessionStorage (Remember this device)
+  const saved = localStorage.getItem('vynor_admin_secret') || sessionStorage.getItem('vynor_admin_secret');
   if (saved) {
     currentAdminSecret = saved;
     try {
-      const res = await fetch(API + '/admin/health', {
+      const res = await fetch(API + '/admin/session', {
         headers: { 'x-admin-secret': saved }
       });
       if (res.ok) {
-        document.getElementById('adminLoginGate').style.display = 'none';
-        document.getElementById('adminHeader').style.display = 'flex';
-        document.getElementById('adminLayout').style.display = 'grid';
-        loadOverview();
+        unlockDashboard('secret_key', null);
         return;
       }
     } catch (_) {}
+    localStorage.removeItem('vynor_admin_secret');
     sessionStorage.removeItem('vynor_admin_secret');
+    currentAdminSecret = '';
   }
+
   // Not logged in: show Login Gate
   document.getElementById('adminLoginGate').style.display = 'flex';
   document.getElementById('adminHeader').style.display = 'none';

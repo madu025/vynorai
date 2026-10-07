@@ -108,4 +108,62 @@ describe("SwarmCommand", () => {
     expect(output).toContain("VynorAI Self-Driving Maintenance Briefing");
     expect(output).toContain("Pull Requests Ready for Review");
   });
+
+  it("yields git repository required message if workspace is not a git repo", async () => {
+    const mockIde = {
+      getWorkspaceDirs: vi.fn().mockResolvedValue(["file:///tmp/non-git-dir"]),
+      readFile: vi.fn().mockRejectedValue(new Error("File not found")),
+    };
+    const abortController = new AbortController();
+
+    const chunks: string[] = [];
+    for await (const chunk of SwarmCommand.run({
+      ide: mockIde as any,
+      llm: {} as any,
+      input: "/swarm run",
+      history: [],
+      contextItems: [],
+      params: { skipGitCheckForTesting: false },
+      addContextItem: vi.fn(),
+      selectedCode: [],
+      abortController,
+    } as any)) {
+      if (typeof chunk === "string") {
+        chunks.push(chunk);
+      }
+    }
+
+    const output = chunks.join("");
+    expect(output).toContain("Git Repository Required");
+    expect(output).toContain("git init");
+  });
+
+  it("enforces Pro subscription gate when unauthenticated or free tier", async () => {
+    const mockIde = {
+      getWorkspaceDirs: vi.fn().mockResolvedValue(["file:///workspace/repo"]),
+      readFile: vi.fn().mockRejectedValue(new Error("File not found")),
+    };
+    const abortController = new AbortController();
+
+    const chunks: string[] = [];
+    for await (const chunk of SwarmCommand.run({
+      ide: mockIde as any,
+      llm: { apiKey: "" } as any,
+      input: "/swarm",
+      history: [],
+      contextItems: [],
+      params: { testAuthGate: true },
+      addContextItem: vi.fn(),
+      selectedCode: [],
+      abortController,
+    } as any)) {
+      if (typeof chunk === "string") {
+        chunks.push(chunk);
+      }
+    }
+
+    const output = chunks.join("");
+    expect(output).toContain("VynorAI Pro Feature Required");
+    expect(output).toContain("**Pro** and **Ultra** plan subscribers");
+  });
 });

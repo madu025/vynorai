@@ -22,6 +22,10 @@ import { getRedis, redisStatus } from "./services/redisStore.js";
 import { billingDbStatus } from "./services/billingDb.js";
 import { loadProviderCredentials } from "./services/providerCredentials.js";
 import { scheduleBackgroundReconciliation } from "./services/backgroundTasks.js";
+import {
+  trackRequestStart,
+  trackRequestEnd,
+} from "./services/admissionControl.js";
 
 import { securityHeadersMiddleware } from "./middleware/security.js";
 
@@ -135,6 +139,21 @@ app.use(
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Track real-time in-flight HTTP connections for Admin Live Traffic radar
+app.use((_req, res, next) => {
+  trackRequestStart();
+  let completed = false;
+  const finish = () => {
+    if (!completed) {
+      completed = true;
+      trackRequestEnd();
+    }
+  };
+  res.on("finish", finish);
+  res.on("close", finish);
+  next();
+});
 
 // Login routes MUST be registered before static / 404 handling
 app.get(LOGIN_PATHS, serveLoginPage);

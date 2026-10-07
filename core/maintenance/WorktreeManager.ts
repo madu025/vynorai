@@ -51,6 +51,22 @@ export class WorktreeManager {
   }
 
   /**
+   * Check if the current project root is an initialized Git repository.
+   */
+  async isGitRepository(): Promise<boolean> {
+    const res = await this.runGit(["rev-parse", "--is-inside-work-tree"]);
+    return res.exitCode === 0 && res.stdout.trim() === "true";
+  }
+
+  /**
+   * Check if the Git repository has at least one committed revision (HEAD).
+   */
+  async hasCommits(): Promise<boolean> {
+    const res = await this.runGit(["rev-parse", "--verify", "HEAD"]);
+    return res.exitCode === 0;
+  }
+
+  /**
    * Create an isolated worktree for a specific maintenance task.
    */
   async createWorktree(

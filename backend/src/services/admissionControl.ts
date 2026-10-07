@@ -2,8 +2,10 @@ import {
   acquireDistributedSlot,
   releaseDistributedSlot,
   renewDistributedSlot,
+  getDistributedSlotCount,
   type DistributedSlot,
 } from "./redisStore.js";
+import { billingGet as dbGet } from "./billingDb.js";
 
 const DEFAULT_GLOBAL_LIMIT = 64;
 const DEFAULT_PROVIDER_LIMIT = 48;
@@ -11,6 +13,17 @@ const DEFAULT_WAIT_MS = 750;
 const SLOT_LEASE_MS = 180_000;
 
 const localCounts = new Map<string, number>();
+
+let inFlightRequests = 0;
+export function trackRequestStart(): void {
+  inFlightRequests++;
+}
+export function trackRequestEnd(): void {
+  inFlightRequests = Math.max(0, inFlightRequests - 1);
+}
+export function getActiveInFlightRequests(): number {
+  return inFlightRequests;
+}
 
 export interface AdmissionLease {
   release(): Promise<void>;
@@ -124,21 +137,75 @@ export function localAdmissionCount(scope: string): number {
 }
 
 /** Operational metrics snapshot for Admin Control Center. */
-export function getAdmissionSnapshot() {
+export async function getAdmissionSnapshot() {
+  const globalLimit = positiveInt(
+    process.env.AI_MAX_CONCURRENT,
+    DEFAULT_GLOBAL_LIMIT,
+  );
+  const providerLimit = positiveInt(
+    process.env.AI_PROVIDER_MAX_CONCURRENT,
+    DEFAULT_PROVIDER_LIMIT,
+  );
+
+  const [redisGlobal, redisDeepSeek, redisOpenRouter, redisAnthropic] =
+    await Promise.all([
+      getDistributedSlotCount("ai-global"),
+      getDistributedSlotCount("ai-provider:deepseek"),
+      getDistributedSlotCount("ai-provider:openrouter"),
+      getDistributedSlotCount("ai-provider:anthropic"),
+    ]);
+
+  const localGlobal = localCounts.get("ai-global") || 0;
+  const localDeepSeek = localCounts.get("ai-provider:deepseek") || 0;
+  const localOpenRouter = localCounts.get("ai-provider:openrouter") || 0;
+  const localAnthropic = localCounts.get("ai-provider:anthropic") || 0;
+
+  const now = Date.now();
+  const oneMinAgo = new Date(now - 60 * 1000).toISOString();
+  const fiveMinAgo = new Date(now - 5 * 60 * 1000).toISOString();
+  const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+
+  let rpm = 0;
+  let requests5m = 0;
+  let requests1h = 0;
+  let tokens1h = 0;
+
+  try {
+    const [row1m, row5m, row1h] = await Promise.all([
+      dbGet<{ count: number }>(
+        "SELECT COUNT(*) as count FROM usage_logs WHERE created_at >= ?",
+        [oneMinAgo],
+      ),
+      dbGet<{ count: number }>(
+        "SELECT COUNT(*) as count FROM usage_logs WHERE created_at >= ?",
+        [fiveMinAgo],
+      ),
+      dbGet<{ count: number; tokens: number }>(
+        "SELECT COUNT(*) as count, COALESCE(SUM(tokens_used), 0) as tokens FROM usage_logs WHERE created_at >= ?",
+        [oneHourAgo],
+      ),
+    ]);
+    rpm = Number(row1m?.count || 0);
+    requests5m = Number(row5m?.count || 0);
+    requests1h = Number(row1h?.count || 0);
+    tokens1h = Number(row1h?.tokens || 0);
+  } catch (_) {}
+
   return {
-    globalLimit: positiveInt(
-      process.env.AI_MAX_CONCURRENT,
-      DEFAULT_GLOBAL_LIMIT,
-    ),
-    providerLimit: positiveInt(
-      process.env.AI_PROVIDER_MAX_CONCURRENT,
-      DEFAULT_PROVIDER_LIMIT,
-    ),
-    localGlobalActive: localCounts.get("ai-global") || 0,
+    globalLimit,
+    providerLimit,
+    inFlightRequests: getActiveInFlightRequests(),
+    localGlobalActive: Math.max(redisGlobal, localGlobal),
     localProviders: {
-      deepseek: localCounts.get("ai-provider:deepseek") || 0,
-      openrouter: localCounts.get("ai-provider:openrouter") || 0,
-      anthropic: localCounts.get("ai-provider:anthropic") || 0,
+      deepseek: Math.max(redisDeepSeek, localDeepSeek),
+      openrouter: Math.max(redisOpenRouter, localOpenRouter),
+      anthropic: Math.max(redisAnthropic, localAnthropic),
+    },
+    traffic: {
+      rpm,
+      requests5m,
+      requests1h,
+      tokens1h,
     },
     waitMs: positiveInt(process.env.AI_ADMISSION_WAIT_MS, DEFAULT_WAIT_MS),
   };

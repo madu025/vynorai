@@ -1231,8 +1231,8 @@ adminRouter.post(
 adminRouter.get(
   "/admission/status",
   requireAdmin,
-  (_req: Request, res: Response) => {
-    const snapshot = getAdmissionSnapshot();
+  async (_req: Request, res: Response) => {
+    const snapshot = await getAdmissionSnapshot();
     res.json({
       status: "ok",
       snapshot,

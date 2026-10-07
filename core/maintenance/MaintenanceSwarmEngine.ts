@@ -61,6 +61,20 @@ export class MaintenanceSwarmEngine {
   }
 
   /**
+   * Check whether the project root is an initialized Git repository.
+   */
+  async isGitRepository(): Promise<boolean> {
+    return this.worktreeManager.isGitRepository();
+  }
+
+  /**
+   * Check whether the Git repository has at least one committed revision (HEAD).
+   */
+  async hasCommits(): Promise<boolean> {
+    return this.worktreeManager.hasCommits();
+  }
+
+  /**
    * Resolve repository reference from config or git remote origin.
    */
   async getGitHubRepo(): Promise<GitHubRepoRef | null> {

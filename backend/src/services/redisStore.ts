@@ -275,3 +275,16 @@ export async function renewDistributedSlot(
   );
   return Number(renewed) === 1;
 }
+
+/**
+ * Get active count of distributed semaphore slots for a scope (prunes expired leases).
+ */
+export async function getDistributedSlotCount(scope: string): Promise<number> {
+  const redis = await getRedis();
+  if (!redis) return 0;
+  const key = `vynor:slots:${scope}`;
+  const now = Date.now();
+  await redis.zRemRangeByScore(key, "-inf", String(now)).catch(() => {});
+  const count = await redis.zCard(key).catch(() => 0);
+  return count || 0;
+}

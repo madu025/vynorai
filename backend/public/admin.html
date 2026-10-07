@@ -535,8 +535,39 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <!-- ADMISSION CONTROL & CONCURRENCY -->
     <div class="page" id="page-admission">
       <h1>⚡ Live Traffic &amp; Concurrency Control</h1>
-      <p class="subtitle">Real-time distributed semaphore slots, provider limits, and backpressure telemetry</p>
+      <p class="subtitle">Real-time distributed semaphore slots, provider limits, and live request telemetry</p>
 
+      <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.8rem;color:var(--accent2);display:flex;align-items:center;gap:6px;">
+        <span class="status-dot on"></span> 📡 Real-Time Traffic &amp; In-Flight Radar
+      </h3>
+      <div class="cards" id="trafficCards" style="margin-bottom:1.5rem;">
+        <div class="stat-card">
+          <div class="stat-label">In-Flight Requests</div>
+          <div class="stat-value green" id="admInFlightVal" style="display:flex;align-items:center;gap:8px;">
+            <span class="status-dot on" style="width:10px;height:10px;"></span> 0
+          </div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Live processing now</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Throughput (RPM)</div>
+          <div class="stat-value purple" id="admRpmVal">0</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Requests in last 60s</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">5-Min Traffic Volume</div>
+          <div class="stat-value purple" id="admReq5mVal">0</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Rolling 5m requests</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">1-Hour Tokens Streamed</div>
+          <div class="stat-value amber" id="admTokens1hVal">0</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">Tokens delivered</div>
+        </div>
+      </div>
+
+      <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.8rem;color:var(--accent2);display:flex;align-items:center;gap:6px;">
+        ⚡ Distributed Semaphore Slot Allocation (Redis)
+      </h3>
       <div class="cards" id="admissionCards">
         <div class="stat-card">
           <div class="stat-label">Global Concurrency</div>
@@ -824,6 +855,23 @@ async function loadAdmission() {
   if (!res || !res.snapshot) return;
   const s = res.snapshot;
 
+  // 1. Live Traffic Telemetry
+  const inFlight = s.inFlightRequests || 0;
+  const inFlightEl = document.getElementById('admInFlightVal');
+  if (inFlightEl) {
+    inFlightEl.innerHTML = `<span class="status-dot ${inFlight > 0 ? 'on' : 'off'}" style="width:10px;height:10px;"></span> ${inFlight}`;
+  }
+
+  const rpmEl = document.getElementById('admRpmVal');
+  if (rpmEl) rpmEl.innerText = (s.traffic?.rpm || 0).toLocaleString();
+
+  const req5mEl = document.getElementById('admReq5mVal');
+  if (req5mEl) req5mEl.innerText = (s.traffic?.requests5m || 0).toLocaleString();
+
+  const tokens1hEl = document.getElementById('admTokens1hVal');
+  if (tokens1hEl) tokens1hEl.innerText = (s.traffic?.tokens1h || 0).toLocaleString();
+
+  // 2. Concurrency Slots
   const gLimit = s.globalLimit || 64;
   const pLimit = s.providerLimit || 48;
   const gActive = s.localGlobalActive || 0;
@@ -853,7 +901,7 @@ async function loadAdmission() {
 
   const updatedEl = document.getElementById('admLastUpdated');
   if (updatedEl) {
-    updatedEl.innerText = `Last snapshot: ${new Date().toLocaleTimeString()} (wait: ${s.waitMs}ms)`;
+    updatedEl.innerText = `Live sync: ${new Date().toLocaleTimeString()} (wait: ${s.waitMs}ms)`;
   }
 }
 

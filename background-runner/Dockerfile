@@ -5,9 +5,8 @@ WORKDIR /app/background-runner
 RUN npm install --include=dev
 WORKDIR /app
 COPY background-runner ./background-runner
-COPY core/agent ./core/agent
-COPY core/llm/vynorai-system-prompt.ts ./core/llm/vynorai-system-prompt.ts
-RUN cd background-runner && npm run build
+COPY core ./core
+RUN ln -s /app/background-runner/node_modules /app/node_modules && cd background-runner && npm run build
 
 FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*

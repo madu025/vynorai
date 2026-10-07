@@ -10,6 +10,14 @@ export { chat } from "./chat.js";
 export { listSessionsCommand } from "./ls.js";
 export { review } from "./review.js";
 export { serve } from "./serve.js";
+export { goalCommand } from "./goal.js";
+export {
+  codebaseIndexCommand,
+  codebaseQueryCommand,
+  codebaseSymbolCommand,
+  codebaseStatsCommand,
+} from "./codebase.js";
+export { healCommand } from "./heal.js";
 
 export interface SlashCommand {
   name: string;
@@ -121,6 +129,21 @@ export const SYSTEM_SLASH_COMMANDS: SystemCommand[] = [
   {
     name: "import",
     description: "Import a session from JSON file",
+    category: "system",
+  },
+  {
+    name: "goal",
+    description: "Run autonomous agent goal in headless mode",
+    category: "system",
+  },
+  {
+    name: "codebase",
+    description: "Query and inspect codebase symbol graph",
+    category: "system",
+  },
+  {
+    name: "heal",
+    description: "Execute command with autonomous self-healing",
     category: "system",
   },
 ];

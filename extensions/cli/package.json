@@ -6,7 +6,9 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "bin": {
-    "cn": "dist/cn.js"
+    "cn": "dist/cn.js",
+    "vynor": "dist/cn.js",
+    "vynorai": "dist/cn.js"
   },
   "scripts": {
     "test": "vitest run",

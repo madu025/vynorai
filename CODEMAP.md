@@ -2,7 +2,7 @@
 
 <!-- Competitive gap roadmap vs Claude Code / Codex: docs/VYNORAI_COMPETITIVE_ROADMAP.md -->
 
-> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Production VSIX Offline Extension Packaging & React Webview Bundle Sync, AST-Aware Cross-File Refactoring Engine, Git Worktree Isolation Sandbox Engine, Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
+> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-08 (Headless CLI Runner in extensions/cli, Production VSIX Offline Extension Packaging & React Webview Bundle Sync, AST-Aware Cross-File Refactoring Engine, Git Worktree Isolation Sandbox Engine, Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
 
 ---
 
@@ -354,10 +354,20 @@ The VS Code extension represents the primary IDE client interface for VynorAI, i
 - `extensions/vscode/src/lang-server/`: Integration with standard Language Server Protocol (LSP) for symbol definition and diagnostics.
 - `extensions/vscode/src/checkpoints/AgentCheckpointManager.ts`: Per-file snapshots taken before every agent write or Apply, tagged with the active task (set per prompt in all modes, kept active until the next prompt). Keeps the newest 400 (pruned by mtime). `restoreTasks(taskIds)` restores every touched file to its state before the earliest of those tasks, with a confirm when files changed afterwards. Backs **Rewind to here** ([gui/src/redux/thunks/rewind.ts](file:///d:/My%20Project/VynorAI/gui/src/redux/thunks/rewind.ts), [RewindButton.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/StepContainer/RewindButton.tsx)): each user message stores its `taskId`; rewinding restores files for that prompt and all later ones, truncates the conversation, and puts the prompt back in the input box.
 
-### 3.5 Other Extension Targets
+### 3.5 Headless CLI Runner & Extension Targets (`extensions/cli/`)
 
-- `extensions/cli/`: Headless command-line interface implementation for VynorAI.
 - `extensions/intellij/`: JetBrains IntelliJ platform plugin bridge.
+- [extensions/cli/](file:///d:/My%20Project/VynorAI/extensions/cli/): **Headless CLI Runner** (`vynor` / `vynorai` / `cn`). Enables terminal-first execution without opening VS Code:
+  - **Autonomous Goal Runner (`vynor goal <prompt>`)**:
+    - Runs agent goals directly in terminal shell.
+    - AST symbol decomposition, Git Worktree Sandbox isolation (`--worktree`), verification test gates (`--test-cmd`), pre-flight AST syntax verification, and autonomous terminal self-healing on failure (`--heal`).
+  - **Codebase AST Symbol Graph & Retrieval (`vynor codebase <subcommand>`)**:
+    - `index`: multi-language AST extraction (TS, JS, Python, Go, Rust, Java), bidirectional call-graph edges, and PageRank in-degree centrality calculation.
+    - `query`: hybrid BM25 + dense token semantic search with 1-hop caller/callee context expansion.
+    - `symbol`: detailed symbol definition and caller/callee relationship inspection.
+    - `stats`: architecture hub rankings and graph metrics.
+  - **Autonomous Terminal Self-Healing (`vynor heal <command>`)**:
+    - Executes arbitrary terminal commands, captures compiler/runtime diagnostics (TS23xx, AssertionError, ReferenceError, Python tracebacks), auto-generates surgical fixes with pre-flight AST syntax validation, looping until exit code 0.
 
 ### 3.6 Production Packaging, Webview Sync & Offline VSIX Architecture
 

@@ -78,10 +78,14 @@ try {
       ),
     },
 
-    // Add banner to create require for CommonJS packages
+    // Add banner to create require, __filename, and __dirname for CommonJS packages
     banner: {
       js: `import { createRequire as __createRequire } from 'module';
-const require = __createRequire(import.meta.url);`,
+import { fileURLToPath as __fileURLToPath } from 'url';
+import { dirname as __dirnameFunction } from 'path';
+const require = __createRequire(import.meta.url);
+const __filename = __fileURLToPath(import.meta.url);
+const __dirname = __dirnameFunction(__filename);`,
     },
   });
 

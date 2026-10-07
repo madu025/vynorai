@@ -7,6 +7,14 @@ import { Command } from "commander";
 
 import { chat } from "./commands/chat.js";
 import { checks } from "./commands/checks.js";
+import {
+  codebaseIndexCommand,
+  codebaseQueryCommand,
+  codebaseStatsCommand,
+  codebaseSymbolCommand,
+} from "./commands/codebase.js";
+import { goalCommand } from "./commands/goal.js";
+import { healCommand } from "./commands/heal.js";
 import { listSessionsCommand } from "./commands/ls.js";
 import { review } from "./commands/review.js";
 import { serve } from "./commands/serve.js";
@@ -358,6 +366,102 @@ program
   .option("--verbose", "Enable verbose logging")
   .action(async (options) => {
     await review(options);
+  });
+
+// Goal subcommand - Headless autonomous goal runner
+program
+  .command("goal [prompt]")
+  .description(
+    "Execute autonomous agent goals directly from the terminal without VS Code",
+  )
+  .option("-p, --prompt <prompt>", "Goal prompt to execute")
+  .option("-w, --worktree", "Run inside an isolated Git worktree sandbox")
+  .option(
+    "-t, --test-cmd <cmd>",
+    "Verification test gate command (e.g. 'npm test')",
+  )
+  .option("--heal", "Enable autonomous terminal self-healing on failure", true)
+  .option("--no-heal", "Disable autonomous terminal self-healing")
+  .option("-m, --max-steps <steps>", "Maximum autonomous execution steps", "15")
+  .option("--dry-run", "Simulate goal execution without merging changes")
+  .option("--format <format>", "Output format ('pretty' or 'json')", "pretty")
+  .option("--verbose", "Enable verbose debug logs")
+  .action(async (prompt: string | undefined, options) => {
+    await goalCommand(prompt, options);
+  });
+
+// Codebase subcommand - AST symbol graph and hybrid retrieval
+const codebaseCmd = program
+  .command("codebase")
+  .description("AST symbol graph indexing and hybrid codebase queries");
+
+codebaseCmd
+  .command("index")
+  .description("Index workspace AST into symbol graph and call graph")
+  .option(
+    "--dir <dir>",
+    "Target workspace directory (default: current directory)",
+  )
+  .option("--force", "Force full re-indexing of all files")
+  .option("--json", "Output statistics in JSON format")
+  .action(async (options) => {
+    await codebaseIndexCommand(options);
+  });
+
+codebaseCmd
+  .command("query <query>")
+  .description(
+    "Hybrid BM25 + dense token search with call graph authority boosting",
+  )
+  .option("-k, --top-k <k>", "Number of top results to return", "5")
+  .option("--dir <dir>", "Target workspace directory")
+  .option("--json", "Output results in JSON format")
+  .action(async (query: string, options) => {
+    await codebaseQueryCommand(query, options);
+  });
+
+codebaseCmd
+  .command("symbol <symbol>")
+  .description("Look up symbol definition, caller, and callee relationships")
+  .option("--dir <dir>", "Target workspace directory")
+  .option("--json", "Output symbol details in JSON format")
+  .action(async (symbol: string, options) => {
+    await codebaseSymbolCommand(symbol, options);
+  });
+
+codebaseCmd
+  .command("stats")
+  .description(
+    "Display codebase architecture, symbols count, and hub statistics",
+  )
+  .option("--dir <dir>", "Target workspace directory")
+  .option("--json", "Output statistics in JSON format")
+  .action(async (options) => {
+    await codebaseStatsCommand(options);
+  });
+
+// Heal subcommand - Terminal command runner with diagnostic self-healing
+program
+  .command("heal <command...>")
+  .description(
+    "Execute terminal command with autonomous diagnostic self-healing",
+  )
+  .option(
+    "-a, --max-attempts <attempts>",
+    "Maximum healing iterations (default: 3)",
+    "3",
+  )
+  .option("--timeout <ms>", "Execution timeout in ms (default: 60000)", "60000")
+  .option(
+    "--virtual",
+    "Dry-run simulation in virtual memory without disk writes",
+  )
+  .option("--json", "Output structured healing log as JSON")
+  .action(async (commandParts: string[], options) => {
+    const fullCommand = Array.isArray(commandParts)
+      ? commandParts.join(" ")
+      : String(commandParts);
+    await healCommand(fullCommand, options);
   });
 
 // Handle unknown commands

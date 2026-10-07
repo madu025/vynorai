@@ -162,6 +162,34 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
   {
     type: "function",
     function: {
+      name: "run_in_worktree_sandbox",
+      description:
+        "Execute edits, tests, and tasks inside an isolated Git worktree sandbox without modifying the developer's working directory or dirty uncommitted files. Merges atomically only if test gates pass.",
+      parameters: {
+        type: "object",
+        properties: {
+          taskId: {
+            type: "string",
+            description: "Unique identifier for the task sandbox",
+          },
+          testGateCommand: {
+            type: "string",
+            description:
+              "Test or verification command to run inside sandbox (e.g. 'npm test')",
+          },
+          targetMergeBranch: {
+            type: "string",
+            description:
+              "Target branch to atomically merge into upon success (default: 'main')",
+          },
+        },
+        required: ["taskId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "list_directory",
       description: "List files and folders within a workspace directory.",
       parameters: {

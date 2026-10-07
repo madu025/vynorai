@@ -922,11 +922,9 @@ proxyRouter.post(
       } = req.body;
 
       if (!command || typeof command !== "string") {
-        return res
-          .status(400)
-          .json({
-            error: "Missing or invalid 'command' string in request body",
-          });
+        return res.status(400).json({
+          error: "Missing or invalid 'command' string in request body",
+        });
       }
 
       const { runAutonomousSelfHealingLoop } = await import(
@@ -945,11 +943,120 @@ proxyRouter.post(
       res.status(statusCode).json(result);
     } catch (err: any) {
       console.error("[TerminalSelfHeal] Error in loop execution:", err);
+      res.status(500).json({
+        error: err.message || "Terminal self-healing execution failed",
+      });
+    }
+  },
+);
+
+// ─── POST /v1/sandbox/worktree/spawn (Create Isolated Worktree Sandbox) ──────
+proxyRouter.post(
+  "/sandbox/worktree/spawn",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    try {
+      const { taskId, baseBranch, projectRoot } = req.body;
+      if (!taskId || typeof taskId !== "string") {
+        return res.status(400).json({ error: "Missing or invalid 'taskId'" });
+      }
+
+      const { gitWorktreeSandboxEngine } = await import(
+        "../services/gitWorktreeSandbox.js"
+      );
+
+      const workspaceState =
+        await gitWorktreeSandboxEngine.getWorkspaceState(projectRoot);
+      const sandbox = await gitWorktreeSandboxEngine.spawnSandbox(taskId, {
+        projectRoot,
+        baseBranch,
+      });
+
+      res.json({
+        success: true,
+        sandbox,
+        workspaceState,
+      });
+    } catch (err: any) {
+      console.error("[WorktreeSandbox] Spawn error:", err);
       res
         .status(500)
-        .json({
-          error: err.message || "Terminal self-healing execution failed",
-        });
+        .json({ error: err.message || "Failed to spawn worktree sandbox" });
+    }
+  },
+);
+
+// ─── POST /v1/sandbox/worktree/run (End-to-End Task & Verification Runner) ───
+proxyRouter.post(
+  "/sandbox/worktree/run",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    try {
+      const {
+        taskId,
+        edits,
+        testGateCommand,
+        targetMergeBranch = "main",
+        baseBranch = "HEAD",
+        commitMessage,
+        projectRoot,
+      } = req.body;
+
+      if (!taskId || typeof taskId !== "string") {
+        return res.status(400).json({ error: "Missing or invalid 'taskId'" });
+      }
+
+      const { gitWorktreeSandboxEngine } = await import(
+        "../services/gitWorktreeSandbox.js"
+      );
+
+      const result = await gitWorktreeSandboxEngine.executeTaskInSandbox({
+        taskId,
+        edits,
+        testGateCommand,
+        targetMergeBranch,
+        baseBranch,
+        commitMessage,
+        projectRoot,
+      });
+
+      const statusCode = result.success ? 200 : 422;
+      res.status(statusCode).json(result);
+    } catch (err: any) {
+      console.error("[WorktreeSandbox] Run error:", err);
+      res
+        .status(500)
+        .json({ error: err.message || "Sandbox execution failed" });
+    }
+  },
+);
+
+// ─── POST /v1/sandbox/worktree/cleanup (Clean and Prune Stale Sandbox) ───────
+proxyRouter.post(
+  "/sandbox/worktree/cleanup",
+  requireValidSubscriber,
+  async (req: Request, res: Response) => {
+    try {
+      const { taskId, branchName, projectRoot, deleteBranch = true } = req.body;
+      if (!taskId || typeof taskId !== "string") {
+        return res.status(400).json({ error: "Missing or invalid 'taskId'" });
+      }
+
+      const { gitWorktreeSandboxEngine } = await import(
+        "../services/gitWorktreeSandbox.js"
+      );
+
+      await gitWorktreeSandboxEngine.cleanupSandbox(
+        taskId,
+        branchName,
+        projectRoot,
+        deleteBranch,
+      );
+
+      res.json({ success: true, cleanedUp: taskId });
+    } catch (err: any) {
+      console.error("[WorktreeSandbox] Cleanup error:", err);
+      res.status(500).json({ error: err.message || "Sandbox cleanup failed" });
     }
   },
 );

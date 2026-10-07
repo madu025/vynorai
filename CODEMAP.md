@@ -2,7 +2,7 @@
 
 <!-- Competitive gap roadmap vs Claude Code / Codex: docs/VYNORAI_COMPETITIVE_ROADMAP.md -->
 
-> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
+> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Git Worktree Isolation Sandbox Engine, Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
 
 ---
 
@@ -191,6 +191,10 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
   - **Enterprise Zero-Knowledge Compliance Endpoints**:
     - `GET /v1/zk/compliance-report`: Verifiable SOC2/ISO27001 zero-retention cryptographic audit report.
     - `POST /v1/zk/verify-chain`: Merkle hash chain integrity proof.
+  - **Git Worktree Isolation Sandbox Endpoints**:
+    - `POST /v1/sandbox/worktree/spawn`: Creates an isolated Git worktree on a background task branch, snapshotting developer dirty state and junction-linking dependencies.
+    - `POST /v1/sandbox/worktree/run`: Spawns sandbox, applies file edits, executes test gate verification (with autonomous self-healing on failure), and performs pre-flight atomic merge.
+    - `POST /v1/sandbox/worktree/cleanup`: Removes git worktree registration, cleans directory, and prunes stale references.
 - [backend/src/routes/admin.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/admin.ts):
   - Enterprise administration panel endpoints for user management, plan overrides, quota manual adjustments, system logs, and security monitoring.
 - [backend/src/routes/payment.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/payment.ts):
@@ -281,6 +285,15 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
   - Multi-tier matching strategies: exact position, sliding window line-shift tolerance, whitespace/indentation normalized fuzzy match, and AST symbol-anchored boundary matching.
 - [backend/src/services/unifiedDiffParser.ts](file:///d:/My%20Project/VynorAI/backend/src/services/unifiedDiffParser.ts): Universal diff parser for standard Git unified diffs (`diff --git`, `---`, `+++`, `@@`) and search/replace blocks.
 - [backend/src/services/syntaxValidator.ts](file:///d:/My%20Project/VynorAI/backend/src/services/syntaxValidator.ts): High-speed pre-flight syntax validator analyzing TypeScript, JavaScript, TSX, JSX, JSON, Python, and CSS before disk writes.
+
+#### G. Git Worktree Isolation Sandbox Engine
+
+- [backend/src/services/gitWorktreeSandbox.ts](file:///d:/My%20Project/VynorAI/backend/src/services/gitWorktreeSandbox.ts): **Git Worktree Isolation Sandbox Engine (`GitWorktreeSandboxEngine`)**.
+  - **Zero Workspace Disruption**: Snapshots uncommitted dirty developer modifications (`git status --porcelain`) and verifies the main active branch remains 100% untouched while agent tasks execute in parallel.
+  - **Instant Dependency Sharing**: Employs native Windows NTFS directory junctions (`junction`) and Unix symlinks to link `node_modules` into worktrees with sub-millisecond latency, eliminating duplicate `npm install` delays.
+  - **Background Test Gates & Self-Healing**: Runs test commands (`npm test`, custom test commands) inside the sandbox with automatic integration to `runAutonomousSelfHealingLoop` to heal compiler diagnostics on failure.
+  - **Atomic Merge & Rollback**: Conducts dry-run pre-flight conflict checks (`git merge --no-commit --no-ff`) before merging; aborts cleanly (`git merge --abort`) if conflicts arise, ensuring zero corruption to main repo HEAD.
+  - **Agent Tool Integration**: Exposes `run_in_worktree_sandbox` in [agentEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/agentEngine.ts) for LLMs to run risky coding modifications safely in background sandboxes.
 
 ---
 

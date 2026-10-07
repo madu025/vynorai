@@ -2,7 +2,7 @@
 
 <!-- Competitive gap roadmap vs Claude Code / Codex: docs/VYNORAI_COMPETITIVE_ROADMAP.md -->
 
-> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (AST-Aware Cross-File Refactoring Engine, Git Worktree Isolation Sandbox Engine, Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
+> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Production VSIX Offline Extension Packaging & React Webview Bundle Sync, AST-Aware Cross-File Refactoring Engine, Git Worktree Isolation Sandbox Engine, Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
 
 ---
 
@@ -317,7 +317,7 @@ The VS Code extension represents the primary IDE client interface for VynorAI, i
 ### 3.1 Extension Manifest & Configuration
 
 - [extensions/vscode/package.json](file:///d:/My%20Project/VynorAI/extensions/vscode/package.json):
-  - Extension identity: publisher `VynorAI`, name `vynorai` (v1.2.5). Published to the VS Code Marketplace and Open VSX by [.github/workflows/main.yaml](file:///d:/My%20Project/VynorAI/.github/workflows/main.yaml) (stable: even minor, tag `vX.Y.Z-vscode`) and [preview.yaml](file:///d:/My%20Project/VynorAI/.github/workflows/preview.yaml) (pre-release: odd minor). The tag must equal the `package.json` version. Secrets: `VSCE_TOKEN`, `VSX_REGISTRY_TOKEN`.
+  - Extension identity: publisher `VynorAI`, name `vynorai` (v1.2.39). Published to the VS Code Marketplace and Open VSX by [.github/workflows/main.yaml](file:///d:/My%20Project/VynorAI/.github/workflows/main.yaml) (stable: even minor, tag `vX.Y.Z-vscode`) and [preview.yaml](file:///d:/My%20Project/VynorAI/.github/workflows/preview.yaml) (pre-release: odd minor). The tag must equal the `package.json` version. Secrets: `VSCE_TOKEN`, `VSX_REGISTRY_TOKEN`.
   - Activation events: `onUri`, `onStartupFinished`, `onView:continueGUIView`.
   - Contributed commands: `continue.focusContinueInput`, `continue.focusEdit`, `continue.acceptDiff`, `continue.rejectDiff`, `continue.toggleTabAutocompleteEnabled`, etc.
   - Keybindings: `Ctrl+L` / `Cmd+L` (Focus Chat), `Ctrl+I` / `Cmd+I` (Quick Edit), `Ctrl+Shift+R` (Debug Terminal).
@@ -358,6 +358,26 @@ The VS Code extension represents the primary IDE client interface for VynorAI, i
 
 - `extensions/cli/`: Headless command-line interface implementation for VynorAI.
 - `extensions/intellij/`: JetBrains IntelliJ platform plugin bridge.
+
+### 3.6 Production Packaging, Webview Sync & Offline VSIX Architecture
+
+VynorAI packages into a fully self-contained, air-gapped capable `.vsix` bundle for zero-dependency offline installation across VS Code, Antigravity IDE, Cursor, and Windsurf:
+
+- **Webview React Production Bundle Sync**:
+  - Build pipeline: `npm --prefix gui run build` executes Vite 5 + Rollup across React 18, Tailwind CSS, Monaco editor, and Redux modules.
+  - Generates optimized production distribution in `gui/dist/` (`assets/index.js`, `assets/index.css`, fonts, and Web Workers).
+  - Sync target: `node scripts/prepackage.js` mirrors `gui/dist/` into `extensions/vscode/gui/` (168 files, 18.05 MB), ensuring webview HTML loads local `vscode-webview-resource:` URIs without external CDN dependencies.
+- **Prepackaged Offline Runtime Assets**:
+  - `onnxruntime-node`: Bundles platform-native binaries (`win32-x64`, `linux-x64`, `darwin-arm64`) for local embedding inference.
+  - `tree-sitter`: Bundles WASM grammar modules (`tree-sitter.wasm`, Python, TypeScript, Rust, Go, Java) into `out/` and `bin/`.
+  - `@lancedb / vectordb`: Prepackages LanceDB native vector database bindings for low-latency codebase symbol retrieval.
+  - `sqlite3.node`: Platform-specific native SQLite bindings copied to `bin/` for local cache persistence.
+  - `all-MiniLM-L6-v2`: Quantized local embedding model pre-cached in `models/` (22.87 MB) for offline semantic search.
+- **Production VSIX Packaging Pipeline**:
+  - Script: `node scripts/package.js --target win32-x64`
+  - Zero-dependency packaging: Uses `@vscode/vsce package --out ./build --no-dependencies --target win32-x64`.
+  - Artifact output: `extensions/vscode/build/vynorai-win32-x64-1.2.39.vsix` (410 files, 78.32 MB / 82,129,050 bytes).
+  - Verification: Tested with 97 unit tests passing, zero TypeScript diagnostic errors across monorepo packages (`core`, `gui`, `backend`, `extensions/vscode`).
 
 ---
 

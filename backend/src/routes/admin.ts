@@ -64,9 +64,10 @@ export function verifyAdminAccess(req: Request): {
       ? req.headers["x-admin-secret"]
       : "";
   const expected = process.env.ADMIN_SECRET || "";
+  const minLength = process.env.NODE_ENV === "production" ? 32 : 16;
   if (
     expected &&
-    expected.length >= 32 &&
+    expected.length >= minLength &&
     secret.length === expected.length &&
     crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(expected))
   ) {
@@ -90,7 +91,8 @@ function requireAdmin(req: Request, res: Response, next: Function) {
   }
 
   const expected = process.env.ADMIN_SECRET || "";
-  if (!expected || expected.length < 32) {
+  const minLength = process.env.NODE_ENV === "production" ? 32 : 16;
+  if (!expected || expected.length < minLength) {
     return res
       .status(503)
       .json({ error: "Admin authentication is not configured" });

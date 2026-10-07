@@ -2,7 +2,7 @@
 
 <!-- Competitive gap roadmap vs Claude Code / Codex: docs/VYNORAI_COMPETITIVE_ROADMAP.md -->
 
-> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-04 (PostgreSQL system of record, two backend workers behind Caddy with zero-downtime rolling deploys, in-process tier classifier replacing the VPS SLM, cost-weighted credits, append-only context with pre-summarized compaction, image input on V4.1 Flash, ranked repo map, economics dashboard).
+> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Autonomous Maintenance Swarm, Cloud GitHub Integration Provider, Self-Healing Engine, 4-Pillar Senior Staff /review, Long-running /goal mode, Redis admission control backpressure, transactional email OTP services, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy with zero-downtime rolling deploys, cost-weighted credits).
 
 ---
 
@@ -27,6 +27,58 @@ flowchart LR
     H --> I[hybridContext<br/>append-only history ·<br/>compaction at 85%, summary<br/>prepared at 70% · read dedupe]
     I --> J[providerRouter<br/>DeepSeek direct → OpenRouter<br/>Pro down → Flash max]
     J --> K[Settle cost-weighted credits<br/>input 1 · cached 0.1 · output 4<br/>× model × off-peak]
+```
+
+### 1.2 The Perfection Loop (Autonomous CI/CD & Self-Healing Architecture)
+
+VynorAI executes background autonomous engineering through the **Perfection Loop**—a zero-disruption TDD lifecycle that inspects, reproduces, heals, reviews, and delivers production-grade code without human developer intervention:
+
+```mermaid
+flowchart TD
+    subgraph S1 ["1. Issue Triage (IssueTriageProvider)"]
+        GH["GitHub Issues<br/>(GET /repos/:owner/:repo/issues)"]
+        BP["Local Blueprints<br/>(.vynor/blueprints/*.md)"]
+        SN["Sentry Crashes / Logs"]
+        SEC["Security Audits<br/>(CVE / npm audit)"]
+        GH & BP & SN & SEC --> Rank["Priority Scoring<br/>(P0 Critical ➔ P3 Chore)"]
+    end
+
+    subgraph S2 ["2. Isolated Worktree Sandbox (WorktreeManager)"]
+        Rank --> WT["Lock & allocate isolated git worktree<br/>(.vynor-worktrees/vynor-swarm-*)"]
+        WT --> Safe["Zero workspace disruption<br/>(developer stays on active branch)"]
+    end
+
+    subgraph S3 ["3. Red Phase (Reproduction Test Synthesis)"]
+        Safe --> RedTest["Synthesize targeted reproduction test<br/>(*.repro.vitest.ts)"]
+        RedTest --> RedExec["Execute test ➔ Confirm failure (RED)"]
+    end
+
+    subgraph S4 ["4. Self-Healing Loop (SelfHealingEngine)"]
+        RedExec --> ErrSig["Parse stderr failure signature<br/>(AssertionError / TS errors / Stack)"]
+        ErrSig --> Patch["Generate surgical AST patch"]
+        Patch --> Verify["Run verification gate (test / typecheck)"]
+        Verify -- Fail (Attempts < 3) --> ErrSig
+        Verify -- Pass --> Green["All tests green (GREEN)"]
+    end
+
+    subgraph S5 ["5. 4-Pillar Senior Staff Review (/review)"]
+        Green --> Diff["Extract git diff HEAD"]
+        Diff --> P1["1. Security & Auth"]
+        Diff --> P2["2. Logic & Edge Cases"]
+        Diff --> P3["3. Performance & Memory"]
+        Diff --> P4["4. Test & Verification Gaps"]
+    end
+
+    subgraph S6 ["6. Remote Push & PR (GitHubIntegrationProvider)"]
+        P1 & P2 & P3 & P4 --> Push["Git push origin branch<br/>(pushBranch)"]
+        Push --> PR["Create GitHub Pull Request<br/>(POST /repos/:owner/:repo/pulls)"]
+        PR --> Labels["Tag labels: automated, vynor-swarm"]
+    end
+
+    subgraph S7 ["7. Morning Briefing (MorningBriefing)"]
+        Labels --> Briefing["Compile executive markdown report<br/>(.vynor/briefings/briefing-DATE.md)"]
+        Briefing --> Notify["Toast notification & GUI dashboard update"]
+    end
 ```
 
 ```mermaid
@@ -116,6 +168,10 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
   - User registration, login, and password management.
   - Ephemeral loopback handshake (`/api/auth/ide-exchange`, `/api/auth/ide-token-poll`).
   - Session verification (`/api/auth/me`) and API key regeneration.
+  - Password reset workflows (`/api/auth/request-password-reset`, `/api/auth/reset-password`).
+  - Email verification & OTP delivery (`/api/auth/verify-email`, `/api/auth/resend-verification`).
+- [backend/public/support.html](file:///d:/My%20Project/VynorAI/backend/public/support.html):
+  - Self-service customer support center providing FAQ guides, troubleshooting instructions, billing issue resolution paths, and direct support contact hooks.
 - [backend/src/routes/proxy.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/proxy.ts):
   - OpenAI-compatible chat completions proxy endpoint (`/v1/chat/completions`) with SSE streaming support.
   - Dynamic model listing (`/v1/models`) enforcing subscriber plan boundaries.
@@ -138,6 +194,7 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
 #### A. AI Proxy, Routing & Completion
 
 - [backend/src/services/aiProxy.ts](file:///d:/My%20Project/VynorAI/backend/src/services/aiProxy.ts): Master proxy engine orchestrating incoming `/v1/chat/completions` calls. Coordinates API key authentication, secret sanitization, quota reservation, exact/semantic cache inspection, 5-layer SLM delegation, and upstream streaming.
+- [backend/src/services/admissionControl.ts](file:///d:/My%20Project/VynorAI/backend/src/services/admissionControl.ts): **Distributed admission control & backpressure engine**. Bounds concurrent upstream LLM calls across all API replicas using distributed Redis lease slots (`acquireDistributedSlot`, `releaseDistributedSlot`) with process-local fallback (`takeLocal`). Enforces global concurrency ceiling (64) and per-provider concurrency caps (48) with non-blocking backpressure shedding (503 Overloaded) to prevent upstream rate-limit cascades.
 - [backend/src/services/localSlmRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/localSlmRouter.ts): **Tier router**. `ROUTER_MODE=classifier` (default) uses `tierClassifier.ts`, an in-process logistic-regression model over hashed word and bigram features, distilled from DeepSeek labels on synthetic prompts (`backend/ml/`, `scripts/buildTierDataset.ts`, `scripts/trainTierClassifier.ts`): about 85% on an independent hand-labeled test set vs 56% for rules. `slm` mode uses the optional llama.cpp server with admission control; `rules` is deterministic only. Intent and mutation authority stay deterministic (`isMutationRequest`; edit tools stay on once a conversation asked for changes). `summarizeConversation()` writes the structured compaction digest (Goal / Decisions / Files / Errors / Open tasks) through `backgroundLlm.ts`: DeepSeek Flash with thinking off, or a GPU server that owns the `compaction` role, falling back to DeepSeek.
 - [backend/src/services/autoRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/autoRouter.ts): **Auto model routing**. Coding runs on DeepSeek V4.1 Flash (`deepseek-flash`): light/normal with thinking off, heavy (big coding work) with thinking on. Only deep logic reasoning (`refineTier`: race conditions, algorithms, proofs, security audits, root-cause analysis, system design) is promoted to the `deep` tier on DeepSeek V4 Pro. Pro costs 5× credits, so `aiProxy.ts` tops up the reservation (`topUpReservation`) and falls back to Flash with thinking when the cycle can't cover it; plans without Pro get the same fallback. Override with `AUTO_MODEL_LIGHT|NORMAL|HEAVY|DEEP`. Falls back to the plan default when a tier model is not entitled, and applies per-tier output caps and reasoning effort (heavy `low`, deep `high`). Turns with an image part never go to a text-only model (V4 Pro); Auto drops them to heavy on Flash. DeepSeek V4 thinks by default, so `providerRouter.ts` sends `thinking: disabled` unless a turn opts in, and always passes `reasoning_content` back in history.
 - [backend/src/services/semanticCache.ts](file:///d:/My%20Project/VynorAI/backend/src/services/semanticCache.ts): **Semantic cache** for short, generic, first-turn questions with no code or project context. Uses the `vynor-embed` bge-small service. Per-user by default (`SEMANTIC_CACHE_SCOPE=global` shares generic Q&A).
@@ -190,7 +247,7 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
 - [backend/src/services/circuitBreaker.ts](file:///d:/My%20Project/VynorAI/backend/src/services/circuitBreaker.ts): Protects against cascading failures from slow or failing external LLM providers.
 - [backend/src/services/ideAuthCodes.ts](file:///d:/My%20Project/VynorAI/backend/src/services/ideAuthCodes.ts): Generates and tracks short-lived cryptographically random codes for IDE authentication.
 - [backend/src/services/webSearch.ts](file:///d:/My%20Project/VynorAI/backend/src/services/webSearch.ts): Web search query integration for real-time documentation retrieval.
-- [backend/src/services/emailService.ts](file:///d:/My%20Project/VynorAI/backend/src/services/emailService.ts): Sends transactional onboarding, password reset, and receipt emails via Nodemailer.
+- [backend/src/services/emailService.ts](file:///d:/My%20Project/VynorAI/backend/src/services/emailService.ts): Multi-provider transactional email engine (Resend HTTP API + SMTP via Nodemailer) powering OTP verification codes, password resets, welcome onboarding, and payment receipts with safe local fallback.
 
 ---
 
@@ -369,18 +426,77 @@ sequenceDiagram
 - `core/autocomplete/`: Autocomplete formatting, multiline heuristic filters, and prompt template construction.
 - `core/nextEdit/`: Predictive next edit suggestion engine.
 
-### 5.6 Proactive Self-Driving Maintenance Swarm (`core/maintenance/`)
+### 5.6 Built-In Slash Commands & Developer Workflows (`core/commands/slash/built-in-legacy/`)
 
-VynorAI's 10-year proactive autonomous CI/CD background agent:
+VynorAI extends the IDE chat environment with high-leverage agentic slash commands:
 
-- [core/maintenance/types.ts](file:///d:/My%20Project/VynorAI/core/maintenance/types.ts): Data contracts for issue triage, reproduction test specs, task results, and morning briefings.
-- [core/maintenance/IssueTriageProvider.ts](file:///d:/My%20Project/VynorAI/core/maintenance/IssueTriageProvider.ts): Autonomous issue discovery and prioritization across GitHub Issues (`gh issue list`), Sentry production crash stack traces, and `npm audit`/`cargo audit` security CVEs.
-- [core/maintenance/WorktreeManager.ts](file:///d:/My%20Project/VynorAI/core/maintenance/WorktreeManager.ts): Zero-interruption Git worktree manager running tasks in `.vynor-worktrees/` so the developer's working tree and active IDE branch are never disrupted.
-- [core/maintenance/MaintenanceSwarmEngine.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MaintenanceSwarmEngine.ts): Autonomous CI/CD loop: Triage → Isolated Worktree → Reproduction Test (Red) → Minimal Patch → Verification Gate (Green) → PR Creation.
+- [core/commands/slash/built-in-legacy/index.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/index.ts): Central registry and dispatcher for built-in legacy slash commands, giving priority to VynorAI exclusive commands over upstream base commands.
+- [core/commands/slash/built-in-legacy/goal.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/goal.ts): `/goal` — **Long-Running Autonomous Milestone Execution**:
+  - Deconstructs ambiguous multi-file feature requests or refactors into structured, verifiable milestone DAGs.
+  - Orchestrates iterative agent loops with TDD verification gates at each milestone.
+  - Persists state in `TaskJournal` so complex, long-running tasks can be resumed seamlessly across IDE restarts.
+- [core/commands/slash/built-in-legacy/swarm.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/swarm.ts): `/swarm` — **Autonomous Background Maintenance & Briefing Inspector**:
+  - Triggers the proactive CI/CD maintenance swarm on demand across workspace repositories.
+  - Inspects existing morning briefings in `.vynor/briefings/` and renders actionable status cards in the chat UI.
+- [core/commands/slash/built-in-legacy/review.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/review.ts): `/review` — **4-Pillar Senior Staff Code Review**:
+  - Runs `git diff HEAD` across working tree to extract real code modifications.
+  - Evaluates changes against 4 senior staff engineering pillars:
+    1. _Security & Auth_ (SQLi, XSS, token leakage, SSRF, broken permissions)
+    2. _Logic & Edge Cases_ (off-by-one errors, null dereferences, race conditions, async leaks)
+    3. _Performance & Memory_ (N+1 queries, unindexed lookups, memory bloat, CPU thrashing)
+    4. _Test & Verification Gaps_ (missing unit/integration tests, untested failure branches)
+- [core/commands/slash/built-in-legacy/init.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/init.ts): `/init` — **Project Architecture Onboarding & Rule Scaffolder**:
+  - Scans workspace manifests (`package.json`, `Cargo.toml`, `go.mod`, etc.) to detect tech stacks and package managers.
+  - Generates tailored `.vynor/rules.md` file defining project conventions, coding guidelines, and verification commands.
+- [core/commands/slash/built-in-legacy/vynorai-commands.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/vynorai-commands.ts): **VynorAI Core Developer Command Suite**:
+  - `/fix`: Surgical bug diagnosis from compiler errors or stack traces, generating minimal diffs.
+  - `/explain`: Structural code walkthrough with architecture role and complexity analysis.
+  - `/test`: Automated unit and integration test synthesis using the repository's test runner (Vitest, Jest, PyTest, Go test).
+  - `/refactor`: Clean code transformation adhering to SOLID and DRY design patterns without changing runtime behavior.
+  - `/docs`: Generates typed TSDoc / JSDoc / GoDoc documentation comments with param and return contracts.
+  - `/security`: Static code vulnerability scan identifying OWASP Top 10 risks and data leakages.
+  - `/optimize`: Algorithmic complexity reduction ($O(N)$), memory allocation tuning, and caching advice.
+  - `/scaffold`: Full-stack file and component generation from architectural blueprints.
+
+### 5.7 Proactive Autonomous Maintenance Swarm & Self-Healing (`core/maintenance/`)
+
+VynorAI's 10-year proactive autonomous CI/CD background agent running the complete **Perfection Loop**:
+
+- [core/maintenance/MaintenanceSwarmEngine.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MaintenanceSwarmEngine.ts): Master autonomous orchestrator executing the full perfection lifecycle:
+  - Triage prioritized issues via `IssueTriageProvider`.
+  - Allocate an isolated Git worktree via `WorktreeManager`.
+  - Synthesize a reproduction test spec (`*.repro.vitest.ts`) and execute to confirm RED failure.
+  - Invoke `SelfHealingEngine` to apply targeted edits until GREEN verification passes.
+  - Commit verified changes and push branch to remote `origin`.
+  - Create a GitHub Pull Request via `GitHubIntegrationProvider` with reproduction receipts.
+  - Persist the executive morning digest via `MorningBriefing`.
+- [core/maintenance/WorktreeManager.ts](file:///d:/My%20Project/VynorAI/core/maintenance/WorktreeManager.ts): **Zero-Interruption Git Worktree Sandbox Manager**:
+  - Manages isolated worktree workspaces in `.vynor-worktrees/` ensuring developer working tree and active IDE branch are never disrupted.
+  - Windows-safe execution: uses `shell: false` in `child_process.spawn` to prevent `cmd.exe` path truncation on directory paths containing spaces.
+  - Correct Git flag order: `git worktree add -b <branchName> <path>`.
+  - Handles branch creation, commit creation, and remote branch pushing (`pushBranch`).
+  - Automated directory pruning, locking, and clean removal on job completion.
+- [core/maintenance/SelfHealingEngine.ts](file:///d:/My%20Project/VynorAI/core/maintenance/SelfHealingEngine.ts): **Autonomous Error Signature Parsing & TDD Self-Healing Engine**:
+  - Regex-based error signature extractor parsing Vitest/Jest `AssertionError` (Expected vs Received), TypeScript compiler errors (`error TS\d+: ...`), and stack trace source line locators.
+  - Formulates targeted AST surgical patches for failing tests.
+  - Executes iterative healing loop with bounded attempts (`maxAttempts: 3`), ensuring regression prevention and convergence to green.
+- [core/maintenance/GitHubIntegrationProvider.ts](file:///d:/My%20Project/VynorAI/core/maintenance/GitHubIntegrationProvider.ts): **Zero-Dependency Native Cloud GitHub REST Integration**:
+  - `parseGitHubRemote(url)`: Robust parser supporting HTTPS (`https://github.com/owner/repo.git`) and SSH (`git@github.com:owner/repo.git`) remotes.
+  - `fetchIssues(owner, repo, options)`: Fetches open GitHub issues via `GET /repos/:owner/:repo/issues` with automated pagination, token authentication via `GITHUB_TOKEN` / `GH_TOKEN`, and fallback to local blueprints when offline.
+  - `createPullRequest(params)`: Creates real pull requests on GitHub via `POST /repos/:owner/:repo/pulls` with detailed markdown descriptions, reproduction test receipts, and verification evidence.
+  - `addLabels(owner, repo, issueNumber, labels)`: Automatically applies `automated`, `vynor-swarm` labels.
+  - `findExistingPr(owner, repo, headBranch)`: Prevents duplicate PR creation across swarm runs.
+- [core/maintenance/IssueTriageProvider.ts](file:///d:/My%20Project/VynorAI/core/maintenance/IssueTriageProvider.ts): Autonomous issue discovery and prioritization across GitHub Issues, local blueprints (`.vynor/blueprints/*.md`), Sentry crash stack traces, and `npm audit`/`cargo audit` security CVEs.
 - [core/maintenance/MorningBriefing.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MorningBriefing.ts): Generates the executive morning report (`.vynor/briefings/briefing-<DATE>.md`) summarizing PRs ready for review with reproduction proofs.
-- [core/commands/slash/built-in-legacy/swarm.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/swarm.ts): Interactive `/swarm` slash command and briefing inspector.
+- [core/maintenance/types.ts](file:///d:/My%20Project/VynorAI/core/maintenance/types.ts): Shared TypeScript interfaces for issues, reproduction specs, worktree allocations, GitHub PR records, and briefing summaries.
+- **Verification & Test Suites**:
+  - [core/maintenance/SelfHealingEngine.vitest.ts](file:///d:/My%20Project/VynorAI/core/maintenance/SelfHealingEngine.vitest.ts): Validates failure signature parsing, iterative repair recovery, and attempt bounding.
+  - [core/maintenance/GitHubIntegrationProvider.vitest.ts](file:///d:/My%20Project/VynorAI/core/maintenance/GitHubIntegrationProvider.vitest.ts): Validates URL parsing (HTTPS/SSH), mock PR creation, label application, and error recovery.
+  - [core/maintenance/EcommerceSwarmEndToEnd.vitest.ts](file:///d:/My%20Project/VynorAI/core/maintenance/EcommerceSwarmEndToEnd.vitest.ts): Full autonomous e-commerce bug fix simulation (discount calculation bug -> reproduction test -> self-healing -> green).
+  - [core/maintenance/MaintenanceSwarmEngine.vitest.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MaintenanceSwarmEngine.vitest.ts): Orchestrator unit tests.
+  - [core/maintenance/run-actual-live-swarm.ts](file:///d:/My%20Project/VynorAI/core/maintenance/run-actual-live-swarm.ts): 100% real on-disk git worktree and GitHub API live execution script.
 
-### 5.7 Dynamic Grammar & Language Synthesis Engine (`core/syntax/`)
+### 5.8 Dynamic Grammar & Language Synthesis Engine (`core/syntax/`)
 
 VynorAI's 10-year language resilience engine for emerging/future programming languages without core updates:
 
@@ -428,42 +544,47 @@ VynorAI's 10-year language resilience engine for emerging/future programming lan
 
 ## 7. Cross-Component Communication Matrix
 
-| Source                   | Destination               | Protocol / Transport                        | Purpose                                                                                |
-| :----------------------- | :------------------------ | :------------------------------------------ | :------------------------------------------------------------------------------------- |
-| **Browser OAuth**        | **Extension Host**        | HTTP `127.0.0.1:41403` / URI Scheme         | Transmits auth tokens from web portal to IDE                                           |
-| **GUI Webview**          | **Extension Host**        | `vscode.postMessage` / typed IPC            | Chat inputs, settings updates, diff decisions                                          |
-| **GUI ModelSelect**      | **Core Engine**           | `config/updateSelectedModel` IPC            | Instant multi-role model switching with fallback profile resolution                    |
-| **Extension Host**       | **Core Engine**           | In-Process TypeScript API / Stream          | Prompt evaluation, indexing queries, tool executions                                   |
-| **Agent Control Center** | **AgentOrchestrator**     | Typed `agent/task/*` and `agent/plan/*` IPC | Plan progress, safety budgets, cancellation, and resumable execution                   |
-| **Verification UI**      | **VerificationDiscovery** | `workspace/getVerificationPlan` IPC         | Approval-required test/typecheck/lint/build suggestions without exposing script bodies |
-| **Extension Host**       | **Backend Proxy**         | HTTPS REST / SSE Stream                     | Chat completions, FIM autocompletions, model lists                                     |
-| **Extension Host**       | **Backend Auth**          | HTTPS REST (`/api/auth/*`)                  | Token exchange, session polling, subscription query                                    |
-| **Caddy**                | **Backend workers**       | HTTP, sticky hash of `Authorization`        | Load balancing, `/ready` health checks, zero-downtime rolling deploys                  |
-| **Backend Proxy**        | **Background LLM**        | HTTPS DeepSeek / optional GPU server        | Conversation compaction digests off the request path                                   |
-| **Backend Proxy**        | **Upstream LLMs**         | HTTPS REST / Streaming                      | Forwards cache-miss prompts to DeepSeek/OpenRouter/Anthropic                           |
-| **Core Indexer**         | **Local DBs**             | SQLite FTS5 / LanceDB                       | Persistent vector and keyword search indices                                           |
+| Source                        | Destination                | Protocol / Transport                        | Purpose                                                                                |
+| :---------------------------- | :------------------------- | :------------------------------------------ | :------------------------------------------------------------------------------------- |
+| **Browser OAuth**             | **Extension Host**         | HTTP `127.0.0.1:41403` / URI Scheme         | Transmits auth tokens from web portal to IDE                                           |
+| **GUI Webview**               | **Extension Host**         | `vscode.postMessage` / typed IPC            | Chat inputs, settings updates, diff decisions                                          |
+| **GUI ModelSelect**           | **Core Engine**            | `config/updateSelectedModel` IPC            | Instant multi-role model switching with fallback profile resolution                    |
+| **Extension Host**            | **Core Engine**            | In-Process TypeScript API / Stream          | Prompt evaluation, indexing queries, tool executions                                   |
+| **Agent Control Center**      | **AgentOrchestrator**      | Typed `agent/task/*` and `agent/plan/*` IPC | Plan progress, safety budgets, cancellation, and resumable execution                   |
+| **Verification UI**           | **VerificationDiscovery**  | `workspace/getVerificationPlan` IPC         | Approval-required test/typecheck/lint/build suggestions without exposing script bodies |
+| **Extension Host**            | **Backend Proxy**          | HTTPS REST / SSE Stream                     | Chat completions, FIM autocompletions, model lists                                     |
+| **Extension Host**            | **Backend Auth**           | HTTPS REST (`/api/auth/*`)                  | Token exchange, session polling, subscription query                                    |
+| **Caddy**                     | **Backend workers**        | HTTP, sticky hash of `Authorization`        | Load balancing, `/ready` health checks, zero-downtime rolling deploys                  |
+| **providerRouter**            | **admissionControl**       | Redis distributed slot leases (`SET NX PX`) | Bounded provider concurrency and non-blocking backpressure                             |
+| **Backend Proxy**             | **Background LLM**         | HTTPS DeepSeek / optional GPU server        | Conversation compaction digests off the request path                                   |
+| **Backend Proxy**             | **Upstream LLMs**          | HTTPS REST / Streaming                      | Forwards cache-miss prompts to DeepSeek/OpenRouter/Anthropic                           |
+| **Core Indexer**              | **Local DBs**              | SQLite FTS5 / LanceDB                       | Persistent vector and keyword search indices                                           |
+| **MaintenanceSwarmEngine**    | **WorktreeManager**        | Git Subprocess (`shell: false`)             | Zero-disruption sandbox branch checkout and remote pushing                             |
+| **SelfHealingEngine**         | **Test / Compiler Stderr** | Regex Signature Extraction & Patching       | Autonomous iterative TDD error recovery and repair                                     |
+| **GitHubIntegrationProvider** | **GitHub Cloud REST**      | HTTPS REST (`api.github.com`)               | Native remote issue retrieval, PR generation, automated label tagging                  |
 
 ---
 
 ## 8. Quick Reference Index by Capability
 
-| Capability                               | Primary Source Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| :--------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Backend Server & Routes**              | [backend/src/index.ts](file:///d:/My%20Project/VynorAI/backend/src/index.ts), [proxy.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/proxy.ts), [auth.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/auth.ts), [payment.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/payment.ts)                                                                                                                                                                                  |
-| **Tier Routing, Background LLM & Infra** | [localSlmRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/localSlmRouter.ts), [tierClassifier.ts](file:///d:/My%20Project/VynorAI/backend/src/services/tierClassifier.ts), [backgroundLlm.ts](file:///d:/My%20Project/VynorAI/backend/src/services/backgroundLlm.ts), [docker-compose.vps.yml](file:///d:/My%20Project/VynorAI/docker-compose.vps.yml), [rolling-deploy.sh](file:///d:/My%20Project/VynorAI/deploy/rolling-deploy.sh)                                       |
-| **Agentic Engine & Reasoning**           | [agentEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/agentEngine.ts), [aiProxy.ts](file:///d:/My%20Project/VynorAI/backend/src/services/aiProxy.ts)                                                                                                                                                                                                                                                                                                                       |
-| **Deterministic 5-Layer SLM**            | [orchestrator.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/orchestrator.ts), [intentClassifier.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/intentClassifier.ts), [scorer.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/scorer.ts), [templateVault.ts](file:///d:/My%20Project/VynorAI/backend/src/services/templateVault.ts)                                                                                                         |
-| **Quota & PayHere Billing**              | [monthlyQuota.ts](file:///d:/My%20Project/VynorAI/backend/src/services/monthlyQuota.ts), [billingDb.ts](file:///d:/My%20Project/VynorAI/backend/src/services/billingDb.ts), [payhere.ts](file:///d:/My%20Project/VynorAI/backend/src/services/payhere.ts)                                                                                                                                                                                                                                  |
-| **Model Selection Subsystem**            | [ModelSelect.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/modelSelection/ModelSelect.tsx), [updateSelectedModelByRole.ts](file:///d:/My%20Project/VynorAI/gui/src/redux/thunks/updateSelectedModelByRole.ts), [profilesSlice.ts](file:///d:/My%20Project/VynorAI/gui/src/redux/slices/profilesSlice.ts), [selectedModels.ts](file:///d:/My%20Project/VynorAI/core/config/selectedModels.ts)                                                                                     |
-| **Extension Host & Auth**                | [extension.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/extension.ts), [vynorAuth.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/util/vynorAuth.ts), [VsCodeIde.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/VsCodeIde.ts)                                                                                                                                                                                                                            |
-| **Frontend GUI, Agent Control & Quota**  | [Chat.tsx](file:///d:/My%20Project/VynorAI/gui/src/pages/gui/Chat.tsx), [AgentControlCenter.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/AgentWorkspace/AgentControlCenter.tsx), [VynorQuotaBar.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/VynorQuotaBar.tsx), [autoProjectContext.ts](file:///d:/My%20Project/VynorAI/gui/src/components/mainInput/TipTapEditor/utils/autoProjectContext.ts)                                                                      |
-| **Codebase Indexing & Search**           | [CodebaseIndexer.ts](file:///d:/My%20Project/VynorAI/core/indexing/CodebaseIndexer.ts), [CodeSnippetsIndex.ts](file:///d:/My%20Project/VynorAI/core/indexing/CodeSnippetsIndex.ts), [FullTextSearchCodebaseIndex.ts](file:///d:/My%20Project/VynorAI/core/indexing/FullTextSearchCodebaseIndex.ts)                                                                                                                                                                                         |
-| **Native Acceleration**                  | [sync/Cargo.toml](file:///d:/My%20Project/VynorAI/sync/Cargo.toml), [binary/build.js](file:///d:/My%20Project/VynorAI/binary/build.js)                                                                                                                                                                                                                                                                                                                                                     |
-| **Agent Runtime, Resume & Verification** | [AgentOrchestrator.ts](file:///d:/My%20Project/VynorAI/core/agent/AgentOrchestrator.ts), [TaskRuntime.ts](file:///d:/My%20Project/VynorAI/core/agent/TaskRuntime.ts), [TaskJournal.ts](file:///d:/My%20Project/VynorAI/core/agent/TaskJournal.ts), [VerificationDiscovery.ts](file:///d:/My%20Project/VynorAI/core/agent/VerificationDiscovery.ts), [AgentControlCenter.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/AgentWorkspace/AgentControlCenter.tsx)                     |
-| **VynorAI Native LLM Provider**          | [VynorAI.ts](file:///d:/My%20Project/VynorAI/core/llm/llms/VynorAI.ts), [providerRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/providerRouter.ts)                                                                                                                                                                                                                                                                                                                        |
-| **Scaffolds & Vault Store**              | [scaffoldRegistry.ts](file:///d:/My%20Project/VynorAI/backend/src/services/scaffoldRegistry.ts), [vaultStore.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vaultStore.ts)                                                                                                                                                                                                                                                                                                       |
-| **Autonomous CI/CD Maintenance Swarm**   | [MaintenanceSwarmEngine.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MaintenanceSwarmEngine.ts), [IssueTriageProvider.ts](file:///d:/My%20Project/VynorAI/core/maintenance/IssueTriageProvider.ts), [WorktreeManager.ts](file:///d:/My%20Project/VynorAI/core/maintenance/WorktreeManager.ts), [MorningBriefing.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MorningBriefing.ts), [swarm.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/swarm.ts) |
-| **Dynamic Grammar & Language Synthesis** | [DynamicGrammarSynthesizer.ts](file:///d:/My%20Project/VynorAI/core/syntax/DynamicGrammarSynthesizer.ts), [types.ts](file:///d:/My%20Project/VynorAI/core/syntax/types.ts), [treeSitter.ts](file:///d:/My%20Project/VynorAI/core/util/treeSitter.ts)                                                                                                                                                                                                                                       |
+| Capability                               | Primary Source Files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| :--------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Backend Server, Routes & Support**     | [backend/src/index.ts](file:///d:/My%20Project/VynorAI/backend/src/index.ts), [proxy.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/proxy.ts), [auth.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/auth.ts), [payment.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/payment.ts), [support.html](file:///d:/My%20Project/VynorAI/backend/public/support.html)                                                                                                                                                                                                                         |
+| **Admission Control & Concurrency**      | [admissionControl.ts](file:///d:/My%20Project/VynorAI/backend/src/services/admissionControl.ts), [redisStore.ts](file:///d:/My%20Project/VynorAI/backend/src/services/redisStore.ts)                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Transactional Email & OTP Delivery**   | [emailService.ts](file:///d:/My%20Project/VynorAI/backend/src/services/emailService.ts), [auth.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/auth.ts)                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Tier Routing, Background LLM & Infra** | [localSlmRouter.ts](file:///d:/My%20Project/VynorAI/backend/src/services/localSlmRouter.ts), [tierClassifier.ts](file:///d:/My%20Project/VynorAI/backend/src/services/tierClassifier.ts), [backgroundLlm.ts](file:///d:/My%20Project/VynorAI/backend/src/services/backgroundLlm.ts), [docker-compose.vps.yml](file:///d:/My%20Project/VynorAI/docker-compose.vps.yml), [rolling-deploy.sh](file:///d:/My%20Project/VynorAI/deploy/rolling-deploy.sh)                                                                                                                                                           |
+| **Agentic Engine & Reasoning**           | [agentEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/agentEngine.ts), [aiProxy.ts](file:///d:/My%20Project/VynorAI/backend/src/services/aiProxy.ts)                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Deterministic 5-Layer SLM**            | [orchestrator.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/orchestrator.ts), [intentClassifier.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/intentClassifier.ts), [scorer.ts](file:///d:/My%20Project/VynorAI/backend/src/services/vault/scorer.ts), [templateVault.ts](file:///d:/My%20Project/VynorAI/backend/src/services/templateVault.ts)                                                                                                                                                                                                                             |
+| **Quota & PayHere Billing**              | [monthlyQuota.ts](file:///d:/My%20Project/VynorAI/backend/src/services/monthlyQuota.ts), [billingDb.ts](file:///d:/My%20Project/VynorAI/backend/src/services/billingDb.ts), [payhere.ts](file:///d:/My%20Project/VynorAI/backend/src/services/payhere.ts)                                                                                                                                                                                                                                                                                                                                                      |
+| **Model Selection Subsystem**            | [ModelSelect.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/modelSelection/ModelSelect.tsx), [updateSelectedModelByRole.ts](file:///d:/My%20Project/VynorAI/gui/src/redux/thunks/updateSelectedModelByRole.ts), [profilesSlice.ts](file:///d:/My%20Project/VynorAI/gui/src/redux/slices/profilesSlice.ts), [selectedModels.ts](file:///d:/My%20Project/VynorAI/core/config/selectedModels.ts)                                                                                                                                                                                                         |
+| **Extension Host & Auth**                | [extension.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/extension.ts), [vynorAuth.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/util/vynorAuth.ts), [VsCodeIde.ts](file:///d:/My%20Project/VynorAI/extensions/vscode/src/VsCodeIde.ts)                                                                                                                                                                                                                                                                                                                                                |
+| **Frontend GUI, Agent Control & Quota**  | [Chat.tsx](file:///d:/My%20Project/VynorAI/gui/src/pages/gui/Chat.tsx), [AgentControlCenter.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/AgentWorkspace/AgentControlCenter.tsx), [VynorQuotaBar.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/VynorQuotaBar.tsx), [autoProjectContext.ts](file:///d:/My%20Project/VynorAI/gui/src/components/mainInput/TipTapEditor/utils/autoProjectContext.ts)                                                                                                                                                                                          |
+| **Codebase Indexing & Search**           | [CodebaseIndexer.ts](file:///d:/My%20Project/VynorAI/core/indexing/CodebaseIndexer.ts), [CodeSnippetsIndex.ts](file:///d:/My%20Project/VynorAI/core/indexing/CodeSnippetsIndex.ts), [FullTextSearchCodebaseIndex.ts](file:///d:/My%20Project/VynorAI/core/indexing/FullTextSearchCodebaseIndex.ts)                                                                                                                                                                                                                                                                                                             |
+| **Native Acceleration**                  | [sync/Cargo.toml](file:///d:/My%20Project/VynorAI/sync/Cargo.toml), [binary/build.js](file:///d:/My%20Project/VynorAI/binary/build.js)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Agent Runtime, Resume & Verification** | [AgentOrchestrator.ts](file:///d:/My%20Project/VynorAI/core/agent/AgentOrchestrator.ts), [TaskRuntime.ts](file:///d:/My%20Project/VynorAI/core/agent/TaskRuntime.ts), [TaskJournal.ts](file:///d:/My%20Project/VynorAI/core/agent/TaskJournal.ts), [VerificationDiscovery.ts](file:///d:/My%20Project/VynorAI/core/agent/VerificationDiscovery.ts), [AgentControlCenter.tsx](file:///d:/My%20Project/VynorAI/gui/src/components/AgentWorkspace/AgentControlCenter.tsx)                                                                                                                                         |
+| **Built-In Slash Commands Suite**        | [goal.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/goal.ts), [swarm.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/swarm.ts), [review.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/review.ts), [init.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/init.ts), [vynorai-commands.ts](file:///d:/My%20Project/VynorAI/core/commands/slash/built-in-legacy/vynorai-commands.ts)                                                                                                                           |
+| **Autonomous CI/CD Maintenance Swarm**   | [MaintenanceSwarmEngine.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MaintenanceSwarmEngine.ts), [SelfHealingEngine.ts](file:///d:/My%20Project/VynorAI/core/maintenance/SelfHealingEngine.ts), [WorktreeManager.ts](file:///d:/My%20Project/VynorAI/core/maintenance/WorktreeManager.ts), [GitHubIntegrationProvider.ts](file:///d:/My%20Project/VynorAI/core/maintenance/GitHubIntegrationProvider.ts), [IssueTriageProvider.ts](file:///d:/My%20Project/VynorAI/core/maintenance/IssueTriageProvider.ts), [MorningBriefing.ts](file:///d:/My%20Project/VynorAI/core/maintenance/MorningBriefing.ts) |
+| **Dynamic Grammar & Language Synthesis** | [DynamicGrammarSynthesizer.ts](file:///d:/My%20Project/VynorAI/core/syntax/DynamicGrammarSynthesizer.ts), [types.ts](file:///d:/My%20Project/VynorAI/core/syntax/types.ts), [treeSitter.ts](file:///d:/My%20Project/VynorAI/core/util/treeSitter.ts)                                                                                                                                                                                                                                                                                                                                                           |
 
 ---
 

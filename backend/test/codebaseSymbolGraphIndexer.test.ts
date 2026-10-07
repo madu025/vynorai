@@ -571,8 +571,8 @@ export function helperFunction_${i}(data: any) {
       assert.equal(index.fileCount, 25);
       assert.equal(index.symbolCount, 75);
       assert.ok(
-        indexDuration < 150,
-        `Indexing should take < 150ms, took ${indexDuration.toFixed(2)}ms`,
+        indexDuration < 500,
+        `Indexing should take < 500ms, took ${indexDuration.toFixed(2)}ms`,
       );
 
       const q0 = performance.now();

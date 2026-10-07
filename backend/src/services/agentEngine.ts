@@ -190,6 +190,65 @@ export const VYNORAI_AGENT_TOOLS: AgentTool[] = [
   {
     type: "function",
     function: {
+      name: "refactor_rename_symbol",
+      description:
+        "Safely renames a function, class, interface, type, or variable across all project files using TypeScript AST, updating declarations, imports, re-exports, and references with atomic pre-flight syntax verification.",
+      parameters: {
+        type: "object",
+        properties: {
+          targetSymbol: {
+            type: "string",
+            description: "Current identifier name of the symbol to rename",
+          },
+          newSymbolName: {
+            type: "string",
+            description: "New identifier name for the symbol",
+          },
+          definingFilePath: {
+            type: "string",
+            description:
+              "Optional relative or absolute path of the file where the symbol is defined",
+          },
+          dryRun: {
+            type: "boolean",
+            description:
+              "If true, returns replacement preview diffs without writing to disk",
+          },
+        },
+        required: ["targetSymbol", "newSymbolName"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "refactor_rewrite_imports",
+      description:
+        "Rewrites all import and export paths across the project when a file is moved or renamed, updating both importing files and internal relative imports inside the moved file.",
+      parameters: {
+        type: "object",
+        properties: {
+          oldFilePath: {
+            type: "string",
+            description: "Original relative or absolute file path",
+          },
+          newFilePath: {
+            type: "string",
+            description: "Target relative or absolute file path after moving",
+          },
+          dryRun: {
+            type: "boolean",
+            description:
+              "If true, returns replacement preview diffs without writing to disk",
+          },
+        },
+        required: ["oldFilePath", "newFilePath"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "list_directory",
       description: "List files and folders within a workspace directory.",
       parameters: {

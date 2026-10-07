@@ -2,7 +2,7 @@
 
 <!-- Competitive gap roadmap vs Claude Code / Codex: docs/VYNORAI_COMPETITIVE_ROADMAP.md -->
 
-> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (Git Worktree Isolation Sandbox Engine, Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
+> **Status:** This is the maintained architecture index for the production codebase. Last refresh: 2026-10-07 (AST-Aware Cross-File Refactoring Engine, Git Worktree Isolation Sandbox Engine, Codebase Symbol Graph Indexer, Autonomous Terminal Self-Healing Loop, Multi-File Speculative Diff Engine, Enterprise Air-Gapped Zero-Knowledge Mode, PayHere Subscription Engine, Cloud GitHub Integration Provider, Redis admission control backpressure, Tree-Sitter dynamic grammars, PostgreSQL system of record, two backend workers behind Caddy).
 
 ---
 
@@ -195,6 +195,10 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
     - `POST /v1/sandbox/worktree/spawn`: Creates an isolated Git worktree on a background task branch, snapshotting developer dirty state and junction-linking dependencies.
     - `POST /v1/sandbox/worktree/run`: Spawns sandbox, applies file edits, executes test gate verification (with autonomous self-healing on failure), and performs pre-flight atomic merge.
     - `POST /v1/sandbox/worktree/cleanup`: Removes git worktree registration, cleans directory, and prunes stale references.
+  - **AST-Aware Cross-File Refactoring Endpoints**:
+    - `POST /v1/refactor/rename-symbol`: Renames symbols across definitions, named/aliased imports, re-exports, and call sites with local shadowing protection.
+    - `POST /v1/refactor/rewrite-imports`: Rewrites import and export paths across the project when files are moved or reorganized.
+    - `POST /v1/refactor/preview`: Dry-run diff preview of symbol renames and import path rewrites without writing to disk.
 - [backend/src/routes/admin.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/admin.ts):
   - Enterprise administration panel endpoints for user management, plan overrides, quota manual adjustments, system logs, and security monitoring.
 - [backend/src/routes/payment.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/payment.ts):
@@ -294,6 +298,15 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
   - **Background Test Gates & Self-Healing**: Runs test commands (`npm test`, custom test commands) inside the sandbox with automatic integration to `runAutonomousSelfHealingLoop` to heal compiler diagnostics on failure.
   - **Atomic Merge & Rollback**: Conducts dry-run pre-flight conflict checks (`git merge --no-commit --no-ff`) before merging; aborts cleanly (`git merge --abort`) if conflicts arise, ensuring zero corruption to main repo HEAD.
   - **Agent Tool Integration**: Exposes `run_in_worktree_sandbox` in [agentEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/agentEngine.ts) for LLMs to run risky coding modifications safely in background sandboxes.
+
+#### H. AST-Aware Cross-File Refactoring Engine
+
+- [backend/src/services/crossFileRefactorEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/crossFileRefactorEngine.ts): **AST-Aware Cross-File Refactoring Engine (`CrossFileRefactorEngine`)**.
+  - **Multi-File Symbol Renaming**: Accurately tracks symbol declarations (functions, classes, interfaces, types, variables), export and import declarations (named, aliased, and re-exports), and call/reference sites across the entire project.
+  - **Scope & Shadowing Protection**: Disambiguates local shadowing to guarantee inner function parameters or unrelated same-named functions in other files are never corrupted.
+  - **Import Path Rewrites**: Automatically recomputes relative module specifiers when files are moved or reorganized, rewriting both importing files and internal relative imports within the moved file itself.
+  - **Atomic Pre-Flight Syntax Validation**: Validates candidate changes in-memory via AST syntax checks before writing to disk; aborts with zero disk changes if any parse errors occur.
+  - **Agent Tool & API Integration**: Exposes `refactor_rename_symbol` and `refactor_rewrite_imports` tools in [agentEngine.ts](file:///d:/My%20Project/VynorAI/backend/src/services/agentEngine.ts) and REST endpoints (`/v1/refactor/*`) in [proxy.ts](file:///d:/My%20Project/VynorAI/backend/src/routes/proxy.ts).
 
 ---
 

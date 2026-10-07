@@ -1060,3 +1060,154 @@ proxyRouter.post(
     }
   },
 );
+
+// ─── AST-AWARE CROSS-FILE REFACTORING ENDPOINTS ─────────────────────────────
+
+proxyRouter.post(
+  "/refactor/rename-symbol",
+  requireValidSubscriber,
+  async (req: Request, res: Response): Promise<any> => {
+    try {
+      const {
+        targetSymbol,
+        newSymbolName,
+        projectRoot = process.cwd(),
+        definingFilePath,
+        dryRun = false,
+      } = req.body;
+
+      if (!targetSymbol || !newSymbolName) {
+        return res
+          .status(400)
+          .json({
+            error: "Missing required fields: targetSymbol, newSymbolName",
+          });
+      }
+
+      const { crossFileRefactorEngine } = await import(
+        "../services/crossFileRefactorEngine.js"
+      );
+
+      const result = await crossFileRefactorEngine.renameSymbol({
+        projectRoot,
+        targetSymbol,
+        newSymbolName,
+        definingFilePath,
+        dryRun,
+      });
+
+      if (!result.success) {
+        return res.status(422).json(result);
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[RefactorEngine] Rename error:", err);
+      res.status(500).json({ error: err.message || "Symbol rename failed" });
+    }
+  },
+);
+
+proxyRouter.post(
+  "/refactor/rewrite-imports",
+  requireValidSubscriber,
+  async (req: Request, res: Response): Promise<any> => {
+    try {
+      const {
+        oldFilePath,
+        newFilePath,
+        projectRoot = process.cwd(),
+        dryRun = false,
+      } = req.body;
+
+      if (!oldFilePath || !newFilePath) {
+        return res
+          .status(400)
+          .json({ error: "Missing required fields: oldFilePath, newFilePath" });
+      }
+
+      const { crossFileRefactorEngine } = await import(
+        "../services/crossFileRefactorEngine.js"
+      );
+
+      const result = await crossFileRefactorEngine.rewriteImportPaths({
+        projectRoot,
+        oldFilePath,
+        newFilePath,
+        dryRun,
+      });
+
+      if (!result.success) {
+        return res.status(422).json(result);
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[RefactorEngine] Rewrite imports error:", err);
+      res.status(500).json({ error: err.message || "Import rewrite failed" });
+    }
+  },
+);
+
+proxyRouter.post(
+  "/refactor/preview",
+  requireValidSubscriber,
+  async (req: Request, res: Response): Promise<any> => {
+    try {
+      const {
+        operation,
+        targetSymbol,
+        newSymbolName,
+        oldFilePath,
+        newFilePath,
+        definingFilePath,
+        projectRoot = process.cwd(),
+      } = req.body;
+
+      const { crossFileRefactorEngine } = await import(
+        "../services/crossFileRefactorEngine.js"
+      );
+
+      if (operation === "rename-symbol") {
+        if (!targetSymbol || !newSymbolName) {
+          return res
+            .status(400)
+            .json({
+              error: "Missing required fields: targetSymbol, newSymbolName",
+            });
+        }
+        const result = await crossFileRefactorEngine.renameSymbol({
+          projectRoot,
+          targetSymbol,
+          newSymbolName,
+          definingFilePath,
+          dryRun: true,
+        });
+        return res.json(result);
+      } else if (operation === "rewrite-imports") {
+        if (!oldFilePath || !newFilePath) {
+          return res
+            .status(400)
+            .json({
+              error: "Missing required fields: oldFilePath, newFilePath",
+            });
+        }
+        const result = await crossFileRefactorEngine.rewriteImportPaths({
+          projectRoot,
+          oldFilePath,
+          newFilePath,
+          dryRun: true,
+        });
+        return res.json(result);
+      } else {
+        return res.status(400).json({
+          error:
+            "Invalid operation. Must be 'rename-symbol' or 'rewrite-imports'",
+        });
+      }
+    } catch (err: any) {
+      console.error("[RefactorEngine] Preview error:", err);
+      res.status(500).json({ error: err.message || "Refactor preview failed" });
+    }
+  },
+);

@@ -154,7 +154,15 @@ export function applyTierPolicy(body: any, tier: Tier): any {
   if (extra_body !== undefined) out.extra_body = extra_body;
 
   // An explicitly chosen reasoning model (R1, "reasoner") always thinks.
-  const think = profile.thinking || isReasoningModel(String(body.model ?? ""));
+  // IDE-agent turns (tools present) always think, briefly on light/normal:
+  // the tier classifier only sees the last prompt (English-trained), so it
+  // under-rates agent work, and a stable mode avoids flipping thinking
+  // mid tool loop. AGENT_THINKING=off restores the pure tier policy.
+  const agentThinks = isAgent && process.env.AGENT_THINKING !== "off";
+  const think =
+    profile.thinking ||
+    agentThinks ||
+    isReasoningModel(String(body.model ?? ""));
   out.thinking =
     thinking !== undefined
       ? thinking
@@ -162,7 +170,8 @@ export function applyTierPolicy(body: any, tier: Tier): any {
 
   if (reasoning_effort !== undefined) out.reasoning_effort = reasoning_effort;
   else if (out.thinking?.type === "enabled")
-    out.reasoning_effort = profile.effort ?? "high";
+    out.reasoning_effort =
+      profile.effort ?? (profile.thinking ? "high" : "low");
 
   return out;
 }

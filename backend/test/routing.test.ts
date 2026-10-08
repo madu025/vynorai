@@ -111,6 +111,33 @@ test("auto falls back to the plan default when a tier model is not entitled", as
   }
 });
 
+test("IDE-agent turns (with tools) think briefly even on light/normal tiers", () => {
+  const tools = [{ type: "function", function: { name: "read_file" } }];
+  for (const tier of ["light", "normal"] as const) {
+    const out = applyTierPolicy({ messages: [], tools }, tier);
+    assert.deepEqual(out.thinking, { type: "enabled" });
+    assert.equal(out.reasoning_effort, "low");
+  }
+  // Plain chat is unchanged.
+  assert.deepEqual(applyTierPolicy({ messages: [] }, "normal").thinking, {
+    type: "disabled",
+  });
+  // Explicit client choice still wins; env switch restores tier policy.
+  assert.deepEqual(
+    applyTierPolicy({ tools, thinking: { type: "disabled" } }, "light")
+      .thinking,
+    { type: "disabled" },
+  );
+  process.env.AGENT_THINKING = "off";
+  try {
+    assert.deepEqual(applyTierPolicy({ tools }, "light").thinking, {
+      type: "disabled",
+    });
+  } finally {
+    delete process.env.AGENT_THINKING;
+  }
+});
+
 test("thinking is explicitly off except on heavy turns; max_tokens can only be lowered", () => {
   // DeepSeek V4 thinks by default, so "off" must be sent explicitly.
   const light = applyTierPolicy({ messages: [] }, "light");

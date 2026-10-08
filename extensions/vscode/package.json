@@ -94,7 +94,12 @@
         "vynorai.autoUpdateCheck": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Check vynor.lk for new VynorAI versions every 6 hours and offer to install them. Downloads are verified against the published SHA-256 checksum."
+          "markdownDescription": "Check vynor.lk for new VynorAI versions every 15 minutes (and when the window regains focus). Downloads are verified against the published SHA-256 checksum."
+        },
+        "vynorai.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Install new VynorAI versions automatically instead of asking first. VS Code, Antigravity, Cursor and other editors on this machine share one verified download, so they all update together. You are only asked to reload."
         },
         "continue.telemetryEnabled": {
           "type": "boolean",

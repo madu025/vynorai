@@ -2,7 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("vscode", () => ({}));
 
-import { isNewer, isValidRelease } from "./selfUpdate";
+import crypto from "crypto";
+import fs from "fs";
+import os from "os";
+import path from "path";
+
+import {
+  findCachedVsix,
+  isNewer,
+  isValidRelease,
+  sharedUpdatesDir,
+} from "./selfUpdate";
 
 describe("isNewer", () => {
   it("compares x.y.z numerically", () => {
@@ -35,5 +45,44 @@ describe("isValidRelease", () => {
       }),
     ).toBe(false);
     expect(isValidRelease({ ...release, sha256: "not-a-sha" })).toBe(false);
+  });
+});
+
+describe("shared update cache", () => {
+  const bytes = Buffer.from("fake vsix contents");
+  const sha = crypto.createHash("sha256").update(bytes).digest("hex");
+  const release = {
+    version: "1.2.40",
+    url: "https://vynor.lk/download/vynorai-1.2.40.vsix",
+    sha256: sha,
+  };
+
+  function tmp() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), "vynor-upd-"));
+  }
+
+  it("reuses a download another editor already verified", () => {
+    const dir = tmp();
+    const file = path.join(dir, "vynorai-1.2.40.vsix");
+    fs.writeFileSync(file, bytes);
+    expect(findCachedVsix(dir, release)).toBe(file);
+  });
+
+  it("ignores a tampered, partial or missing file", () => {
+    const dir = tmp();
+    expect(findCachedVsix(dir, release)).toBeNull();
+    fs.writeFileSync(path.join(dir, "vynorai-1.2.40.vsix"), "tampered");
+    expect(findCachedVsix(dir, release)).toBeNull();
+  });
+
+  it("uses one folder under the VynorAI global dir for every editor", () => {
+    const prev = process.env.VYNORAI_GLOBAL_DIR;
+    process.env.VYNORAI_GLOBAL_DIR = path.join(os.tmpdir(), "vg");
+    try {
+      expect(sharedUpdatesDir()).toBe(path.join(os.tmpdir(), "vg", "updates"));
+    } finally {
+      if (prev === undefined) delete process.env.VYNORAI_GLOBAL_DIR;
+      else process.env.VYNORAI_GLOBAL_DIR = prev;
+    }
   });
 });

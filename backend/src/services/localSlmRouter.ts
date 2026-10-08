@@ -56,6 +56,9 @@ export function capSlmTier(
   return clean.length >= HARD_MIN_CHARS || HARD_HINT.test(clean) ? "H" : "N";
 }
 
+/** Sinhala and Tamil script: outside the tier classifier's vocabulary. */
+export const NON_LATIN_SCRIPT = /[඀-෿஀-௿]/;
+
 const TIER_GRAMMAR = 'root ::= "L" | "N" | "H"';
 const LETTER_TO_COMPLEXITY = { L: "EASY", N: "MEDIUM", H: "HARD" } as const;
 
@@ -227,6 +230,10 @@ export async function analyzeIntentWithLocalSlm(
 
   if (mode === "classifier") {
     const result = classifyTier(clean);
+    // The classifier is trained on English words only. A Sinhala/Tamil prompt
+    // has no features it can read, so "light" would be a guess: floor it at N.
+    if (result && result.letter === "L" && NON_LATIN_SCRIPT.test(clean))
+      result.letter = "N";
     // No H cap here: the classifier is calibrated on held-out data (H precision
     // ~0.9); the cap exists for the small generative SLM, which over-calls H.
     if (result)

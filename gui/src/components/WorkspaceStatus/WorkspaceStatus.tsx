@@ -38,6 +38,21 @@ export function WorkspaceStatus() {
     }
   };
 
+  const selectRoot = async (rootId: string) => {
+    try {
+      const result = await ideMessenger.request("workspace/setActiveRoot", {
+        rootId,
+      });
+      if (result.status === "success") {
+        dispatch(setWorkspaceSnapshot(result.content));
+      } else {
+        dispatch(setWorkspaceError("Could not switch workspace root."));
+      }
+    } catch {
+      dispatch(setWorkspaceError("Could not switch workspace root."));
+    }
+  };
+
   const activeRoot = roots.find((root) => root.id === snapshot?.activeRootId);
   const indexState = indexItems.find(
     (item) => item.rootId === snapshot?.activeRootId,
@@ -49,7 +64,7 @@ export function WorkspaceStatus() {
         ? "Grounded"
         : "Workspace ready";
 
-  return (
+  const chip = (
     <button
       type="button"
       onClick={() => void refresh()}
@@ -80,5 +95,31 @@ export function WorkspaceStatus() {
         {!snapshot?.trusted && roots.length ? " · restricted" : ""}
       </span>
     </button>
+  );
+
+  // Multi-root workspaces cannot infer the target repository when no file is
+  // open, so let the user pick it instead of leaving the agent ungrounded.
+  if (roots.length < 2) return chip;
+  return (
+    <div className="flex min-w-0 items-center">
+      {chip}
+      <select
+        aria-label="Active workspace root"
+        value={snapshot?.activeRootId ?? ""}
+        onChange={(e) => void selectRoot(e.target.value)}
+        className="border-command-border bg-editor text-description mb-1 mr-2 max-w-[40%] truncate rounded-md border border-solid px-1 py-1 text-[10px]"
+      >
+        {!snapshot?.activeRootId && (
+          <option value="" disabled>
+            Select root…
+          </option>
+        )}
+        {roots.map((root) => (
+          <option key={root.id} value={root.id}>
+            {root.name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

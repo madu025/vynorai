@@ -291,22 +291,35 @@ const TRIMMABLE_TOOLS = new Set([
   "search_web",
 ]);
 const TOOL_OUTPUT_CAP = 6000;
+// Search and listing results ARE the evidence: dropping their middle made
+// agents conclude "nothing found". They get a larger cap, and anything cut is
+// reported with a line count so the agent can narrow the query.
+const SEARCH_TOOLS = new Set([
+  "grep_search",
+  "file_glob_search",
+  "ls",
+  "list_directory",
+]);
+const SEARCH_OUTPUT_CAP = 24000;
 const ERROR_LINE =
   /\b(error|fail(ed|ure)?|exception|traceback|panic|cannot|undefined|not found|warn(ing)?)\b|✗|✖/i;
 
-export function trimToolOutput(text: string): string {
-  if (text.length <= TOOL_OUTPUT_CAP) return text;
-  const head = text.slice(0, 1500);
-  const tail = text.slice(-3000);
+export function trimToolOutput(text: string, cap = TOOL_OUTPUT_CAP): string {
+  if (text.length <= cap) return text;
+  const headChars = Math.floor(cap / 4);
+  const tailChars = Math.floor(cap / 2);
+  const head = text.slice(0, headChars);
+  const tail = text.slice(-tailChars);
   const middle = text
-    .slice(1500, -3000)
+    .slice(headChars, -tailChars)
     .split("\n")
     .filter((l) => ERROR_LINE.test(l))
     .slice(0, 60);
   const omitted = text.length - head.length - tail.length;
+  const omittedLines = text.slice(headChars, -tailChars).split("\n").length;
   return [
     head,
-    `\n[... ${omitted} chars of output trimmed by VynorAI${middle.length ? "; error/warning lines kept below" : ""} ...]\n`,
+    `\n[... ${omitted} chars / ~${omittedLines} lines of output trimmed by VynorAI${middle.length ? "; error/warning lines kept below" : ""}. This is NOT the full result: narrow the query or read the specific file ...]\n`,
     ...middle,
     middle.length ? "\n[...]\n" : "",
     tail,
@@ -335,7 +348,10 @@ function applyToolOutputTrim(messages: Msg[]): {
     const name = toolNames.get(msg.tool_call_id ?? msg.toolCallId ?? "") ?? "";
     if (!TRIMMABLE_TOOLS.has(name)) return msg;
     const text = getText(msg);
-    const trimmed = trimToolOutput(text);
+    const trimmed = trimToolOutput(
+      text,
+      SEARCH_TOOLS.has(name) ? SEARCH_OUTPUT_CAP : TOOL_OUTPUT_CAP,
+    );
     if (trimmed === text) return msg;
     saved += text.length - trimmed.length;
     return setText(msg, trimmed);

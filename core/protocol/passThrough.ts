@@ -97,6 +97,7 @@ export const WEBVIEW_TO_CORE_PASS_THROUGH: (keyof ToCoreFromWebviewProtocol)[] =
     "workspace/getSnapshot",
     "workspace/refreshSnapshot",
     "workspace/invalidate",
+    "workspace/setActiveRoot",
     "workspace/getVerificationPlan",
     "agent/task/start",
     "agent/task/get",

@@ -165,6 +165,7 @@ class MessageTypes {
             "workspace/getSnapshot",
             "workspace/refreshSnapshot",
             "workspace/invalidate",
+            "workspace/setActiveRoot",
             "workspace/getVerificationPlan",
             "agent/task/start",
             "agent/task/get",

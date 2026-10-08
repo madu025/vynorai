@@ -1,5 +1,9 @@
 const PROJECT_OVERVIEW_TERMS =
   /\b(project|repo|repository|codebase|workspace|architecture|application|app structure|system design)\b/i;
+// Sinhala and Tamil script (project / code base / architecture) so a prompt
+// written in the user's own language still triggers project-wide context.
+const PROJECT_OVERVIEW_TERMS_NATIVE =
+  /(ව්‍යාපෘති|ව්යාපෘති|කෝඩ්|කේත|ගෘහ නිර්මාණ|திட்டம்|கோட்)/;
 
 export type AutomaticProjectContext = {
   codebase: boolean;
@@ -26,7 +30,9 @@ export function getAutomaticProjectContext(
     return { codebase: false, tree: false };
   }
 
-  const isProjectOverview = PROJECT_OVERVIEW_TERMS.test(normalized);
+  const isProjectOverview =
+    PROJECT_OVERVIEW_TERMS.test(normalized) ||
+    PROJECT_OVERVIEW_TERMS_NATIVE.test(normalized);
   if (userMessageCount > 1 && !isProjectOverview) {
     return { codebase: false, tree: false };
   }

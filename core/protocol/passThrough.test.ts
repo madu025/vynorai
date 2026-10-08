@@ -10,6 +10,7 @@ describe("workspace and agent protocol pass-through", () => {
         "workspace/getSnapshot",
         "workspace/refreshSnapshot",
         "workspace/invalidate",
+        "workspace/setActiveRoot",
         "workspace/getVerificationPlan",
         "agent/task/start",
         "agent/task/transition",

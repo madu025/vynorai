@@ -278,6 +278,33 @@ test("window never starts on an orphaned tool result", () => {
     if (m.role === "tool") assert.ok(callIds.has(m.tool_call_id));
 });
 
+test("search results keep a larger budget and a trimmed result says so", () => {
+  const hits = Array.from(
+    { length: 300 },
+    (_, i) => `src/f${i}.ts:${i}: match`,
+  ).join("\n");
+  assert.ok(hits.length > 6000 && hits.length < 24000);
+  const mk = (name: string, out: string) => [
+    { role: "system", content: "rules" },
+    { role: "user", content: "find it" },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{ id: "t1", function: { name, arguments: "{}" } }],
+    },
+    { role: "tool", tool_call_id: "t1", content: out },
+  ];
+  const grep = applyHybridContext({ messages: mk("grep_search", hits) }, "pro");
+  assert.equal(
+    grep.body.messages.find((m: any) => m.role === "tool").content,
+    hits,
+  );
+  const big = hits.repeat(4);
+  const trimmed = trimToolOutput(big, 24000);
+  assert.match(trimmed, /NOT the full result/);
+  assert.match(trimmed, /lines of output trimmed/);
+});
+
 test("terminal output is trimmed deterministically, file reads are not", () => {
   const noisy = `${"npm info ok\n".repeat(1000)}src/a.ts:3 error TS2304: Cannot find name 'x'\n${"done\n".repeat(1000)}`;
   const trimmed = trimToolOutput(noisy);
@@ -430,4 +457,14 @@ test("the backend prompt is added only when the client sends none", async () => 
     String(systemPromptFor({ messages: [{ role: "user", content: "hi" }] })),
     /VynorAI/,
   );
+});
+
+test("Sinhala/Tamil prompts are never classified as light", async () => {
+  const { analyzeIntentWithLocalSlm } = await import(
+    "../src/services/localSlmRouter.js"
+  );
+  const d = await analyzeIntentWithLocalSlm(
+    "මේ project එකේ authentication flow එක පරීක්ෂා කරලා දෙන්න",
+  );
+  assert.notEqual(d.complexity, "EASY");
 });

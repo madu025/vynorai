@@ -89,6 +89,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "workspace/getSnapshot": [undefined, WorkspaceSnapshot];
   "workspace/refreshSnapshot": [undefined, WorkspaceSnapshot];
   "workspace/invalidate": [{ reason?: string } | undefined, void];
+  "workspace/setActiveRoot": [{ rootId: string }, WorkspaceSnapshot];
   "workspace/getVerificationPlan": [undefined, VerificationCommandCandidate[]];
   "agent/task/start": [
     {

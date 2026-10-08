@@ -10,6 +10,9 @@ import type { AddressInfo } from "node:net";
 
 // Setup environment secrets before any imports
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-bg-benchmark-"));
+// db.ts opens SQLite at import time under cwd/data; isolate it before any import
+// so the test never touches the developer's real backend/data database.
+process.chdir(tmpDir);
 process.env.BG_QUOTE_SECRET = "q".repeat(48);
 process.env.DATA_ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";

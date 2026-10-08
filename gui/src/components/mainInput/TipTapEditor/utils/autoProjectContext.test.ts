@@ -45,3 +45,12 @@ test("refreshes project context for an explicit project question on later turns"
     getAutomaticProjectContext("Did you understand this project?", 4, false),
   ).toMatchObject({ codebase: true, tree: true });
 });
+
+test("detects project-level prompts written in Sinhala or Tamil script", () => {
+  expect(
+    getAutomaticProjectContext("මේ ව්‍යාපෘතිය ගැන කියන්න", 1, false),
+  ).toMatchObject({ codebase: true, tree: true });
+  expect(
+    getAutomaticProjectContext("இந்த திட்டம் பற்றி சொல்லு", 1, false),
+  ).toMatchObject({ codebase: true, tree: true });
+});

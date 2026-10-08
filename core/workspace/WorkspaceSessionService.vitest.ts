@@ -107,4 +107,29 @@ describe("WorkspaceSessionService", () => {
     expect(recovered.roots[0]?.name).toBe("VynorAI");
     expect(getWorkspaceDirs).toHaveBeenCalledTimes(3);
   });
+
+  it("lets the user pin the active root in a multi-root workspace", async () => {
+    const ide = createIde({
+      getWorkspaceDirs: vi
+        .fn()
+        .mockResolvedValue(["file:///workspace/a", "file:///workspace/b"]),
+      getCurrentFile: vi.fn().mockResolvedValue(undefined),
+    });
+    const service = new WorkspaceSessionService(ide, () => undefined);
+
+    const before = await service.getSnapshot();
+    expect(before.roots).toHaveLength(2);
+    expect(before.activeRootId).toBeUndefined();
+
+    const target = before.roots[1];
+    const after = await service.setActiveRoot(target.id);
+    expect(after.activeRootId).toBe(target.id);
+    expect(after.revision).toBeGreaterThan(before.revision);
+
+    await expect(service.setActiveRoot("not-a-root")).rejects.toThrow(
+      "Unknown workspace root",
+    );
+    // A rejected pick leaves the previous selection intact.
+    expect((await service.getSnapshot(true)).activeRootId).toBe(target.id);
+  });
 });

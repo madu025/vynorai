@@ -361,6 +361,11 @@ export class Core {
       this.messenger.send("workspace/statusUpdate", snapshot);
       return snapshot;
     });
+    on("workspace/setActiveRoot", async ({ data }) => {
+      const snapshot = await this.workspaceSession.setActiveRoot(data.rootId);
+      this.messenger.send("workspace/statusUpdate", snapshot);
+      return snapshot;
+    });
     on("workspace/invalidate", () => {
       this.scheduleWorkspaceRefresh();
     });

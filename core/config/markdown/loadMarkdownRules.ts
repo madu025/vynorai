@@ -5,6 +5,8 @@ import {
 import { IDE, RuleWithSource } from "../..";
 import { PROMPTS_DIR_NAME, RULES_DIR_NAME } from "../../promptFiles";
 import { joinPathsToUri } from "../../util/uri";
+import { getActiveRootUri } from "../../workspace/activeRootProvider";
+import { expandInstructionImports } from "./expandInstructionImports";
 import { getAllDotContinueDefinitionFiles } from "../loadLocalAssistants";
 
 export const SUPPORTED_AGENT_FILES = ["AGENTS.md", "AGENT.md", "CLAUDE.md"];
@@ -23,14 +25,29 @@ export async function loadMarkdownRules(ide: IDE): Promise<{
   const workspaceDirs = await ide.getWorkspaceDirs();
 
   for (const workspaceDir of workspaceDirs) {
+    // Every supported agent file in a root is loaded, so a repo that keeps
+    // both AGENTS.md and CLAUDE.md gets both. A file whose content is
+    // identical to one already loaded (a copy or a symlink) is skipped.
+    const loadedContent = new Set<string>();
     for (const fileName of SUPPORTED_AGENT_FILES) {
       try {
         const agentFileUri = joinPathsToUri(workspaceDir, fileName);
         const exists = await ide.fileExists(agentFileUri);
         if (exists) {
           const agentContent = await ide.readFile(agentFileUri);
+          const normalized = agentContent.trim();
+          if (loadedContent.has(normalized)) continue;
+          loadedContent.add(normalized);
 
-          const rule = markdownToRule(agentContent, {
+          // Inline `@path` imports (within this root) before parsing.
+          const expandedContent = await expandInstructionImports(
+            agentContent,
+            agentFileUri,
+            workspaceDir,
+            ide,
+          );
+
+          const rule = markdownToRule(expandedContent, {
             uriType: "file",
             fileUri: agentFileUri,
           });
@@ -40,12 +57,29 @@ export async function loadMarkdownRules(ide: IDE): Promise<{
             sourceFile: agentFileUri,
             alwaysApply: true,
           });
-          break; // Use the first supported agent file in this workspace.
         }
       } catch (e) {
         // File doesn't exist or can't be read, continue to next file
       }
     }
+  }
+
+  // Agent files of the active root come first, so in a multi-root workspace
+  // the project the user is working in leads the instructions. Every root's
+  // files still load; only the order changes.
+  const activeRootUri = await getActiveRootUri();
+  if (activeRootUri && workspaceDirs.length > 1) {
+    const prefix = activeRootUri.endsWith("/")
+      ? activeRootUri
+      : `${activeRootUri}/`;
+    const inActiveRoot = (rule: RuleWithSource) =>
+      rule.sourceFile?.startsWith(prefix) ?? false;
+    rules.splice(
+      0,
+      rules.length,
+      ...rules.filter(inActiveRoot),
+      ...rules.filter((rule) => !inActiveRoot(rule)),
+    );
   }
 
   // Load markdown files from both .continue/rules and .continue/prompts

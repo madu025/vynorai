@@ -7,7 +7,10 @@ import {
   DEFAULT_IGNORE_FILETYPES,
 } from "../indexing/ignore";
 import { walkDir } from "../indexing/walkDir";
-import { RULES_MARKDOWN_FILENAME } from "../llm/rules/constants";
+import {
+  AGENT_INSTRUCTION_FILENAMES,
+  RULES_MARKDOWN_FILENAME,
+} from "../llm/rules/constants";
 import { getGlobalFolderWithName } from "../util/paths";
 import { localPathToUri } from "../util/pathToUri";
 import { getUriPathBasename, joinPathsToUri } from "../util/uri";
@@ -45,6 +48,19 @@ export function isContinueAgentConfigFile(uri: string): boolean {
 
 export function isColocatedRulesFile(uri: string): boolean {
   return getUriPathBasename(uri) === RULES_MARKDOWN_FILENAME;
+}
+
+/**
+ * Files the codebase rules cache tracks: rules.md anywhere, plus agent files
+ * (the cache itself ignores the ones at a workspace root, which load as agent
+ * file rules). Not for deletion checks: use isColocatedRulesFile there.
+ */
+export function isCodebaseRuleSourceFile(uri: string): boolean {
+  const name = getUriPathBasename(uri);
+  return (
+    name === RULES_MARKDOWN_FILENAME ||
+    AGENT_INSTRUCTION_FILENAMES.includes(name)
+  );
 }
 
 async function getDefinitionFilesInDir(

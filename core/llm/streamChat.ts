@@ -12,6 +12,7 @@ export async function* llmStreamChat(
   msg: Message<ToCoreProtocol["llm/streamChat"][0]>,
   ide: IDE,
   messenger: IMessenger<ToCoreProtocol, FromCoreProtocol>,
+  getActiveWorkspaceDir?: () => Promise<string | undefined>,
 ): AsyncGenerator<ChatMessage, PromptLog> {
   const { config } = await configHandler.loadConfig();
   if (!config) {
@@ -69,6 +70,9 @@ export async function* llmStreamChat(
         throw new Error(`Slash command not found`);
       }
 
+      const activeWorkspaceDir = await getActiveWorkspaceDir?.().catch(
+        () => undefined,
+      );
       const gen = slashCommand.run({
         input,
         history: messages,
@@ -95,6 +99,7 @@ export async function* llmStreamChat(
           ),
         completionOptions,
         abortController,
+        activeWorkspaceDir,
       });
       let next = await gen.next();
       while (!next.done) {

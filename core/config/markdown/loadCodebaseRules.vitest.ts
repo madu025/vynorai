@@ -2,7 +2,7 @@ import { markdownToRule } from "@continuedev/config-yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDE } from "../..";
 import { walkDirs } from "../../indexing/walkDir";
-import { loadCodebaseRules } from "./loadCodebaseRules";
+import { CodebaseRulesCache, loadCodebaseRules } from "./loadCodebaseRules";
 
 // Mock dependencies
 vi.mock("../../indexing/walkDir", () => ({
@@ -182,5 +182,98 @@ describe("loadCodebaseRules", () => {
     // Should have one error
     expect(errors).toHaveLength(1);
     expect(errors[0].message).toContain("Error loading colocated rule files");
+  });
+});
+
+describe("loadCodebaseRules nested agent instruction files", () => {
+  const ide = {
+    readFile: vi.fn(),
+    getWorkspaceDirs: vi.fn(),
+  } as unknown as IDE;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    (ide.getWorkspaceDirs as any).mockResolvedValue(["file:///workspace"]);
+    (ide.readFile as any).mockImplementation(async (uri: string) => `# ${uri}`);
+    (markdownToRule as any).mockImplementation(
+      (_content: string, options: any, parentDir?: string) => ({
+        name: options.fileUri,
+        rule: `scoped to ${parentDir}`,
+      }),
+    );
+  });
+
+  it("loads agent files below the root, scoped to their directory", async () => {
+    (walkDirs as any).mockResolvedValue([
+      "file:///workspace/packages/api/AGENTS.md",
+      "file:///workspace/packages/web/CLAUDE.md",
+      "file:///workspace/src/rules.md",
+    ]);
+
+    const { rules, errors } = await loadCodebaseRules(ide);
+
+    expect(errors).toHaveLength(0);
+    expect(rules.map((r) => r.sourceFile)).toEqual([
+      "file:///workspace/packages/api/AGENTS.md",
+      "file:///workspace/packages/web/CLAUDE.md",
+      "file:///workspace/src/rules.md",
+    ]);
+    expect(rules.every((r) => r.source === "colocated-markdown")).toBe(true);
+    expect(rules[0].rule).toBe("scoped to packages/api");
+    expect(rules[1].rule).toBe("scoped to packages/web");
+  });
+
+  it("leaves root agent files to loadMarkdownRules", async () => {
+    (walkDirs as any).mockResolvedValue([
+      "file:///workspace/AGENTS.md",
+      "file:///workspace/CLAUDE.md",
+      "file:///workspace/AGENT.md",
+    ]);
+
+    const { rules } = await loadCodebaseRules(ide);
+
+    expect(rules).toHaveLength(0);
+    expect(ide.readFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps a rules.md at the root as before", async () => {
+    (walkDirs as any).mockResolvedValue(["file:///workspace/rules.md"]);
+    const { rules } = await loadCodebaseRules(ide);
+    expect(rules).toHaveLength(1);
+  });
+});
+
+describe("CodebaseRulesCache.update with agent files", () => {
+  const ide = {
+    readFile: vi.fn(async () => "# content"),
+    getWorkspaceDirs: vi.fn(async () => ["file:///workspace"]),
+  } as unknown as IDE;
+
+  beforeEach(() => {
+    (markdownToRule as any).mockReset();
+    (markdownToRule as any).mockImplementation(() => ({
+      name: "n",
+      rule: "r",
+    }));
+    CodebaseRulesCache.getInstance().rules = [];
+  });
+
+  it("ignores a root agent file but tracks a nested one", async () => {
+    const cache = CodebaseRulesCache.getInstance();
+
+    expect(await cache.update(ide, "file:///workspace/AGENTS.md")).toBe(false);
+    expect(cache.rules).toHaveLength(0);
+
+    expect(await cache.update(ide, "file:///workspace/pkg/AGENTS.md")).toBe(
+      true,
+    );
+    expect(cache.rules.map((r) => r.sourceFile)).toEqual([
+      "file:///workspace/pkg/AGENTS.md",
+    ]);
+  });
+
+  it("still tracks rules.md at any depth", async () => {
+    const cache = CodebaseRulesCache.getInstance();
+    expect(await cache.update(ide, "file:///workspace/rules.md")).toBe(true);
   });
 });

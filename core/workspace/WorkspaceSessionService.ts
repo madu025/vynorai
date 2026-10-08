@@ -47,6 +47,7 @@ export class WorkspaceSessionService {
   private invalidated = true;
   /** Root the user picked explicitly; wins over file/single-root inference. */
   private manualRootId?: string;
+  private activeRootUri?: string;
 
   constructor(
     private readonly ide: IDE,
@@ -63,6 +64,12 @@ export class WorkspaceSessionService {
    * An unknown id is rejected so a stale picker can never select a root that
    * is no longer open.
    */
+  /** URI of the selected root. Kept off the snapshot: it holds absolute paths. */
+  async getActiveRootUri(): Promise<string | undefined> {
+    await this.getSnapshot();
+    return this.activeRootUri;
+  }
+
   async setActiveRoot(rootId: string): Promise<WorkspaceSnapshot> {
     const snapshot = await this.getSnapshot(true);
     if (!snapshot.roots.some((root) => root.id === rootId)) {
@@ -112,6 +119,7 @@ export class WorkspaceSessionService {
     if (this.manualRootId && !manualRoot) this.manualRootId = undefined;
     const selectedRoot =
       manualRoot ?? activeRoot ?? (roots.length === 1 ? roots[0] : undefined);
+    this.activeRootUri = selectedRoot?.uri;
 
     const [manifests, instructions] = await Promise.all([
       this.collectArtifacts(roots, MANIFESTS),

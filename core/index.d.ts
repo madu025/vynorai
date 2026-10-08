@@ -957,6 +957,8 @@ export interface ContinueSDK {
   fetch: FetchFunction;
   completionOptions?: LLMFullCompletionOptions;
   abortController: AbortController;
+  /** Root the user pinned or the workspace snapshot selected, if known. */
+  activeWorkspaceDir?: string;
 }
 
 /* Be careful changing SlashCommand or SlashCommandDescription, config.ts can break */

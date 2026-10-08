@@ -1,6 +1,7 @@
 import { FileType, SlashCommand } from "../../../index.js";
 import { renderChatMessage } from "../../../util/messageContent.js";
-import { joinPathsToUri } from "../../../util/uri.js";
+import { getUriPathBasename, joinPathsToUri } from "../../../util/uri.js";
+import { resolveActiveWorkspaceDir } from "../../../workspace/activeRoot.js";
 
 const MANIFEST_CANDIDATES = [
   "package.json",
@@ -38,14 +39,20 @@ export const InitCommand: SlashCommand = {
   name: "init",
   description:
     "Initialize AGENTS.md project memory and architecture guidelines",
-  run: async function* ({ ide, llm, abortController }) {
-    const workspaceDirs = await ide.getWorkspaceDirs();
-    if (!workspaceDirs || workspaceDirs.length === 0) {
+  run: async function* ({ ide, llm, abortController, activeWorkspaceDir }) {
+    // Act on the root the user is working in (pinned root, then the root of the
+    // open file, then the only root), not blindly on the first folder.
+    const workspaceDir = await resolveActiveWorkspaceDir(
+      ide,
+      activeWorkspaceDir,
+    );
+    if (!workspaceDir) {
       yield "⚠️ No active workspace directory found. Open a workspace folder first.";
       return;
     }
 
-    const workspaceDir = workspaceDirs[0];
+    const rootName = getUriPathBasename(workspaceDir) || "workspace";
+    yield `📁 Project root: **${rootName}**\n`;
     yield "🔍 Analyzing workspace architecture, manifests, and build commands...\n\n";
 
     // 1. Gather top-level structure
@@ -85,15 +92,20 @@ export const InitCommand: SlashCommand = {
       }
     }
 
-    // 3. Check for existing AGENTS.md or CLAUDE.md
+    // 3. Check for existing AGENTS.md or CLAUDE.md. An existing file is
+    // updated in place under its own name; a new one is written as AGENTS.md.
     const agentsUri = joinPathsToUri(workspaceDir, "AGENTS.md");
     const claudeUri = joinPathsToUri(workspaceDir, "CLAUDE.md");
     let existingMemory = "";
+    let targetUri = agentsUri;
+    let targetName = "AGENTS.md";
     try {
       if (await ide.fileExists(agentsUri)) {
         existingMemory = await ide.readFile(agentsUri);
       } else if (await ide.fileExists(claudeUri)) {
         existingMemory = await ide.readFile(claudeUri);
+        targetUri = claudeUri;
+        targetName = "CLAUDE.md";
       }
     } catch {
       // Ignore read errors
@@ -102,7 +114,7 @@ export const InitCommand: SlashCommand = {
     // 4. Construct prompt
     const prompt = `<vynorai_task type="init_project_memory">
 <instruction>
-You are an expert Principal Systems Architect. Your job is to create a comprehensive, highly dense, strictly formatted AGENTS.md project memory guide for this codebase.
+You are an expert Principal Systems Architect. Your job is to create a comprehensive, highly dense, strictly formatted ${targetName} project memory guide for this codebase.
 This file will be read by VynorAI, Claude Code, OpenAI Codex, and Cursor as the single source of truth for repository conventions, architecture, build commands, and rules.
 
 STRICT CONSTRAINTS:
@@ -154,7 +166,7 @@ ${
 - Sensitive files, environment variables, or platform-specific rules (Windows/Linux/Docker).
 </required_structure>
 
-Output ONLY the complete Markdown content for AGENTS.md.
+Output ONLY the complete Markdown content for ${targetName}.
 </vynorai_task>`;
 
     let fullGeneratedText = "";
@@ -181,12 +193,12 @@ Output ONLY the complete Markdown content for AGENTS.md.
         .trim();
     }
 
-    // Save to AGENTS.md at workspace root
+    // Save at the root of the active project
     try {
-      await ide.writeFile(agentsUri, cleaned + "\n");
-      yield "\n\n---\n✅ **AGENTS.md** successfully created and saved to the workspace root!\nAll VynorAI, Claude Code, and Codex sessions will now automatically load and follow these project guidelines.";
+      await ide.writeFile(targetUri, cleaned + "\n");
+      yield `\n\n---\n✅ **${targetName}** successfully created and saved to the root of **${rootName}**!\nAll VynorAI, Claude Code, and Codex sessions will now automatically load and follow these project guidelines.`;
     } catch (err: any) {
-      yield `\n\n---\n⚠️ Could not automatically write to AGENTS.md: ${err?.message || err}. You can copy the content above into AGENTS.md manually.`;
+      yield `\n\n---\n⚠️ Could not automatically write to ${targetName}: ${err?.message || err}. You can copy the content above into ${targetName} manually.`;
     }
   },
 };

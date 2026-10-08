@@ -4,8 +4,12 @@ import {
 } from "@continuedev/config-yaml";
 import { IDE, RuleWithSource } from "../..";
 import { walkDirs } from "../../indexing/walkDir";
-import { RULES_MARKDOWN_FILENAME } from "../../llm/rules/constants";
+import {
+  isNestedAgentInstructionFile,
+  RULES_MARKDOWN_FILENAME,
+} from "../../llm/rules/constants";
 import { findUriInDirs, getUriPathBasename } from "../../util/uri";
+import { expandInstructionImports } from "./expandInstructionImports";
 
 export class CodebaseRulesCache {
   private static instance: CodebaseRulesCache | null = null;
@@ -24,7 +28,8 @@ export class CodebaseRulesCache {
     this.rules = rules;
     this.errors = errors;
   }
-  async update(ide: IDE, uri: string) {
+  /** Returns false when the file is not a codebase rule (e.g. a root agent file). */
+  async update(ide: IDE, uri: string): Promise<boolean> {
     const content = await ide.readFile(uri);
     const workspaceDirs = await ide.getWorkspaceDirs();
     const { relativePathOrBasename, foundInDir } = findUriInDirs(
@@ -36,8 +41,19 @@ export class CodebaseRulesCache {
         `Failed to load codebase rule ${uri}: URI not found in workspace`,
       );
     }
+    const filename = getUriPathBasename(uri);
+    if (
+      filename !== RULES_MARKDOWN_FILENAME &&
+      !isNestedAgentInstructionFile(filename, relativePathOrBasename)
+    ) {
+      return false; // root agent files load through loadMarkdownRules
+    }
+    const body =
+      filename !== RULES_MARKDOWN_FILENAME && foundInDir
+        ? await expandInstructionImports(content, uri, foundInDir, ide)
+        : content;
     const rule = markdownToRule(
-      content,
+      body,
       {
         uriType: "file",
         fileUri: uri,
@@ -55,6 +71,7 @@ export class CodebaseRulesCache {
     } else {
       this.rules[matchIdx] = ruleWithSource;
     }
+    return true;
   }
   remove(uri: string) {
     this.rules = this.rules.filter((r) => r.sourceFile !== uri);
@@ -75,10 +92,16 @@ export async function loadCodebaseRules(ide: IDE): Promise<{
     // Get all files from the workspace
     const allFiles = await walkDirs(ide);
 
-    // Filter to just rules.md files
+    // rules.md anywhere, plus agent files below the workspace root. Root agent
+    // files are excluded here: loadMarkdownRules loads them (always applied).
+    const workspaceDirsForFilter = await ide.getWorkspaceDirs();
     const rulesMdFiles = allFiles.filter((file) => {
       const filename = getUriPathBasename(file);
-      return filename === RULES_MARKDOWN_FILENAME;
+      if (filename === RULES_MARKDOWN_FILENAME) return true;
+      return isNestedAgentInstructionFile(
+        filename,
+        findUriInDirs(file, workspaceDirsForFilter).relativePathOrBasename,
+      );
     });
 
     // Process each rules.md file
@@ -92,8 +115,12 @@ export async function loadCodebaseRules(ide: IDE): Promise<{
         if (foundInDir) {
           const lastSlashIndex = relativePathOrBasename.lastIndexOf("/");
           const parentDir = relativePathOrBasename.substring(0, lastSlashIndex);
+          const body =
+            getUriPathBasename(filePath) !== RULES_MARKDOWN_FILENAME
+              ? await expandInstructionImports(content, uri, foundInDir, ide)
+              : content;
           const rule = markdownToRule(
-            content,
+            body,
             {
               uriType: "file",
               fileUri: uri,

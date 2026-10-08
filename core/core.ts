@@ -65,6 +65,7 @@ import { getDiffFn, GitDiffCache } from "./autocomplete/snippets/gitDiffCache";
 import { stringifyMcpPrompt } from "./commands/slash/mcpSlashCommand";
 import { createNewAssistantFile } from "./config/createNewAssistantFile";
 import {
+  isCodebaseRuleSourceFile,
   isColocatedRulesFile,
   isContinueAgentConfigFile,
   isContinueConfigRelatedUri,
@@ -99,6 +100,7 @@ import { ContinueError, ContinueErrorReason } from "./util/errors";
 import { shareSession } from "./util/historyUtils";
 import { Logger } from "./util/Logger.js";
 import { WorkspaceSessionService } from "./workspace/WorkspaceSessionService";
+import { setActiveRootUriProvider } from "./workspace/activeRootProvider";
 import { TaskRuntime } from "./agent/TaskRuntime";
 import { AgentOrchestrator } from "./agent/AgentOrchestrator";
 import { discoverVerificationCommands } from "./agent/VerificationDiscovery";
@@ -216,6 +218,8 @@ export class Core {
         this.ide,
         () => this.codeBaseIndexer.currentIndexingState,
       );
+
+      setActiveRootUriProvider(() => this.workspaceSession.getActiveRootUri());
 
       this.configHandler.onConfigUpdate((result) => {
         void (async () => {
@@ -364,6 +368,8 @@ export class Core {
     on("workspace/setActiveRoot", async ({ data }) => {
       const snapshot = await this.workspaceSession.setActiveRoot(data.rootId);
       this.messenger.send("workspace/statusUpdate", snapshot);
+      // Instruction rules are ordered by the active root, so reload them.
+      void this.configHandler.reloadConfig("Active workspace root changed");
       return snapshot;
     });
     on("workspace/invalidate", () => {
@@ -841,6 +847,7 @@ export class Core {
         msg,
         this.ide,
         this.messenger,
+        () => this.workspaceSession.getActiveRootUri(),
       );
     });
 
@@ -1128,9 +1135,9 @@ export class Core {
       walkDirCache.invalidate();
       void refreshIfNotIgnored(data.uris);
 
-      const colocatedRulesUris = data.uris.filter(isColocatedRulesFile);
+      const colocatedRulesUris = data.uris.filter(isCodebaseRuleSourceFile);
       const nonColocatedRuleUris = data.uris.filter(
-        (uri) => !isColocatedRulesFile(uri),
+        (uri) => !isCodebaseRuleSourceFile(uri),
       );
       if (colocatedRulesUris) {
         const rulesCache = CodebaseRulesCache.getInstance();
@@ -1161,9 +1168,9 @@ export class Core {
       walkDirCache.invalidate();
       void refreshIfNotIgnored(data.uris);
 
-      const colocatedRulesUris = data.uris.filter(isColocatedRulesFile);
+      const colocatedRulesUris = data.uris.filter(isCodebaseRuleSourceFile);
       const nonColocatedRuleUris = data.uris.filter(
-        (uri) => !isColocatedRulesFile(uri),
+        (uri) => !isCodebaseRuleSourceFile(uri),
       );
 
       if (colocatedRulesUris) {
@@ -1661,7 +1668,7 @@ export class Core {
           );
           continue;
         }
-        if (isColocatedRulesFile(uri)) {
+        if (isCodebaseRuleSourceFile(uri)) {
           try {
             const codebaseRulesCache = CodebaseRulesCache.getInstance();
             void codebaseRulesCache.update(this.ide, uri).then(() => {

@@ -118,4 +118,83 @@ Always verify code changes before completing.`;
     expect(savedContent).toContain("Essential Commands");
     expect(savedContent?.startsWith("```")).toBe(false);
   });
+
+  async function runInit(ide: any, extra: Record<string, unknown> = {}) {
+    const mockLlm = {
+      streamChat: vi.fn().mockImplementation(async function* () {
+        yield { role: "assistant", content: "# Guide\n\nBody." };
+      }),
+    };
+    const chunks: string[] = [];
+    for await (const chunk of InitCommand.run({
+      ide,
+      llm: mockLlm as any,
+      input: "/init",
+      history: [],
+      contextItems: [],
+      params: undefined,
+      addContextItem: vi.fn(),
+      selectedCode: [],
+      abortController: new AbortController(),
+      ...extra,
+    } as any)) {
+      if (typeof chunk === "string") chunks.push(chunk);
+    }
+    return {
+      text: chunks.join(""),
+      prompt: mockLlm.streamChat.mock.calls[0]?.[0]?.[0]?.content as string,
+    };
+  }
+
+  function multiRootIde(files: Record<string, string>, currentPath?: string) {
+    const written = new Map<string, string>();
+    return {
+      written,
+      ide: {
+        getWorkspaceDirs: vi
+          .fn()
+          .mockResolvedValue(["file:///w/alpha", "file:///w/beta"]),
+        getCurrentFile: vi
+          .fn()
+          .mockResolvedValue(
+            currentPath
+              ? { isUntitled: false, path: currentPath, contents: "" }
+              : undefined,
+          ),
+        listDir: vi.fn().mockResolvedValue([]),
+        fileExists: vi.fn().mockImplementation(async (u: string) => u in files),
+        readFile: vi
+          .fn()
+          .mockImplementation(async (u: string) => files[u] ?? ""),
+        writeFile: vi.fn().mockImplementation(async (u: string, c: string) => {
+          written.set(u, c);
+        }),
+      },
+    };
+  }
+
+  it("writes to the root of the open file in a multi-root workspace", async () => {
+    const { ide, written } = multiRootIde({}, "file:///w/beta/src/b.ts");
+    const { text } = await runInit(ide);
+    expect(text).toContain("Project root: **beta**");
+    expect([...written.keys()]).toEqual(["file:///w/beta/AGENTS.md"]);
+  });
+
+  it("honours the root the user pinned", async () => {
+    const { ide, written } = multiRootIde({}, "file:///w/beta/src/b.ts");
+    await runInit(ide, { activeWorkspaceDir: "file:///w/alpha" });
+    expect([...written.keys()]).toEqual(["file:///w/alpha/AGENTS.md"]);
+  });
+
+  it("updates an existing CLAUDE.md in place instead of adding AGENTS.md", async () => {
+    const { ide, written } = multiRootIde(
+      { "file:///w/alpha/CLAUDE.md": "# Existing conventions" },
+      "file:///w/alpha/a.ts",
+    );
+    const { text, prompt } = await runInit(ide);
+    expect([...written.keys()]).toEqual(["file:///w/alpha/CLAUDE.md"]);
+    expect(prompt).toContain("Existing conventions");
+    expect(prompt).toContain("CLAUDE.md project memory guide");
+    expect(text).toContain("**CLAUDE.md** successfully created");
+  });
 });

@@ -132,4 +132,22 @@ describe("WorkspaceSessionService", () => {
     // A rejected pick leaves the previous selection intact.
     expect((await service.getSnapshot(true)).activeRootId).toBe(target.id);
   });
+
+  it("exposes the selected root URI for commands without leaking it into the snapshot", async () => {
+    const ide = createIde({
+      getWorkspaceDirs: vi
+        .fn()
+        .mockResolvedValue(["file:///workspace/a", "file:///workspace/b"]),
+      getCurrentFile: vi.fn().mockResolvedValue(undefined),
+    });
+    const service = new WorkspaceSessionService(ide, () => undefined);
+
+    expect(await service.getActiveRootUri()).toBeUndefined();
+    const snapshot = await service.getSnapshot();
+    await service.setActiveRoot(snapshot.roots[1].id);
+    expect(await service.getActiveRootUri()).toBe("file:///workspace/b");
+    expect(JSON.stringify(await service.getSnapshot())).not.toContain(
+      "file:///workspace",
+    );
+  });
 });

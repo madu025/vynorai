@@ -50,3 +50,48 @@ test("tolerates an incomplete snapshot while the IDE refresh is in flight", () =
   expect(result).toContain("Roots: none detected");
   expect(result).toContain("Available IDE capabilities: none detected");
 });
+
+test("names the active root, the platform and today's date", () => {
+  const multi = {
+    ...snapshot,
+    roots: [
+      { id: "root-1", name: "VynorAI", branch: "main" },
+      { id: "root-2", name: "docs-site" },
+    ],
+    activeRootId: "root-2",
+    platform: "win32",
+  } as WorkspaceSnapshot;
+
+  const result = formatWorkspaceGrounding(
+    multi,
+    new Date("2026-10-08T10:00:00Z"),
+  );
+
+  expect(result).toContain("- Active root: docs-site");
+  expect(result).toContain("VynorAI (branch: main)");
+  expect(result).toContain("- Platform: win32");
+  expect(result).toContain("- Date: 2026-10-08");
+});
+
+test("tells the model not to assume a root when several are open and none is active", () => {
+  const multi = {
+    ...snapshot,
+    roots: [
+      { id: "root-1", name: "alpha" },
+      { id: "root-2", name: "beta" },
+    ],
+    activeRootId: undefined,
+  } as WorkspaceSnapshot;
+
+  const result = formatWorkspaceGrounding(multi);
+
+  expect(result).toContain("Active root: not selected");
+  expect(result).toContain("do not assume one");
+  expect(result).toContain("Platform: unknown");
+});
+
+test("a single open root is reported as the active root", () => {
+  expect(formatWorkspaceGrounding(snapshot)).toContain(
+    "- Active root: VynorAI",
+  );
+});

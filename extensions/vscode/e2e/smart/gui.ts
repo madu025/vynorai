@@ -50,10 +50,47 @@ export async function openPanel(): Promise<{
   view: WebView;
   driver: WebDriver;
 }> {
-  await retry(() =>
-    new Workbench().executeCommand("continue.focusContinueInput"),
-  );
+  await waitForExtensionActive();
+  await retry(async () => {
+    await new Workbench().executeCommand("continue.focusContinueInput");
+    await failIfCommandNotFound();
+  }, 60_000);
   return attachToPanel();
+}
+
+/**
+ * The extension bundle is large: loading it takes ~6 s and its commands are
+ * registered at the end of activation (~8 s after start). The command palette
+ * lists the commands from package.json at once, so running one too early hits
+ * "command not found" and leaves a modal error open. Wait for the extension's
+ * status bar item, which is created during activation.
+ */
+async function waitForExtensionActive() {
+  await retry(async () => {
+    const statusBar = await new Workbench().getStatusBar();
+    await statusBar.findElement(By.xpath("//*[contains(., 'VynorAI')]"));
+  }, 60_000);
+}
+
+/**
+ * A command run before activation finishes does not throw: VS Code opens an
+ * error dialog. Close it and throw so the caller retries.
+ */
+async function failIfCommandNotFound() {
+  const driver = VSBrowser.instance.driver;
+  const dialogs = await driver.findElements(By.css(".monaco-dialog-box"));
+  if (dialogs.length === 0) return;
+  const text = await dialogs[0].getText();
+  const button = await dialogs[0].findElements(
+    By.css(".dialog-buttons .monaco-button"),
+  );
+  if (button.length > 0) await button[0].click();
+  if (/not found|resulted in an error/i.test(text)) {
+    await sleep(1_000);
+    throw new Error(
+      `VynorAI command not ready yet: ${text.replace(/\s+/g, " ")}`,
+    );
+  }
 }
 
 /** Attach to an already-open VynorAI panel without changing its route. */

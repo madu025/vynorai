@@ -12,6 +12,7 @@ import ReviewCommand from "./review";
 import ShareSlashCommand from "./share";
 import SwarmCommand from "./swarm";
 import GoalCommand from "./goal";
+import { MemoryCommand, StatusCommand } from "./status";
 import {
   FixCommand,
   ExplainCommand,
@@ -26,6 +27,8 @@ import {
 const LegacyBuiltInSlashCommands: SlashCommand[] = [
   // ── VynorAI Exclusive Commands (listed first) ──────────────────────────
   InitCommand,
+  StatusCommand,
+  MemoryCommand,
   GoalCommand,
   SwarmCommand,
   ReviewCommand,

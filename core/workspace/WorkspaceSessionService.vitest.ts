@@ -150,4 +150,14 @@ describe("WorkspaceSessionService", () => {
       "file:///workspace",
     );
   });
+
+  it("reports the host platform without changing the snapshot revision", async () => {
+    const service = new WorkspaceSessionService(createIde(), () => undefined);
+
+    const first = await service.getSnapshot();
+    const second = await service.getSnapshot(true);
+
+    expect(first.platform).toBe(process.platform);
+    expect(second.revision).toBe(first.revision);
+  });
 });

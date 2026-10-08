@@ -28,13 +28,21 @@ import { createNewPromptFileV2 } from "./promptFiles/createNewPromptFile";
 import { callTool } from "./tools/callTool";
 import { abortRunningSubagents } from "./tools/implementations/runSubagent";
 import { BuiltInToolNames } from "./tools/builtIn";
+import {
+  evaluatePermissionRules,
+  loadPermissionRules,
+} from "./agent/permissionRules";
 import { safeParseToolCallArgs } from "./tools/parseArgs";
 import { ChatDescriber } from "./util/chatDescriber";
 import { compactConversation } from "./util/conversationCompaction";
 import { HookRunner } from "./hooks/HookRunner";
 import { GlobalContext } from "./util/GlobalContext";
 import historyManager from "./util/history";
-import { editConfigFile, migrateV1DevDataFiles } from "./util/paths";
+import {
+  editConfigFile,
+  getContinueGlobalPath,
+  migrateV1DevDataFiles,
+} from "./util/paths";
 
 import {
   isProcessBackgrounded,
@@ -1346,63 +1354,65 @@ export class Core {
 
     on(
       "tools/evaluatePolicy",
-      async ({
-        data: {
-          toolName,
-          basePolicy,
-          parsedArgs,
-          processedArgs,
-          permissionMode,
-        },
-      }) => {
-        if (WORKSPACE_MUTATING_TOOLS.has(toolName)) {
-          const workspace = await this.workspaceSession.getSnapshot();
-          if (!workspace.trusted || workspace.roots.length === 0) {
-            return {
-              policy: "disabled" as const,
-              displayValue:
-                "Workspace-changing tools require an open, trusted workspace.",
-            };
-          }
-        }
-        const { config } = await this.configHandler.loadConfig();
-        if (!config) {
-          throw new Error("Config not loaded");
-        }
-
-        const tool = config.tools.find((t) => t.function.name === toolName);
-        if (!tool) {
-          return { policy: basePolicy };
-        }
-
-        // Extract display value for specific tools
-        let displayValue: string | undefined;
-        if (toolName === "runTerminalCommand" && parsedArgs.command) {
-          displayValue = parsedArgs.command as string;
-        }
-
-        if (permissionMode === "auto" || permissionMode === "full") {
-          return this.evaluateAutoApproval(
-            tool,
+      this.withPermissionRules(
+        async ({
+          data: {
             toolName,
+            basePolicy,
+            parsedArgs,
+            processedArgs,
             permissionMode,
-            basePolicy,
-            parsedArgs,
-            processedArgs,
-            displayValue,
-          );
-        }
+          },
+        }) => {
+          if (WORKSPACE_MUTATING_TOOLS.has(toolName)) {
+            const workspace = await this.workspaceSession.getSnapshot();
+            if (!workspace.trusted || workspace.roots.length === 0) {
+              return {
+                policy: "disabled" as const,
+                displayValue:
+                  "Workspace-changing tools require an open, trusted workspace.",
+              };
+            }
+          }
+          const { config } = await this.configHandler.loadConfig();
+          if (!config) {
+            throw new Error("Config not loaded");
+          }
 
-        if (tool.evaluateToolCallPolicy) {
-          const evaluatedPolicy = tool.evaluateToolCallPolicy(
-            basePolicy,
-            parsedArgs,
-            processedArgs,
-          );
-          return { policy: evaluatedPolicy, displayValue };
-        }
-        return { policy: basePolicy, displayValue };
-      },
+          const tool = config.tools.find((t) => t.function.name === toolName);
+          if (!tool) {
+            return { policy: basePolicy };
+          }
+
+          // Extract display value for specific tools
+          let displayValue: string | undefined;
+          if (toolName === "runTerminalCommand" && parsedArgs.command) {
+            displayValue = parsedArgs.command as string;
+          }
+
+          if (permissionMode === "auto" || permissionMode === "full") {
+            return this.evaluateAutoApproval(
+              tool,
+              toolName,
+              permissionMode,
+              basePolicy,
+              parsedArgs,
+              processedArgs,
+              displayValue,
+            );
+          }
+
+          if (tool.evaluateToolCallPolicy) {
+            const evaluatedPolicy = tool.evaluateToolCallPolicy(
+              basePolicy,
+              parsedArgs,
+              processedArgs,
+            );
+            return { policy: evaluatedPolicy, displayValue };
+          }
+          return { policy: basePolicy, displayValue };
+        },
+      ),
     );
 
     on("tools/preprocessArgs", async ({ data: { toolName, args } }) => {
@@ -1471,6 +1481,80 @@ export class Core {
         return [];
       }
     });
+  }
+
+  /** User permission rules (.vynorai/permissions.json, global permissions.json) for one call. */
+  private async checkPermissionRules(
+    toolName: string,
+    args: Record<string, unknown>,
+    processedArgs?: Record<string, unknown>,
+  ) {
+    try {
+      const rules = await loadPermissionRules(
+        this.ide,
+        getContinueGlobalPath(),
+      );
+      if (!rules.deny.length && !rules.ask.length) return undefined;
+      const roots = (await this.ide.getWorkspaceDirs()).flatMap((dir) => {
+        try {
+          return dir.startsWith("file:") ? [fileURLToPath(dir)] : [];
+        } catch {
+          return [];
+        }
+      });
+      return evaluatePermissionRules(
+        rules,
+        { toolName, args, processedArgs },
+        roots,
+      );
+    } catch (e) {
+      // A broken rules file must not take tool calling down with it.
+      Logger.error(`Failed to evaluate permission rules: ${e}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Layers user permission rules over a policy evaluator: a matching deny
+   * rule disables the call, a matching ask rule turns an automatic approval
+   * into a prompt. Rules never make a call more permissive.
+   */
+  private withPermissionRules<
+    M extends {
+      data: {
+        toolName: string;
+        parsedArgs: Record<string, unknown>;
+        processedArgs?: Record<string, unknown>;
+      };
+    },
+  >(base: (msg: M) => Promise<{ policy: ToolPolicy; displayValue?: string }>) {
+    return async (
+      msg: M,
+    ): Promise<{ policy: ToolPolicy; displayValue?: string }> => {
+      const { toolName, parsedArgs, processedArgs } = msg.data;
+      const verdict = await this.checkPermissionRules(
+        toolName,
+        parsedArgs,
+        processedArgs,
+      );
+      if (verdict?.decision === "deny") {
+        return {
+          policy: "disabled",
+          displayValue: `Blocked by permission rule: ${verdict.rule}`,
+        };
+      }
+      const result = await base(msg);
+      if (
+        verdict?.decision === "ask" &&
+        result.policy === "allowedWithoutPermission"
+      ) {
+        return {
+          policy: "allowedWithPermission",
+          displayValue: `${result.displayValue ?? toolName} (approval required by rule ${verdict.rule})`,
+        };
+      }
+      return result;
+    };
   }
 
   /**
@@ -1556,6 +1640,15 @@ export class Core {
 
     if (!tool) {
       throw new Error(`Tool ${toolCall.function.name} not found`);
+    }
+
+    // Enforced here too, so subagents and headless runs cannot bypass a deny rule.
+    const ruleVerdict = await this.checkPermissionRules(
+      toolCall.function.name,
+      safeParseToolCallArgs(toolCall),
+    );
+    if (ruleVerdict?.decision === "deny") {
+      throw new Error(`Blocked by permission rule: ${ruleVerdict.rule}`);
     }
 
     if (!config.selectedModelByRole.chat) {

@@ -21,6 +21,7 @@ import { convertRuleBlockToSlashCommand } from "../../commands/slash/ruleBlockSl
 import { MCPManagerSingleton } from "../../context/mcp/MCPManagerSingleton";
 import MCPContextProvider from "../../context/providers/MCPContextProvider";
 import { initSlashCommand } from "../../promptFiles/initPrompt";
+import { addInfoSlashCommands } from "../../commands/slash/built-in-legacy/status";
 import { getConfigDependentToolDefinitions } from "../../tools";
 import { encodeMCPToolUri } from "../../tools/callTool";
 import { getMCPToolName } from "../../tools/mcpToolName";
@@ -170,6 +171,8 @@ export default async function doLoadConfig(options: {
   }
 
   newConfig.slashCommands.push(initSlashCommand);
+  // /status and /memory are always available, unless the user already defined them.
+  addInfoSlashCommands(newConfig.slashCommands);
 
   // Show deprecation warnings for providers
   const globalContext = new GlobalContext();

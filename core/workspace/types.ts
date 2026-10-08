@@ -39,6 +39,8 @@ export interface WorkspaceSnapshot {
   }>;
   trusted: boolean;
   capabilities: string[];
+  /** Node platform of the extension host (where shell tools run), e.g. "win32". */
+  platform?: string;
   createdAt: number;
 }
 

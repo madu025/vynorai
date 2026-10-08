@@ -24,6 +24,7 @@ import { TurnStatusLine } from "../../components/StepContainer/TurnStatusLine";
 import { useAutoCompaction } from "../../util/autoCompaction";
 import { RewindButton } from "../../components/StepContainer/RewindButton";
 import { ContinueTaskBanner } from "../../components/StepContainer/ContinueTaskBanner";
+import { PlanApprovalBanner } from "../../components/StepContainer/PlanApprovalBanner";
 import { TodoListPanel } from "../../components/StepContainer/TodoListPanel";
 import { estimateTokens } from "../../components/StepContainer/turnStatus";
 import {
@@ -562,6 +563,11 @@ export function Chat() {
         <TodoListPanel />
         <ContinueTaskBanner
           onContinue={(editorState) =>
+            submitOrQueue(editorState, { useCodebase: false, noContext: true })
+          }
+        />
+        <PlanApprovalBanner
+          onApprove={(editorState) =>
             submitOrQueue(editorState, { useCodebase: false, noContext: true })
           }
         />

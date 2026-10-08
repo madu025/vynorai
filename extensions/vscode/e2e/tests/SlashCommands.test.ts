@@ -1,0 +1,142 @@
+import { expect } from "chai";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { By, Key, WebView } from "vscode-extension-tester";
+import {
+  openPanel,
+  openWorkspace,
+  pageText,
+  retry,
+  sleep,
+  waitForTurnEnd,
+} from "../smart/gui";
+
+/**
+ * Live check of the commands that run locally in the extension (no model, no
+ * API key): /status and /memory, against a real folder with instruction files.
+ * Covers the real chat input, slash-command menu, core and chat rendering.
+ */
+function makeProject(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-e2e-project-"));
+  fs.mkdirSync(path.join(dir, "docs"));
+  fs.mkdirSync(path.join(dir, "pkg"));
+  fs.writeFileSync(path.join(dir, "docs", "style.md"), "Use two spaces.\n");
+  fs.writeFileSync(
+    path.join(dir, "AGENTS.md"),
+    "# Project rules\nFollow @docs/style.md for formatting.\n",
+  );
+  fs.writeFileSync(
+    path.join(dir, "pkg", "CLAUDE.md"),
+    "# Package notes\nKeep it small.\n",
+  );
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    '{"name":"vynor-e2e-project"}\n',
+  );
+  return dir;
+}
+
+/**
+ * Slash commands come from the loaded config, and the project chip needs the
+ * workspace snapshot. Typing "/" before both are ready shows only "Create a
+ * prompt". Wait until the panel has finished loading.
+ */
+async function waitUntilLoaded(view: WebView) {
+  await retry(async () => {
+    const model = await view.findWebElement(
+      By.css("[data-testid='model-select-button']"),
+    );
+    const modelText = (await model.getText()).trim();
+    const text = await pageText(view);
+    if (modelText !== "VynorAI Auto") {
+      throw new Error(`model still loading: ${modelText}`);
+    }
+    if (/Detecting workspace|No workspace/.test(text)) {
+      throw new Error("workspace still loading");
+    }
+  }, 90_000);
+}
+
+/** The chat input re-renders as a turn starts and ends, so never reuse an element. */
+async function typeIntoInput(view: WebView, ...keys: string[]) {
+  await retry(async () => {
+    const editors = await view.findWebElements(By.className("tiptap"));
+    if (!editors.length) throw new Error("no input");
+    // Earlier messages render read-only editors above; the live input is last.
+    const input = editors[editors.length - 1];
+    await input.click();
+    await input.sendKeys(...keys);
+  }, 30_000);
+}
+
+async function runSlashCommand(view: WebView, name: string) {
+  await typeIntoInput(view, `/${name}`);
+  await sleep(1_000);
+  await typeIntoInput(view, Key.ENTER); // pick the command from the slash menu
+  await sleep(500);
+  await typeIntoInput(view, Key.ENTER); // submit it
+}
+
+async function waitForText(view: WebView, needle: string, timeoutMs = 60_000) {
+  return retry(async () => {
+    const text = await pageText(view);
+    if (!text.includes(needle)) {
+      throw new Error(`"${needle}" not shown yet`);
+    }
+    return text;
+  }, timeoutMs);
+}
+
+describe("VynorAI local slash commands", function () {
+  this.timeout(240_000);
+
+  let view: WebView | undefined;
+  let project = "";
+
+  before(() => {
+    project = makeProject();
+  });
+
+  afterEach(async () => {
+    await view?.switchBack().catch(() => undefined);
+  });
+
+  it("lists, runs /status and /memory in one panel session", async () => {
+    await openWorkspace(project);
+    ({ view } = await openPanel());
+    await waitUntilLoaded(view);
+
+    // 1. The slash menu offers the built-in commands.
+    await typeIntoInput(view, "/");
+    await sleep(1_500);
+    const menu = await pageText(view);
+    console.log("SLASH MENU TEXT:", JSON.stringify(menu.slice(0, 700)));
+    for (const name of ["init", "status", "memory"]) {
+      expect(menu).to.include(name);
+    }
+    await typeIntoInput(view, Key.ESCAPE);
+    await typeIntoInput(view, Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE);
+
+    // 2. /status reports the project, model, index and instruction files.
+    await runSlashCommand(view, "status");
+    const status = await waitForText(view, "VynorAI status");
+    console.log("STATUS OUTPUT:", JSON.stringify(status.slice(0, 900)));
+    expect(status).to.include(`Active project: ${path.basename(project)}`);
+    expect(status).to.match(/Chat model: /);
+    expect(status).to.match(/Codebase index: (enabled|disabled)/);
+    expect(status).to.match(/Instruction files loaded: [1-9]/);
+    expect(status).not.to.include(os.tmpdir());
+
+    // The first turn must be finished before the next command is submitted.
+    await waitForTurnEnd(view);
+
+    // 3. /memory lists AGENTS.md and the nested CLAUDE.md, relative paths only.
+    await runSlashCommand(view, "memory");
+    const memory = await waitForText(view, "Loaded instructions");
+    console.log("MEMORY OUTPUT:", JSON.stringify(memory.slice(0, 1200)));
+    expect(memory).to.include("AGENTS.md");
+    expect(memory).to.include("pkg/CLAUDE.md");
+    expect(memory).not.to.include(os.tmpdir());
+  });
+});

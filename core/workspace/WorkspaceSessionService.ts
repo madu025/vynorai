@@ -178,6 +178,8 @@ export class WorkspaceSessionService {
       id: digest(workspaceDirs.join("|") || "no-workspace").slice(0, 24),
       revision: this.revision,
       ...comparable,
+      // Constant for the process, so it stays out of the change fingerprint.
+      platform: process.platform,
       createdAt: Date.now(),
     };
     this.invalidated = false;

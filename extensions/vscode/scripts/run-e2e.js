@@ -8,6 +8,12 @@ const path = require("path");
 // editor, so ChromeDriver only reports a misleading DevToolsActivePort error.
 const env = { ...process.env, NODE_ENV: "e2e" };
 delete env.ELECTRON_RUN_AS_NODE;
+// The extension resolves a relative CONTINUE_GLOBAL_DIR against VS Code's own
+// working directory, where the parent folder does not exist, so activation
+// fails and no command is ever registered. Hand it an absolute path.
+for (const name of ["CONTINUE_GLOBAL_DIR", "VYNORAI_GLOBAL_DIR"]) {
+  if (env[name]) env[name] = path.resolve(env[name]);
+}
 
 const testFile = process.env.TEST_FILE || "./e2e/_output/tests/*.test.js";
 const extensionsDir =

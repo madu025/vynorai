@@ -30,7 +30,7 @@ describe("VSIX lifecycle recovery", function () {
     await assertVynorModel(view);
 
     await view.switchBack();
-    await new Workbench().executeCommand("workbench.action.reloadWindow");
+    await new Workbench().executeCommand("Developer: Reload Window");
     ({ view } = await attachToPanel());
     await assertVynorModel(view);
 

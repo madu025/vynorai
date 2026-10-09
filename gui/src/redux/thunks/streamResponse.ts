@@ -12,6 +12,7 @@ import {
   updateHistoryItemAtIndex,
 } from "../slices/sessionSlice";
 import { RootState, ThunkApiType } from "../store";
+import { panelCommandFromEditor } from "../../util/panelCommands";
 import { ensureTokenizerLoaded } from "../../util/tokenCount";
 import { streamNormalInput } from "./streamNormalInput";
 import { streamThunkWrapper } from "./streamThunkWrapper";
@@ -52,6 +53,25 @@ export const streamResponseThunk = createAsyncThunk<
     { editorState, modifiers, index, resumeTaskId },
     { dispatch, extra, getState },
   ) => {
+    // /clear, /compact and /plan act on the panel and never reach the model.
+    const typedCommand =
+      index === undefined && resumeTaskId === undefined
+        ? panelCommandFromEditor(editorState)
+        : undefined;
+    // A command of the same name that the user defined is theirs, not ours.
+    const panelCommand =
+      typedCommand &&
+      getState().config.config.slashCommands?.find(
+        (command) => command.name === typedCommand.name,
+      )?.source === "built-in-legacy"
+        ? typedCommand
+        : undefined;
+    if (panelCommand) {
+      const { runPanelCommand } = await import("./panelCommands");
+      await dispatch(runPanelCommand({ command: panelCommand, modifiers }));
+      return;
+    }
+
     const startedAt = Date.now();
     const runId = newDiagnosticId();
     const initialState = getState();

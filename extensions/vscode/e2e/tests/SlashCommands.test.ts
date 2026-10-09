@@ -112,7 +112,15 @@ describe("VynorAI local slash commands", function () {
     await sleep(1_500);
     const menu = await pageText(view);
     console.log("SLASH MENU TEXT:", JSON.stringify(menu.slice(0, 700)));
-    for (const name of ["init", "status", "memory"]) {
+    for (const name of [
+      "init",
+      "status",
+      "memory",
+      "help",
+      "clear",
+      "compact",
+      "plan",
+    ]) {
       expect(menu).to.include(name);
     }
     await typeIntoInput(view, Key.ESCAPE);
@@ -138,5 +146,32 @@ describe("VynorAI local slash commands", function () {
     expect(memory).to.include("AGENTS.md");
     expect(memory).to.include("pkg/CLAUDE.md");
     expect(memory).not.to.include(os.tmpdir());
+
+    await waitForTurnEnd(view);
+
+    // 4. /help lists the commands, /plan switches mode, /clear starts a new chat.
+    await runSlashCommand(view, "help");
+    const help = await waitForText(view, "VynorAI commands");
+    console.log("HELP OUTPUT:", JSON.stringify(help.slice(0, 900)));
+    expect(help).to.include("/status");
+    expect(help).to.include("/clear");
+    await waitForTurnEnd(view);
+
+    await runSlashCommand(view, "plan");
+    await retry(async () => {
+      const mode = await view!.findWebElement(
+        By.css("[data-testid='mode-select-button']"),
+      );
+      const label = (await mode.getAttribute("textContent")).trim();
+      if (!/plan/i.test(label)) throw new Error(`mode is still ${label}`);
+    }, 30_000);
+
+    await runSlashCommand(view, "clear");
+    await retry(async () => {
+      const text = await pageText(view!);
+      if (text.includes("VynorAI commands")) {
+        throw new Error("old conversation is still shown");
+      }
+    }, 30_000);
   });
 });

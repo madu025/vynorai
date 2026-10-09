@@ -36,6 +36,7 @@ import StepContainer from "../../components/StepContainer";
 import { TabBar } from "../../components/TabBar/TabBar";
 import { IdeMessengerContext } from "../../context/IdeMessenger";
 import { useWebviewListener } from "../../hooks/useWebviewListener";
+import { editorText } from "../../util/editorText";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
 import {
   selectDoneApplyStates,
@@ -98,14 +99,6 @@ const StepsDiv = styled.div`
 `;
 
 export const MAIN_EDITOR_INPUT_ID = "main-editor-input";
-
-function editorText(node: JSONContent): string {
-  return [node.text, ...(node.content ?? []).map(editorText)]
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function fallbackRender({ error, resetErrorBoundary }: any) {
   // Call resetErrorBoundary() to reset the error boundary and retry the render.

@@ -393,7 +393,9 @@ const StyledMarkdownPreview = memo(function StyledMarkdownPreview(
         fixDoubleDollarNewLineLatex(patchNestedMarkdown(source)),
       );
 
-    // Math and code highlighting load on first use; plain text renders at once.
+    // Show the text at once; math and code highlighting load on first use and
+    // the block is rendered again when they arrive.
+    render();
     const pending: Promise<void>[] = [];
     if (sourceNeedsKatex(source) && !isKatexLoaded()) {
       pending.push(ensureKatexLoaded());
@@ -401,10 +403,7 @@ const StyledMarkdownPreview = memo(function StyledMarkdownPreview(
     if (sourceNeedsHighlight(source) && !isHighlightLoaded()) {
       pending.push(ensureHighlightLoaded());
     }
-    if (pending.length === 0) {
-      render();
-      return;
-    }
+    if (pending.length === 0) return;
     let cancelled = false;
     void Promise.all(pending).then(() => {
       if (!cancelled) render();

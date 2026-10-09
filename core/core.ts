@@ -923,6 +923,7 @@ export class Core {
         await compactConversation({
           sessionId: msg.data.sessionId,
           index: msg.data.index,
+          instructions: msg.data.instructions,
           historyManager,
           currentModel,
         });

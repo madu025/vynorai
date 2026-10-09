@@ -430,6 +430,8 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     {
       index: number;
       sessionId: string;
+      /** Optional focus for the summary, from `/compact <instructions>`. */
+      instructions?: string;
     },
     string | undefined,
   ];

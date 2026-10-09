@@ -88,6 +88,32 @@ export async function loadJsonMcpConfigs(
     }),
   );
 
+  // Project-scoped servers in `.mcp.json` at the root of each workspace folder
+  // (Claude Code's file). A server entry is a command to run, so a repository
+  // you have not trusted never gets to start one.
+  const trusted = ide.isWorkspaceTrusted
+    ? await ide.isWorkspaceTrusted().catch(() => false)
+    : true;
+  for (const dir of workspaceDirs) {
+    const uri = joinPathsToUri(dir, ".mcp.json");
+    try {
+      if (!(await ide.fileExists(uri))) continue;
+      if (!trusted) {
+        errors.push({
+          fatal: false,
+          message: `Not loading ${getUriPathBasename(dir) || "workspace"}/.mcp.json: the workspace is not trusted, and MCP servers start local commands. Trust the workspace to use it.`,
+        });
+        continue;
+      }
+      jsonFiles.push({ uri, content: await ide.readFile(uri) });
+    } catch (e) {
+      errors.push({
+        fatal: false,
+        message: `Failed to read ${uri}: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+  }
+
   const validJsonConfigs: {
     name: string;
     mcpJson: McpJsonConfig;

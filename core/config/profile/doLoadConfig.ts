@@ -18,6 +18,8 @@ import {
 } from "../../";
 import { stringifyMcpPrompt } from "../../commands/slash/mcpSlashCommand";
 import { convertRuleBlockToSlashCommand } from "../../commands/slash/ruleBlockSlashCommand";
+import { skillSlashCommands } from "../../commands/slash/skillSlashCommands";
+import { loadMarkdownSkills } from "../markdown/loadMarkdownSkills";
 import { MCPManagerSingleton } from "../../context/mcp/MCPManagerSingleton";
 import MCPContextProvider from "../../context/providers/MCPContextProvider";
 import { initSlashCommand } from "../../promptFiles/initPrompt";
@@ -176,6 +178,22 @@ export default async function doLoadConfig(options: {
   addInfoSlashCommands(newConfig.slashCommands);
   // /help, /clear, /compact and /plan likewise.
   addPanelSlashCommands(newConfig.slashCommands);
+
+  // Every skill is also a /<skill-name> command.
+  try {
+    const { skills } = await loadMarkdownSkills(ide);
+    newConfig.slashCommands.push(
+      ...skillSlashCommands(
+        skills,
+        newConfig.slashCommands.map((command) => command.name),
+      ),
+    );
+  } catch (e) {
+    errors.push({
+      message: `Error adding skills as slash commands: ${e instanceof Error ? e.message : e}`,
+      fatal: false,
+    });
+  }
 
   // Show deprecation warnings for providers
   const globalContext = new GlobalContext();

@@ -34,6 +34,13 @@ function makeProject(): string {
     path.join(dir, "CLAUDE.local.md"),
     "# My notes\nPrefer short answers.\n",
   );
+  fs.mkdirSync(path.join(dir, ".claude", "skills", "e2e-checklist"), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    path.join(dir, ".claude", "skills", "e2e-checklist", "SKILL.md"),
+    "---\nname: e2e-checklist\ndescription: Release checklist for the e2e project\n---\nStep one.\n",
+  );
   fs.mkdirSync(path.join(dir, ".claude", "agents"), { recursive: true });
   fs.writeFileSync(
     path.join(dir, ".claude", "agents", "sec-reviewer.md"),
@@ -139,6 +146,7 @@ describe("VynorAI local slash commands", function () {
       "cost",
       "agents",
       "permissions",
+      "e2e-checklist",
     ]) {
       expect(menu).to.include(name);
     }

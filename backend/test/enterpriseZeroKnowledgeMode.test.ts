@@ -293,7 +293,7 @@ diff --git a/src/algo.ts b/src/algo.ts
 
       // Verify audit table contains only the SHA-256 hash and metadata
       const auditRows = await dbm.dbAll<any>(
-        "SELECT * FROM zk_compliance_audit_logs ORDER BY rowid DESC LIMIT 1",
+        `SELECT * FROM zk_compliance_audit_logs ORDER BY ${dbm.usingPostgres ? "seq" : "rowid"} DESC LIMIT 1`,
       );
       assert.ok(auditRows.length > 0);
       assert.equal(auditRows[0].zero_retention_verified, 1);
@@ -380,7 +380,7 @@ diff --git a/src/algo.ts b/src/algo.ts
 
       // 4.3 Intentional database tamper simulation
       const latestRecord = await dbm.dbGet<any>(
-        "SELECT * FROM zk_compliance_audit_logs ORDER BY rowid DESC LIMIT 1",
+        `SELECT * FROM zk_compliance_audit_logs ORDER BY ${dbm.usingPostgres ? "seq" : "rowid"} DESC LIMIT 1`,
       );
 
       // Tamper with lines_added in the database directly

@@ -502,6 +502,16 @@ CREATE INDEX IF NOT EXISTS idx_zk_audit_surrogate ON zk_compliance_audit_logs(us
 CREATE INDEX IF NOT EXISTS idx_zk_audit_diff_hash ON zk_compliance_audit_logs(diff_fingerprint);
 `,
   },
+  {
+    // The ledger is a hash chain, so its order is part of its meaning. SQLite
+    // orders by rowid; PostgreSQL has no rowid, so rows get an explicit
+    // insertion sequence (existing rows are numbered in storage order).
+    version: "025_zk_audit_sequence",
+    sql: `
+ALTER TABLE zk_compliance_audit_logs ADD COLUMN IF NOT EXISTS seq BIGSERIAL;
+CREATE INDEX IF NOT EXISTS idx_zk_audit_seq ON zk_compliance_audit_logs(seq);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

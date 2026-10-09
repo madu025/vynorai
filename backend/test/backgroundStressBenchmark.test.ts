@@ -254,14 +254,17 @@ test("Background Agent Queue: Concurrency Limits, Quote Pricing, LLM Failover & 
   // Helper to provision user and credit balance
   async function provisionUser(userId: string, plan: "pro" | "ultra" = "pro") {
     await dbRun(
-      "INSERT OR REPLACE INTO users (id, email, password_hash, api_key, api_key_hash) VALUES (?, ?, 'x', ?, ?)",
+      `INSERT INTO users (id, email, password_hash, api_key, api_key_hash) VALUES (?, ?, 'x', ?, ?)
+       ON CONFLICT (id) DO UPDATE SET email = excluded.email, api_key = excluded.api_key, api_key_hash = excluded.api_key_hash`,
       [userId, `${userId}@example.com`, `key-${userId}`, `hash-${userId}`],
     );
     const validUntilDate = new Date(Date.now() + 30 * 24 * 60 * 60_000);
     await dbRun(
-      `INSERT OR REPLACE INTO subscriptions
+      `INSERT INTO subscriptions
        (id, user_id, plan_name, status, order_id, currency, valid_until)
-       VALUES (?, ?, ?, 'active', ?, 'USD', ?)`,
+       VALUES (?, ?, ?, 'active', ?, 'USD', ?)
+       ON CONFLICT (id) DO UPDATE SET plan_name = excluded.plan_name, status = excluded.status,
+         order_id = excluded.order_id, currency = excluded.currency, valid_until = excluded.valid_until`,
       [
         `sub-${userId}`,
         userId,

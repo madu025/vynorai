@@ -10,7 +10,10 @@
 
 import crypto from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
-import { dbGet, dbAll, dbRun } from "../db.js";
+import { dbGet, dbAll, dbRun, usingPostgres } from "../db.js";
+
+/** Insertion order of the hash chain: PostgreSQL has no rowid. */
+const CHAIN_ORDER = usingPostgres ? "seq" : "rowid";
 import { generateZKUserId } from "./zkShield.js";
 
 export const GENESIS_MERKLE_ROOT =
@@ -146,7 +149,7 @@ export async function recordZkComplianceAuditLog(
 
   // Retrieve the latest Merkle root for chaining
   const lastRecord = await dbGet<{ merkle_hash: string }>(
-    "SELECT merkle_hash FROM zk_compliance_audit_logs ORDER BY rowid DESC LIMIT 1",
+    `SELECT merkle_hash FROM zk_compliance_audit_logs ORDER BY ${CHAIN_ORDER} DESC LIMIT 1`,
   );
   const prevHash = lastRecord?.merkle_hash || GENESIS_MERKLE_ROOT;
 
@@ -203,7 +206,7 @@ export async function verifyZkAuditChainIntegrity(): Promise<{
   error?: string;
 }> {
   const rows = await dbAll<ZkAuditRow>(
-    "SELECT * FROM zk_compliance_audit_logs ORDER BY rowid ASC",
+    `SELECT * FROM zk_compliance_audit_logs ORDER BY ${CHAIN_ORDER} ASC`,
   );
 
   if (!rows || rows.length === 0) {
@@ -264,7 +267,7 @@ export async function generateZkComplianceReport(
     query += " WHERE user_surrogate_id = ?";
     params.push(userSurrogateId);
   }
-  query += " ORDER BY rowid DESC LIMIT 100";
+  query += ` ORDER BY ${CHAIN_ORDER} DESC LIMIT 100`;
 
   const rows = await dbAll<ZkAuditRow>(query, params);
 

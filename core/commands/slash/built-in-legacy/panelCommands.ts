@@ -29,6 +29,23 @@ export const PlanCommand = panelOnly(
   "Switch to Plan mode; add a task to start planning it",
 );
 
+export const ResumeCommand = panelOnly(
+  "resume",
+  "Open the history of earlier conversations",
+);
+export const RewindCommand = panelOnly(
+  "rewind",
+  "Undo the last prompt: restore the files it changed and remove it from the chat",
+);
+export const ModelCommand = panelOnly(
+  "model",
+  "Show the chat models, or switch with /model <name>",
+);
+export const CostCommand = panelOnly(
+  "cost",
+  "Show the credits used by this chat and this month",
+);
+
 /** `/help`: the commands available in this session, from the loaded config. */
 export const HelpCommand: SlashCommand = {
   name: "help",
@@ -58,6 +75,10 @@ export function addPanelSlashCommands(
     ClearCommand,
     CompactCommand,
     PlanCommand,
+    ResumeCommand,
+    RewindCommand,
+    ModelCommand,
+    CostCommand,
   ]) {
     if (!slashCommands.some((cmd) => cmd.name === builtIn.name)) {
       slashCommands.push({

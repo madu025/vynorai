@@ -15,6 +15,17 @@ describe("parsePanelCommand", () => {
     });
   });
 
+  it("recognises the session commands", () => {
+    expect(parsePanelCommand("/resume")).toEqual({ name: "resume", arg: "" });
+    expect(parsePanelCommand("/rewind")).toEqual({ name: "rewind", arg: "" });
+    expect(parsePanelCommand("/cost")).toEqual({ name: "cost", arg: "" });
+    expect(parsePanelCommand("/model deepseek coder")).toEqual({
+      name: "model",
+      arg: "deepseek coder",
+    });
+    expect(parsePanelCommand("/models")).toBeUndefined();
+  });
+
   it("leaves everything else for the model", () => {
     expect(parsePanelCommand("please /clear my cache")).toBeUndefined();
     expect(parsePanelCommand("/clearance")).toBeUndefined();

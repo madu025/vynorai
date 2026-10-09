@@ -8,14 +8,22 @@ import { editorText } from "./editorText";
  * any other command, so the menu lists them (core registers a stub for each)
  * and the panel handles them before anything is sent.
  */
-export type PanelCommandName = "clear" | "compact" | "plan";
+export type PanelCommandName =
+  | "clear"
+  | "compact"
+  | "plan"
+  | "resume"
+  | "rewind"
+  | "model"
+  | "cost";
 
 export interface PanelCommand {
   name: PanelCommandName;
   arg: string;
 }
 
-const PANEL_COMMAND = /^\/(clear|compact|plan)(?:\s+(.*))?$/i;
+const PANEL_COMMAND =
+  /^\/(clear|compact|plan|resume|rewind|model|cost)(?:\s+(.*))?$/i;
 
 export function parsePanelCommand(text: string): PanelCommand | undefined {
   const match = PANEL_COMMAND.exec(text.trim());

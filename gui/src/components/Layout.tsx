@@ -8,7 +8,7 @@ import { LocalStorageProvider } from "../context/LocalStorage";
 import { useWebviewListener } from "../hooks/useWebviewListener";
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
 import { setCodeToEdit } from "../redux/slices/editState";
-import { setShowDialog } from "../redux/slices/uiSlice";
+import { setPendingRoute, setShowDialog } from "../redux/slices/uiSlice";
 import { enterEdit, exitEdit } from "../redux/thunks/edit";
 import {
   saveCurrentSession,
@@ -46,6 +46,12 @@ const Layout = () => {
   const dialogMessage = useAppSelector((state) => state.ui.dialogMessage);
 
   const showDialog = useAppSelector((state) => state.ui.showDialog);
+  const pendingRoute = useAppSelector((state) => state.ui.pendingRoute);
+  useEffect(() => {
+    if (!pendingRoute) return;
+    dispatch(setPendingRoute(undefined));
+    navigate(pendingRoute);
+  }, [pendingRoute, dispatch, navigate]);
   const isInEdit = useAppSelector((store) => store.session.isInEdit);
   const isHome =
     location.pathname === ROUTES.HOME ||

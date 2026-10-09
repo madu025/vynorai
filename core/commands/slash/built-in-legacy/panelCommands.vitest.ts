@@ -15,8 +15,12 @@ describe("panel slash commands", () => {
     expect(commands.map((c) => c.name).sort()).toEqual([
       "clear",
       "compact",
+      "cost",
       "help",
+      "model",
       "plan",
+      "resume",
+      "rewind",
     ]);
     expect(commands.find((c) => c.name === "plan")).toBe(custom);
   });

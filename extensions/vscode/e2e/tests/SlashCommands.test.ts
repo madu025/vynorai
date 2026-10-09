@@ -120,6 +120,10 @@ describe("VynorAI local slash commands", function () {
       "clear",
       "compact",
       "plan",
+      "resume",
+      "rewind",
+      "model",
+      "cost",
     ]) {
       expect(menu).to.include(name);
     }
@@ -172,6 +176,39 @@ describe("VynorAI local slash commands", function () {
       if (text.includes("VynorAI commands")) {
         throw new Error("old conversation is still shown");
       }
+    }, 30_000);
+
+    // 5. /model and /cost open a small dialog; /resume opens History.
+    const closeDialog = async () => {
+      const buttons = await view!.findWebElements(
+        By.xpath(
+          "//*[@hidden=false or not(@hidden)]//button[.//*[name()='svg']]",
+        ),
+      );
+      // the dialog's close button is the first button inside the dialog cover
+      const cover = await view!.findWebElements(
+        By.css("[tabindex='-1'] > div > button"),
+      );
+      await (cover[0] ?? buttons[0]).click();
+    };
+
+    await runSlashCommand(view, "model");
+    const models = await waitForText(view, "Chat models");
+    console.log("MODEL OUTPUT:", JSON.stringify(models.slice(0, 400)));
+    expect(models).to.include("Use /model <name> to switch.");
+    await closeDialog();
+
+    await runSlashCommand(view, "cost");
+    const cost = await waitForText(view, "This chat:");
+    console.log("COST OUTPUT:", JSON.stringify(cost.slice(0, 400)));
+    await closeDialog();
+
+    await runSlashCommand(view, "resume");
+    await retry(async () => {
+      const search = await view!.findWebElements(
+        By.css("input[placeholder='Search past sessions']"),
+      );
+      if (!search.length) throw new Error("History page is not open");
     }, 30_000);
   });
 });

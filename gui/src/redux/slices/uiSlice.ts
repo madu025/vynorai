@@ -49,6 +49,8 @@ type UIState = {
   permissionMode?: PermissionMode;
   /** Opt-in: send GUI crash messages and stacks (never code or prompts). */
   errorReportsEnabled?: boolean;
+  /** A route a slash command asked for (e.g. /resume); Layout navigates and clears it. */
+  pendingRoute?: string;
 };
 
 export const DEFAULT_TOOL_SETTING: ToolPolicy = "allowedWithPermission";
@@ -83,6 +85,9 @@ export const uiSlice = createSlice({
     },
     setSideReviewEnabled: (state, action: PayloadAction<boolean>) => {
       state.sideReviewEnabled = action.payload;
+    },
+    setPendingRoute: (state, action: PayloadAction<string | undefined>) => {
+      state.pendingRoute = action.payload;
     },
     setTaskCreditCap: (state, action: PayloadAction<number>) => {
       state.taskCreditCap = action.payload;
@@ -197,6 +202,7 @@ export const {
   setHistoryAccount,
   setSideReviewEnabled,
   setTaskCreditCap,
+  setPendingRoute,
   setJudgmentLevel,
   setPermissionMode,
   setErrorReportsEnabled,

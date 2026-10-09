@@ -86,7 +86,7 @@ export const AgentsCommand: SlashCommand = {
     }
     lines.push(
       "",
-      "Custom agents are read-only: they can search and read the project, not edit files or run commands.",
+      "Custom agents are read-only: they can search and read the project, not edit files or run commands. Changes to these files reach the agent's tool list on the next config reload (reload the window).",
     );
     yield lines.join("\n");
   },
@@ -112,22 +112,25 @@ export const HelpCommand: SlashCommand = {
   },
 };
 
+/** Every command in this file; the one list both registration paths use. */
+export const PanelSlashCommands: SlashCommand[] = [
+  HelpCommand,
+  ClearCommand,
+  CompactCommand,
+  PlanCommand,
+  ResumeCommand,
+  RewindCommand,
+  ModelCommand,
+  CostCommand,
+  PermissionsCommand,
+  AgentsCommand,
+];
+
 /** Registered by doLoadConfig next to /status and /memory. */
 export function addPanelSlashCommands(
   slashCommands: SlashCommandWithSource[],
 ): void {
-  for (const builtIn of [
-    HelpCommand,
-    ClearCommand,
-    CompactCommand,
-    PlanCommand,
-    ResumeCommand,
-    RewindCommand,
-    ModelCommand,
-    CostCommand,
-    PermissionsCommand,
-    AgentsCommand,
-  ]) {
+  for (const builtIn of PanelSlashCommands) {
     if (!slashCommands.some((cmd) => cmd.name === builtIn.name)) {
       slashCommands.push({
         name: builtIn.name,

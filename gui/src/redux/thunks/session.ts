@@ -166,6 +166,20 @@ export const loadSession = createAsyncThunk<
   },
 );
 
+/**
+ * Replaces the open chat with its saved copy. loadSession returns early for
+ * the chat that is already open, so compaction (which writes the summary to the
+ * saved copy) uses this to bring the summary into the panel.
+ */
+export const reloadOpenSession = createAsyncThunk<void, void, ThunkApiType>(
+  "session/reloadOpen",
+  async (_, { extra, dispatch, getState }) => {
+    const id = getState().session.id;
+    if (!id) return;
+    dispatch(newSession(await getSession(extra.ideMessenger, id)));
+  },
+);
+
 export const selectChatModelForProfile = createAsyncThunk<
   void,
   string,

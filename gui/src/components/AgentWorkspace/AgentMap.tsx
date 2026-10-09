@@ -13,24 +13,33 @@ export interface SubagentEntry {
 
 const SUBAGENT_TOOL = "run_subagent";
 
+// History items are immutable, so an item that did not change keeps its
+// object and its entries are not recomputed on every streamed token.
+const entriesByItem = new WeakMap<ChatHistoryItem, SubagentEntry[]>();
+
+function entriesOf(item: ChatHistoryItem): SubagentEntry[] {
+  const cached = entriesByItem.get(item);
+  if (cached) return cached;
+  const entries: SubagentEntry[] = [];
+  for (const state of item.toolCallStates ?? []) {
+    if (state.toolCall.function.name !== SUBAGENT_TOOL) continue;
+    const args = state.parsedArgs ?? {};
+    entries.push({
+      id: state.toolCallId,
+      label: String(args.description ?? "Subagent").slice(0, 80),
+      agent:
+        typeof args.agent === "string" && args.agent ? args.agent : undefined,
+      status: state.status,
+      detail: state.output?.[0]?.description,
+    });
+  }
+  entriesByItem.set(item, entries);
+  return entries;
+}
+
 /** Every subagent the agent started in this chat, oldest first. */
 export function collectSubagents(history: ChatHistoryItem[]): SubagentEntry[] {
-  const entries: SubagentEntry[] = [];
-  for (const item of history) {
-    for (const state of item.toolCallStates ?? []) {
-      if (state.toolCall.function.name !== SUBAGENT_TOOL) continue;
-      const args = state.parsedArgs ?? {};
-      entries.push({
-        id: state.toolCallId,
-        label: String(args.description ?? "Subagent").slice(0, 80),
-        agent:
-          typeof args.agent === "string" && args.agent ? args.agent : undefined,
-        status: state.status,
-        detail: state.output?.[0]?.description,
-      });
-    }
-  }
-  return entries;
+  return history.flatMap(entriesOf);
 }
 
 const STATUS_LABEL: Record<ToolStatus, string> = {

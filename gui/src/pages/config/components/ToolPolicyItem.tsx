@@ -46,12 +46,17 @@ export function ToolPolicyItem(props: ToolPolicyItemProps) {
   const mode = useAppSelector((state) => state.session.mode);
   // In Auto/Full permission mode, "ask" on a built-in tool means "decided by
   // risk": safe calls run, risky ones ask.
-  const byRisk = useAppSelector(
-    (state) =>
-      (state.ui.permissionMode ?? DEFAULT_PERMISSION_MODE) !== "ask" &&
-      props.tool.group === BUILT_IN_GROUP_NAME,
+  const permissionMode = useAppSelector(
+    (state) => state.ui.permissionMode ?? DEFAULT_PERMISSION_MODE,
   );
-  const askLabel = byRisk ? "By risk" : "Ask First";
+  const isBuiltIn = props.tool.group === BUILT_IN_GROUP_NAME;
+  // Accept-edits mode decides by tool type (edits run, commands ask), not risk.
+  const askLabel =
+    isBuiltIn && permissionMode === "edits"
+      ? "By mode"
+      : isBuiltIn && permissionMode !== "ask"
+        ? "By risk"
+        : "Ask First";
 
   useEffect(() => {
     if (!policy) {

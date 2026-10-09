@@ -1,5 +1,8 @@
 import { GetTool } from "../..";
-import { loadUserSubagents } from "../../agent/userSubagents";
+import {
+  describeAgentForTool,
+  loadUserSubagents,
+} from "../../agent/userSubagents";
 
 import { BUILT_IN_GROUP_NAME, BuiltInToolNames } from "../builtIn";
 
@@ -9,7 +12,7 @@ export const runSubagentTool: GetTool = async ({ ide }) => {
   }));
   const agentList = agents.length
     ? `\n\nCustom agents you can pick with the agent argument (omit it for the general explore subagent):\n${agents
-        .map((agent) => `- ${agent.name}: ${agent.description}`)
+        .map((agent) => describeAgentForTool(agent))
         .join("\n")}`
     : "";
   return {

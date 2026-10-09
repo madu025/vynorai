@@ -12,12 +12,7 @@ import ReviewCommand from "./review";
 import ShareSlashCommand from "./share";
 import SwarmCommand from "./swarm";
 import GoalCommand from "./goal";
-import {
-  ClearCommand,
-  CompactCommand,
-  HelpCommand,
-  PlanCommand,
-} from "./panelCommands";
+import { PanelSlashCommands } from "./panelCommands";
 import { MemoryCommand, StatusCommand } from "./status";
 import {
   FixCommand,
@@ -35,10 +30,7 @@ const LegacyBuiltInSlashCommands: SlashCommand[] = [
   InitCommand,
   StatusCommand,
   MemoryCommand,
-  HelpCommand,
-  ClearCommand,
-  CompactCommand,
-  PlanCommand,
+  ...PanelSlashCommands,
   GoalCommand,
   SwarmCommand,
   ReviewCommand,

@@ -1,5 +1,6 @@
 import {
   ApprovalVerdict,
+  asksInAcceptEditsMode,
   classifyCommand,
   classifyFileEdit,
 } from "./agent/autoApproval";
@@ -1627,7 +1628,7 @@ export class Core {
     if (risk === "R0") return { policy: "allowedWithoutPermission" };
     // Accept-edits mode: project file edits run on their own (secrets and
     // paths outside the workspace still ask below); commands always ask.
-    if (mode === "edits" && risk === "R3") {
+    if (mode === "edits" && asksInAcceptEditsMode(risk)) {
       return { policy: "allowedWithPermission", displayValue };
     }
 

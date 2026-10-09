@@ -5,7 +5,7 @@ import {
   setCompactionLoading,
   deleteCompaction,
 } from "../redux/slices/sessionSlice";
-import { loadSession, saveCurrentSession } from "../redux/thunks/session";
+import { reloadOpenSession, saveCurrentSession } from "../redux/thunks/session";
 
 export const useCompactConversation = () => {
   const dispatch = useAppDispatch();
@@ -27,12 +27,7 @@ export const useCompactConversation = () => {
       });
 
       // Reload the current session to refresh the conversation state
-      dispatch(
-        loadSession({
-          sessionId: currentSessionId,
-          saveCurrentSession: false,
-        }),
-      );
+      await dispatch(reloadOpenSession());
     } catch (error) {
       console.error("Error compacting conversation:", error);
     } finally {

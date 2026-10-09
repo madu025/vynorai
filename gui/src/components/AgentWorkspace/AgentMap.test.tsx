@@ -43,3 +43,12 @@ describe("collectSubagents", () => {
     expect(collectSubagents([])).toEqual([]);
   });
 });
+
+describe("collectSubagents caching", () => {
+  it("does not recompute entries for history items that did not change", () => {
+    const item = call("x", "run_subagent", { description: "Map" }, "done");
+    const first = collectSubagents([item]);
+    const second = collectSubagents([item, call("y", "read_file", {}, "done")]);
+    expect(second[0]).toBe(first[0]);
+  });
+});

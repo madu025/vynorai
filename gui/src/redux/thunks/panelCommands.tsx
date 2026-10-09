@@ -12,7 +12,7 @@ import {
 } from "../slices/uiSlice";
 import { ThunkApiType } from "../store";
 import { rewindToUserMessage } from "./rewind";
-import { loadSession, saveCurrentSession } from "./session";
+import { reloadOpenSession, saveCurrentSession } from "./session";
 import { updateSelectedModelByRole } from "./updateSelectedModelByRole";
 import { streamResponseThunk } from "./streamResponse";
 
@@ -20,8 +20,8 @@ function Info(props: { title: string; lines: string[] }) {
   return (
     <div className="flex flex-col gap-1 p-2 text-sm">
       <div className="font-semibold">{props.title}</div>
-      {props.lines.map((line) => (
-        <div key={line}>{line}</div>
+      {props.lines.map((line, index) => (
+        <div key={index}>{line}</div>
       ))}
     </div>
   );
@@ -144,7 +144,7 @@ export const runPanelCommand = createAsyncThunk<
         };
         const wanted = command.arg.toLowerCase() as PermissionMode;
         if (command.arg) {
-          if (!(wanted in descriptions)) {
+          if (!Object.hasOwn(descriptions, wanted)) {
             showInfo(dispatch, "Permission mode not changed", [
               `"${command.arg}" is not a mode. Use: ${Object.keys(descriptions).join(", ")}.`,
             ]);
@@ -194,14 +194,16 @@ export const runPanelCommand = createAsyncThunk<
         if (!session.id || index < 0) return;
         try {
           dispatch(setCompactionLoading({ index, loading: true }));
+          // Core compacts the saved copy, so make sure it is current.
+          await dispatch(
+            saveCurrentSession({ openNewSession: false, generateTitle: false }),
+          );
           await extra.ideMessenger.request("conversation/compact", {
             index,
             sessionId: session.id,
             instructions: command.arg || undefined,
           });
-          await dispatch(
-            loadSession({ sessionId: session.id, saveCurrentSession: false }),
-          );
+          await dispatch(reloadOpenSession());
         } finally {
           dispatch(setCompactionLoading({ index, loading: false }));
         }

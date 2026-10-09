@@ -170,3 +170,13 @@ export function classifyFileEdit(
   }
   return AUTO;
 }
+
+/**
+ * Accept-edits mode: project file edits (R2) run on their own, reads (R0) are
+ * always fine, and every other tool (commands, browser, MCP, web) asks.
+ */
+export function asksInAcceptEditsMode(
+  risk: "R0" | "R1" | "R2" | "R3",
+): boolean {
+  return risk !== "R0" && risk !== "R2";
+}

@@ -152,6 +152,10 @@ export function UserSettingsSection() {
                       value: "ask",
                       label: "Ask before every edit and command",
                     },
+                    {
+                      value: "edits",
+                      label: "Accept edits (ask before commands)",
+                    },
                     { value: "full", label: "Full auto (never ask)" },
                   ]}
                   onChange={(value) =>

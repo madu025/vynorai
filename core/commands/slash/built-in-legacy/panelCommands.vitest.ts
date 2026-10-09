@@ -13,11 +13,13 @@ describe("panel slash commands", () => {
     addPanelSlashCommands(commands);
     addPanelSlashCommands(commands);
     expect(commands.map((c) => c.name).sort()).toEqual([
+      "agents",
       "clear",
       "compact",
       "cost",
       "help",
       "model",
+      "permissions",
       "plan",
       "resume",
       "rewind",

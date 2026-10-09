@@ -1,3 +1,4 @@
+import { loadUserSubagents } from "../../../agent/userSubagents.js";
 import type { SlashCommand, SlashCommandWithSource } from "../../../index.js";
 
 /**
@@ -46,6 +47,51 @@ export const CostCommand = panelOnly(
   "Show the credits used by this chat and this month",
 );
 
+export const PermissionsCommand = panelOnly(
+  "permissions",
+  "Show or change when the agent asks before editing or running commands",
+);
+
+/** `/agents`: the custom subagents the agent can start, and files that failed to load. */
+export const AgentsCommand: SlashCommand = {
+  name: "agents",
+  description: "List the custom subagents (.claude/agents, .vynorai/agents)",
+  run: async function* ({ ide }) {
+    const { agents, errors } = await loadUserSubagents(ide);
+    const lines = ["**Custom agents**", ""];
+    if (agents.length === 0) {
+      lines.push(
+        "None found. Add a markdown file such as `.claude/agents/reviewer.md` or `.vynorai/agents/reviewer.md`:",
+        "",
+        "```",
+        "---",
+        "name: reviewer",
+        "description: Reviews code for bugs. Use after a change.",
+        "tools: Read, Grep, Glob",
+        "---",
+        "Your instructions for this agent...",
+        "```",
+      );
+    }
+    for (const agent of agents) {
+      const ignored = agent.ignoredTools.length
+        ? ` (read-only: ${agent.ignoredTools.join(", ")} not available)`
+        : "";
+      lines.push(
+        `- \`${agent.name}\` (${agent.scope}, \`${agent.path}\`): ${agent.description}${ignored}`,
+      );
+    }
+    if (errors.length) {
+      lines.push("", "Not loaded:", ...errors.map((error) => `- ${error}`));
+    }
+    lines.push(
+      "",
+      "Custom agents are read-only: they can search and read the project, not edit files or run commands.",
+    );
+    yield lines.join("\n");
+  },
+};
+
 /** `/help`: the commands available in this session, from the loaded config. */
 export const HelpCommand: SlashCommand = {
   name: "help",
@@ -79,6 +125,8 @@ export function addPanelSlashCommands(
     RewindCommand,
     ModelCommand,
     CostCommand,
+    PermissionsCommand,
+    AgentsCommand,
   ]) {
     if (!slashCommands.some((cmd) => cmd.name === builtIn.name)) {
       slashCommands.push({

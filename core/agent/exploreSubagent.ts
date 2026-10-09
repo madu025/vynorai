@@ -57,6 +57,10 @@ export interface ExploreSubagentOptions {
   signal: AbortSignal;
   maxRounds?: number;
   onProgress?: (line: string) => void;
+  /** A user-defined agent's system prompt; the explore prompt when omitted. */
+  systemMessage?: string;
+  /** Narrows the explore tools (never widens them). */
+  allowedTools?: ReadonlySet<string>;
 }
 
 export interface ExploreSubagentResult {
@@ -131,11 +135,16 @@ export async function runExploreSubagent(
   options: ExploreSubagentOptions,
 ): Promise<ExploreSubagentResult> {
   const maxRounds = options.maxRounds ?? SUBAGENT_MAX_ROUNDS;
-  const tools = options.tools.filter((tool) =>
-    EXPLORE_SUBAGENT_TOOLS.has(tool.function.name),
+  const tools = options.tools.filter(
+    (tool) =>
+      EXPLORE_SUBAGENT_TOOLS.has(tool.function.name) &&
+      (!options.allowedTools || options.allowedTools.has(tool.function.name)),
   );
   const messages: ChatMessage[] = [
-    { role: "system", content: EXPLORE_SUBAGENT_SYSTEM_MESSAGE },
+    {
+      role: "system",
+      content: options.systemMessage ?? EXPLORE_SUBAGENT_SYSTEM_MESSAGE,
+    },
     { role: "user", content: options.task },
   ];
   let toolCallCount = 0;

@@ -55,7 +55,7 @@ type UIState = {
 
 export const DEFAULT_TOOL_SETTING: ToolPolicy = "allowedWithPermission";
 
-export type PermissionMode = "ask" | "auto" | "full";
+export type PermissionMode = "ask" | "edits" | "auto" | "full";
 export const DEFAULT_PERMISSION_MODE: PermissionMode = "auto";
 export const DEFAULT_RULE_SETTING: RulePolicy = "on";
 export const DEFAULT_UI_SLICE: UIState = {

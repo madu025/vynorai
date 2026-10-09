@@ -17,7 +17,6 @@ export const getBaseToolDefinitions = () => [
   // Persistent, live browser (replaces the one-shot browser_qa report).
   toolDefinitions.browserTool,
   toolDefinitions.updateTodoListTool,
-  toolDefinitions.runSubagentTool,
 ];
 
 export const getConfigDependentToolDefinitions = async (
@@ -27,6 +26,10 @@ export const getConfigDependentToolDefinitions = async (
   const tools: Tool[] = [];
 
   tools.push(await toolDefinitions.readSkillTool(params));
+
+  // Lists the user's custom agents (.claude/agents, .vynorai/agents), so it
+  // is built per config load.
+  tools.push(await toolDefinitions.runSubagentTool(params));
 
   tools.push(toolDefinitions.searchWebTool);
 

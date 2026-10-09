@@ -3,7 +3,10 @@ import { JSONContent } from "@tiptap/core";
 import { PanelCommand } from "../../util/panelCommands";
 import { setCompactionLoading, setMode } from "../slices/sessionSlice";
 import {
+  DEFAULT_PERMISSION_MODE,
+  PermissionMode,
   setDialogMessage,
+  setPermissionMode,
   setPendingRoute,
   setShowDialog,
 } from "../slices/uiSlice";
@@ -130,6 +133,31 @@ export const runPanelCommand = createAsyncThunk<
             selectedProfile: null,
           }),
         );
+        return;
+      }
+      case "permissions": {
+        const descriptions: Record<PermissionMode, string> = {
+          ask: "Ask before every edit and command",
+          edits: "Accept edits (ask before commands)",
+          auto: "Auto (ask only for risky actions)",
+          full: "Full auto (never ask)",
+        };
+        const wanted = command.arg.toLowerCase() as PermissionMode;
+        if (command.arg) {
+          if (!(wanted in descriptions)) {
+            showInfo(dispatch, "Permission mode not changed", [
+              `"${command.arg}" is not a mode. Use: ${Object.keys(descriptions).join(", ")}.`,
+            ]);
+            return;
+          }
+          dispatch(setPermissionMode(wanted));
+        }
+        const current = getState().ui.permissionMode ?? DEFAULT_PERMISSION_MODE;
+        showInfo(dispatch, "Permissions", [
+          `Mode: ${current} (${descriptions[current]})`,
+          "Switch with /permissions ask | edits | auto | full.",
+          "Allow, ask and deny rules for your project go in .vynorai/permissions.json (deny always wins).",
+        ]);
         return;
       }
       case "cost": {

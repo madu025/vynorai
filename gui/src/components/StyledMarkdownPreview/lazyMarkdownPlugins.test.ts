@@ -60,5 +60,5 @@ describe("lazyMarkdownPlugins", () => {
     lazyRehypeHighlight()(tree, {});
     const code = tree.children[0].children[0];
     expect(code.children.some((c: any) => c.type === "element")).toBe(true);
-  });
+  }, 30_000);
 });

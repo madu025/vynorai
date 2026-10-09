@@ -15,7 +15,8 @@ export type PanelCommandName =
   | "resume"
   | "rewind"
   | "model"
-  | "cost";
+  | "cost"
+  | "permissions";
 
 export interface PanelCommand {
   name: PanelCommandName;
@@ -23,7 +24,7 @@ export interface PanelCommand {
 }
 
 const PANEL_COMMAND =
-  /^\/(clear|compact|plan|resume|rewind|model|cost)(?:\s+(.*))?$/i;
+  /^\/(clear|compact|plan|resume|rewind|model|cost|permissions)(?:\s+(.*))?$/i;
 
 export function parsePanelCommand(text: string): PanelCommand | undefined {
   const match = PANEL_COMMAND.exec(text.trim());

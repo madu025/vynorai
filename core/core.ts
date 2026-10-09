@@ -1398,7 +1398,11 @@ export class Core {
             displayValue = parsedArgs.command as string;
           }
 
-          if (permissionMode === "auto" || permissionMode === "full") {
+          if (
+            permissionMode === "auto" ||
+            permissionMode === "edits" ||
+            permissionMode === "full"
+          ) {
             return this.evaluateAutoApproval(
               tool,
               toolName,
@@ -1602,7 +1606,7 @@ export class Core {
   private async evaluateAutoApproval(
     tool: Tool,
     toolName: string,
-    mode: "auto" | "full",
+    mode: "auto" | "edits" | "full",
     basePolicy: ToolPolicy,
     parsedArgs: Record<string, unknown>,
     processedArgs: Record<string, unknown> | undefined,
@@ -1621,6 +1625,11 @@ export class Core {
 
     const risk = classifyToolRisk(toolName);
     if (risk === "R0") return { policy: "allowedWithoutPermission" };
+    // Accept-edits mode: project file edits run on their own (secrets and
+    // paths outside the workspace still ask below); commands always ask.
+    if (mode === "edits" && risk === "R3") {
+      return { policy: "allowedWithPermission", displayValue };
+    }
 
     const roots = (await this.ide.getWorkspaceDirs()).flatMap((dir) => {
       try {

@@ -113,3 +113,24 @@ describe("runPanelCommand", () => {
     expect((store.getState() as any).ui.showDialog).toBe(true);
   });
 });
+
+describe("runPanelCommand /permissions", () => {
+  it("switches to accept-edits mode and rejects an unknown mode", async () => {
+    const store = storeWithHistory();
+    await (store.dispatch as any)(
+      runPanelCommand({
+        command: { name: "permissions", arg: "edits" },
+        modifiers: {} as any,
+      }),
+    );
+    expect((store.getState() as any).ui.permissionMode).toBe("edits");
+
+    await (store.dispatch as any)(
+      runPanelCommand({
+        command: { name: "permissions", arg: "yolo" },
+        modifiers: {} as any,
+      }),
+    );
+    expect((store.getState() as any).ui.permissionMode).toBe("edits");
+  });
+});

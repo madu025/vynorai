@@ -30,6 +30,15 @@ function makeProject(): string {
     path.join(dir, "pkg", "CLAUDE.md"),
     "# Package notes\nKeep it small.\n",
   );
+  fs.mkdirSync(path.join(dir, ".claude", "agents"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, ".claude", "agents", "sec-reviewer.md"),
+    "---\nname: sec-reviewer\ndescription: Reviews code for security problems\ntools: Read, Grep, Bash\n---\nYou review code for security problems.\n",
+  );
+  fs.writeFileSync(
+    path.join(dir, ".claude", "agents", "broken.md"),
+    "---\nname: Not Valid\ndescription: bad name\n---\nbody\n",
+  );
   fs.writeFileSync(
     path.join(dir, "package.json"),
     '{"name":"vynor-e2e-project"}\n',
@@ -124,6 +133,8 @@ describe("VynorAI local slash commands", function () {
       "rewind",
       "model",
       "cost",
+      "agents",
+      "permissions",
     ]) {
       expect(menu).to.include(name);
     }
@@ -178,7 +189,16 @@ describe("VynorAI local slash commands", function () {
       }
     }, 30_000);
 
-    // 5. /model and /cost open a small dialog; /resume opens History.
+    // 5. /agents lists custom subagents (read-only), /permissions switches mode.
+    await runSlashCommand(view, "agents");
+    const agentsText = await waitForText(view, "Custom agents");
+    console.log("AGENTS OUTPUT:", JSON.stringify(agentsText.slice(0, 700)));
+    expect(agentsText).to.include("sec-reviewer");
+    expect(agentsText).to.include("read-only: Bash");
+    expect(agentsText).to.include("Not Valid");
+    await waitForTurnEnd(view);
+
+    // 6. /model and /cost open a small dialog; /resume opens History.
     const closeDialog = async () => {
       const buttons = await view!.findWebElements(
         By.xpath(
@@ -196,6 +216,10 @@ describe("VynorAI local slash commands", function () {
     const models = await waitForText(view, "Chat models");
     console.log("MODEL OUTPUT:", JSON.stringify(models.slice(0, 400)));
     expect(models).to.include("Use /model <name> to switch.");
+    await closeDialog();
+
+    await runSlashCommand(view, "permissions");
+    await waitForText(view, "Mode:");
     await closeDialog();
 
     await runSlashCommand(view, "cost");

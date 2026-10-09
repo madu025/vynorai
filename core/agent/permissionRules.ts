@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
 import type { IDE } from "..";
 import { joinPathsToUri } from "../util/uri";
@@ -47,8 +48,11 @@ function strings(value: unknown): string[] {
     : [];
 }
 
-/** Accepts `{permissions:{...}}` or the lists at the top level. Bad input yields no rules. */
-export function parsePermissionRules(text: string): PermissionRules {
+/** Like parsePermissionRules, but says why a file produced no rules. */
+export function parsePermissionRulesDetailed(text: string): {
+  rules: PermissionRules;
+  error?: string;
+} {
   try {
     const json = JSON.parse(text);
     const source =
@@ -56,16 +60,29 @@ export function parsePermissionRules(text: string): PermissionRules {
         ? json.permissions
         : json;
     if (!source || typeof source !== "object") {
-      return { allow: [], ask: [], deny: [] };
+      return {
+        rules: { allow: [], ask: [], deny: [] },
+        error: "expected an object with allow, ask and deny lists",
+      };
     }
     return {
-      allow: strings(source.allow),
-      ask: strings(source.ask),
-      deny: strings(source.deny),
+      rules: {
+        allow: strings(source.allow),
+        ask: strings(source.ask),
+        deny: strings(source.deny),
+      },
     };
-  } catch {
-    return { allow: [], ask: [], deny: [] };
+  } catch (e) {
+    return {
+      rules: { allow: [], ask: [], deny: [] },
+      error: e instanceof Error ? e.message : "invalid JSON",
+    };
   }
+}
+
+/** Accepts `{permissions:{...}}` or the lists at the top level. Bad input yields no rules. */
+export function parsePermissionRules(text: string): PermissionRules {
+  return parsePermissionRulesDetailed(text).rules;
 }
 
 export function mergePermissionRules(all: PermissionRules[]): PermissionRules {
@@ -78,33 +95,59 @@ export function mergePermissionRules(all: PermissionRules[]): PermissionRules {
   return merged;
 }
 
+export interface LoadedPermissionRules {
+  rules: PermissionRules;
+  /** Files that exist but could not be used, so their rules are NOT in effect. */
+  problems: string[];
+}
+
 /** Loads project rules (every workspace root) and user rules (global folder). */
-export async function loadPermissionRules(
+export async function loadPermissionRulesDetailed(
   ide: Pick<IDE, "getWorkspaceDirs" | "fileExists" | "readFile">,
   globalDir?: string,
-): Promise<PermissionRules> {
+): Promise<LoadedPermissionRules> {
   const found: PermissionRules[] = [];
+  const problems: string[] = [];
+  const take = (label: string, text: string) => {
+    const parsed = parsePermissionRulesDetailed(text);
+    if (parsed.error) problems.push(`${label}: ${parsed.error}`);
+    found.push(parsed.rules);
+  };
   for (const dir of (await ide.getWorkspaceDirs()) ?? []) {
     const uri = joinPathsToUri(dir, `.vynorai/${PERMISSIONS_FILE}`);
     try {
       if (await ide.fileExists(uri)) {
-        found.push(parsePermissionRules(await ide.readFile(uri)));
+        take(`.vynorai/${PERMISSIONS_FILE}`, await ide.readFile(uri));
       }
-    } catch {
-      // unreadable file: no rules from it
+    } catch (e) {
+      problems.push(
+        `.vynorai/${PERMISSIONS_FILE}: could not be read (${e instanceof Error ? e.message : e})`,
+      );
     }
   }
   if (globalDir) {
     try {
       const file = path.join(globalDir, PERMISSIONS_FILE);
       if (fs.existsSync(file)) {
-        found.push(parsePermissionRules(fs.readFileSync(file, "utf8")));
+        take(
+          `global ${PERMISSIONS_FILE}`,
+          await fs.promises.readFile(file, "utf8"),
+        );
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      problems.push(
+        `global ${PERMISSIONS_FILE}: could not be read (${e instanceof Error ? e.message : e})`,
+      );
     }
   }
-  return mergePermissionRules(found);
+  return { rules: mergePermissionRules(found), problems };
+}
+
+export async function loadPermissionRules(
+  ide: Pick<IDE, "getWorkspaceDirs" | "fileExists" | "readFile">,
+  globalDir?: string,
+): Promise<PermissionRules> {
+  return (await loadPermissionRulesDetailed(ide, globalDir)).rules;
 }
 
 interface ParsedRule {
@@ -123,12 +166,16 @@ function escapeRegExp(text: string): string {
 }
 
 const DOUBLE_STAR = "\u0000";
+const ANY_DIRS = "\u0001";
 
-/** `*` matches `star`; `**` always matches across separators. */
+/** `*` matches `star`; `**` matches across separators; a `**` followed by `/` also matches zero directories. */
 function globToRegExp(glob: string, star: string): RegExp {
   const source = escapeRegExp(glob)
+    .replace(/\*\*\//g, ANY_DIRS)
     .replace(/\*\*/g, DOUBLE_STAR)
     .replace(/\*/g, star)
+    .split(ANY_DIRS)
+    .join("(?:.*/)?")
     .split(DOUBLE_STAR)
     .join(".*");
   return new RegExp(`^${source}$`);
@@ -142,17 +189,70 @@ function toolMatches(ruleTool: string, toolName: string): boolean {
   return ruleTool === toolName;
 }
 
-/** Shell separators and substitutions, so `git status && rm -rf x` is checked per command. */
+/**
+ * Shell separators, background "&" and substitutions, so "git status && rm -rf x"
+ * and "echo ok & rm -rf x" are checked per command.
+ */
 export function splitCommands(command: string): string[] {
   return command
-    .split(/&&|\|\||;|\||\n|\$\(|`|\)/)
+    .split(/&&|\|\||;|\||&|\r?\n|\r|\$\(|\u0060|\(|\)|\{|\}/)
     .map((part) => part.trim().replace(/\s+/g, " "))
     .filter(Boolean);
+}
+
+/** Programs that only run another program: "sudo rm x" is really "rm x". */
+const WRAPPERS = new Set([
+  "sudo",
+  "doas",
+  "env",
+  "nohup",
+  "time",
+  "command",
+  "exec",
+  "nice",
+  "ionice",
+  "stdbuf",
+  "setsid",
+  "xargs",
+  "timeout",
+  "watch",
+  "builtin",
+]);
+
+function programName(token: string): string {
+  return token.replace(/^.*[\\/]/, "").replace(/\.exe$/i, "");
+}
+
+/**
+ * The command a segment really runs: leading VAR=value assignments and wrapper
+ * programs (with their flags) removed, and an absolute path or .exe suffix cut
+ * from the program, so "sudo -n /bin/rm -rf x" becomes "rm -rf x".
+ */
+export function normalizeCommand(segment: string): string {
+  let tokens = segment.trim().split(/\s+/).filter(Boolean);
+  for (let guard = 0; guard < 8 && tokens.length; guard++) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) {
+      tokens = tokens.slice(1);
+      continue;
+    }
+    if (!WRAPPERS.has(programName(tokens[0]).toLowerCase())) break;
+    tokens = tokens.slice(1);
+    while (
+      tokens.length &&
+      (tokens[0].startsWith("-") || /^\d+[smhd]?$/.test(tokens[0]))
+    ) {
+      tokens = tokens.slice(1);
+    }
+  }
+  if (!tokens.length) return "";
+  tokens[0] = programName(tokens[0]);
+  return tokens.join(" ");
 }
 
 function commandMatches(specifier: string, command: string): boolean {
   const spec = specifier.replace(/\s+/g, " ").trim();
   const test = (candidate: string): boolean => {
+    if (!candidate) return false;
     if (spec.endsWith(":*")) {
       const prefix = spec.slice(0, -2);
       return candidate === prefix || candidate.startsWith(`${prefix} `);
@@ -160,14 +260,28 @@ function commandMatches(specifier: string, command: string): boolean {
     if (spec.includes("*")) return globToRegExp(spec, ".*").test(candidate);
     return candidate === spec;
   };
-  return (
-    test(command.trim().replace(/\s+/g, " ")) ||
-    splitCommands(command).some(test)
-  );
+  const whole = command.trim().replace(/\s+/g, " ");
+  const segments = splitCommands(command);
+  return [whole, ...segments, ...segments.map(normalizeCommand)].some(test);
+}
+
+/** A tool may pass a file: URI; rules are written against plain paths. */
+function toPlainPath(filepath: string): string {
+  let plain = filepath;
+  if (/^file:/i.test(plain)) {
+    try {
+      plain = fileURLToPath(plain);
+    } catch {
+      plain = decodeURIComponent(plain.replace(/^file:\/*/i, "/"));
+    }
+  }
+  // Collapse "a/../b" so a rule cannot be dodged with ".." segments.
+  const slashed = plain.replace(/\\/g, "/");
+  return path.posix.normalize(slashed).replace(/^\.\//, "");
 }
 
 function pathCandidates(filepath: string, roots: string[]): string[] {
-  const normalized = filepath.replace(/\\/g, "/").replace(/^\.\//, "");
+  const normalized = toPlainPath(filepath);
   const candidates = new Set([normalized, path.posix.basename(normalized)]);
   for (const root of roots) {
     const r = root.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -187,7 +301,7 @@ function pathMatches(
   const regex = globToRegExp(spec, "[^/]*");
   // A pattern without a slash (".env*") matches the file name in any folder.
   if (!spec.includes("/")) {
-    return regex.test(path.posix.basename(filepath.replace(/\\/g, "/")));
+    return regex.test(path.posix.basename(toPlainPath(filepath)));
   }
   return pathCandidates(filepath, roots).some((c) => regex.test(c));
 }

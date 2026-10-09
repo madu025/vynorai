@@ -196,6 +196,24 @@ void (async () => {
   console.log(
     `[timer] onnxruntime copy completed in ${Date.now() - onnxCopyStart}ms`,
   );
+
+  // Local embeddings fall back to onnxruntime-web's WebAssembly backend, which
+  // loads its .wasm from out/dist next to the bundle. Without these files the
+  // extension host logs "no available backend found ... ENOENT
+  // ort-wasm-simd-threaded.wasm" and semantic @codebase search never works.
+  const ortWebDist = path.join(
+    __dirname,
+    "../../../core/node_modules/onnxruntime-web/dist",
+  );
+  fs.mkdirSync(path.join(__dirname, "../out/dist"), { recursive: true });
+  for (const wasm of ["ort-wasm-simd-threaded.wasm", "ort-wasm-simd.wasm"]) {
+    const from = path.join(ortWebDist, wasm);
+    if (fs.existsSync(from)) {
+      fs.copyFileSync(from, path.join(__dirname, "../out/dist", wasm));
+    } else {
+      console.warn(`[info] ${wasm} not found in onnxruntime-web, skipping`);
+    }
+  }
   if (target) {
     // If building for production, only need the binaries for current platform
     try {

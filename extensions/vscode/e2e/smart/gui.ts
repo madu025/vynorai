@@ -38,10 +38,20 @@ export async function signIn() {
   const key = e2eApiKey();
   if (!/^vynor_live_[a-f0-9]{32}$/i.test(key))
     throw new Error("VYNORAI_E2E_API_KEY is missing or malformed");
-  await new Workbench().executeCommand("VynorAI: Set API Key");
-  const input = await retry(() => InputBox.create(10_000));
-  await input.setText(key);
-  await input.confirm();
+  // Run before activation finishes, the command is only a palette entry: the
+  // key would be typed into the palette itself and no sign-in would happen.
+  await waitForExtensionActive();
+  await retry(async () => {
+    await new Workbench().executeCommand("VynorAI: Set API Key");
+    const input = await InputBox.create(10_000);
+    const placeholder = await input.getPlaceHolder().catch(() => "");
+    if (!/vynor_live/i.test(placeholder)) {
+      await input.cancel().catch(() => undefined);
+      throw new Error(`API key box not shown yet (got "${placeholder}")`);
+    }
+    await input.setText(key);
+    await input.confirm();
+  }, 90_000);
   await sleep(3_000); // config reload after sign-in
 }
 

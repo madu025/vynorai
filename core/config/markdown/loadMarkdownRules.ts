@@ -29,6 +29,17 @@ export async function loadMarkdownRules(ide: IDE): Promise<{
     // both AGENTS.md and CLAUDE.md gets both. A file whose content is
     // identical to one already loaded (a copy or a symlink) is skipped.
     const loadedContent = new Set<string>();
+    // Agent files that exist in this root load as their own rules, so one file
+    // importing another (CLAUDE.md with `@AGENTS.md`) must not repeat it.
+    const siblingAgentFiles: string[] = [];
+    for (const name of SUPPORTED_AGENT_FILES) {
+      const uri = joinPathsToUri(workspaceDir, name);
+      try {
+        if (await ide.fileExists(uri)) siblingAgentFiles.push(uri);
+      } catch {
+        // unreadable: not a sibling
+      }
+    }
     for (const fileName of SUPPORTED_AGENT_FILES) {
       try {
         const agentFileUri = joinPathsToUri(workspaceDir, fileName);
@@ -45,6 +56,7 @@ export async function loadMarkdownRules(ide: IDE): Promise<{
             agentFileUri,
             workspaceDir,
             ide,
+            { skipUris: siblingAgentFiles.filter((u) => u !== agentFileUri) },
           );
 
           const rule = markdownToRule(expandedContent, {

@@ -202,3 +202,11 @@ extensions/vscode/e2e/smart-report/
 .vynor/
 **/.vynor/
 .vynor-worktrees/
+
+# Local-only: personal Claude Code permissions, research outputs, E2E scratch
+.claude/settings.local.json
+reports/
+research_notes/
+extensions/vscode/e2e/.test-extensions-base/
+extensions/vscode/e2e/storage/
+extensions/vscode/e2e/_output/

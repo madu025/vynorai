@@ -58,9 +58,19 @@ export async function expandInstructionImports(
   fileUri: string,
   rootUri: string,
   ide: ReadIde,
+  options: { skipUris?: string[] } = {},
 ): Promise<string> {
   let budget = MAX_EXPANDED_CHARS - content.length;
   const inlined = new Set<string>([fileUri]);
+  const sameUri = (a: string) => {
+    try {
+      return decodeURIComponent(a).toLowerCase();
+    } catch {
+      return a.toLowerCase();
+    }
+  };
+  // Files loaded as their own rule (a sibling AGENTS.md) are not inlined again.
+  const skip = new Set((options.skipUris ?? []).map(sameUri));
 
   async function expand(
     text: string,
@@ -87,12 +97,17 @@ export async function expandInstructionImports(
           target &&
           !ancestors.includes(target) &&
           !inlined.has(target) &&
+          !skip.has(sameUri(target)) &&
           budget > 0
         ) {
           try {
             if (await ide.fileExists(target)) {
               const body = await ide.readFile(target);
               if (body.length <= MAX_IMPORT_BYTES) {
+                // Only count the file as inlined if it fits the budget:
+                // otherwise a later reference could still use the space.
+                const inlinedBefore = new Set(inlined);
+                const budgetBefore = budget;
                 inlined.add(target);
                 const nested = await expand(body, target, depth + 1, [
                   ...ancestors,
@@ -100,7 +115,13 @@ export async function expandInstructionImports(
                 ]);
                 const block = `\n<!-- imported from ${match[1]} -->\n${nested.trim()}\n<!-- end ${match[1]} -->\n`;
                 budget -= block.length;
-                if (budget >= 0) replacement = block;
+                if (budget >= 0) {
+                  replacement = block;
+                } else {
+                  budget = budgetBefore;
+                  inlined.clear();
+                  inlinedBefore.forEach((uri) => inlined.add(uri));
+                }
               }
             }
           } catch {

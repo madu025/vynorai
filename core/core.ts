@@ -30,7 +30,8 @@ import { abortRunningSubagents } from "./tools/implementations/runSubagent";
 import { BuiltInToolNames } from "./tools/builtIn";
 import {
   evaluatePermissionRules,
-  loadPermissionRules,
+  loadPermissionRulesDetailed,
+  type LoadedPermissionRules,
 } from "./agent/permissionRules";
 import { safeParseToolCallArgs } from "./tools/parseArgs";
 import { ChatDescriber } from "./util/chatDescriber";
@@ -1349,7 +1350,7 @@ export class Core {
           args: safeParseToolCallArgs(toolCall),
         });
       }
-      return this.handleToolCall(toolCall);
+      return this.handleToolCall(toolCall, Boolean(delegation));
     });
 
     on(
@@ -1386,7 +1387,11 @@ export class Core {
 
           // Extract display value for specific tools
           let displayValue: string | undefined;
-          if (toolName === "runTerminalCommand" && parsedArgs.command) {
+          if (
+            (toolName === "runTerminalCommand" ||
+              toolName === BuiltInToolNames.RunTerminalCommand) &&
+            parsedArgs.command
+          ) {
             displayValue = parsedArgs.command as string;
           }
 
@@ -1484,24 +1489,52 @@ export class Core {
   }
 
   /** User permission rules (.vynorai/permissions.json, global permissions.json) for one call. */
+  private permissionRulesCache?: {
+    at: number;
+    loaded: LoadedPermissionRules;
+  };
+  private warnedPermissionProblems = new Set<string>();
+
+  /** Rules are re-read at most every few seconds, not on every tool call. */
+  private async getPermissionRules(): Promise<LoadedPermissionRules> {
+    const cached = this.permissionRulesCache;
+    if (cached && Date.now() - cached.at < 3_000) return cached.loaded;
+    const loaded = await loadPermissionRulesDetailed(
+      this.ide,
+      getContinueGlobalPath(),
+    );
+    this.permissionRulesCache = { at: Date.now(), loaded };
+    // A rules file that cannot be used means its rules are NOT in effect:
+    // say so once instead of failing open in silence.
+    for (const problem of loaded.problems) {
+      if (this.warnedPermissionProblems.has(problem)) continue;
+      this.warnedPermissionProblems.add(problem);
+      void this.ide.showToast(
+        "warning",
+        `VynorAI permission rules are not in effect (${problem}). Fix the file to enforce them.`,
+      );
+    }
+    return loaded;
+  }
+
+  /** User permission rules (.vynorai/permissions.json, global permissions.json) for one call. */
   private async checkPermissionRules(
     toolName: string,
     args: Record<string, unknown>,
     processedArgs?: Record<string, unknown>,
   ) {
     try {
-      const rules = await loadPermissionRules(
-        this.ide,
-        getContinueGlobalPath(),
-      );
+      const { rules } = await this.getPermissionRules();
       if (!rules.deny.length && !rules.ask.length) return undefined;
-      const roots = (await this.ide.getWorkspaceDirs()).flatMap((dir) => {
-        try {
-          return dir.startsWith("file:") ? [fileURLToPath(dir)] : [];
-        } catch {
-          return [];
-        }
-      });
+      const roots = ((await this.ide.getWorkspaceDirs()) ?? []).flatMap(
+        (dir) => {
+          try {
+            return dir.startsWith("file:") ? [fileURLToPath(dir)] : [];
+          } catch {
+            return [];
+          }
+        },
+      );
       return evaluatePermissionRules(
         rules,
         { toolName, args, processedArgs },
@@ -1620,7 +1653,7 @@ export class Core {
         };
   }
 
-  private async handleToolCall(toolCall: ToolCall) {
+  private async handleToolCall(toolCall: ToolCall, delegated = false) {
     if (WORKSPACE_MUTATING_TOOLS.has(toolCall.function.name)) {
       const workspace = await this.workspaceSession.getSnapshot();
       if (!workspace.trusted || workspace.roots.length === 0) {
@@ -1649,6 +1682,12 @@ export class Core {
     );
     if (ruleVerdict?.decision === "deny") {
       throw new Error(`Blocked by permission rule: ${ruleVerdict.rule}`);
+    }
+    // A subagent has nobody to ask, so a rule that needs approval blocks it.
+    if (delegated && ruleVerdict?.decision === "ask") {
+      throw new Error(
+        `Blocked: permission rule ${ruleVerdict.rule} requires approval, and subagents cannot ask.`,
+      );
     }
 
     if (!config.selectedModelByRole.chat) {

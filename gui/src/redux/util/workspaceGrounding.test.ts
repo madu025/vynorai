@@ -95,3 +95,15 @@ test("a single open root is reported as the active root", () => {
     "- Active root: VynorAI",
   );
 });
+
+test("the date is the user's local calendar day, not the UTC day", () => {
+  // 02:00 local on the 10th is still the 9th in UTC for any zone ahead of UTC.
+  const lateNight = new Date(2026, 9, 10, 2, 0, 0);
+  expect(formatWorkspaceGrounding(snapshot, lateNight)).toContain(
+    "- Date: 2026-10-10",
+  );
+  const earlyMorning = new Date(2026, 9, 10, 23, 30, 0);
+  expect(formatWorkspaceGrounding(snapshot, earlyMorning)).toContain(
+    "- Date: 2026-10-10",
+  );
+});

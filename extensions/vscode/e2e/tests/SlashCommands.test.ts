@@ -30,6 +30,10 @@ function makeProject(): string {
     path.join(dir, "pkg", "CLAUDE.md"),
     "# Package notes\nKeep it small.\n",
   );
+  fs.writeFileSync(
+    path.join(dir, "CLAUDE.local.md"),
+    "# My notes\nPrefer short answers.\n",
+  );
   fs.mkdirSync(path.join(dir, ".claude", "agents"), { recursive: true });
   fs.writeFileSync(
     path.join(dir, ".claude", "agents", "sec-reviewer.md"),
@@ -160,6 +164,7 @@ describe("VynorAI local slash commands", function () {
     console.log("MEMORY OUTPUT:", JSON.stringify(memory.slice(0, 1200)));
     expect(memory).to.include("AGENTS.md");
     expect(memory).to.include("pkg/CLAUDE.md");
+    expect(memory).to.include("CLAUDE.local.md");
     expect(memory).not.to.include(os.tmpdir());
 
     await waitForTurnEnd(view);

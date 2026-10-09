@@ -7,6 +7,10 @@ import { PROMPTS_DIR_NAME, RULES_DIR_NAME } from "../../promptFiles";
 import { joinPathsToUri } from "../../util/uri";
 import { getActiveRootUri } from "../../workspace/activeRootProvider";
 import { expandInstructionImports } from "./expandInstructionImports";
+import {
+  loadLocalInstructionRules,
+  loadOuterInstructionRules,
+} from "./loadInstructionFiles";
 import { getAllDotContinueDefinitionFiles } from "../loadLocalAssistants";
 
 export const SUPPORTED_AGENT_FILES = ["AGENTS.md", "AGENT.md", "CLAUDE.md"];
@@ -74,6 +78,10 @@ export async function loadMarkdownRules(ide: IDE): Promise<{
         // File doesn't exist or can't be read, continue to next file
       }
     }
+    // CLAUDE.local.md / AGENTS.local.md: personal notes, read after the shared ones.
+    rules.push(
+      ...(await loadLocalInstructionRules(ide, workspaceDir, loadedContent)),
+    );
   }
 
   // Agent files of the active root come first, so in a multi-root workspace
@@ -93,6 +101,16 @@ export async function loadMarkdownRules(ide: IDE): Promise<{
       ...rules.filter((rule) => !inActiveRoot(rule)),
     );
   }
+
+  // Global files and the AGENTS.md / CLAUDE.md of folders above the workspace
+  // come first; the project's own files, which are more specific, read after.
+  rules.unshift(
+    ...(await loadOuterInstructionRules(
+      ide,
+      workspaceDirs,
+      new Set(rules.map((rule) => rule.rule.trim())),
+    )),
+  );
 
   // Load markdown files from both .continue/rules and .continue/prompts
   const dirsToCheck = [RULES_DIR_NAME, PROMPTS_DIR_NAME];

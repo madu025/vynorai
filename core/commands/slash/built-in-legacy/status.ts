@@ -3,6 +3,7 @@ import type {
   SlashCommand,
   SlashCommandWithSource,
 } from "../../../index.js";
+import { GlobalContext } from "../../../util/GlobalContext.js";
 import { findUriInDirs, getUriPathBasename } from "../../../util/uri.js";
 import { resolveActiveWorkspaceDir } from "../../../workspace/activeRoot.js";
 
@@ -16,6 +17,22 @@ function displayPath(sourceFile: string | undefined, dirs: string[]): string {
   return foundInDir
     ? relativePathOrBasename
     : `${getUriPathBasename(sourceFile)} (global)`;
+}
+
+/**
+ * Why indexing is off. A "disableIndexing" saved in the shared settings
+ * (Settings > Indexing, or a value migrated from an old config.json) overrides
+ * config.yaml and config.json, so editing those files does not turn it back on.
+ */
+function indexOffReason(): string {
+  try {
+    if (new GlobalContext().getSharedConfig().disableIndexing) {
+      return " (turned off in the shared settings: Settings > Indexing, or sharedConfig.disableIndexing in index/globalContext.json in the VynorAI folder; config.yaml and config.json do not override it)";
+    }
+  } catch {
+    // unreadable settings: no extra detail
+  }
+  return " (config sets disableIndexing)";
 }
 
 const SOURCE_LABELS: Array<[RuleWithSource["source"], string]> = [
@@ -72,7 +89,7 @@ export const StatusCommand: SlashCommand = {
     }
     lines.push(
       `- Chat model: ${model?.title ?? model?.model ?? "not selected"}`,
-      `- Codebase index: ${config.disableIndexing ? "disabled" : "enabled"}`,
+      `- Codebase index: ${config.disableIndexing ? `disabled${indexOffReason()}` : "enabled"}`,
       `- Instruction files loaded: ${instructionFiles} (run /memory to list them)`,
     );
     yield lines.join("\n");

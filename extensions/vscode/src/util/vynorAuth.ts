@@ -7,7 +7,10 @@ import { getConfigJsonPath, getConfigYamlPath } from "core/util/paths";
 import * as vscode from "vscode";
 import { isSeq, parseDocument } from "yaml";
 
-import { migrateVynorModels } from "./vynorModelMigration";
+import {
+  migrateVynorModels,
+  upsertVynorJsonModels,
+} from "./vynorModelMigration";
 
 import { SecretStorage } from "../stubs/SecretStorage";
 
@@ -240,37 +243,25 @@ export async function applyVynorConfig(): Promise<boolean> {
 
     config.models = config.models || [];
 
-    // Check if VynorAI primary model already configured
-    const vynorModelIndex = config.models.findIndex(
-      (m: any) =>
-        m.title === "VynorAI Coder" || m.apiBase?.includes("vynor.lk"),
+    // Auto first (default for new users, routed per request by the backend),
+    // then one Coder. Idempotent: a repeat run never adds or replaces entries.
+    config.models = upsertVynorJsonModels(
+      config.models,
+      {
+        title: "VynorAI Auto",
+        provider: "vynorai",
+        model: VYNORAI_AUTO_MODEL,
+        apiBase: VYNORAI_PROD_URL,
+        apiKey: VYNORAI_SECRET_REF,
+      },
+      {
+        title: "VynorAI Coder",
+        provider: "vynorai",
+        model: "deepseek/deepseek-flash",
+        apiBase: VYNORAI_PROD_URL,
+        apiKey: VYNORAI_SECRET_REF,
+      },
     );
-
-    const vynorModelConfig = {
-      title: "VynorAI Coder",
-      provider: "vynorai",
-      model: "deepseek/deepseek-flash",
-      apiBase: VYNORAI_PROD_URL,
-      apiKey: VYNORAI_SECRET_REF,
-    };
-
-    if (vynorModelIndex >= 0) {
-      config.models[vynorModelIndex] = vynorModelConfig;
-    } else {
-      config.models.unshift(vynorModelConfig);
-    }
-
-    // Auto first: default for new users, routed per request by the backend.
-    config.models = config.models.filter(
-      (m: any) => m.model !== VYNORAI_AUTO_MODEL,
-    );
-    config.models.unshift({
-      title: "VynorAI Auto",
-      provider: "vynorai",
-      model: VYNORAI_AUTO_MODEL,
-      apiBase: VYNORAI_PROD_URL,
-      apiKey: VYNORAI_SECRET_REF,
-    });
 
     // Configure tab autocomplete
     config.tabAutocompleteModel = {

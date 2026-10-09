@@ -105,3 +105,52 @@ export function migrateVynorModels(
     );
   }
 }
+
+export interface JsonVynorModel {
+  title: string;
+  provider: string;
+  model: string;
+  apiBase: string;
+  apiKey: string;
+}
+
+/**
+ * Keeps a config.json "models" list at exactly one "VynorAI Auto" (first) and
+ * one "VynorAI Coder", without ever replacing or duplicating entries on a
+ * repeat run. The old code matched any entry whose apiBase contained
+ * "vynor.lk" (Auto included), overwrote it with Coder and then added a new
+ * Auto, so every activation grew the list by one entry (135 duplicates seen).
+ * Identical entries left by that bug are collapsed here as well.
+ */
+export function upsertVynorJsonModels<T extends Record<string, any>>(
+  models: T[],
+  auto: JsonVynorModel,
+  coder: JsonVynorModel,
+): Array<T | JsonVynorModel> {
+  // 1. Heal lists the bug already grew: drop exact duplicates, keep order.
+  const seen = new Set<string>();
+  const unique = models.filter((m) => {
+    const key = JSON.stringify([m?.title, m?.provider, m?.model, m?.apiBase]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // 2. Exactly one Coder, matched by its own title only, updated in place.
+  const withoutAuto = unique.filter((m) => m?.model !== auto.model);
+  const coderIndex = withoutAuto.findIndex((m) => m?.title === coder.title);
+  const next: Array<T | JsonVynorModel> = [...withoutAuto];
+  if (coderIndex >= 0) {
+    next[coderIndex] = coder;
+    // a second entry with the Coder title is a leftover duplicate
+    for (let i = next.length - 1; i > coderIndex; i--) {
+      if ((next[i] as any)?.title === coder.title) next.splice(i, 1);
+    }
+  } else {
+    next.unshift(coder);
+  }
+
+  // 3. Auto first: the default for new users.
+  next.unshift(auto);
+  return next;
+}

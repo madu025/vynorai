@@ -26,6 +26,16 @@ class EmbeddingsPipeline {
       // prettier-ignore
       const { env, pipeline } = await import("../../vendor/modules/@xenova/transformers/src/transformers.js");
 
+      // If the native ONNX backend cannot load, onnxruntime falls back to
+      // WebAssembly. Its multi-threaded mode starts workers from a blob: URL,
+      // which Node's worker_threads rejects ("worker script or module filename
+      // must be an absolute path"), so the fallback must run single-threaded.
+      const wasmEnv = (env as any)?.backends?.onnx?.wasm;
+      if (wasmEnv) {
+        wasmEnv.numThreads = 1;
+        wasmEnv.proxy = false;
+      }
+
       env.allowLocalModels = true;
       env.allowRemoteModels = false;
       env.localModelPath = path.join(

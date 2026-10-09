@@ -319,10 +319,18 @@ authRouter.post(
   },
 );
 
+// Codes and states travel in these bodies, so no response (rejections and rate
+// limits included) may be cached. Set before the validators and limiter run.
+const noStore = (_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+};
+
 // Browser creates a short-lived, single-use code. Raw API credentials never
 // enter custom URI query strings, browser history, or OS protocol logs.
 authRouter.post(
   "/ide-code",
+  noStore,
   authRateLimiter,
   requireAuth,
   validateBody(IdeCodeBodySchema),
@@ -351,6 +359,7 @@ authRouter.post(
 // Redis is configured; single-instance deployments use the bounded fallback.
 authRouter.post(
   "/ide-exchange",
+  noStore,
   authRateLimiter,
   validateBody(IdeExchangeBodySchema),
   async (req: Request, res: Response, next: NextFunction) => {

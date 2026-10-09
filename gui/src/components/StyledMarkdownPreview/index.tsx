@@ -1,7 +1,6 @@
 import { ctxItemToRifWithContents } from "core/commands/util";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { useRemark } from "react-remark";
-import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import styled from "styled-components";
 import { visit } from "unist-util-visit";
@@ -22,7 +21,16 @@ import FilenameLink from "./FilenameLink";
 import "./katex.css";
 import "./markdown.css";
 import MermaidBlock from "./MermaidBlock";
-import { rehypeHighlightPlugin } from "./rehypeHighlightPlugin";
+import {
+  ensureHighlightLoaded,
+  ensureKatexLoaded,
+  isHighlightLoaded,
+  isKatexLoaded,
+  lazyRehypeHighlight,
+  lazyRehypeKatex,
+  sourceNeedsHighlight,
+  sourceNeedsKatex,
+} from "./lazyMarkdownPlugins";
 import { SecureImageComponent } from "./SecureImageComponent";
 import { StepContainerPreToolbar } from "./StepContainerPreToolbar";
 import SymbolLink from "./SymbolLink";
@@ -267,9 +275,8 @@ const StyledMarkdownPreview = memo(function StyledMarkdownPreview(
       },
     ],
     rehypePlugins: [
-      rehypeKatex as any,
-      {},
-      rehypeHighlightPlugin(),
+      lazyRehypeKatex,
+      lazyRehypeHighlight,
       // Note: An empty obj is the default behavior, but leaving this here for scaffolding to
       // add unsupported languages in the future. We will need to install the `lowlight` package
       // to use the `common` language set in addition to unsupported languages.
@@ -284,7 +291,6 @@ const StyledMarkdownPreview = memo(function StyledMarkdownPreview(
           });
         };
       },
-      {},
     ],
     rehypeReactOptions: {
       components: {
@@ -380,10 +386,32 @@ const StyledMarkdownPreview = memo(function StyledMarkdownPreview(
   });
 
   useEffect(() => {
-    setMarkdownSource(
-      // some patches to source markdown are applied here:
-      fixDoubleDollarNewLineLatex(patchNestedMarkdown(props.source ?? "")),
-    );
+    const source = props.source ?? "";
+    // some patches to source markdown are applied here:
+    const render = () =>
+      setMarkdownSource(
+        fixDoubleDollarNewLineLatex(patchNestedMarkdown(source)),
+      );
+
+    // Math and code highlighting load on first use; plain text renders at once.
+    const pending: Promise<void>[] = [];
+    if (sourceNeedsKatex(source) && !isKatexLoaded()) {
+      pending.push(ensureKatexLoaded());
+    }
+    if (sourceNeedsHighlight(source) && !isHighlightLoaded()) {
+      pending.push(ensureHighlightLoaded());
+    }
+    if (pending.length === 0) {
+      render();
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(pending).then(() => {
+      if (!cancelled) render();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [props.source, allSymbols]);
 
   const uiConfig = useAppSelector(selectUIConfig);

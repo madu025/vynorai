@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import type { ContextItemWithId } from "core";
 import { countTokens } from "core/llm/countTokens";
+import { ensureTokenizerLoaded } from "../../../../util/tokenCount";
 import { applyContextBudget } from "./contextBudget";
+
+// Production awaits the tokenizer before building a prompt (streamResponse).
+beforeAll(() => ensureTokenizerLoaded());
 
 function item(id: string, content: string): ContextItemWithId {
   return {

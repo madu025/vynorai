@@ -1236,10 +1236,12 @@ export class Core {
           uris: data.uris,
         });
       }
+      this.messenger.send("openFilesChanged", undefined);
     });
 
     on("files/opened", async ({ data: { uris } }) => {
       this.scheduleWorkspaceRefresh();
+      this.messenger.send("openFilesChanged", undefined);
       if (uris) {
         for (const filepath of uris) {
           try {

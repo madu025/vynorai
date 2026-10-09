@@ -44,9 +44,9 @@ export function isQuotaState(value: unknown): value is QuotaState {
   );
 }
 
-const BarContainer = styled.div`
+const BarContainer = styled.div<{ $compact?: boolean }>`
   margin: 6px 10px 8px 10px;
-  padding: 8px 12px;
+  padding: ${(props) => (props.$compact ? "5px 10px" : "8px 12px")};
   background: rgba(14, 17, 28, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
@@ -61,19 +61,11 @@ const BarContainer = styled.div`
   }
 `;
 
-const HeaderRow = styled.div`
+const CompactRow = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-`;
-
-const BrandBadge = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: #eef2f8;
+  gap: 8px;
+  white-space: nowrap;
 `;
 
 const SparkleIcon = styled.span`
@@ -137,27 +129,6 @@ const ProgressFill = styled.div<{ $percent: number; $isWarning: boolean }>`
   box-shadow: 0 0 8px
     ${(props) =>
       props.$isWarning ? "rgba(255, 82, 82, 0.5)" : "rgba(0, 229, 255, 0.4)"};
-`;
-
-const SavingsRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 5px;
-  padding: 3px 7px;
-  background: rgba(0, 230, 118, 0.08);
-  border: 1px solid rgba(0, 230, 118, 0.2);
-  border-radius: 6px;
-  font-size: 10px;
-`;
-
-const FooterRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 6px;
-  font-size: 10px;
-  color: #718096;
 `;
 
 const ActionLink = styled.a`
@@ -413,84 +384,64 @@ export function VynorQuotaBar() {
     );
   }
 
+  const savedAnswers = quota.cachedRequests || 0;
+  const details = [
+    `${quota.usedTokens.toLocaleString()} of ${quota.maxTokens.toLocaleString()} credits used (${quota.percentageUsed}%)`,
+    quota.periodEnd ? `Resets ${quota.periodEnd}` : "",
+    savedAnswers > 0
+      ? `${savedAnswers.toLocaleString()} ${savedAnswers === 1 ? "answer" : "answers"} came free from cache, templates or the local engine (0 credits)`
+      : "Repeat questions are answered from cache for 0 credits",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <BarContainer>
-      <HeaderRow>
-        <BrandBadge>
-          <SparkleIcon>💎</SparkleIcon>
-          <span>VynorAI Quota</span>
-          <PlanPill $plan={quota.planName}>{quota.planName}</PlanPill>
-        </BrandBadge>
+    <BarContainer $compact title={details}>
+      <CompactRow>
+        <PlanPill $plan={quota.planName}>{quota.planName}</PlanPill>
+        <ProgressTrack
+          role="progressbar"
+          aria-label="Monthly VynorAI credit usage"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={quota.percentageUsed}
+          style={{ flex: 1, minWidth: 24 }}
+        >
+          <ProgressFill
+            $percent={quota.percentageUsed}
+            $isWarning={isWarning}
+          />
+        </ProgressTrack>
         <TokenCount>
-          <span>{quota.remainingTokens.toLocaleString()}</span> /{" "}
-          {quota.maxTokens.toLocaleString()} credits left
+          <span>{quota.remainingTokens.toLocaleString()}</span> credits left
         </TokenCount>
-      </HeaderRow>
-
-      <ProgressTrack
-        role="progressbar"
-        aria-label="Monthly VynorAI credit usage"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={quota.percentageUsed}
-      >
-        <ProgressFill $percent={quota.percentageUsed} $isWarning={isWarning} />
-      </ProgressTrack>
-
-      <SavingsRow title="Estimated tokens answered from cache, templates and the local engine instead of a paid model. These cost you no credits.">
-        <span
+        <button
+          onClick={fetchQuota}
+          aria-label="Refresh credit balance"
           style={{
-            color: "#00e676",
-            fontWeight: 600,
+            background: "none",
+            border: "none",
+            color: "#718096",
+            cursor: "pointer",
+            padding: 0,
             display: "flex",
             alignItems: "center",
-            gap: 3,
           }}
+          title="Refresh Token Balance"
         >
-          ✨{" "}
-          {(quota.cachedRequests || 0) > 0
-            ? `${(quota.cachedRequests || 0).toLocaleString()} ${quota.cachedRequests === 1 ? "answer" : "answers"} free from cache (0 credits)`
-            : "Repeat questions cost 0 credits"}
-        </span>
-        <span style={{ color: "#a0aec0" }}>
-          {`${quota.usedTokens.toLocaleString()} credits used`}
-        </span>
-      </SavingsRow>
-
-      <FooterRow>
-        <span>
-          {100 - quota.percentageUsed}% remaining
-          {quota.periodEnd ? ` • resets ${quota.periodEnd}` : ""}
-        </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
-            onClick={fetchQuota}
-            aria-label="Refresh credit balance"
+          <ArrowPathIcon
             style={{
-              background: "none",
-              border: "none",
-              color: "#718096",
-              cursor: "pointer",
-              padding: 0,
-              display: "flex",
-              alignItems: "center",
+              width: 11,
+              height: 11,
+              animation: loading ? "spin 1s linear infinite" : "none",
             }}
-            title="Refresh Token Balance"
-          >
-            <ArrowPathIcon
-              style={{
-                width: 11,
-                height: 11,
-                animation: loading ? "spin 1s linear infinite" : "none",
-              }}
-            />
-          </button>
-          <ActionLink href="#" onClick={handleUpgrade}>
-            Upgrade Plan{" "}
-            <ArrowTopRightOnSquareIcon style={{ width: 10, height: 10 }} />
-          </ActionLink>
-        </div>
-      </FooterRow>
+          />
+        </button>
+        <ActionLink href="#" onClick={handleUpgrade}>
+          Upgrade{" "}
+          <ArrowTopRightOnSquareIcon style={{ width: 10, height: 10 }} />
+        </ActionLink>
+      </CompactRow>
     </BarContainer>
   );
 }

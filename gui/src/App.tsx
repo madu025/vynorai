@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import Layout from "./components/Layout";
 import { MainEditorProvider } from "./components/mainInput/TipTapEditor";
@@ -8,6 +8,8 @@ import ParallelListeners from "./hooks/ParallelListeners";
 import ErrorPage from "./pages/error";
 import Chat from "./pages/gui";
 import { ROUTES } from "./util/navigation";
+import { ensureHighlightLoaded } from "./components/StyledMarkdownPreview/lazyMarkdownPlugins";
+import { ensureTokenizerLoaded } from "./util/tokenCount";
 
 // Vynor chat is the startup surface. Provider configuration, history, usage,
 // and theme tools remain available, but loading them must not delay the first
@@ -76,6 +78,16 @@ const router = createMemoryRouter([
   most of which interact with redux etc.
 */
 function App() {
+  // The exact tokenizer and the code highlighter are separate chunks: fetch it shortly after the first
+  // paint instead of making the panel parse it up front.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void ensureTokenizerLoaded();
+      void ensureHighlightLoaded();
+    }, 1_500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
     <VscThemeProvider>
       <MainEditorProvider>

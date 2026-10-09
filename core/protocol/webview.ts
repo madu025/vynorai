@@ -30,6 +30,8 @@ export type ToWebviewFromIdeOrCoreProtocol = {
     void,
   ];
   didCloseFiles: [{ uris: string[] }, void];
+  /** The set of open editor tabs changed; the GUI re-reads it for @file suggestions. */
+  openFilesChanged: [undefined, void];
   isContinueInputFocused: [undefined, boolean];
   addContextItem: [
     {

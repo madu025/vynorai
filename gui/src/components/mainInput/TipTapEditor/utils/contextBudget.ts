@@ -1,5 +1,5 @@
 import type { ContextItemWithId } from "core";
-import { countTokens } from "core/llm/countTokens";
+import { countTokens } from "../../../../util/tokenCount";
 
 export const DEFAULT_CONTEXT_TOKEN_BUDGET = 18_000;
 export const DEFAULT_ITEM_TOKEN_BUDGET = 8_000;

@@ -139,6 +139,7 @@ export const CORE_TO_WEBVIEW_PASS_THROUGH: (keyof ToWebviewFromCoreProtocol)[] =
     "getCurrentSessionId",
     "sessionUpdate",
     "didCloseFiles",
+    "openFilesChanged",
     "toolCallPartialOutput",
     "workspace/statusUpdate",
   ];

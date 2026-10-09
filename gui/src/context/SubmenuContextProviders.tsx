@@ -155,7 +155,9 @@ export const SubmenuContextProvidersProvider = ({
     [id: string]: ContextSubmenuItemWithProvider[];
   }>({});
 
-  // Update open files for file provider on an interval
+  // Update open files for the file provider when the IDE reports a tab change
+  const refreshOpenFilesRef = useRef<(() => Promise<void>) | undefined>();
+  const openFilesDebounce = useRef<ReturnType<typeof setTimeout>>();
   const lastOpenFilesRef = useRef<ContextSubmenuItemWithProvider[]>([]);
   useEffect(() => {
     function hasOpenFilesChanged(
@@ -206,15 +208,31 @@ export const SubmenuContextProvidersProvider = ({
       lastOpenFilesRef.current = openFileItems;
     };
 
-    const interval = setInterval(refreshOpenFiles, 2000);
+    // Refresh when the IDE says the open tabs changed (see the listener below);
+    // the slow interval only covers changes that send no event.
+    refreshOpenFilesRef.current = refreshOpenFiles;
+    const interval = setInterval(refreshOpenFiles, 60_000);
 
     void refreshOpenFiles(); // Initial call
 
     return () => {
       isMounted = false;
+      refreshOpenFilesRef.current = undefined;
       clearInterval(interval);
     };
   }, [ideMessenger]);
+
+  useWebviewListener(
+    "openFilesChanged",
+    async () => {
+      if (openFilesDebounce.current) clearTimeout(openFilesDebounce.current);
+      openFilesDebounce.current = setTimeout(
+        () => void refreshOpenFilesRef.current?.(),
+        300,
+      );
+    },
+    [],
+  );
 
   const providersLoading = useRef(new Set<ContextProviderName>()).current;
   const abortControllers = useRef(

@@ -4,7 +4,7 @@ import { LLMFullCompletionOptions, ModelDescription } from "core";
 import { renderChatMessage } from "core/util/messageContent";
 import { v4 as uuidv4 } from "uuid";
 import { runHooks } from "../util/hooks";
-import { countTokens } from "core/llm/countTokens";
+import { countTokens } from "../../util/tokenCount";
 import { getRuleId } from "core/llm/rules/getSystemMessageWithRules";
 import { ToCoreProtocol } from "core/protocol";
 import { BUILT_IN_GROUP_NAME, BuiltInToolNames } from "core/tools/builtIn";

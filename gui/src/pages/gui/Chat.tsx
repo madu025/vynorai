@@ -73,6 +73,8 @@ import { AgentControlCenter } from "../../components/AgentWorkspace/AgentControl
 import { BackgroundModeView } from "../../components/BackgroundMode/BackgroundModeView";
 
 // Helper function to find the index of the latest conversation summary
+const HISTORY_WINDOW_STEP = 40;
+
 function findLatestSummaryIndex(history: ChatHistoryItem[]): number {
   for (let i = history.length - 1; i >= 0; i--) {
     if (history[i].conversationSummary) {
@@ -161,6 +163,18 @@ export function Chat() {
   const hasDismissedExploreDialog = useAppSelector(
     (state) => state.ui.hasDismissedExploreDialog,
   );
+  // Long sessions only mount the newest messages; older ones load on request.
+  const [windowSize, setWindowSize] = useState(HISTORY_WINDOW_STEP);
+  const sessionKey = useAppSelector((state) => state.session.id);
+  useEffect(() => setWindowSize(HISTORY_WINDOW_STEP), [sessionKey]);
+  const shownHistory = useMemo(
+    () => history.filter((item) => item.message.role !== "system"),
+    [history],
+  );
+  const windowStart = Math.max(0, shownHistory.length - windowSize);
+  const visibleItems = shownHistory.slice(windowStart);
+  const hiddenCount = windowStart;
+
   const jetbrains = useMemo(() => {
     return isJetBrains();
   }, []);
@@ -514,48 +528,64 @@ export function Chat() {
         {mode === "background" ? (
           <BackgroundModeView isCreatingAgent={isCreatingBackground} />
         ) : (
-          history
-            .filter((item) => item.message.role !== "system")
-            .map((item, index: number) => (
-              <div
-                key={item.message.id}
-                style={{
-                  minHeight: index === history.length - 1 ? "200px" : 0,
-                }}
+          <>
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                data-testid="show-earlier-messages"
+                className="text-description hover:text-foreground mx-auto mb-2 block cursor-pointer border-none bg-transparent text-xs underline"
+                onClick={() =>
+                  setWindowSize((size) => size + HISTORY_WINDOW_STEP)
+                }
               >
-                <ErrorBoundary
-                  FallbackComponent={fallbackRender}
-                  onError={(error) => {
-                    const diagnostic = createRuntimeDiagnostic({
-                      error,
-                      sessionId,
-                      mode,
-                      historyLength: history.length,
-                      workspace: workspaceSnapshot
-                        ? {
-                            connected:
-                              (workspaceSnapshot.roots ?? []).length > 0,
-                            rootCount: (workspaceSnapshot.roots ?? []).length,
-                            trusted: workspaceSnapshot.trusted,
-                            revision: workspaceSnapshot.revision,
-                          }
-                        : undefined,
-                      toolStatusCounts: {},
-                    });
-                    saveRuntimeDiagnostic(diagnostic);
-                    if (!errorReportsEnabled) return;
-                    ideMessenger.post("vynor/errorReport", {
-                      source: "gui",
-                      message: diagnostic.error.message,
-                      stack: diagnostic.error.stack,
-                    });
+                Show {Math.min(hiddenCount, HISTORY_WINDOW_STEP)} earlier
+                messages ({hiddenCount} hidden)
+              </button>
+            )}
+            {visibleItems.map((item, offset: number) => {
+              const index = windowStart + offset;
+              return (
+                <div
+                  key={item.message.id}
+                  style={{
+                    minHeight: index === history.length - 1 ? "200px" : 0,
                   }}
                 >
-                  {renderChatHistoryItem(item, index)}
-                </ErrorBoundary>
-                {index === history.length - 1 && <InlineErrorMessage />}
-              </div>
-            ))
+                  <ErrorBoundary
+                    FallbackComponent={fallbackRender}
+                    onError={(error) => {
+                      const diagnostic = createRuntimeDiagnostic({
+                        error,
+                        sessionId,
+                        mode,
+                        historyLength: history.length,
+                        workspace: workspaceSnapshot
+                          ? {
+                              connected:
+                                (workspaceSnapshot.roots ?? []).length > 0,
+                              rootCount: (workspaceSnapshot.roots ?? []).length,
+                              trusted: workspaceSnapshot.trusted,
+                              revision: workspaceSnapshot.revision,
+                            }
+                          : undefined,
+                        toolStatusCounts: {},
+                      });
+                      saveRuntimeDiagnostic(diagnostic);
+                      if (!errorReportsEnabled) return;
+                      ideMessenger.post("vynor/errorReport", {
+                        source: "gui",
+                        message: diagnostic.error.message,
+                        stack: diagnostic.error.stack,
+                      });
+                    }}
+                  >
+                    {renderChatHistoryItem(item, index)}
+                  </ErrorBoundary>
+                  {index === history.length - 1 && <InlineErrorMessage />}
+                </div>
+              );
+            })}
+          </>
         )}
       </StepsDiv>
       <div className={"relative shrink-0"}>

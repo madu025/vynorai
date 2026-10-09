@@ -1,4 +1,11 @@
 import "@testing-library/jest-dom";
+import { ensureHighlightLoaded } from "../../components/StyledMarkdownPreview/lazyMarkdownPlugins";
+import { ensureTokenizerLoaded } from "../tokenCount";
+
+// The app preloads these chunks shortly after it opens (App.tsx), before anyone
+// has typed a prompt. Do the same before each test file, so a test never pays
+// for transforming the 6 MB tokenizer while it is running.
+await Promise.all([ensureTokenizerLoaded(), ensureHighlightLoaded()]);
 
 afterEach(() => {
   vi.clearAllMocks();

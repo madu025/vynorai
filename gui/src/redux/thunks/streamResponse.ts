@@ -13,7 +13,7 @@ import {
 } from "../slices/sessionSlice";
 import { RootState, ThunkApiType } from "../store";
 import { panelCommandFromEditor } from "../../util/panelCommands";
-import { ensureTokenizerLoaded } from "../../util/tokenCount";
+import { waitForTokenizer } from "../../util/tokenCount";
 import { streamNormalInput } from "./streamNormalInput";
 import { streamThunkWrapper } from "./streamThunkWrapper";
 import { updateFileSymbolsFromFiles } from "./updateFileSymbols";
@@ -109,8 +109,8 @@ export const streamResponseThunk = createAsyncThunk<
 
     const wrapperResult = await dispatch(
       streamThunkWrapper(async () => {
-        // Context budgets are counted with the exact tokenizer, so wait for it.
-        await ensureTokenizerLoaded();
+        // Context budgets use the exact tokenizer when it is ready (a short wait at most).
+        await waitForTokenizer();
         const state = getState();
         const selectedChatModel = selectSelectedChatModel(state);
         const inputIndex = index ?? state.session.history.length; // Either given index or concat to end

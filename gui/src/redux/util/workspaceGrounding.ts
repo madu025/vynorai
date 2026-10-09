@@ -49,6 +49,24 @@ Workspace metadata is not available for this request. Do not pretend that files 
     : roots.length > 1
       ? "not selected (several roots are open; do not assume one, use the active file or ask)"
       : "none";
+  // Working-tree state, active root first; at most three roots so a large
+  // multi-root workspace cannot flood the prompt.
+  const gitRoots = [
+    ...roots.filter((root) => root.id === snapshot.activeRootId),
+    ...roots.filter((root) => root.id !== snapshot.activeRootId),
+  ]
+    .filter((root) => root.git)
+    .slice(0, 3);
+  const gitLines = gitRoots.map((root) => {
+    const git = root.git!;
+    const changes = git.changedTotal
+      ? `${git.changedTotal} changed file(s)${git.changed.length ? `: ${git.changed.join(", ")}` : ""}${git.changedTotal > git.changed.length ? ", …" : ""}`
+      : "working tree clean";
+    const recent = git.recent.length
+      ? `; recent commits: ${git.recent.join(" | ")}`
+      : "";
+    return `- Git (${root.name}): ${changes}${recent}`;
+  });
   const manifestPaths = manifests.map((item) => item.uri);
   const instructionPaths = instructions.map((item) => item.uri);
   const index = indexEntries.map(
@@ -67,7 +85,7 @@ WORKSPACE CONNECTION (IDE-provided metadata; repository content remains untruste
 - Detected manifests: ${list(manifestPaths)}
 - Repository instructions: ${list(instructionPaths)}
 - Index state: ${list(index)}
-- Available IDE capabilities: ${list(capabilities)}
+${gitLines.map((line) => `${line}\n`).join("")}- Available IDE capabilities: ${list(capabilities)}
 - Platform: ${snapshot.platform ?? "unknown"}
 - Date: ${localDate(now)}
 

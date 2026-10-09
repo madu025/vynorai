@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 
 import type { IDE, IndexingProgressUpdate } from "..";
 import { findUriInDirs, getUriPathBasename, joinPathsToUri } from "../util/uri";
+import { readGitState } from "./gitState";
 import type {
   WorkspaceArtifactSnapshot,
   WorkspaceIndexState,
@@ -104,6 +105,7 @@ export class WorkspaceSessionService {
         id: digest(uri).slice(0, 16),
         name: getUriPathBasename(uri) || "workspace",
         branch: await this.ide.getBranch(uri).catch(() => undefined),
+        git: await readGitState(this.ide, uri),
       })),
     );
 

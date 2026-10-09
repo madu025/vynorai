@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -54,6 +55,16 @@ function makeProject(): string {
     path.join(dir, "package.json"),
     '{"name":"vynor-e2e-project"}\n',
   );
+  // A real git repository: one commit, then one modified and one new file.
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: dir, stdio: "ignore" });
+  git("init", "-q");
+  git("config", "user.email", "e2e@example.com");
+  git("config", "user.name", "E2E");
+  git("add", ".");
+  git("commit", "-q", "-m", "e2e initial commit");
+  fs.writeFileSync(path.join(dir, "package.json"), '{"name":"changed"}\n');
+  fs.writeFileSync(path.join(dir, "scratch.txt"), "new\n");
   return dir;
 }
 
@@ -161,6 +172,8 @@ describe("VynorAI local slash commands", function () {
     expect(status).to.match(/Chat model: /);
     expect(status).to.match(/Codebase index: (enabled|disabled)/);
     expect(status).to.match(/Instruction files loaded: [1-9]/);
+    expect(status).to.include("Git: 2 changed file(s)");
+    expect(status).to.include("e2e initial commit");
     expect(status).not.to.include(os.tmpdir());
 
     // The first turn must be finished before the next command is submitted.

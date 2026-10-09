@@ -21,6 +21,7 @@ export enum BuiltInToolNames {
   ReadSkill = "read_skill",
   UpdateTodoList = "update_todo_list",
   RunSubagent = "run_subagent",
+  GetDiagnostics = "get_diagnostics",
 
   // excluded from allTools for now
   ViewRepoMap = "view_repo_map",

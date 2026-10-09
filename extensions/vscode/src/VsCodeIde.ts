@@ -676,6 +676,8 @@ class VsCodeIde implements IDE {
           end: { line: d.range.end.line, character: d.range.end.character },
         },
         message: d.message,
+        severity: (["error", "warning", "info", "hint"] as const)[d.severity],
+        source: d.source,
       };
     });
   }

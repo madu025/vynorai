@@ -107,3 +107,48 @@ test("the date is the user's local calendar day, not the UTC day", () => {
     "- Date: 2026-10-10",
   );
 });
+
+describe("git state in the environment block", () => {
+  const base: any = {
+    id: "w",
+    revision: 1,
+    roots: [
+      {
+        id: "r1",
+        name: "app",
+        branch: "main",
+        git: {
+          changed: ["M src/a.ts", "?? notes.md"],
+          changedTotal: 4,
+          recent: ["abc1234 fix login", "def5678 add tests"],
+        },
+      },
+    ],
+    activeRootId: "r1",
+    manifests: [],
+    instructions: [],
+    index: [],
+    trusted: true,
+    capabilities: [],
+    createdAt: 0,
+  };
+
+  it("lists changed files and recent commits, and says when more are hidden", () => {
+    const text = formatWorkspaceGrounding(base);
+    expect(text).toContain(
+      "- Git (app): 4 changed file(s): M src/a.ts, ?? notes.md, …; recent commits: abc1234 fix login | def5678 add tests",
+    );
+  });
+
+  it("says the tree is clean, and omits the line for a folder without git", () => {
+    const clean = {
+      ...base,
+      roots: [
+        { ...base.roots[0], git: { changed: [], changedTotal: 0, recent: [] } },
+      ],
+    };
+    expect(formatWorkspaceGrounding(clean)).toContain("working tree clean");
+    const none = { ...base, roots: [{ id: "r1", name: "app" }] };
+    expect(formatWorkspaceGrounding(none)).not.toContain("- Git (");
+  });
+});

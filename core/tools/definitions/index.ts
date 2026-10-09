@@ -21,5 +21,6 @@ export { searchWebTool } from "./searchWeb";
 export { singleFindAndReplaceTool } from "./singleFindAndReplace";
 export { updateTodoListTool } from "./updateTodoList";
 export { viewDiffTool } from "./viewDiff";
+export { getDiagnosticsTool } from "./getDiagnostics";
 export { viewRepoMapTool } from "./viewRepoMap";
 export { viewSubdirectoryTool } from "./viewSubdirectory";

@@ -17,6 +17,7 @@ export const getBaseToolDefinitions = () => [
   // Persistent, live browser (replaces the one-shot browser_qa report).
   toolDefinitions.browserTool,
   toolDefinitions.updateTodoListTool,
+  toolDefinitions.getDiagnosticsTool,
 ];
 
 export const getConfigDependentToolDefinitions = async (

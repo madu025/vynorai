@@ -8,6 +8,7 @@ const READ_ONLY = new Set<string>([
   BuiltInToolNames.GrepSearch,
   BuiltInToolNames.FileGlobSearch,
   BuiltInToolNames.ViewDiff,
+  BuiltInToolNames.GetDiagnostics,
   BuiltInToolNames.LSTool,
   BuiltInToolNames.CodebaseTool,
   BuiltInToolNames.ViewRepoMap,

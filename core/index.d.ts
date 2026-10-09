@@ -780,6 +780,10 @@ export interface Problem {
   filepath: string;
   range: Range;
   message: string;
+  /** Set by editors that report it (VS Code); older clients omit it. */
+  severity?: "error" | "warning" | "info" | "hint";
+  /** The language service that reported it, e.g. "ts" or "eslint". */
+  source?: string;
 }
 
 export interface Thread {

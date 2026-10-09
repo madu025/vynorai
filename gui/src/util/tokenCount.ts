@@ -27,6 +27,23 @@ export function ensureTokenizerLoaded(): Promise<void> {
   return loading;
 }
 
+/**
+ * Waits for the exact tokenizer, but never longer than `maxMs`: a prompt must
+ * not sit behind a 6 MB module on a slow or busy machine. After the wait the
+ * estimate is used, which is slightly generous, and loading continues.
+ */
+export async function waitForTokenizer(maxMs = 1_500): Promise<void> {
+  if (exactCounter) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    ensureTokenizerLoaded(),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, maxMs);
+    }),
+  ]);
+  if (timer) clearTimeout(timer);
+}
+
 function textLength(content: MessageContent): number {
   if (typeof content === "string") return content.length;
   return content.reduce(

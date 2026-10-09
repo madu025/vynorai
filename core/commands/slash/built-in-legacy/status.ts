@@ -6,6 +6,7 @@ import type {
 import { GlobalContext } from "../../../util/GlobalContext.js";
 import { findUriInDirs, getUriPathBasename } from "../../../util/uri.js";
 import { resolveActiveWorkspaceDir } from "../../../workspace/activeRoot.js";
+import { readGitState } from "../../../workspace/gitState.js";
 
 /** Path shown to the user: workspace-relative, never an absolute local path. */
 function displayPath(sourceFile: string | undefined, dirs: string[]): string {
@@ -85,6 +86,12 @@ export const StatusCommand: SlashCommand = {
     if (trusted !== undefined) {
       lines.push(
         `- Workspace trust: ${trusted ? "trusted" : "restricted (edits and commands are blocked)"}`,
+      );
+    }
+    const git = activeDir ? await readGitState(ide, activeDir) : undefined;
+    if (git) {
+      lines.push(
+        `- Git: ${git.changedTotal ? `${git.changedTotal} changed file(s)` : "working tree clean"}${git.recent[0] ? `; latest commit \`${git.recent[0]}\`` : ""}`,
       );
     }
     lines.push(

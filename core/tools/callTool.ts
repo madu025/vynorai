@@ -23,6 +23,7 @@ import { requestRuleImpl } from "./implementations/requestRule";
 import { runSubagentImpl } from "./implementations/runSubagent";
 import { runTerminalCommandImpl } from "./implementations/runTerminalCommand";
 import { searchWebImpl } from "./implementations/searchWeb";
+import { getDiagnosticsImpl } from "./implementations/getDiagnostics";
 import { viewDiffImpl } from "./implementations/viewDiff";
 import { viewRepoMapImpl } from "./implementations/viewRepoMap";
 import { viewSubdirectoryImpl } from "./implementations/viewSubdirectory";
@@ -215,6 +216,8 @@ export async function callBuiltInTool(
       return await fetchUrlContentImpl(args, extras);
     case BuiltInToolNames.ViewDiff:
       return await viewDiffImpl(args, extras);
+    case BuiltInToolNames.GetDiagnostics:
+      return await getDiagnosticsImpl(args, extras);
     case BuiltInToolNames.LSTool:
       return await lsToolImpl(args, extras);
     case BuiltInToolNames.ReadCurrentlyOpenFile:

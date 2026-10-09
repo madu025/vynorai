@@ -10,6 +10,14 @@ import { IdeMessengerProvider } from "../../context/IdeMessenger";
 import { MockIdeMessenger } from "../../context/MockIdeMessenger";
 import ParallelListeners from "../../hooks/ParallelListeners";
 import { setupStore } from "../../redux/store";
+
+import { ensureHighlightLoaded } from "../../components/StyledMarkdownPreview/lazyMarkdownPlugins";
+import { ensureTokenizerLoaded } from "../tokenCount";
+
+// The app preloads these chunks shortly after it opens (App.tsx), before anyone
+// has typed a prompt. Tests that build a store or render the chat do the same,
+// so they never pay for transforming the 6 MB tokenizer while running.
+await Promise.all([ensureTokenizerLoaded(), ensureHighlightLoaded()]);
 // As a basic setup, import your same slice reducers
 
 // This type interface extends the default options for render from RTL, as well

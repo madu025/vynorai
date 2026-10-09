@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 
 import type { IDE, IndexingProgressUpdate } from "..";
 import { findUriInDirs, getUriPathBasename, joinPathsToUri } from "../util/uri";
-import { readGitState } from "./gitState";
+import { readGitState, resetGitStateCache } from "./gitState";
 import type {
   WorkspaceArtifactSnapshot,
   WorkspaceIndexState,
@@ -57,6 +57,8 @@ export class WorkspaceSessionService {
   ) {}
 
   invalidate(): void {
+    // The agent may just have changed files: do not serve a stale git state.
+    resetGitStateCache();
     this.invalidated = true;
   }
 

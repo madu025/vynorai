@@ -3,10 +3,12 @@ import type { MessageContent } from "core";
 /**
  * The exact tokenizer (js-tiktoken with every vocabulary, about 5.5 MB) used to
  * be bundled into the webview's main script, so every panel open parsed it.
- * It is now a separate chunk, fetched in the background after startup and always
- * awaited before a prompt is built, so counts that decide what gets truncated
- * stay exact. Until it has loaded (only the first moments of a session), a
- * cautious character estimate is used.
+ * It is now a separate chunk, fetched in the background shortly after startup
+ * and waited for (a few seconds at most) before a prompt is built, so counts
+ * that decide what gets truncated are exact. If it is not ready in time, a
+ * conservative estimate is used for that prompt: it never counts fewer tokens
+ * than a character is likely to cost, so context is trimmed too much rather
+ * than too little.
  */
 type Counter = (content: MessageContent, model?: string) => number;
 
@@ -32,7 +34,7 @@ export function ensureTokenizerLoaded(): Promise<void> {
  * not sit behind a 6 MB module on a slow or busy machine. After the wait the
  * estimate is used, which is slightly generous, and loading continues.
  */
-export async function waitForTokenizer(maxMs = 1_500): Promise<void> {
+export async function waitForTokenizer(maxMs = 4_000): Promise<void> {
   if (exactCounter) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
@@ -44,17 +46,27 @@ export async function waitForTokenizer(maxMs = 1_500): Promise<void> {
   if (timer) clearTimeout(timer);
 }
 
-function textLength(content: MessageContent): number {
-  if (typeof content === "string") return content.length;
-  return content.reduce(
-    (sum, part) => sum + (part.type === "text" ? part.text.length : 0),
-    0,
-  );
+function textOf(content: MessageContent): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join("");
 }
 
-/** Slightly above chars/4 so an item is never kept longer than its budget. */
+/**
+ * ASCII text costs about one token per 3.5 characters (a little above the
+ * usual 4, so code is not under-counted); every other character (Sinhala,
+ * Tamil, CJK, emoji) is counted as a whole token, which is what they cost in
+ * the worst case.
+ */
 export function estimateTokenCount(content: MessageContent): number {
-  return Math.ceil(textLength(content) / 3.5);
+  let ascii = 0;
+  let other = 0;
+  for (const char of textOf(content)) {
+    if (char.charCodeAt(0) < 128) ascii += 1;
+    else other += 1;
+  }
+  return Math.ceil(ascii / 3.5 + other);
 }
 
 export function countTokens(content: MessageContent, model?: string): number {

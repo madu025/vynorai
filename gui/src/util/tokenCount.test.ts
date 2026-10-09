@@ -61,3 +61,14 @@ describe("waitForTokenizer", () => {
     vi.doUnmock("core/llm/countTokens");
   });
 });
+
+describe("estimate for non-Latin text", () => {
+  it("counts every non-ASCII character as a token, so Sinhala is not under-counted", () => {
+    resetTokenizerForTests();
+    const sinhala = "සිංහල අකුරු".replace(" ", "");
+    expect(estimateTokenCount(sinhala)).toBe([...sinhala].length);
+    expect(estimateTokenCount("日本語のテキスト")).toBe(8);
+    // mixed: 7 ASCII chars (2 tokens) + 2 others
+    expect(estimateTokenCount("abcdefgක්")).toBe(2 + [..."ක්"].length);
+  });
+});

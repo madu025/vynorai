@@ -40,8 +40,8 @@ describe("formatDiagnostics", () => {
   });
 
   it("says so when there is nothing to report", () => {
-    expect(formatDiagnostics([], [rootUri])).toBe(
-      "No errors or warnings reported.",
+    expect(formatDiagnostics([], [rootUri])).toContain(
+      "No errors or warnings reported",
     );
   });
 
@@ -70,9 +70,16 @@ describe("formatDiagnostics", () => {
 });
 
 describe("getDiagnosticsImpl (real files)", () => {
-  const ide = (seen: Array<string | undefined>) =>
+  const ide = (
+    seen: Array<string | undefined>,
+    current: { path: string; isUntitled: boolean } | null = {
+      path: `${rootUri}/a.ts`,
+      isUntitled: false,
+    },
+  ) =>
     ({
       getWorkspaceDirs: async () => [rootUri],
+      getCurrentFile: async () => current ?? undefined,
       fileExists: async (uri: string) => fs.existsSync(new URL(uri)),
       getProblems: async (uri?: string) => {
         seen.push(uri);
@@ -100,5 +107,23 @@ describe("getDiagnosticsImpl (real files)", () => {
     await expect(
       getDiagnosticsImpl({ filepath: "nope.ts" }, { ide: ide([]) } as any),
     ).rejects.toThrow(/does not exist/);
+  });
+
+  it("does not claim a clean result when no file is open and none is named", async () => {
+    const seen: Array<string | undefined> = [];
+    const [item] = await getDiagnosticsImpl({}, {
+      ide: ide(seen, null),
+    } as any);
+    expect(item.content).toContain("nothing was checked");
+    expect(seen).toEqual([]); // the editor was not even asked
+  });
+
+  it("counts an unknown severity as an error in both the header and the list", () => {
+    const text = formatDiagnostics(
+      [problem({ severity: "fatal" as any, message: "odd" })],
+      [rootUri],
+    );
+    expect(text.split("\n")[0]).toBe("1 error(s), 0 other problem(s)");
+    expect(text).toContain("error a.ts:1:7");
   });
 });

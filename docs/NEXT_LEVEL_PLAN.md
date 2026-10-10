@@ -102,3 +102,24 @@ Size: 1 to 2 weeks.
 ## Not planned
 
 Side-by-side diff review, session tabs, more hook events, IntelliJ. They do not change why a new user would install the extension.
+
+## Status, 2026-10-10
+
+| Step                | State                   | Evidence and what is not verified                                                                                                                                                                                                                                                                                                                          |
+| ------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Roadmap corrected | Done                    | `VYNORAI_COMPETITIVE_ROADMAP.md`, `CLAUDE_CODE_PARITY.md`                                                                                                                                                                                                                                                                                                  |
+| 2 Benchmark         | Done, baseline recorded | 40 tasks, 14 non-English, `backend/scripts/bench/`; baseline 75 of 80 runs (93.8%), `backend/bench-results/baseline-2026-10-10.md`. The first run was before the fixes below. Two runs of the same build differed by 5 failed runs, all explained by the two causes below; a clean repeat after deploy is still needed to meet the "within 3 tasks" check. |
+| 3 Outcome signal    | Done                    | `task_outcomes` (both databases), `POST /v1/task-outcomes`, admin table, GUI reports; 1 backend test, 3 GUI tests. Opt-in, so it only counts users who turned it on. Not verified: a row written by a real extension session.                                                                                                                              |
+| 4 First run         | Partly done             | New users see a labelled estimate in `TaskCreditHint` (3 tests). The Continue onboarding card is not mounted anywhere, so its local-model and provider tabs are not reachable. Not done: a `FirstRun` E2E; it needs a real browser sign-in. Not measured: the screens of a clean install.                                                                  |
+| 5 Reply language    | Done in code            | `replyLanguage` setting, one block in the system message, "auto" adds nothing (3 tests). Not measured: Sinhala pass rate with the setting on, because the benchmark calls the proxy directly and does not build the extension's system message.                                                                                                            |
+| 6 Agent parts       | Decided, not wired      | Summaries stay in memory and the scheduler stays unwired; reasons in `ARCHITECTURE_DECISIONS.md`.                                                                                                                                                                                                                                                          |
+
+Found by the benchmark and fixed in code, not yet deployed:
+
+- Sinhala and Tamil script edit requests matched no mutation verb, so the proxy removed the edit tools and the agent
+  could only paste code into the chat. All 4 such runs failed (`ft-word-count`, `rn-property`). `isMutationRequest`
+  now knows the verbs. Takes effect after the next backend deploy; the benchmark must be re-run then.
+- The scorer did not accept "næthæ" as "does not exist" (`ms-singlish`). Scorer fixed; the model was right.
+
+Next: deploy the backend (asks first), re-run the benchmark twice, add a multi-file category, then decide the
+implementation subagents.

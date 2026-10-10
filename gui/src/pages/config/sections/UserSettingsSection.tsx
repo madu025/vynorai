@@ -12,6 +12,7 @@ import {
   PermissionMode,
   setErrorReportsEnabled,
   setJudgmentLevel,
+  setReplyLanguage,
   setPermissionMode,
   setSideReviewEnabled,
   setTaskCreditCap,
@@ -20,6 +21,10 @@ import {
   DEFAULT_JUDGMENT_LEVEL,
   JudgmentLevel,
 } from "../../../redux/util/judgment";
+import {
+  REPLY_LANGUAGE_OPTIONS,
+  ReplyLanguage,
+} from "../../../redux/util/replyLanguage";
 import {
   formatCredits,
   TASK_CREDIT_CAP_OPTIONS,
@@ -105,6 +110,9 @@ export function UserSettingsSection() {
   const errorReportsEnabled = useAppSelector(
     (state) => state.ui.errorReportsEnabled === true,
   );
+  const replyLanguage = useAppSelector(
+    (state) => state.ui.replyLanguage ?? "auto",
+  );
   const judgmentLevel = useAppSelector(
     (state) => state.ui.judgmentLevel ?? DEFAULT_JUDGMENT_LEVEL,
   );
@@ -174,6 +182,16 @@ export function UserSettingsSection() {
                   ]}
                   onChange={(value) =>
                     dispatch(setJudgmentLevel(value as JudgmentLevel))
+                  }
+                />
+                <UserSetting
+                  type="select"
+                  title="Reply language"
+                  description="Language of explanations, plans and questions. Code, commands and file paths always stay in English."
+                  value={replyLanguage}
+                  options={REPLY_LANGUAGE_OPTIONS}
+                  onChange={(value) =>
+                    dispatch(setReplyLanguage(value as ReplyLanguage))
                   }
                 />
                 <UserSetting

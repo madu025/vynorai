@@ -43,6 +43,29 @@ anything about production environment values is marked "not verified".
   block (`localSlmRouter.ts`); summaries live in process memory, so a restart or rolling deploy changes the
   block once.
 
+## Compaction summaries are not persisted
+
+- Summaries stay in process memory (`hybridContext.ts`, 500 entries). A restart or rolling deploy loses them, so
+  one prompt per active conversation is sent with the verbatim requests and `<earlier-actions>` block only, and the
+  summary is generated again in the background. That costs one provider cache miss per conversation per deploy.
+- Decision (2026-10-10): do not write them to the database. A summary is derived from the user's code and
+  conversation; storing it would add retained user content to a product that stores only fingerprints and counts
+  (`routing_feedback`, `task_outcomes`). Revisit only with an explicit retention period and delete-on-account-delete,
+  and only if the deploy cost shows up in the cache-hit share of the benchmark report.
+
+## Implementation subagents
+
+- `core/agent/ImplementationSubagentScheduler.ts` and the `agent/subagent/*` handlers in `core/core.ts` are not
+  called by any client. They are kept, not wired and not deleted, because the benchmark has no multi-file category
+  yet to show whether parallel implementation agents raise the pass rate. Add that category first, then wire or
+  delete.
+
+## Task outcomes
+
+- The GUI reports how a task ended (completed, completed unverified, stopped, budget, credit cap, error, rewound) with
+  round and credit counts to `POST /v1/task-outcomes`, only when the user turned on "Send Error Reports and Task
+  Outcomes". No prompt, path or code is sent or stored. Retention 180 days. Admin: `/admin/task-outcomes`.
+
 ## Product
 
 - VynorAI: VS Code extension plus a hosted proxy over low-cost models (DeepSeek), no user API key,

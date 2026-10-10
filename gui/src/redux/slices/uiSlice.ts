@@ -1,4 +1,5 @@
 import type { JudgmentLevel } from "../util/judgment";
+import type { ReplyLanguage } from "../util/replyLanguage";
 import { ToolPolicy } from "@continuedev/terminal-security";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { RuleWithSource, Tool } from "core";
@@ -45,6 +46,8 @@ type UIState = {
   taskCreditCap?: number;
   /** How much review process wraps agent turns (see util/judgment). */
   judgmentLevel?: JudgmentLevel;
+  /** Language of explanations and questions; "auto" follows the user's message. */
+  replyLanguage?: ReplyLanguage;
   /** Which tool calls ask first (see core/agent/autoApproval). */
   permissionMode?: PermissionMode;
   /** Opt-in: send GUI crash messages and stacks (never code or prompts). */
@@ -94,6 +97,9 @@ export const uiSlice = createSlice({
     },
     setJudgmentLevel: (state, action: PayloadAction<JudgmentLevel>) => {
       state.judgmentLevel = action.payload;
+    },
+    setReplyLanguage: (state, action: PayloadAction<ReplyLanguage>) => {
+      state.replyLanguage = action.payload;
     },
     setPermissionMode: (state, action: PayloadAction<PermissionMode>) => {
       state.permissionMode = action.payload;
@@ -204,6 +210,7 @@ export const {
   setTaskCreditCap,
   setPendingRoute,
   setJudgmentLevel,
+  setReplyLanguage,
   setPermissionMode,
   setErrorReportsEnabled,
   setOnboardingCard,

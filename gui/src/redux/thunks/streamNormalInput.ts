@@ -64,6 +64,7 @@ import {
   TOOL_BUDGET_GUIDANCE,
   toolRoundBudget,
 } from "../util/toolRoundBudget";
+import { replyLanguageGuidance } from "../util/replyLanguage";
 import { finishedOutcome, reportTaskOutcome } from "../util/taskOutcome";
 import {
   unverifiedEdits,
@@ -509,7 +510,7 @@ export const streamNormalInput = createAsyncThunk<
       workspaceSnapshot
         ? freezeVolatileWorkspaceState(state.session.id, workspaceSnapshot)
         : workspaceSnapshot,
-    )}${browserQaGuidance}${toolBudgetGuidance}`;
+    )}${browserQaGuidance}${replyLanguageGuidance(state.ui.replyLanguage)}${toolBudgetGuidance}`;
 
     const systemMessage = systemToolsFramework
       ? addSystemMessageToolsToSystemMessage(

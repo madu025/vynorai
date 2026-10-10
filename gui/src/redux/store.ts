@@ -63,6 +63,7 @@ const saveSubsetFilters = [
     "sideReviewEnabled",
     "taskCreditCap",
     "judgmentLevel",
+    "replyLanguage",
     "permissionMode",
     "errorReportsEnabled",
   ]),

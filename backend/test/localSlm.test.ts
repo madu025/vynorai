@@ -104,6 +104,42 @@ test("dropped turns are summarized in the background and reused", async () => {
   assert.ok(!other.result.strategy.includes("summary"));
 });
 
+test("dropped user requests stay verbatim even when no summary exists", async () => {
+  const msgs: any[] = [{ role: "system", content: "rules" }];
+  msgs.push({
+    role: "user",
+    content:
+      "GOAL-7731 build the login page in TypeScript and never touch existing tests. " +
+      "q".repeat(12_000),
+  });
+  msgs.push({ role: "assistant", content: "a".repeat(12_000) });
+  for (let i = 1; i < 25; i++) {
+    msgs.push({ role: "user", content: `question ${i} ` + "q".repeat(12_000) });
+    msgs.push({
+      role: "assistant",
+      content: `answer ${i} ` + "a".repeat(12_000),
+    });
+  }
+
+  // No scope: no summary is possible, the dropped goal must still survive.
+  const one = hybrid.applyHybridContext({ messages: msgs }, "pro", "safe");
+  assert.ok(one.result.strategy.includes("user-requests"));
+  assert.ok(!one.result.strategy.includes("summary"));
+  const firstUser = one.body.messages.find((m: any) => m.role === "user");
+  assert.match(firstUser.content, /<earlier-conversation-omitted>/);
+  assert.match(
+    firstUser.content,
+    /GOAL-7731 build the login page in TypeScript/,
+  );
+  assert.match(firstUser.content, /never touch existing tests/);
+  // The clip keeps the block small: 12K of filler must not be copied over.
+  assert.ok(firstUser.content.length < 12_000 + 8_000);
+
+  // Same input, same block: the cached prefix stays stable between boundaries.
+  const two = hybrid.applyHybridContext({ messages: msgs }, "pro", "safe");
+  assert.deepEqual(two.body.messages, one.body.messages);
+});
+
 test("capSlmTier: short follow-ups never turn on thinking", async () => {
   const { capSlmTier } = await import("../src/services/localSlmRouter.ts");
   assert.equal(capSlmTier("H", "Now add jest tests for it."), "N");

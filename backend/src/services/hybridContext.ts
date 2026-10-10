@@ -565,28 +565,73 @@ function presummarize(upcoming: Msg[], scope?: string): void {
   scheduleSummary(droppedKey(scope, upcoming), upcoming);
 }
 
+// The user's own requests are the goal and constraints of the task. They are
+// small, so the dropped ones are kept verbatim (capped) instead of relying on
+// a summary that only sees the tail of the dropped block. A pure function of
+// the dropped messages, so the block is as stable as the window itself.
+const REQUEST_FIRST_CAP = 2000;
+const REQUEST_CAP = 1000;
+const REQUESTS_TOTAL_CAP = 6000;
+
+export function earlierUserRequests(dropped: Msg[]): string {
+  const texts = dropped
+    .filter((m) => m.role === "user")
+    .map((m) => getText(m).trim())
+    .filter(Boolean);
+  if (texts.length === 0) return "";
+  const clip = (t: string, cap: number) =>
+    t.length <= cap ? t : `${t.slice(0, cap)} [...]`;
+  // The first request always stays; newer ones fill the remaining budget.
+  const first = clip(texts[0], REQUEST_FIRST_CAP);
+  const rest: string[] = [];
+  let used = first.length;
+  for (let i = texts.length - 1; i >= 1; i--) {
+    const item = clip(texts[i], REQUEST_CAP);
+    if (used + item.length > REQUESTS_TOTAL_CAP) break;
+    used += item.length;
+    rest.unshift(item);
+  }
+  const omitted = texts.length - 1 - rest.length;
+  return [
+    first,
+    ...(omitted > 0 ? [`[... ${omitted} earlier request(s) omitted ...]`] : []),
+    ...rest,
+  ]
+    .map((t, i) => `${i + 1}. ${t}`)
+    .join("\n");
+}
+
 function applyCompaction(
   messages: Msg[],
   dropped: Msg[],
   scope?: string,
-): { messages: Msg[]; used: boolean } {
-  if (!scope || dropped.length === 0 || !config.localSlm.compactionEnabled)
-    return { messages, used: false };
-  const key = droppedKey(scope, dropped);
-  const summary = summaries.get(key);
-  if (!summary) {
-    scheduleSummary(key, dropped);
-    return { messages, used: false };
+): { messages: Msg[]; used: boolean; requests: boolean } {
+  const none = { messages, used: false, requests: false };
+  if (dropped.length === 0) return none;
+  const canSummarize = Boolean(scope) && config.localSlm.compactionEnabled;
+  let summary: string | undefined;
+  if (canSummarize) {
+    const key = droppedKey(scope!, dropped);
+    summary = summaries.get(key);
+    if (!summary) scheduleSummary(key, dropped);
   }
+  const requests = earlierUserRequests(dropped);
+  if (!summary && !requests) return none;
   const idx = messages.findIndex((m) => m.role === "user");
-  if (idx < 0) return { messages, used: false };
-  const block = `<earlier-conversation-summary>\n${summary}\n</earlier-conversation-summary>\n\n`;
+  if (idx < 0) return none;
+  const block =
+    (summary
+      ? `<earlier-conversation-summary>\n${summary}\n</earlier-conversation-summary>\n\n`
+      : `<earlier-conversation-omitted>\n${dropped.length} earlier message(s) were removed to fit the context window. Do not assume you remember them; re-read files before editing.\n</earlier-conversation-omitted>\n\n`) +
+    (requests
+      ? `<earlier-user-requests>\nThe user's earlier requests and constraints, still in force unless a later message changes them:\n${requests}\n</earlier-user-requests>\n\n`
+      : "");
   const out = [...messages];
   const first = out[idx];
   out[idx] = Array.isArray(first.content)
     ? { ...first, content: [{ type: "text", text: block }, ...first.content] }
     : { ...first, content: block + (first.content ?? "") };
-  return { messages: out, used: true };
+  return { messages: out, used: Boolean(summary), requests: Boolean(requests) };
 }
 
 export interface HybridOptions {
@@ -637,12 +682,13 @@ export function applyHybridContext(
     if (saved > 0) strategy.push(`window(~${toTokens(saved)}tok)`);
     const { messages: deduped, saved: sDedupe } = applyReadDedupe(windowed);
     if (sDedupe > 0) strategy.push(`read-dedupe(~${toTokens(sDedupe)}tok)`);
-    const { messages: compacted, used } = applyCompaction(
-      deduped,
-      dropped,
-      options.scope,
-    );
+    const {
+      messages: compacted,
+      used,
+      requests,
+    } = applyCompaction(deduped, dropped, options.scope);
     if (used) strategy.push("summary");
+    if (requests) strategy.push("user-requests");
     return {
       body: { ...body, messages: compacted },
       result: {
@@ -690,12 +736,13 @@ export function applyHybridContext(
   const { messages: dedupedRead, saved: s1c } = applyReadDedupe(windowedRaw);
   if (s1c > 0) strategy.push(`read-dedupe(~${toTokens(s1c)}tok)`);
   totalSaved += s1c;
-  const { messages: windowed, used } = applyCompaction(
-    dedupedRead,
-    dropped,
-    options.scope,
-  );
+  const {
+    messages: windowed,
+    used,
+    requests,
+  } = applyCompaction(dedupedRead, dropped, options.scope);
   if (used) strategy.push("summary");
+  if (requests) strategy.push("user-requests");
 
   // Layer 2 — code block compression
   const { messages: compressed, saved: s2 } = applyCodeCompression(

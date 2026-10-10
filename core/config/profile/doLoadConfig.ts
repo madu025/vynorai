@@ -23,7 +23,7 @@ import { loadMarkdownSkills } from "../markdown/loadMarkdownSkills";
 import { MCPManagerSingleton } from "../../context/mcp/MCPManagerSingleton";
 import MCPContextProvider from "../../context/providers/MCPContextProvider";
 import { initSlashCommand } from "../../promptFiles/initPrompt";
-import { addDefaultLegacySlashCommands } from "../../commands/slash/built-in-legacy";
+import { addAgentPromptSlashCommands } from "../../commands/slash/agentPromptCommands";
 import { addPanelSlashCommands } from "../../commands/slash/built-in-legacy/panelCommands";
 import { addInfoSlashCommands } from "../../commands/slash/built-in-legacy/status";
 import { getConfigDependentToolDefinitions } from "../../tools";
@@ -179,8 +179,8 @@ export default async function doLoadConfig(options: {
   addInfoSlashCommands(newConfig.slashCommands);
   // /help, /clear, /compact and /plan likewise.
   addPanelSlashCommands(newConfig.slashCommands);
-  // /goal, /fix, /explain, /test, /review ... (the YAML loader never resolved these).
-  addDefaultLegacySlashCommands(newConfig.slashCommands);
+  // /fix, /explain, /test, /review ... run as normal agent turns with tools.
+  addAgentPromptSlashCommands(newConfig.slashCommands);
 
   // Every skill is also a /<skill-name> command.
   try {

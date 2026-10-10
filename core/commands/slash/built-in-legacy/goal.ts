@@ -1,8 +1,7 @@
 import { SlashCommand } from "../../../index.js";
 import { renderChatMessage } from "../../../util/messageContent.js";
-import { SelfHealingEngine } from "../../../maintenance/SelfHealingEngine.js";
 
-const GOAL_ORCHESTRATOR_PROMPT = `You are VynorAI's Autonomous Long-Running Goal Orchestrator (equivalent to DeepMind / Antigravity Goal Mode).
+const GOAL_ORCHESTRATOR_PROMPT = `You are VynorAI's Autonomous Long-Running Goal Orchestrator .
 The user has assigned a high-priority, long-running engineering objective.
 Your duty is to be extra thorough and not stop until the goal is fully achieved and verified.
 
@@ -39,7 +38,6 @@ export const GoalCommand: SlashCommand = {
 
     yield `🎯 **VynorAI Goal Orchestrator** activating for long-running execution...\n\n` +
       `**Objective:** *${rawGoal}*\n\n` +
-      `🌿 *Worktree Isolation & Self-Healing Verification Engine engaged.*\n\n` +
       `---\n\n`;
 
     // Discover workspace context
@@ -60,10 +58,7 @@ export const GoalCommand: SlashCommand = {
       yield renderChatMessage(chunk);
     }
 
-    void ide.showToast?.(
-      "info",
-      "✅ VynorAI Goal Plan & Verification gates prepared!",
-    );
+    void ide.showToast?.("info", "✅ VynorAI goal plan ready");
 
     yield `\n\n---\n✅ **Goal Plan Formulated.** VynorAI is ready to execute each milestone with automated verification gates.`;
   },

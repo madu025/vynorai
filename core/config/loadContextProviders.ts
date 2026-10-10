@@ -10,9 +10,12 @@ import DiffContextProvider from "../context/providers/DiffContextProvider";
 import DocsContextProvider from "../context/providers/DocsContextProvider";
 import FileContextProvider from "../context/providers/FileContextProvider";
 import FileTreeContextProvider from "../context/providers/FileTreeContextProvider";
+import OpenFilesContextProvider from "../context/providers/OpenFilesContextProvider";
 import ProblemsContextProvider from "../context/providers/ProblemsContextProvider";
+import RepoMapContextProvider from "../context/providers/RepoMapContextProvider";
 import RulesContextProvider from "../context/providers/RulesContextProvider";
 import TerminalContextProvider from "../context/providers/TerminalContextProvider";
+import URLContextProvider from "../context/providers/URLContextProvider";
 
 /*
     Loads context providers based on configuration
@@ -39,6 +42,10 @@ export function loadConfigContextProviders(
     new TerminalContextProvider({}),
     new ProblemsContextProvider({}),
     new RulesContextProvider({}),
+    // Used only when the user @-mentions them, so no per-request tokens.
+    new OpenFilesContextProvider({}),
+    new RepoMapContextProvider({}),
+    new URLContextProvider({}),
   ];
 
   // VS Code-compatible hosts (VS Code, Cursor, Antigravity) must be able to

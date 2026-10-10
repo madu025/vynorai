@@ -23,6 +23,9 @@ import {
   SecurityCommand,
   OptimizeCommand,
   ScaffoldCommand,
+  CommitCommand,
+  ErrorsCommand,
+  ArchitectCommand,
 } from "./vynorai-commands";
 
 const LegacyBuiltInSlashCommands: SlashCommand[] = [
@@ -63,4 +66,43 @@ export function getLegacyBuiltInSlashCommandFromDescription(
     description: desc.description ?? cmd.description,
     source: "built-in-legacy",
   };
+}
+
+/**
+ * Commands every config gets, whichever loader built it. The YAML loader (the
+ * default) never resolves legacy names, so without this /goal, /fix, /explain
+ * and the rest were only reachable from a hand-written config.json.
+ * /swarm is left out on purpose: it creates worktrees and PRs and has not been
+ * verified in the IDE. A name the user or another source already defined wins.
+ */
+const DEFAULT_LEGACY_COMMANDS: SlashCommand[] = [
+  GoalCommand,
+  FixCommand,
+  ExplainCommand,
+  TestCommand,
+  RefactorCommand,
+  DocsCommand,
+  ReviewCommand,
+  SecurityCommand,
+  OptimizeCommand,
+  ScaffoldCommand,
+  CommitCommand,
+  ErrorsCommand,
+  ArchitectCommand,
+  GenerateTerminalCommand,
+];
+
+export function addDefaultLegacySlashCommands(
+  slashCommands: SlashCommandWithSource[],
+): void {
+  for (const builtIn of DEFAULT_LEGACY_COMMANDS) {
+    if (!slashCommands.some((cmd) => cmd.name === builtIn.name)) {
+      slashCommands.push({
+        name: builtIn.name,
+        description: builtIn.description,
+        source: "built-in-legacy",
+        run: builtIn.run,
+      });
+    }
+  }
 }

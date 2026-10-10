@@ -23,7 +23,8 @@ export const getBaseToolDefinitions = () => [
 export const getConfigDependentToolDefinitions = async (
   params: ConfigDependentToolParams,
 ): Promise<Tool[]> => {
-  const { modelName, enableExperimentalTools, isRemote } = params;
+  const { modelName, enableExperimentalTools, indexingEnabled, isRemote } =
+    params;
   const tools: Tool[] = [];
 
   tools.push(await toolDefinitions.readSkillTool(params));
@@ -42,10 +43,13 @@ export const getConfigDependentToolDefinitions = async (
   );
 
   if (enableExperimentalTools) {
-    tools.push(
-      toolDefinitions.viewSubdirectoryTool,
-      toolDefinitions.codebaseTool,
-    );
+    tools.push(toolDefinitions.viewSubdirectoryTool);
+  }
+
+  // Semantic search is only worth its schema tokens when an index exists to
+  // answer it; with indexing off it would return nothing.
+  if (enableExperimentalTools || indexingEnabled) {
+    tools.push(toolDefinitions.codebaseTool);
   }
 
   if (modelName && isRecommendedAgentModel(modelName)) {

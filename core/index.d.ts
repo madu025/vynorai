@@ -1199,6 +1199,8 @@ interface ToolChoice {
 export interface ConfigDependentToolParams {
   rules: RuleWithSource[];
   enableExperimentalTools: boolean;
+  /** Codebase index is on: the semantic `codebase` tool can return results. */
+  indexingEnabled?: boolean;
   isRemote: boolean;
   modelName: string | undefined;
   ide: IDE;

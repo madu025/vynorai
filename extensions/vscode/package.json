@@ -2,7 +2,7 @@
   "name": "vynorai",
   "icon": "media/icon.png",
   "author": "VynorAI",
-  "version": "1.2.56",
+  "version": "1.2.57",
   "repository": {
     "type": "git",
     "url": "https://github.com/vynorai/vynorai"
@@ -58,7 +58,7 @@
   "activationEvents": [
     "onUri",
     "onStartupFinished",
-    "onView:continueGUIView"
+    "onView:continue.continueGUIView"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -361,12 +361,6 @@
         "group": "Continue"
       },
       {
-        "command": "continue.enterEnterpriseLicenseKey",
-        "category": "Continue",
-        "title": "Enter Enterprise License Key",
-        "group": "Continue"
-      },
-      {
         "command": "continue.toggleNextEditEnabled",
         "title": "Continue: Toggle Next Edit"
       },
@@ -564,9 +558,6 @@
         },
         {
           "command": "continue.newSession"
-        },
-        {
-          "command": "continue.enterEnterpriseLicenseKey"
         },
         {
           "command": "continue.openInNewWindow"

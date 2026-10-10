@@ -272,6 +272,10 @@ export class VsCodeMessenger {
       },
     );
 
+    this.onWebview("copyText", async (msg) => {
+      await vscode.env.clipboard.writeText(msg.data.text);
+    });
+
     this.onWebview("insertAtCursor", async (msg) => {
       const editor = vscode.window.activeTextEditor;
       if (editor === undefined || !editor.selection) {

@@ -91,7 +91,7 @@ describe("loadConfigContextProviders", () => {
       const result = loadConfigContextProviders(undefined, false, "vscode");
 
       expect(result.errors).toEqual([]);
-      expect(result.providers).toHaveLength(8);
+      expect(result.providers).toHaveLength(11);
 
       // Verify all default providers are included
       const providerTitles = result.providers.map((p) => p.description.title);
@@ -113,7 +113,7 @@ describe("loadConfigContextProviders", () => {
       const result = loadConfigContextProviders([], false, "vscode");
 
       expect(result.errors).toEqual([]);
-      expect(result.providers).toHaveLength(8);
+      expect(result.providers).toHaveLength(11);
 
       const providerTitles = result.providers.map((p) => p.description.title);
       expect(providerTitles).toEqual(
@@ -134,7 +134,7 @@ describe("loadConfigContextProviders", () => {
       const result = loadConfigContextProviders([], false, "jetbrains");
 
       expect(result.errors).toEqual([]);
-      expect(result.providers).toHaveLength(4);
+      expect(result.providers).toHaveLength(7);
 
       const providerTitles = result.providers.map((p) => p.description.title);
       expect(providerTitles).toEqual(
@@ -147,7 +147,7 @@ describe("loadConfigContextProviders", () => {
     const result = loadConfigContextProviders([], true, "vscode");
 
     expect(result.errors).toEqual([]);
-    expect(result.providers).toHaveLength(9);
+    expect(result.providers).toHaveLength(12);
 
     const providerTitles = result.providers.map((p) => p.description.title);
     expect(providerTitles).toEqual(
@@ -199,7 +199,7 @@ describe("with valid config", () => {
     });
 
     // Should have custom provider + all defaults
-    expect(result.providers).toHaveLength(9);
+    expect(result.providers).toHaveLength(12);
 
     const customProvider = result.providers.find(
       (p) => p.description.title === "custom-provider",
@@ -243,7 +243,7 @@ describe("with valid config", () => {
     const result = loadConfigContextProviders(config, false, "vscode");
 
     expect(result.errors).toEqual([]);
-    expect(result.providers).toHaveLength(10); // 2 custom + 8 defaults
+    expect(result.providers).toHaveLength(13); // 2 custom + 11 defaults
 
     expect(mockProvider1).toHaveBeenCalledWith({
       name: "first-provider",
@@ -326,7 +326,7 @@ describe("error handling", () => {
     ]);
 
     // Should still have default providers
-    expect(result.providers).toHaveLength(8);
+    expect(result.providers).toHaveLength(11);
     expect(mockedContextProviderClassFromName).toHaveBeenCalledWith(
       "unknown-provider",
     );
@@ -361,7 +361,7 @@ describe("error handling", () => {
       },
     ]);
 
-    expect(result.providers).toHaveLength(8); // Only defaults
+    expect(result.providers).toHaveLength(11); // Only defaults
   });
 
   it("should handle mix of valid and invalid providers", () => {
@@ -397,7 +397,7 @@ describe("error handling", () => {
     ]);
 
     // Should have valid provider + defaults
-    expect(result.providers).toHaveLength(9);
+    expect(result.providers).toHaveLength(12);
     expect(mockValidProvider).toHaveBeenCalledWith({
       name: "valid",
       key: "value",
@@ -423,7 +423,7 @@ describe("default provider merging", () => {
     expect(result.errors).toEqual([]);
 
     // Should have configured file provider + other defaults (not duplicate file)
-    expect(result.providers).toHaveLength(8);
+    expect(result.providers).toHaveLength(11);
 
     const fileProviders = result.providers.filter(
       (p) => p.description.title === "file",
@@ -456,7 +456,7 @@ describe("default provider merging", () => {
     const result = loadConfigContextProviders(config, false, "vscode");
 
     expect(result.errors).toEqual([]);
-    expect(result.providers).toHaveLength(9); // 1 custom + 8 defaults
+    expect(result.providers).toHaveLength(12); // 1 custom + 11 defaults
 
     // All defaults should be present
     const providerTitles = result.providers.map((p) => p.description.title);
@@ -506,6 +506,9 @@ describe("default provider merging", () => {
       "terminal",
       "problems",
       "rules",
+      "open",
+      "repo-map",
+      "url",
       "tree",
       "codebase",
     ]);

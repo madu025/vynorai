@@ -17,6 +17,10 @@ import {
   setConfigFilePermissions,
 } from "core/util/paths";
 import * as vscode from "vscode";
+import {
+  acceptSuggestionCommand,
+  rejectSuggestionCommand,
+} from "./suggestions";
 import * as YAML from "yaml";
 
 import { convertJsonToYamlConfig } from "../../../packages/config-yaml/dist";
@@ -696,39 +700,12 @@ const getCommandsMap: (
           }
         });
     },
-    "continue.enterEnterpriseLicenseKey": async () => {
-      const licenseKey = await vscode.window.showInputBox({
-        prompt: "Enter your enterprise license key",
-        password: true,
-        ignoreFocusOut: true,
-        placeHolder: "License key",
-      });
-
-      if (!licenseKey) {
-        return;
-      }
-
-      try {
-        const isValid = core.invoke("mdm/setLicenseKey", {
-          licenseKey,
-        });
-
-        if (isValid) {
-          void vscode.window.showInformationMessage(
-            "Enterprise license key successfully validated and saved. Reloading window.",
-          );
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          await vscode.commands.executeCommand("workbench.action.reloadWindow");
-        } else {
-          void vscode.window.showErrorMessage(
-            "Invalid license key. Please check your license key and try again.",
-          );
-        }
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Failed to set enterprise license key: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+    // The Accept/Reject CodeLens (SuggestionsCodeLensProvider) runs these.
+    "continue.acceptSuggestion": (suggestion?: any) => {
+      acceptSuggestionCommand(suggestion ?? null);
+    },
+    "continue.rejectSuggestion": async (suggestion?: any) => {
+      await rejectSuggestionCommand(suggestion ?? null);
     },
     "continue.toggleNextEditEnabled": async () => {
       const config = vscode.workspace.getConfiguration(EXTENSION_NAME);

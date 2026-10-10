@@ -23,6 +23,7 @@ import { loadMarkdownSkills } from "../markdown/loadMarkdownSkills";
 import { MCPManagerSingleton } from "../../context/mcp/MCPManagerSingleton";
 import MCPContextProvider from "../../context/providers/MCPContextProvider";
 import { initSlashCommand } from "../../promptFiles/initPrompt";
+import { addDefaultLegacySlashCommands } from "../../commands/slash/built-in-legacy";
 import { addPanelSlashCommands } from "../../commands/slash/built-in-legacy/panelCommands";
 import { addInfoSlashCommands } from "../../commands/slash/built-in-legacy/status";
 import { getConfigDependentToolDefinitions } from "../../tools";
@@ -178,6 +179,8 @@ export default async function doLoadConfig(options: {
   addInfoSlashCommands(newConfig.slashCommands);
   // /help, /clear, /compact and /plan likewise.
   addPanelSlashCommands(newConfig.slashCommands);
+  // /goal, /fix, /explain, /test, /review ... (the YAML loader never resolved these).
+  addDefaultLegacySlashCommands(newConfig.slashCommands);
 
   // Every skill is also a /<skill-name> command.
   try {
@@ -317,6 +320,7 @@ export default async function doLoadConfig(options: {
       rules: newConfig.rules,
       enableExperimentalTools:
         newConfig.experimental?.enableExperimentalTools ?? false,
+      indexingEnabled: isIndexingEnabled(newConfig.disableIndexing),
       isRemote: await ide.isWorkspaceRemote(),
       modelName: newConfig.selectedModelByRole.chat?.model,
       ide,
@@ -385,4 +389,14 @@ export default async function doLoadConfig(options: {
     configLoadInterrupted: false,
     configName,
   };
+}
+
+/** The shared "disableIndexing" setting overrides the config files. */
+function isIndexingEnabled(configDisabled: boolean | undefined): boolean {
+  if (configDisabled) return false;
+  try {
+    return !new GlobalContext().getSharedConfig().disableIndexing;
+  } catch {
+    return true;
+  }
 }

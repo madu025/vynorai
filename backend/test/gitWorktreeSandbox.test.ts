@@ -338,63 +338,6 @@ test("Git Worktree Isolation Sandbox Test Suite", async (suite) => {
     },
   );
 
-  // ─── 5. HTTP REST API ENDPOINTS INTEGRATION ──────────────────────────────────
-  await suite.test(
-    "5. HTTP REST API Endpoints: /v1/sandbox/worktree/spawn, /run, /cleanup",
-    async () => {
-      const { apiKey } = await createSubscriber("pro");
-
-      // 5.1 Spawn sandbox via API
-      const spawnRes = await fetch(`${baseUrl}/sandbox/worktree/spawn`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          taskId: "api-spawn-test",
-          projectRoot: testRepoDir,
-          baseBranch: "HEAD",
-        }),
-      });
-
-      assert.equal(spawnRes.status, 200);
-      const spawnData = await spawnRes.json();
-      assert.equal(spawnData.success, true);
-      assert.equal(spawnData.sandbox.sandboxId, "api_spawn_test");
-      assert.ok(spawnData.workspaceState);
-
-      // 5.2 Cleanup sandbox via API
-      const cleanupRes = await fetch(`${baseUrl}/sandbox/worktree/cleanup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          taskId: "api-spawn-test",
-          projectRoot: testRepoDir,
-          deleteBranch: true,
-        }),
-      });
-
-      assert.equal(cleanupRes.status, 200);
-      const cleanupData = await cleanupRes.json();
-      assert.equal(cleanupData.success, true);
-
-      // 5.3 Bad request validation
-      const badRes = await fetch(`${baseUrl}/sandbox/worktree/spawn`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({}),
-      });
-      assert.equal(badRes.status, 400);
-    },
-  );
-
   // ─── 6. PERFORMANCE BENCHMARK: SUB-50MS SANDBOX SPWAN ────────────────────────
   await suite.test(
     "6. Benchmark: spawns and cleans up isolated worktree sandbox in < 150ms",

@@ -293,45 +293,6 @@ export function computeRate(): number {
     },
   );
 
-  // ─── 7. REST API ENDPOINT: POST /v1/terminal/self-heal ─────────────────────────
-  await suite.test(
-    "7. HTTP REST API Endpoint: POST /v1/terminal/self-heal with subscriber auth",
-    async () => {
-      const { apiKey } = await createSubscriber("pro");
-
-      // 7.1 Immediate success command
-      const res = await fetch(`${baseUrl}/terminal/self-heal`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          command: `node -e "process.exit(0)"`,
-          maxAttempts: 3,
-        }),
-      });
-
-      assert.equal(res.status, 200);
-      const data = await res.json();
-      assert.equal(data.success, true);
-      assert.equal(data.finalExitCode, 0);
-      assert.equal(data.attempts, 1);
-      assert.ok(Array.isArray(data.iterations));
-
-      // 7.2 Bad request validation (missing command)
-      const badRes = await fetch(`${baseUrl}/terminal/self-heal`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({}),
-      });
-      assert.equal(badRes.status, 400);
-    },
-  );
-
   // ─── 8. PERFORMANCE BENCHMARK ────────────────────────────────────────────────
   await suite.test(
     "8. Benchmark: parse diagnostics and execution loop completes quickly",

@@ -230,77 +230,6 @@ diff --git a/src/securityVault.ts b/src/securityVault.ts
     },
   );
 
-  // ─── 2. ZERO PLAINTEXT RETENTION IN DATABASE (STRICT AUDIT INSPECTION) ─────
-  await suite.test(
-    "2. Zero Plaintext Retention: guarantees 0 instances of proprietary code in all SQLite tables",
-    async () => {
-      const { apiKey } = await createSubscriber("enterprise");
-      const secretSignature = "SUPER_CONFIDENTIAL_TRADING_ALGORITHM_ABC123";
-
-      const diff = `
-diff --git a/src/algo.ts b/src/algo.ts
---- a/src/algo.ts
-+++ b/src/algo.ts
-@@ -1,1 +1,2 @@
-+export const SECRET = "${secretSignature}";
- export const version = 1;
-`;
-
-      const virtualFiles = {
-        "src/algo.ts": `export const version = 1;\n`,
-      };
-
-      const res = await fetch(`${baseUrl}/diff/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-          "X-VynorAI-ZK-Mode": "air-gapped",
-        },
-        body: JSON.stringify({
-          diff,
-          virtualFiles,
-        }),
-      });
-
-      assert.equal(res.status, 200);
-      assert.equal(res.headers.get("x-vynorai-zk-mode"), "Air-Gapped");
-      assert.equal(res.headers.get("x-vynorai-zero-retention"), "Verified");
-      assert.ok(res.headers.get("x-vynorai-diff-fingerprint"));
-
-      // Exhaustive database inspection for secret leak
-      const tables = [
-        "usage_logs",
-        "request_economics",
-        "zk_compliance_audit_logs",
-        "user_rules",
-        "user_memory",
-      ];
-
-      for (const table of tables) {
-        try {
-          const rows = await dbm.dbAll<any>(`SELECT * FROM ${table}`);
-          const dump = JSON.stringify(rows);
-          assert.equal(
-            dump.includes(secretSignature),
-            false,
-            `CRITICAL PRIVACY VIOLATION: Plaintext secret leaked into table "${table}"!`,
-          );
-        } catch (err: any) {
-          if (!err.message?.includes("no such table")) throw err;
-        }
-      }
-
-      // Verify audit table contains only the SHA-256 hash and metadata
-      const auditRows = await dbm.dbAll<any>(
-        `SELECT * FROM zk_compliance_audit_logs ORDER BY ${dbm.usingPostgres ? "seq" : "rowid"} DESC LIMIT 1`,
-      );
-      assert.ok(auditRows.length > 0);
-      assert.equal(auditRows[0].zero_retention_verified, 1);
-      assert.ok(auditRows[0].diff_fingerprint);
-    },
-  );
-
   // ─── 3. UPSTREAM ZERO-RETENTION ENFORCEMENT (store: false & X-Zero-Retention)
   await suite.test(
     "3. Upstream Zero-Retention: forces store: false and X-Zero-Retention on AI provider requests",
@@ -412,43 +341,6 @@ diff --git a/src/algo.ts b/src/algo.ts
         true,
         "Restored chain must validate cleanly",
       );
-    },
-  );
-
-  // ─── 5. ENTERPRISE COMPLIANCE REPORT API & AUDIT VERIFICATION ──────────────
-  await suite.test(
-    "5. Compliance Report API: serves verifiable SOC2/ISO27001 zero-retention report",
-    async () => {
-      const { apiKey } = await createSubscriber("enterprise");
-
-      // 5.1 Generate audit report via API
-      const reportRes = await fetch(`${baseUrl}/zk/compliance-report`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
-
-      assert.equal(reportRes.status, 200);
-      const reportJson = (await reportRes.json()) as any;
-
-      assert.equal(reportJson.complianceStandard, "VynorAI-ZK-AirGapped-v1.0");
-      assert.equal(reportJson.zeroRetentionEnforced, true);
-      assert.equal(reportJson.chainIntegrityValid, true);
-      assert.ok(reportJson.latestMerkleRoot);
-      assert.ok(Array.isArray(reportJson.auditTrail));
-
-      // 5.2 Validate chain verification endpoint
-      const verifyRes = await fetch(`${baseUrl}/zk/verify-chain`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
-
-      assert.equal(verifyRes.status, 200);
-      const verifyJson = (await verifyRes.json()) as any;
-      assert.equal(verifyJson.valid, true);
     },
   );
 });

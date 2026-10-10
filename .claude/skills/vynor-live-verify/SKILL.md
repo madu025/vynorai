@@ -50,7 +50,8 @@ Tests that share one VS Code session interfere with each other (workspace reload
 
 The key comes only from the environment: `VYNORAI_E2E_API_KEY`. Rotate any key that was pasted into a chat.
 
-- `node backend/scripts/live-audit.mjs 3` in `backend`: production proxy + real DeepSeek + read-only tools over a docs/core fixture; scores false "file is missing" claims, invented paths, and a final answer within 14 turns (~350K tokens per run).
+- `node backend/scripts/live-audit.mjs 3` in `backend`: production proxy + real DeepSeek + read-only tools over a docs/core fixture; scores false "file is missing" claims, invented paths, and a final answer within the extension's plan round budget (25 rounds, `gui/src/redux/util/toolRoundBudget.ts`) (~350K raw tokens per run; most are cached, so judge cost by credits and cache-hit tokens, not the raw total).
+- Run it with `timeout` in the background; one run can take several minutes.
 - UI route (`Smart.audit.test.ts`) still stalls in the harness: the status bar shows the account (signed in) but the chat panel stays on "Loading". Do not claim it passes.
 
 ## Report

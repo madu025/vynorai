@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "bashOutputMaxChars": 20000,
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx vitest run *)",
+      "Bash(npx tsx --test *)",
+      "Bash(npx prettier --write *)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git show *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./**/node_modules/**)",
+      "Read(./**/*.map)",
+      "Read(./**/*.vsix)",
+      "Read(./gui/dist/**)",
+      "Read(./extensions/vscode/build/**)",
+      "Read(./extensions/vscode/e2e/storage/**)",
+      "Read(./extensions/vscode/e2e/.test-extensions/**)",
+      "Read(./backend/data/**)"
+    ]
+  }
+}

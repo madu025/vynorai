@@ -37,13 +37,16 @@ export function taskIdsFrom(
  * prompt, drop those turns from the conversation, and put the prompt back in
  * the input box so it can be edited and resent.
  */
+/** What a rewind undoes: files and conversation, only the conversation, or only the files. */
+export type RewindMode = "both" | "chat" | "code";
+
 export const rewindToUserMessage = createAsyncThunk<
   RewindResult,
-  { index: number },
+  { index: number; mode?: RewindMode },
   ThunkApiType
 >(
   "session/rewindToUserMessage",
-  async ({ index }, { dispatch, extra, getState }) => {
+  async ({ index, mode = "both" }, { dispatch, extra, getState }) => {
     const { history, isStreaming } = getState().session;
     const target = history[index];
     if (isStreaming) {
@@ -62,7 +65,7 @@ export const rewindToUserMessage = createAsyncThunk<
     }
 
     let restoredFiles = 0;
-    const taskIds = taskIdsFrom(history, index);
+    const taskIds = mode === "chat" ? [] : taskIdsFrom(history, index);
     if (taskIds.length) {
       const result = await extra.ideMessenger.request(
         "checkpoints/restoreTasks",
@@ -92,6 +95,9 @@ export const rewindToUserMessage = createAsyncThunk<
         } catch {}
       }
     }
+
+    // Files only: the conversation stays exactly as it is.
+    if (mode === "code") return { rewound: true, restoredFiles };
 
     dispatch(rewindHistoryToIndex(index));
     dispatch(

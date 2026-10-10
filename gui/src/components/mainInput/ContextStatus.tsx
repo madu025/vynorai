@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../../redux/hooks";
 import { saveCurrentSession } from "../../redux/thunks/session";
+import { AUTO_COMPACT_THRESHOLD } from "../../util/autoCompaction";
 import { useCompactConversation } from "../../util/compactConversation";
 import { ToolTip } from "../gui/Tooltip";
 
@@ -56,6 +57,9 @@ const ContextStatus = () => {
             <span className="inline-block">
               {`${percent}% of context filled.`}
             </span>
+            <span className="inline-block">
+              {`Older turns are summarized automatically at ${Math.round(AUTO_COMPACT_THRESHOLD * 100)}%.`}
+            </span>
             {isPruned && (
               <span className="inline-block">
                 {`Oldest messages are being removed.`}
@@ -90,11 +94,19 @@ const ContextStatus = () => {
           </div>
         }
       >
-        <div className="border-command-border relative h-[14px] w-[7px] rounded-[1px] border-[0.5px] border-solid md:h-[10px] md:w-[5px]">
-          <div
-            className={`transition-height absolute bottom-0 left-0 w-full duration-300 ease-in-out ${barColorClass}`}
-            style={{ height: `${percent}%` }}
-          />
+        <div className="flex items-center gap-1">
+          <div className="border-command-border relative h-[14px] w-[7px] rounded-[1px] border-[0.5px] border-solid md:h-[10px] md:w-[5px]">
+            <div
+              className={`transition-height absolute bottom-0 left-0 w-full duration-300 ease-in-out ${barColorClass}`}
+              style={{ height: `${percent}%` }}
+            />
+          </div>
+          <span
+            data-testid="context-percent"
+            className="text-description-muted text-[10px] tabular-nums"
+          >
+            {percent}%
+          </span>
         </div>
       </ToolTip>
     </div>

@@ -70,6 +70,7 @@ import { useAutoScroll } from "./useAutoScroll";
 import { VynorQuotaBar } from "../../components/VynorQuotaBar";
 import { ExpertTeamPanel } from "../../components/AgentWorkspace/ExpertTeamPanel";
 import { WorkspaceStatus } from "../../components/WorkspaceStatus/WorkspaceStatus";
+import { ChangesStrip } from "../../components/AgentWorkspace/ChangesStrip";
 import { AgentMap } from "../../components/AgentWorkspace/AgentMap";
 import { AgentControlCenter } from "../../components/AgentWorkspace/AgentControlCenter";
 import { BackgroundModeView } from "../../components/BackgroundMode/BackgroundModeView";
@@ -596,6 +597,7 @@ export function Chat() {
           }
         />
         <AgentMap />
+        <ChangesStrip />
         <AgentControlCenter />
         <WorkspaceStatus />
         {queuedInputs.length > 0 && (

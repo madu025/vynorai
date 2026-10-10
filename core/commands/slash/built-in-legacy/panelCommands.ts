@@ -36,7 +36,7 @@ export const ResumeCommand = panelOnly(
 );
 export const RewindCommand = panelOnly(
   "rewind",
-  "Undo the last prompt: restore the files it changed and remove it from the chat",
+  "Undo a prompt (default: the last): /rewind [n] [chat|code] restores files, the chat, or only one of them",
 );
 export const ModelCommand = panelOnly(
   "model",

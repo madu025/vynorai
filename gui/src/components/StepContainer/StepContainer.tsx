@@ -1,8 +1,7 @@
 import { ChatHistoryItem } from "core";
 import { renderChatMessage, stripImages } from "core/util/messageContent";
 import { useEffect, useState } from "react";
-import { useDispatch } from "react-redux";
-import { useAppSelector } from "../../redux/hooks";
+import { useAppDispatch, useAppSelector } from "../../redux/hooks";
 import {
   selectSelectedChatModel,
   selectUIConfig,
@@ -13,6 +12,7 @@ import StyledMarkdownPreview from "../StyledMarkdownPreview";
 import ConversationSummary from "./ConversationSummary";
 import ResponseActions from "./ResponseActions";
 import SideReviewCard from "./SideReviewCard";
+import { updateSelectedModelByRole } from "../../redux/thunks/updateSelectedModelByRole";
 import { formatCredits } from "../../redux/util/turnCredits";
 import { estimateTokens, turnUsedThinking } from "./turnStatus";
 
@@ -26,7 +26,7 @@ interface StepContainerProps {
 }
 
 export default function StepContainer(props: StepContainerProps) {
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const [isTruncated, setIsTruncated] = useState(false);
   const isStreaming = useAppSelector((state) => state.session.isStreaming);
   const uiConfig = useAppSelector(selectUIConfig);
@@ -65,6 +65,21 @@ export default function StepContainer(props: StepContainerProps) {
     : props.isLast
       ? selectedChatModel
       : undefined;
+  // The model the router really used, as reported by the proxy for this turn.
+  const served = (
+    props.item.message as {
+      metadata?: { vynorServed?: { model?: string; tier?: string } };
+    }
+  ).metadata?.vynorServed;
+  const servedName = served?.model?.split("/").pop();
+  const pinTarget = served?.model
+    ? chatModels.find(
+        (m) =>
+          m.model === served.model &&
+          m.model !== VYNORAI_AUTO_MODEL &&
+          m.title !== selectedChatModel?.title,
+      )
+    : undefined;
   const autoRoute =
     usedModel?.model === VYNORAI_AUTO_MODEL
       ? usedThinking
@@ -143,28 +158,57 @@ export default function StepContainer(props: StepContainerProps) {
         )}
       </div>
 
-      {showResponseActions && (autoRoute || promptCredits !== undefined) && (
-        <div className="text-description-muted flex gap-2 px-2.5 pt-1 text-[10px]">
-          {autoRoute && (
-            <span
-              data-testid="auto-route-badge"
-              title="VynorAI Auto picked this based on the request"
-            >
-              {autoRoute === "thinking"
-                ? "Auto · 🧠 Deep thinking"
-                : "Auto · ⚡ Fast"}
-            </span>
-          )}
-          {promptCredits !== undefined && (
-            <span
-              data-testid="prompt-credits"
-              title="Credits this prompt used, including every tool round"
-            >
-              {formatCredits(promptCredits)} credits
-            </span>
-          )}
-        </div>
-      )}
+      {showResponseActions &&
+        (autoRoute || servedName || promptCredits !== undefined) && (
+          <div className="text-description-muted flex gap-2 px-2.5 pt-1 text-[10px]">
+            {autoRoute && (
+              <span
+                data-testid="auto-route-badge"
+                title="VynorAI Auto picked this based on the request"
+              >
+                {autoRoute === "thinking"
+                  ? "Auto · 🧠 Deep thinking"
+                  : "Auto · ⚡ Fast"}
+              </span>
+            )}
+            {servedName && (
+              <span
+                data-testid="served-model"
+                title={`The model that answered this turn${served?.tier ? ` (${served.tier} tier)` : ""}`}
+              >
+                {servedName}
+                {served?.tier ? ` · ${served.tier}` : ""}
+              </span>
+            )}
+            {pinTarget && selectedChatModel?.model === VYNORAI_AUTO_MODEL && (
+              <button
+                type="button"
+                data-testid="pin-model"
+                className="text-description-muted hover:text-foreground cursor-pointer border-none bg-transparent p-0 text-[10px] underline"
+                title={`Always use ${pinTarget.title} instead of Auto`}
+                onClick={() =>
+                  void dispatch(
+                    updateSelectedModelByRole({
+                      role: "chat",
+                      modelTitle: pinTarget.title,
+                      selectedProfile: null,
+                    }),
+                  )
+                }
+              >
+                Pin {pinTarget.title}
+              </button>
+            )}
+            {promptCredits !== undefined && (
+              <span
+                data-testid="prompt-credits"
+                title="Credits this prompt used, including every tool round"
+              >
+                {formatCredits(promptCredits)} credits
+              </span>
+            )}
+          </div>
+        )}
 
       {showResponseActions && (
         <div

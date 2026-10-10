@@ -78,18 +78,33 @@ export const runPanelCommand = createAsyncThunk<
         return;
       }
       case "rewind": {
+        // /rewind [n] [chat|code]: the n-th most recent prompt (1 = the last),
+        // undoing files and chat, or only one of them.
+        const words = command.arg.toLowerCase().split(/\s+/).filter(Boolean);
+        const mode = words.includes("chat")
+          ? "chat"
+          : words.includes("code")
+            ? "code"
+            : "both";
+        const nth = Math.max(
+          1,
+          Number(words.find((word) => /^\d+$/.test(word)) ?? 1),
+        );
         const { history } = getState().session;
-        let target = -1;
-        for (let i = history.length - 1; i >= 0; i--) {
-          if (history[i].message.role === "user") {
-            target = i;
-            break;
-          }
-        }
-        const result =
-          target >= 0
-            ? (await dispatch(rewindToUserMessage({ index: target }))).payload
-            : { rewound: false, reason: "There is no prompt to rewind." };
+        const prompts = history
+          .map((item, i) => ({ item, i }))
+          .filter(({ item }) => item.message.role === "user");
+        const target = prompts[prompts.length - nth];
+        const result = target
+          ? (await dispatch(rewindToUserMessage({ index: target.i, mode })))
+              .payload
+          : {
+              rewound: false,
+              reason:
+                prompts.length === 0
+                  ? "There is no prompt to rewind."
+                  : `There are only ${prompts.length} prompt(s) in this chat.`,
+            };
         if (!(result as any)?.rewound) {
           showInfo(dispatch, "Rewind", [
             (result as any)?.reason ?? "Could not rewind.",

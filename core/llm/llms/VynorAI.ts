@@ -163,6 +163,22 @@ class VynorAI extends OpenAI {
       return;
     }
 
+    // The proxy says which model its router actually used (Auto picks per
+    // request). Pass it on as message metadata so the panel can show it.
+    const servedModel = response.headers.get("x-vynorai-model");
+    if (servedModel) {
+      yield {
+        role: "assistant",
+        content: "",
+        metadata: {
+          vynorServed: {
+            model: servedModel,
+            tier: response.headers.get("x-vynorai-tier") ?? undefined,
+          },
+        },
+      };
+    }
+
     for await (const value of streamSse(response)) {
       const chunk = fromChatCompletionChunk(value);
       if (chunk) {

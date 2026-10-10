@@ -760,6 +760,16 @@ export const sessionSlice = createSlice({
               .responsesOutputItemId as string;
           }
 
+          // Which model the VynorAI router served (see VynorAI._streamChat).
+          if (
+            message.role === "assistant" &&
+            lastMessage.role === "assistant" &&
+            message.metadata?.vynorServed
+          ) {
+            lastMessage.metadata = lastMessage.metadata || {};
+            lastMessage.metadata.vynorServed = message.metadata.vynorServed;
+          }
+
           if (
             message.role === "thinking" &&
             message.reasoning_details &&

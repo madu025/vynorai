@@ -109,6 +109,21 @@ async function runSlashCommand(view: WebView, name: string) {
   await typeIntoInput(view, Key.ENTER); // submit it
 }
 
+/** Picks the command from the menu, then types its argument before submitting. */
+async function runSlashCommandWithArg(
+  view: WebView,
+  name: string,
+  arg: string,
+) {
+  await typeIntoInput(view, `/${name}`);
+  await sleep(1_000);
+  await typeIntoInput(view, Key.ENTER); // pick the command from the slash menu
+  await sleep(500);
+  await typeIntoInput(view, ` ${arg}`);
+  await sleep(300);
+  await typeIntoInput(view, Key.ENTER); // submit it
+}
+
 async function waitForText(view: WebView, needle: string, timeoutMs = 60_000) {
   return retry(async () => {
     const text = await pageText(view);
@@ -223,6 +238,18 @@ describe("VynorAI local slash commands", function () {
     expect(agentsText).to.include("read-only: Bash");
     expect(agentsText).to.include("Not Valid");
     await waitForTurnEnd(view);
+
+    // /rewind chat removes the last prompt from the conversation, files untouched.
+    await runSlashCommandWithArg(view, "rewind", "chat");
+    await retry(async () => {
+      const text = await pageText(view!);
+      if (text.includes("Custom agents")) {
+        throw new Error("the /agents turn is still in the conversation");
+      }
+    }, 30_000);
+    // an unknown number is explained, not ignored
+    await runSlashCommandWithArg(view, "rewind", "9");
+    await waitForText(view, "There");
 
     // 6. /model and /cost open a small dialog; /resume opens History.
     const closeDialog = async () => {

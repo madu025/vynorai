@@ -15,6 +15,11 @@ Rules for Claude working in this repository.
 - Never bypass a denied permission or a safety check. Never print or commit secrets (`.env`, API keys).
 - Report results honestly: say what was verified (with evidence) and what was not. Do not claim something works without running it.
 
+## Fixed decisions
+
+- Before answering or changing anything about the database, caches, context limits or plans, read `docs/ARCHITECTURE_DECISIONS.md`. Do not re-derive these from memory; they are the same in every session.
+- If you change one of those decisions, update that file in the same commit. If code and the file disagree, say so and fix the file.
+
 ## Token and context discipline
 
 - Search before reading: Grep/Glob first, then Read with `offset`/`limit`. Do not read whole large files, lockfiles, build output or logs; filter long command output (`| tail`, `| grep`) or redirect it to a file.

@@ -10,6 +10,15 @@ const RETIRED_MODEL =
 const FLASH_MODEL = "deepseek/deepseek-flash";
 const PRO_MODEL = "deepseek/deepseek-v4-pro";
 
+/**
+ * Largest plan window. The backend owns the real window per plan
+ * (32K/128K/256K) and compacts with a stable prefix; a smaller client value
+ * prunes history first, one message per round, and the server never compacts.
+ */
+export const VYNOR_CLIENT_CONTEXT_LENGTH = 256000;
+/** The old client default that pre-empted server compaction on paid plans. */
+const LEGACY_CLIENT_CONTEXT_LENGTH = 64000;
+
 type YamlDoc = ReturnType<typeof parseDocument>;
 
 function isVynorEntry(m: Record<string, unknown> | undefined): boolean {
@@ -51,6 +60,17 @@ export function migrateVynorModels(
       if (chat)
         document.setIn(["models", i, "name"], "VynorAI DeepSeek V4.1 Flash");
     }
+    // Only the untouched legacy default is raised; a value the user chose
+    // (or the 16000 autocomplete window) is left alone.
+    const options = m!.defaultCompletionOptions as
+      | Record<string, unknown>
+      | undefined;
+    if (chat && options?.contextLength === LEGACY_CLIENT_CONTEXT_LENGTH) {
+      document.setIn(
+        ["models", i, "defaultCompletionOptions", "contextLength"],
+        VYNOR_CLIENT_CONTEXT_LENGTH,
+      );
+    }
     // Autocomplete-only models must not be offered as subagents.
     if (!chat && roles.includes("subagent")) {
       document.setIn(
@@ -85,7 +105,10 @@ export function migrateVynorModels(
         apiBase,
         apiKey: apiKeyRef,
         roles: ["chat", "edit", "apply", "subagent"],
-        defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192 },
+        defaultCompletionOptions: {
+          contextLength: VYNOR_CLIENT_CONTEXT_LENGTH,
+          maxTokens: 8192,
+        },
         capabilities: ["tool_use", "image_input"],
       }),
     );
@@ -99,7 +122,10 @@ export function migrateVynorModels(
         apiBase,
         apiKey: apiKeyRef,
         roles: ["chat", "edit"],
-        defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 },
+        defaultCompletionOptions: {
+          contextLength: VYNOR_CLIENT_CONTEXT_LENGTH,
+          maxTokens: 16384,
+        },
         capabilities: ["tool_use"],
       }),
     );

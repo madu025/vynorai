@@ -8,6 +8,7 @@ import * as vscode from "vscode";
 import { isSeq, parseDocument } from "yaml";
 
 import {
+  VYNOR_CLIENT_CONTEXT_LENGTH,
   migrateVynorModels,
   upsertVynorJsonModels,
 } from "./vynorModelMigration";
@@ -158,7 +159,7 @@ export async function applyVynorConfig(): Promise<boolean> {
             roles: ["chat", "edit", "apply", "subagent"],
             // Backend tier policy caps output; leave room for heavy turns.
             defaultCompletionOptions: {
-              contextLength: 64000,
+              contextLength: VYNOR_CLIENT_CONTEXT_LENGTH,
               maxTokens: 16384,
             },
             capabilities: ["tool_use", "image_input"],

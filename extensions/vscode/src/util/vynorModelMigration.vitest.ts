@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { isSeq, parseDocument } from "yaml";
 
-import { migrateVynorModels } from "./vynorModelMigration";
+import {
+  VYNOR_CLIENT_CONTEXT_LENGTH,
+  migrateVynorModels,
+} from "./vynorModelMigration";
 
 // Shape of a real config written by older extension versions.
 const OLD_CONFIG = `
@@ -72,6 +75,39 @@ describe("VynorAI model migration", () => {
     expect(out[1].name).toBe("VynorAI DeepSeek V4.1 Flash");
     // Autocomplete keeps its role but is no longer a subagent.
     expect(out[3].roles).toEqual(["autocomplete"]);
+  });
+
+  it("raises only the untouched legacy 64000 client window, so the backend owns compaction", () => {
+    const yaml = `
+models:
+  - name: VynorAI Auto
+    provider: vynorai
+    model: vynor-auto
+    roles: [chat, edit]
+    defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 }
+  - name: User chosen
+    provider: vynorai
+    model: deepseek/deepseek-flash
+    roles: [chat]
+    defaultCompletionOptions: { contextLength: 48000 }
+  - name: VynorAI Autocomplete (FIM)
+    provider: vynorai
+    model: deepseek/deepseek-flash
+    roles: [autocomplete]
+    defaultCompletionOptions: { contextLength: 16000 }
+`;
+    const doc = parseDocument(yaml);
+    const models = doc.get("models", true);
+    if (!isSeq(models)) throw new Error("no models");
+    migrateVynorModels(doc, models, undefined, "k", "https://vynor.lk/v1");
+    const out = doc.toJSON().models as Array<Record<string, any>>;
+    const length = (name: string) =>
+      out.find((m) => m.name === name)?.defaultCompletionOptions?.contextLength;
+    expect(length("VynorAI Auto")).toBe(VYNOR_CLIENT_CONTEXT_LENGTH);
+    expect(length("User chosen")).toBe(48000);
+    expect(length("VynorAI Autocomplete (FIM)")).toBe(16000);
+    // Models added by the migration use the same window.
+    expect(length("VynorAI DeepSeek V4 Pro")).toBe(VYNOR_CLIENT_CONTEXT_LENGTH);
   });
 
   it("is idempotent", () => {

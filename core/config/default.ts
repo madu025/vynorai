@@ -31,7 +31,11 @@ export const defaultConfig: ConfigYaml = {
       apiBase: VYNORAI_API_BASE,
       roles: ["chat", "edit", "apply", "subagent"],
       // The backend tier policy caps output; leave room for heavy turns.
-      defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 },
+      // contextLength is the largest plan window, not the user's plan: the
+      // backend owns the real window (32K/128K/256K) and compacts with a
+      // stable prefix. A smaller client value prunes history first, one
+      // message per round, and the server never sees an oversized prompt.
+      defaultCompletionOptions: { contextLength: 256000, maxTokens: 16384 },
       capabilities: ["tool_use", "image_input"],
     },
     // ── Advanced: fixed models ───────────────────────────────────────────
@@ -41,7 +45,7 @@ export const defaultConfig: ConfigYaml = {
       model: "deepseek/deepseek-flash",
       apiBase: VYNORAI_API_BASE,
       roles: ["chat", "edit", "apply", "subagent"],
-      defaultCompletionOptions: { contextLength: 64000, maxTokens: 8192 },
+      defaultCompletionOptions: { contextLength: 256000, maxTokens: 8192 },
       capabilities: ["tool_use", "image_input"],
     },
     // ── 🧠 Premium model (Pro & Ultra, 4x credits) ────────────────────────
@@ -51,7 +55,7 @@ export const defaultConfig: ConfigYaml = {
       model: "deepseek/deepseek-v4-pro",
       apiBase: VYNORAI_API_BASE,
       roles: ["chat", "edit"],
-      defaultCompletionOptions: { contextLength: 64000, maxTokens: 16384 },
+      defaultCompletionOptions: { contextLength: 256000, maxTokens: 16384 },
       capabilities: ["tool_use"],
     },
     // ── ⌨️  Code Autocomplete Engine (All Plans) ─────────────────────────

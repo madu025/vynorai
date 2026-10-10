@@ -46,6 +46,7 @@ import {
   selectCurrentToolCalls,
   selectPendingToolCalls,
 } from "../selectors/selectToolCalls";
+import { freezeVolatileWorkspaceState } from "../util/groundingFreeze";
 import { getBaseSystemMessage } from "../util/getBaseSystemMessage";
 import { inferExpertRoles } from "../../util/expertRouting";
 import {
@@ -504,7 +505,9 @@ export const streamNormalInput = createAsyncThunk<
       expertRoles,
       latestUserRequest ? renderChatMessage(latestUserRequest.message) : "",
       subagentFindings,
-      workspaceSnapshot,
+      workspaceSnapshot
+        ? freezeVolatileWorkspaceState(state.session.id, workspaceSnapshot)
+        : workspaceSnapshot,
     )}${browserQaGuidance}${toolBudgetGuidance}`;
 
     const systemMessage = systemToolsFramework

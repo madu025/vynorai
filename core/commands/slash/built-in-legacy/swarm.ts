@@ -15,6 +15,18 @@ function getLocalFsPath(uri: string): string {
   return uri;
 }
 
+/**
+ * The account endpoint is /api/auth/me on the site origin. The old
+ * ${apiBase}/v1/auth/me does not exist, so every paid user was told to upgrade.
+ */
+export function swarmAuthMeUrl(apiBase: string): string {
+  try {
+    return `${new URL(apiBase).origin}/api/auth/me`;
+  } catch {
+    return "https://vynor.lk/api/auth/me";
+  }
+}
+
 export const SwarmCommand: SlashCommand = {
   name: "swarm",
   description:
@@ -49,13 +61,10 @@ export const SwarmCommand: SlashCommand = {
 
       if (apiKey && apiKey.startsWith("vynor_live_")) {
         try {
-          const authRes = await fetch(
-            `${apiBase.replace(/\/$/, "")}/v1/auth/me`,
-            {
-              headers: { Authorization: `Bearer ${apiKey}` },
-              signal: AbortSignal.timeout(5000),
-            },
-          );
+          const authRes = await fetch(swarmAuthMeUrl(apiBase), {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            signal: AbortSignal.timeout(5000),
+          });
           if (authRes.ok) {
             const authData: any = await authRes.json();
             userEmail = authData.user?.email || "";

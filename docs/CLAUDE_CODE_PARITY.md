@@ -71,4 +71,8 @@ Created: 2026-10-08 (loop tick 1, research only; no source code changed).
 
 ## Progress
 
-Closed 9 of 27 gaps (G1 tick 2, G2 tick 3, G2b tick 4, G3 tick 5, G4 tick 6, G6a tick 7, G9 tick 8, G16a tick 9, G10 tick 10). Next: G16b (GUI-backed slash commands: /compact, /clear, /rewind, /resume), then G12 (hook events) and G17 (diagnostics tool).
+Closed: G1, G2, G2b, G3, G4, G6a, G9, G10, G16a, G16b (slash commands, see the G16b row). Partial: G2c, G6b, G11, G13, G14, G17, G19. Open: G4b, G7, G10b, G12, G18, G20, G21.
+
+G8 (`/memory`) is closed by G16a. G21 was checked on 2026-10-10: edit, create, rule and terminal tools are blocked in an untrusted workspace both when the policy is evaluated and when the call runs (`core/core.ts`), and project MCP files and hooks do not load; the row stays open for project rules that are still read.
+
+Task shortcuts (`/fix`, `/review`, `/test`, ...) run as normal agent turns with tools (`core/commands/slash/agentPromptCommands.ts`). Next work follows [NEXT_LEVEL_PLAN.md](NEXT_LEVEL_PLAN.md).

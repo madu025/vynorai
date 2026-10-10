@@ -2,6 +2,7 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 
 import { setMessageCredits, setTurnCredits } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
+import { reportTaskOutcome, TaskOutcomeInfo } from "../util/taskOutcome";
 
 // The backend settles a request's credits just after its stream ends.
 const SETTLE_DELAY_MS = 1200;
@@ -34,17 +35,27 @@ export async function fetchCreditShare(
 /** After a prompt ends, record what it cost under its last reply. */
 export const finalizeTurnCredits = createAsyncThunk<
   void,
-  { messageId: string },
+  { messageId: string; outcome?: TaskOutcomeInfo },
   ThunkApiType
 >(
   "session/finalizeTurnCredits",
-  async ({ messageId }, { dispatch, extra, getState }) => {
+  async ({ messageId, outcome }, { dispatch, extra, getState }) => {
+    const report = (credits: number | null) => {
+      if (outcome) {
+        reportTaskOutcome(
+          extra.ideMessenger,
+          getState().ui.errorReportsEnabled,
+          { ...outcome, credits },
+        );
+      }
+    };
     const turn = getState().session.turnCredits;
-    if (!turn) return;
+    if (!turn) return report(null);
     await new Promise((r) => setTimeout(r, SETTLE_DELAY_MS));
     const used = await fetchCreditsUsed(extra);
-    if (used === null) return;
+    if (used === null) return report(null);
     const credits = Math.max(0, used - turn.start);
+    report(credits);
     // A new prompt may have started during the settle delay with its own
     // baseline; never overwrite it with this turn's.
     if (getState().session.turnCredits?.start === turn.start)

@@ -64,6 +64,7 @@ import {
   TOOL_BUDGET_GUIDANCE,
   toolRoundBudget,
 } from "../util/toolRoundBudget";
+import { finishedOutcome, reportTaskOutcome } from "../util/taskOutcome";
 import {
   unverifiedEdits,
   verificationGatePrompt,
@@ -837,12 +838,26 @@ ${PREMORTEM_GUIDANCE}`
       let verificationSatisfied = !taskId;
       // "You should know": a background second look at what this turn changed.
       const finalReply = getState().session.history.at(-1);
+      const outcomeInfo = {
+        ...finishedOutcome(getState().session.history),
+        mode: getState().session.mode,
+        rounds: depth + 1,
+      };
       if (
         getState().session.turnCredits &&
         finalReply?.message.role === "assistant"
       ) {
         void dispatch(
-          finalizeTurnCredits({ messageId: finalReply.message.id }),
+          finalizeTurnCredits({
+            messageId: finalReply.message.id,
+            outcome: outcomeInfo,
+          }),
+        );
+      } else {
+        reportTaskOutcome(
+          extra.ideMessenger,
+          getState().ui.errorReportsEnabled,
+          outcomeInfo,
         );
       }
       if (
@@ -996,12 +1011,27 @@ ${PREMORTEM_GUIDANCE}`
         dispatch(setToolBudgetPausedAfter(depth));
         dispatch(setToolBudgetPauseReason(creditCapHit ? "credits" : "rounds"));
         const pausedReply = getState().session.history.at(-1);
+        const pausedOutcome = {
+          outcome: creditCapHit ? ("credit_cap" as const) : ("budget" as const),
+          mode: getState().session.mode,
+          rounds: depth + 1,
+          edited: finishedOutcome(getState().session.history).edited,
+        };
         if (
           getState().session.turnCredits &&
           pausedReply?.message.role === "assistant"
         ) {
           void dispatch(
-            finalizeTurnCredits({ messageId: pausedReply.message.id }),
+            finalizeTurnCredits({
+              messageId: pausedReply.message.id,
+              outcome: pausedOutcome,
+            }),
+          );
+        } else {
+          reportTaskOutcome(
+            extra.ideMessenger,
+            getState().ui.errorReportsEnabled,
+            pausedOutcome,
           );
         }
       }

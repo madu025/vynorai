@@ -211,6 +211,33 @@ test("isMutationRequest: rename/redesign style edits keep the edit tools", async
   assert.equal(isMutationRequest("what does this regex do"), false);
 });
 
+test("isMutationRequest: Sinhala, Tamil and Singlish edit requests keep the edit tools", async () => {
+  const { isMutationRequest } = await import(
+    "../src/services/localSlmRouter.ts"
+  );
+  // The benchmark's Sinhala tasks lost the edit tools before this.
+  assert.equal(
+    isMutationRequest(
+      "src/words.mjs හි wordCount(text) ලියන්න. test.mjs pass කරන්න.",
+    ),
+    true,
+  );
+  assert.equal(
+    isMutationRequest(
+      "ව්‍යාපෘතිය පුරා userName property එක username ලෙස වෙනස් කරන්න",
+    ),
+    true,
+  );
+  assert.equal(isMutationRequest("இந்த function-ஐ மாற்று"), true);
+  assert.equal(isMutationRequest("src/words.mjs eke wordCount liyanna"), true);
+  // Questions stay read-only.
+  assert.equal(
+    isMutationRequest("PORT සහ LOG_LEVEL සඳහා default අගයන් මොනවාද?"),
+    false,
+  );
+  assert.equal(isMutationRequest("retry function eka mokakda karanne?"), false);
+});
+
 test("history is append-only below the compaction trigger (prefix stays cache-hot)", async () => {
   const msgs: any[] = [
     { role: "system", content: "rules" },

@@ -6,6 +6,7 @@ import {
   setMainEditorContentTrigger,
 } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
+import { reportTaskOutcome } from "../util/taskOutcome";
 import { saveCurrentSession } from "./session";
 
 export interface RewindResult {
@@ -118,6 +119,9 @@ export const rewindToUserMessage = createAsyncThunk<
     await dispatch(
       saveCurrentSession({ openNewSession: false, generateTitle: false }),
     );
+    reportTaskOutcome(extra.ideMessenger, getState().ui.errorReportsEnabled, {
+      outcome: "rewound",
+    });
     return { rewound: true, restoredFiles };
   },
 );

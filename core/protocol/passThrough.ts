@@ -19,6 +19,7 @@ export const WEBVIEW_TO_CORE_PASS_THROUGH: (keyof ToCoreFromWebviewProtocol)[] =
     "vynor/usage",
     "vynor/feedback",
     "vynor/errorReport",
+    "vynor/taskOutcome",
     "devdata/log",
     "config/addModel",
     "config/newPromptFile",

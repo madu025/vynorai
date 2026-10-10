@@ -560,6 +560,16 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
         </div>
       </div>
       <div class="panel">
+        <div class="panel-header"><div class="panel-title">📈 How agent tasks ended (opt-in, last 30 days)</div><button class="btn btn-ghost" onclick="loadTaskOutcomes()">↻ Refresh</button></div>
+        <div class="panel-body">
+          <p id="taskOutcomeSummary" class="subtitle"></p>
+          <table class="model-table">
+            <thead><tr><th>Day</th><th>Outcome</th><th>Tasks</th><th>Users</th><th>Avg rounds</th><th>Avg credits</th></tr></thead>
+            <tbody id="taskOutcomes"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
         <div class="panel-header"><div class="panel-title">🗄️ Cache Controls</div></div>
         <div class="panel-body" style="display:flex;gap:1rem;flex-wrap:wrap">
           <button class="btn btn-ghost" onclick="clearCache('models')">Clear Model Cache</button>
@@ -932,7 +942,7 @@ function showPage(id) {
     }
   }
   if (id === 'broadcast') loadBroadcast();
-  if (id === 'system')    { loadErrors(); loadSystem(); }
+  if (id === 'system')    { loadErrors(); loadTaskOutcomes(); loadSystem(); }
 }
 
 let admissionPollTimer = null;
@@ -1458,6 +1468,17 @@ async function loadErrors() {
   document.getElementById('errorReports').innerHTML = data.errors.length
     ? data.errors.map(e => `<tr title="${escHtml(e.stack || '')}"><td>${escHtml(e.last_seen)}</td><td>${escHtml(e.source)}</td><td style="max-width:420px;word-break:break-word">${escHtml(e.message)}</td><td>${econNum(e.count)}</td><td>${econNum(e.users)}</td></tr>`).join('')
     : '<tr><td colspan="5" class="loading">No error reports</td></tr>';
+}
+
+async function loadTaskOutcomes() {
+  const data = await api('GET', '/admin/task-outcomes?days=30');
+  if (!data) return;
+  document.getElementById('taskOutcomeSummary').textContent = data.total
+    ? `${econNum(data.total)} tasks · ${data.completionRate}% ended with an answer`
+    : '';
+  document.getElementById('taskOutcomes').innerHTML = data.rows.length
+    ? data.rows.map(r => `<tr><td>${escHtml(r.day)}</td><td>${escHtml(r.outcome)}</td><td>${econNum(r.count)}</td><td>${econNum(r.users)}</td><td>${escHtml(Math.round(r.avgRounds * 10) / 10)}</td><td>${econNum(Math.round(r.avgCredits))}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="loading">No task outcomes yet</td></tr>';
 }
 
 async function loadEconomics() {

@@ -62,6 +62,26 @@ export const FeedbackBodySchema = z.object({
   prompt: z.string().optional().default(""),
 });
 
+export const TASK_OUTCOMES = [
+  "completed",
+  "completed_unverified",
+  "stopped",
+  "budget",
+  "credit_cap",
+  "error",
+  "rewound",
+] as const;
+
+export const TaskOutcomeBodySchema = z.object({
+  outcome: z.enum(TASK_OUTCOMES, { error: "unknown outcome" }),
+  mode: z.string().max(16).optional(),
+  rounds: z.number().int().min(0).max(1000).optional(),
+  credits: z.number().int().min(0).max(100_000_000).nullable().optional(),
+  edited: z.boolean().optional(),
+  verified: z.boolean().optional(),
+  client: z.string().max(64).optional(),
+});
+
 export const ErrorReportBodySchema = z.object({
   message: z
     .string({ error: "message is required" })
@@ -339,6 +359,33 @@ proxyRouter.post(
     await dbRun(
       "INSERT INTO routing_feedback (id, user_id, prompt_fp, signal) VALUES (?, ?, ?, ?)",
       [uuidv4(), user.id, fp, signal],
+    );
+    res.json({ ok: true });
+  },
+);
+
+// ─── POST /v1/task-outcomes ───────────────────────────────────────────────────
+// How an agent task ended. Counts and flags only: no prompt, path or code.
+proxyRouter.post(
+  "/task-outcomes",
+  requireValidSubscriber,
+  validateBody(TaskOutcomeBodySchema),
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const b = req.body;
+    await dbRun(
+      "INSERT INTO task_outcomes (id, user_id, outcome, mode, rounds, credits, edited, verified, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        uuidv4(),
+        user.id,
+        b.outcome,
+        b.mode ?? null,
+        b.rounds ?? null,
+        b.credits ?? null,
+        b.edited ? 1 : 0,
+        b.verified ? 1 : 0,
+        b.client ?? null,
+      ],
     );
     res.json({ ok: true });
   },

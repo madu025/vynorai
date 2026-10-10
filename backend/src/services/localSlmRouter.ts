@@ -310,9 +310,23 @@ export async function summarizeConversation(
 const MUTATION_VERBS =
   /\b(create|write|add|implement|fix|refactor|update|delete|remove|modify|edit|build|scaffold|generate|setup|set up|rename|move|replace|change|convert|migrate|extract|inline|redesign|rewrite|restructure|optimi[sz]e|upgrade|install|patch|apply|make|hadanna|hadapan|danna|weda karanna|wenas karanna)\b/i;
 
+// The same verbs written in Sinhala and Tamil script, and more Singlish. A
+// Sinhala prompt such as "src/words.mjs හි wordCount ලියන්න" matched none of the
+// English verbs above, so the edit tools were stripped and the agent could only
+// paste code into the chat (the benchmark failed every such task).
+const MUTATION_VERBS_SCRIPT =
+  /(ලියන්න|ලියා|ලියමු|වෙනස් කරන්න|වෙනස් කර|වෙනස් කළ|සකස් කරන්න|සකස් කර|හදන්න|හදා|හදමු|හැදිය|නිර්මාණය කරන්න|එකතු කරන්න|එකතු කර|ඉවත් කරන්න|ඉවත් කර|මකන්න|මකා|නැවත නම්|නම වෙනස්|යාවත්කාලීන කරන්න|යාවත්කාලීන කර|නිවැරදි කරන්න|නිවැරදි කර|ක්‍රියාත්මක කරන්න|ඇතුළත් කරන්න|ප්‍රතිව්‍යුහගත|එළවන්න|pass කරන්න|எழுது|எழுத|மாற்று|மாற்ற|சரிசெய்|சரி செய்|உருவாக்கு|உருவாக்க|சேர்|நீக்கு|புதுப்பி)/;
+const MUTATION_VERBS_SINGLISH =
+  /\b(liyanna|liyapan|liyala|liyamu|wenas kara|hadala|hariyata kara|ain karanna|ain kara|pass karanna|pass wenna|hadamu|nam wenas|rename karanna|implement karanna)\b/i;
+
 /** True when a user turn asks for code to be changed. */
 export function isMutationRequest(clean: string): boolean {
-  return MUTATION_VERBS.test(clean) || clean.startsWith("/");
+  return (
+    MUTATION_VERBS.test(clean) ||
+    MUTATION_VERBS_SCRIPT.test(clean) ||
+    MUTATION_VERBS_SINGLISH.test(clean) ||
+    clean.startsWith("/")
+  );
 }
 
 /**

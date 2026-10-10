@@ -883,6 +883,28 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "026_task_outcomes",
+    description:
+      "How an agent task ended (counts only; no prompt, path or code), opt-in from the client",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS task_outcomes (
+        id          VARCHAR(36) PRIMARY KEY,
+        user_id     VARCHAR(36) REFERENCES users(id) ON DELETE CASCADE,
+        outcome     VARCHAR(24) NOT NULL,
+        mode        VARCHAR(16),
+        rounds      INTEGER,
+        credits     INTEGER,
+        edited      INTEGER NOT NULL DEFAULT 0,
+        verified    INTEGER NOT NULL DEFAULT 0,
+        client      VARCHAR(64),
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_task_outcomes_created ON task_outcomes(created_at)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

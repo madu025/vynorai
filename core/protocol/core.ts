@@ -249,6 +249,26 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     { source: string; message: string; stack?: string; client?: string },
     void,
   ];
+  /** Opt-in: how an agent task ended. Counts and flags only. */
+  "vynor/taskOutcome": [
+    {
+      outcome:
+        | "completed"
+        | "completed_unverified"
+        | "stopped"
+        | "budget"
+        | "credit_cap"
+        | "error"
+        | "rewound";
+      mode?: string;
+      rounds?: number;
+      credits?: number | null;
+      edited?: boolean;
+      verified?: boolean;
+      client?: string;
+    },
+    void,
+  ];
   "devdata/log": [DevDataLogEvent, void];
   "config/addOpenAiKey": [string, void];
   "config/addModel": [

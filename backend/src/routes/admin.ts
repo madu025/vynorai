@@ -1077,6 +1077,46 @@ adminRouter.get(
   },
 );
 
+/**
+ * How agent tasks ended, per day (opt-in client reports; counts only).
+ * completionRate is completed + completed_unverified over all ended tasks.
+ */
+adminRouter.get(
+  "/task-outcomes",
+  requireAdmin,
+  validateQuery(AdminDaysQuerySchema),
+  async (req: Request, res: Response) => {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    const since = new Date(Date.now() - days * 86400_000)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
+    const rows = await dbAll<any>(
+      `SELECT SUBSTR(CAST(created_at AS TEXT), 1, 10) AS day, outcome,
+              COUNT(*) AS count, COUNT(DISTINCT user_id) AS users,
+              COALESCE(AVG(rounds), 0) AS avgRounds,
+              COALESCE(AVG(credits), 0) AS avgCredits
+       FROM task_outcomes
+       WHERE created_at >= ?
+       GROUP BY day, outcome
+       ORDER BY day DESC, outcome`,
+      [since],
+    ).catch(() => []);
+    const total = rows.reduce((s: number, r: any) => s + Number(r.count), 0);
+    const completed = rows
+      .filter((r: any) => String(r.outcome).startsWith("completed"))
+      .reduce((s: number, r: any) => s + Number(r.count), 0);
+    res.json({
+      days,
+      total,
+      completionRate: total
+        ? Math.round((1000 * completed) / total) / 10
+        : null,
+      rows,
+    });
+  },
+);
+
 adminRouter.get(
   "/economics",
   requireAdmin,

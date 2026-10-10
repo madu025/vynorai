@@ -44,6 +44,7 @@ const DEFAULT_MOCK_CORE_RESPONSES: MockResponses = {
   "vynor/usage": null,
   "vynor/feedback": undefined,
   "vynor/errorReport": undefined,
+  "vynor/taskOutcome": undefined,
   "config/getSerializedProfileInfo": {
     profileId: "local",
     profiles: [],

@@ -253,8 +253,8 @@ export function UserSettingsSection() {
                 </div>
                 <UserSetting
                   type="toggle"
-                  title="Send Error Reports"
-                  description="Send crash details (never your code or prompts) so we can fix bugs."
+                  title="Send Error Reports and Task Outcomes"
+                  description="Send crash details and how each task ended (completed, stopped, hit the budget), with round and credit counts. Never your code, prompts or file names."
                   value={errorReportsEnabled}
                   onChange={(value) => dispatch(setErrorReportsEnabled(value))}
                 />

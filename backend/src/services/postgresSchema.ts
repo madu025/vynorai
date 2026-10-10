@@ -512,6 +512,24 @@ ALTER TABLE zk_compliance_audit_logs ADD COLUMN IF NOT EXISTS seq BIGSERIAL;
 CREATE INDEX IF NOT EXISTS idx_zk_audit_seq ON zk_compliance_audit_logs(seq);
 `,
   },
+  {
+    version: "026_task_outcomes",
+    sql: `
+CREATE TABLE IF NOT EXISTS task_outcomes (
+  id VARCHAR(36) PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  outcome VARCHAR(24) NOT NULL,
+  mode VARCHAR(16),
+  rounds INTEGER,
+  credits INTEGER,
+  edited SMALLINT NOT NULL DEFAULT 0,
+  verified SMALLINT NOT NULL DEFAULT 0,
+  client VARCHAR(64),
+  created_at TEXT DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_task_outcomes_created ON task_outcomes (created_at);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

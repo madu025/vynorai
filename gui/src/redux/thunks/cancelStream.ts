@@ -6,6 +6,7 @@ import {
   setInactive,
 } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
+import { reportTaskOutcome } from "../util/taskOutcome";
 
 export const cancelStream = createAsyncThunk<
   void,
@@ -13,6 +14,12 @@ export const cancelStream = createAsyncThunk<
   ThunkApiType
 >("chat/cancelStream", async (options, { dispatch, extra, getState }) => {
   const activeTaskId = getState().session.activeTaskId;
+  if (getState().session.isStreaming) {
+    reportTaskOutcome(extra.ideMessenger, getState().ui.errorReportsEnabled, {
+      outcome: "stopped",
+      mode: getState().session.mode,
+    });
+  }
   if (activeTaskId && options?.cancelTask !== false) {
     try {
       const result = await extra.ideMessenger.request("agent/task/cancel", {

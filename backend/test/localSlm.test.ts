@@ -9,6 +9,7 @@ import { after, before, test } from "node:test";
 
 const requests: any[] = [];
 let letter = "H";
+let failSummary = false;
 let server: http.Server;
 let slm: typeof import("../src/services/localSlmRouter.js");
 let hybrid: typeof import("../src/services/hybridContext.js");
@@ -20,6 +21,11 @@ before(async () => {
     req.on("end", () => {
       const body = JSON.parse(raw);
       requests.push(body);
+      if (failSummary && body.max_tokens !== 1) {
+        res.statusCode = 500;
+        res.end("{}");
+        return;
+      }
       const content =
         body.max_tokens === 1
           ? letter
@@ -140,6 +146,50 @@ test("dropped user requests stay verbatim even when no summary exists", async ()
   assert.deepEqual(two.body.messages, one.body.messages);
 });
 
+test("earlierActions lists tool + target of dropped tool calls, deduped and capped", () => {
+  const call = (id: string, name: string, args: unknown) => ({
+    id,
+    type: "function",
+    function: {
+      name,
+      arguments: typeof args === "string" ? args : JSON.stringify(args),
+    },
+  });
+  const dropped: any[] = [
+    { role: "user", content: "do it" },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        call("1", "read_file", { filepath: "src/a.ts" }),
+        call("2", "read_file", { filepath: "src/a.ts" }),
+        call("3", "run_terminal_command", { command: "npm test" }),
+        call("4", "broken_tool", "{not json"),
+      ],
+    },
+  ];
+  const out = hybrid.earlierActions(dropped);
+  assert.equal(
+    out,
+    "- read_file: src/a.ts\n- run_terminal_command: npm test\n- broken_tool",
+  );
+  assert.equal(hybrid.earlierActions([{ role: "user", content: "x" }]), "");
+
+  const many: any[] = [
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: Array.from({ length: 50 }, (_, i) =>
+        call(String(i), "read_file", { filepath: `f${i}.ts` }),
+      ),
+    },
+  ];
+  const capped = hybrid.earlierActions(many);
+  assert.match(capped, /10 earlier action\(s\) omitted/);
+  assert.match(capped, /f49\.ts/);
+  assert.doesNotMatch(capped, /f0\.ts/);
+});
+
 test("capSlmTier: short follow-ups never turn on thinking", async () => {
   const { capSlmTier } = await import("../src/services/localSlmRouter.ts");
   assert.equal(capSlmTier("H", "Now add jest tests for it."), "N");
@@ -221,4 +271,36 @@ test("the next compaction's summary is prepared before the drop, so no turn runs
     atDrop.result.strategy.includes("summary"),
     JSON.stringify(atDrop.result.strategy),
   );
+});
+
+test("a failing summary is not retried on every request", async () => {
+  hybrid.resetSummaryFailures();
+  failSummary = true;
+  try {
+    const msgs: any[] = [{ role: "system", content: "rules" }];
+    for (let i = 0; i < 25; i++) {
+      msgs.push({
+        role: "user",
+        content: `FAILCASE ${i} ` + "q".repeat(12_000),
+      });
+      msgs.push({ role: "assistant", content: "a".repeat(12_000) });
+    }
+    const before = requests.length;
+    hybrid.applyHybridContext({ messages: msgs }, "pro", "safe", {
+      scope: "fail-user",
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    const afterFirst = requests.length;
+    for (let i = 0; i < 5; i++) {
+      hybrid.applyHybridContext({ messages: msgs }, "pro", "safe", {
+        scope: "fail-user",
+      });
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.ok(afterFirst > before, "first request tries the summary");
+    assert.equal(requests.length, afterFirst, "no retry inside the backoff");
+  } finally {
+    failSummary = false;
+    hybrid.resetSummaryFailures();
+  }
 });

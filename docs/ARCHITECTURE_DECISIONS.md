@@ -34,9 +34,14 @@ anything about production environment values is marked "not verified".
 - When turns are dropped, the user's own requests of the dropped turns are kept verbatim in
   `<earlier-user-requests>` (capped), and an `<earlier-conversation-omitted>` note is added while no summary
   exists (`hybridContext.ts` `applyCompaction`).
+- The tool name + target (path, command, query) of dropped assistant tool calls is listed in
+  `<earlier-actions>` (deduped, last 40; `hybridContext.ts` `earlierActions`), so the model knows what it ran.
+- A failed summary backs off exponentially (30s, 60s, ...) and stops after 4 tries per dropped block, so it no
+  longer spends upstream tokens on every request; the verbatim requests and `<earlier-actions>` still carry
+  the task. The summary transcript now includes assistant tool calls.
 - Known quality risks (not fixed): the compaction summary sees only the last 12,000 characters of the dropped
-  block and no assistant tool calls (`localSlmRouter.ts`, `transcriptOf`); summaries live in process memory,
-  so a restart or rolling deploy changes the block once; a failed summary is retried every request.
+  block (`localSlmRouter.ts`); summaries live in process memory, so a restart or rolling deploy changes the
+  block once.
 
 ## Product
 

@@ -517,10 +517,20 @@ function droppedKey(scope: string, dropped: Msg[]): string {
 
 function transcriptOf(dropped: Msg[]): string {
   return dropped
-    .map(
-      (m) =>
-        `${m.role.toUpperCase()}: ${m.role === "tool" ? getText(m).slice(0, 400) : getText(m)}`,
-    )
+    .map((m) => {
+      const body = m.role === "tool" ? getText(m).slice(0, 400) : getText(m);
+      // Assistant tool calls have empty text; without this the summary of an
+      // agent loop saw nothing of what was actually done.
+      const calls = Array.isArray(m.tool_calls)
+        ? m.tool_calls
+            .map(
+              (c: any) =>
+                `[tool ${c?.function?.name ?? "?"} ${String(c?.function?.arguments ?? "").slice(0, 200)}]`,
+            )
+            .join(" ")
+        : "";
+      return `${m.role.toUpperCase()}: ${[body, calls].filter(Boolean).join(" ")}`;
+    })
     .join("\n\n");
 }
 
@@ -538,6 +548,9 @@ async function drainSummaryQueue(): Promise<void> {
           if (oldest) summaries.delete(oldest);
         }
         summaries.set(job.key, summary);
+        summaryFailures.delete(job.key);
+      } else {
+        recordSummaryFailure(job.key);
       }
       pendingSummaries.delete(job.key);
     }
@@ -546,11 +559,41 @@ async function drainSummaryQueue(): Promise<void> {
   }
 }
 
+// A failed summary used to be retried on every request, burning upstream tokens
+// for nothing. Back off exponentially and give up after a few attempts: the
+// verbatim requests and action list already carry the task.
+const SUMMARY_MAX_FAILURES = 4;
+const SUMMARY_BACKOFF_MS = 30_000;
+const summaryFailures = new Map<string, { count: number; retryAt: number }>();
+
+function recordSummaryFailure(key: string): void {
+  if (summaryFailures.size >= SUMMARY_MAX) {
+    const oldest = summaryFailures.keys().next().value;
+    if (oldest) summaryFailures.delete(oldest);
+  }
+  const count = (summaryFailures.get(key)?.count ?? 0) + 1;
+  summaryFailures.set(key, {
+    count,
+    retryAt: Date.now() + SUMMARY_BACKOFF_MS * 2 ** (count - 1),
+  });
+}
+
+/** Test hook: forget failure state. */
+export function resetSummaryFailures(): void {
+  summaryFailures.clear();
+}
+
 function scheduleSummary(key: string, dropped: Msg[]): void {
   if (
     summaries.has(key) ||
     pendingSummaries.has(key) ||
     summaryQueue.length >= 50
+  )
+    return;
+  const failed = summaryFailures.get(key);
+  if (
+    failed &&
+    (failed.count >= SUMMARY_MAX_FAILURES || Date.now() < failed.retryAt)
   )
     return;
   pendingSummaries.add(key);
@@ -601,6 +644,56 @@ export function earlierUserRequests(dropped: Msg[]): string {
     .join("\n");
 }
 
+// Tool + target of the dropped assistant tool calls, so the model still knows
+// which files it already touched. Pure function of the dropped messages.
+const ACTIONS_CAP = 40;
+const ACTION_TARGET_KEYS = [
+  "filepath",
+  "file_path",
+  "path",
+  "filename",
+  "dirpath",
+  "pattern",
+  "query",
+  "command",
+  "url",
+];
+
+export function earlierActions(dropped: Msg[]): string {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const msg of dropped) {
+    if (msg.role !== "assistant" || !Array.isArray(msg.tool_calls)) continue;
+    for (const call of msg.tool_calls) {
+      const name = call?.function?.name;
+      if (!name) continue;
+      let target = "";
+      try {
+        const args = JSON.parse(call.function.arguments ?? "{}");
+        const key = ACTION_TARGET_KEYS.find(
+          (k) => typeof args?.[k] === "string",
+        );
+        if (key) target = String(args[key]).replace(/\s+/g, " ").slice(0, 120);
+      } catch {
+        // unparsable arguments: keep the tool name only
+      }
+      const line = target ? `${name}: ${target}` : name;
+      if (seen.has(line)) continue;
+      seen.add(line);
+      lines.push(line);
+    }
+  }
+  if (lines.length === 0) return "";
+  const kept = lines.slice(-ACTIONS_CAP);
+  const omitted = lines.length - kept.length;
+  return [
+    ...(omitted > 0 ? [`[... ${omitted} earlier action(s) omitted ...]`] : []),
+    ...kept,
+  ]
+    .map((l) => `- ${l}`)
+    .join("\n");
+}
+
 function applyCompaction(
   messages: Msg[],
   dropped: Msg[],
@@ -616,7 +709,8 @@ function applyCompaction(
     if (!summary) scheduleSummary(key, dropped);
   }
   const requests = earlierUserRequests(dropped);
-  if (!summary && !requests) return none;
+  const actions = earlierActions(dropped);
+  if (!summary && !requests && !actions) return none;
   const idx = messages.findIndex((m) => m.role === "user");
   if (idx < 0) return none;
   const block =
@@ -625,6 +719,9 @@ function applyCompaction(
       : `<earlier-conversation-omitted>\n${dropped.length} earlier message(s) were removed to fit the context window. Do not assume you remember them; re-read files before editing.\n</earlier-conversation-omitted>\n\n`) +
     (requests
       ? `<earlier-user-requests>\nThe user's earlier requests and constraints, still in force unless a later message changes them:\n${requests}\n</earlier-user-requests>\n\n`
+      : "") +
+    (actions
+      ? `<earlier-actions>\nTools already run in the omitted turns (results are gone; re-read before relying on them):\n${actions}\n</earlier-actions>\n\n`
       : "");
   const out = [...messages];
   const first = out[idx];

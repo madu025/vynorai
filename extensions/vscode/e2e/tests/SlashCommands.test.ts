@@ -239,19 +239,6 @@ describe("VynorAI local slash commands", function () {
     expect(agentsText).to.include("Not Valid");
     await waitForTurnEnd(view);
 
-    // /rewind chat removes the last prompt from the conversation, files untouched.
-    await runSlashCommandWithArg(view, "rewind", "chat");
-    await retry(async () => {
-      const text = await pageText(view!);
-      if (text.includes("Custom agents")) {
-        throw new Error("the /agents turn is still in the conversation");
-      }
-    }, 30_000);
-    // an unknown number is explained, not ignored
-    await runSlashCommandWithArg(view, "rewind", "9");
-    await waitForText(view, "There");
-
-    // 6. /model and /cost open a small dialog; /resume opens History.
     const closeDialog = async () => {
       const buttons = await view!.findWebElements(
         By.xpath(
@@ -264,6 +251,23 @@ describe("VynorAI local slash commands", function () {
       );
       await (cover[0] ?? buttons[0]).click();
     };
+
+    // /rewind chat removes the last prompt from the conversation, files untouched.
+    await runSlashCommandWithArg(view, "rewind", "chat");
+    await retry(async () => {
+      const text = await pageText(view!);
+      if (text.includes("Custom agents")) {
+        throw new Error("the /agents turn is still in the conversation");
+      }
+    }, 30_000);
+    // Rewind puts the prompt back in the input box so it can be edited; clear it.
+    await typeIntoInput(view, Key.chord(Key.CONTROL, "a"), Key.BACK_SPACE);
+    // an unknown number is explained, not ignored
+    await runSlashCommandWithArg(view, "rewind", "9");
+    await waitForText(view, "There");
+    await closeDialog();
+
+    // 6. /model and /cost open a small dialog; /resume opens History.
 
     await runSlashCommand(view, "model");
     const models = await waitForText(view, "Chat models");

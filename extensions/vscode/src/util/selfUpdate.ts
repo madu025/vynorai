@@ -18,6 +18,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
+import { downloadResumable } from "./resumableDownload";
 
 const LATEST_URL = "https://vynor.lk/api/extension/latest";
 const CHECK_EVERY_MS = 15 * 60_000;
@@ -110,25 +111,16 @@ export function findCachedVsix(dir: string, release: Release): string | null {
 async function downloadVerified(
   release: Release,
   dir: string,
+  onProgress?: (received: number, total: number) => void,
 ): Promise<string> {
   const cached = findCachedVsix(dir, release);
   if (cached) return cached;
-  const res = await fetch(release.url, {
-    signal: AbortSignal.timeout(300_000),
+  const file = await downloadResumable({
+    url: release.url,
+    destFile: path.join(dir, `vynorai-${release.version}.vsix`),
+    sha256: release.sha256,
+    onProgress,
   });
-  if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
-  const bytes = Buffer.from(await res.arrayBuffer());
-  const digest = crypto.createHash("sha256").update(bytes).digest("hex");
-  if (digest !== release.sha256)
-    throw new Error(
-      "Downloaded file failed the integrity check; not installed.",
-    );
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `vynorai-${release.version}.vsix`);
-  // Write then rename: another editor may be reading or writing the same file.
-  const tmp = `${file}.${process.pid}.part`;
-  fs.writeFileSync(tmp, bytes);
-  fs.renameSync(tmp, file);
   pruneOldVsix(dir, release.version);
   return file;
 }
@@ -157,8 +149,22 @@ async function installRelease(
       location: vscode.ProgressLocation.Notification,
       title: `Updating VynorAI to ${release.version}…`,
     },
-    async () => {
-      const file = await downloadVerified(release, sharedUpdatesDir());
+    async (progress) => {
+      let lastPercent = -1;
+      const file = await downloadVerified(
+        release,
+        sharedUpdatesDir(),
+        (received, total) => {
+          if (!total) return;
+          const percent = Math.floor((received / total) * 100);
+          if (percent === lastPercent) return;
+          progress.report({
+            increment: lastPercent < 0 ? 0 : percent - lastPercent,
+            message: `${percent}% (${(received / 1e6).toFixed(0)} of ${(total / 1e6).toFixed(0)} MB)`,
+          });
+          lastPercent = percent;
+        },
+      );
       await vscode.commands.executeCommand(
         "workbench.extensions.installExtension",
         vscode.Uri.file(file),

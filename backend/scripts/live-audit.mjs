@@ -219,7 +219,8 @@ async function runOnce(n) {
     const calls = msg.tool_calls ?? [];
     if (!calls.length) {
       const answer = msg.content ?? "";
-      return { n, ...score(answer, files), answer, toolCalls, tokens, ...meta };
+      const seen = messages.filter((m) => m.role === "tool").map((m) => m.content).join("\n");
+      return { n, ...score(answer, files, seen), answer, toolCalls, tokens, ...meta };
     }
     messages.push({
       role: "assistant",
@@ -242,7 +243,10 @@ async function runOnce(n) {
 export const NO_WORKSPACE_CLAIM =
   /\b(?:i (?:have|see|found|can ?not see|can't see|don't have|do not have)|there (?:is|are|was)|currently|connected root (?:is )?)[^.\n|`]{0,40}\bno workspace\b|\bno workspace (?:is |was )?(?:open|connected|available|detected)\b|\bworkspace (?:is )?not (?:open|available|connected)\b/i;
 
-function score(answer, files) {
+// `seen` is everything the tools returned. A path that appears there (the plan
+// and CODEMAP list files that are not in the fixture) is grounded in what the
+// model read, so naming it - e.g. to say it is absent - is not an invention.
+function score(answer, files, seen = "") {
   const problems = [];
   if (answer.trim().length < 400) problems.push("answer too short");
   // A claim about the assistant's own access ("I have no workspace", "no
@@ -259,7 +263,9 @@ function score(answer, files) {
     ...new Set((answer.match(/[\w@.-]+(?:\/[\w@.-]+)+\.(?:ts|tsx|md|json|js|yaml|yml)/g) ?? []).map((p) => p.replace(/^\.\//, ""))),
   ];
   const invented = mentioned.filter(
-    (p) => !files.some((f) => f === p || f.endsWith("/" + p)) && !PLANNED_MISSING.some((n) => p.endsWith(n)),
+    (p) => !files.some((f) => f === p || f.endsWith("/" + p)) &&
+      !PLANNED_MISSING.some((n) => p.endsWith(n)) &&
+      !(seen && seen.includes(p)),
   );
   if (mentioned.length < 3) problems.push(`cites only ${mentioned.length} paths`);
   if (invented.length > Math.max(1, Math.floor(mentioned.length * 0.2)))

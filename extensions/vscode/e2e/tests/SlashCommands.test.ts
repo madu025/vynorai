@@ -173,6 +173,17 @@ describe("VynorAI local slash commands", function () {
       "agents",
       "permissions",
       "e2e-checklist",
+      // Task shortcuts that run as agent turns (YAML configs used to drop them).
+      "fix",
+      "explain",
+      "test",
+      "refactor",
+      "docs",
+      "review",
+      "security",
+      "optimize",
+      "scaffold",
+      "commit",
     ]) {
       expect(menu).to.include(name);
     }

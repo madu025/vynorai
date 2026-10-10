@@ -62,6 +62,8 @@ export const getConfigDependentToolDefinitions = async (
   // missing support for remote os calls: https://github.com/microsoft/vscode/issues/252269
   if (!isRemote) {
     tools.push(toolDefinitions.grepSearchTool);
+    // These read and write the local disk directly.
+    tools.push(toolDefinitions.applyDiffTool, toolDefinitions.renameSymbolTool);
   }
 
   return tools;

@@ -122,6 +122,8 @@ const WORKSPACE_MUTATING_TOOLS = new Set<string>([
   BuiltInToolNames.CreateNewFile,
   BuiltInToolNames.CreateRuleBlock,
   BuiltInToolNames.RunTerminalCommand,
+  BuiltInToolNames.ApplyDiff,
+  BuiltInToolNames.RenameSymbol,
 ]);
 
 export class Core {

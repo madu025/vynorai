@@ -24,6 +24,7 @@ import { runSubagentImpl } from "./implementations/runSubagent";
 import { runTerminalCommandImpl } from "./implementations/runTerminalCommand";
 import { searchWebImpl } from "./implementations/searchWeb";
 import { getDiagnosticsImpl } from "./implementations/getDiagnostics";
+import { applyDiffImpl, renameSymbolImpl } from "./implementations/patchTools";
 import { viewDiffImpl } from "./implementations/viewDiff";
 import { viewRepoMapImpl } from "./implementations/viewRepoMap";
 import { viewSubdirectoryImpl } from "./implementations/viewSubdirectory";
@@ -218,6 +219,10 @@ export async function callBuiltInTool(
       return await viewDiffImpl(args, extras);
     case BuiltInToolNames.GetDiagnostics:
       return await getDiagnosticsImpl(args, extras);
+    case BuiltInToolNames.ApplyDiff:
+      return await applyDiffImpl(args, extras);
+    case BuiltInToolNames.RenameSymbol:
+      return await renameSymbolImpl(args, extras);
     case BuiltInToolNames.LSTool:
       return await lsToolImpl(args, extras);
     case BuiltInToolNames.ReadCurrentlyOpenFile:

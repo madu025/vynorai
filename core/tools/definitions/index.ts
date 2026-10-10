@@ -24,3 +24,5 @@ export { viewDiffTool } from "./viewDiff";
 export { getDiagnosticsTool } from "./getDiagnostics";
 export { viewRepoMapTool } from "./viewRepoMap";
 export { viewSubdirectoryTool } from "./viewSubdirectory";
+export { applyDiffTool } from "./applyDiff";
+export { renameSymbolTool } from "./renameSymbol";

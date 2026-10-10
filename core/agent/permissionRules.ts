@@ -34,7 +34,13 @@ export const PERMISSIONS_FILE = "permissions.json";
 const TOOL_ALIASES: Record<string, string[]> = {
   bash: ["run_terminal_command"],
   read: ["read_file", "read_file_range", "read_currently_open_file"],
-  edit: ["edit_existing_file", "single_find_and_replace", "multi_edit"],
+  edit: [
+    "edit_existing_file",
+    "single_find_and_replace",
+    "multi_edit",
+    "apply_diff",
+    "rename_symbol",
+  ],
   write: ["create_new_file"],
   grep: ["grep_search"],
   glob: ["file_glob_search"],

@@ -26,6 +26,8 @@ export enum BuiltInToolNames {
   // excluded from allTools for now
   ViewRepoMap = "view_repo_map",
   ViewSubdirectory = "view_subdirectory",
+  ApplyDiff = "apply_diff",
+  RenameSymbol = "rename_symbol",
 }
 
 export const BUILT_IN_GROUP_NAME = "Built-In";

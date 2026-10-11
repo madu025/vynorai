@@ -123,3 +123,28 @@ Found by the benchmark and fixed in code, not yet deployed:
 
 Next: deploy the backend (asks first), re-run the benchmark twice, add a multi-file category, then decide the
 implementation subagents.
+
+## Verification, 2026-10-11
+
+Against production (backend f47bc87) with a real key:
+
+| Check                                                                                              | Result                                                                                  |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Benchmark, 40 tasks x 2                                                                            | 78 of 80 (97.5%); Sinhala 7 of 8, was 4 of 8; the 2 failures were scorer wording misses |
+| `apply_diff`, `rename_symbol` chosen and working with the model (core schemas and code)            | 2 of 2                                                                                  |
+| `/fix` (English, Singlish), `/review`, `/test` prompts from `agentPromptCommands.ts`               | 4 of 4                                                                                  |
+| Reply language si / en / auto                                                                      | 3 of 3 (Sinhala when asked, English when asked, Sinhala prompt left alone)              |
+| Task outcome: core `postToVynor` to `/v1/task-outcomes` to a PostgreSQL row, admin aggregate query | works; the row was removed afterwards                                                   |
+| Real extension, real chat panel, real model prompt, reporting off                                  | answered; no row written (E2E `TaskOutcome`)                                            |
+| E2E `VynorOnlyUI`, `VSIXLifecycle`, `SlashCommands` on 1.2.58                                      | pass                                                                                    |
+
+Open, with evidence:
+
+- Reporting on, from a real extension session: the E2E could not finish. After the settings page is visited and the
+  chat is focused again with `continue.focusContinueInput` (Ctrl+L), the renderer and the extension host stay at
+  more than one core each and the window stops answering the test driver. The same happens without changing any
+  setting (round trip only), so it is not the outcome code. It also happens after `VynorAI: Set API Key`
+  (the 2026-10-08 smart report shows it on 1.2.41). The settings page alone, and a chat turn alone, are quiet.
+  This blocks `Smart.test` and `SignInPanel`. Root cause not found; the next step is a CPU profile of the
+  webview during the round trip.
+- Reply language through the extension's own system message (the benchmark above uses the same text block).

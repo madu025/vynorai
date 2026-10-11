@@ -192,13 +192,13 @@ const MIN_GAP_MS = 1500;
 let nextSlot = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function chat(key, messages, withTools) {
+async function chat(key, messages, withTools, tools = TOOLS) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const now = Date.now();
     const wait = Math.max(0, nextSlot - now);
     nextSlot = Math.max(now, nextSlot) + MIN_GAP_MS;
     if (wait) await sleep(wait);
-    const r = await chatOnce(key, messages, withTools);
+    const r = await chatOnce(key, messages, withTools, tools);
     if (r.status !== 429) return r;
     let retry = 20;
     try {
@@ -206,17 +206,17 @@ async function chat(key, messages, withTools) {
     } catch {}
     nextSlot = Math.max(nextSlot, Date.now() + (retry + 2) * 1000);
   }
-  return chatOnce(key, messages, withTools);
+  return chatOnce(key, messages, withTools, tools);
 }
 
-async function chatOnce(key, messages, withTools) {
+async function chatOnce(key, messages, withTools, tools = TOOLS) {
   const res = await fetch(`${BASE}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: "vynor-auto",
       messages,
-      ...(withTools ? { tools: TOOLS } : {}),
+      ...(withTools ? { tools } : {}),
       stream: false,
     }),
   });
@@ -232,9 +232,9 @@ async function chatOnce(key, messages, withTools) {
 }
 
 /** Runs one task once. Returns the facts the checks and the report need. */
-export async function runAgent(key, task, fx) {
+export async function runAgent(key, task, fx, opts = {}) {
   const messages = [
-    { role: "system", content: systemPrompt(fx) },
+    { role: "system", content: systemPrompt(fx) + (opts.systemExtra ?? "") },
     { role: "user", content: task.prompt },
   ];
   const log = { commands: [], tools: [], toolErrors: 0 };
@@ -257,6 +257,7 @@ export async function runAgent(key, task, fx) {
         ? [{ ...messages[0], content: messages[0].content + BUDGET_GUIDANCE }, ...messages.slice(1)]
         : messages,
       !last,
+      [...TOOLS, ...(opts.tools ?? [])],
     );
     if (r.status !== 200) return done("", `HTTP ${r.status} ${r.error}`);
     totals.rounds++;
@@ -277,7 +278,8 @@ export async function runAgent(key, task, fx) {
       try {
         args = JSON.parse(c.function.arguments || "{}");
       } catch {}
-      const out = runTool(fx, c.function.name, args, log);
+      const extra = opts.impl?.[c.function.name];
+      const out = extra ? await extra(args, fx) : runTool(fx, c.function.name, args, log);
       log.tools.push(c.function.name);
       if (/^(No such|Refused|error:|old_string|Invalid|unknown tool|That node|Only )/.test(out)) {
         log.toolErrors++;

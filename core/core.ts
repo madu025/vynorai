@@ -107,6 +107,7 @@ import type { FromCoreProtocol, ToCoreProtocol } from "./protocol";
 import { OnboardingModes } from "./protocol/core";
 import type { IMessenger, Message } from "./protocol/messenger";
 import { ContinueError, ContinueErrorReason } from "./util/errors";
+import { postToVynor, VynorChatModel } from "./util/vynorBackend";
 import { shareSession } from "./util/historyUtils";
 import { Logger } from "./util/Logger.js";
 import { WorkspaceSessionService } from "./workspace/WorkspaceSessionService";
@@ -620,26 +621,12 @@ export class Core {
 
     on("vynor/taskOutcome", async (msg) => {
       const { config } = await this.configHandler.loadConfig();
-      const llm = config?.selectedModelByRole.chat;
-      const base = llm?.apiBase ?? "";
-      if (
-        !llm?.apiKey ||
-        (llm.providerName !== "vynorai" && !base.includes("vynor"))
-      )
-        return;
-      try {
-        await fetch(`${base.replace(/\/+$/, "")}/task-outcomes`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${llm.apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(msg.data),
-          signal: AbortSignal.timeout(4000),
-        });
-      } catch {
-        // Outcome reports are best effort.
-      }
+      // Best effort: a failed report never affects the chat.
+      await postToVynor(
+        config?.selectedModelByRole.chat as VynorChatModel | undefined,
+        "task-outcomes",
+        msg.data,
+      );
     });
 
     on("devdata/log", async (msg) => {

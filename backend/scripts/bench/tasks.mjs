@@ -396,7 +396,7 @@ const authFiles = {
   "src/auth/token.mjs": `export const signToken = (user) => "t." + user.id;\n`,
   "src/index.mjs": `export * from "./auth/token.mjs";\n`,
 };
-const NOT_EXIST = /(does not exist|doesn't exist|not exist|no such file|not found|is missing|not defined|isn't defined|no definition|cannot find|can't find|couldn't find|nathi|natha|naha|nehe|nethe|n[æa]th[æa]|නැහැ|නැත|නෑ|නොමැත)/i;
+const NOT_EXIST = /(does not exist|doesn't exist|not exist|no such file|not found|is missing|not defined|isn't defined|no definition|cannot find|can't find|couldn't find|nathi|natha|naha|nehe|nethe|nattam|na|n[æa]th[æa]|නැහැ|නැත|නෑ|නොමැත)/i;
 const missing = [
   {
     id: "ms-summarize",
@@ -427,7 +427,7 @@ const missing = [
     lang: "sinhala",
     prompt: "README.md හි 'Deployment' කොටසේ ඇති පියවර සාරාංශ කරන්න.",
     files: { "README.md": `# Demo\n\nA small demo project.\n\n## Usage\n\nRun node src/index.mjs.\n`, ...authFiles },
-    check: { usedTool: ["read_file|grep_search"], answerAll: [/(Deployment)/i, /(නැත|නැහැ|නෑ|not (found|present|exist)|no .*section|does not (have|contain)|missing)/i] },
+    check: { usedTool: ["read_file|grep_search"], answerAll: [/(Deployment)/i, /(නැත|නැහැ|නෑ|නොමැත|not (found|present|exist)|no .*section|does not (have|contain)|missing)/i] },
     goodAnswer: "README.md හි Deployment කොටසක් නැත. Usage පමණක් ඇත.",
     badAnswer: "Deployment steps: build, push, deploy.",
   },

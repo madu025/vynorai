@@ -4,20 +4,6 @@
   },
   "models": [
     {
-      "title": "VynorAI Auto",
-      "provider": "vynorai",
-      "model": "vynor-auto",
-      "apiBase": "https://vynor.lk/v1",
-      "apiKey": "${{ secrets.VYNORAI_API_KEY }}"
-    },
-    {
-      "title": "VynorAI Coder",
-      "provider": "vynorai",
-      "model": "deepseek/deepseek-flash",
-      "apiBase": "https://vynor.lk/v1",
-      "apiKey": "${{ secrets.VYNORAI_API_KEY }}"
-    },
-    {
       "title": "TEST LLM",
       "provider": "test",
       "model": "this field is not used"
@@ -56,9 +42,7 @@
                 ]
               }
             ],
-            [
-              "REPEAT_LAST_MSG"
-            ]
+            ["REPEAT_LAST_MSG"]
           ]
         }
       }
@@ -69,11 +53,7 @@
       "model": "claude-sonnet-4-5",
       "requestOptions": {
         "extraBodyProperties": {
-          "chatStream": [
-            [
-              "REPEAT_SYSTEM_MSG"
-            ]
-          ]
+          "chatStream": [["REPEAT_SYSTEM_MSG"]]
         }
       }
     },
@@ -83,22 +63,16 @@
       "model": "claude-sonnet-4-5",
       "requestOptions": {
         "extraBodyProperties": {
-          "chatStream": [
-            [
-              "REPEAT_LAST_MSG"
-            ]
-          ]
+          "chatStream": [["REPEAT_LAST_MSG"]]
         }
       }
     }
   ],
   "systemMessage": "TEST_SYS_MSG",
   "tabAutocompleteModel": {
-    "title": "VynorAI Autocomplete",
-    "provider": "vynorai",
-    "model": "deepseek/deepseek-flash",
-    "apiBase": "https://vynor.lk/v1",
-    "apiKey": "${{ secrets.VYNORAI_API_KEY }}"
+    "title": "TEST LLM",
+    "provider": "test",
+    "model": "this field is not used"
   },
   "tabAutocompleteOptions": {
     "useCache": false

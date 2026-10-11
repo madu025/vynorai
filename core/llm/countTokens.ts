@@ -294,59 +294,67 @@ function extractToolSequence(messages: ChatMessage[]): ChatMessage[] {
   return toolSequence;
 }
 
+/**
+ * No token is longer than this many characters (the longest are runs of
+ * spaces), so a line longer than maxTokens * this cannot fit in maxTokens.
+ */
+const MAX_CHARS_PER_TOKEN = 128;
+
+/** Token count of one line, or just over maxTokens when it cannot fit. */
+function lineTokenCount(
+  line: string,
+  modelName: string,
+  maxTokens: number,
+): number {
+  if (line.length > Math.max(0, maxTokens) * MAX_CHARS_PER_TOKEN) {
+    return Math.max(0, maxTokens) + 1;
+  }
+  return countTokens(line, modelName);
+}
+
+/**
+ * Keeps the lines nearest the end of the prompt. The old version counted the
+ * tokens of every line of the file before dropping any, which froze the
+ * extension host on large files; this one stops at the first line that no
+ * longer fits, so the work is bounded by maxTokens, not by file size.
+ */
 function pruneLinesFromTop(
   prompt: string,
   maxTokens: number,
   modelName: string,
 ): string {
   const lines = prompt.split("\n");
-  // Preprocess tokens for all lines and cache them.
-  const lineTokens = lines.map((line) => countTokens(line, modelName));
-  let totalTokens = lineTokens.reduce((sum, tokens) => sum + tokens, 0);
-  let start = 0;
-  let currentLines = lines.length;
-
-  // Calculate initial token count including newlines
-  totalTokens += Math.max(0, currentLines - 1); // Add tokens for joining newlines
-
-  // Using indexes instead of array modifications.
-  // Remove lines from the top until the token count is within the limit.
-  while (totalTokens > maxTokens && start < currentLines) {
-    totalTokens -= lineTokens[start];
-    // Decrement token count for the removed line and its preceding/joining newline (if not the last line)
-    if (currentLines - start > 1) {
-      totalTokens--;
-    }
-    start++;
+  let total = 0;
+  let start = lines.length;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    // Tokens of the line, plus the newline that joins it to the kept lines.
+    const next =
+      total +
+      lineTokenCount(lines[i], modelName, maxTokens) +
+      (i < lines.length - 1 ? 1 : 0);
+    if (next > maxTokens) break;
+    total = next;
+    start = i;
   }
-
   return lines.slice(start).join("\n");
 }
 
+/** Keeps the lines nearest the start of the prompt; see pruneLinesFromTop. */
 function pruneLinesFromBottom(
   prompt: string,
   maxTokens: number,
   modelName: string,
 ): string {
   const lines = prompt.split("\n");
-  const lineTokens = lines.map((line) => countTokens(line, modelName));
-  let totalTokens = lineTokens.reduce((sum, tokens) => sum + tokens, 0);
-  let end = lines.length;
-
-  // Calculate initial token count including newlines
-  totalTokens += Math.max(0, end - 1); // Add tokens for joining newlines
-
-  // Reverse traversal to avoid array modification
-  // Remove lines from the bottom until the token count is within the limit.
-  while (totalTokens > maxTokens && end > 0) {
-    end--;
-    totalTokens -= lineTokens[end];
-    // Decrement token count for the removed line and its following/joining newline (if not the first line)
-    if (end > 0) {
-      totalTokens--;
-    }
+  let total = 0;
+  let end = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const next =
+      total + lineTokenCount(lines[i], modelName, maxTokens) + (i > 0 ? 1 : 0);
+    if (next > maxTokens) break;
+    total = next;
+    end = i + 1;
   }
-
   return lines.slice(0, end).join("\n");
 }
 

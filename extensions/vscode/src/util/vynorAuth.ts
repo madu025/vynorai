@@ -14,6 +14,17 @@ import {
 } from "./vynorModelMigration";
 
 import { SecretStorage } from "../stubs/SecretStorage";
+import {
+  VynorQuotaInfo,
+  accountEmailFor,
+  boundEmail,
+  checkVynorKey,
+  makeBinding,
+} from "./vynorAccount";
+
+export type { VynorQuotaInfo } from "./vynorAccount";
+
+const ACCOUNT_BINDING_KEY = "vynorai_account_binding";
 
 // ─── Per-account chat history ─────────────────────────────────────────────────
 /** Fires when the signed-in account changes; the webview resets its tabs and history. */
@@ -83,20 +94,6 @@ function writeFileAtomically(filePath: string, content: string): void {
       fs.unlinkSync(temporaryPath);
     }
   }
-}
-
-export interface VynorQuotaInfo {
-  planId: string;
-  planName: string;
-  monthlyTokens: number;
-  usedTokens: number;
-  remainingTokens: number;
-  percentageUsed: number;
-  periodEnd: string;
-  email: string;
-  tokensSaved?: number;
-  savingPercentage?: number;
-  estimatedLkrSaved?: number;
 }
 
 /**
@@ -288,41 +285,8 @@ export async function applyVynorConfig(): Promise<boolean> {
 export async function fetchVynorQuota(
   apiKey: string,
 ): Promise<VynorQuotaInfo | null> {
-  try {
-    const res = await fetch(`${VYNORAI_WEB_URL}/api/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
-
-    if (!res.ok) return null;
-    const data = (await res.json()) as any;
-    const monthly = data.monthlyUsage || {};
-    const slm = data.slmSavings || {};
-    const maxTokens = monthly.max_tokens || 100_000;
-    const usedTokens = monthly.used_tokens || 0;
-    const remaining = Math.max(0, maxTokens - usedTokens);
-    const percentage = Math.min(
-      100,
-      Math.round((usedTokens / maxTokens) * 100),
-    );
-
-    return {
-      planId: monthly.plan_name || "free",
-      planName: (monthly.plan_name || "Free Tier").toUpperCase(),
-      monthlyTokens: maxTokens,
-      usedTokens,
-      remainingTokens: remaining,
-      percentageUsed: percentage,
-      periodEnd: monthly.period_end || "",
-      email: data.user?.email || "",
-      tokensSaved: slm.tokensSaved || 0,
-      savingPercentage: slm.savingPercentage || 0,
-      estimatedLkrSaved: slm.estimatedLkrSaved || 0,
-    };
-  } catch (err) {
-    return null;
-  }
+  const check = await checkVynorKey(apiKey, VYNORAI_WEB_URL);
+  return check.ok ? check.quota : null;
 }
 
 let loopbackServer: http.Server | null = null;
@@ -513,13 +477,36 @@ function startLoopbackServer(
   }
 }
 
+/**
+ * Signs in with a key and binds it to the account that owns it. The key is
+ * checked with the server first: a refused key changes nothing, and the
+ * account is the one the server names, never one left over from an earlier
+ * sign-in. Returns false when nothing was changed.
+ */
 export async function handleSuccessfulAuthentication(
   context: vscode.ExtensionContext,
   apiKey: string,
   email: string,
   token?: string,
   refreshQuotaStatus?: () => void,
-) {
+): Promise<boolean> {
+  const check = await checkVynorKey(apiKey, VYNORAI_WEB_URL);
+  if (!check.ok && check.reason === "invalid") {
+    void vscode.window.showErrorMessage(
+      "VynorAI does not accept this API key. Check that it is complete and has not been revoked. Nothing was changed.",
+    );
+    return false;
+  }
+  const quota = check.ok ? check.quota : undefined;
+  const accountEmail = accountEmailFor(quota, email);
+  if (!quota && !accountEmail) {
+    // A key typed by hand with no way to learn its owner: do not guess.
+    void vscode.window.showErrorMessage(
+      "Could not reach VynorAI to check this API key. Check your connection and try again. Nothing was changed.",
+    );
+    return false;
+  }
+
   const secretStorage = new SecretStorage(context);
   await secretStorage.store(VYNORAI_SECRET_NAME, apiKey);
   await context.secrets.delete(LEGACY_API_KEY_SECRET);
@@ -528,15 +515,14 @@ export async function handleSuccessfulAuthentication(
     await context.secrets.store(JWT_SECRET, token);
     await context.globalState.update("vynorai_jwt_token", undefined);
   }
-  // Key-only logins (setApiKey) learn the email from the account endpoint, so
-  // history lands in the same folder as a browser login for that account.
-  let accountEmail = email;
-  if (!isEmail(accountEmail)) {
-    accountEmail = (await fetchVynorQuota(apiKey))?.email || accountEmail;
-  }
-  if (isEmail(accountEmail)) {
-    await context.globalState.update("vynorai_user_email", accountEmail);
-  }
+  await context.globalState.update(
+    ACCOUNT_BINDING_KEY,
+    makeBinding(apiKey, accountEmail),
+  );
+  await context.globalState.update(
+    "vynorai_user_email",
+    accountEmail || undefined,
+  );
   applyHistoryScope({ email: accountEmail, apiKey });
 
   await applyVynorConfig();
@@ -551,9 +537,11 @@ export async function handleSuccessfulAuthentication(
     await vscode.commands.executeCommand("continue.continueGUIView.focus");
   } catch (e) {}
 
+  const plan = quota ? ` (${quota.planName} plan)` : "";
   void vscode.window.showInformationMessage(
-    `🎉 Welcome to VynorAI! Successfully authenticated as ${email}. Coding Assistant & Cloud Models are now active.`,
+    `Signed in to VynorAI as ${accountEmail || "your account"}${plan}.`,
   );
+  return true;
 }
 
 /**
@@ -622,7 +610,12 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
       return;
     }
 
-    const storedEmail = context.globalState.get<string>("vynorai_user_email");
+    // The stored account counts only for the key it was recorded with; a key
+    // that arrived any other way (config file, older release) is looked up.
+    const storedEmail = boundEmail(
+      context.globalState.get(ACCOUNT_BINDING_KEY),
+      savedKey,
+    );
     if (isEmail(storedEmail))
       applyHistoryScope({ email: storedEmail, apiKey: savedKey });
 
@@ -637,9 +630,14 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
     // Offline with no known email: stay signed out for history rather than
     // guess an account folder (old chats would be moved into the wrong one).
     if (!isEmail(storedEmail) && quota) {
-      if (isEmail(quota.email)) {
-        await context.globalState.update("vynorai_user_email", quota.email);
-      }
+      await context.globalState.update(
+        ACCOUNT_BINDING_KEY,
+        makeBinding(savedKey, isEmail(quota.email) ? quota.email : ""),
+      );
+      await context.globalState.update(
+        "vynorai_user_email",
+        isEmail(quota.email) ? quota.email : undefined,
+      );
       applyHistoryScope({ email: quota.email, apiKey: savedKey });
     }
     if (quota) {
@@ -789,6 +787,7 @@ export function setupVynorAuth(context: vscode.ExtensionContext) {
       await context.globalState.update("vynorai_api_key", undefined);
       await context.globalState.update("vynorai_jwt_token", undefined);
       await context.globalState.update("vynorai_user_email", undefined);
+      await context.globalState.update(ACCOUNT_BINDING_KEY, undefined);
       // Older releases wrote the key into config files; startup would pick it
       // up again and silently sign back in.
       for (const file of [getConfigYamlPath(), getConfigJsonPath()]) {

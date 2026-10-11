@@ -140,11 +140,11 @@ Against production (backend f47bc87) with a real key:
 
 Open, with evidence:
 
-- Reporting on, from a real extension session: the E2E could not finish. After the settings page is visited and the
-  chat is focused again with `continue.focusContinueInput` (Ctrl+L), the renderer and the extension host stay at
-  more than one core each and the window stops answering the test driver. The same happens without changing any
-  setting (round trip only), so it is not the outcome code. It also happens after `VynorAI: Set API Key`
-  (the 2026-10-08 smart report shows it on 1.2.41). The settings page alone, and a chat turn alone, are quiet.
-  This blocks `Smart.test` and `SignInPanel`. Root cause not found; the next step is a CPU profile of the
-  webview during the round trip.
+- Window hang after Settings, Ctrl+L or `Set API Key`: cause found on 2026-10-11, fixed in code, verified in the
+  live extension (VSIX 1.2.59, not published). One focus or new-session message was answered by several GUI
+  listeners; the extension returned the extra answers as errors of the same message type; the listeners handled
+  them again, without end. Details and numbers: [LARGE_TASK_BENCHMARK_PLAN.md](LARGE_TASK_BENCHMARK_PLAN.md).
+  `Smart.test` and `SignInPanel` still have to be run again.
+- Every earlier E2E "answer" in the isolated profile came from the `TEST LLM` echo model (the profile had it
+  selected). `TaskOutcome` with reporting on needs a repeat against the real model.
 - Reply language through the extension's own system message (the benchmark above uses the same text block).

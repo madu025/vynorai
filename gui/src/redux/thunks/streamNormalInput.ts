@@ -65,6 +65,7 @@ import {
   toolRoundBudget,
 } from "../util/toolRoundBudget";
 import { replyLanguageGuidance } from "../util/replyLanguage";
+import { createStreamBatcher } from "../util/streamBatcher";
 import { finishedOutcome, reportTaskOutcome } from "../util/taskOutcome";
 import {
   unverifiedEdits,
@@ -591,15 +592,27 @@ export const streamNormalInput = createAsyncThunk<
         );
       }
 
-      let next = await gen.next();
-      while (!next.done) {
-        if (!getState().session.isStreaming) {
-          dispatch(abortStream());
-          break;
-        }
-
-        dispatch(streamUpdate(next.value));
+      // Pieces of the answer are applied together, at most every 80 ms (see
+      // streamBatcher.ts); whatever is left is applied before anything else
+      // looks at the history, including when the stream fails.
+      const batcher = createStreamBatcher((messages) =>
+        dispatch(streamUpdate(messages)),
+      );
+      let next;
+      try {
         next = await gen.next();
+        while (!next.done) {
+          if (!getState().session.isStreaming) {
+            batcher.flush();
+            dispatch(abortStream());
+            break;
+          }
+
+          batcher.push(next.value);
+          next = await gen.next();
+        }
+      } finally {
+        batcher.flush();
       }
 
       // Attach prompt log and end thinking for reasoning models

@@ -41,6 +41,7 @@ import { LLMClasses, llmFromDescription } from "../llm/llms";
 import CustomLLMClass from "../llm/llms/CustomLLM";
 import { LLMReranker } from "../llm/llms/llm";
 import TransformersJsEmbeddingsProvider from "../llm/llms/TransformersJsEmbeddingsProvider";
+import { resolveConfigJsonSecrets } from "./resolveSecretRefs";
 import { getAllPromptFiles } from "../promptFiles/getPromptFiles";
 import { copyOf } from "../util";
 import { GlobalContext } from "../util/GlobalContext";
@@ -817,7 +818,10 @@ async function loadContinueConfigFromJson(
   // Apply shared config
   // TODO: override several of these values with user/org shared config
   const sharedConfig = new GlobalContext().getSharedConfig();
-  const withShared = modifyAnyConfigWithSharedConfig(serialized, sharedConfig);
+  const withShared = await resolveConfigJsonSecrets(
+    modifyAnyConfigWithSharedConfig(serialized, sharedConfig),
+    ide,
+  );
 
   // Convert serialized to intermediate config
   let intermediate = await serializedToIntermediateConfig(withShared, ide);

@@ -23,6 +23,16 @@ export class VsCodeWebviewProtocol
   >();
   private startupComplete = false;
   private warnedUnsupportedTypes = new Set<string>();
+  /**
+   * Ids of extension -> webview requests that already got their answer. Several
+   * webview listeners can answer the same request; every answer after the
+   * first used to be taken for a new webview request and answered with an
+   * "unsupported" error of the SAME message type. The webview listeners handle
+   * any message of that type, so the error was handled and answered again,
+   * three times over, without end (about 1,700 messages a second).
+   */
+  private answeredRequestIds = new Set<string>();
+  private static readonly MAX_ANSWERED_IDS = 1000;
 
   send(messageType: string, data: any, messageId?: string): string {
     const id = messageId ?? uuidv4();
@@ -99,9 +109,12 @@ export class VsCodeWebviewProtocol
     const pendingRequest = this.pendingRequests.get(msg.messageId);
     if (pendingRequest) {
       this.pendingRequests.delete(msg.messageId);
+      this.rememberAnswered(msg.messageId);
       pendingRequest(msg.data);
       return;
     }
+    // A later answer to a request that is already settled: drop it.
+    if (this.answeredRequestIds.has(msg.messageId)) return;
 
     const respond = (message: any) =>
       this.send(msg.messageType, message, msg.messageId);
@@ -194,6 +207,14 @@ export class VsCodeWebviewProtocol
       }
     }
   };
+
+  private rememberAnswered(id: string): void {
+    this.answeredRequestIds.add(id);
+    if (this.answeredRequestIds.size > VsCodeWebviewProtocol.MAX_ANSWERED_IDS) {
+      const oldest = this.answeredRequestIds.values().next().value;
+      if (oldest !== undefined) this.answeredRequestIds.delete(oldest);
+    }
+  }
 
   constructor() {}
 

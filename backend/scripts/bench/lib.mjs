@@ -39,10 +39,14 @@ export function cleanup(fx) {
   fs.rmSync(fx.root, { recursive: true, force: true });
 }
 
+// A directory fixture links the package's node_modules; the agent never sees it.
+const SKIPPED_DIRS = new Set(["node_modules", ".git", "dist"]);
+
 export function listFiles(dir) {
   const out = [];
   const walk = (d) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (SKIPPED_DIRS.has(e.name)) continue;
       const full = path.join(d, e.name);
       if (e.isDirectory()) walk(full);
       else out.push(path.relative(dir, full).split(path.sep).join("/"));
@@ -79,12 +83,14 @@ export function runTool(fx, name, args, log) {
       const full = inside(fx.dir, args.filepath);
       if (!full || !fs.existsSync(full) || fs.statSync(full).isDirectory())
         return `No such file: ${args.filepath}`;
-      return fs
+      log.read?.push(String(args.filepath).replace(/^\.\//, ""));
+      const limit = fx.maxOutput ?? MAX_OUTPUT;
+      const numbered = fs
         .readFileSync(full, "utf8")
         .split("\n")
         .map((l, i) => `${i + 1}: ${l}`)
-        .join("\n")
-        .slice(0, MAX_OUTPUT);
+        .join("\n");
+      return numbered.length > limit ? `${numbered.slice(0, limit)}\n[truncated]` : numbered;
     }
     if (name === "grep_search") {
       let re;
@@ -104,7 +110,7 @@ export function runTool(fx, name, args, log) {
             if (re.test(line)) hits.push(`${f}:${i + 1}: ${line.trim().slice(0, 200)}`);
           });
       }
-      return hits.length ? hits.slice(0, 100).join("\n") : "No matches found.";
+      return hits.length ? hits.slice(0, fx.maxHits ?? 100).join("\n") : "No matches found.";
     }
     if (name === "edit_file") {
       const full = inside(fx.dir, args.filepath);
@@ -129,6 +135,7 @@ export function runTool(fx, name, args, log) {
     if (name === "run_command") {
       const command = String(args.command ?? "").trim();
       log.commands.push(command);
+      if (fx.runCommand) return fx.runCommand(command);
       const parts = command.split(/\s+/);
       if (parts[0] !== "node")
         return "Only `node <script>` and `node --test <file>` are available here.";
@@ -192,13 +199,13 @@ const MIN_GAP_MS = 1500;
 let nextSlot = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function chat(key, messages, withTools, tools = TOOLS) {
+async function chat(key, messages, withTools, tools = TOOLS, model = "vynor-auto") {
   for (let attempt = 0; attempt < 8; attempt++) {
     const now = Date.now();
     const wait = Math.max(0, nextSlot - now);
     nextSlot = Math.max(now, nextSlot) + MIN_GAP_MS;
     if (wait) await sleep(wait);
-    const r = await chatOnce(key, messages, withTools, tools);
+    const r = await chatOnce(key, messages, withTools, tools, model);
     if (r.status !== 429) return r;
     let retry = 20;
     try {
@@ -206,15 +213,15 @@ async function chat(key, messages, withTools, tools = TOOLS) {
     } catch {}
     nextSlot = Math.max(nextSlot, Date.now() + (retry + 2) * 1000);
   }
-  return chatOnce(key, messages, withTools, tools);
+  return chatOnce(key, messages, withTools, tools, model);
 }
 
-async function chatOnce(key, messages, withTools, tools = TOOLS) {
+async function chatOnce(key, messages, withTools, tools = TOOLS, model = "vynor-auto") {
   const res = await fetch(`${BASE}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: "vynor-auto",
+      model,
       messages,
       ...(withTools ? { tools } : {}),
       stream: false,
@@ -237,9 +244,11 @@ export async function runAgent(key, task, fx, opts = {}) {
     { role: "system", content: systemPrompt(fx) + (opts.systemExtra ?? "") },
     { role: "user", content: task.prompt },
   ];
-  const log = { commands: [], tools: [], toolErrors: 0 };
+  const log = { commands: [], tools: [], toolErrors: 0, read: [] };
+  const maxTurns = opts.maxTurns ?? MAX_TURNS;
+  const baseTools = opts.baseTools ?? TOOLS;
   const started = Date.now();
-  const totals = { rounds: 0, tokens: 0, cacheHit: 0 };
+  const totals = { rounds: 0, tokens: 0, cacheHit: 0, budgetHit: false };
   let meta = {};
   const done = (answer, error) => ({
     answer,
@@ -249,15 +258,18 @@ export async function runAgent(key, task, fx, opts = {}) {
     log,
     ...meta,
   });
-  for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const last = turn === MAX_TURNS - 1;
+  for (let turn = 0; turn < maxTurns; turn++) {
+    // opts.tokenCap ends an expensive run the same way the turn limit does.
+    const last = turn === maxTurns - 1 || (opts.tokenCap ? totals.tokens >= opts.tokenCap : false);
+    if (last) totals.budgetHit = true;
     const r = await chat(
       key,
       last
         ? [{ ...messages[0], content: messages[0].content + BUDGET_GUIDANCE }, ...messages.slice(1)]
         : messages,
       !last,
-      [...TOOLS, ...(opts.tools ?? [])],
+      [...baseTools, ...(opts.tools ?? [])],
+      opts.model,
     );
     if (r.status !== 200) return done("", `HTTP ${r.status} ${r.error}`);
     totals.rounds++;

@@ -1,0 +1,88 @@
+{
+  "date": "2026-10-11T06:04:32.444Z",
+  "model": "vynor-auto",
+  "rows": [
+    {
+      "id": "lg-add-provider",
+      "size": "L",
+      "type": "feature",
+      "arm": "vynor-auto",
+      "served": "deepseek-flash",
+      "tier": "heavy",
+      "pass": true,
+      "class": "pass",
+      "verified": true,
+      "refEdited": "3/3",
+      "changed": 3,
+      "rounds": 26,
+      "tokens": 592698,
+      "cacheHit": 554112,
+      "seconds": 84,
+      "toolErrors": 3,
+      "tools": {
+        "ls": 4,
+        "read_file": 13,
+        "grep_search": 3,
+        "create_file": 1,
+        "edit_file": 6,
+        "apply_diff": 2,
+        "run_command": 2
+      },
+      "why": ""
+    },
+    {
+      "id": "lg-rename-fetch",
+      "size": "L",
+      "type": "rename",
+      "arm": "vynor-auto",
+      "served": "deepseek-flash",
+      "tier": "heavy",
+      "pass": true,
+      "class": "pass",
+      "verified": true,
+      "refEdited": "17/17",
+      "changed": 17,
+      "rounds": 14,
+      "tokens": 120622,
+      "cacheHit": 104704,
+      "seconds": 54,
+      "toolErrors": 2,
+      "tools": {
+        "ls": 1,
+        "grep_search": 4,
+        "rename_symbol": 2,
+        "read_file": 5,
+        "edit_file": 5,
+        "apply_diff": 1,
+        "run_command": 2
+      },
+      "why": ""
+    },
+    {
+      "id": "lg-fim-finish",
+      "size": "L",
+      "type": "bugfix",
+      "arm": "vynor-auto",
+      "served": "deepseek-flash",
+      "tier": "heavy",
+      "pass": true,
+      "class": "pass",
+      "verified": true,
+      "refEdited": "3/3",
+      "changed": 3,
+      "rounds": 13,
+      "tokens": 71930,
+      "cacheHit": 54016,
+      "seconds": 42,
+      "toolErrors": 0,
+      "tools": {
+        "ls": 3,
+        "read_file": 7,
+        "grep_search": 4,
+        "edit_file": 3,
+        "run_command": 2
+      },
+      "why": ""
+    }
+  ]
+}

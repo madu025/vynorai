@@ -108,6 +108,40 @@ describe("VsCodeWebviewProtocol startup queue", () => {
     expect((protocol as any).pendingRequests.size).toBe(0);
   });
 
+  it("drops a second answer to a request instead of echoing it back as an error", async () => {
+    protocol.sealStartupQueue();
+    const first = protocol.request(
+      "newSession" as never,
+      undefined as never,
+      false,
+    );
+    const outbound = postMessage.mock.calls.at(-1)?.[0];
+    postMessage.mockClear();
+
+    // Three webview listeners answer the same request.
+    for (let i = 0; i < 3; i++) {
+      await receive({
+        messageId: outbound.messageId,
+        messageType: "newSession",
+        data: { done: true, status: "success", content: undefined },
+      });
+    }
+
+    await expect(first).resolves.toBeDefined();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect((protocol as any).pendingMessages).toHaveLength(0);
+  });
+
+  it("keeps answering genuinely unsupported requests", async () => {
+    protocol.sealStartupQueue();
+    await receive({
+      messageId: "u1",
+      messageType: "future/unknown",
+      data: undefined,
+    });
+    expect(postMessage).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects unsupported messages immediately after startup is sealed", async () => {
     protocol.sealStartupQueue();
 

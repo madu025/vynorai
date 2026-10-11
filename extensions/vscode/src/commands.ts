@@ -386,6 +386,13 @@ const getCommandsMap: (
       sidebar.webviewProtocol?.request("newSession", undefined);
     },
 
+    // Called by sign-in and sign-out. The calls existed but no command was
+    // registered, so the core kept the old key (or no key) until the next
+    // window reload and kept answering after "Sign out".
+    "continue.reloadConfig": async () => {
+      await configHandler.reloadConfig("Sign-in state changed");
+    },
+
     "continue.shareSession": async (sessionId: string | undefined) => {
       if (!sessionId) {
         sessionId = await sidebar.webviewProtocol?.request(

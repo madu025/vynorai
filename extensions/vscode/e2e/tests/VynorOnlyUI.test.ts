@@ -15,10 +15,17 @@ describe("VynorAI-only packaged UI", function () {
   it("does not expose BYOK onboarding or model-provider configuration", async () => {
     ({ view, driver } = await openPanel());
 
-    const modelStatus = await retry(() =>
-      view.findWebElement(By.css("[data-testid='model-select-button']")),
-    );
-    expect((await modelStatus.getText()).trim()).to.equal("VynorAI Auto");
+    // The first start after an install shows "VynorAI loading" while the
+    // configuration loads; the label is checked once it has settled, and the
+    // time it took is printed (a start that never settles still fails).
+    const startedAt = Date.now();
+    await retry(async () => {
+      const modelStatus = await view.findWebElement(
+        By.css("[data-testid='model-select-button']"),
+      );
+      expect((await modelStatus.getText()).trim()).to.equal("VynorAI Auto");
+    }, 60_000);
+    console.log(`MODEL_READY_MS ${Date.now() - startedAt}`);
 
     const chatText = await pageText(view);
     for (const removedText of [

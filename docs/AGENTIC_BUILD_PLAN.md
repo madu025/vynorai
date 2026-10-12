@@ -74,6 +74,10 @@ Still seen on this build: `multi_edit` failing with "string not found" (2 of 3 r
 without `contents` (1 run); the result of a background command changing in the history after it was sent
 ("running in the background" replaced by its exit status, 2 times in run t), which re-bills what follows it.
 
+Released as 1.2.61 on 2026-10-12. 1.2.60 had already been published earlier that day from the 13:12 build, and
+the updater installs only a higher version, so the fixes needed a new number. The 1.2.61 VSIX differs from the
+benchmarked build in the version and the build time only (GUI bundle identical, `extension.js` one line).
+
 ### The runs that tested the wrong build
 
 Runs a to r of 2026-10-12 did not test that day's changes. `npm run e2e:install-vsix` (extest) passes the folders

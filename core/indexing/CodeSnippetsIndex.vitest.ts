@@ -9,6 +9,20 @@ const index = new CodeSnippetsCodebaseIndex(testIde);
 const titles = async (file: string, code: string) =>
   (await index.getSnippetsInFile(file, code)).map((s) => s.title);
 
+describe("paths and signatures for the repo map", () => {
+  it("returns nothing for an empty workspace instead of a SQL error", async () => {
+    // No paths used to leave "WHERE path LIKE ORDER BY": view_repo_map failed
+    // with a syntax error in every empty folder.
+    await expect(
+      CodeSnippetsCodebaseIndex.getPathsAndSignatures([]),
+    ).resolves.toEqual({
+      groupedByUri: {},
+      hasMoreSnippets: false,
+      hasMoreUris: false,
+    });
+  });
+});
+
 describe("code map signatures", () => {
   it("PHP methods carry their parameters (Laravel controllers)", async () => {
     const snippets = await index.getSnippetsInFile(

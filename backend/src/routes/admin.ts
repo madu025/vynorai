@@ -1093,13 +1093,16 @@ adminRouter.get(
       .replace("T", " ");
     const rows = await dbAll<any>(
       `SELECT SUBSTR(CAST(created_at AS TEXT), 1, 10) AS day, outcome,
+              COALESCE(reason, '') AS reason,
               COUNT(*) AS count, COUNT(DISTINCT user_id) AS users,
               COALESCE(AVG(rounds), 0) AS avgRounds,
-              COALESCE(AVG(credits), 0) AS avgCredits
+              COALESCE(AVG(credits), 0) AS avgCredits,
+              COALESCE(AVG(repairs), 0) AS avgRepairs,
+              COALESCE(AVG(gates), 0) AS avgGates
        FROM task_outcomes
        WHERE created_at >= ?
-       GROUP BY day, outcome
-       ORDER BY day DESC, outcome`,
+       GROUP BY SUBSTR(CAST(created_at AS TEXT), 1, 10), outcome, COALESCE(reason, '')
+       ORDER BY day DESC, outcome, reason`,
       [since],
     ).catch(() => []);
     const total = rows.reduce((s: number, r: any) => s + Number(r.count), 0);

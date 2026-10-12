@@ -12,12 +12,23 @@ import type { GitState, WorkspaceSnapshot } from "core/workspace/types";
  * index progress percentage while indexing. Those parts are therefore
  * captured once per conversation and reused (the same idea as the git status
  * "snapshot at the start of the conversation" in Claude Code). Things that
- * rarely change and matter when they do (open folders, trust, index
- * ready/not ready) stay live.
+ * rarely change and matter when they do (open folders, trust, the index
+ * becoming ready) stay live.
+ *
+ * Measured on 14 real agent runs: the index went ready -> indexing -> ready
+ * after every file the agent wrote, and the manifest list grew when it created
+ * package.json, so the system message changed on most rounds of a build (133
+ * times in 14 runs) and each of those rounds re-billed the conversation. The
+ * index state therefore only moves forward to "ready" and stays there, and
+ * the manifest and instruction lists are the ones the conversation began with.
  */
 interface Frozen {
   activeFile: WorkspaceSnapshot["activeFile"];
   git: Map<string, GitState | undefined>;
+  manifests: WorkspaceSnapshot["manifests"];
+  instructions: WorkspaceSnapshot["instructions"];
+  /** Per root: the first state seen, replaced once by "ready". */
+  index: Map<string, WorkspaceSnapshot["index"][number]["status"]>;
 }
 
 const MAX_SESSIONS = 50;
@@ -34,7 +45,13 @@ export function freezeVolatileWorkspaceState(
 ): WorkspaceSnapshot {
   let frozen = frozenBySession.get(sessionId);
   if (!frozen) {
-    frozen = { activeFile: snapshot.activeFile, git: new Map() };
+    frozen = {
+      activeFile: snapshot.activeFile,
+      git: new Map(),
+      manifests: snapshot.manifests,
+      instructions: snapshot.instructions,
+      index: new Map(),
+    };
     frozenBySession.set(sessionId, frozen);
     while (frozenBySession.size > MAX_SESSIONS) {
       const oldest = frozenBySession.keys().next().value;
@@ -53,11 +70,22 @@ export function freezeVolatileWorkspaceState(
     ...snapshot,
     roots,
     activeFile: frozen.activeFile,
-    // Keep ready/not ready; drop the moving percentage and description.
-    index: (snapshot.index ?? []).map((entry) => ({
-      ...entry,
-      progress: undefined,
-      description: undefined,
-    })),
+    manifests: frozen.manifests,
+    instructions: frozen.instructions,
+    // Drop the moving percentage and description. The state itself changes
+    // once at most: from whatever it was first to "ready". Re-indexing one
+    // edited file afterwards is not "not ready".
+    index: (snapshot.index ?? []).map((entry) => {
+      const seen = frozen!.index.get(entry.rootId);
+      if (seen === undefined || entry.status === "ready") {
+        frozen!.index.set(entry.rootId, entry.status);
+      }
+      return {
+        ...entry,
+        status: frozen!.index.get(entry.rootId)!,
+        progress: undefined,
+        description: undefined,
+      };
+    }),
   };
 }

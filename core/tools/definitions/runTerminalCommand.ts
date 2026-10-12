@@ -23,7 +23,15 @@ function getPreferredShell(): string {
   }
 }
 
-const PLATFORM_INFO = `Choose terminal commands and scripts optimized for ${os.platform()} and ${os.arch()} and shell ${getPreferredShell()}.`;
+// The shell name alone was not enough: in 11 of 14 measured builds the model's
+// first command joined its parts with "&&", which Windows PowerShell 5.1
+// rejects, and the round was spent on the error.
+const WINDOWS_SHELL_RULES =
+  os.platform() === "win32"
+    ? ' This is Windows PowerShell 5.1: "&&" and "||" are not valid there, so separate commands with ";". Commands run in the workspace root folder.'
+    : "";
+
+const PLATFORM_INFO = `Choose terminal commands and scripts optimized for ${os.platform()} and ${os.arch()} and shell ${getPreferredShell()}.${WINDOWS_SHELL_RULES}`;
 
 const RUN_COMMAND_NOTES = `The shell is not stateful and will not remember any previous commands.\
       When a command is run in the background ALWAYS suggest using shell commands to stop it; NEVER suggest using Ctrl+C.\

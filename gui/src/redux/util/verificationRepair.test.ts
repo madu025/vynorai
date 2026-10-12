@@ -117,6 +117,33 @@ describe("verification repair gate", () => {
     expect(repair).toMatchObject({ command: "npm run build", attempt: 1 });
   });
 
+  test("asks about an older failing check once the newest has its prompt", () => {
+    const history: object[] = [
+      user("build the shop"),
+      calls(check("npm run lint", true, "no-unused-vars")),
+      calls(failedTest),
+    ];
+    expect(pendingVerificationRepair(history as any)).toMatchObject({
+      command: "npm test",
+    });
+    history.push(prompt(history), answer("I could not fix the test."));
+    // Only the newest failure was looked at: with its prompt sent, the lint
+    // failure was never asked about.
+    expect(pendingVerificationRepair(history as any)).toMatchObject({
+      command: "npm run lint",
+      attempt: 1,
+    });
+    history.push(prompt(history), answer("Lint is left as it is."));
+    expect(pendingVerificationRepair(history as any)).toBeUndefined();
+  });
+
+  test("reads the command from the model's arguments when preprocessing has none", () => {
+    const blanked = { ...failedTest, processedArgs: { resolvedPath: null } };
+    expect(
+      unresolvedVerificationFailures([user("fix"), calls(blanked)] as any),
+    ).toEqual(["npm test"]);
+  });
+
   test("keeps a failed check unverified until the same command passes", () => {
     const history = [user("fix the test"), calls(failedTest)] as any;
     expect(unresolvedVerificationFailures(history)).toEqual(["npm test"]);

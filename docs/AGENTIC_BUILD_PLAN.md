@@ -54,7 +54,76 @@ It cost about four times the quota tokens and six times the seconds of the earli
 itself. The fourth run, with the output limit (C8) and the terminal fix (C7), needed half the model calls and
 half the time, and ended by itself: 13 source files, 1,793 lines, todo list updated four times.
 
-Harness faults found on the way, none of them counted as runs: the profile had `TEST LLM` selected again after
+### Build with the fixes of the afternoon of 2026-10-12 (runs s, t, u)
+
+Three runs, Agent mode, one build, the same driver. Before each run the installed extension was compared byte for
+byte with the built VSIX (see "The runs that tested the wrong build" below).
+
+| Run | Checks   | Seconds | Model calls | Approvals | Continue | Quota tokens | System message changes | End state |
+| --- | -------- | ------- | ----------- | --------- | -------- | ------------ | ---------------------- | --------- |
+| s   | 39 of 39 | 444     | 46          | 4         | 0        | 176,459      | 0                      | completed |
+| t   | 39 of 39 | 478     | 48          | 5         | 0        | 226,752      | 0                      | completed |
+| u   | 39 of 39 | 487     | 47          | 5         | 0        | 192,336      | 1 (index became ready) | completed |
+
+Against the 14 runs of the older build read by the inspector: the system message changed 11 to 19 times per run
+there (133 in all) and 0 to 1 times here; quota tokens were 205K to 595K there and 176K to 227K here; a command
+joined with `&&` was rejected in 11 of 14 runs and in none here; files were written to `project/project/` in 5 of
+14 runs and in none here. Three runs on one task: the token figures are a first reading, not a result.
+
+Still seen on this build: `multi_edit` failing with "string not found" (2 of 3 runs); `create_new_file` called
+without `contents` (1 run); the result of a background command changing in the history after it was sent
+("running in the background" replaced by its exit status, 2 times in run t), which re-bills what follows it.
+
+### The runs that tested the wrong build
+
+Runs a to r of 2026-10-12 did not test that day's changes. `npm run e2e:install-vsix` (extest) passes the folders
+to VS Code unquoted; with the space in `D:\My Project\...` the extension went to `D:\My` and the command reported
+success. The E2E profile kept a build from 13:12, and the marker file named the new VSIX, so `run-e2e.js` did not
+object. Found by the inspector: the system message still changed 18 times a run after the fix for it.
+`scripts/sync-vsix.js` now removes the same-version folder and its registry entry and installs through the E2E VS
+Code's own CLI with quoted arguments. Before a run, compare the installed `out/extension.js` and
+`gui/assets/index.js` with the VSIX.
+
+What those runs are still good for: they are real runs of the older build, and the inspector's counts above come
+from them. Their scores (39 of 39 in g, h, i, j, l, m, p, q) say nothing about the fixes.
+
+### Run inspector
+
+`backend/scripts/bench/inspect.ts` reads the saved session and the task journal of a run and lists every anomaly:
+tool calls that failed and why, files written outside the workspace root, a check that failed but was read as
+passed, commands the shell rejected, repeated calls, automatic prompts, pauses, where the prompt prefix changed
+between two rounds, calls left pending at the end, the todo list at the end, the task's final state. It calls no
+model. Run it after every real run; a score alone found 2 faults in 18 runs.
+
+Faults found on the older build, all fixed:
+
+- `argsOf` in `agentProgress.ts` built a call's signature from `processedArgs`, which for `create_new_file` is
+  `{ resolvedPath: null }` while the file does not exist. Eleven new files in a row counted as one repeated edit
+  and a build was paused as "stalled" (run a). The signature now merges `parsedArgs` and `processedArgs`.
+- A pause round sent no tools; the backend then offered its own 12 (`VYNORAI_AGENT_TOOLS`) and the model called
+  `edit_file`, which no client can run. The backend now sends the caller's tools or none, and the pause is told as
+  the last message with the system message and tool list unchanged. A tool call on a paused round is answered,
+  not run.
+- The driver closed three runs (b, c, d) while an approval was pending or a command was running: 8 s without
+  streaming counted as the end. It now ends a run on the task journal's own `completed`/`verifying`/`failed`
+  transition, and reports "stuck" only after 180 s with no journal event and nothing on screen.
+- The system message changed on most rounds of a build: the index state went ready, indexing, ready after every
+  written file, and the manifest list grew when `package.json` was created. `groundingFreeze.ts` now lets the index
+  state move once, to "ready", and keeps the manifest and instruction lists the conversation began with.
+- In an empty folder the file tree was the single line `project/`, and the model wrote every file to
+  `project/project/`. The tree now says its first line is the workspace root and shows `(empty)`.
+- `view_repo_map` failed with a SQL syntax error in an empty workspace (`CodeSnippetsIndex.getPathsAndSignatures`).
+- The terminal tool named the shell but the model still joined commands with `&&`; on win32 the tool now says
+  that Windows PowerShell 5.1 rejects it.
+
+Open, found by the inspector: `npm test 2>&1 | tail -n 60` printed `not ok 1` and the tool reported "Command
+completed" (run p): a pipe hides the exit code, so a failing check is read as passed. A privacy placeholder was
+written into a test file (run q). A task stays in `verifying` after its checks passed when the agent's last command
+(stopping its own server) counts as a mutation (3 of 14 runs).
+
+Harness faults found on the way, none of them counted as runs: an `npm start` server left running by the agent held
+the E2E profile's log files, so the next run failed with `EBUSY` before it started (the run script now stops it); the
+profile had `TEST LLM` selected again after
 `SlashCommands` (and `VynorAI Auto` is only in the profile config after a sign-in); the sign-in does not survive
 a VS Code session, so each run signs in (`LARGE_TASK_SIGNIN=1`); the driver took 8 s without streaming for the
 end of the turn while `npm install` was running (`LargeTask.test.ts` now waits for a running command).
@@ -137,8 +206,9 @@ Open after the review:
   four arrive as `budget`. It needs a field in the backend schema.
 - The 200 action net is the last count-based stop. A build larger than the benchmark can reach it. Replacing
   it as the usual stop with a default task credit cap is a pricing decision and is not made here.
-- If `agent/task/start` fails, the turn runs with no task, so the action net and the repeat guard are off.
-  Read from the code, not reproduced.
+- If `agent/task/start` fails, the turn runs with no task. It no longer reuses the task of the prompt before,
+  and the GUI counts the prompt's tool calls to the same 200 itself. The core's repeat guard (the same call 3
+  times with no edit in between) is still off for that prompt; the stall rule is what bounds repeats there.
 - Each round awaits the next inside its own call, so a turn of several hundred rounds holds every round's
   compiled messages until it ends. Not measured.
 - Edits that undo each other with small differences are not seen as a loop.

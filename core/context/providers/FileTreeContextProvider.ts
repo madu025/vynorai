@@ -89,7 +89,10 @@ class FileTreeContextProvider extends BaseContextProvider {
         currentTree.files.push(parts.pop()!);
       }
 
-      trees.push(`${subDirTree.name}/\n${formatFileTree(subDirTree, "  ")}`);
+      // An empty folder would otherwise be one bare line, "project/", which
+      // reads as a folder inside the workspace.
+      const contents = formatFileTree(subDirTree, "  ") || "  (empty)\n";
+      trees.push(`${subDirTree.name}/\n${contents}`);
     }
 
     const renderedTree = trees.join("\n\n");
@@ -101,7 +104,9 @@ class FileTreeContextProvider extends BaseContextProvider {
 
     return [
       {
-        content: `Here is a file tree of the current workspace:\n\n${boundedTree}${truncationNotice}`,
+        // A build in an empty folder wrote every file to "project/project/":
+        // the model took the root's own name for a folder inside it.
+        content: `Here is a file tree of the current workspace. The first line of a tree is the workspace root folder itself, and tool paths are relative to it: write "src/app.js", never "<root name>/src/app.js".\n\n${boundedTree}${truncationNotice}`,
         name: "File Tree",
         description: "File Tree",
       },

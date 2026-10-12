@@ -1,13 +1,17 @@
 import { ChatHistoryItem } from "core";
 import { describe, expect, it } from "vitest";
 
+import { missingTodoGate } from "./completionGate";
+import { pendingPremortem } from "./judgment";
 import {
   diffForFiles,
   parseSideReview,
   SIDE_REVIEW_MAX_DIFF_CHARS,
   sideReviewPrompt,
+  turnChanges,
   turnEdits,
 } from "./sideReview";
+import { unverifiedEdits } from "./verificationGate";
 
 const user = (content: string, isAutoPrompt = false) =>
   ({
@@ -65,6 +69,58 @@ describe("side review", () => {
       parseSideReview("Here:\n- src/auth.ts: API key hardcoded\n- a\n- b\n- c"),
     ).toBe("- src/auth.ts: API key hardcoded\n- a\n- b");
     expect(sideReviewPrompt("x", "diff")).toMatch(/reply exactly: NONE/);
+  });
+});
+
+describe("one file, however its path is written", () => {
+  const edit = (
+    name: string,
+    filepath: string,
+    processedArgs?: object,
+  ): ChatHistoryItem => {
+    const item = editCall(name, filepath);
+    (item.toolCallStates![0] as any).processedArgs = processedArgs;
+    return item;
+  };
+
+  it("counts `src/a.ts` and `./src/a.ts` as one file in every gate", () => {
+    const history = [
+      user("fix the total"),
+      edit("single_find_and_replace", "src/a.ts"),
+      edit("single_find_and_replace", "./src/a.ts"),
+    ];
+    // Two spellings were two files: a one-file fix got the completion gate
+    // and the pre-mortem, which are for changes of two files.
+    expect(turnEdits(history).files).toEqual(["src/a.ts"]);
+    expect(unverifiedEdits(history)).toEqual({ files: ["src/a.ts"] });
+    expect(missingTodoGate(history)).toBe(false);
+    expect(pendingPremortem(history, "careful")).toBeUndefined();
+    expect([...turnChanges(history).keys()]).toEqual(["src/a.ts"]);
+  });
+
+  it("goes by the resolved URI, also for a file created in this turn", () => {
+    const uri = "file:///d%3A/shop/src/a.ts";
+    const history = [
+      user("add the cart"),
+      // A new file has no URI yet: preprocessing found nothing to resolve.
+      edit("create_new_file", "src\\a.ts", { resolvedPath: null }),
+      edit("single_find_and_replace", "./src/a.ts", { fileUri: uri }),
+      edit("multi_edit", "d:/shop/src/a.ts", { resolvedPath: { uri } }),
+      edit("multi_edit", "src/b.ts", {
+        fileUri: "file:///d%3A/shop/src/b.ts",
+      }),
+    ];
+    expect(turnEdits(history).files).toEqual(["src\\a.ts", "src/b.ts"]);
+    expect(turnChanges(history).get("src\\a.ts")?.created).toBe(true);
+  });
+
+  it("keeps two files that only differ in case apart", () => {
+    const history = [
+      user("x"),
+      edit("multi_edit", "src/Cart.ts"),
+      edit("multi_edit", "src/cart.ts"),
+    ];
+    expect(turnEdits(history).files).toEqual(["src/Cart.ts", "src/cart.ts"]);
   });
 });
 

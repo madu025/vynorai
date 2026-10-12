@@ -1,4 +1,5 @@
 import { AssistantChatMessage, ChatHistoryItem, PromptLog } from "core";
+import { MAX_AUTONOMOUS_STEPS } from "core/agent/guardErrors";
 import { serializeTool } from "core/tools";
 import { runTerminalCommandTool } from "core/tools/definitions";
 import { describe, expect, it, vi } from "vitest";
@@ -162,12 +163,34 @@ describe("a turn with no round cap", () => {
     await (store.dispatch as any)(streamNormalInput({}));
 
     expect(messenger.llmStreamChat).toHaveBeenCalledTimes(1);
-    expect(toolsSent(messenger)).toHaveLength(0);
+    // The paused round keeps its tools (the request is the same as the round
+    // before, so the prompt cache holds, and the model is not told its tools
+    // were switched off). The pause is told as the last message.
+    expect(toolsSent(messenger).length).toBeGreaterThan(0);
     expect(session(store).toolBudgetPauseReason).toBe("stalled");
     expect(session(store).toolBudgetPausedAfter).toBeDefined();
-    // A paused turn is not sent back by a gate.
-    expect(autoPrompts(store)).toHaveLength(0);
+    // A paused turn is not sent back by a gate: the only automatic prompt is
+    // the pause itself.
+    expect(autoPrompts(store)).toHaveLength(1);
+    expect(autoPrompts(store)[0]).toMatch(/^\[paused\] /);
     expect(session(store).isStreaming).toBe(false);
+  });
+
+  it("pauses at the action limit when the prompt has no task to count for it", async () => {
+    // No task here (its start failed), so nothing in the core counts calls.
+    const { store, messenger } = storeWith(
+      Array.from({ length: MAX_AUTONOMOUS_STEPS }, (_, i) =>
+        call("create_new_file", { filepath: `src/f${i}.js` }),
+      ),
+    );
+    messenger.llmStreamChat = replies("Done so far: 200 files.");
+
+    await (store.dispatch as any)(streamNormalInput({}));
+
+    expect(messenger.llmStreamChat).toHaveBeenCalledTimes(1);
+    expect(session(store).toolBudgetPauseReason).toBe("actions");
+    expect(session(store).toolBudgetPausedAfter).toBeDefined();
+    expect(autoPrompts(store)[0]).toMatch(/^\[paused\] /);
   });
 
   it("tells the model once about a check that keeps failing, without pausing", async () => {

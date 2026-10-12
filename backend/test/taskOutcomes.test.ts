@@ -79,6 +79,31 @@ test("task outcomes: stored as counts only, validated, retained 180 days", async
     assert.equal(dump.includes("SECRET PROMPT TEXT"), false);
     assert.equal(dump.includes("secret/project"), false);
 
+    // A paused task says why, and how often the harness sent the agent back.
+    assert.equal(rows[0].reason, null);
+    const paused = await post({
+      outcome: "budget",
+      mode: "agent",
+      rounds: 40,
+      reason: "same_failure",
+      repairs: 2,
+      gates: 3,
+    });
+    assert.equal(paused.status, 200);
+    const pausedRows = await dbm.dbAll<any>(
+      "SELECT reason, repairs, gates FROM task_outcomes WHERE outcome = 'budget'",
+    );
+    assert.deepEqual(
+      pausedRows.map((r) => ({ ...r })),
+      [{ reason: "same_failure", repairs: 2, gates: 3 }],
+    );
+    // The reason is a short code, never free text.
+    const freeText = await post({
+      outcome: "budget",
+      reason: "C:/secret/project failed",
+    });
+    assert.equal(freeText.status, 400);
+
     const bad = await post({ outcome: "hacked" });
     assert.equal(bad.status, 400);
     const noAuth = await post({ outcome: "completed" }, false);

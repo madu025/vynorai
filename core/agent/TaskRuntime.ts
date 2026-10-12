@@ -4,6 +4,7 @@ import * as path from "path";
 
 import { Mutex } from "async-mutex";
 
+import { MAX_AUTONOMOUS_STEPS } from "./guardErrors";
 import { TaskJournal } from "./TaskJournal";
 import { classifyDelegatedToolCall } from "./SubagentToolPolicy";
 import { hasPassedRequiredVerification } from "./verification";
@@ -61,12 +62,7 @@ const DEFAULT_BUDGET: AgentTaskBudget = {
 };
 
 const MAX_IMPLEMENTATION_SUBAGENTS = 8;
-/**
- * Runaway-loop safety net per task. The GUI pauses a turn when it stops
- * making progress (gui/src/redux/util/agentProgress.ts); this only catches a
- * loop that still looks productive. "Continue" starts a new task.
- */
-export const MAX_AUTONOMOUS_STEPS = 200;
+export { MAX_AUTONOMOUS_STEPS };
 
 function canonicalScopePath(value: string): string {
   const normalized = value.trim().replace(/\\/g, "/").replace(/^\.\//, "");

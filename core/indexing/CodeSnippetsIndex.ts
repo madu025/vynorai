@@ -442,11 +442,20 @@ export class CodeSnippetsCodebaseIndex implements CodebaseIndex {
     hasMoreSnippets: boolean;
     hasMoreUris: boolean;
   }> {
-    const db = await SqliteDb.get();
-    await CodeSnippetsCodebaseIndex._createTables(db);
-
     const endIndex = uriOffset + uriBatchSize;
     const uriBatch = workspaceDirs.slice(uriOffset, endIndex);
+    // No paths (an empty workspace) left "WHERE path LIKE ORDER BY", and the
+    // repo map tool failed with a SQL syntax error.
+    if (uriBatch.length === 0) {
+      return {
+        groupedByUri: {},
+        hasMoreSnippets: false,
+        hasMoreUris: endIndex < workspaceDirs.length,
+      };
+    }
+
+    const db = await SqliteDb.get();
+    await CodeSnippetsCodebaseIndex._createTables(db);
 
     const likePatterns = uriBatch.map((dir) => `${dir}%`);
 

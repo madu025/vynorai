@@ -2,6 +2,9 @@ import { ChatHistoryItem } from "core";
 import { BuiltInToolNames } from "core/tools/builtIn";
 import { parseTodoArgs, TodoItem } from "core/tools/definitions/updateTodoList";
 
+import { jobStartIndex } from "./agentProgress";
+import { isFinishedEdit } from "./sideReview";
+
 export const TODO_GATE_MARKER = "[todo-gate]";
 
 /**
@@ -14,41 +17,55 @@ export const MAX_TODO_GATES = 3;
 
 /**
  * The agent's own todo items that are still open when it stops, taken from
- * the latest todo list of the current prompt. Undefined when there is no list
- * for this prompt, nothing is open, the limit of reminders is reached, or the last reminder was answered
- * without a tool call.
+ * the latest todo list of the current job. Undefined when the job has no
+ * list, nothing is open, the limit of reminders is reached, or the last
+ * reminder was answered without working on the list.
+ *
+ * The list is looked up over the whole job, so a list written before a pause
+ * still counts after "Continue". The reminders are counted per prompt:
+ * Continue starts them again, like the other counts.
  */
 export function openTodoGate(
   history: ChatHistoryItem[],
 ): { open: TodoItem[]; total: number } | undefined {
-  let start = 0;
+  let promptStart = 0;
   let gates = 0;
   for (let i = history.length - 1; i >= 0; i--) {
     const { message, isAutoPrompt } = history[i];
     if (message.role !== "user") continue;
     if (!isAutoPrompt) {
-      start = i + 1;
+      promptStart = i + 1;
       break;
     }
     const content = typeof message.content === "string" ? message.content : "";
     if (content.startsWith(TODO_GATE_MARKER)) gates++;
   }
   if (gates >= MAX_TODO_GATES) return undefined;
-  // The model answered the last reminder in words and called no tool: it has
-  // said why the items stay open, and the same reminder again would get the
-  // same answer.
+  // The model answered the last reminder in words: it has said why the items
+  // stay open, and the same reminder again would get the same answer. Only
+  // work on the list brings another: the list was updated, or a file was
+  // edited. A read or a check made later for another prompt (the pre-mortem,
+  // the verification gate) is not work on the list.
   if (gates > 0) {
     let acted = false;
-    for (let i = history.length - 1; i >= start; i--) {
+    for (let i = history.length - 1; i >= promptStart; i--) {
       const { message, isAutoPrompt } = history[i];
       const content =
         typeof message.content === "string" ? message.content : "";
       if (isAutoPrompt && content.startsWith(TODO_GATE_MARKER)) break;
-      if ((history[i].toolCallStates ?? []).length > 0) acted = true;
+      if (
+        (history[i].toolCallStates ?? []).some(
+          (call) =>
+            call.toolCall.function.name === BuiltInToolNames.UpdateTodoList ||
+            isFinishedEdit(call),
+        )
+      )
+        acted = true;
     }
     if (!acted) return undefined;
   }
 
+  const start = jobStartIndex(history) + 1;
   for (let i = history.length - 1; i >= start; i--) {
     const calls = history[i].toolCallStates ?? [];
     for (let j = calls.length - 1; j >= 0; j--) {

@@ -4,15 +4,11 @@ import { BuiltInToolNames } from "core/tools/builtIn";
 import {
   classifyVerificationCommand,
   commandFailed,
+  commandOf,
 } from "./verificationEvidence";
 
 export const VERIFICATION_REPAIR_MARKER = "[verification-repair]";
 const MAX_REPAIR_ATTEMPTS = 2;
-
-function commandOf(args: unknown): string | undefined {
-  const command = (args as { command?: unknown } | undefined)?.command;
-  return typeof command === "string" ? command : undefined;
-}
 
 export function verificationFailed(call: {
   status?: string;
@@ -61,7 +57,7 @@ function failingChecks(history: ChatHistoryItem[]): Map<string, FailingCheck> {
   const failing = new Map<string, FailingCheck>();
   for (let index = start; index < history.length; index++) {
     for (const call of history[index].toolCallStates ?? []) {
-      const command = commandOf(call.processedArgs ?? call.parsedArgs);
+      const command = commandOf(call);
       if (
         call.toolCall.function.name !== BuiltInToolNames.RunTerminalCommand ||
         !command ||
@@ -105,36 +101,41 @@ export function unresolvedVerificationFailures(
  * to a prompt does not bring another. After MAX_REPAIR_ATTEMPTS prompts for
  * the same failing check the next one asks for a blocker report and is the
  * last.
+ *
+ * Every failing check gets its prompts, the most recent failure first. Only
+ * the most recent one used to be looked at, so once it had its prompt an
+ * older check that was still failing was never asked about.
  */
 export function pendingVerificationRepair(
   history: ChatHistoryItem[],
 ): VerificationRepair | undefined {
-  const [command, latest] =
-    [...failingChecks(history)].sort((a, b) => b[1].index - a[1].index)[0] ??
-    [];
-  if (command === undefined || latest === undefined) return undefined;
-
-  const quoted = `\`${command}\``;
-  const prompts: number[] = [];
-  for (let index = latest.since; index < history.length; index++) {
-    const item = history[index];
-    if (
-      item.isAutoPrompt &&
-      typeof item.message.content === "string" &&
-      item.message.content.startsWith(VERIFICATION_REPAIR_MARKER) &&
-      item.message.content.includes(quoted)
-    )
-      prompts.push(index);
+  const newestFirst = [...failingChecks(history)].sort(
+    (a, b) => b[1].index - a[1].index,
+  );
+  for (const [command, latest] of newestFirst) {
+    const quoted = `\`${command}\``;
+    const prompts: number[] = [];
+    for (let index = latest.since; index < history.length; index++) {
+      const item = history[index];
+      if (
+        item.isAutoPrompt &&
+        typeof item.message.content === "string" &&
+        item.message.content.startsWith(VERIFICATION_REPAIR_MARKER) &&
+        item.message.content.includes(quoted)
+      )
+        prompts.push(index);
+    }
+    // Already asked about this failure, or the blocker report was requested.
+    if (prompts.length > 0 && prompts.at(-1)! > latest.index) continue;
+    if (prompts.length > MAX_REPAIR_ATTEMPTS) continue;
+    return {
+      command,
+      output: outputExcerpt(latest.output),
+      attempt: prompts.length + 1,
+      limitReached: prompts.length >= MAX_REPAIR_ATTEMPTS,
+    };
   }
-  // Already asked about this failure, or the blocker report was requested.
-  if (prompts.length > 0 && prompts.at(-1)! > latest.index) return undefined;
-  if (prompts.length > MAX_REPAIR_ATTEMPTS) return undefined;
-  return {
-    command,
-    output: outputExcerpt(latest.output),
-    attempt: prompts.length + 1,
-    limitReached: prompts.length >= MAX_REPAIR_ATTEMPTS,
-  };
+  return undefined;
 }
 
 export function verificationRepairPrompt(repair: VerificationRepair): string {

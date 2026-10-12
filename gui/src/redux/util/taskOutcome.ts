@@ -1,7 +1,12 @@
 import type { ChatHistoryItem } from "core";
 import type { IIdeMessenger } from "../../context/IdeMessenger";
+import { PAUSE_MARKER } from "./agentProgress";
 import { turnEdits } from "./sideReview";
-import { unresolvedVerificationFailures } from "./verificationRepair";
+import { STREAM_RECOVERY_MARKER } from "./streamRecovery";
+import {
+  unresolvedVerificationFailures,
+  VERIFICATION_REPAIR_MARKER,
+} from "./verificationRepair";
 
 export type TaskOutcomeKind =
   | "completed"
@@ -19,6 +24,35 @@ export interface TaskOutcomeInfo {
   credits?: number | null;
   edited?: boolean;
   verified?: boolean;
+  /** Why a paused task paused ("stalled", "same_failure", ...). */
+  reason?: string;
+  /** Verification-repair prompts sent in this prompt. */
+  repairs?: number;
+  /** Other automatic prompts (todo, completion, verification, pre-mortem). */
+  gates?: number;
+}
+
+/**
+ * How often the harness sent the agent back in the current prompt. A network
+ * recovery is not a gate and is not counted.
+ */
+export function autoPromptCounts(history: ChatHistoryItem[]): {
+  repairs: number;
+  gates: number;
+} {
+  let repairs = 0;
+  let gates = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const { message, isAutoPrompt } = history[i];
+    if (message.role !== "user") continue;
+    if (!isAutoPrompt) break;
+    const content = typeof message.content === "string" ? message.content : "";
+    if (content.startsWith(STREAM_RECOVERY_MARKER)) continue;
+    if (content.startsWith(PAUSE_MARKER)) continue;
+    if (content.startsWith(VERIFICATION_REPAIR_MARKER)) repairs++;
+    else gates++;
+  }
+  return { repairs, gates };
 }
 
 /**
@@ -59,6 +93,9 @@ export function reportTaskOutcome(
         typeof info.credits === "number" ? Math.round(info.credits) : null,
       edited: info.edited,
       verified: info.verified,
+      reason: info.reason,
+      repairs: info.repairs,
+      gates: info.gates,
     });
   } catch {
     // Reporting must never affect the chat.

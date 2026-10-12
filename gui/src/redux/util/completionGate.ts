@@ -1,38 +1,29 @@
 import { ChatHistoryItem } from "core";
 import { BuiltInToolNames } from "core/tools/builtIn";
 
+import { jobStartIndex } from "./agentProgress";
+import { editedFiles } from "./sideReview";
+
 export const COMPLETION_GATE_MARKER = "[completion-gate]";
 
-const EDIT_TOOLS = new Set<string>([
-  BuiltInToolNames.EditExistingFile,
-  BuiltInToolNames.SingleFindAndReplace,
-  BuiltInToolNames.MultiEdit,
-  BuiltInToolNames.CreateNewFile,
-]);
-
 /**
- * The model stopped with edits but no todo list for this prompt. It started
+ * The model stopped with edits but no todo list for this job. It started
  * working without planning, so nothing tracks whether the job is complete.
  * Fires at most once; after that the model has a todo list and the todoGate
  * handles open items.
  *
  * Only fires when 2+ distinct files were edited — a single-file fix does not
  * need a formal plan, and forcing one adds an unnecessary round.
+ *
+ * Looked at over the whole job: after "Continue" the list written before the
+ * pause is still the job's list, and no second plan is asked for.
  */
 export function missingTodoGate(history: ChatHistoryItem[]): boolean {
-  let start = 0;
   let gateCount = 0;
   let hasTodo = false;
-  const editedFiles = new Set<string>();
+  const calls: NonNullable<ChatHistoryItem["toolCallStates"]> = [];
 
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].message.role === "user" && !history[i].isAutoPrompt) {
-      start = i + 1;
-      break;
-    }
-  }
-
-  for (let i = start; i < history.length; i++) {
+  for (let i = jobStartIndex(history) + 1; i < history.length; i++) {
     const { message, isAutoPrompt } = history[i];
 
     if (
@@ -45,16 +36,15 @@ export function missingTodoGate(history: ChatHistoryItem[]): boolean {
 
     for (const call of history[i].toolCallStates ?? []) {
       if (call.status !== "done") continue;
-      const name = call.toolCall.function.name;
-      if (name === BuiltInToolNames.UpdateTodoList) hasTodo = true;
-      if (EDIT_TOOLS.has(name)) {
-        const filepath = (call.parsedArgs as { filepath?: unknown })?.filepath;
-        editedFiles.add(typeof filepath === "string" ? filepath : `anon-${i}`);
-      }
+      if (call.toolCall.function.name === BuiltInToolNames.UpdateTodoList)
+        hasTodo = true;
+      calls.push(call);
     }
   }
 
-  return !hasTodo && editedFiles.size >= 2 && gateCount === 0;
+  // One file is one file however its path was written.
+  const { files, unnamed } = editedFiles(calls);
+  return !hasTodo && files.length + unnamed >= 2 && gateCount === 0;
 }
 
 export function completionGatePrompt(userRequest: string): string {

@@ -265,6 +265,9 @@ export type ToCoreFromIdeOrWebviewProtocol = {
       credits?: number | null;
       edited?: boolean;
       verified?: boolean;
+      reason?: string;
+      repairs?: number;
+      gates?: number;
       client?: string;
     },
     void,

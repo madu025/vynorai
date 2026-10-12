@@ -79,6 +79,14 @@ export const TaskOutcomeBodySchema = z.object({
   credits: z.number().int().min(0).max(100_000_000).nullable().optional(),
   edited: z.boolean().optional(),
   verified: z.boolean().optional(),
+  // Why a paused task paused: a short code, never free text.
+  reason: z
+    .string()
+    .max(24)
+    .regex(/^[a-z_]+$/)
+    .optional(),
+  repairs: z.number().int().min(0).max(1000).optional(),
+  gates: z.number().int().min(0).max(1000).optional(),
   client: z.string().max(64).optional(),
 });
 
@@ -374,7 +382,7 @@ proxyRouter.post(
     const user = (req as any).user;
     const b = req.body;
     await dbRun(
-      "INSERT INTO task_outcomes (id, user_id, outcome, mode, rounds, credits, edited, verified, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO task_outcomes (id, user_id, outcome, mode, rounds, credits, edited, verified, client, reason, repairs, gates) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         uuidv4(),
         user.id,
@@ -385,6 +393,9 @@ proxyRouter.post(
         b.edited ? 1 : 0,
         b.verified ? 1 : 0,
         b.client ?? null,
+        b.reason ?? null,
+        b.repairs ?? null,
+        b.gates ?? null,
       ],
     );
     res.json({ ok: true });

@@ -14,6 +14,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { By, WebView } from "vscode-extension-tester";
 import {
+  approvalCount,
   creditsUsed,
   isStreaming,
   lastReply,
@@ -29,6 +30,60 @@ import {
 
 const LIMIT_MS = Number(process.env.LARGE_TASK_LIMIT_MIN ?? 25) * 60_000;
 const QUIET_MS = 8_000;
+/** Nothing in the journal and nothing on screen for this long: the turn hung. */
+const STUCK_MS = 180_000;
+
+/**
+ * The newest event of the newest task journal written since `since`. The
+ * journal is the extension's own record of where the turn is; the screen alone
+ * cannot tell "finished" from "a command is running" or "an approval is
+ * pending" (three runs were closed by the driver in those states).
+ */
+function lastJournalEvent(
+  since: number,
+): { type: string; state?: string; kind?: string; at: number } | undefined {
+  try {
+    const dir = path.join(
+      path.resolve(process.env.CONTINUE_GLOBAL_DIR ?? ""),
+      "agent-tasks",
+    );
+    const newest = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".events.jsonl"))
+      .map((f) => ({ f, t: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .filter((x) => x.t >= since)
+      .sort((a, b) => b.t - a.t)[0];
+    if (!newest) return undefined;
+    const lines = fs
+      .readFileSync(path.join(dir, newest.f), "utf8")
+      .trim()
+      .split("\n");
+    const event = JSON.parse(lines[lines.length - 1]);
+    return {
+      type: event.type,
+      state: event.data?.state,
+      kind: event.data?.kind,
+      at: event.createdAt,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** The extension ended the turn: finalisation wrote one of these states. */
+function journalSaysTurnEnded(
+  event: { type: string; state?: string; kind?: string } | undefined,
+): boolean {
+  // A task that stays in "verifying" (its checks are older than its last
+  // command) ends on the response verification: the transition that follows
+  // is verifying -> verifying, which the runtime refuses and does not record.
+  if (event?.type === "verification.recorded" && event.kind === "response")
+    return true;
+  return (
+    event?.type === "task.transitioned" &&
+    ["completed", "verifying", "failed", "canceled"].includes(event.state ?? "")
+  );
+}
 
 /** A frozen window answers nothing; never wait on it forever. */
 function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
@@ -94,6 +149,8 @@ describe("VynorAI large task through the extension", function () {
     let approvals = 0;
     let continues = 0;
     let idleSince = 0;
+    let journalSignature = "";
+    let journalChangedAt = Date.now();
     let everStreamed = false;
     let end = "time limit";
     const log = (m: string) =>
@@ -137,15 +194,29 @@ describe("VynorAI large task through the extension", function () {
               )
               .catch(() => [])
           ).length > 0;
-        if (streaming || pressed || commandRunning) {
+        // A tool call waiting for its approval is not an ended turn either.
+        const waiting = await approvalCount(view).catch(() => 0);
+        if (streaming || pressed || commandRunning || waiting > 0) {
           everStreamed ||= streaming;
           idleSince = 0;
           continue;
         }
         if (!everStreamed && Date.now() - started < 30_000) continue;
         idleSince ||= Date.now();
-        if (Date.now() - idleSince >= QUIET_MS) {
+        const latest = lastJournalEvent(started - 5_000);
+        const signature = latest ? `${latest.type}:${latest.at}` : "";
+        if (signature !== journalSignature) {
+          journalSignature = signature;
+          journalChangedAt = Date.now();
+        }
+        const idleFor = Date.now() - idleSince;
+        if (journalSaysTurnEnded(latest) && idleFor >= QUIET_MS) {
           end = "finished";
+          break;
+        }
+        if (idleFor >= STUCK_MS && Date.now() - journalChangedAt >= STUCK_MS) {
+          end =
+            `stuck after ${latest?.type ?? "no journal"} ${latest?.state ?? ""}`.trim();
           break;
         }
       }

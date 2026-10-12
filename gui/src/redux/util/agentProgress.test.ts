@@ -1,5 +1,9 @@
 import type { ChatHistoryItem } from "core";
-import { REPEAT_LIMIT_ERROR, STEP_LIMIT_ERROR } from "core/agent/guardErrors";
+import {
+  MAX_AUTONOMOUS_STEPS,
+  REPEAT_LIMIT_ERROR,
+  STEP_LIMIT_ERROR,
+} from "core/agent/guardErrors";
 import { describe, expect, it } from "vitest";
 import {
   failureFingerprint,
@@ -53,6 +57,15 @@ const round = (
 const write = (n: number) =>
   round("create_new_file", { filepath: `src/f${n}.js` });
 const read = (n: number) => round("read_file", { filepath: `src/f${n}.js` });
+/**
+ * A new file as the session really holds it: preprocessing leaves only
+ * `resolvedPath`, and that is null because the file does not exist yet.
+ */
+const writeNew = (n: number) => {
+  const item = write(n);
+  (item.toolCallStates![0] as any).processedArgs = { resolvedPath: null };
+  return item;
+};
 /** What the terminal tool returns: the result is in `status`, not in the text. */
 const run = (command: string, failed: boolean, content: string) =>
   round("run_terminal_command", { command }, "done", [
@@ -78,6 +91,16 @@ describe("progressCounters", () => {
     const history = [
       user("build a shop"),
       ...Array.from({ length: 120 }, (_, i) => write(i)),
+    ];
+    expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
+    expect(progressPause(history)).toBeUndefined();
+  });
+
+  it("tells new files apart when preprocessing left only a null path", () => {
+    // Seen in a shop build: eleven files written in a row, then "stalled".
+    const history = [
+      user("build a shop"),
+      ...Array.from({ length: 20 }, (_, i) => writeNew(i)),
     ];
     expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
     expect(progressPause(history)).toBeUndefined();
@@ -117,6 +140,16 @@ describe("progressCounters", () => {
     expect(
       progressPause([user("fix checkout"), ...reads(NO_CHANGE_LIMIT)]),
     ).toBe("no_change");
+  });
+
+  it("does not call a plan-mode investigation 'no change'", () => {
+    // Plan mode has no edit tools, so nothing there can ever count as a change.
+    const reads = Array.from({ length: NO_CHANGE_LIMIT + 5 }, (_, i) =>
+      read(i),
+    );
+    const history = [user("plan the checkout rewrite"), ...reads];
+    expect(progressPause(history, "plan")).toBeUndefined();
+    expect(progressPause(history, "agent")).toBe("no_change");
   });
 
   it("counts an edit, a check turning green and a closed todo as change", () => {
@@ -312,5 +345,26 @@ describe("the core's guard refusals", () => {
     ]);
     expect(progressPause([user("build"), write(1), refused])).toBe("actions");
     expect(progressPause([user("build"), write(1)])).toBeUndefined();
+  });
+
+  it("are replaced by a count here when the prompt has no task", () => {
+    // A failed task start leaves no task, so no call is authorized by the
+    // core and its action net never fires.
+    const build = (calls: number) => [
+      user("old prompt"),
+      write(0),
+      user("build"),
+      ...Array.from({ length: calls }, (_, i) => write(i + 1)),
+    ];
+    expect(progressPause(build(MAX_AUTONOMOUS_STEPS), "agent", false)).toBe(
+      "actions",
+    );
+    expect(
+      progressPause(build(MAX_AUTONOMOUS_STEPS - 1), "agent", false),
+    ).toBeUndefined();
+    // With a task the core counts; the GUI does not pause on its own count.
+    expect(
+      progressPause(build(MAX_AUTONOMOUS_STEPS + 5), "agent", true),
+    ).toBeUndefined();
   });
 });

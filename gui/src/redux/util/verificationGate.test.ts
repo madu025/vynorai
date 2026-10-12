@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { finishedOutcome } from "./taskOutcome";
+import { pendingVerificationRepair } from "./verificationRepair";
 import {
   MAX_VERIFICATION_GATES,
   unverifiedEdits,
@@ -135,6 +137,69 @@ describe("unverifiedEdits", () => {
     }
     history.push(tools(edit("last.ts")));
     expect(unverifiedEdits(history)).toBeUndefined();
+  });
+});
+
+describe("one definition of a check for both gates", () => {
+  const failed = (command: string) => ({
+    message: { role: "assistant", content: "" },
+    contextItems: [],
+    toolCallStates: [
+      {
+        toolCallId: "run",
+        status: "done",
+        parsedArgs: { command },
+        output: [
+          {
+            name: "Terminal",
+            description: "Terminal command output",
+            status: "Command failed with exit code 1",
+            content: "not ok 1 - cart total",
+          },
+        ],
+        toolCall: {
+          id: "run",
+          type: "function",
+          function: { name: "run_terminal_command", arguments: "{}" },
+        },
+      },
+    ],
+  });
+  const answer = { message: { role: "assistant", content: "All done." } };
+
+  it("sends a failing `node --test` to the repair gate and reports the task unverified", () => {
+    const history = [
+      user("build the shop"),
+      tools(edit("shop.js")),
+      failed("node --test"),
+      answer,
+    ] as any;
+    // The verification gate took this run for a check and the repair gate
+    // did not, so the turn ended as "completed" with its test failing.
+    expect(pendingVerificationRepair(history)).toMatchObject({
+      command: "node --test",
+      attempt: 1,
+    });
+    expect(finishedOutcome(history).outcome).toBe("completed_unverified");
+    // A check that failed has verified nothing.
+    expect(unverifiedEdits(history)).toEqual({ files: ["shop.js"] });
+  });
+
+  it("is not satisfied by a file command that names a test or build folder", () => {
+    for (const command of ["ls tests", "mkdir build", "cat eslint.config.js"])
+      expect(
+        unverifiedEdits([user("x"), tools(edit("a.ts")), tools(run(command))]),
+      ).toEqual({ files: ["a.ts"] });
+  });
+
+  it("counts one file once however its path is written", () => {
+    expect(
+      unverifiedEdits([
+        user("fix"),
+        tools(edit("src/a.ts")),
+        tools(edit("./src/a.ts")),
+      ]),
+    ).toEqual({ files: ["src/a.ts"] });
   });
 });
 

@@ -74,6 +74,42 @@ describe("grounding block is stable across rounds (cache-safe)", () => {
     expect(ready).not.toBe(first);
   });
 
+  it("does not change when the agent's own edits re-index a file or add a manifest", () => {
+    // Seen in 14 of 14 real builds: ready -> indexing -> ready after every
+    // written file, and "Detected manifests" growing when package.json was
+    // created. Each change re-billed the whole conversation.
+    const ready = snapshot({
+      index: [{ rootId: "r1", status: "ready" } as any],
+    });
+    const first = block("s1", ready);
+    for (const status of ["indexing", "ready", "loading", "waiting"] as const) {
+      expect(
+        block(
+          "s1",
+          snapshot({
+            index: [{ rootId: "r1", status, progress: 40 } as any],
+            manifests: [{ rootId: "r1", uri: "package.json" }] as any,
+            instructions: [{ rootId: "r1", uri: "AGENTS.md" }] as any,
+          }),
+        ),
+      ).toBe(first);
+    }
+  });
+
+  it("changes once when the index becomes ready, and not before", () => {
+    const first = block("s1", snapshot());
+    const waiting = snapshot({
+      index: [{ rootId: "r1", status: "loading" } as any],
+    });
+    expect(block("s1", waiting)).toBe(first);
+    const ready = block(
+      "s1",
+      snapshot({ index: [{ rootId: "r1", status: "ready" } as any] }),
+    );
+    expect(ready).not.toBe(first);
+    expect(ready).toContain("app: ready");
+  });
+
   it("a new conversation takes a fresh snapshot", () => {
     block("s1", snapshot());
     const changed = snapshot({

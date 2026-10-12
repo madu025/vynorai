@@ -530,6 +530,14 @@ CREATE TABLE IF NOT EXISTS task_outcomes (
 CREATE INDEX IF NOT EXISTS idx_task_outcomes_created ON task_outcomes (created_at);
 `,
   },
+  {
+    version: "027_task_outcome_reason",
+    sql: `
+ALTER TABLE task_outcomes ADD COLUMN IF NOT EXISTS reason VARCHAR(24);
+ALTER TABLE task_outcomes ADD COLUMN IF NOT EXISTS repairs INTEGER;
+ALTER TABLE task_outcomes ADD COLUMN IF NOT EXISTS gates INTEGER;
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

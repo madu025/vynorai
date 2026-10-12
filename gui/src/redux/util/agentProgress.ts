@@ -1,7 +1,12 @@
 import { ChatHistoryItem, ContextItem } from "core";
-import { REPEAT_LIMIT_ERROR, STEP_LIMIT_ERROR } from "core/agent/guardErrors";
+import {
+  MAX_AUTONOMOUS_STEPS,
+  REPEAT_LIMIT_ERROR,
+  STEP_LIMIT_ERROR,
+} from "core/agent/guardErrors";
 import { BuiltInToolNames } from "core/tools/builtIn";
 import { parseTodoArgs } from "core/tools/definitions/updateTodoList";
+import { renderChatMessage } from "core/util/messageContent";
 
 import { classifyVerificationCommand } from "./verificationEvidence";
 import { verificationFailed } from "./verificationRepair";
@@ -25,7 +30,8 @@ import { verificationFailed } from "./verificationRepair";
  *   SAME_FAILURE_NUDGE the model is told once and may change approach;
  * - actions: the core's per-task action net refused a call (a runaway guard,
  *   see MAX_AUTONOMOUS_STEPS); the turn pauses once instead of failing call
- *   after call.
+ *   after call. A prompt whose task could not be started has no such net in
+ *   the core, so its tool calls are counted here to the same limit.
  *
  * An answer with no tool call is neither progress nor a stalled round: it
  * ends the turn unless a gate sends the model back, and each gate is bounded.
@@ -54,6 +60,27 @@ const EDIT_TOOLS = new Set<string>([
 export const CONTINUE_TASK_PROMPT =
   "Continue the task from where you stopped. Follow the remaining steps you listed.";
 
+/**
+ * Index of the user message that opened the current job, or -1.
+ *
+ * "Continue" after a pause is sent as a real user message, so it starts a new
+ * prompt: the stall and same-failure counts begin again (see currentPrompt).
+ * It is not a new request, though. What belongs to the job (its todo list,
+ * its goal, the roles and memories chosen for it) is looked up from here;
+ * from the Continue message on, the list from before the pause was invisible
+ * and the turn could finish with it open.
+ */
+export function jobStartIndex(history: ChatHistoryItem[]): number {
+  let start = -1;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const { message, isAutoPrompt } = history[i];
+    if (message.role !== "user" || isAutoPrompt) continue;
+    start = i;
+    if (renderChatMessage(message).trim() !== CONTINUE_TASK_PROMPT) break;
+  }
+  return start;
+}
+
 export const SAME_FAILURE_MARKER = "[same-failure]";
 
 const ACTION_LIMIT_MESSAGE =
@@ -73,7 +100,48 @@ const PAUSE_CAUSE: Record<ProgressPause, string> = {
 
 /** Appended to the system message of the one round that reports a pause. */
 export function pauseGuidance(reason: ProgressPause): string {
-  return `\n\nPAUSED\n${PAUSE_CAUSE[reason]} ${PAUSE_REPLY}`;
+  return `${PAUSE_CAUSE[reason]} ${PAUSE_REPLY}`;
+}
+
+/**
+ * A pause is told to the model as the last message of the history. The system
+ * message and the tool list stay exactly as they were: changing them for one
+ * round re-billed the whole conversation, and a request without tools made
+ * the model report that the user had switched its tools off.
+ */
+export const PAUSE_MARKER = "[paused]";
+
+export function pausePrompt(guidance: string): string {
+  return `${PAUSE_MARKER} ${guidance.trim()}`;
+}
+
+/** What a tool call gets when the model makes one on a paused round. */
+export const PAUSED_CALL_MESSAGE =
+  "Not run: this task is paused. Do not call tools. Reply now with what is done, what is left and what blocks you.";
+
+function isPausePrompt(item: ChatHistoryItem): boolean {
+  return (
+    item.message.role === "user" &&
+    !!item.isAutoPrompt &&
+    typeof item.message.content === "string" &&
+    item.message.content.startsWith(PAUSE_MARKER)
+  );
+}
+
+/** The current prompt was already told it is paused. */
+export function pausePromptSent(history: ChatHistoryItem[]): boolean {
+  return currentPrompt(history).some(isPausePrompt);
+}
+
+/** A tool call was already refused on a paused round of the current prompt. */
+export function pausedCallRefused(history: ChatHistoryItem[]): boolean {
+  return currentPrompt(history).some((item) =>
+    (item.toolCallStates ?? []).some(
+      (call) =>
+        call.status === "errored" &&
+        outputText(call.output).includes(PAUSED_CALL_MESSAGE),
+    ),
+  );
 }
 
 /**
@@ -132,8 +200,17 @@ function currentPrompt(history: ChatHistoryItem[]): ChatHistoryItem[] {
 
 type Call = NonNullable<ChatHistoryItem["toolCallStates"]>[number];
 
+/**
+ * The model's own arguments, with what preprocessing added. Preprocessing
+ * alone is not the call: for the file tools it holds only `resolvedPath`,
+ * which is null for every file that does not exist yet, so eleven new files
+ * in a row looked like one edit repeated and a build was paused as stalled.
+ */
 function argsOf(call: Call): unknown {
-  return call.processedArgs ?? call.parsedArgs ?? {};
+  return {
+    ...((call.parsedArgs as object | undefined) ?? {}),
+    ...((call.processedArgs as object | undefined) ?? {}),
+  };
 }
 
 function outputText(output: ContextItem[] | undefined): string {
@@ -304,15 +381,30 @@ function actionLimitRefused(history: ChatHistoryItem[]): boolean {
   );
 }
 
-/** Why the current prompt should pause now, if it should. */
+/**
+ * Why the current prompt should pause now, if it should. `hasTask` is false
+ * when the prompt's task could not be started: no call is then authorized by
+ * the core, so nothing there counts the calls.
+ */
 export function progressPause(
   history: ChatHistoryItem[],
+  mode: string = "agent",
+  hasTask: boolean = true,
 ): ProgressPause | undefined {
   if (actionLimitRefused(history)) return "actions";
+  if (!hasTask) {
+    let calls = 0;
+    for (const item of currentPrompt(history))
+      calls += item.toolCallStates?.length ?? 0;
+    if (calls >= MAX_AUTONOMOUS_STEPS) return "actions";
+  }
   if ((sameFailureStreak(history)?.streak ?? 0) >= SAME_FAILURE_LIMIT)
     return "same_failure";
   const { idle, unchanged } = progressCounters(history);
   if (idle >= STALL_LIMIT) return "stalled";
-  if (unchanged >= NO_CHANGE_LIMIT) return "no_change";
+  // Only where the agent can change things. Plan and chat mode have no edit
+  // tools, so every long investigation there would count as "no change";
+  // they stay bounded by the stall rule and the core's action net.
+  if (unchanged >= NO_CHANGE_LIMIT && mode === "agent") return "no_change";
   return undefined;
 }

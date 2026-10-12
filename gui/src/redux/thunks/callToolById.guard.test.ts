@@ -3,7 +3,7 @@ import { createMockStore } from "../../util/test/mockStore";
 import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
 import { callToolById } from "./callToolById";
 
-function storeWithGuardError(guardError: string) {
+function storeWithGuardError(guardError: string, processedArgs?: object) {
   const root = getRootStateWithClaude();
   const store = createMockStore({
     ...root,
@@ -25,6 +25,7 @@ function storeWithGuardError(guardError: string) {
               toolCallId: "t1",
               status: "generated",
               parsedArgs: { command: "npm test" },
+              processedArgs,
               toolCall: {
                 id: "t1",
                 type: "function",
@@ -173,6 +174,34 @@ describe("callToolById never leaves a call hanging", () => {
     expect(calls).not.toContain("agent/plan/failStep");
     expect(status(store)).toBe("errored");
     expect(toolOutput(store)).toContain("core crashed");
+  });
+
+  it("keeps the model's arguments in the audit and the evidence when preprocessing has none", async () => {
+    // Preprocessing can leave an object without the model's own arguments
+    // (`{ resolvedPath: null }` for a path that does not exist yet).
+    const { store } = storeWithGuardError("unused", { resolvedPath: null });
+    const messenger = store.mockIdeMessenger;
+    const base = messenger.request.bind(messenger);
+    const sent: Record<string, any> = {};
+    messenger.request = (async (type: string, data: unknown) => {
+      sent[type] = data;
+      if (type.startsWith("agent/"))
+        return { status: "success", content: {}, done: true };
+      return base(type as any, data as any);
+    }) as typeof messenger.request;
+
+    await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
+
+    expect(JSON.parse(sent["agent/task/recordApproval"].scope)).toEqual({
+      command: "npm test",
+      resolvedPath: null,
+    });
+    // The command was looked up in the preprocessed arguments alone, so the
+    // test run left no evidence on the task.
+    expect(sent["agent/task/recordVerification"].result).toMatchObject({
+      kind: "test",
+      status: "passed",
+    });
   });
 
   it("an unexpected exception still errors the call instead of hanging", async () => {

@@ -112,15 +112,62 @@ function installE2e() {
     process.platform === "win32" ? "extest.cmd" : "extest",
   );
   if (!fs.existsSync(extest)) fail(`extest is missing: ${extest}`);
-  run(extest, [
-    "install-vsix",
-    "-f",
-    artifactPath,
-    "--extensions_dir",
-    extensionsDir,
-    "--storage",
+  // extest does not replace a folder of the same version: it reports success
+  // and leaves the old files. A day of benchmark runs tested a build from
+  // hours earlier that way, while the marker below named the new VSIX. Remove
+  // the folder first, so what is there afterwards can only be this VSIX.
+  const sameVersionDir = path.join(extensionsDir, `vynorai.vynorai-${version}`);
+  fs.rmSync(sameVersionDir, { recursive: true, force: true });
+  if (fs.existsSync(sameVersionDir)) {
+    fail(
+      `could not remove ${sameVersionDir}; close the E2E VS Code and try again`,
+    );
+  }
+  // VS Code also keeps a registry of what is installed. With the version
+  // still listed there it extracts nothing and reports success.
+  const registry = path.join(extensionsDir, "extensions.json");
+  if (fs.existsSync(registry)) {
+    const entries = JSON.parse(fs.readFileSync(registry, "utf8"));
+    fs.writeFileSync(
+      registry,
+      JSON.stringify(
+        entries.filter(
+          (entry) =>
+            String(entry?.identifier?.id).toLowerCase() !== "vynorai.vynorai",
+        ),
+      ),
+    );
+  }
+  // extest passes the folders to VS Code unquoted. With a space in the path
+  // ("D:\My Project\...") the install went to "D:\My" and reported success.
+  // The E2E VS Code's own CLI, called through run(), gets quoted arguments.
+  const codeCli = path.join(
     storage,
-  ]);
+    process.platform === "win32" ? "VSCode-win32-x64-archive" : "",
+    "bin",
+    process.platform === "win32" ? "code.cmd" : "code",
+  );
+  if (fs.existsSync(codeCli)) {
+    run(codeCli, [
+      "--install-extension",
+      artifactPath,
+      "--force",
+      "--extensions-dir",
+      extensionsDir,
+      "--user-data-dir",
+      path.join(storage, "settings-cli"),
+    ]);
+  } else {
+    run(extest, [
+      "install-vsix",
+      "-f",
+      artifactPath,
+      "--extensions_dir",
+      extensionsDir,
+      "--storage",
+      storage,
+    ]);
+  }
 
   const expectedDir = path.join(extensionsDir, `vynorai.vynorai-${version}`);
   let installedPackage = path.join(expectedDir, "package.json");

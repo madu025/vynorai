@@ -253,6 +253,11 @@ type SessionState = {
   expertCouncilDepth?: ExpertCouncilDepth;
   projectMemories?: ProjectMemory[];
   subagentRuns?: SubagentRun[];
+  /**
+   * The expert council's findings for one prompt (by its message id). They
+   * are part of the system message on every round of that prompt.
+   */
+  subagentFindings?: { promptId?: string; text: string };
   queuedInputs?: QueuedInput[];
   activeTaskId?: string;
   /** Set only while an implementation subagent model turn owns tool dispatch. */
@@ -1162,6 +1167,12 @@ export const sessionSlice = createSlice({
     setSubagentRuns: (state, action: PayloadAction<SubagentRun[]>) => {
       state.subagentRuns = action.payload;
     },
+    setSubagentFindings: (
+      state,
+      action: PayloadAction<{ promptId?: string; text: string }>,
+    ) => {
+      state.subagentFindings = action.payload;
+    },
     updateSubagentRun: (
       state,
       action: PayloadAction<Pick<SubagentRun, "id"> & Partial<SubagentRun>>,
@@ -1300,6 +1311,7 @@ export const {
   setActiveImplementationSubagentId,
   setActiveTaskState,
   setToolBudgetPausedAfter,
+  setSubagentFindings,
   appendAutoPrompt,
   setSideReview,
   setTurnCredits,

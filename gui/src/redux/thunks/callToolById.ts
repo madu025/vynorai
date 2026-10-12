@@ -16,10 +16,14 @@ import {
   setToolCallCalling,
   updateToolCallOutput,
 } from "../slices/sessionSlice";
+import { DEFAULT_PERMISSION_MODE } from "../slices/uiSlice";
 import { ThunkApiType } from "../store";
 import { findToolCallById, logToolUsage } from "../util";
 import { streamResponseAfterToolCall } from "./streamResponseAfterToolCall";
-import { verificationFromToolResult } from "../util/verificationEvidence";
+import {
+  commandOf,
+  verificationFromToolResult,
+} from "../util/verificationEvidence";
 import { runHooks, toolOutputText } from "../util/hooks";
 import {
   guardErrorForModel,
@@ -128,7 +132,12 @@ async function callToolByIdImpl(
   if (state.session.activeTaskId) {
     const signature = JSON.stringify({
       tool: toolCallState.toolCall.function.name,
-      arguments: toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {},
+      // Both: preprocessing alone is `{ resolvedPath: null }` for every path
+      // that does not exist, so different calls would count as one repeated.
+      arguments: {
+        ...(toolCallState.parsedArgs ?? {}),
+        ...(toolCallState.processedArgs ?? {}),
+      },
     });
     const authorization = await extra.ideMessenger.request(
       "agent/task/authorizeAction",
@@ -183,9 +192,12 @@ async function callToolByIdImpl(
           toolName: toolCallState.toolCall.function.name,
           risk: classifyToolRisk(toolCallState.toolCall.function.name),
           decision: "approved",
-          scope: JSON.stringify(
-            toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {},
-          ),
+          // Both, as for the guard signature: preprocessing alone can hold
+          // nothing of what the model asked for.
+          scope: JSON.stringify({
+            ...(toolCallState.parsedArgs ?? {}),
+            ...(toolCallState.processedArgs ?? {}),
+          }),
         },
         AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
       );
@@ -345,14 +357,9 @@ async function callToolByIdImpl(
   }
 
   if (state.session.activeTaskId) {
-    const rawArgs =
-      toolCallState.processedArgs ?? toolCallState.parsedArgs ?? {};
     const evidence = verificationFromToolResult({
       toolName: toolCallState.toolCall.function.name,
-      command:
-        typeof (rawArgs as Record<string, unknown>).command === "string"
-          ? ((rawArgs as Record<string, unknown>).command as string)
-          : undefined,
+      command: commandOf(toolCallState),
       output,
       failed: Boolean(error),
     });
@@ -417,7 +424,15 @@ async function callToolByIdImpl(
     const siblingRunning = current.some(
       (tc) => tc.toolCallId !== toolCallId && tc.status === "calling",
     );
-    if (stillApplying && !siblingRunning) {
+    // An edit that is accepted by itself is still the agent working: the
+    // turn stays active until the apply closes and the next round starts. It
+    // goes idle only where the user has to accept the diff.
+    const ui = getState().ui;
+    const acceptedByItself =
+      (ui.permissionMode ?? DEFAULT_PERMISSION_MODE) !== "ask" ||
+      ui.toolSettings[toolCallState.toolCall.function.name] ===
+        "allowedWithoutPermission";
+    if (stillApplying && !siblingRunning && !acceptedByItself) {
       dispatch(setInactive());
     }
   }

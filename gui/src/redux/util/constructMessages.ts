@@ -33,6 +33,8 @@ import { toolCallStateToContextItems } from "../../pages/gui/ToolCallDiv/utils";
 interface MessageWithContextItems {
   ctxItems: ContextItemWithId[];
   message: ChatMessage;
+  /** A gate, repair, nudge or recovery prompt, not the user's own. */
+  isAutoPrompt?: boolean;
 }
 /**
  * Files the agent touched through tools anywhere in the conversation. Taken
@@ -125,6 +127,7 @@ export function constructMessages(
           ...item.message,
           content,
         },
+        isAutoPrompt: item.isAutoPrompt,
       });
     } else if (item.message.role === "thinking") {
       msgs.push({
@@ -204,17 +207,21 @@ export function constructMessages(
     }
   }
 
+  // An automatic prompt is not the user's message: it carries no context
+  // items. Counted as one, it dropped the real prompt's context items from
+  // the round after any gate, so a rule that applied through them left the
+  // system message and the whole conversation was billed again.
+  const isUserPrompt = (item: MessageWithContextItems) =>
+    item.message.role === "user" && !item.isAutoPrompt;
+
   // Some rules only apply to the last user or tool message
   const lastUserOrToolMsg = findLast(
     msgs,
-    (item) => item.message.role === "user" || item.message.role === "tool",
+    (item) => isUserPrompt(item) || item.message.role === "tool",
   )?.message as UserChatMessage | ToolResultChatMessage;
 
   // Some rules apply to all context items since the last user message, inclusiv
-  const lastUserMsgIndex = findLastIndex(
-    msgs,
-    (item) => item.message.role === "user",
-  );
+  const lastUserMsgIndex = findLastIndex(msgs, isUserPrompt);
   const itemsBackToLastUserMessage = msgs
     .slice(lastUserMsgIndex, msgs.length)
     .filter(

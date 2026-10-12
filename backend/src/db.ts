@@ -905,6 +905,16 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "027_task_outcome_reason",
+    description:
+      "Why a paused task paused, and how often the harness sent the agent back",
+    up: async () => {
+      await addColumnIfNotExists("task_outcomes", "reason VARCHAR(24)");
+      await addColumnIfNotExists("task_outcomes", "repairs INTEGER");
+      await addColumnIfNotExists("task_outcomes", "gates INTEGER");
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

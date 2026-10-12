@@ -9,7 +9,6 @@ import {
   waitForCacheFill,
 } from "./cacheEngine.js";
 import {
-  VYNORAI_AGENT_TOOLS,
   VYNORAI_AGENT_SYSTEM_PROMPT,
   filterToolsForIntent,
 } from "./agentEngine.js";
@@ -865,11 +864,13 @@ export async function handleChatCompletions(
     );
 
   // A conversation-compaction request must produce a summary, not tool calls.
-  const baseTools = isCompactionRequest(cleanPromptForGating)
-    ? []
-    : body.tools !== undefined
+  // The model gets the caller's tools and no others. A request without tools
+  // (chat mode, a title, a summary) used to receive the server's own tool
+  // list; the model then called `edit_file`, which no client can run.
+  const baseTools =
+    !isCompactionRequest(cleanPromptForGating) && Array.isArray(body.tools)
       ? body.tools
-      : VYNORAI_AGENT_TOOLS;
+      : [];
   const gatedTools = filterToolsForIntent(baseTools, allowMutation);
   const prunedCount = (baseTools?.length || 0) - (gatedTools?.length || 0);
 

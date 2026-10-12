@@ -1477,7 +1477,7 @@ async function loadTaskOutcomes() {
     ? `${econNum(data.total)} tasks · ${data.completionRate}% ended with an answer`
     : '';
   document.getElementById('taskOutcomes').innerHTML = data.rows.length
-    ? data.rows.map(r => `<tr><td>${escHtml(r.day)}</td><td>${escHtml(r.outcome)}</td><td>${econNum(r.count)}</td><td>${econNum(r.users)}</td><td>${escHtml(Math.round(r.avgRounds * 10) / 10)}</td><td>${econNum(Math.round(r.avgCredits))}</td></tr>`).join('')
+    ? data.rows.map(r => `<tr><td>${escHtml(r.day)}</td><td>${escHtml(r.reason ? `${r.outcome} (${r.reason})` : r.outcome)}</td><td>${econNum(r.count)}</td><td>${econNum(r.users)}</td><td>${escHtml(Math.round(r.avgRounds * 10) / 10)}</td><td>${econNum(Math.round(r.avgCredits))}</td></tr>`).join('')
     : '<tr><td colspan="6" class="loading">No task outcomes yet</td></tr>';
 }
 

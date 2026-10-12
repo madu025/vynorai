@@ -29,6 +29,23 @@ describe("FileTreeContextProvider", () => {
     expect(items[0].content).toContain("  src/\n    index.ts");
   });
 
+  it("does not let an empty workspace read as a folder to write into", async () => {
+    // Seen in a build: the tree was the single line "project/" and every
+    // file went to "project/project/...".
+    vi.mocked(walkDir).mockResolvedValue([]);
+    const provider = new FileTreeContextProvider({});
+
+    const items = await provider.getContextItems("", {
+      ide: {
+        getWorkspaceDirs: vi.fn().mockResolvedValue(["file:///work/project"]),
+      },
+    } as any);
+
+    expect(items[0].content).toContain("project/\n  (empty)\n");
+    expect(items[0].content).toContain("workspace root folder itself");
+    expect(items[0].content).toContain("paths are relative to it");
+  });
+
   it("reports when no workspace folder is open", async () => {
     const provider = new FileTreeContextProvider({});
     const items = await provider.getContextItems("", {

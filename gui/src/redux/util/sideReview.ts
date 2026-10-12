@@ -16,6 +16,73 @@ const EDIT_TOOLS = new Set<string>([
 
 export const SIDE_REVIEW_MAX_DIFF_CHARS = 8000;
 
+type ToolCall = NonNullable<ChatHistoryItem["toolCallStates"]>[number];
+
+const normalizePath = (f: string) => f.replace(/\\/g, "/").replace(/^\.\//, "");
+
+/** A finished call of a tool that changes a file. */
+export function isFinishedEdit(call: ToolCall): boolean {
+  return call.status === "done" && EDIT_TOOLS.has(call.toolCall.function.name);
+}
+
+/**
+ * The file of each finished edit among `calls`, as the path the model first
+ * wrote for it. One file is one entry however it was spelled: `src/a.ts` and
+ * `./src/a.ts` counted as two files, and a one-file fix then got the
+ * completion gate and the pre-mortem, which are for changes of two files.
+ *
+ * A file is told by the URI preprocessing resolved (`fileUri`, or
+ * `resolvedPath.uri`), else by its normalised path. A file that did not exist
+ * when it was created has no URI on that call, so a path seen with a URI on
+ * any call stands for that URI on every call.
+ */
+function editedPaths(calls: ToolCall[]): Map<ToolCall, string> {
+  const edits = calls.filter(isFinishedEdit).map((call) => {
+    const filepath = (call.parsedArgs as { filepath?: unknown } | undefined)
+      ?.filepath;
+    const processed = call.processedArgs as
+      | { fileUri?: unknown; resolvedPath?: { uri?: unknown } | null }
+      | undefined;
+    const uri = processed?.fileUri ?? processed?.resolvedPath?.uri;
+    return {
+      call,
+      written: typeof filepath === "string" ? filepath : undefined,
+      uri: typeof uri === "string" ? uri : undefined,
+    };
+  });
+  const uriOfPath = new Map<string, string>();
+  for (const { written, uri } of edits) {
+    if (written !== undefined && uri && !uriOfPath.has(normalizePath(written)))
+      uriOfPath.set(normalizePath(written), uri);
+  }
+  const shownAs = new Map<string, string>();
+  const paths = new Map<ToolCall, string>();
+  for (const { call, written, uri } of edits) {
+    const path = written === undefined ? undefined : normalizePath(written);
+    const identity =
+      uri ?? (path === undefined ? undefined : (uriOfPath.get(path) ?? path));
+    if (identity === undefined) continue;
+    if (!shownAs.has(identity)) shownAs.set(identity, written ?? identity);
+    paths.set(call, shownAs.get(identity)!);
+  }
+  return paths;
+}
+
+/**
+ * The distinct files the finished edits among `calls` changed, and how many
+ * of those edits named no file.
+ */
+export function editedFiles(calls: ToolCall[]): {
+  files: string[];
+  unnamed: number;
+} {
+  const paths = editedPaths(calls);
+  return {
+    files: [...new Set(paths.values())],
+    unnamed: calls.filter(isFinishedEdit).length - paths.size,
+  };
+}
+
 /** Files changed since the latest real user prompt, and that prompt's text. */
 export function turnEdits(history: ChatHistoryItem[]): {
   files: string[];
@@ -34,16 +101,10 @@ export function turnEdits(history: ChatHistoryItem[]): {
         : content.map((p) => (p.type === "text" ? p.text : "")).join("");
     break;
   }
-  const files = new Set<string>();
-  for (const item of history.slice(start)) {
-    for (const call of item.toolCallStates ?? []) {
-      if (call.status !== "done") continue;
-      if (!EDIT_TOOLS.has(call.toolCall.function.name)) continue;
-      const filepath = (call.parsedArgs as { filepath?: unknown })?.filepath;
-      if (typeof filepath === "string") files.add(filepath);
-    }
-  }
-  return { files: [...files], request };
+  const { files } = editedFiles(
+    history.slice(start).flatMap((item) => item.toolCallStates ?? []),
+  );
+  return { files, request };
 }
 
 /**
@@ -62,27 +123,26 @@ export function turnChanges(
     }
   }
   const out = new Map<string, { created: boolean; edits: string[] }>();
-  for (const item of history.slice(start)) {
-    for (const call of item.toolCallStates ?? []) {
-      if (call.status !== "done") continue;
-      const name = call.toolCall.function.name;
-      if (!EDIT_TOOLS.has(name)) continue;
-      const args = (call.parsedArgs ?? {}) as Record<string, any>;
-      if (typeof args.filepath !== "string") continue;
-      const entry = out.get(args.filepath) ?? { created: false, edits: [] };
-      if (name === BuiltInToolNames.CreateNewFile) entry.created = true;
-      const pairs: Array<{ old_string?: string; new_string?: string }> =
-        Array.isArray(args.edits) ? args.edits : [args];
-      for (const p of pairs) {
-        if (typeof p.new_string !== "string") continue;
-        const minus = String(p.old_string ?? "")
-          .split("\n")
-          .map((l) => `-${l}`);
-        const plus = p.new_string.split("\n").map((l) => `+${l}`);
-        entry.edits.push([...minus, ...plus].join("\n"));
-      }
-      out.set(args.filepath, entry);
+  const calls = history
+    .slice(start)
+    .flatMap((item) => item.toolCallStates ?? []);
+  // Keyed like turnEdits().files, so both spellings of a file are one entry.
+  for (const [call, file] of editedPaths(calls)) {
+    const name = call.toolCall.function.name;
+    const args = (call.parsedArgs ?? {}) as Record<string, any>;
+    const entry = out.get(file) ?? { created: false, edits: [] };
+    if (name === BuiltInToolNames.CreateNewFile) entry.created = true;
+    const pairs: Array<{ old_string?: string; new_string?: string }> =
+      Array.isArray(args.edits) ? args.edits : [args];
+    for (const p of pairs) {
+      if (typeof p.new_string !== "string") continue;
+      const minus = String(p.old_string ?? "")
+        .split("\n")
+        .map((l) => `-${l}`);
+      const plus = p.new_string.split("\n").map((l) => `+${l}`);
+      entry.edits.push([...minus, ...plus].join("\n"));
     }
+    out.set(file, entry);
   }
   return out;
 }
@@ -95,8 +155,6 @@ export function editsDiff(file: string, edits: string[]): string {
     ...edits.map((e) => `@@\n${e}`),
   ].join("\n");
 }
-
-const normalizePath = (f: string) => f.replace(/\\/g, "/").replace(/^\.\//, "");
 
 /** Files of this turn with no hunk in the diff (new, untracked files). */
 export function filesMissingFromDiff(diff: string, files: string[]): string[] {

@@ -57,9 +57,65 @@ describe("task credit cap", () => {
     expect(session.turnCredits?.used).toBe(60_000);
     expect(session.toolBudgetPausedAfter).toBe(1);
     expect(session.toolBudgetPauseReason).toBe("credits");
-    // The capped round runs without tools.
+    // The capped round keeps its tools and system message (prompt cache, and
+    // a request without tools made the model say its tools were switched
+    // off); the pause is told as the last message instead.
     const options = (messenger.llmStreamChat as any).mock.calls[0][0];
-    expect(options.completionOptions.tools ?? []).toHaveLength(0);
+    expect(options.completionOptions.tools).toHaveLength(1);
+    const told = session.history.filter(
+      (item) =>
+        item.isAutoPrompt &&
+        String(item.message.content).startsWith("[paused]"),
+    );
+    expect(told).toHaveLength(1);
+    expect(String(told[0].message.content)).toContain("TASK CREDIT LIMIT");
+  });
+
+  it("never runs a tool the model calls on the paused round", async () => {
+    const { store, messenger } = storeMidTask(50_000, 61_000);
+    const toolCall = {
+      id: "c1",
+      type: "function" as const,
+      function: {
+        name: "run_terminal_command",
+        arguments: JSON.stringify({ command: "npm test" }),
+      },
+    };
+    messenger.llmStreamChat = vi.fn().mockImplementation(() =>
+      (async function* (): AsyncGenerator<AssistantChatMessage[], PromptLog> {
+        yield [{ role: "assistant", content: "", toolCalls: [toolCall] }];
+        return {
+          prompt: "p",
+          completion: "",
+          modelTitle: "Claude",
+          modelProvider: "anthropic",
+        };
+      })(),
+    );
+    const ran = vi.fn(async () => ({ contextItems: [] }));
+    messenger.responseHandlers["tools/call"] = ran as any;
+
+    await (store.dispatch as any)(streamNormalInput({ depth: 1 }));
+
+    const session = (store.getState() as RootState).session;
+    expect(ran).not.toHaveBeenCalled();
+    // One more round for the report, then the turn ends: no loop.
+    expect(messenger.llmStreamChat).toHaveBeenCalledTimes(2);
+    expect(session.toolBudgetPauseReason).toBe("credits");
+    expect(session.isStreaming).toBe(false);
+    // Told once, and every refused call has a result, so "Continue" sends a
+    // valid history.
+    expect(
+      session.history.filter((item) =>
+        String(item.message.content).startsWith("[paused]"),
+      ),
+    ).toHaveLength(1);
+    const calls = session.history.flatMap((item) => item.toolCallStates ?? []);
+    expect(calls).toHaveLength(2);
+    expect(calls.every((call) => call.status === "errored")).toBe(true);
+    expect(
+      session.history.filter((item) => item.message.role === "tool"),
+    ).toHaveLength(2);
   });
 
   it("keeps going under the cap, with no cap, and for non-VynorAI models", async () => {

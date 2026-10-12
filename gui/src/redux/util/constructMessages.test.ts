@@ -598,6 +598,57 @@ describe("constructMessages", () => {
     expect(messages[0].content).toContain(CONTEXT_RULE.rule);
   });
 
+  test("an automatic prompt does not change the system message", () => {
+    // Two rules that apply only through the user's own prompt: one by its
+    // context item, one by its text.
+    const round: ChatHistoryItem[] = [
+      {
+        message: {
+          role: "user",
+          content: `Fix it. ${LAST_MESSAGE_RULE.description}`,
+        } as UserChatMessage,
+        contextItems: [
+          createContextItem("trigger", `File with ${CONTEXT_RULE.description}`),
+        ],
+      },
+      {
+        message: {
+          role: "assistant",
+          content: "Fixed.",
+        } as AssistantChatMessage,
+        contextItems: [],
+      },
+    ];
+    const systemOf = (history: ChatHistoryItem[]) =>
+      constructMessages(history, "Base System Message", mockRules, {})
+        .messages[0].content;
+
+    const before = systemOf(round);
+    // A gate sends the model back: appendAutoPrompt adds the prompt and the
+    // placeholder for the answer.
+    const after = systemOf([
+      ...round,
+      {
+        message: {
+          role: "user",
+          content: "[verification-gate] Before finishing: run a check.",
+        } as UserChatMessage,
+        contextItems: [],
+        isAutoPrompt: true,
+      },
+      {
+        message: { role: "assistant", content: "" } as AssistantChatMessage,
+        contextItems: [],
+      },
+    ]);
+
+    expect(before).toContain(CONTEXT_RULE.rule);
+    expect(before).toContain(LAST_MESSAGE_RULE.rule);
+    // The gate prompt was taken for the last user message: both rules left
+    // the system message and the conversation was billed again in full.
+    expect(after).toBe(before);
+  });
+
   test("system message should include rules triggered by tool output after the last user message", () => {
     // Create a history with a user message, assistant with tool call, and tool output containing triggering content
     const assistantWithToolCall: AssistantChatMessage = {

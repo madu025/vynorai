@@ -138,6 +138,8 @@ export interface JsonVynorModel {
   model: string;
   apiBase: string;
   apiKey: string;
+  contextLength?: number;
+  completionOptions?: { maxTokens: number };
 }
 
 /**

@@ -68,6 +68,7 @@ import {
 import { replyLanguageGuidance } from "../util/replyLanguage";
 import { createStreamBatcher } from "../util/streamBatcher";
 import { missingTodoGate, completionGatePrompt } from "../util/completionGate";
+import { EMPTY_ANSWER_PROMPT, emptyAnswerGate } from "../util/emptyAnswerGate";
 import { openTodoGate, todoGatePrompt } from "../util/todoGate";
 import { finishedOutcome, reportTaskOutcome } from "../util/taskOutcome";
 import {
@@ -774,6 +775,19 @@ export const streamNormalInput = createAsyncThunk<
     );
 
     // 4. Execute remaining tool calls
+    // An answer with no text and no tool call ends the turn with nothing
+    // done; ask the model to carry on.
+    if (
+      originalToolCalls.length === 0 &&
+      state.session.mode === "agent" &&
+      !toolBudgetExhausted &&
+      emptyAnswerGate(getState().session.history)
+    ) {
+      dispatch(appendAutoPrompt(EMPTY_ANSWER_PROMPT));
+      unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
+      return;
+    }
+
     // Verification gate: an agent turn that edited files must not finish
     // without a test/type check/lint/build after the last edit. Asked once per
     // prompt; the model may decline in one line when no check applies.

@@ -251,6 +251,10 @@ export async function applyVynorConfig(): Promise<boolean> {
         model: VYNORAI_AUTO_MODEL,
         apiBase: VYNORAI_PROD_URL,
         apiKey: VYNORAI_SECRET_REF,
+        // Same limits as config.yaml. Without them the 4,096 token default
+        // was spent on thinking and the answer was cut before its tool call.
+        contextLength: VYNOR_CLIENT_CONTEXT_LENGTH,
+        completionOptions: { maxTokens: 16384 },
       },
       {
         title: "VynorAI Coder",
@@ -258,6 +262,8 @@ export async function applyVynorConfig(): Promise<boolean> {
         model: "deepseek/deepseek-flash",
         apiBase: VYNORAI_PROD_URL,
         apiKey: VYNORAI_SECRET_REF,
+        contextLength: VYNOR_CLIENT_CONTEXT_LENGTH,
+        completionOptions: { maxTokens: 8192 },
       },
     );
 

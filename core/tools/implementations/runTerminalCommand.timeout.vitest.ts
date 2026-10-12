@@ -163,6 +163,53 @@ describe("runTerminalCommand timeout functionality", () => {
     expect(mockChildProc.kill).not.toHaveBeenCalled();
   });
 
+  it("returns when the shell exits but a leftover process keeps the pipes open", async () => {
+    mockChildProc.stdout.destroy = vi.fn();
+    mockChildProc.stderr.destroy = vi.fn();
+    const extras = createMockExtras();
+    const args = { command: "start-server-and-exit", waitForCompletion: true };
+    const resultPromise = runTerminalCommandImpl(args, extras);
+    await vi.advanceTimersByTimeAsync(0);
+    mockChildProc.stdout.emit("data", Buffer.from("server stopped\n"));
+    mockChildProc.exitCode = 0;
+    mockChildProc.emit("exit", 0); // no "close": the pipes stay open
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await resultPromise;
+    expect(result[0].status).toBe("Command completed");
+    expect(result[0].content).toContain("server stopped");
+    expect(mockChildProc.stdout.destroy).toHaveBeenCalled();
+    expect(mockChildProc.kill).not.toHaveBeenCalled();
+  });
+
+  it("returns once when close follows exit", async () => {
+    const extras = createMockExtras();
+    const args = { command: "echo quick", waitForCompletion: true };
+    const resultPromise = runTerminalCommandImpl(args, extras);
+    await vi.advanceTimersByTimeAsync(0);
+    mockChildProc.exitCode = 0;
+    mockChildProc.emit("exit", 0);
+    mockChildProc.emit("close", 0);
+    const result = await resultPromise;
+    expect(result[0].status).toBe("Command completed");
+    await vi.advanceTimersByTimeAsync(5_000);
+  });
+
+  it("returns after the timeout even when the kill is never reported", async () => {
+    mockChildProc.stdout.destroy = vi.fn();
+    mockChildProc.stderr.destroy = vi.fn();
+    mockChildProc.kill = vi.fn(() => true); // nothing ever exits or closes
+    const extras = createMockExtras();
+    const args = { command: "hang", waitForCompletion: true };
+    const resultPromise = runTerminalCommandImpl(args, extras);
+    await vi.runOnlyPendingTimersAsync();
+    await vi.advanceTimersByTimeAsync(120_000 + 5_000 + 2_000);
+    const result = await resultPromise;
+    expect(result[0].content).toContain(
+      "[Timeout: process killed after 2 minutes]",
+    );
+    expect(result[0].status).toContain("failed");
+  });
+
   it("should clear SIGKILL timeout when process exits between SIGTERM and SIGKILL grace period", async () => {
     const extras = createMockExtras();
     const args = { command: "sleep 300", waitForCompletion: true };

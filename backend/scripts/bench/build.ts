@@ -615,10 +615,15 @@ async function acceptance(dir: string) {
       if (/^https?:/.test(s)) continue;
       code += (await call("GET", s.startsWith("/") ? s : `/${s}`)).text;
     }
+    // A page may keep the "/api" prefix in one constant and call
+    // api("/products"); two correct pages failed the literal "/api/products".
+    const calls = (name: string) =>
+      new RegExp(`/api/${name}|["'\`]/${name}\\b`).test(code);
     return want(
-      /\/api\/products/.test(code) &&
-        /\/api\/cart/.test(code) &&
-        /\/api\/orders/.test(code),
+      /["'`/]\/?api\b/.test(code) &&
+        calls("products") &&
+        calls("cart") &&
+        calls("orders"),
       "page and its scripts do not call products, cart and orders",
     );
   });
@@ -659,8 +664,14 @@ async function acceptance(dir: string) {
   );
   add(
     "README.md lists the API",
+    // A README may give the base path "/api" once and list "/orders" in a table.
     facts.hasReadme === true &&
-      /\/api\/orders/.test(
+      ((readme) =>
+        /\/api\/orders/.test(readme) ||
+        (/\/api\b/.test(readme) &&
+          /\/orders\b/.test(readme) &&
+          /\/products\b/.test(readme) &&
+          /\/cart\b/.test(readme)))(
         fs.readFileSync(path.join(dir, "README.md"), "utf8"),
       ),
   );

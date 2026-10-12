@@ -29,30 +29,60 @@ Only runs confirmed to be in Agent mode count. Three early runs (2 of 39 checks,
 pasted into the chat) were not in Agent mode: the test driver did not check the mode it had selected. They are
 discarded, and the driver now refuses to start a run unless Agent mode is confirmed.
 
-| Build                | Checks   | Model calls | Seconds | Quota tokens | How it ended                                                       |
-| -------------------- | -------- | ----------- | ------- | ------------ | ------------------------------------------------------------------ |
-| 1.2.59               | 37 of 39 | 23          | 217     | 112,577      | round count bug (C1): todo list 0 of 9 closed, README missing      |
-| 1.2.60 with C1 to C4 | 35 of 39 | 27          | 254     | 154,195      | task marked failed (C5): 10 tool calls refused, tests left failing |
+| Build                | Checks   | Model calls | Seconds | Quota tokens | How it ended                                                                              |
+| -------------------- | -------- | ----------- | ------- | ------------ | ----------------------------------------------------------------------------------------- |
+| 1.2.59               | 37 of 39 | 23          | 217     | 112,577      | round count bug (C1): todo list 0 of 9 closed, README missing                             |
+| 1.2.60 with C1 to C4 | 35 of 39 | 27          | 254     | 154,195      | task marked failed (C5): 10 tool calls refused, tests left failing                        |
+| 1.2.60 with C1 to C6 | 39 of 39 | 62          | 1502    | 589,232      | driver time limit (25 min): the last cleanup command never returned (C7), no final report |
+| 1.2.60 with C1 to C8 | 39 of 39 | 32          | 731     | 411,587      | ended by itself with a final report; no empty answer, no reminder needed                  |
+| 1.2.60 with C1 to C8 | 39 of 39 | 53          | 870     | 331,989      | ended by itself with a final report                                                       |
+| 1.2.60 with C1 to C8 | 39 of 39 | 78          | 650     | 594,582      | ended by itself with a final report                                                       |
 
-Both runs show the model can build the system and the harness stopping the work before it is finished. One
-run per build is not a result: the fix for C5 still needs three runs.
+Three runs on the build with C1 to C8 (2026-10-12): 39 of 39 each, every run ended by itself, no "Continue"
+click. Median 53 model calls, 731 s and 411,587 quota tokens; the spread in quota tokens is wide (332K to 595K).
+The step 1 target (no run ends before the todo list is closed; median checks at least 37 of 39) is met.
+
+Two scorer checks were too literal and are corrected; the reference solution still passes 39 of 39 and an empty
+folder still fails. "frontend page talks to the API" wanted the literal `/api/products`, and pages keep `/api` in
+one constant and call `api("/products")` (two runs showed 38 of 39 for it). "README.md lists the API" wanted the
+literal `/api/orders`, and one README gives the base path once and lists `/orders` in a table (one run).
+
+The first two runs show the model can build the system and the harness stopping the work before it is finished.
+The third run (2026-10-12, 15 source files, 1,847 lines, README present) got through the whole build: the todo
+list was written and updated three times, and the empty-answer reminder (C6) fired once and the agent carried on.
+It cost about four times the quota tokens and six times the seconds of the earlier runs, and it did not end by
+itself. The fourth run, with the output limit (C8) and the terminal fix (C7), needed half the model calls and
+half the time, and ended by itself: 13 source files, 1,793 lines, todo list updated four times.
+
+Harness faults found on the way, none of them counted as runs: the profile had `TEST LLM` selected again after
+`SlashCommands` (and `VynorAI Auto` is only in the profile config after a sign-in); the sign-in does not survive
+a VS Code session, so each run signs in (`LARGE_TASK_SIGNIN=1`); the driver took 8 s without streaming for the
+end of the turn while `npm install` was running (`LargeTask.test.ts` now waits for a running command).
 
 ## Causes found
 
-| #   | Cause                                                                                                                                                                                                                                | Evidence                                                                                                                        | State                                                                                              |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| C1  | The round budget counted history items, not model answers. A reasoning model leaves an empty assistant item before each thinking block, so 23 answers counted as 42 rounds. Past 40 the turn threw and ended without a message.      | session file of run 2: 23 prompt logs, 42 assistant items, 19 of them empty, `roundsSincePrompt` 42                             | Fixed: the round cap is removed; a turn pauses only when it is stuck or at the credit cap (step 3) |
-| C2  | The privacy shield replaces emails with `__PII_EMAIL_1__` before the model sees them. The model took the placeholder for corruption and spent rounds building emails from parts.                                                     | the model's own text in run 2 ("the environment redacted email literals"); `backend/src/services/piiShield.ts`                  | Fixed in the agent prompt: one rule says what a placeholder is                                     |
-| C3  | Nothing checks the agent's own todo list. Run 2 ended with 0 of 9 items closed.                                                                                                                                                      | end state of run 2                                                                                                              | Fixed: a reminder with the open items, at most 3 per prompt                                        |
-| C4  | The agent prompt is written for small edits ("make the smallest change", "report in 1-3 sentences"). It says nothing about building a whole system.                                                                                  | `core/llm/vynorai-system-prompt.ts`                                                                                             | Fixed: one sentence for build tasks                                                                |
-| C5  | A failed tool call failed the task's plan step. The step allows 2 attempts, so the second tool error of a task ended it; every later tool call was refused with "Task is terminal" and the agent could not repair its failing tests. | task journal of the 1.2.60 run: `plan.step.failed` twice (an edit with no `filepath`), then 10 refused calls; `callToolById.ts` | Fixed: a tool error goes back to the model and the task stays open                                 |
+| #   | Cause                                                                                                                                                                                                                                                                                                                                                                                            | Evidence                                                                                                                        | State                                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | The round budget counted history items, not model answers. A reasoning model leaves an empty assistant item before each thinking block, so 23 answers counted as 42 rounds. Past 40 the turn threw and ended without a message.                                                                                                                                                                  | session file of run 2: 23 prompt logs, 42 assistant items, 19 of them empty, `roundsSincePrompt` 42                             | Fixed: the round cap is removed; a turn pauses only when it is stuck or at the credit cap (step 3)                                                                   |
+| C2  | The privacy shield replaces emails with `__PII_EMAIL_1__` before the model sees them. The model took the placeholder for corruption and spent rounds building emails from parts.                                                                                                                                                                                                                 | the model's own text in run 2 ("the environment redacted email literals"); `backend/src/services/piiShield.ts`                  | Fixed in the agent prompt: one rule says what a placeholder is                                                                                                       |
+| C3  | Nothing checks the agent's own todo list. Run 2 ended with 0 of 9 items closed.                                                                                                                                                                                                                                                                                                                  | end state of run 2                                                                                                              | Fixed: a reminder with the open items, at most 3 per prompt                                                                                                          |
+| C4  | The agent prompt is written for small edits ("make the smallest change", "report in 1-3 sentences"). It says nothing about building a whole system.                                                                                                                                                                                                                                              | `core/llm/vynorai-system-prompt.ts`                                                                                             | Fixed: one sentence for build tasks                                                                                                                                  |
+| C5  | A failed tool call failed the task's plan step. The step allows 2 attempts, so the second tool error of a task ended it; every later tool call was refused with "Task is terminal" and the agent could not repair its failing tests.                                                                                                                                                             | task journal of the 1.2.60 run: `plan.step.failed` twice (an edit with no `filepath`), then 10 refused calls; `callToolById.ts` | Fixed: a tool error goes back to the model and the task stays open                                                                                                   |
+| C6  | An answer with no text and no tool call ended the turn. A reasoning model can spend a whole answer thinking; with no edit and no todo list yet, no gate fired.                                                                                                                                                                                                                                   | run of 2026-10-12: 3 model calls, 61 s, no file written, third completion empty in `chatInteraction.jsonl`                      | Fixed: `gui/src/redux/util/emptyAnswerGate.ts` sends the model back, at most twice per prompt                                                                        |
+| C7  | A terminal command that never returns holds the turn. The last cleanup command (stop the server, delete the probe database) showed "Running" from about 1,080 s to the 1,502 s limit. The tool waited for the "close" event only: a process that inherited the output pipes keeps them open after the shell exits, and the 2 minute timeout did nothing because the shell was no longer running. | progress log of the 38 of 39 run; a real PowerShell command that leaves a 9 s process behind: exit at 0.7 s, close at 9.6 s     | Fixed in `core/tools/implementations/runTerminalCommand.ts`: return 2 s after exit, and always after the timeout. Not yet confirmed as the cause of that run's hang. |
+
+C8, the cause behind C6: the sign-in wrote `VynorAI Auto` into `config.json` without limits, so the client asked
+for the 4,096 token default (and a 32,768 context) instead of the 16,384 and 256,000 that `config.yaml` and
+`docs/ARCHITECTURE_DECISIONS.md` give. Reasoning counts as output: two runs stopped with about 3,970 thinking
+tokens and an answer cut before its tool call (one empty, one ending in "Let me plan the build. <"). Fixed in
+`extensions/vscode/src/util/vynorAuth.ts`; the E2E profile uses `config.json`, so every run so far had this cap.
 
 ## Order of work
 
 Each step ends with the same measurement, three runs, compared with the baseline.
 
-1. C1 to C5 (done in code, with tests, built into the local VSIX 1.2.60). Three runs are still to be done.
-   Target: no run ends before the todo list is closed; median checks at least 37 of 39.
+1. C1 to C8 (done in code, with tests, built into the local VSIX 1.2.60). Three runs done, 39 of 39 each.
+   Target: no run ends before the todo list is closed; median checks at least 37 of 39. Met.
 2. Read the three runs for the next stop and fix that cause, again with three runs.
 3. No round cap (done in code, with tests; `gui/src/redux/util/agentProgress.ts`). A turn ends for one of
    three reasons, and the number of rounds is none of them:

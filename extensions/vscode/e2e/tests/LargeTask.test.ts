@@ -127,7 +127,17 @@ describe("VynorAI large task through the extension", function () {
             `streaming=${streaming} approvals=${approvals} continues=${continues} ${await within(turnStateSnapshot(view), 15_000, "snapshot").catch((e) => String(e.message))}`,
           );
         }
-        if (streaming || pressed) {
+        // A running terminal command (npm install) is not streaming, and the
+        // turn is not over: a run was cut off 8 s into an install.
+        const commandRunning =
+          (
+            await view
+              .findWebElements(
+                By.xpath("//a[normalize-space()='Move to background']"),
+              )
+              .catch(() => [])
+          ).length > 0;
+        if (streaming || pressed || commandRunning) {
           everStreamed ||= streaming;
           idleSince = 0;
           continue;

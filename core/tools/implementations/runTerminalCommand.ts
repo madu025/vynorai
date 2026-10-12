@@ -7,6 +7,8 @@ import { buildSandboxedCommand } from "../../util/sandbox.js";
 
 // Default timeout for terminal commands (2 minutes)
 const DEFAULT_TOOL_TIMEOUT_MS = 120_000;
+// Time for the last output to arrive after the shell has exited.
+const EXIT_GRACE_MS = 2_000;
 
 // Decode a stream's chunks with one stateful decoder: a UTF-8 character split
 // across two chunks (e.g. "✔" in test output) decoded per chunk turned into
@@ -223,6 +225,8 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
                   if (isRunning()) {
                     killProcessTree(childProc, "SIGKILL");
                   }
+                  // Return even when the kill is never reported.
+                  setTimeout(() => finishWithoutClose(null), EXIT_GRACE_MS);
                 }, 5_000);
               }
             }, DEFAULT_TOOL_TIMEOUT_MS);
@@ -301,7 +305,21 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
             ]);
           }
 
-          childProc.on("close", (code) => {
+          let finished = false;
+          let exitGraceId: ReturnType<typeof setTimeout> | undefined;
+          const finishWithoutClose = (code: number | null) => {
+            if (finished) return;
+            childProc.stdout?.destroy();
+            childProc.stderr?.destroy();
+            finish(code);
+          };
+          const finish = (code: number | null) => {
+            if (finished) return;
+            finished = true;
+            if (exitGraceId) {
+              clearTimeout(exitGraceId);
+            }
+
             // Clear timeout on normal completion
             if (timeoutId) {
               clearTimeout(timeoutId);
@@ -366,9 +384,23 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
                 });
               }
             }
+          };
+
+          childProc.on("close", finish);
+          // "close" waits for the output pipes. A process the command left
+          // behind (a server it started) keeps them open after the shell has
+          // exited, and the tool call then never returned.
+          childProc.on("exit", (code) => {
+            exitGraceId = setTimeout(
+              () => finishWithoutClose(code),
+              EXIT_GRACE_MS,
+            );
           });
 
           childProc.on("error", (error) => {
+            if (exitGraceId) {
+              clearTimeout(exitGraceId);
+            }
             // Clear timeout on error
             if (timeoutId) {
               clearTimeout(timeoutId);

@@ -2,8 +2,6 @@ import { ChatHistoryItem } from "core";
 import { BuiltInToolNames } from "core/tools/builtIn";
 import type { VerificationCommandCandidate } from "core/workspace/types";
 
-import { STREAM_RECOVERY_MARKER } from "./streamRecovery";
-
 const EDIT_TOOLS = new Set<string>([
   BuiltInToolNames.EditExistingFile,
   BuiltInToolNames.SingleFindAndReplace,
@@ -22,33 +20,45 @@ function commandOf(args: unknown): string {
   return typeof command === "string" ? command : "";
 }
 
+/** How often one prompt may be asked to check its edits. */
+export const MAX_VERIFICATION_GATES = 3;
+
 /**
  * Files edited since the latest real user prompt with no test, type check,
- * lint or build run after the last edit. Returns undefined when the turn is
- * already verified, made no edits, or was already gated once.
+ * lint or build run after the last edit. Returns undefined when the edits are
+ * verified, there are none, the model was already asked about these edits
+ * (it may decline in one line when no check applies), or the limit is
+ * reached.
+ *
+ * The question is always "was there a check after the last edit". An earlier
+ * automatic prompt of another kind (a repair prompt early in a long turn)
+ * used to switch the gate off for every later edit of that turn.
  */
 export function unverifiedEdits(
   history: ChatHistoryItem[],
 ): { files: string[] } | undefined {
-  let start = history.length;
+  let start = 0;
   for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].message.role !== "user") continue;
-    // A network-recovery prompt is not a new request; look past it.
-    const content = history[i].message.content;
-    if (
-      history[i].isAutoPrompt &&
-      typeof content === "string" &&
-      content.startsWith(STREAM_RECOVERY_MARKER)
-    )
-      continue;
-    if (history[i].isAutoPrompt) return undefined; // gated once already
-    start = i + 1;
-    break;
+    if (history[i].message.role === "user" && !history[i].isAutoPrompt) {
+      start = i + 1;
+      break;
+    }
   }
 
   const files = new Set<string>();
   let verifiedSinceLastEdit = false;
+  let askedSinceLastEdit = false;
+  let gates = 0;
   for (const item of history.slice(start)) {
+    const content = item.message.content;
+    if (
+      item.isAutoPrompt &&
+      typeof content === "string" &&
+      content.startsWith(VERIFICATION_GATE_MARKER)
+    ) {
+      gates++;
+      askedSinceLastEdit = true;
+    }
     for (const call of item.toolCallStates ?? []) {
       if (call.status !== "done") continue;
       const name = call.toolCall.function.name;
@@ -56,15 +66,21 @@ export function unverifiedEdits(
         const filepath = (call.parsedArgs as { filepath?: unknown })?.filepath;
         files.add(typeof filepath === "string" ? filepath : "a file");
         verifiedSinceLastEdit = false;
+        askedSinceLastEdit = false;
       } else if (
         name === BuiltInToolNames.RunTerminalCommand &&
         CHECK_COMMAND.test(commandOf(call.parsedArgs))
       ) {
         verifiedSinceLastEdit = true;
+        // What is left to verify starts again after a check.
+        files.clear();
       }
     }
   }
-  return files.size > 0 && !verifiedSinceLastEdit
+  return files.size > 0 &&
+    !verifiedSinceLastEdit &&
+    !askedSinceLastEdit &&
+    gates < MAX_VERIFICATION_GATES
     ? { files: [...files] }
     : undefined;
 }

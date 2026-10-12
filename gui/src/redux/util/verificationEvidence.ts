@@ -22,6 +22,22 @@ export function classifyVerificationCommand(
   return COMMAND_SIGNALS.find(([, signal]) => signal.test(command))?.[0];
 }
 
+/**
+ * Whether a command result is a failure, read from the status line the
+ * terminal tool sets ("Command failed with exit code 1", "Command timed
+ * out"). The output text is never read: "5 passed, 0 failed" and a passing
+ * test named "rejects the order when payment failed" are passes.
+ */
+export function commandFailed(output: ContextItem[] | undefined): boolean {
+  return Boolean(
+    output?.some((item) =>
+      /^command (?:failed|timed out)/i.test(
+        (item.status || item.description || "").trim(),
+      ),
+    ),
+  );
+}
+
 export function verificationFromToolResult(args: {
   toolName: string;
   command?: string;
@@ -39,12 +55,8 @@ export function verificationFromToolResult(args: {
   else if (args.command) kind = classifyVerificationCommand(args.command);
   if (!kind) return undefined;
 
-  const outputFailed = args.output?.some((item) =>
-    /(?:command failed|timed out|exit code [1-9]\d*|\bfailed\b)/i.test(
-      `${item.status ?? ""}\n${item.description ?? ""}`,
-    ),
-  );
-  const status = args.failed || outputFailed ? "failed" : "passed";
+  const status =
+    args.failed || commandFailed(args.output) ? "failed" : "passed";
   return {
     kind,
     status,

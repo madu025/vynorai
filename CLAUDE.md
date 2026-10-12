@@ -15,6 +15,11 @@ Rules for Claude working in this repository.
 - Never bypass a denied permission or a safety check. Never print or commit secrets (`.env`, API keys).
 - Report results honestly: say what was verified (with evidence) and what was not. Do not claim something works without running it.
 
+## Existing product, and its index
+
+- VynorAI is built and released. Extend what exists: search and read `CODEMAP.md` before writing a new module, and never rebuild a subsystem without asking. `AGENTS.md` has the same rules for other AI agents and a table of what already exists.
+- When you add, move, rename or remove a module, update `CODEMAP.md` (and the table in `AGENTS.md` if a capability moved) in the same commit. Run `node scripts/check-doc-links.mjs` from the root before committing.
+
 ## Fixed decisions
 
 - Before answering or changing anything about the database, caches, context limits or plans, read `docs/ARCHITECTURE_DECISIONS.md`. Do not re-derive these from memory; they are the same in every session.

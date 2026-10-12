@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>Shop</title></head>
+  <body>
+    <h1>Shop</h1>
+    <ul id="products"></ul>
+    <script>
+      let token = "";
+      const api = (path, method = "GET", body) =>
+        fetch(path, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: body && JSON.stringify(body) }).then((r) => (r.status === 204 ? null : r.json()));
+      api("/api/products").then((d) => {
+        document.getElementById("products").innerHTML = d.items.map((p) => "<li>" + p.name + " " + p.price + "</li>").join("");
+      });
+      window.shop = {
+        add: (productId) => api("/api/cart/items", "POST", { productId, quantity: 1 }),
+        cart: () => api("/api/cart"),
+        checkout: () => api("/api/orders", "POST", {}),
+      };
+    </script>
+  </body>
+</html>

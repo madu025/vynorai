@@ -1,0 +1,8 @@
+{
+  "name": "shop-reference",
+  "private": true,
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "test": "node --no-warnings --test"
+  }
+}

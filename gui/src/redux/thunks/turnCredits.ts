@@ -4,6 +4,10 @@ import { setMessageCredits, setTurnCredits } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
 import { reportTaskOutcome, TaskOutcomeInfo } from "../util/taskOutcome";
 
+// The credit read runs before every model round. Without a limit, a request
+// that never gets an answer left the turn "streaming" with nothing happening.
+export const USAGE_REQUEST_TIMEOUT_MS = 8000;
+
 // The backend settles a request's credits just after its stream ends.
 const SETTLE_DELAY_MS = 1200;
 
@@ -12,7 +16,11 @@ export async function fetchCreditsUsed(
   extra: ThunkApiType["extra"],
 ): Promise<number | null> {
   try {
-    const res = await extra.ideMessenger.request("vynor/usage", undefined);
+    const res = await extra.ideMessenger.request(
+      "vynor/usage",
+      undefined,
+      USAGE_REQUEST_TIMEOUT_MS,
+    );
     return res.status === "success" && res.content ? res.content.used : null;
   } catch {
     return null;
@@ -24,7 +32,11 @@ export async function fetchCreditShare(
   extra: ThunkApiType["extra"],
 ): Promise<number | null> {
   try {
-    const res = await extra.ideMessenger.request("vynor/usage", undefined);
+    const res = await extra.ideMessenger.request(
+      "vynor/usage",
+      undefined,
+      USAGE_REQUEST_TIMEOUT_MS,
+    );
     if (res.status !== "success" || !res.content?.limit) return null;
     return res.content.used / res.content.limit;
   } catch {

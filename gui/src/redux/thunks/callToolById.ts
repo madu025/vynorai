@@ -24,7 +24,7 @@ import { runHooks, toolOutputText } from "../util/hooks";
 import {
   guardErrorForModel,
   isRecoverableGuardError,
-} from "../util/toolRoundBudget";
+} from "../util/agentProgress";
 
 type CallToolInputs = {
   toolCallId: string;
@@ -34,8 +34,8 @@ type CallToolInputs = {
 
 // A core tool can involve an external process. Never leave the webview in a
 // streaming state forever if that process or its protocol response stalls.
-// The normal error path below records the failure and lets the persisted plan
-// decide whether to retry, block, or fail the task.
+// The normal error path below records the failure as the tool's error so the
+// model can continue.
 const CORE_TOOL_TIMEOUT_MS = 120_000;
 const AGENT_RUNTIME_REQUEST_TIMEOUT_MS = 15_000;
 
@@ -371,70 +371,12 @@ async function callToolByIdImpl(
       }
     }
 
-    // The persisted plan, not the prose response, owns retry and blocked
-    // decisions. A failed tool must therefore fail the currently running plan
-    // step before the model receives its error and attempts another action.
-    if (error || evidence?.status === "failed") {
-      try {
-        const taskResult = await extra.ideMessenger.request(
-          "agent/task/get",
-          {
-            taskId: state.session.activeTaskId,
-          },
-          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
-        );
-        const activeStep =
-          taskResult.status === "success"
-            ? taskResult.content?.plan?.steps.find(
-                (step) =>
-                  step.state === "running" || step.state === "verifying",
-              )
-            : undefined;
-        if (activeStep) {
-          const failureCode =
-            error?.message ??
-            evidence?.summary ??
-            `${toolCallState.toolCall.function.name} failed`;
-          const failedStep = await extra.ideMessenger.request(
-            "agent/plan/failStep",
-            {
-              taskId: state.session.activeTaskId,
-              stepId: activeStep.id,
-              failureCode,
-            },
-            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
-          );
-          if (failedStep.status === "success") {
-            dispatch(setActiveTaskState(failedStep.content.state));
-            const next = await extra.ideMessenger.request(
-              "agent/plan/next",
-              {
-                taskId: state.session.activeTaskId,
-              },
-              AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
-            );
-            if (
-              next.status === "success" &&
-              next.content.action === "execute"
-            ) {
-              const restarted = await extra.ideMessenger.request(
-                "agent/plan/startStep",
-                {
-                  taskId: state.session.activeTaskId,
-                  stepId: next.content.step.id,
-                },
-                AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
-              );
-              if (restarted.status === "success") {
-                dispatch(setActiveTaskState(restarted.content.state));
-              }
-            }
-          }
-        }
-      } catch {
-        // A journal failure must not hide the actual tool failure from the model.
-      }
-    }
+    // A failed tool call or a failing check is feedback for the model, not a
+    // failed plan step. Failing the step here ended the whole task on the
+    // second tool error (two edits with a missing `filepath` in a 27 call
+    // build), after which every tool was refused with "Task is terminal" and
+    // the agent could not repair its own failing tests. Loops are bounded by
+    // the repeated-action guard, the step limit and the progress pause.
   }
 
   if (streamResponse) {

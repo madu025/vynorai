@@ -131,7 +131,7 @@ describe("callToolById never leaves a call hanging", () => {
     expect(toolOutput(store)).toContain("core crashed");
   });
 
-  it("reports a failed tool to the active persisted plan step and starts its retry", async () => {
+  it("a failed tool does not fail the task's plan step", async () => {
     const calls: string[] = [];
     const store = storeWith((type) => {
       calls.push(type);
@@ -168,14 +168,11 @@ describe("callToolById never leaves a call hanging", () => {
 
     await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
 
-    expect(calls).toEqual(
-      expect.arrayContaining([
-        "agent/task/get",
-        "agent/plan/failStep",
-        "agent/plan/next",
-        "agent/plan/startStep",
-      ]),
-    );
+    // Two tool errors used to exhaust the step's attempts and end the task,
+    // which then refused every later tool call.
+    expect(calls).not.toContain("agent/plan/failStep");
+    expect(status(store)).toBe("errored");
+    expect(toolOutput(store)).toContain("core crashed");
   });
 
   it("an unexpected exception still errors the call instead of hanging", async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_VERIFICATION_GATES,
   unverifiedEdits,
   VERIFICATION_GATE_MARKER,
   verificationGatePrompt,
@@ -66,7 +67,8 @@ describe("unverifiedEdits", () => {
       tools(run("npm test")),
       tools(edit("b.ts")),
     ];
-    expect(unverifiedEdits(history)).toEqual({ files: ["a.ts", "b.ts"] });
+    // a.ts was covered by the check; only b.ts is left to verify.
+    expect(unverifiedEdits(history)).toEqual({ files: ["b.ts"] });
   });
 
   it("ignores non-check commands, failed edits and earlier prompts", () => {
@@ -89,13 +91,49 @@ describe("unverifiedEdits", () => {
     ).toBeUndefined();
   });
 
-  it("gates a prompt only once", () => {
+  it("asks once about the same edits", () => {
+    const history = [
+      user("fix"),
+      tools(edit("a.ts")),
+      user(`${VERIFICATION_GATE_MARKER} ...`, true),
+      {
+        message: { role: "assistant", content: "No check applies: docs only." },
+        contextItems: [],
+      } as any,
+    ];
+    expect(unverifiedEdits(history)).toBeUndefined();
+  });
+
+  it("asks again when files are edited after the question", () => {
     const history = [
       user("fix"),
       tools(edit("a.ts")),
       user(`${VERIFICATION_GATE_MARKER} ...`, true),
       tools(edit("b.ts")),
     ];
+    expect(unverifiedEdits(history)).toEqual({ files: ["a.ts", "b.ts"] });
+  });
+
+  it("is not switched off by an earlier prompt of another kind", () => {
+    const history = [
+      user("build"),
+      tools(edit("a.ts")),
+      tools(run("npm test")),
+      user("[verification-repair] The check `npm test` failed", true),
+      tools(run("npm test")),
+      ...Array.from({ length: 20 }, (_, i) => tools(edit(`src/f${i}.ts`))),
+    ];
+    expect(unverifiedEdits(history)?.files).toHaveLength(20);
+  });
+
+  it("stops asking after the limit", () => {
+    const history = [user("build")];
+    for (let i = 0; i < MAX_VERIFICATION_GATES; i++) {
+      history.push(tools(edit(`f${i}.ts`)));
+      expect(unverifiedEdits(history)).toBeDefined();
+      history.push(user(`${VERIFICATION_GATE_MARKER} ...`, true));
+    }
+    history.push(tools(edit("last.ts")));
     expect(unverifiedEdits(history)).toBeUndefined();
   });
 });

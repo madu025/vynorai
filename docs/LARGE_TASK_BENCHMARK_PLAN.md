@@ -200,4 +200,21 @@ Every item below was measured, and each fix has a test.
 Not found: a stall caused by the model or by indexing. The 82 CPU seconds of first indexing (local embeddings in
 the extension host thread) were measured and are still open.
 
+### Cost through the extension, and one stalled turn
+
+Monthly quota tokens read from `/api/auth/me` before and after one run, no other traffic on the key (Pro plan,
+25,000,000 a month). Samples of one or two runs; not an average.
+
+| Task              | Quota tokens | Requests | Model calls | Seconds                                          |
+| ----------------- | ------------ | -------- | ----------- | ------------------------------------------------ |
+| `lg-rename-fetch` | 92,490       | 23       | 20 to 23    | 181                                              |
+| `lg-add-provider` | 166,717      | 36       | 35          | 259 (1 run), 191 to 220 (4 runs), 19 to 23 calls |
+
+Across 8 real runs through the extension, 7 finished normally (183 to 220 s). In one `lg-add-provider` run
+the work was finished and passing after 259 s, but the chat stayed in "streaming" for more than 20 minutes with no
+model call and a responsive panel. It did not return in 3 further runs, so the cause is not known. The credit read
+before every round (`vynor/usage`) had no time limit; it now has 8 s (`turnCredits.ts`), a hardening that is not
+shown to be the cause. In two of the runs the agent also edited `src/apis/Bedrock.ts`, a file the task did not
+name; the fixture's type check already failed there before the task.
+
 Cost guide from the pilot: 70K to 600K tokens per task, most of it cache hits.

@@ -1,0 +1,99 @@
+# AGENTS.md
+
+Rules and a start-here index for any AI coding agent (Codex, Claude Code, Cursor and others) working in this
+repository. `CLAUDE.md` holds the same rules for Claude Code.
+
+## This is an existing product
+
+VynorAI is built, released and in use: a VS Code extension, a hosted proxy and a billing back end. Extend what
+is here. Do not scaffold a new project, re-create a module that exists, or replace a subsystem because its
+design is unfamiliar.
+
+Before you write a new file:
+
+1. Search for the feature by name and by behavior (`rg`), and look it up in `CODEMAP.md`.
+2. Read the module you find and its tests.
+3. Change that module. Add a new one only when nothing covers the behavior.
+
+If you believe something must be rebuilt, say why and ask first.
+
+## Read first
+
+| Order | File                                | What it answers                                                            |
+| ----- | ----------------------------------- | -------------------------------------------------------------------------- |
+| 1     | `README.md`                         | What the product is, the repository layout, how to build and test          |
+| 2     | `CODEMAP.md`                        | Every subsystem and the files that implement it                            |
+| 3     | `docs/ARCHITECTURE_DECISIONS.md`    | Fixed decisions: database, caches, context limits, plans. Do not re-derive |
+| 4     | `docs/AGENTIC_BUILD_PLAN.md`        | The work in progress: making the agent finish a whole job, with evidence   |
+| 5     | `docs/LARGE_TASK_BENCHMARK_PLAN.md` | How multi-file tasks are measured and what was found                       |
+| 6     | `docs/NEXT_LEVEL_PLAN.md`           | Planned upgrades and their order                                           |
+| 7     | `docs/CLAUDE_CODE_PARITY.md`        | Feature gaps against Claude Code and their state                           |
+
+## What already exists
+
+Each row is implemented and tested. `CODEMAP.md` has the full index.
+
+| Capability                              | Where                                                                                                                                                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Agent loop (model call, tools, results) | `gui/src/redux/thunks/streamNormalInput.ts`, `gui/src/redux/thunks/callToolById.ts`                                                                                                                                                                    |
+| When a turn ends or pauses              | `gui/src/redux/util/agentProgress.ts` (no round cap), `gui/src/redux/util/completionGate.ts`, `gui/src/redux/util/todoGate.ts`, `gui/src/redux/util/verificationGate.ts`, `gui/src/redux/util/verificationRepair.ts`, `gui/src/redux/util/judgment.ts` |
+| Task state, guards, journal             | `core/agent/TaskRuntime.ts`, `core/agent/AgentOrchestrator.ts`, `core/agent/TaskJournal.ts`                                                                                                                                                            |
+| Tools the model can call                | `core/tools/definitions`, `core/tools/implementations`                                                                                                                                                                                                 |
+| Agent, chat and plan system prompts     | `core/llm/vynorai-system-prompt.ts`                                                                                                                                                                                                                    |
+| Slash commands                          | `core/commands/slash/agentPromptCommands.ts`, `core/commands/slash/built-in-legacy`, `gui/src/redux/thunks/panelCommands.tsx`                                                                                                                          |
+| Subagents and custom agents             | `core/agent/exploreSubagent.ts`, `core/agent/userSubagents.ts`                                                                                                                                                                                         |
+| Hooks                                   | `core/hooks`, `docs/HOOKS.md`                                                                                                                                                                                                                          |
+| Checkpoints and rewind                  | `extensions/vscode/src/checkpoints`, `gui/src/redux/thunks/rewind.ts`                                                                                                                                                                                  |
+| Codebase indexing and search            | `core/indexing/CodebaseIndexer.ts`                                                                                                                                                                                                                     |
+| Credits per turn, task credit cap       | `gui/src/redux/thunks/turnCredits.ts`, `gui/src/redux/util/turnCredits.ts`                                                                                                                                                                             |
+| Sign-in, API key and account binding    | `extensions/vscode/src/util/vynorAuth.ts`, `extensions/vscode/src/util/vynorAccount.ts`                                                                                                                                                                |
+| Extension commands, webview messaging   | `extensions/vscode/src/commands.ts`, `extensions/vscode/src/webviewProtocol.ts`                                                                                                                                                                        |
+| Model provider used by the extension    | `core/llm/llms/VynorAI.ts`                                                                                                                                                                                                                             |
+| Proxy endpoint `/v1/chat/completions`   | `backend/src/routes/proxy.ts`, `backend/src/services/aiProxy.ts`                                                                                                                                                                                       |
+| Model routing and provider fallback     | `backend/src/services/autoRouter.ts`, `backend/src/services/tierClassifier.ts`, `backend/src/services/providerRouter.ts`, `backend/src/services/modelRegistry.ts`                                                                                      |
+| Context handling and compaction         | `backend/src/services/hybridContext.ts`                                                                                                                                                                                                                |
+| Privacy placeholders for personal data  | `backend/src/services/piiShield.ts`                                                                                                                                                                                                                    |
+| Quota, credits, billing                 | `backend/src/services/monthlyQuota.ts`, `backend/src/services/billingPolicy.ts`, `backend/src/services/payhere.ts`                                                                                                                                     |
+| Response caches                         | `backend/src/services/cacheEngine.ts`, `backend/src/services/semanticCache.ts`                                                                                                                                                                         |
+| Database (PostgreSQL, SQLite for tests) | `backend/src/db.ts`, `backend/src/services/pgDriver.ts`, `backend/src/services/postgresSchema.ts`                                                                                                                                                      |
+| Accounts, payments, admin, releases     | `backend/src/routes/auth.ts`, `backend/src/routes/payment.ts`, `backend/src/routes/admin.ts`, `backend/src/routes/releases.ts`                                                                                                                         |
+| Benchmarks                              | `backend/scripts/bench`                                                                                                                                                                                                                                |
+| End-to-end tests in a real VS Code      | `extensions/vscode/e2e/tests`                                                                                                                                                                                                                          |
+| Build, release and deploy scripts       | `deploy/build-extension.sh`, `deploy/release-extension.sh`, `deploy/rolling-deploy.sh`                                                                                                                                                                 |
+
+`core` and `gui` started from the open-source Continue project, so file and command names such as `continue.*`
+are expected. `CODEMAP.md` section 9 says which parts are VynorAI's own.
+
+## Rules
+
+- Reply to the user in Sinhala script, in simple language. Keep code, commands, paths, identifiers, error
+  messages, commit messages and pull request text in English.
+- Own the engineering: given a goal, choose the best option, do it and report. Do not hand back option menus.
+- Ask before `git push`, publishing the extension, deploying the back end, or any change to production.
+- Never bypass a denied permission or a safety check. Never print or commit secrets (`.env`, API keys).
+- Report honestly: say what was verified, with the evidence, and what was not. Do not say something works
+  without running it.
+- Before changing the database, caches, context limits or plans, read `docs/ARCHITECTURE_DECISIONS.md`. If you
+  change one of those decisions, update that file in the same commit.
+- Anything that goes into a model prompt must keep the prompt prefix stable: read
+  `.claude/skills/vynor-prompt-cache/SKILL.md`.
+- Match the surrounding code: its naming, comment density and style.
+
+## Verify before saying it works
+
+```bash
+npx tsc --noEmit                      # in backend, core, gui, extensions/vscode
+npx tsx --test test/*.test.ts         # in backend
+npx vitest run <path>                 # in core and gui
+node scripts/check-doc-links.mjs      # from the root: every path named in these documents exists
+```
+
+A change to the agent loop is not verified by unit tests alone. `.claude/skills/vynor-live-verify/SKILL.md`
+describes the run in a real VS Code. The other procedures in `.claude/skills` (release, PostgreSQL check,
+Windows shell pitfalls) are plain Markdown and apply to any agent.
+
+## Keep this index true
+
+When you add, move, rename or remove a module, update `CODEMAP.md` in the same commit, and the table above if
+a capability moved. When a plan document's step is done or found wrong, change the document. Run
+`node scripts/check-doc-links.mjs` before committing; a path that no longer exists fails it.

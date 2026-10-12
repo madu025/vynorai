@@ -43,6 +43,7 @@ import { RootState } from "../store";
 import { ProjectMemory } from "../../util/projectMemory";
 import { streamResponseThunk } from "../thunks/streamResponse";
 import { findChatHistoryItemByToolCallId, findToolCallById } from "../util";
+import type { ProgressPause } from "../util/agentProgress";
 
 /**
  * Helper function to filter out duplicate edit/search-replace tool calls.
@@ -257,7 +258,7 @@ type SessionState = {
   /** Set only while an implementation subagent model turn owns tool dispatch. */
   activeImplementationSubagentId?: string;
   activeTaskState?: TaskState;
-  /** Tool rounds used when the last turn paused at its round budget; shows "Continue". */
+  /** Rounds used when the last turn paused (no progress or credit cap); shows "Continue". */
   toolBudgetPausedAfter?: number;
   isInEdit: boolean;
   codeBlockApplyStates: {
@@ -274,8 +275,8 @@ type SessionState = {
   turnCredits?: { start: number; used: number };
   /** Final credits of a finished prompt, keyed by its last assistant message. */
   creditsByMessage?: Record<string, number>;
-  /** Why the last turn paused: its tool round budget or the task credit cap. */
-  toolBudgetPauseReason?: "rounds" | "credits";
+  /** Why the last turn paused: no progress or the task credit cap. */
+  toolBudgetPauseReason?: ProgressPause | "credits";
   /** "You should know" notes, keyed by the assistant message they follow. */
   sideReviews?: Record<string, SideReviewNote>;
 };
@@ -1125,7 +1126,7 @@ export const sessionSlice = createSlice({
     },
     setToolBudgetPauseReason: (
       state,
-      action: PayloadAction<"rounds" | "credits" | undefined>,
+      action: PayloadAction<ProgressPause | "credits" | undefined>,
     ) => {
       state.toolBudgetPauseReason = action.payload;
     },

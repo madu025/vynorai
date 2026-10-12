@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 
 import { TaskRuntime } from "./TaskRuntime";
+import { REPEAT_LIMIT_ERROR, STEP_LIMIT_ERROR } from "./guardErrors";
 import { redactSecrets } from "./redactSecrets";
 import { classifyToolRisk } from "./toolRisk";
 import { hasPassedRequiredVerification } from "./verification";
@@ -285,12 +286,12 @@ export class AgentOrchestrator {
         task.executionGuard.autonomousSteps >=
         task.executionGuard.maxAutonomousSteps
       )
-        throw new Error("Autonomous step limit reached");
+        throw new Error(STEP_LIMIT_ERROR);
       const actionDigest = digest(signature);
       const repeats =
         (task.executionGuard.actionDigests[actionDigest] ?? 0) + 1;
       if (repeats > task.executionGuard.repeatedActionLimit)
-        throw new Error("Repeated tool action limit reached");
+        throw new Error(REPEAT_LIMIT_ERROR);
       // A file edit changes what reads, tests and builds return, so repeats
       // only count since the last edit: edit → `npm test` → edit → `npm test`
       // is a fix loop, not a stuck loop.

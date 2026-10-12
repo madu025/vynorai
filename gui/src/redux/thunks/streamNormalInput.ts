@@ -61,11 +61,14 @@ import { setWorkspaceSnapshot } from "../slices/workspaceSlice";
 import { selectBatchContinuation } from "../util/toolLoopGuards";
 import {
   roundsSincePrompt,
-  TOOL_BUDGET_GUIDANCE,
-  toolRoundBudget,
-} from "../util/toolRoundBudget";
+  pauseGuidance,
+  progressPause,
+  sameFailureNudge,
+} from "../util/agentProgress";
 import { replyLanguageGuidance } from "../util/replyLanguage";
 import { createStreamBatcher } from "../util/streamBatcher";
+import { missingTodoGate, completionGatePrompt } from "../util/completionGate";
+import { openTodoGate, todoGatePrompt } from "../util/todoGate";
 import { finishedOutcome, reportTaskOutcome } from "../util/taskOutcome";
 import {
   unverifiedEdits,
@@ -149,6 +152,13 @@ export const streamNormalInput = createAsyncThunk<
     { legacySlashCommandData, depth: passedDepth = 0, resumeTaskId },
     { dispatch, extra, getState },
   ) => {
+    // A check that keeps failing the same way: tell the model once, at the end
+    // of the history, before the next round. It may carry on or change
+    // approach; the turn pauses only if the failure goes on (agentProgress).
+    if (getState().session.mode === "agent") {
+      const nudge = sameFailureNudge(getState().session.history);
+      if (nudge) dispatch(appendAutoPrompt(nudge));
+    }
     const state = getState();
     // Stop aborts (and replaces) the store's aborter; holding this turn's
     // copy lets the pre-stream steps notice a Stop pressed before streaming.
@@ -158,12 +168,10 @@ export const streamNormalInput = createAsyncThunk<
       passedDepth,
       roundsSincePrompt(state.session.history),
     );
-    const roundBudget = toolRoundBudget(state.session.mode);
-    // At the budget the model answers without tools, so depth can only pass
-    // it through a bug; fail loudly rather than loop.
-    if (depth > roundBudget) {
-      throw new Error(`Tool round budget of ${roundBudget} exceeded`);
-    }
+    // No cap on rounds: the turn pauses only when the agent stopped making
+    // progress (or at the task credit cap). Then the model answers without
+    // tools and the Continue banner is shown.
+    const progressStop = progressPause(state.session.history);
     if (depth === 0 && state.session.toolBudgetPausedAfter !== undefined) {
       dispatch(setToolBudgetPausedAfter(undefined));
     }
@@ -182,8 +190,15 @@ export const streamNormalInput = createAsyncThunk<
         dispatch(setTurnCredits({ start: turn.start, used }));
         creditCapHit = creditCapReached(used, getState().ui.taskCreditCap);
       }
+    } else {
+      // The usage request failed or timed out: judge the cap on the last
+      // known spend instead of treating the task as free.
+      creditCapHit = creditCapReached(
+        getState().session.turnCredits?.used ?? 0,
+        getState().ui.taskCreditCap,
+      );
     }
-    const toolBudgetExhausted = depth >= roundBudget || creditCapHit;
+    const toolBudgetExhausted = Boolean(progressStop) || creditCapHit;
     const selectedChatModel = selectSelectedChatModel(state);
 
     if (!selectedChatModel) {
@@ -248,9 +263,12 @@ export const streamNormalInput = createAsyncThunk<
     );
 
     // Construct messages (excluding system message)
+    // The user's own request, not a gate or recovery prompt: expert roles and
+    // memories chosen from it go into the system message, which must not
+    // change between two rounds of one prompt.
     const latestUserRequest = [...state.session.history]
       .reverse()
-      .find((item) => item.message.role === "user");
+      .find((item) => item.message.role === "user" && !item.isAutoPrompt);
     // UserPromptSubmit hooks: exit 2 stops the turn; stdout is attached to the
     // prompt as a context item (persisted, so the whole tool loop sees it).
     let promptHistory = state.session.history;
@@ -497,7 +515,7 @@ export const streamNormalInput = createAsyncThunk<
     const toolBudgetGuidance = toolBudgetExhausted
       ? creditCapHit
         ? CREDIT_CAP_GUIDANCE
-        : TOOL_BUDGET_GUIDANCE
+        : pauseGuidance(progressStop ?? "stalled")
       : "";
     const baseSystemMessage = `${getBaseSystemMessage(
       state.session.mode,
@@ -693,8 +711,7 @@ export const streamNormalInput = createAsyncThunk<
         getState().session.isStreaming &&
         toolCallsToCancel.length === 0 &&
         isTransientStreamError(e) &&
-        !alreadyRecovered(getState().session.history) &&
-        depth + 1 < roundBudget
+        !alreadyRecovered(getState().session.history)
       ) {
         // Keep the partial reply and ask the model once to continue from it.
         const hadPartial =
@@ -763,8 +780,7 @@ export const streamNormalInput = createAsyncThunk<
     const pendingRepair =
       originalToolCalls.length === 0 &&
       state.session.mode === "agent" &&
-      !toolBudgetExhausted &&
-      depth + 1 < roundBudget
+      !toolBudgetExhausted
         ? pendingVerificationRepair(getState().session.history)
         : undefined;
     if (pendingRepair) {
@@ -773,11 +789,52 @@ export const streamNormalInput = createAsyncThunk<
       return;
     }
 
+    // The agent made edits but never created a todo list: it started working
+    // without planning. Send it back once to create one so the todoGate can
+    // track whether the job is complete.
+    const noTodo =
+      originalToolCalls.length === 0 &&
+      state.session.mode === "agent" &&
+      !toolBudgetExhausted
+        ? missingTodoGate(getState().session.history)
+        : false;
+    if (noTodo && latestUserRequest) {
+      if (streamAborter.signal.aborted || !getState().session.isStreaming) {
+        return;
+      }
+      dispatch(
+        appendAutoPrompt(
+          completionGatePrompt(renderChatMessage(latestUserRequest.message)),
+        ),
+      );
+      unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
+      return;
+    }
+
+    // The agent stopped with its own todo list still open: send it back to
+    // finish before any final check. A build task ended with 0 of 9 items
+    // closed and the README and part of the page missing.
+    const pendingTodos =
+      originalToolCalls.length === 0 &&
+      state.session.mode === "agent" &&
+      !toolBudgetExhausted
+        ? openTodoGate(getState().session.history)
+        : undefined;
+    if (pendingTodos) {
+      if (streamAborter.signal.aborted || !getState().session.isStreaming) {
+        return;
+      }
+      dispatch(
+        appendAutoPrompt(todoGatePrompt(pendingTodos.open, pendingTodos.total)),
+      );
+      unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
+      return;
+    }
+
     const pendingVerification =
       originalToolCalls.length === 0 &&
       state.session.mode === "agent" &&
       !toolBudgetExhausted &&
-      depth + 1 < roundBudget &&
       activeTools.some(
         (tool) => tool.function.name === BuiltInToolNames.RunTerminalCommand,
       )
@@ -827,8 +884,7 @@ ${PREMORTEM_GUIDANCE}`
     const pendingReview =
       originalToolCalls.length === 0 &&
       state.session.mode === "agent" &&
-      !toolBudgetExhausted &&
-      depth + 1 < roundBudget
+      !toolBudgetExhausted
         ? pendingPremortem(
             getState().session.history,
             getState().ui.judgmentLevel,
@@ -857,7 +913,9 @@ ${PREMORTEM_GUIDANCE}`
         mode: getState().session.mode,
         rounds: depth + 1,
       };
-      if (
+      if (toolBudgetExhausted) {
+        // A paused turn is reported once, as paused, further down.
+      } else if (
         getState().session.turnCredits &&
         finalReply?.message.role === "assistant"
       ) {
@@ -1023,7 +1081,11 @@ ${PREMORTEM_GUIDANCE}`
       }
       if (toolBudgetExhausted) {
         dispatch(setToolBudgetPausedAfter(depth));
-        dispatch(setToolBudgetPauseReason(creditCapHit ? "credits" : "rounds"));
+        dispatch(
+          setToolBudgetPauseReason(
+            creditCapHit ? "credits" : (progressStop ?? "stalled"),
+          ),
+        );
         const pausedReply = getState().session.history.at(-1);
         const pausedOutcome = {
           outcome: creditCapHit ? ("credit_cap" as const) : ("budget" as const),

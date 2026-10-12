@@ -1,7 +1,7 @@
 import { PlayIcon } from "@heroicons/react/24/outline";
 import { JSONContent } from "@tiptap/react";
 import { useAppSelector } from "../../redux/hooks";
-import { CONTINUE_TASK_PROMPT } from "../../redux/util/toolRoundBudget";
+import { CONTINUE_TASK_PROMPT } from "../../redux/util/agentProgress";
 import { formatCredits } from "../../redux/util/turnCredits";
 
 export const continueEditorState: JSONContent = {
@@ -15,9 +15,9 @@ export const continueEditorState: JSONContent = {
 };
 
 /**
- * Shown after a turn pauses at its tool round budget. The agent has already
- * summarized progress and remaining steps; Continue resumes with a fresh
- * budget as a new prompt, so it can be rewound on its own.
+ * Shown after a turn pauses because it stopped making progress or reached the
+ * task credit cap. The agent has already summarized progress and remaining
+ * steps; Continue resumes as a new prompt, so it can be rewound on its own.
  */
 export function ContinueTaskBanner({
   onContinue,
@@ -40,7 +40,11 @@ export function ContinueTaskBanner({
       <span className="text-description min-w-0 flex-1">
         {reason === "credits"
           ? `Paused at your ${formatCredits(cap ?? 0)}-credit task limit. The plan above lists what is left.`
-          : `Paused after ${pausedAfter} steps to check in. The plan above lists what is left.`}
+          : reason === "same_failure"
+            ? "Paused: the same check kept failing the same way. The reply above says what is blocking."
+            : reason === "actions"
+              ? "Paused at the action limit for one task. The reply above lists what is left."
+              : "Paused: the last steps made no progress. The reply above says what is left and what is blocking."}
       </span>
       <button
         type="button"

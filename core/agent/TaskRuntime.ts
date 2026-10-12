@@ -62,8 +62,9 @@ const DEFAULT_BUDGET: AgentTaskBudget = {
 
 const MAX_IMPLEMENTATION_SUBAGENTS = 8;
 /**
- * Runaway-loop safety net per task. The user-facing pause is the GUI's tool
- * round budget ("Continue" starts a new task), so this is rarely reached.
+ * Runaway-loop safety net per task. The GUI pauses a turn when it stops
+ * making progress (gui/src/redux/util/agentProgress.ts); this only catches a
+ * loop that still looks productive. "Continue" starts a new task.
  */
 export const MAX_AUTONOMOUS_STEPS = 200;
 
@@ -102,7 +103,11 @@ export class TaskRuntime {
 
   constructor(
     directory = path.join(
-      process.env.VYNORAI_GLOBAL_DIR || path.join(os.homedir(), ".vynorai"),
+      // Same lookup as core/util/paths.ts, so an isolated profile (E2E) does
+      // not write its task journals into the user's own folder.
+      process.env.VYNORAI_GLOBAL_DIR ||
+        process.env.CONTINUE_GLOBAL_DIR ||
+        path.join(os.homedir(), ".vynorai"),
       "agent-tasks",
     ),
   ) {

@@ -1,16 +1,17 @@
 /**
  * Real-model scope-routing benchmark. It measures whether the agent infers
  * simple versus complex work from the requested outcome, rather than matching
- * a fixed keyword list. It intentionally stops after two tool rounds: this is
- * a routing test, not a benchmark that asks the model to build twenty apps.
+ * a fixed keyword list. It calls the same preflight prompt/parser used by the
+ * GUI; this is a routing test, not twenty full application builds.
  *
  * node --env-file='../.env.e2e' --import tsx scripts/bench/scope-live.ts
  */
-import { DEFAULT_AGENT_SYSTEM_MESSAGE } from "../../../core/llm/defaultSystemMessages";
-import { updateTodoListTool } from "../../../core/tools/definitions/updateTodoList";
-import { viewRepoMapTool } from "../../../core/tools/definitions/viewRepoMap";
+import {
+  resolveTaskScope,
+  type TaskScopeAssessment,
+} from "../../../gui/src/redux/util/taskScope";
 // @ts-expect-error plain JS modules
-import { cleanup, makeFixture, runAgent } from "./lib.mjs";
+import { BASE } from "./lib.mjs";
 
 const key = process.env.VYNORAI_E2E_API_KEY ?? "";
 if (!/^vynor_live_[a-f0-9]{32}$/i.test(key)) {
@@ -144,52 +145,86 @@ const cases: ScopeCase[] = [
   },
 ];
 
-const fixture = {
-  id: "scope-routing",
-  prompt: "",
-  files: {
-    "src/math.mjs":
-      "export function calculateTotal(items, tax = 0.1) { return items.reduce((sum, item) => sum + item, 0) * (1 + tax); }\n",
-    "test.mjs":
-      "import assert from 'node:assert/strict';\nimport { calculateTotal } from './src/math.mjs';\nassert.equal(calculateTotal([10]), 11);\nconsole.log('PASS');\n",
-  },
-};
-
 async function main() {
   let failed = 0;
   let totalTokens = 0;
-  for (const c of cases) {
-    const task = { ...fixture, prompt: c.prompt };
-    const fx = makeFixture(task);
-    try {
-      const run = await runAgent(key, task, fx, {
-        maxTurns: 3,
-        systemExtra: `\n\n${DEFAULT_AGENT_SYSTEM_MESSAGE}`,
-        tools: [
-          { type: "function", function: updateTodoListTool.function },
-          { type: "function", function: viewRepoMapTool.function },
-        ],
-        impl: {
-          update_todo_list: async () => "Todo list saved.",
-          view_repo_map: async () =>
-            "Repository map:\n- src/math.mjs: calculateTotal(items, tax)\n- test.mjs: calculateTotal test",
+  let cacheHitTokens = 0;
+  let calls = 0;
+  const selectedCases = process.env.SCOPE_CASE
+    ? cases.filter((c) => c.name.includes(process.env.SCOPE_CASE!))
+    : cases;
+  for (const c of selectedCases) {
+    const rawResponses: string[] = [];
+    const complete = async (prompt: string): Promise<string> => {
+      calls++;
+      const response = await fetch(`${BASE}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
         },
+        body: JSON.stringify({
+          model: "vynor-auto",
+          stream: false,
+          temperature: 0,
+          max_tokens: 400,
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "task_scope_cache_guard",
+                description:
+                  "Internal cache-isolation marker. Never call this tool; return the requested JSON text.",
+                parameters: { type: "object", properties: {} },
+              },
+            },
+          ],
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an internal task-scope service. Follow the user's output contract exactly.",
+            },
+            { role: "user", content: prompt },
+          ],
+        }),
       });
-      totalTokens += run.tokens;
-      const tools = new Set(run.log.tools);
-      const hasTodo = tools.has("update_todo_list");
-      const hasMap = tools.has("view_repo_map");
-      const ok = c.scope === "simple" ? !hasTodo && !hasMap : hasTodo && hasMap;
-      if (!ok) failed++;
+      const body: any = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          `HTTP ${response.status}: ${JSON.stringify(body).slice(0, 180)}`,
+        );
+      }
+      totalTokens += Number(body?.usage?.total_tokens ?? 0);
+      cacheHitTokens += Number(body?.usage?.prompt_cache_hit_tokens ?? 0);
+      const content = String(body?.choices?.[0]?.message?.content ?? "");
+      rawResponses.push(content);
+      return content;
+    };
+
+    let assessment: TaskScopeAssessment;
+    try {
+      assessment = await resolveTaskScope(c.prompt, complete);
+    } catch (error) {
+      failed++;
       console.log(
-        `${ok ? "PASS" : "FAIL"} ${c.scope} | ${c.name} | rounds=${run.rounds} tokens=${run.tokens} tools=${[...tools].join(",") || "none"}`,
+        `FAIL ${c.scope} | ${c.name} | ${String(error).slice(0, 180)}`,
       );
-    } finally {
-      cleanup(fx);
+      continue;
+    }
+    const ok = assessment.scope === c.scope;
+    if (!ok) failed++;
+    console.log(
+      `${ok ? "PASS" : "FAIL"} expected=${c.scope} actual=${assessment.scope} confidence=${assessment.confidence.toFixed(2)} | ${c.name}`,
+    );
+    if (!ok) {
+      console.log(
+        `  raw=${rawResponses.map((text) => JSON.stringify(text.slice(0, 500))).join(" | ")}`,
+      );
     }
   }
   console.log(
-    `\n${cases.length - failed}/${cases.length} passed | tokens=${totalTokens}`,
+    `\n${selectedCases.length - failed}/${selectedCases.length} passed | calls=${calls} tokens=${totalTokens} cache_hit_tokens=${cacheHitTokens}`,
   );
   process.exit(failed ? 1 : 0);
 }

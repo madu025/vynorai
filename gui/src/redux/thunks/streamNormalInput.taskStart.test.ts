@@ -1,15 +1,20 @@
 import { AssistantChatMessage, PromptLog } from "core";
 import { serializeTool } from "core/tools";
-import { runTerminalCommandTool } from "core/tools/definitions";
+import {
+  runTerminalCommandTool,
+  updateTodoListTool,
+} from "core/tools/definitions";
 import { describe, expect, it, vi } from "vitest";
 import { createMockStore } from "../../util/test/mockStore";
 import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
 import { RootState } from "../store";
 import { CONTINUE_TASK_PROMPT } from "../util/agentProgress";
+import { TASK_SCOPE_MARKER } from "../util/taskScope";
 import { streamNormalInput } from "./streamNormalInput";
 
 const terminalTool = serializeTool(runTerminalCommandTool);
 const terminalName = terminalTool.function.name;
+const todoTool = serializeTool(updateTodoListTool);
 
 /** The model's answers in order: a command to run, or a text. */
 function answers(...list: Array<{ command: string } | string>) {
@@ -60,8 +65,11 @@ function storeWith(
   state.session.mode = "agent";
   state.session.isStreaming = true;
   state.session.activeTaskId = "task-1";
-  state.config.config.tools = [terminalTool];
-  state.ui.toolSettings = { [terminalName]: "allowedWithoutPermission" };
+  state.config.config.tools = [terminalTool, todoTool];
+  state.ui.toolSettings = {
+    [terminalName]: "allowedWithoutPermission",
+    [todoTool.function.name]: "allowedWithoutPermission",
+  };
   state.session.history = history as any;
   const store = createMockStore(state);
   const messenger = store.mockIdeMessenger;
@@ -95,6 +103,67 @@ const session = (store: ReturnType<typeof createMockStore>) =>
   (store.getState() as RootState).session;
 
 describe("a prompt whose task could not be started", () => {
+  it("runs one semantic scope preflight and appends its decision to the job", async () => {
+    const { store, messenger, requests } = storeWith(
+      [user("u1", "build a complete booking platform")],
+      () => ({
+        status: "success",
+        content: { id: "task-2", state: "planning" },
+      }),
+    );
+    messenger.responses["llm/complete"] =
+      '{"scope":"complex","confidence":0.96,"impliedDeliverables":["booking","admin"],"reason":"Multiple roles and workflows."}';
+    messenger.llmStreamChat = answers("I will plan the implementation.");
+
+    await (store.dispatch as any)(streamNormalInput({}));
+
+    const scopeRequests = requests.filter((r) => r.type === "llm/complete");
+    expect(scopeRequests).toHaveLength(1);
+    expect(scopeRequests[0].data.completionOptions.tools[0].function.name).toBe(
+      "task_scope_cache_guard",
+    );
+    expect(
+      session(store).history.some(
+        (item) =>
+          item.isAutoPrompt &&
+          String(item.message.content).startsWith(TASK_SCOPE_MARKER) &&
+          String(item.message.content).includes("scope=complex"),
+      ),
+    ).toBe(true);
+    expect(requests.find((r) => r.type === "agent/task/start")?.data.goal).toBe(
+      "build a complete booking platform",
+    );
+  });
+
+  it("refuses non-todo tools until a complex task has a todo list", async () => {
+    const { store, messenger, requests } = storeWith(
+      [user("u1", "build a complete booking platform")],
+      () => ({
+        status: "success",
+        content: { id: "task-2", state: "planning" },
+      }),
+    );
+    messenger.responses["llm/complete"] =
+      '{"scope":"complex","confidence":0.96,"impliedDeliverables":["booking","admin"],"reason":"Multiple roles and workflows."}';
+    messenger.llmStreamChat = answers(
+      { command: "git status" },
+      "I need to create the todo list first.",
+    );
+
+    await (store.dispatch as any)(streamNormalInput({}));
+
+    expect(requests.filter((r) => r.type === "tools/call")).toHaveLength(0);
+    expect(
+      session(store).history.some((item) =>
+        item.toolCallStates?.some(
+          (call) =>
+            call.toolCall.function.name === terminalName &&
+            call.status === "errored",
+        ),
+      ),
+    ).toBe(true);
+  });
+
   it("never runs its tool calls under the task of the prompt before", async () => {
     const { store, messenger, requests } = storeWith(
       [

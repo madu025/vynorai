@@ -6,10 +6,7 @@ import { VYNORAI_XML_SYSTEM_PROMPT } from "./vynorai-system-prompt";
 describe("VYNORAI_XML_SYSTEM_PROMPT", () => {
   test("requires scope to be inferred from the intended outcome", () => {
     expect(VYNORAI_XML_SYSTEM_PROMPT).toContain(
-      "Infer the work needed to achieve the user's intended outcome",
-    );
-    expect(VYNORAI_XML_SYSTEM_PROMPT).toContain(
-      "complete e-commerce website for my clothing shop",
+      "semantic task-scope assessment",
     );
     expect(VYNORAI_XML_SYSTEM_PROMPT).toContain(
       "Its first tool call must be update_todo_list",

@@ -243,6 +243,24 @@ the disabled core repeat guard is defense in depth rather than an unbounded path
 not present in retained evidence and was not guessed. Local editor logs show that Antigravity installed 1.2.60
 successfully and later uninstalled it; the retained VSIX download is not evidence that this update failed.
 
+## Semantic scope preflight, 2026-10-13
+
+Prompt-only scope instructions were not reliable enough: the first 20-case production run classified 9 of 20
+correctly (124,175 tokens), and a stronger prompt reached 18 of 20 (133,257 tokens). The agent now makes one
+short semantic assessment before an Agent-mode task, with one independent retry only for invalid or
+low-confidence output. The result is appended after the user request, so the provider prompt prefix and tool
+list remain stable during the task. Complex work is prevented from using any other tool until it creates its
+todo list; simple work is told to skip todo and repository-map overhead unless repository evidence expands the
+scope.
+
+`backend/scripts/bench/scope-live.ts` calls the production proxy with the same prompt and parser. Its 20 English,
+Sinhala and Singlish cases passed 20 of 20 (20 calls, 25,445 total tokens, 9,344 provider cache-hit tokens). An
+earlier 19 of 20 run exposed the proxy's deterministic scaffold engine intercepting the internal classifier;
+the preflight now includes a cache-isolation tool marker, which keeps it out of that engine and the
+semantic response cache. This suite demonstrates semantic generalization across the covered outcome classes;
+it is not evidence that 10,000 labelled prompts were executed. A versioned large labelled corpus is required
+before claiming a measured 10,000-prompt accuracy rate.
+
 ## Not planned yet
 
 Parallel implementation subagents, worktree isolation and a planner model. Each needs a measured gain on this

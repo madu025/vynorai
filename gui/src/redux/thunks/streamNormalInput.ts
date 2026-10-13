@@ -110,6 +110,12 @@ import {
   partialReply,
   streamRecoveryPrompt,
 } from "../util/streamRecovery";
+import {
+  currentTaskScope,
+  requiresTodoBeforeTool,
+  resolveTaskScope,
+  taskScopeAutoPrompt,
+} from "../util/taskScope";
 import type { VerificationCommandCandidate } from "core/workspace/types";
 import { hasPassedRequiredVerification } from "core/agent/verification";
 
@@ -370,6 +376,63 @@ export const streamNormalInput = createAsyncThunk<
             },
           }),
         );
+        promptHistory = getState().session.history;
+      }
+    }
+
+    // One short semantic pass classifies the intended outcome before the
+    // coding agent acts. Its result is appended after the user's request, not
+    // placed in the system prefix, and is therefore stable for every later
+    // tool round. Invalid/uncertain output gets one independent second pass.
+    if (
+      depth === 0 &&
+      !resumeTaskId &&
+      state.session.mode === "agent" &&
+      latestUserRequest &&
+      !currentTaskScope(getState().session.history)
+    ) {
+      const request = renderChatMessage(latestUserRequest.message);
+      let receivedScopeResponse = false;
+      const assessment = await resolveTaskScope(request, async (prompt) => {
+        try {
+          const result = await extra.ideMessenger.request("llm/complete", {
+            title: selectedChatModel.title,
+            prompt,
+            completionOptions: {
+              maxTokens: 400,
+              temperature: 0,
+              reasoning: true,
+              // The proxy treats requests with tools as agent/control-plane
+              // work, so its answer cache and deterministic scaffold engine
+              // cannot replace this semantic assessment. The tool is only a
+              // cache-isolation marker; the prompt requires JSON text.
+              tools: [
+                {
+                  type: "function",
+                  function: {
+                    name: "task_scope_cache_guard",
+                    description:
+                      "Internal cache-isolation marker. Never call this tool; return the requested JSON text.",
+                    parameters: { type: "object", properties: {} },
+                  },
+                  displayTitle: "Task scope cache guard",
+                  readonly: true,
+                  group: "internal",
+                },
+              ],
+            },
+          });
+          const content = result.status === "success" ? result.content : "";
+          if (content.trim()) receivedScopeResponse = true;
+          return content;
+        } catch {
+          return "";
+        }
+      });
+      // A network/provider failure must not add a fabricated assessment. The
+      // stable agent prompt already contains a semantic fallback for this case.
+      if (receivedScopeResponse) {
+        dispatch(appendAutoPrompt(taskScopeAutoPrompt(assessment)));
         promptHistory = getState().session.history;
       }
     }
@@ -828,6 +891,29 @@ export const streamNormalInput = createAsyncThunk<
         setToolGenerated({
           toolCallId,
           tools: state1.config.config.tools,
+        }),
+      );
+    }
+
+    // A complex task cannot drift into ad-hoc exploration before its plan.
+    // The schemas remain byte-identical; only premature calls are answered
+    // with a refusal, so prompt caching is preserved across the retry.
+    const scopeHistory = getState().session.history;
+    for (const call of originalToolCalls) {
+      if (!requiresTodoBeforeTool(scopeHistory, call.toolCall.function.name)) {
+        continue;
+      }
+      dispatch(
+        errorToolCall({
+          toolCallId: call.toolCallId,
+          output: [
+            {
+              name: "Task scope gate",
+              description: "Planning required",
+              content:
+                "This task was assessed as complex. This tool was not run. Call update_todo_list first with every implied deliverable, then continue with view_repo_map and the implementation.",
+            },
+          ],
         }),
       );
     }

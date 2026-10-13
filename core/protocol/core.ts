@@ -508,6 +508,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
   "tools/call": [
     {
       toolCall: ToolCall;
+      sessionId?: string;
       delegation?: { taskId: string; subagentId: string };
     },
     {

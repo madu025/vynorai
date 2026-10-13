@@ -236,6 +236,11 @@ export type QueuedInput = {
   createdAt: number;
 };
 
+export type PendingBackgroundCommandResult = {
+  toolCallId: string;
+  contextItems: ContextItem[];
+};
+
 type SessionState = {
   lastSessionId?: string;
   isSessionMetadataLoading: boolean;
@@ -259,6 +264,7 @@ type SessionState = {
    */
   subagentFindings?: { promptId?: string; text: string };
   queuedInputs?: QueuedInput[];
+  pendingBackgroundCommandResults?: PendingBackgroundCommandResult[];
   activeTaskId?: string;
   /** Set only while an implementation subagent model turn owns tool dispatch. */
   activeImplementationSubagentId?: string;
@@ -306,6 +312,7 @@ export const INITIAL_SESSION_STATE: SessionState = {
   projectMemories: [],
   subagentRuns: [],
   queuedInputs: [],
+  pendingBackgroundCommandResults: [],
   isInEdit: false,
   codeBlockApplyStates: {
     states: [],
@@ -799,6 +806,7 @@ export const sessionSlice = createSlice({
       // A new session starts its own credit count.
       state.turnCredits = undefined;
       state.queuedInputs = [];
+      state.pendingBackgroundCommandResults = [];
       state.symbols = {};
       state.activeTaskId = undefined;
       state.activeTaskState = undefined;
@@ -1155,6 +1163,36 @@ export const sessionSlice = createSlice({
         },
       );
     },
+    queueBackgroundCommandResult: (
+      state,
+      action: PayloadAction<PendingBackgroundCommandResult>,
+    ) => {
+      const pending = state.pendingBackgroundCommandResults ?? [];
+      pending.push(action.payload);
+      state.pendingBackgroundCommandResults = pending.slice(-20);
+    },
+    appendPendingBackgroundCommandResults: (state) => {
+      const pending = state.pendingBackgroundCommandResults ?? [];
+      if (!pending.length) return;
+      const content = pending
+        .map(
+          (result) =>
+            `[background-command-result]\nCommand ${result.toolCallId} has now finished. This is a new result; the earlier background status has not been rewritten.\n\n${renderContextItems(result.contextItems)}`,
+        )
+        .join("\n\n");
+      state.pendingBackgroundCommandResults = [];
+      state.history.push(
+        {
+          message: { id: uuidv4(), role: "user", content },
+          contextItems: [],
+          isAutoPrompt: true,
+        },
+        {
+          message: { id: uuidv4(), role: "assistant", content: "" },
+          contextItems: [],
+        },
+      );
+    },
     setToolBudgetPausedAfter: (
       state,
       action: PayloadAction<number | undefined>,
@@ -1313,6 +1351,8 @@ export const {
   setToolBudgetPausedAfter,
   setSubagentFindings,
   appendAutoPrompt,
+  queueBackgroundCommandResult,
+  appendPendingBackgroundCommandResults,
   setSideReview,
   setTurnCredits,
   setMessageCredits,

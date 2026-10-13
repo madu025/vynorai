@@ -13,6 +13,7 @@ import { selectSelectedChatModel } from "../slices/configSlice";
 import {
   abortStream,
   addPromptCompletionPair,
+  appendPendingBackgroundCommandResults,
   appendAutoPrompt,
   errorToolCall,
   setActive,
@@ -163,6 +164,10 @@ export const streamNormalInput = createAsyncThunk<
     { legacySlashCommandData, depth: passedDepth = 0, resumeTaskId },
     { dispatch, extra, getState },
   ) => {
+    // A background command may finish while another model round is running.
+    // Append its result at the end of history before compiling the next
+    // request; never rewrite the earlier "running" tool result.
+    dispatch(appendPendingBackgroundCommandResults());
     // A check that keeps failing the same way: tell the model once, at the end
     // of the history, before the next round. It may carry on or change
     // approach; the turn pauses only if the failure goes on (agentProgress).

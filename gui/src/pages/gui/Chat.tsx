@@ -48,6 +48,7 @@ import {
   enqueueInput,
   newSession,
   QueuedInput,
+  queueBackgroundCommandResult,
   removeQueuedInput,
   updateToolCallOutput,
 } from "../../redux/slices/sessionSlice";
@@ -64,6 +65,7 @@ import { resolveEditorContent } from "../../components/mainInput/TipTapEditor/ut
 import { setDialogMessage, setShowDialog } from "../../redux/slices/uiSlice";
 import { RootState } from "../../redux/store";
 import { cancelStream } from "../../redux/thunks/cancelStream";
+import { streamNormalInput } from "../../redux/thunks/streamNormalInput";
 import { EmptyChatBody } from "./EmptyChatBody";
 import { ExploreDialogWatcher } from "./ExploreDialogWatcher";
 import { useAutoScroll } from "./useAutoScroll";
@@ -135,6 +137,9 @@ export function Chat() {
     (store) => store.config.config.ui?.showSessionTabs,
   );
   const isStreaming = useAppSelector((state) => state.session.isStreaming);
+  const pendingBackgroundResults = useAppSelector(
+    (state) => state.session.pendingBackgroundCommandResults?.length ?? 0,
+  );
   const mode = useAppSelector((state) => state.session.mode);
   const sessionId = useAppSelector((state) => state.session.id);
   const [isCreatingBackground, setIsCreatingBackground] = useState(false);
@@ -364,6 +369,29 @@ export function Chat() {
     },
     [dispatch],
   );
+
+  useWebviewListener(
+    "backgroundCommandResult",
+    async (data) => {
+      // A core command can outlive a model round. Never attach its late
+      // result to whichever conversation happens to be open afterward.
+      if (reduxStore.getState().session.id !== data.sessionId) return;
+      dispatch(
+        queueBackgroundCommandResult({
+          toolCallId: data.toolCallId,
+          contextItems: data.contextItems,
+        }),
+      );
+    },
+    [dispatch, reduxStore],
+  );
+
+  useEffect(() => {
+    if (isStreaming || pendingBackgroundResults === 0) return;
+    // If the original turn went idle before the background process ended,
+    // start one continuation so the result reaches the model immediately.
+    void dispatch(streamNormalInput({}));
+  }, [dispatch, isStreaming, pendingBackgroundResults]);
 
   const isLastUserInput = useCallback(
     (index: number): boolean => {

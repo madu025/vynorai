@@ -27,5 +27,6 @@ describe("workspace and agent protocol pass-through", () => {
 
   it("routes workspace status changes from Core to the webview", () => {
     expect(CORE_TO_WEBVIEW_PASS_THROUGH).toContain("workspace/statusUpdate");
+    expect(CORE_TO_WEBVIEW_PASS_THROUGH).toContain("backgroundCommandResult");
   });
 });

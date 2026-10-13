@@ -142,5 +142,6 @@ export const CORE_TO_WEBVIEW_PASS_THROUGH: (keyof ToWebviewFromCoreProtocol)[] =
     "didCloseFiles",
     "openFilesChanged",
     "toolCallPartialOutput",
+    "backgroundCommandResult",
     "workspace/statusUpdate",
   ];

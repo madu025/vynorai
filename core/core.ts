@@ -1359,7 +1359,7 @@ export class Core {
       return { url: "" };
     });
 
-    on("tools/call", async ({ data: { toolCall, delegation } }) => {
+    on("tools/call", async ({ data: { toolCall, sessionId, delegation } }) => {
       if (delegation) {
         this.taskRuntime.authorizeSubagentTool({
           ...delegation,
@@ -1367,7 +1367,7 @@ export class Core {
           args: safeParseToolCallArgs(toolCall),
         });
       }
-      return this.handleToolCall(toolCall, Boolean(delegation));
+      return this.handleToolCall(toolCall, Boolean(delegation), sessionId);
     });
 
     on(
@@ -1679,7 +1679,11 @@ export class Core {
         };
   }
 
-  private async handleToolCall(toolCall: ToolCall, delegated = false) {
+  private async handleToolCall(
+    toolCall: ToolCall,
+    delegated = false,
+    sessionId?: string,
+  ) {
     if (WORKSPACE_MUTATING_TOOLS.has(toolCall.function.name)) {
       const workspace = await this.workspaceSession.getSnapshot();
       if (!workspace.trusted || workspace.roots.length === 0) {
@@ -1727,6 +1731,17 @@ export class Core {
     }) => {
       this.messenger.send("toolCallPartialOutput", params);
     };
+    const onBackgroundResult = (params: {
+      toolCallId: string;
+      contextItems: ContextItem[];
+    }) => {
+      if (sessionId) {
+        this.messenger.send("backgroundCommandResult", {
+          sessionId,
+          ...params,
+        });
+      }
+    };
 
     const result = await callTool(tool, toolCall, {
       config,
@@ -1737,6 +1752,7 @@ export class Core {
       tool,
       toolCallId: toolCall.id,
       onPartialOutput,
+      ...(sessionId ? { onBackgroundResult } : {}),
       codeBaseIndexer: this.codeBaseIndexer,
     });
 

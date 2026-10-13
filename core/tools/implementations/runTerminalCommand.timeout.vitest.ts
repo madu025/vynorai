@@ -25,6 +25,7 @@ describe("runTerminalCommand timeout functionality", () => {
   let mockGetIdeInfo: ReturnType<typeof vi.fn>;
   let mockGetWorkspaceDirs: ReturnType<typeof vi.fn>;
   let mockOnPartialOutput: ReturnType<typeof vi.fn>;
+  let mockOnBackgroundResult: ReturnType<typeof vi.fn>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let setTimeoutSpy: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,6 +65,7 @@ describe("runTerminalCommand timeout functionality", () => {
       .fn()
       .mockResolvedValue(["file:///tmp/test-workspace"]);
     mockOnPartialOutput = vi.fn();
+    mockOnBackgroundResult = vi.fn();
   });
 
   afterEach(() => {
@@ -152,7 +154,9 @@ describe("runTerminalCommand timeout functionality", () => {
   });
 
   it("does not rewrite the old tool result when a background command exits", async () => {
-    const extras = createMockExtras();
+    const extras = createMockExtras({
+      onBackgroundResult: mockOnBackgroundResult,
+    });
     const result = await runTerminalCommandImpl(
       { command: "background-task", waitForCompletion: false },
       extras,
@@ -163,6 +167,16 @@ describe("runTerminalCommand timeout functionality", () => {
     mockChildProc.exitCode = 1;
     mockChildProc.emit("close", 1);
     expect(mockOnPartialOutput).not.toHaveBeenCalled();
+    expect(mockOnBackgroundResult).toHaveBeenCalledWith({
+      toolCallId: "test-tool-call-id",
+      contextItems: [
+        expect.objectContaining({
+          description: "Background command result",
+          content: "late output\n",
+          status: "Background command failed with exit code 1",
+        }),
+      ],
+    });
   });
 
   it("should kill process when timeout fires (streaming)", async () => {

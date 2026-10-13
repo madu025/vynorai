@@ -1,5 +1,8 @@
 import { ChatMessage } from "core";
-import { renderChatMessage } from "core/util/messageContent";
+import {
+  renderChatMessage,
+  renderContextItems,
+} from "core/util/messageContent";
 import { v4 as uuidv4 } from "uuid";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { addToolCallDeltaToState } from "../../util/toolCallState";
@@ -12,6 +15,7 @@ vi.mock("../../util/toolCallState");
 
 const mockUuidv4 = vi.mocked(uuidv4);
 const mockRenderChatMessage = vi.mocked(renderChatMessage);
+const mockRenderContextItems = vi.mocked(renderContextItems);
 const mockAddToolCallDeltaToState = vi.mocked(addToolCallDeltaToState);
 
 describe("sessionSlice streamUpdate", () => {
@@ -30,6 +34,7 @@ describe("sessionSlice streamUpdate", () => {
       }
       return "";
     });
+    mockRenderContextItems.mockReturnValue("late output\nBackground failed");
 
     // Mock addToolCallDeltaToState
     mockAddToolCallDeltaToState.mockImplementation((delta, state) => {
@@ -477,6 +482,43 @@ describe("sessionSlice streamUpdate", () => {
       expect(newState.history).toHaveLength(2);
       expect(newState.history[1].message.role).toBe("assistant");
       expect(newState.history[1].toolCallStates).toHaveLength(1);
+    });
+
+    it("appends a late background result without rewriting older history", () => {
+      const initialState = createInitialState();
+      const originalMessage = initialState.history[0].message;
+      let state = sessionSlice.reducer(
+        initialState,
+        sessionSlice.actions.queueBackgroundCommandResult({
+          toolCallId: "background-1",
+          contextItems: [
+            {
+              name: "Terminal",
+              description: "Background command result",
+              content: "late output",
+            },
+          ],
+        }),
+      );
+
+      state = sessionSlice.reducer(
+        state,
+        sessionSlice.actions.appendPendingBackgroundCommandResults(),
+      );
+
+      expect(state.history[0].message).toEqual(originalMessage);
+      expect(state.history.at(-2)).toMatchObject({
+        isAutoPrompt: true,
+        message: {
+          role: "user",
+          content: expect.stringContaining("[background-command-result]"),
+        },
+      });
+      expect(state.history.at(-1)?.message).toMatchObject({
+        role: "assistant",
+        content: "",
+      });
+      expect(state.pendingBackgroundCommandResults).toEqual([]);
     });
   });
 });

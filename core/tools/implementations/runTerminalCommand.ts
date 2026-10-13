@@ -406,11 +406,27 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
                 code === 0
                   ? "Background command completed"
                   : `Background command failed with exit code ${code}`;
-              enqueueBackgroundCommandResult(cwd, {
+              const result = {
                 toolCallId,
                 output: backgroundCommandOutput,
                 status,
-              });
+              };
+              if (extras.onBackgroundResult) {
+                extras.onBackgroundResult({
+                  toolCallId,
+                  contextItems: [
+                    {
+                      name: "Terminal",
+                      description: "Background command result",
+                      content: backgroundCommandOutput,
+                      status,
+                    },
+                  ],
+                });
+              } else {
+                // Headless callers have no webview history to append to.
+                enqueueBackgroundCommandResult(cwd, result);
+              }
             }
           };
 

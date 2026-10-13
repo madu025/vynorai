@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createMockStore } from "../../util/test/mockStore";
 import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
 import { RootState } from "../store";
+import { queueBackgroundCommandResult } from "../slices/sessionSlice";
 import {
   SAME_FAILURE_MARKER,
   SAME_FAILURE_NUDGE,
@@ -128,6 +129,34 @@ const toolsSent = (messenger: any, n = 0) =>
   messenger.llmStreamChat.mock.calls[n][0].completionOptions.tools ?? [];
 
 describe("a turn with no round cap", () => {
+  it("appends a pending background result before the next model round", async () => {
+    const { store, messenger } = storeWith([]);
+    const originalUser = session(store).history[0].message;
+    messenger.llmStreamChat = replies("I will repair the failed command.");
+    store.dispatch(
+      queueBackgroundCommandResult({
+        toolCallId: "background-1",
+        contextItems: [
+          {
+            name: "Terminal",
+            description: "Background command result",
+            content: "server failed",
+            status: "Background command failed with exit code 1",
+          },
+        ],
+      }),
+    );
+
+    await (store.dispatch as any)(streamNormalInput({}));
+
+    expect(session(store).history[0].message).toEqual(originalUser);
+    expect(autoPrompts(store)).toContainEqual(
+      expect.stringContaining("[background-command-result]"),
+    );
+    expect(session(store).pendingBackgroundCommandResults).toEqual([]);
+    expect(messenger.llmStreamChat).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps its tools after far more than 40 rounds of real work", async () => {
     const { store, messenger } = storeWith(
       Array.from({ length: 90 }, (_, i) => [

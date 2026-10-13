@@ -1131,6 +1131,11 @@ export interface ToolExtras {
     toolCallId: string;
     contextItems: ContextItem[];
   }) => void;
+  /** A command returned in background and later finished; append as new history. */
+  onBackgroundResult?: (params: {
+    toolCallId: string;
+    contextItems: ContextItem[];
+  }) => void;
   config: ContinueConfig;
   codeBaseIndexer?: CodebaseIndexer;
 }

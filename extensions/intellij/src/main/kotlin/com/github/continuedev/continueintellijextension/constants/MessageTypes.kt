@@ -65,6 +65,7 @@ class MessageTypes {
             "sessionUpdate",
             "didCloseFiles",
             "toolCallPartialOutput",
+            "backgroundCommandResult",
             "workspace/statusUpdate",
         )
 

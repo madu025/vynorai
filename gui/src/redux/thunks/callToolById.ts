@@ -296,6 +296,7 @@ async function callToolByIdImpl(
       "tools/call",
       {
         toolCall: toolCallState.toolCall,
+        sessionId: state.session.id,
         delegation,
       },
       CORE_TOOL_TIMEOUT_MS,

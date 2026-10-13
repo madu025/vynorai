@@ -225,9 +225,10 @@ large-task run:
 
 - PowerShell and POSIX pipelines now preserve a failing upstream exit code. Run p had printed `not ok 1` for
   `npm test 2>&1 | tail -n 60` while reporting completion.
-- Late output from a background command is queued for a new terminal result instead of rewriting its old tool
-  result. Thirteen of the inspected sessions had changed prompt prefixes; run B showed the background status
-  replacement directly.
+- Late output from a background command is sent as a session-scoped event and appended as a new automatic
+  history message before the next model round; if the turn is already idle, that one continuation starts
+  immediately. The old tool result is never rewritten. Thirteen of the inspected sessions had changed prompt
+  prefixes; run B showed the background status replacement directly.
 - An unresolved `__PII_*` value is refused before a tool can write or execute it, and the prompt tells the
   model to re-read and retry. Run q had passed email placeholders into `multi_edit` before later correcting
   them.

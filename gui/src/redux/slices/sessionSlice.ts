@@ -312,7 +312,6 @@ export const INITIAL_SESSION_STATE: SessionState = {
   projectMemories: [],
   subagentRuns: [],
   queuedInputs: [],
-  pendingBackgroundCommandResults: [],
   isInEdit: false,
   codeBlockApplyStates: {
     states: [],
@@ -806,7 +805,7 @@ export const sessionSlice = createSlice({
       // A new session starts its own credit count.
       state.turnCredits = undefined;
       state.queuedInputs = [];
-      state.pendingBackgroundCommandResults = [];
+      delete state.pendingBackgroundCommandResults;
       state.symbols = {};
       state.activeTaskId = undefined;
       state.activeTaskState = undefined;

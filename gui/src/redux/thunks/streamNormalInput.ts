@@ -118,6 +118,30 @@ import { hasPassedRequiredVerification } from "core/agent/verification";
 // unresponsive; model and tool requests keep their own, longer lifetimes.
 const AGENT_RUNTIME_REQUEST_TIMEOUT_MS = 15_000;
 
+function hasUnreportedBackgroundCommand(history: any[]): boolean {
+  const reported = new Set(
+    history
+      .filter((item) => item.isAutoPrompt)
+      .flatMap((item) =>
+        Array.from(
+          String(item.message.content ?? "").matchAll(
+            /\[background-command-result\]\s*\nCommand ([^\s]+) has now finished/g,
+          ),
+          (match) => match[1],
+        ),
+      ),
+  );
+  return history.some((item) =>
+    item.toolCallStates?.some((call: any) =>
+      call.output?.some(
+        (output: any) =>
+          output.status === "Command is running in the background..." &&
+          !reported.has(call.toolCallId),
+      ),
+    ),
+  );
+}
+
 /**
  * Builds completion options with reasoning configuration based on session state and model capabilities.
  *
@@ -167,7 +191,9 @@ export const streamNormalInput = createAsyncThunk<
     // A background command may finish while another model round is running.
     // Append its result at the end of history before compiling the next
     // request; never rewrite the earlier "running" tool result.
-    dispatch(appendPendingBackgroundCommandResults());
+    if ((getState().session.pendingBackgroundCommandResults?.length ?? 0) > 0) {
+      dispatch(appendPendingBackgroundCommandResults());
+    }
     // A check that keeps failing the same way: tell the model once, at the end
     // of the history, before the next round. It may carry on or change
     // approach; the turn pauses only if the failure goes on (agentProgress).
@@ -1161,17 +1187,22 @@ ${PREMORTEM_GUIDANCE}`
           // Completion is not blocked by an unavailable local audit journal.
         }
       }
+      const backgroundCommandStillRunning = hasUnreportedBackgroundCommand(
+        getState().session.history,
+      );
       await transitionTask(
         unresolvedVerification.length > 0
           ? "failed"
-          : verificationSatisfied
+          : verificationSatisfied && !backgroundCommandStillRunning
             ? "completed"
             : "verifying",
         unresolvedVerification.length > 0
           ? `Verification still failing: ${unresolvedVerification.join(", ")}`
-          : !verificationSatisfied
-            ? "Verification evidence is required before task completion."
-            : undefined,
+          : backgroundCommandStillRunning
+            ? "Waiting for a background command result before task completion."
+            : !verificationSatisfied
+              ? "Verification evidence is required before task completion."
+              : undefined,
       );
       // Stop hooks run once the agent has finished the turn (e.g. tests or a
       // notification). A blocking hook's reason is shown to the user; the

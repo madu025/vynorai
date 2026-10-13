@@ -757,6 +757,7 @@ describe("streamResponseThunk", () => {
             arguments: JSON.stringify({ query: "test function" }),
           },
         },
+        sessionId: "session-123",
         delegation: undefined,
       },
       expect.any(Number),

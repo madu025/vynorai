@@ -18,6 +18,7 @@ import {
   creditsUsed,
   isStreaming,
   lastReply,
+  newSession,
   openPanel,
   openWorkspace,
   retry,
@@ -133,6 +134,7 @@ describe("VynorAI large task through the extension", function () {
       console.log("LARGE_TASK_SIGNED_IN");
     }
     ({ view } = await openPanel());
+    await newSession(view);
     await retry(async () => {
       const model = await view!.findWebElement(
         By.css("[data-testid='model-select-button']"),

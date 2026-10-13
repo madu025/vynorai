@@ -116,6 +116,9 @@ CREATE TABLE IF NOT EXISTS request_economics (
   estimated_tokens_saved BIGINT NOT NULL DEFAULT 0,
   latency_ms INTEGER,
   outcome VARCHAR(16) NOT NULL DEFAULT 'success' CHECK (outcome IN ('success', 'failed')),
+  request_kind VARCHAR(32) NOT NULL DEFAULT 'chat',
+  cache_policy VARCHAR(16) NOT NULL DEFAULT 'standard',
+  cache_bypass_reason VARCHAR(64),
   created_at TEXT DEFAULT ${NOW}
 );
 CREATE INDEX IF NOT EXISTS idx_request_economics_user_created ON request_economics(user_id, created_at DESC);
@@ -536,6 +539,15 @@ CREATE INDEX IF NOT EXISTS idx_task_outcomes_created ON task_outcomes (created_a
 ALTER TABLE task_outcomes ADD COLUMN IF NOT EXISTS reason VARCHAR(24);
 ALTER TABLE task_outcomes ADD COLUMN IF NOT EXISTS repairs INTEGER;
 ALTER TABLE task_outcomes ADD COLUMN IF NOT EXISTS gates INTEGER;
+`,
+  },
+  {
+    version: "028_scope_preflight_observability",
+    sql: `
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS request_kind VARCHAR(32) NOT NULL DEFAULT 'chat';
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS cache_policy VARCHAR(16) NOT NULL DEFAULT 'standard';
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS cache_bypass_reason VARCHAR(64);
+CREATE INDEX IF NOT EXISTS idx_request_economics_kind_created ON request_economics (request_kind, created_at DESC);
 `,
   },
 ];

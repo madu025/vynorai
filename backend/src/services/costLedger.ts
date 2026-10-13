@@ -98,6 +98,12 @@ export interface EconomicsEvent {
   routeAuto?: boolean;
   promptFp?: string | null;
   toolFollowUp?: boolean;
+  /** Control-plane requests are recorded separately from user chat. */
+  requestKind?: "chat" | "task_scope";
+  /** Whether response caches were eligible for this request. */
+  cachePolicy?: "standard" | "bypass";
+  /** Stable reason code when the response cache was intentionally bypassed. */
+  cacheBypassReason?: string | null;
 }
 
 /**
@@ -141,8 +147,9 @@ export async function recordRequestEconomics(
       cost_source, allocated_revenue_usd, gross_margin_usd, cache_status,
       optimization_mode, template_id, estimated_tokens_saved, latency_ms, outcome,
       cached_input_tokens, estimated_cost_usd, credits_charged, off_peak,
-      route_tier, route_auto, prompt_fp, tool_followup
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      route_tier, route_auto, prompt_fp, tool_followup,
+      request_kind, cache_policy, cache_bypass_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       uuidv4(),
       event.requestId ?? uuidv4(),
@@ -172,6 +179,9 @@ export async function recordRequestEconomics(
       event.routeAuto ? 1 : 0,
       event.promptFp ?? null,
       event.toolFollowUp ? 1 : 0,
+      event.requestKind ?? "chat",
+      event.cachePolicy ?? "standard",
+      event.cacheBypassReason ?? null,
     ],
   );
 }

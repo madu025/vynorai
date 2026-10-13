@@ -345,6 +345,15 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       <div class="cards" id="econCards"><div class="loading">Loading...</div></div>
       <div class="alert alert-info" id="deepSeekPricingMethod" style="margin-bottom:1rem">Loading DeepSeek pricing method...</div>
       <div class="panel">
+        <div class="panel-header"><div class="panel-title">🧭 Request class & cache policy</div></div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead><tr><th>Request class</th><th>Cache policy</th><th>Bypass reason</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Credits</th><th>Cost</th><th>Cache hits</th><th>Bypassed</th></tr></thead>
+            <tbody id="econRequestKinds"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
         <div class="panel-header"><div class="panel-title">📅 Per day</div></div>
         <div class="panel-body" style="padding:0;overflow-x:auto">
           <table class="model-table">
@@ -1488,6 +1497,9 @@ async function loadEconomics() {
   if (!data) return;
   const t = data.totals;
   const payments = data.payments || {};
+  const scope = (data.requestKinds || []).filter(r => r.requestKind === 'task_scope');
+  const scopeRequests = scope.reduce((sum, r) => sum + Number(r.requests || 0), 0);
+  const scopeCost = scope.reduce((sum, r) => sum + Number(r.costUsd || 0), 0);
   const paymentByDay = new Map((data.paymentDaily || []).map(p => [p.day, p]));
   const card = (label, value, sub, cls = '') => `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value ${cls}">${value}</div><div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">${sub}</div></div>`;
   document.getElementById('econCards').innerHTML =
@@ -1496,10 +1508,14 @@ async function loadEconomics() {
     card('All upstream cost', econUsd(t.costUsd), `${econUsd(t.providerReportedCostUsd)} provider-reported + ${econUsd(t.publishedRateCostUsd)} tariff-calculated`) +
     card('Allocated unit margin', econPct(t.marginPct), `${econUsd(t.marginUsd)} on ${econUsd(t.revenueUsd)} allocated usage value`, t.marginUsd < 0 ? 'amber' : 'green') +
     card('Cost per 1M credits', t.costPerMillionCredits === null ? '—' : econUsd(t.costPerMillionCredits), `${econNum(t.credits)} credits charged`, 'purple') +
+    card('Scope preflights', econNum(scopeRequests), `${econUsd(scopeCost)} upstream cost · explicit cache bypass`, scopeRequests ? 'purple' : '') +
     card('Payments needing attention', econNum(Number(payments.pendingOrders || 0) + Number(payments.failedOrCancelledOrders || 0)), `${econLkr(payments.chargebackLkr)} chargebacks`, Number(payments.chargebackLkr) > 0 ? 'amber' : '') +
     card('Paying users below cost', econNum(data.negativeMarginUsers), 'Free users are excluded', data.negativeMarginUsers > 0 ? 'amber' : 'green');
   const method = document.getElementById('deepSeekPricingMethod');
   method.innerHTML = `<strong>DeepSeek cost method:</strong> ${escHtml(data.deepSeekPricing?.method || '')}. Rates verified ${escHtml(data.deepSeekPricing?.verifiedAt || '')}. <a href="${escHtml(data.deepSeekPricing?.sourceUrl || '#')}" target="_blank" rel="noopener" style="color:var(--accent2)">Official pricing source</a>. ${escHtml(data.deepSeekPricing?.note || '')}`;
+  document.getElementById('econRequestKinds').innerHTML = (data.requestKinds || []).length
+    ? data.requestKinds.map(r => `<tr><td>${escHtml(r.requestKind)}</td><td>${escHtml(r.cachePolicy)}</td><td>${escHtml(r.cacheBypassReason || '—')}</td><td>${econNum(r.requests)}</td><td>${econNum(r.inputTokens)}</td><td>${econNum(r.outputTokens)}</td><td>${econNum(r.credits)}</td><td>${econUsd(r.costUsd)}</td><td>${econNum(r.cacheHits)}</td><td>${econNum(r.cacheBypasses)}</td></tr>`).join('')
+    : '<tr><td colspan="10" class="loading">No request classes recorded in this period</td></tr>';
   document.getElementById('econDaily').innerHTML = data.daily.length
     ? data.daily.map(d => { const p = paymentByDay.get(d.day) || {}; return `<tr><td>${escHtml(d.day)}</td><td>${econNum(d.requests)}</td><td>${econNum(d.credits)}</td><td>${econLkr(p.netCollectedLkr)}</td><td>${econUsd(d.deepSeekCostUsd)}</td><td>${econUsd(d.costUsd)}</td><td>${econUsd(d.revenueUsd)}</td><td>${econMargin(d)}</td></tr>`; }).join('')
     : '<tr><td colspan="8" class="loading">No requests in this period</td></tr>';

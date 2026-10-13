@@ -938,6 +938,8 @@ declare global {
     stream?: boolean;
     prediction?: Prediction;
     tools?: Tool[];
+    requestKind?: "task_scope";
+    cachePolicy?: "standard" | "bypass";
   }
   
   export interface ModelCapability {

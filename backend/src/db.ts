@@ -462,6 +462,9 @@ const MIGRATIONS: Migration[] = [
         estimated_tokens_saved INTEGER NOT NULL DEFAULT 0,
         latency_ms             INTEGER,
         outcome                VARCHAR(16) NOT NULL DEFAULT 'success' CHECK(outcome IN ('success', 'failed')),
+        request_kind           VARCHAR(32) NOT NULL DEFAULT 'chat',
+        cache_policy           VARCHAR(16) NOT NULL DEFAULT 'standard',
+        cache_bypass_reason    VARCHAR(64),
         created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
         FOREIGN KEY (usage_log_id) REFERENCES usage_logs (id) ON DELETE SET NULL
@@ -913,6 +916,28 @@ const MIGRATIONS: Migration[] = [
       await addColumnIfNotExists("task_outcomes", "reason VARCHAR(24)");
       await addColumnIfNotExists("task_outcomes", "repairs INTEGER");
       await addColumnIfNotExists("task_outcomes", "gates INTEGER");
+    },
+  },
+  {
+    version: "028_scope_preflight_observability",
+    description:
+      "Classify control-plane requests and record their explicit cache policy without retaining prompt content",
+    up: async () => {
+      await addColumnIfNotExists(
+        "request_economics",
+        "request_kind VARCHAR(32) NOT NULL DEFAULT 'chat'",
+      );
+      await addColumnIfNotExists(
+        "request_economics",
+        "cache_policy VARCHAR(16) NOT NULL DEFAULT 'standard'",
+      );
+      await addColumnIfNotExists(
+        "request_economics",
+        "cache_bypass_reason VARCHAR(64)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_request_economics_kind_created ON request_economics(request_kind, created_at DESC)",
+      );
     },
   },
 ];

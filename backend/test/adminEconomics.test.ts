@@ -59,6 +59,16 @@ before(async () => {
   );
   await dbm.dbRun(
     `INSERT INTO request_economics
+      (id, request_id, user_id, plan_id, requested_model, provider,
+       input_tokens, output_tokens, provider_cost_usd, cost_source,
+       allocated_revenue_usd, cache_status, outcome, request_kind,
+       cache_policy, cache_bypass_reason)
+     VALUES (?, ?, ?, 'pro', ?, 'deepseek', 120, 30, 0.01, 'provider',
+       0.02, 'bypass', 'success', 'task_scope', 'bypass', 'task_scope')`,
+    ["econ-scope", "request-scope", "deepseek-user", "deepseek/deepseek-flash"],
+  );
+  await dbm.dbRun(
+    `INSERT INTO request_economics
       (id, request_id, user_id, plan_id, requested_model, resolved_model, provider,
        input_tokens, output_tokens, cached_input_tokens, provider_cost_usd,
        estimated_cost_usd, cost_source, allocated_revenue_usd, gross_margin_usd,
@@ -120,17 +130,24 @@ test("economics reports cash and DeepSeek cost by total and user", async () => {
   });
   assert.equal(response.status, 200);
   const data = (await response.json()) as any;
-  assert.equal(data.totals.deepSeekCostUsd, 0.25);
-  assert.equal(data.totals.costUsd, 0.65);
-  assert.equal(data.totals.providerReportedCostUsd, 0.4);
+  assert.equal(data.totals.deepSeekCostUsd, 0.26);
+  assert.equal(data.totals.costUsd, 0.66);
+  assert.ok(Math.abs(data.totals.providerReportedCostUsd - 0.41) < 1e-9);
   assert.equal(data.totals.publishedRateCostUsd, 0.25);
   assert.equal(data.payments.netCollectedLkr, 3850);
   assert.equal(data.payments.successfulOrders, 1);
   const deepSeekUser = data.users.find(
     (user: any) => user.userId === "deepseek-user",
   );
-  assert.equal(deepSeekUser.deepSeekCostUsd, 0.25);
+  assert.equal(deepSeekUser.deepSeekCostUsd, 0.26);
   assert.equal(deepSeekUser.netCollectedLkr, 3850);
+  const scope = data.requestKinds.find(
+    (row: any) => row.requestKind === "task_scope",
+  );
+  assert.equal(scope.cachePolicy, "bypass");
+  assert.equal(scope.cacheBypassReason, "task_scope");
+  assert.equal(scope.requests, 1);
+  assert.equal(scope.cacheBypasses, 1);
   assert.match(
     data.deepSeekPricing.sourceUrl,
     /^https:\/\/api-docs\.deepseek\.com\//,

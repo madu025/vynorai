@@ -168,17 +168,8 @@ async function main() {
           stream: false,
           temperature: 0,
           max_tokens: 400,
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "task_scope_cache_guard",
-                description:
-                  "Internal cache-isolation marker. Never call this tool; return the requested JSON text.",
-                parameters: { type: "object", properties: {} },
-              },
-            },
-          ],
+          request_kind: "task_scope",
+          cache_policy: "bypass",
           messages: [
             {
               role: "system",

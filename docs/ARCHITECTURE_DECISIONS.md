@@ -22,6 +22,11 @@ anything about production environment values is marked "not verified".
 | Semantic response cache        | `backend/src/services/semanticCache.ts`: embedding match, threshold 0.95, scope per user.                           | **Off unless `SEMANTIC_CACHE_ENABLED=true`**. Production value not verified |
 | Redis                          | Optional shared store, active only when `REDIS_URL` is set.                                                         | Production value not verified                                               |
 
+- Control-plane task-scope preflights send `request_kind: "task_scope"` and
+  `cache_policy: "bypass"`. The proxy skips exact, semantic, deterministic and
+  template response paths for them. The economics ledger stores only the request
+  class, policy and stable bypass reason; it never stores prompt, path or code.
+
 ## Context and plans
 
 - Context limit per plan (`backend/src/services/modelRegistry.ts`): free and starter 32K, pro 128K,

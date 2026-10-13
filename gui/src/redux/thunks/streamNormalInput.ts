@@ -402,24 +402,10 @@ export const streamNormalInput = createAsyncThunk<
               maxTokens: 400,
               temperature: 0,
               reasoning: true,
-              // The proxy treats requests with tools as agent/control-plane
-              // work, so its answer cache and deterministic scaffold engine
-              // cannot replace this semantic assessment. The tool is only a
-              // cache-isolation marker; the prompt requires JSON text.
-              tools: [
-                {
-                  type: "function",
-                  function: {
-                    name: "task_scope_cache_guard",
-                    description:
-                      "Internal cache-isolation marker. Never call this tool; return the requested JSON text.",
-                    parameters: { type: "object", properties: {} },
-                  },
-                  displayTitle: "Task scope cache guard",
-                  readonly: true,
-                  group: "internal",
-                },
-              ],
+              // This is a control-plane assessment, never a reusable answer.
+              // The proxy records and enforces this policy explicitly.
+              requestKind: "task_scope",
+              cachePolicy: "bypass",
             },
           });
           const content = result.status === "success" ? result.content : "";

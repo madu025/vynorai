@@ -119,9 +119,10 @@ describe("a prompt whose task could not be started", () => {
 
     const scopeRequests = requests.filter((r) => r.type === "llm/complete");
     expect(scopeRequests).toHaveLength(1);
-    expect(scopeRequests[0].data.completionOptions.tools[0].function.name).toBe(
-      "task_scope_cache_guard",
+    expect(scopeRequests[0].data.completionOptions.requestKind).toBe(
+      "task_scope",
     );
+    expect(scopeRequests[0].data.completionOptions.cachePolicy).toBe("bypass");
     expect(
       session(store).history.some(
         (item) =>

@@ -1235,6 +1235,10 @@ export interface BaseCompletionOptions {
   reasoning?: boolean;
   reasoningBudgetTokens?: number;
   promptCaching?: boolean;
+  /** VynorAI control-plane classification; omitted for normal chat. */
+  requestKind?: "task_scope";
+  /** Explicit VynorAI response-cache policy for this request. */
+  cachePolicy?: "standard" | "bypass";
 }
 
 export interface ModelCapability {

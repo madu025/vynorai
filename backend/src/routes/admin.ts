@@ -1148,29 +1148,45 @@ adminRouter.get(
       COALESCE(SUM(${t}allocated_revenue_usd), 0) AS revenueUsd,
       SUM(CASE WHEN ${cost} IS NULL THEN 1 ELSE 0 END) AS unpricedRequests,
       SUM(CASE WHEN ${t}cache_status = 'hit' THEN 1 ELSE 0 END) AS cacheHits,
+      SUM(CASE WHEN ${t}cache_status = 'bypass' THEN 1 ELSE 0 END) AS cacheBypasses,
       SUM(CASE WHEN ${t}off_peak = 1 THEN 1 ELSE 0 END) AS offPeakRequests`;
     };
     const SUMS = sums();
     const WHERE = "WHERE created_at >= ? AND outcome = 'success'";
 
-    const [totals, daily, users, paymentSummary, paymentUsers, paymentDaily] =
-      await Promise.all([
-        dbGet<any>(`SELECT ${SUMS} FROM request_economics ${WHERE}`, [since]),
-        dbAll<any>(
-          `SELECT SUBSTR(created_at, 1, 10) AS day, ${SUMS}
+    const [
+      totals,
+      daily,
+      users,
+      requestKinds,
+      paymentSummary,
+      paymentUsers,
+      paymentDaily,
+    ] = await Promise.all([
+      dbGet<any>(`SELECT ${SUMS} FROM request_economics ${WHERE}`, [since]),
+      dbAll<any>(
+        `SELECT SUBSTR(created_at, 1, 10) AS day, ${SUMS}
            FROM request_economics ${WHERE}
            GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
-          [since],
-        ),
-        dbAll<any>(
-          `SELECT e.user_id AS userId, u.email AS email, MAX(e.plan_id) AS planId, ${sums("e.")}
+        [since],
+      ),
+      dbAll<any>(
+        `SELECT e.user_id AS userId, u.email AS email, MAX(e.plan_id) AS planId, ${sums("e.")}
            FROM request_economics e LEFT JOIN users u ON u.id = e.user_id
            WHERE e.created_at >= ? AND e.outcome = 'success'
            GROUP BY e.user_id, u.email`,
-          [since],
-        ),
-        dbGet<any>(
-          `SELECT
+        [since],
+      ),
+      dbAll<any>(
+        `SELECT request_kind AS requestKind, cache_policy AS cachePolicy,
+                  COALESCE(cache_bypass_reason, '') AS cacheBypassReason, ${SUMS}
+           FROM request_economics ${WHERE}
+           GROUP BY request_kind, cache_policy, COALESCE(cache_bypass_reason, '')
+           ORDER BY requests DESC, request_kind`,
+        [since],
+      ),
+      dbGet<any>(
+        `SELECT
             SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited','chargedback') THEN 1 ELSE 0 END) AS processedOrders,
             SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN 1 ELSE 0 END) AS successfulOrders,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pendingOrders,
@@ -1179,24 +1195,24 @@ adminRouter.get(
             COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status = 'chargedback' THEN amount_minor ELSE 0 END), 0) / 100.0 AS chargebackLkr,
             COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN amount_minor ELSE 0 END), 0) / 100.0 AS netCollectedLkr
            FROM subscriptions WHERE created_at >= ?`,
-          [since],
-        ),
-        dbAll<any>(
-          `SELECT user_id AS userId,
+        [since],
+      ),
+      dbAll<any>(
+        `SELECT user_id AS userId,
             COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN amount_minor ELSE 0 END), 0) / 100.0 AS netCollectedLkr,
             SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN 1 ELSE 0 END) AS successfulOrders
            FROM subscriptions WHERE created_at >= ? GROUP BY user_id`,
-          [since],
-        ),
-        dbAll<any>(
-          `SELECT SUBSTR(created_at, 1, 10) AS day,
+        [since],
+      ),
+      dbAll<any>(
+        `SELECT SUBSTR(created_at, 1, 10) AS day,
             COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN amount_minor ELSE 0 END), 0) / 100.0 AS netCollectedLkr,
             SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN 1 ELSE 0 END) AS successfulOrders
            FROM subscriptions WHERE created_at >= ?
            GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
-          [since],
-        ),
-      ]);
+        [since],
+      ),
+    ]);
 
     const withMargin = (r: any) => {
       const costUsd = Number(r.costUsd) || 0;
@@ -1230,6 +1246,7 @@ adminRouter.get(
       days,
       totals: withMargin(totals || {}),
       daily: daily.map(withMargin),
+      requestKinds: requestKinds.map(withMargin),
       // Free users are always negative (no revenue); flag paying users only.
       negativeMarginUsers: perUser.filter(
         (u) => u.planId !== "free" && u.marginUsd < 0,

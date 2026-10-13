@@ -41,6 +41,8 @@ export const ChatCompletionsBodySchema = z
     model: z.string().optional(),
     messages: z.array(z.any()).min(1, "messages must be a non-empty array"),
     stream: z.boolean().optional(),
+    request_kind: z.enum(["task_scope"]).optional(),
+    cache_policy: z.enum(["standard", "bypass"]).optional(),
   })
   .passthrough();
 

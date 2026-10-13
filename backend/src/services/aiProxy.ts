@@ -242,6 +242,25 @@ export async function handleChatCompletions(
   };
 
   const isZkMode = Boolean(body.zkMode || body.store === false);
+  const requestKind =
+    body.request_kind === "task_scope" ? "task_scope" : "chat";
+  const cachePolicy =
+    body.cache_policy === "bypass" || requestKind === "task_scope"
+      ? "bypass"
+      : "standard";
+  const cacheBypassReason =
+    requestKind === "task_scope"
+      ? "task_scope"
+      : body.cache_policy === "bypass"
+        ? "client_policy"
+        : isZkMode
+          ? "zero_retention"
+          : null;
+  const cacheBypassed = cachePolicy === "bypass" || isZkMode;
+  res.setHeader("X-VynorAI-Request-Kind", requestKind);
+  res.setHeader("X-VynorAI-Cache-Policy", cachePolicy);
+  if (cacheBypassReason)
+    res.setHeader("X-VynorAI-Cache-Bypass", cacheBypassReason);
   if (isZkMode) {
     res.setHeader("X-VynorAI-ZK-Mode", "Air-Gapped");
     res.setHeader("X-VynorAI-Zero-Retention", "Verified");
@@ -255,7 +274,7 @@ export async function handleChatCompletions(
       // Streamed and plain answers are stored in different shapes, and the
       // same prompt with other tools is a different request (v2 also drops
       // entries cached before truncated answers were excluded).
-      policyVersion: `2026-10-security-v3|stream=${stream !== false}|tools=${
+      policyVersion: `2026-10-security-v4|kind=${requestKind}|policy=${cachePolicy}|stream=${stream !== false}|tools=${
         Array.isArray(body.tools)
           ? body.tools
               .map((t: any) => t?.function?.name ?? t?.name ?? "")
@@ -267,7 +286,9 @@ export async function handleChatCompletions(
     messages,
     temperature,
   );
-  const cached = isZkMode ? null : await getFromCache(cacheKey, cacheOwner);
+  const cached = cacheBypassed
+    ? null
+    : await getFromCache(cacheKey, cacheOwner);
 
   /** Serve a stored answer at zero upstream cost (exact or semantic cache hit). */
   const serveCachedChunks = async (
@@ -308,6 +329,9 @@ export async function handleChatCompletions(
           providerCostUsd: 0,
           costSource: "local-zero",
           cacheStatus: "hit",
+          requestKind,
+          cachePolicy,
+          cacheBypassReason,
           estimatedTokensSaved: savedTokens,
           latencyMs: Date.now() - requestStartedAt,
         });
@@ -374,7 +398,7 @@ export async function handleChatCompletions(
 
   // CRITICAL GUARD: Only run the 0-token deterministic engine on initial user turns.
   // NEVER run on tool continuations, tool outputs, or multi-turn tool loops!
-  if (!isToolFollowUp && !hasToolHistory && !isIdeAgent) {
+  if (!isToolFollowUp && !hasToolHistory && !isIdeAgent && !cacheBypassed) {
     const lastUserMsgEarly = [...(messages || [])]
       .reverse()
       .find((m: any) => m.role === "user");
@@ -447,6 +471,9 @@ export async function handleChatCompletions(
           providerCostUsd: 0,
           costSource: "local-zero",
           cacheStatus: "bypass",
+          requestKind,
+          cachePolicy,
+          cacheBypassReason,
           templateId: engineResult.workflowId,
           estimatedTokensSaved: engineSavedTokens,
           latencyMs: Date.now() - requestStartedAt,
@@ -634,6 +661,9 @@ export async function handleChatCompletions(
         providerCostUsd: 0,
         costSource: "local-zero",
         cacheStatus: "bypass",
+        requestKind,
+        cachePolicy,
+        cacheBypassReason,
         templateId: instantMatch.template?.id,
         estimatedTokensSaved: templateSavedTokens,
         latencyMs: Date.now() - requestStartedAt,
@@ -712,6 +742,9 @@ export async function handleChatCompletions(
         providerCostUsd: 0,
         costSource: "local-zero",
         cacheStatus: "bypass",
+        requestKind,
+        cachePolicy,
+        cacheBypassReason,
         templateId: blueprintMatch.id,
         estimatedTokensSaved: blueprintSavedTokens,
         latencyMs: Date.now() - requestStartedAt,
@@ -832,7 +865,9 @@ export async function handleChatCompletions(
     );
 
   // ── 2-pre. Semantic cache: near-duplicate generic questions ────────────────
-  const semanticQuestion = semanticCacheQuestion(body.messages, body.tools);
+  const semanticQuestion = cacheBypassed
+    ? null
+    : semanticCacheQuestion(body.messages, body.tools);
   const semanticKey = semanticQuestion ? semanticScope(user.id, model) : null;
   let semanticVector: Float32Array | null = null;
   if (semanticQuestion && semanticKey) {
@@ -919,7 +954,8 @@ export async function handleChatCompletions(
         : "";
   // Coding-agent turns work on the user's own project; a generic scaffold
   // (matched on loose keywords) only adds tokens and pulls the agent off task.
-  const scaffold = isIdeAgent ? null : detectTemplateIntent(lastQuery);
+  const scaffold =
+    isIdeAgent || cacheBypassed ? null : detectTemplateIntent(lastQuery);
   if (scaffold) res.setHeader("X-VynorAI-Scaffold-Match", scaffold.id);
   const turnContext = await memoizeTurnContext(
     turnKey(user.id, memBody.messages || []),
@@ -968,7 +1004,7 @@ export async function handleChatCompletions(
   const { body: shielded, map: piiMap } = maskRequestBody(optimised);
   if (piiMap.size) res.setHeader("X-VynorAI-PII-Masked", String(piiMap.size));
   let cacheFillToken: string | undefined;
-  if (!isIdeAgent) {
+  if (!isIdeAgent && !cacheBypassed) {
     const lock = await acquireCacheFillLock(cacheKey, 150_000).catch(
       () => undefined,
     );
@@ -1013,7 +1049,7 @@ export async function handleChatCompletions(
       dispatch.success &&
       !dispatch.interrupted &&
       !isIdeAgent &&
-      !isZkMode &&
+      !cacheBypassed &&
       allChunks.length > 0 &&
       finishedWithStop(allChunks)
     ) {
@@ -1119,7 +1155,10 @@ export async function handleChatCompletions(
         providerCostUsd: dispatch.usage?.providerCostUsd ?? null,
         costSource: dispatch.usage?.costSource ?? "unknown",
         cachedInputTokens: dispatch.usage?.cachedInputTokens ?? 0,
-        cacheStatus: "miss",
+        cacheStatus: cacheBypassed ? "bypass" : "miss",
+        requestKind,
+        cachePolicy,
+        cacheBypassReason,
         optimizationMode: ctxResult.optimizationMode,
         templateId: scaffold?.id,
         estimatedTokensSaved: ctxResult.savedTokens,

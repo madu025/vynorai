@@ -79,6 +79,12 @@ class VynorAI extends OpenAI {
           headers: this._getHeaders(),
           body: JSON.stringify({
             ...body,
+            ...(options.requestKind
+              ? { request_kind: options.requestKind }
+              : {}),
+            ...(options.cachePolicy
+              ? { cache_policy: options.cachePolicy }
+              : {}),
             ...this.extraBodyProperties(),
           }),
           signal,

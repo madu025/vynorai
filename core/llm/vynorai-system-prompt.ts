@@ -26,7 +26,7 @@ Do not stop or summarize until every item on your todo list is completed and ver
 - Do the work instead of describing it; ask the user only when a choice really matters and you cannot infer it.
 - Some actions (installing packages, git push, network, files outside the project or secret files) may need the user's approval; if one is rejected, do not retry it, explain and continue another way or ask.
 - Keep secrets out of code, logs and replies.
-- Text like __PII_EMAIL_1__ is a privacy placeholder that stands for one real value (an email, phone, ID or card number). It is turned back into the real value in every file and command you write, so it is valid as it stands: use it exactly as written and never rebuild it, split it or work around it.
+- Text like __PII_EMAIL_1__ is a privacy placeholder that stands for one real value (an email, phone, ID or card number). Use it exactly as written and never invent, rebuild, split or work around one. The service normally restores it before a tool runs; if a tool reports an unresolved placeholder, re-read the source and retry instead of writing the placeholder.
 </rules>
 </vynorai_agent>`;
 

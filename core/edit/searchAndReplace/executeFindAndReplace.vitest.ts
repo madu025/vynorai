@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createNewFileImpl } from "../../tools/implementations/createNewFile";
 import { ContinueErrorReason } from "../../util/errors";
 import { executeFindAndReplace } from "./performReplace";
 
@@ -182,6 +183,17 @@ describe("executeFindAndReplace", () => {
       );
     });
 
+    it("should tell the agent how to recover from stale edit text", () => {
+      expect(() => {
+        executeFindAndReplace(
+          "current contents",
+          "stale contents",
+          "new contents",
+          false,
+        );
+      }).toThrowError(/Re-read the file, then retry only this edit/);
+    });
+
     it("should throw error when multiple occurrences exist and replaceAll is false", () => {
       const content = "Hello world\nHello again\nHello there";
 
@@ -326,5 +338,23 @@ describe("executeFindAndReplace", () => {
 
       expect(result).toBe("new content");
     });
+  });
+});
+
+describe("create_new_file recovery guidance", () => {
+  it("directs an existing path to multi_edit", async () => {
+    const extras = {
+      ide: {
+        getWorkspaceDirs: async () => ["file:///workspace"],
+        fileExists: async () => true,
+      },
+    } as any;
+
+    await expect(
+      createNewFileImpl(
+        { filepath: "src/existing.ts", contents: "changed" },
+        extras,
+      ),
+    ).rejects.toThrow(/read its latest contents and use multi_edit instead/);
   });
 });

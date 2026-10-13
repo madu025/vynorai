@@ -22,6 +22,48 @@ export interface SandboxedCommand {
     | "host-fallback";
 }
 
+/**
+ * PowerShell 5.1 reports only the last native program's exit code for a
+ * pipeline. Guard every pipeline stage so `npm test | tail` cannot turn a
+ * failing test run into a successful terminal result.
+ */
+export function guardPowerShellPipelines(command: string): string {
+  const stages: string[] = [];
+  let current = "";
+  let quote = "";
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i];
+    if (quote) {
+      current += char;
+      if (char === quote && command[i - 1] !== "`") quote = "";
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === "|" && command[i - 1] !== ">" && command[i + 1] !== "|") {
+      stages.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  stages.push(current.trim());
+  if (stages.length === 1) return command;
+  return stages
+    .map(
+      (stage) =>
+        `& { ${stage}; if (-not $?) { $__vynorStageExit = $LASTEXITCODE; if ($__vynorStageExit -ne 0) { exit $__vynorStageExit }; exit 1 } }`,
+    )
+    .join(" | ");
+}
+
+function bashCommand(command: string): string {
+  return `set -o pipefail; ${command}`;
+}
+
 const SECRET_ENV_NAME =
   /(?:secret|token|password|passwd|api[_-]?key|auth|cookie|credential|private[_-]?key)/i;
 
@@ -134,7 +176,7 @@ export function buildSandboxedCommand(
     }
 
     bindArgs.push("--chdir", cwd);
-    bindArgs.push("/bin/bash", "-c", command);
+    bindArgs.push("/bin/bash", "-c", bashCommand(command));
 
     return {
       shell: "bwrap",
@@ -161,7 +203,14 @@ export function buildSandboxedCommand(
 
     return {
       shell: "sandbox-exec",
-      args: ["-p", seatbeltProfile, "/bin/bash", "-l", "-c", command],
+      args: [
+        "-p",
+        seatbeltProfile,
+        "/bin/bash",
+        "-l",
+        "-c",
+        bashCommand(command),
+      ],
       env: { ...safeEnv, VYNOR_SANDBOX: "seatbelt" },
       isSandboxed: true,
       sandboxType: "macos-seatbelt",
@@ -186,7 +235,7 @@ export function buildSandboxedCommand(
       `Set-Location -LiteralPath '${normalizedCwd.replace(/'/g, "''")}'`,
       `$global:LASTEXITCODE = 0`,
       `$__vynorFailed = $false`,
-      `& { ${command}\n} 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { [Console]::Error.WriteLine($_.ToString()); if ($_.FullyQualifiedErrorId -notlike 'NativeCommandError*') { $__vynorFailed = $true } } else { $_ } }`,
+      `& { ${guardPowerShellPipelines(command)}\n} 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { [Console]::Error.WriteLine($_.ToString()); if ($_.FullyQualifiedErrorId -notlike 'NativeCommandError*') { $__vynorFailed = $true } } else { $_ } }`,
       `if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`,
       `if ($__vynorFailed) { exit 1 }`,
       `exit 0`,
@@ -221,9 +270,13 @@ export function buildSandboxedCommand(
     );
   }
   const userShell = process.env.SHELL || "/bin/bash";
+  const shellName = path.basename(userShell).toLowerCase();
+  const guardedCommand = /^(?:ba|z|k)?sh(?:\.exe)?$/.test(shellName)
+    ? bashCommand(command)
+    : command;
   return {
     shell: userShell,
-    args: ["-l", "-c", command],
+    args: ["-l", "-c", guardedCommand],
     env: { ...safeEnv, VYNOR_SANDBOX: "fallback" },
     isSandboxed: false,
     sandboxType: "host-fallback",

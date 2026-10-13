@@ -39,6 +39,8 @@ describe("verification evidence", () => {
     ["go vet ./...", "lint"],
     ["./gradlew assemble", "build"],
     ["node_modules\\.bin\\tsc.cmd --noEmit", "typecheck"],
+    ['powershell -Command "& { npm test }"', "test"],
+    ["python -m build", "build"],
   ])("knows the runner in %s", (command, kind) => {
     expect(classifyVerificationCommand(command)).toBe(kind);
   });

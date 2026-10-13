@@ -49,6 +49,7 @@ const BY_PROGRAM: Record<string, CheckKind> = {
   esbuild: "build",
   compileall: "build",
   py_compile: "build",
+  build: "build",
 };
 
 /** Programs that are a check only with one of these subcommands. */
@@ -298,11 +299,13 @@ function classifySegment(
   // `cmd /c "cd app && npm test"`, `bash -lc '...'`: classify what is inside.
   const wrapped = segment.match(SHELL_WRAPPER);
   if (wrapped) {
+    const inner = wrapped[1]
+      .trim()
+      .replace(/^(["'])([\s\S]*)\1$/, "$2")
+      .trim();
+    const invokedBlock = inner.match(/^&\s*\{([\s\S]*)\}$/);
     return depth < 3
-      ? classifyCommandLine(
-          wrapped[1].trim().replace(/^(["'])([\s\S]*)\1$/, "$2"),
-          depth + 1,
-        )
+      ? classifyCommandLine((invokedBlock?.[1] ?? inner).trim(), depth + 1)
       : undefined;
   }
 

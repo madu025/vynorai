@@ -76,4 +76,40 @@ describe("hasPassedRequiredVerification", () => {
       }),
     ).toBe(true);
   });
+
+  it("does not invalidate a pass when a later terminal command stops a server", () => {
+    expect(
+      hasPassedRequiredVerification({
+        approvals: [
+          {
+            id: "approval-1",
+            toolCallId: "edit-1",
+            toolName: "multi_edit",
+            risk: "R2",
+            decision: "approved",
+            approvedAt: 20,
+            scopeDigest: "edit",
+          },
+          {
+            id: "approval-2",
+            toolCallId: "terminal-1",
+            toolName: "run_terminal_command",
+            risk: "R3",
+            decision: "approved",
+            approvedAt: 30,
+            scopeDigest: "stop-server",
+          },
+        ],
+        verification: [
+          {
+            id: "test-1",
+            kind: "test",
+            status: "passed",
+            summary: "Tests passed before cleanup",
+            createdAt: 25,
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
 });

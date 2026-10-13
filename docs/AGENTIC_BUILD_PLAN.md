@@ -217,6 +217,31 @@ Open after the review:
   compiled messages until it ends. Not measured.
 - Edits that undo each other with small differences are not seen as a loop.
 
+## Follow-up audit of 2026-10-13
+
+The saved-session inspector covered 14 recent runs. It confirmed four execution defects and two evidence or
+recovery gaps; the fixes below have focused regression tests but have not yet been measured by another paid
+large-task run:
+
+- PowerShell and POSIX pipelines now preserve a failing upstream exit code. Run p had printed `not ok 1` for
+  `npm test 2>&1 | tail -n 60` while reporting completion.
+- Late output from a background command is queued for a new terminal result instead of rewriting its old tool
+  result. Thirteen of the inspected sessions had changed prompt prefixes; run B showed the background status
+  replacement directly.
+- An unresolved `__PII_*` value is refused before a tool can write or execute it, and the prompt tells the
+  model to re-read and retry. Run q had passed email placeholders into `multi_edit` before later correcting
+  them.
+- Verification freshness is based on workspace edit tools, not every R3 approval. A server-stop command no
+  longer makes the immediately preceding passing checks stale.
+- Failed edits now say whether the multi-edit was applied and tell the agent to re-read and retry the one edit;
+  attempts to create an existing file direct it to `multi_edit`.
+- Verification evidence recognizes PowerShell script blocks and `python -m build`.
+
+The no-task path remains bounded by the GUI's failed-call, no-change, same-failure and 200-action guards, so
+the disabled core repeat guard is defense in depth rather than an unbounded path. The E2E exit-127 cause was
+not present in retained evidence and was not guessed. Local editor logs show that Antigravity installed 1.2.60
+successfully and later uninstalled it; the retained VSIX download is not evidence that this update failed.
+
 ## Not planned yet
 
 Parallel implementation subagents, worktree isolation and a planner model. Each needs a measured gain on this

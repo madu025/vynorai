@@ -16,7 +16,7 @@ export const createNewFileTool: Tool = {
   function: {
     name: BuiltInToolNames.CreateNewFile,
     description:
-      "Create a new file. Only use this when a file doesn't exist and should be created",
+      "Create a new file. Call it only after confirming the path does not exist, and always provide both filepath and contents. If the file exists, read it and use multi_edit instead",
     parameters: {
       type: "object",
       required: ["filepath", "contents"],

@@ -42,6 +42,15 @@ type CallToolInputs = {
 // model can continue.
 const CORE_TOOL_TIMEOUT_MS = 120_000;
 const AGENT_RUNTIME_REQUEST_TIMEOUT_MS = 15_000;
+const PRIVACY_PLACEHOLDER = /__PII_(?:EMAIL|PHONE|NIC|CARD)_\d+__/;
+
+export function hasUnrestoredPrivacyPlaceholder(value: unknown): boolean {
+  try {
+    return PRIVACY_PLACEHOLDER.test(JSON.stringify(value));
+  } catch {
+    return false;
+  }
+}
 
 export const callToolById = createAsyncThunk<
   void,
@@ -129,6 +138,14 @@ async function callToolByIdImpl(
   // so it can change approach; anything else (workspace changed, canceled)
   // still fails the turn.
   let guardRefusal: string | undefined;
+  const combinedArgs = {
+    ...(toolCallState.parsedArgs ?? {}),
+    ...(toolCallState.processedArgs ?? {}),
+  };
+  if (hasUnrestoredPrivacyPlaceholder(combinedArgs)) {
+    guardRefusal =
+      "Privacy safety blocked this tool call because a __PII_* placeholder was not restored. Do not write or execute the placeholder. Re-read the relevant source, then retry the call with the value returned by the service.";
+  }
   if (state.session.activeTaskId) {
     const signature = JSON.stringify({
       tool: toolCallState.toolCall.function.name,
@@ -147,7 +164,7 @@ async function callToolByIdImpl(
       },
       AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
     );
-    if (authorization.status === "error") {
+    if (authorization.status === "error" && !guardRefusal) {
       // Never leave the call hanging in "generated": any guard refusal goes
       // back to the model (and the user sees it) as this tool's error.
       guardRefusal = isRecoverableGuardError(authorization.error)

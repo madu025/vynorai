@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMockStore } from "../../util/test/mockStore";
 import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
-import { callToolById } from "./callToolById";
+import { callToolById, hasUnrestoredPrivacyPlaceholder } from "./callToolById";
 
 function storeWithGuardError(guardError: string, processedArgs?: object) {
   const root = getRootStateWithClaude();
@@ -69,6 +69,31 @@ function toolOutput(store: ReturnType<typeof createMockStore>) {
 }
 
 describe("callToolById safety guard", () => {
+  it("recognizes unresolved privacy placeholders in nested tool arguments", () => {
+    expect(
+      hasUnrestoredPrivacyPlaceholder({
+        edits: [{ new_string: "email = '__PII_EMAIL_3__'" }],
+      }),
+    ).toBe(true);
+    expect(
+      hasUnrestoredPrivacyPlaceholder({ contents: "email@example.com" }),
+    ).toBe(false);
+  });
+
+  it("refuses an unresolved privacy placeholder before the tool runs", async () => {
+    const { store, toolCalls } = storeWithGuardError("unused", {
+      command: "echo __PII_EMAIL_3__",
+    });
+
+    const result = await (store.dispatch as any)(
+      callToolById({ toolCallId: "t1" }),
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(toolCalls).toHaveLength(0);
+    expect(toolOutput(store)).toContain("Privacy safety blocked");
+  });
+
   it("returns a repeated-action refusal to the model instead of failing the turn", async () => {
     const { store, toolCalls, hookCalls } = storeWithGuardError(
       "Repeated tool action limit reached",

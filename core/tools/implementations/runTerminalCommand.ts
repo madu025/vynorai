@@ -10,6 +10,39 @@ const DEFAULT_TOOL_TIMEOUT_MS = 120_000;
 // Time for the last output to arrive after the shell has exited.
 const EXIT_GRACE_MS = 2_000;
 
+type BackgroundCommandResult = {
+  toolCallId: string;
+  output: string;
+  status: string;
+};
+
+// A background command returns before it exits. Its late result must not
+// rewrite that already-sent tool message: doing so changes an old prompt
+// prefix and re-bills every message after it. Keep the result per workspace
+// and append it to the next terminal result instead.
+const pendingBackgroundResults = new Map<string, BackgroundCommandResult[]>();
+
+export function enqueueBackgroundCommandResult(
+  workspace: string,
+  result: BackgroundCommandResult,
+): void {
+  const pending = pendingBackgroundResults.get(workspace) ?? [];
+  pending.push(result);
+  pendingBackgroundResults.set(workspace, pending.slice(-20));
+}
+
+export function takeBackgroundCommandResults(workspace: string): string {
+  const pending = pendingBackgroundResults.get(workspace) ?? [];
+  pendingBackgroundResults.delete(workspace);
+  if (!pending.length) return "";
+  return pending
+    .map(
+      (result) =>
+        `[Late result for background command ${result.toolCallId || "unknown"}]\n${result.output}${result.output && !result.output.endsWith("\n") ? "\n" : ""}[Status: ${result.status}]`,
+    )
+    .join("\n\n");
+}
+
 // Decode a stream's chunks with one stateful decoder: a UTF-8 character split
 // across two chunks (e.g. "✔" in test output) decoded per chunk turned into
 // "�", and the whole chunk was then re-decoded as GBK. Windows still falls
@@ -138,7 +171,9 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
         const cwd = resolveWorkingDirectory(workspaceDirs);
 
         return new Promise((resolve, reject) => {
-          let terminalOutput = "";
+          const lateResults = takeBackgroundCommandResults(cwd);
+          let terminalOutput = lateResults ? `${lateResults}\n\n` : "";
+          let backgroundCommandOutput = "";
           let timeoutId: ReturnType<typeof setTimeout> | undefined;
           let sigkillTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -240,6 +275,7 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
 
             const newOutput = decodeStdout(data);
             terminalOutput += newOutput;
+            backgroundCommandOutput += newOutput;
 
             // Update the tracked output for potential cancellation notifications
             if (toolCallId && waitForCompletion) {
@@ -247,10 +283,7 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
             }
 
             // Send partial output to UI
-            if (extras.onPartialOutput) {
-              const status = waitForCompletion
-                ? ""
-                : "Command is running in the background...";
+            if (extras.onPartialOutput && waitForCompletion) {
               extras.onPartialOutput({
                 toolCallId,
                 contextItems: [
@@ -258,7 +291,7 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
                     name: "Terminal",
                     description: "Terminal command output",
                     content: terminalOutput,
-                    status: status,
+                    status: "",
                   },
                 ],
               });
@@ -271,6 +304,7 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
 
             const newOutput = decodeStderr(data);
             terminalOutput += newOutput;
+            backgroundCommandOutput += newOutput;
 
             // Update the tracked output for potential cancellation notifications
             if (toolCallId && waitForCompletion) {
@@ -278,7 +312,7 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
             }
 
             // Send partial output to UI, status is not required
-            if (extras.onPartialOutput) {
+            if (extras.onPartialOutput && waitForCompletion) {
               extras.onPartialOutput({
                 toolCallId,
                 contextItems: [
@@ -365,24 +399,18 @@ export const runTerminalCommandImpl: ToolImpl = async (args, extras) => {
                 ]);
               }
             } else {
-              // Already resolved, just update the UI with final output
-              if (extras.onPartialOutput) {
-                const status =
-                  code === 0 || !code
-                    ? "\nBackground command completed"
-                    : `\nBackground command failed with exit code ${code}`;
-                extras.onPartialOutput({
-                  toolCallId,
-                  contextItems: [
-                    {
-                      name: "Terminal",
-                      description: "Terminal command output",
-                      content: terminalOutput,
-                      status: status,
-                    },
-                  ],
-                });
-              }
+              // The original tool result is already in model history. Queue
+              // the late result for a new terminal result instead of editing
+              // that older message in place.
+              const status =
+                code === 0
+                  ? "Background command completed"
+                  : `Background command failed with exit code ${code}`;
+              enqueueBackgroundCommandResult(cwd, {
+                toolCallId,
+                output: backgroundCommandOutput,
+                status,
+              });
             }
           };
 

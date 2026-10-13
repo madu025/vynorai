@@ -1,7 +1,11 @@
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDE, ToolExtras } from "../..";
-import { runTerminalCommandImpl } from "./runTerminalCommand";
+import {
+  enqueueBackgroundCommandResult,
+  runTerminalCommandImpl,
+  takeBackgroundCommandResults,
+} from "./runTerminalCommand";
 
 // Hoist mock function so it can be referenced in vi.mock factory
 const { mockSpawn } = vi.hoisted(() => ({
@@ -123,6 +127,19 @@ describe("runTerminalCommand timeout functionality", () => {
     expect(clearTimeoutSpy).toHaveBeenCalled();
   });
 
+  it("delivers a late background result through a later append-only result", () => {
+    const workspace = "file:///append-only-background-test";
+    enqueueBackgroundCommandResult(workspace, {
+      toolCallId: "background-1",
+      output: "server failed\n",
+      status: "Background command failed with exit code 1",
+    });
+    expect(takeBackgroundCommandResults(workspace)).toContain(
+      "[Late result for background command background-1]",
+    );
+    expect(takeBackgroundCommandResults(workspace)).toBe("");
+  });
+
   it("should NOT set up timeout when waitForCompletion is false", async () => {
     const extras = createMockExtras();
     const args = { command: "sleep 10", waitForCompletion: false };
@@ -132,6 +149,20 @@ describe("runTerminalCommand timeout functionality", () => {
     );
     expect(timeoutCalls.length).toBe(0);
     expect(result[0].status).toContain("background");
+  });
+
+  it("does not rewrite the old tool result when a background command exits", async () => {
+    const extras = createMockExtras();
+    const result = await runTerminalCommandImpl(
+      { command: "background-task", waitForCompletion: false },
+      extras,
+    );
+    expect(result[0].status).toContain("background");
+    mockOnPartialOutput.mockClear();
+    mockChildProc.stdout.emit("data", Buffer.from("late output\n"));
+    mockChildProc.exitCode = 1;
+    mockChildProc.emit("close", 1);
+    expect(mockOnPartialOutput).not.toHaveBeenCalled();
   });
 
   it("should kill process when timeout fires (streaming)", async () => {

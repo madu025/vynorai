@@ -61,7 +61,7 @@ export const createNewFileImpl: ToolImpl = async (args, extras) => {
     if (exists) {
       throw new ContinueError(
         ContinueErrorReason.FileAlreadyExists,
-        `File ${filepath} already exists. Use the edit tool to edit this file`,
+        `File ${filepath} already exists. Do not call create_new_file for it again; read its latest contents and use multi_edit instead`,
       );
     }
     await extras.ide.writeFile(resolvedFileUri, contents);

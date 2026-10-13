@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { DEFAULT_AGENT_SYSTEM_MESSAGE } from "./defaultSystemMessages";
 import { VYNORAI_XML_SYSTEM_PROMPT } from "./vynorai-system-prompt";
 
 describe("VYNORAI_XML_SYSTEM_PROMPT", () => {
@@ -9,6 +10,18 @@ describe("VYNORAI_XML_SYSTEM_PROMPT", () => {
     );
     expect(VYNORAI_XML_SYSTEM_PROMPT).toContain(
       "complete e-commerce website for my clothing shop",
+    );
+    expect(VYNORAI_XML_SYSTEM_PROMPT).toContain(
+      "Its first tool call must be update_todo_list",
+    );
+  });
+
+  test("does not require a repository map for every task", () => {
+    expect(DEFAULT_AGENT_SYSTEM_MESSAGE).toContain(
+      "When a task needs broad exploration",
+    );
+    expect(DEFAULT_AGENT_SYSTEM_MESSAGE).toContain(
+      "Skip it for a clearly bounded file or question",
     );
   });
 });

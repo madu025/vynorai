@@ -36,6 +36,7 @@ interface MessageWithContextItems {
   /** A gate, repair, nudge or recovery prompt, not the user's own. */
   isAutoPrompt?: boolean;
 }
+
 /**
  * Files the agent touched through tools anywhere in the conversation. Taken
  * over the whole history so the set only grows: folder-scoped rules then join

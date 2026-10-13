@@ -100,7 +100,12 @@ export class HeadlessAgentRunner {
         summary: next.step.summary,
       });
       const result = await this.adapter.execute(next.step);
-      if (result.workspaceRevision != null) revision = result.workspaceRevision;
+      if (
+        result.workspaceRevision !== undefined &&
+        result.workspaceRevision !== null
+      ) {
+        revision = result.workspaceRevision;
+      }
       if (result.verification)
         await this.runtime.recordVerification(task.id, result.verification);
       if (result.ok)

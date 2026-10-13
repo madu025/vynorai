@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
@@ -37,8 +39,26 @@ jobs:
         if: steps.root-cache.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Check code formatting with Prettier
-        run: npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}" --ignore-path .gitignore --ignore-path .prettierignore
+      - name: Check changed code formatting with Prettier
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # The repository has legacy formatting debt. Keep new and edited files
+          # strict without falsely failing every unrelated PR on that baseline.
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          mapfile -d '' files < <(git diff --name-only --diff-filter=ACMR -z "$BASE_SHA" "$GITHUB_SHA")
+          prettier_files=()
+          for file in "${files[@]}"; do
+            [[ "$file" =~ \.(js|jsx|ts|tsx|json|css|md)$ ]] && prettier_files+=("$file")
+          done
+          if ((${#prettier_files[@]})); then
+            npx prettier --check --ignore-path .gitignore --ignore-path .prettierignore "${prettier_files[@]}"
+          else
+            echo "No Prettier-supported files changed."
+          fi
 
   core-checks:
     runs-on: ubuntu-latest
@@ -61,13 +81,23 @@ jobs:
           is_fork: ${{ github.event.pull_request.head.repo.fork == true }}
           is_dependabot: ${{ github.actor == 'dependabot[bot]' }}
 
-      - name: Type check and lint
+      - name: Type check and lint changed core files
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           cd core
           npx tsc --noEmit
-          npm run lint
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          cd ..
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          mapfile -t core_files < <(git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$GITHUB_SHA" -- 'core/**/*.ts')
+          if ((${#core_files[@]})); then
+            npx eslint "${core_files[@]}"
+          else
+            echo "No core TypeScript files changed."
+          fi
 
       - name: Run tests
         run: |

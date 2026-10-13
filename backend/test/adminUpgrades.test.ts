@@ -57,18 +57,22 @@ test("Admin Upgrades Test Suite", async (t) => {
     },
   );
 
-  await t.test("POST /admin/swarm/run triggers background swarm", async () => {
-    const res = await fetch(`${baseUrl}/admin/swarm/run`, {
-      method: "POST",
-      headers: {
-        "x-admin-secret": "test_super_secret_admin_key_32bytes!!",
-      },
-    });
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    assert.equal(body.ok, true);
-    assert.equal(body.status, "active");
-  });
+  await t.test(
+    "POST /admin/swarm/run never claims to dispatch an unavailable worker",
+    async () => {
+      const res = await fetch(`${baseUrl}/admin/swarm/run`, {
+        method: "POST",
+        headers: {
+          "x-admin-secret": "test_super_secret_admin_key_32bytes!!",
+        },
+      });
+      assert.equal(res.status, 409);
+      const body = await res.json();
+      assert.equal(body.ok, false);
+      assert.equal(body.status, "unavailable");
+      assert.match(body.error, /No job was started/);
+    },
+  );
 
   await t.test("POST /admin/email/test validates email address", async () => {
     const res = await fetch(`${baseUrl}/admin/email/test`, {

@@ -1543,27 +1543,19 @@ adminRouter.get(
   },
 );
 
-/** POST /admin/swarm/run — triggers background maintenance run */
+/**
+ * The dashboard must not claim that a maintenance job was dispatched until
+ * the backend owns a real, isolated worker for it.
+ */
 adminRouter.post(
   "/swarm/run",
   requireAdmin,
   async (_req: Request, res: Response) => {
-    await logSecurityEvent({
-      eventType: "ADMIN_SWARM_TRIGGERED",
-      severity: "INFO",
-      actor: "ADMIN",
-      target: "SYSTEM",
-      details:
-        "Autonomous Maintenance Swarm initiated via Admin Operations Center",
-      ipAddress: _req.ip,
-    });
-
-    res.json({
-      ok: true,
-      status: "active",
-      message:
-        "Maintenance Swarm job dispatched. Issue triage, worktree sandbox allocation, and TDD verification active.",
-      timestamp: new Date().toISOString(),
+    res.status(409).json({
+      ok: false,
+      status: "unavailable",
+      error:
+        "Maintenance Swarm is not connected to a production worker. No job was started.",
     });
   },
 );

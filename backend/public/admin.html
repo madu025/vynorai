@@ -604,23 +604,23 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <!-- AUTONOMOUS MAINTENANCE SWARM -->
     <div class="page" id="page-swarm">
       <h1>🐝 Autonomous CI/CD Maintenance Swarm</h1>
-      <p class="subtitle">Self-healing GitHub issue triager, sandbox worktrees, and Daily Morning Briefings</p>
+      <p class="subtitle">Maintenance briefings are visible here. Production swarm execution remains disabled until a dedicated isolated worker is connected.</p>
 
       <div class="cards">
         <div class="stat-card">
           <div class="stat-label">Swarm Engine</div>
-          <div class="stat-value green" style="font-size:1.1rem">Armed &amp; Active</div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Cron: 0 0 * * * UTC</div>
+          <div class="stat-value amber" style="font-size:1.1rem">Not connected</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">No maintenance job can start from this page</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Triage Intelligence</div>
-          <div class="stat-value purple" style="font-size:1.1rem">DeepSeek Flash</div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Isolated git worktrees</div>
+          <div class="stat-value purple" style="font-size:1.1rem">Design available</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Worker, credentials, and approval flow are not wired</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Verification Standard</div>
-          <div class="stat-value green" style="font-size:1.1rem">TDD Test Suite</div>
-          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">Strict zero-regression barrier</div>
+          <div class="stat-value amber" style="font-size:1.1rem">Not running</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.4rem">No CI or repository action is triggered</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Briefings Archive</div>
@@ -630,7 +630,7 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
       </div>
 
       <div style="display:flex;gap:1rem;margin-bottom:1.5rem">
-        <button class="btn btn-primary" id="btnRunSwarm" onclick="triggerSwarmRun()">⚡ Trigger Swarm Run Now</button>
+        <button class="btn btn-ghost" id="btnRunSwarm" disabled title="A production worker has not been connected">Swarm execution unavailable</button>
         <button class="btn btn-ghost" onclick="loadSwarm()">↻ Refresh Reports</button>
       </div>
 
@@ -1043,7 +1043,7 @@ async function loadSwarm() {
 
   if (currentBriefings.length === 0) {
     listEl.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:1rem;">No briefings found in .vynor/briefings yet.</div>';
-    document.getElementById('briefingViewer').innerText = 'Trigger a swarm run or wait for midnight UTC cron to generate briefings.';
+    document.getElementById('briefingViewer').innerText = 'No maintenance briefings are available. Swarm execution is not connected in production.';
     return;
   }
 

@@ -138,10 +138,10 @@ export const browserQaImpl: ToolImpl = async (args) => {
       try {
         const target = new URL(request.url());
         if (request.isNavigationRequest() && target.origin !== initial.origin)
-          request.abort();
-        else request.continue();
+          void request.abort().catch(() => undefined);
+        else void request.continue().catch(() => undefined);
       } catch {
-        request.abort();
+        void request.abort().catch(() => undefined);
       }
     });
     const response = await page.goto(initial.href, {
@@ -195,7 +195,7 @@ export const browserQaImpl: ToolImpl = async (args) => {
     const screenshotPath = path.join(directory, `qa-${Date.now()}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
     const screenshotHash = createHash("sha256")
-      .update(await fs.readFile(screenshotPath))
+      .update(await fs.readFile(screenshotPath, "base64"), "base64")
       .digest("hex");
     const baselinePath = path.join(
       directory,

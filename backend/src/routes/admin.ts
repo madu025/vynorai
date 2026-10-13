@@ -1093,6 +1093,7 @@ adminRouter.get(
       .replace("T", " ");
     const rows = await dbAll<any>(
       `SELECT SUBSTR(CAST(created_at AS TEXT), 1, 10) AS day, outcome,
+              COALESCE(scope, 'unknown') AS scope,
               COALESCE(reason, '') AS reason,
               COUNT(*) AS count, COUNT(DISTINCT user_id) AS users,
               COALESCE(AVG(rounds), 0) AS avgRounds,
@@ -1101,8 +1102,8 @@ adminRouter.get(
               COALESCE(AVG(gates), 0) AS avgGates
        FROM task_outcomes
        WHERE created_at >= ?
-       GROUP BY SUBSTR(CAST(created_at AS TEXT), 1, 10), outcome, COALESCE(reason, '')
-       ORDER BY day DESC, outcome, reason`,
+       GROUP BY SUBSTR(CAST(created_at AS TEXT), 1, 10), outcome, COALESCE(scope, 'unknown'), COALESCE(reason, '')
+       ORDER BY day DESC, scope, outcome, reason`,
       [since],
     ).catch(() => []);
     const total = rows.reduce((s: number, r: any) => s + Number(r.count), 0);
@@ -1157,6 +1158,7 @@ adminRouter.get(
     const [
       totals,
       daily,
+      taskScopes,
       users,
       requestKinds,
       paymentSummary,
@@ -1168,6 +1170,13 @@ adminRouter.get(
         `SELECT SUBSTR(created_at, 1, 10) AS day, ${SUMS}
            FROM request_economics ${WHERE}
            GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
+        [since],
+      ),
+      dbAll<any>(
+        `SELECT COALESCE(task_scope, 'unknown') AS scope, ${SUMS}
+           FROM request_economics ${WHERE}
+           GROUP BY COALESCE(task_scope, 'unknown')
+           ORDER BY requests DESC, scope`,
         [since],
       ),
       dbAll<any>(
@@ -1247,6 +1256,7 @@ adminRouter.get(
       totals: withMargin(totals || {}),
       daily: daily.map(withMargin),
       requestKinds: requestKinds.map(withMargin),
+      taskScopes: taskScopes.map(withMargin),
       // Free users are always negative (no revenue); flag paying users only.
       negativeMarginUsers: perUser.filter(
         (u) => u.planId !== "free" && u.marginUsd < 0,

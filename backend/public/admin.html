@@ -354,6 +354,15 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
         </div>
       </div>
       <div class="panel">
+        <div class="panel-header"><div class="panel-title">🎯 Economics by semantic task scope</div></div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead><tr><th>Scope</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Credits</th><th>Cost</th><th>Cache hits</th><th>Bypassed</th></tr></thead>
+            <tbody id="econTaskScopes"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
         <div class="panel-header"><div class="panel-title">📅 Per day</div></div>
         <div class="panel-body" style="padding:0;overflow-x:auto">
           <table class="model-table">
@@ -573,8 +582,8 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
         <div class="panel-body">
           <p id="taskOutcomeSummary" class="subtitle"></p>
           <table class="model-table">
-            <thead><tr><th>Day</th><th>Outcome</th><th>Tasks</th><th>Users</th><th>Avg rounds</th><th>Avg credits</th></tr></thead>
-            <tbody id="taskOutcomes"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+            <thead><tr><th>Day</th><th>Scope</th><th>Outcome</th><th>Tasks</th><th>Users</th><th>Avg rounds</th><th>Avg credits</th></tr></thead>
+            <tbody id="taskOutcomes"><tr><td colspan="7" class="loading">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1486,8 +1495,8 @@ async function loadTaskOutcomes() {
     ? `${econNum(data.total)} tasks · ${data.completionRate}% ended with an answer`
     : '';
   document.getElementById('taskOutcomes').innerHTML = data.rows.length
-    ? data.rows.map(r => `<tr><td>${escHtml(r.day)}</td><td>${escHtml(r.reason ? `${r.outcome} (${r.reason})` : r.outcome)}</td><td>${econNum(r.count)}</td><td>${econNum(r.users)}</td><td>${escHtml(Math.round(r.avgRounds * 10) / 10)}</td><td>${econNum(Math.round(r.avgCredits))}</td></tr>`).join('')
-    : '<tr><td colspan="6" class="loading">No task outcomes yet</td></tr>';
+    ? data.rows.map(r => `<tr><td>${escHtml(r.day)}</td><td>${escHtml(r.scope)}</td><td>${escHtml(r.reason ? `${r.outcome} (${r.reason})` : r.outcome)}</td><td>${econNum(r.count)}</td><td>${econNum(r.users)}</td><td>${escHtml(Math.round(r.avgRounds * 10) / 10)}</td><td>${econNum(Math.round(r.avgCredits))}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="loading">No task outcomes yet</td></tr>';
 }
 
 async function loadEconomics() {
@@ -1516,6 +1525,9 @@ async function loadEconomics() {
   document.getElementById('econRequestKinds').innerHTML = (data.requestKinds || []).length
     ? data.requestKinds.map(r => `<tr><td>${escHtml(r.requestKind)}</td><td>${escHtml(r.cachePolicy)}</td><td>${escHtml(r.cacheBypassReason || '—')}</td><td>${econNum(r.requests)}</td><td>${econNum(r.inputTokens)}</td><td>${econNum(r.outputTokens)}</td><td>${econNum(r.credits)}</td><td>${econUsd(r.costUsd)}</td><td>${econNum(r.cacheHits)}</td><td>${econNum(r.cacheBypasses)}</td></tr>`).join('')
     : '<tr><td colspan="10" class="loading">No request classes recorded in this period</td></tr>';
+  document.getElementById('econTaskScopes').innerHTML = (data.taskScopes || []).length
+    ? data.taskScopes.map(r => `<tr><td>${escHtml(r.scope)}</td><td>${econNum(r.requests)}</td><td>${econNum(r.inputTokens)}</td><td>${econNum(r.outputTokens)}</td><td>${econNum(r.credits)}</td><td>${econUsd(r.costUsd)}</td><td>${econNum(r.cacheHits)}</td><td>${econNum(r.cacheBypasses)}</td></tr>`).join('')
+    : '<tr><td colspan="8" class="loading">No scoped requests recorded in this period</td></tr>';
   document.getElementById('econDaily').innerHTML = data.daily.length
     ? data.daily.map(d => { const p = paymentByDay.get(d.day) || {}; return `<tr><td>${escHtml(d.day)}</td><td>${econNum(d.requests)}</td><td>${econNum(d.credits)}</td><td>${econLkr(p.netCollectedLkr)}</td><td>${econUsd(d.deepSeekCostUsd)}</td><td>${econUsd(d.costUsd)}</td><td>${econUsd(d.revenueUsd)}</td><td>${econMargin(d)}</td></tr>`; }).join('')
     : '<tr><td colspan="8" class="loading">No requests in this period</td></tr>';

@@ -59,6 +59,7 @@ test("task outcomes: stored as counts only, validated, retained 180 days", async
       edited: true,
       verified: false,
       client: "1.2.58",
+      scope: "complex",
       // Extra fields must never be stored.
       prompt: "SECRET PROMPT TEXT",
       filepath: "C:/secret/project/file.ts",
@@ -75,6 +76,7 @@ test("task outcomes: stored as counts only, validated, retained 180 days", async
     assert.equal(rows[0].credits, 1234);
     assert.equal(rows[0].edited, 1);
     assert.equal(rows[0].verified, 0);
+    assert.equal(rows[0].scope, "complex");
     const dump = JSON.stringify(rows);
     assert.equal(dump.includes("SECRET PROMPT TEXT"), false);
     assert.equal(dump.includes("secret/project"), false);

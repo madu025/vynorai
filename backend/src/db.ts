@@ -465,6 +465,7 @@ const MIGRATIONS: Migration[] = [
         request_kind           VARCHAR(32) NOT NULL DEFAULT 'chat',
         cache_policy           VARCHAR(16) NOT NULL DEFAULT 'standard',
         cache_bypass_reason    VARCHAR(64),
+        task_scope             VARCHAR(16),
         created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
         FOREIGN KEY (usage_log_id) REFERENCES usage_logs (id) ON DELETE SET NULL
@@ -900,6 +901,7 @@ const MIGRATIONS: Migration[] = [
         credits     INTEGER,
         edited      INTEGER NOT NULL DEFAULT 0,
         verified    INTEGER NOT NULL DEFAULT 0,
+        scope       VARCHAR(16),
         client      VARCHAR(64),
         created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
@@ -937,6 +939,21 @@ const MIGRATIONS: Migration[] = [
       );
       await execSchema(
         "CREATE INDEX IF NOT EXISTS idx_request_economics_kind_created ON request_economics(request_kind, created_at DESC)",
+      );
+    },
+  },
+  {
+    version: "029_scope_outcome_evidence",
+    description:
+      "Aggregate semantic task class with opt-in outcomes and request economics, without prompt retention",
+    up: async () => {
+      await addColumnIfNotExists("request_economics", "task_scope VARCHAR(16)");
+      await addColumnIfNotExists("task_outcomes", "scope VARCHAR(16)");
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_request_economics_scope_created ON request_economics(task_scope, created_at DESC)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_task_outcomes_scope_created ON task_outcomes(scope, created_at DESC)",
       );
     },
   },

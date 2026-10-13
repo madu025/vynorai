@@ -37,8 +37,8 @@ before(async () => {
       (id, request_id, user_id, plan_id, requested_model, resolved_model, provider,
        input_tokens, output_tokens, cached_input_tokens, provider_cost_usd,
        estimated_cost_usd, cost_source, allocated_revenue_usd, gross_margin_usd,
-       cache_status, outcome, credits_charged)
-     VALUES (?, ?, ?, 'pro', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'miss', 'success', ?)`,
+       cache_status, outcome, credits_charged, task_scope)
+     VALUES (?, ?, ?, 'pro', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'miss', 'success', ?, 'complex')`,
     [
       "econ-deepseek",
       "request-deepseek",
@@ -148,6 +148,8 @@ test("economics reports cash and DeepSeek cost by total and user", async () => {
   assert.equal(scope.cacheBypassReason, "task_scope");
   assert.equal(scope.requests, 1);
   assert.equal(scope.cacheBypasses, 1);
+  const complex = data.taskScopes.find((row: any) => row.scope === "complex");
+  assert.equal(complex.requests, 1);
   assert.match(
     data.deepSeekPricing.sourceUrl,
     /^https:\/\/api-docs\.deepseek\.com\//,

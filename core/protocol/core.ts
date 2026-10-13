@@ -268,6 +268,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
       reason?: string;
       repairs?: number;
       gates?: number;
+      scope?: "simple" | "medium" | "complex";
       client?: string;
     },
     void,

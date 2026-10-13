@@ -104,6 +104,8 @@ export interface EconomicsEvent {
   cachePolicy?: "standard" | "bypass";
   /** Stable reason code when the response cache was intentionally bypassed. */
   cacheBypassReason?: string | null;
+  /** Semantic task class inferred by the extension; no prompt text is retained. */
+  taskScope?: "simple" | "medium" | "complex" | null;
 }
 
 /**
@@ -148,8 +150,8 @@ export async function recordRequestEconomics(
       optimization_mode, template_id, estimated_tokens_saved, latency_ms, outcome,
       cached_input_tokens, estimated_cost_usd, credits_charged, off_peak,
       route_tier, route_auto, prompt_fp, tool_followup,
-      request_kind, cache_policy, cache_bypass_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      request_kind, cache_policy, cache_bypass_reason, task_scope
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       uuidv4(),
       event.requestId ?? uuidv4(),
@@ -182,6 +184,7 @@ export async function recordRequestEconomics(
       event.requestKind ?? "chat",
       event.cachePolicy ?? "standard",
       event.cacheBypassReason ?? null,
+      event.taskScope ?? null,
     ],
   );
 }

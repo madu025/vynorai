@@ -219,6 +219,22 @@ export function finishedWithStop(chunks: unknown[]): boolean {
   );
 }
 
+/** Extracts only the semantic class injected by the extension, never request text. */
+function taskScopeFromMessages(
+  messages: unknown[],
+): "simple" | "medium" | "complex" | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i] as any;
+    if (message?.role !== "user" || typeof message.content !== "string")
+      continue;
+    const match = message.content.match(
+      /^\[task-scope\]\s+scope=(simple|medium|complex)\b/m,
+    );
+    if (match) return match[1] as "simple" | "medium" | "complex";
+  }
+  return null;
+}
+
 export async function handleChatCompletions(
   user: AuthenticatedUser,
   body: any,
@@ -235,6 +251,7 @@ export async function handleChatCompletions(
   const planId = user.subscriptionPlan || "free";
   const requestId = uuidv4();
   const requestStartedAt = Date.now();
+  const taskScope = taskScopeFromMessages(messages);
   const cacheOwner = {
     userId: user.id,
     projectId:
@@ -332,6 +349,7 @@ export async function handleChatCompletions(
           requestKind,
           cachePolicy,
           cacheBypassReason,
+          taskScope,
           estimatedTokensSaved: savedTokens,
           latencyMs: Date.now() - requestStartedAt,
         });
@@ -474,6 +492,7 @@ export async function handleChatCompletions(
           requestKind,
           cachePolicy,
           cacheBypassReason,
+          taskScope,
           templateId: engineResult.workflowId,
           estimatedTokensSaved: engineSavedTokens,
           latencyMs: Date.now() - requestStartedAt,
@@ -664,6 +683,7 @@ export async function handleChatCompletions(
         requestKind,
         cachePolicy,
         cacheBypassReason,
+        taskScope,
         templateId: instantMatch.template?.id,
         estimatedTokensSaved: templateSavedTokens,
         latencyMs: Date.now() - requestStartedAt,
@@ -745,6 +765,7 @@ export async function handleChatCompletions(
         requestKind,
         cachePolicy,
         cacheBypassReason,
+        taskScope,
         templateId: blueprintMatch.id,
         estimatedTokensSaved: blueprintSavedTokens,
         latencyMs: Date.now() - requestStartedAt,
@@ -1159,6 +1180,7 @@ export async function handleChatCompletions(
         requestKind,
         cachePolicy,
         cacheBypassReason,
+        taskScope,
         optimizationMode: ctxResult.optimizationMode,
         templateId: scaffold?.id,
         estimatedTokensSaved: ctxResult.savedTokens,

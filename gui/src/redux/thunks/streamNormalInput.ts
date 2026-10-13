@@ -1117,6 +1117,7 @@ ${PREMORTEM_GUIDANCE}`
         ...autoPromptCounts(getState().session.history),
         mode: getState().session.mode,
         rounds: depth + 1,
+        scope: currentTaskScope(getState().session.history),
       };
       if (toolBudgetExhausted) {
         // A paused turn is reported once, as paused, further down.
@@ -1306,6 +1307,7 @@ ${PREMORTEM_GUIDANCE}`
           rounds: depth + 1,
           edited: finishedOutcome(getState().session.history).edited,
           reason: creditCapHit ? undefined : (progressStop ?? "stalled"),
+          scope: currentTaskScope(getState().session.history),
           ...autoPromptCounts(getState().session.history),
         };
         if (

@@ -256,10 +256,18 @@ scope.
 `backend/scripts/bench/scope-live.ts` calls the production proxy with the same prompt and parser. Its 20 English,
 Sinhala and Singlish cases passed 20 of 20 (20 calls, 25,445 total tokens, 9,344 provider cache-hit tokens). An
 earlier 19 of 20 run exposed the proxy's deterministic scaffold engine intercepting the internal classifier;
-the preflight now includes a cache-isolation tool marker, which keeps it out of that engine and the
-semantic response cache. This suite demonstrates semantic generalization across the covered outcome classes;
+the preflight now sends an explicit `request_kind: task_scope` and `cache_policy: bypass` contract, which keeps it
+out of that engine and the semantic response cache. This suite demonstrates semantic generalization across the covered outcome classes;
 it is not evidence that 10,000 labelled prompts were executed. A versioned large labelled corpus is required
 before claiming a measured 10,000-prompt accuracy rate.
+
+### Stage 1 evidence dashboard, pending production measurement
+
+The extension reports only the scope class with opt-in task outcomes, and the proxy records the same class on request
+economics. Admin can compare simple, medium, complex and unknown aggregates for requests, tokens, credits, cost,
+rounds and verification outcomes. This is observability, not an orchestration policy change: no token-saving claim or
+conditional gate may be promoted until a baseline versus candidate A/B benchmark preserves completion and verification
+quality.
 
 ## Not planned yet
 

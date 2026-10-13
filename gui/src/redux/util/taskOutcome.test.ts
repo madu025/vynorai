@@ -64,6 +64,7 @@ describe("reportTaskOutcome", () => {
       reason: undefined,
       repairs: undefined,
       gates: undefined,
+      scope: undefined,
     });
   });
 
@@ -74,12 +75,14 @@ describe("reportTaskOutcome", () => {
       reason: "same_failure",
       repairs: 2,
       gates: 3,
+      scope: "complex",
     });
     expect(post.mock.calls[0][1]).toMatchObject({
       outcome: "budget",
       reason: "same_failure",
       repairs: 2,
       gates: 3,
+      scope: "complex",
     });
   });
 

@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS request_economics (
   request_kind VARCHAR(32) NOT NULL DEFAULT 'chat',
   cache_policy VARCHAR(16) NOT NULL DEFAULT 'standard',
   cache_bypass_reason VARCHAR(64),
+  task_scope VARCHAR(16),
   created_at TEXT DEFAULT ${NOW}
 );
 CREATE INDEX IF NOT EXISTS idx_request_economics_user_created ON request_economics(user_id, created_at DESC);
@@ -527,6 +528,7 @@ CREATE TABLE IF NOT EXISTS task_outcomes (
   credits INTEGER,
   edited SMALLINT NOT NULL DEFAULT 0,
   verified SMALLINT NOT NULL DEFAULT 0,
+  scope VARCHAR(16),
   client VARCHAR(64),
   created_at TEXT DEFAULT ${NOW}
 );
@@ -548,6 +550,15 @@ ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS request_kind VARCHAR(32) 
 ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS cache_policy VARCHAR(16) NOT NULL DEFAULT 'standard';
 ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS cache_bypass_reason VARCHAR(64);
 CREATE INDEX IF NOT EXISTS idx_request_economics_kind_created ON request_economics (request_kind, created_at DESC);
+`,
+  },
+  {
+    version: "029_scope_outcome_evidence",
+    sql: `
+ALTER TABLE request_economics ADD COLUMN IF NOT EXISTS task_scope VARCHAR(16);
+ALTER TABLE task_outcomes ADD COLUMN IF NOT EXISTS scope VARCHAR(16);
+CREATE INDEX IF NOT EXISTS idx_request_economics_scope_created ON request_economics (task_scope, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_outcomes_scope_created ON task_outcomes (scope, created_at DESC);
 `,
   },
 ];

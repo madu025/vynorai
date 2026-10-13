@@ -7,6 +7,7 @@ import {
 } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
 import { reportTaskOutcome } from "../util/taskOutcome";
+import { currentTaskScope } from "../util/taskScope";
 import { saveCurrentSession } from "./session";
 
 export interface RewindResult {
@@ -121,6 +122,7 @@ export const rewindToUserMessage = createAsyncThunk<
     );
     reportTaskOutcome(extra.ideMessenger, getState().ui.errorReportsEnabled, {
       outcome: "rewound",
+      scope: currentTaskScope(getState().session.history),
     });
     return { rewound: true, restoredFiles };
   },

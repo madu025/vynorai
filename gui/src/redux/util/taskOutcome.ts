@@ -7,6 +7,7 @@ import {
   unresolvedVerificationFailures,
   VERIFICATION_REPAIR_MARKER,
 } from "./verificationRepair";
+import type { TaskScope } from "./taskScope";
 
 export type TaskOutcomeKind =
   | "completed"
@@ -30,6 +31,8 @@ export interface TaskOutcomeInfo {
   repairs?: number;
   /** Other automatic prompts (todo, completion, verification, pre-mortem). */
   gates?: number;
+  /** Semantic scope class only; no user request content is reported. */
+  scope?: TaskScope;
 }
 
 /**
@@ -96,6 +99,7 @@ export function reportTaskOutcome(
       reason: info.reason,
       repairs: info.repairs,
       gates: info.gates,
+      scope: info.scope,
     });
   } catch {
     // Reporting must never affect the chat.

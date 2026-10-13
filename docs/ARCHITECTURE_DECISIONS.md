@@ -68,8 +68,9 @@ anything about production environment values is marked "not verified".
 ## Task outcomes
 
 - The GUI reports how a task ended (completed, completed unverified, stopped, budget, credit cap, error, rewound) with
-  round and credit counts to `POST /v1/task-outcomes`, only when the user turned on "Send Error Reports and Task
-  Outcomes". No prompt, path or code is sent or stored. Retention 180 days. Admin: `/admin/task-outcomes`.
+  scope class, round and credit counts to `POST /v1/task-outcomes`, only when the user turned on "Send Error Reports
+  and Task Outcomes". Request economics carries the same scope class for aggregate cost comparison. No prompt, path
+  or code is sent or stored. Retention 180 days. Admin: `/admin/task-outcomes` and `/admin/economics`.
 
 ## Product
 

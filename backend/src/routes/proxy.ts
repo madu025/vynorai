@@ -89,6 +89,7 @@ export const TaskOutcomeBodySchema = z.object({
     .optional(),
   repairs: z.number().int().min(0).max(1000).optional(),
   gates: z.number().int().min(0).max(1000).optional(),
+  scope: z.enum(["simple", "medium", "complex"]).optional(),
   client: z.string().max(64).optional(),
 });
 
@@ -384,7 +385,7 @@ proxyRouter.post(
     const user = (req as any).user;
     const b = req.body;
     await dbRun(
-      "INSERT INTO task_outcomes (id, user_id, outcome, mode, rounds, credits, edited, verified, client, reason, repairs, gates) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO task_outcomes (id, user_id, outcome, mode, rounds, credits, edited, verified, client, reason, repairs, gates, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         uuidv4(),
         user.id,
@@ -398,6 +399,7 @@ proxyRouter.post(
         b.reason ?? null,
         b.repairs ?? null,
         b.gates ?? null,
+        b.scope ?? null,
       ],
     );
     res.json({ ok: true });

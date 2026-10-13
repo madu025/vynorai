@@ -7,6 +7,7 @@ import {
 } from "../slices/sessionSlice";
 import { ThunkApiType } from "../store";
 import { reportTaskOutcome } from "../util/taskOutcome";
+import { currentTaskScope } from "../util/taskScope";
 
 export const cancelStream = createAsyncThunk<
   void,
@@ -18,6 +19,7 @@ export const cancelStream = createAsyncThunk<
     reportTaskOutcome(extra.ideMessenger, getState().ui.errorReportsEnabled, {
       outcome: "stopped",
       mode: getState().session.mode,
+      scope: currentTaskScope(getState().session.history),
     });
   }
   if (activeTaskId && options?.cancelTask !== false) {

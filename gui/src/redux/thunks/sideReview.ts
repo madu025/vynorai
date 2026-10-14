@@ -94,7 +94,14 @@ export const runSideReview = createAsyncThunk<
       const result = await extra.ideMessenger.request("llm/complete", {
         title: model.title,
         prompt: sideReviewPrompt(request, diff),
-        completionOptions: { maxTokens: 300, temperature: 0, reasoning: false },
+        // A review must inspect the current diff, never a cached answer or the
+        // deterministic mutation engine's canned workflow.
+        completionOptions: {
+          maxTokens: 300,
+          temperature: 0,
+          reasoning: false,
+          cachePolicy: "bypass",
+        },
       });
       const parsed =
         result.status === "success"

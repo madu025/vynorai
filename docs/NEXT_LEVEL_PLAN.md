@@ -754,6 +754,19 @@ false-block rate `50.0%`, with one unreliable response. The stronger tier did no
 solve the gate, so changing model tier alone is not an approved fix; the reviewer
 contract/fixture policy needs another measured iteration before rollout.
 
+#### Phase 4 cache-bypass and corpus-v2 follow-up (2026-10-14)
+
+The measured unreliable scaffold response came from the reviewer call being
+eligible for the deterministic/cache paths. Independent review now sends an
+explicit `cache_policy: "bypass"`; the same rule is used by the live corpus
+runner. The corpus controls were also corrected so omitted setup is not labelled
+as a clean patch. The resulting real run is recorded in
+`backend/bench-results/phase4-review-live-20261014T062410Z.md` with fixture digest
+`v2`: `100%` blocking-defect recall, `0%` control false-blocks and `0` unreliable
+responses. This closes the measured implementation bug, but one run is not a
+population rollout proof; repeat runs with the same fixture digest and the
+predeclared overhead ceiling are still required before promotion.
+
 ### Phase 5: exact-cost comparison, canary and controlled rollout
 
 1. Add stable request classes and a correlation/task/run ID for scope, optional contract call, main

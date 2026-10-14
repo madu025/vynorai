@@ -26,6 +26,11 @@ anything about production environment values is marked "not verified".
   `cache_policy: "bypass"`. The proxy skips exact, semantic, deterministic and
   template response paths for them. The economics ledger stores only the request
   class, policy and stable bypass reason; it never stores prompt, path or code.
+- Independent side-review calls also send `cache_policy: "bypass"`. They must
+  inspect the current diff and must never receive an exact/semantic cache answer
+  or a deterministic mutation workflow. They remain `request_kind: "chat"` and
+  are recorded with the stable `client_policy` bypass reason; review text is not
+  persisted.
 
 ## Context and plans
 

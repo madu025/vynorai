@@ -219,6 +219,8 @@ ${diff}
 List at most 3 concrete problems a careful senior engineer would flag. Use exactly one of these prefixes for every line:
 [block] file: a security problem, likely correctness bug, broken boundary, or missing evidence that makes completion unsafe.
 [warn] file: a non-blocking concern that is useful to mention but must not prevent completion.
+Mark a required downstream caller, export, route, or consumer that remains unchanged as [block] when the request requires it; that is incomplete work, not a hypothetical concern.
+Use [block] only when the shown diff directly proves the problem. Do not block because imports, fixtures, setup, or unchanged context are not shown; use [warn] when the diff is insufficient to prove a defect.
 Do not treat style, naming, or an optional extra test as [block]. Name the file. If nothing is worth flagging, reply exactly: NONE.`;
 }
 

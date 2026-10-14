@@ -748,6 +748,12 @@ implementation and measurement improvement, not a Phase 4 promotion: the recall,
 false-block and reviewer-reliability ceilings are not all met yet and repeated
 independent runs are still required.
 
+A second real run with the stronger `deepseek-v4-pro` reviewer is recorded in
+`backend/bench-results/phase4-review-live-20261014T053131Z.md`: recall was `50.0%`,
+false-block rate `50.0%`, with one unreliable response. The stronger tier did not
+solve the gate, so changing model tier alone is not an approved fix; the reviewer
+contract/fixture policy needs another measured iteration before rollout.
+
 ### Phase 5: exact-cost comparison, canary and controlled rollout
 
 1. Add stable request classes and a correlation/task/run ID for scope, optional contract call, main

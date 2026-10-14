@@ -39,7 +39,7 @@ export function createOAuthConfig(input: M365OAuthConfig): M365OAuthConfig {
 
 export async function beginM365OAuth(
   config: M365OAuthConfig,
-  storage: OAuthStorage = sessionStorage,
+  storage: OAuthStorage = localStorage,
 ): Promise<string> {
   const normalized = createOAuthConfig(config);
   const verifier = randomBase64Url(32);
@@ -67,7 +67,7 @@ export async function beginM365OAuth(
 export async function completeM365OAuth(
   callbackUrl: string,
   config: M365OAuthConfig,
-  storage: OAuthStorage = sessionStorage,
+  storage: OAuthStorage = localStorage,
   request: typeof fetch = fetch,
 ): Promise<M365OAuthTokens> {
   const normalized = createOAuthConfig(config);

@@ -6,6 +6,7 @@ import {
   excelPlansMatch,
   excelSafeBaseName,
   profileExcelRange,
+  selectExcelActions,
 } from "./excel.js";
 
 const input = {
@@ -75,4 +76,16 @@ test("server preview must match the exact local selection and action plan", () =
     }),
     false,
   );
+});
+
+test("instruction planner selects only explicit allowlisted Excel actions", () => {
+  assert.deepEqual(
+    selectExcelActions("Create a chart and PivotTable on a new result sheet"),
+    ["chart", "new-sheet", "pivot-table"],
+  );
+  assert.deepEqual(selectExcelActions("Create only a PivotTable"), [
+    "pivot-table",
+  ]);
+  assert.deepEqual(selectExcelActions("Format it as a table"), ["table"]);
+  assert.deepEqual(selectExcelActions("Please improve this data"), []);
 });

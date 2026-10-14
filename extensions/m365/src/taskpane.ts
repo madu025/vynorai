@@ -11,7 +11,11 @@ import {
   describeOfficeHost,
   formatEntry,
 } from "./diagnostics.js";
-import { createExcelPreviewPlan, excelPlansMatch } from "./excel.js";
+import {
+  createExcelPreviewPlan,
+  excelPlansMatch,
+  selectExcelActions,
+} from "./excel.js";
 import {
   beginM365OAuth,
   completeM365OAuth,
@@ -33,6 +37,7 @@ declare global {
 const config = window.__VYNORAI_M365_CONFIG__;
 const status = document.querySelector<HTMLElement>("#status");
 const preview = document.querySelector<HTMLElement>("#preview");
+const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
@@ -317,11 +322,30 @@ signIn?.addEventListener("click", async () => {
 
 signOut?.addEventListener("click", signOutOfMicrosoft);
 
+instruction?.addEventListener("input", () => {
+  currentPlan = undefined;
+  previewFingerprint = "";
+  if (apply) apply.disabled = true;
+  if (preview) preview.textContent = "No preview yet.";
+});
+
 inspect?.addEventListener("click", async () => {
   if (!config || !accessToken)
     return setStatus("Sign in before inspecting Excel data.");
   if (apply) apply.disabled = true;
   currentPlan = undefined;
+  const actions = selectExcelActions(instruction?.value || "");
+  if (actions.length === 0) {
+    log.record(
+      "instruction:actions",
+      "fail",
+      "no explicit allowlisted workbook action",
+    );
+    return setStatus(
+      "Say what to create: a table, chart, new result sheet, or PivotTable.",
+    );
+  }
+  log.record("instruction:actions", "pass", { actions });
   try {
     setStatus("Inspecting the selected range...");
     const input = await log.step(
@@ -334,10 +358,9 @@ inspect?.addEventListener("click", async () => {
         columns: value.values[0]?.length ?? 0,
       }),
     );
-    const actions = ["table", "chart", "new-sheet", "pivot-table"] as const;
     const localPreview = await log.step(
       "local:preview",
-      () => createExcelPreviewPlan(input, [...actions]),
+      () => createExcelPreviewPlan(input, actions),
       (value) => ({
         actions: value.actions.length,
         warnings: value.warnings.length,

@@ -36,12 +36,43 @@ type ExcelActionPlan = {
   requiresConfirmation: true;
 };
 
+export type ExcelActionKind = ExcelActionPlan["actions"][number]["kind"];
+
+const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
+  "table",
+  "chart",
+  "new-sheet",
+  "pivot-table",
+];
+
 type ComparableExcelPlan = Omit<
   ExcelActionPlan,
   "planId" | "approvalToken" | "expiresAt"
 >;
 
 const DEFAULT_CHUNK_ROWS = 500;
+
+/**
+ * Maps an explicit user instruction to the mutation allowlist. Ambiguous text returns no
+ * actions, so inspecting data can never silently turn into every supported workbook change.
+ */
+export function selectExcelActions(instruction: string): ExcelActionKind[] {
+  const normalized = instruction.toLocaleLowerCase().replace(/[_-]+/g, " ");
+  const withoutPivot = normalized.replace(/pivot\s*table/g, " ");
+  const requested = new Set<ExcelActionKind>();
+  if (/\btable\b|\bformat\s+(?:it\s+)?as\s+(?:a\s+)?table\b/.test(withoutPivot))
+    requested.add("table");
+  if (/\b(chart|graph|plot|visuali[sz](?:e|ation))\b/.test(normalized))
+    requested.add("chart");
+  if (
+    /\b(new|result|summary)\s+(sheet|worksheet|tab)\b|\bworksheet\b/.test(
+      normalized,
+    )
+  )
+    requested.add("new-sheet");
+  if (/\bpivot(?:\s*table)?\b/.test(normalized)) requested.add("pivot-table");
+  return EXCEL_ACTION_ORDER.filter((action) => requested.has(action));
+}
 
 /** Local FNV-1a fingerprint of the exact source cells; used to prove the source is unchanged. */
 export function fingerprintExcelRange(input: ExcelRangeInput): string {

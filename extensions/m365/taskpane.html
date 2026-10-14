@@ -17,6 +17,8 @@
       button { margin: 0; padding: 9px 12px; border: 1px solid #64748b; border-radius: 4px; background: #ffffff; color: #102a4c; font: inherit; cursor: pointer; }
       button:hover:not(:disabled) { background: #eff6ff; }
       button:disabled { cursor: not-allowed; opacity: .5; }
+      label { display: block; margin: 0 0 6px; font-weight: 600; }
+      textarea { width: 100%; min-height: 76px; margin: 0 0 10px; padding: 9px; border: 1px solid #64748b; border-radius: 4px; resize: vertical; font: inherit; }
       pre { margin: 0; white-space: pre-wrap; background: #f3f4f6; padding: 10px; max-height: 320px; overflow: auto; }
       #diagnostics { color: #1f2937; font-size: 12px; }
       #diagnostics-summary { min-height: 18px; margin: 8px 0; font-weight: 600; }
@@ -28,10 +30,12 @@
     <main>
       <h1>VynorAI Excel</h1>
       <p id="status" role="status" aria-live="polite">Loading…</p>
+      <label for="instruction">What should VynorAI create?</label>
+      <textarea id="instruction" placeholder="For example: Create a chart and PivotTable on a new result sheet."></textarea>
       <div class="actions">
         <button id="sign-in" type="button">Sign in with Microsoft</button>
         <button id="sign-out" type="button" disabled>Sign out</button>
-        <button id="inspect" type="button">Inspect selected data</button>
+        <button id="inspect" type="button">Inspect and preview</button>
         <button id="apply" type="button" disabled>Confirm and apply</button>
       </div>
       <h2>Preview</h2>
@@ -82,7 +86,7 @@
     <script nomodule>
       document.getElementById("status").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";
     </script>
-    <script src="./runtime-config.js?v=20261015.8"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261015.8"></script>
+    <script src="./runtime-config.js?v=20261015.9"></script>
+    <script src="./dist/taskpane.bundle.js?v=20261015.9"></script>
   </body>
 </html>

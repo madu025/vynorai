@@ -1,6 +1,6 @@
 # VynorAI Microsoft 365 Add-in
 
-This development package contains the first Excel slice. It uses Entra Authorization Code + PKCE, reads only the selected range, sends a bounded preview request to the existing VynorAI backend, and requires an approval response before Office.js writes a table, chart, result sheet, or PivotTable.
+This development package contains the first Excel slice. It uses Entra Authorization Code + PKCE, maps an explicit user instruction to the table/chart/new-sheet/PivotTable allowlist, reads only the selected range, sends a bounded preview request to the existing VynorAI backend, and requires an approval response before Office.js writes anything. Ambiguous instructions produce no mutation plan.
 
 Configure the task pane at runtime with `window.__VYNORAI_M365_CONFIG__`:
 

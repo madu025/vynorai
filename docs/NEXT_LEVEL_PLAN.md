@@ -716,6 +716,15 @@ Phase 4 gate: all predeclared seeded blocking defects are caught, clean false-bl
 stay below predeclared ceilings, and false completion improves. Otherwise keep review advisory or
 remove the change.
 
+#### Real production evidence run (2026-10-14)
+
+The production proxy evidence pilot ran after the sandbox cleanup deployment with the real E2E
+account and real routed model: `12/12` deterministic tasks passed, with no invalid runs. The run
+covered simple/medium/complex scopes and English, Singlish and Sinhala prompts; cache-hit share was
+`77.3%`, median five rounds, p90 `31.3s`, and the recorded usage delta was `53,428` tokens. This is
+quality and routing evidence, not the Phase 4 blinded reviewer gate or the Phase 5 paired A/B gate.
+The JSON and Markdown report are `backend/bench-results/2026-10-14T04-31-04-191Z.*`.
+
 #### Phase 4 measurement record (2026-10-14)
 
 Initial live seed evidence is in `backend/bench-results/phase4-review-seed-2026-10-14.md`:

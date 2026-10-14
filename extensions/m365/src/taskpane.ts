@@ -1,4 +1,4 @@
-import { createM365ApiClient } from "./api.js";
+import { createM365ApiClient, M365ApiError } from "./api.js";
 import { createExcelPreviewPlan } from "./excel.js";
 import {
   beginM365OAuth,
@@ -27,7 +27,8 @@ const apply = document.querySelector<HTMLButtonElement>("#apply");
 const diagnostics = document.querySelector<HTMLElement>("#diagnostics");
 let accessToken = "";
 let currentPlan: any;
-const SESSION_KEY = "vynorai.m365.excel.session";
+const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
+const SESSION_KEY = "vynorai.m365.excel.session.v2";
 
 interface StoredSession {
   accessToken: string;
@@ -88,10 +89,42 @@ function signOutOfMicrosoft() {
   accessToken = "";
   currentPlan = undefined;
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(LEGACY_SESSION_KEY);
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
   updateAuthenticationUi(false);
   setStatus("Signed out. Sign in to inspect selected Excel data.");
+}
+
+function handleApiError(error: unknown) {
+  if (!(error instanceof M365ApiError)) {
+    setStatus((error as Error).message);
+    return;
+  }
+  if (
+    [
+      "invalid_entra_identity",
+      "invalid_entra_token",
+      "invalid_entra_issuer",
+      "jwt expired",
+    ].includes(error.code)
+  ) {
+    signOutOfMicrosoft();
+    setStatus(
+      "Microsoft session changed or expired. Sign in again to continue.",
+    );
+    return;
+  }
+  const messages: Record<string, string> = {
+    tenant_disabled:
+      "Your Microsoft 365 organization is not enabled in VynorAI yet.",
+    M365_IDENTITY_NOT_LINKED:
+      "Your Microsoft account must be linked to a VynorAI account by an administrator.",
+    insufficient_scope:
+      "Microsoft consent is missing a required Excel permission.",
+    CREDITS_EXHAUSTED: "The linked VynorAI account has no credits available.",
+  };
+  setStatus(messages[error.code] || `VynorAI request failed (${error.code}).`);
 }
 
 function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
@@ -211,7 +244,7 @@ inspect?.addEventListener("click", async () => {
     if (apply) apply.disabled = false;
     setStatus("Preview ready. Review it before applying.");
   } catch (error) {
-    setStatus((error as Error).message);
+    handleApiError(error);
   }
 });
 
@@ -240,11 +273,12 @@ apply?.addEventListener("click", async () => {
     );
     setStatus("Excel changes applied to the approved result.");
   } catch (error) {
-    setStatus((error as Error).message);
+    handleApiError(error);
   }
 });
 
 async function initialize() {
+  localStorage.removeItem(LEGACY_SESSION_KEY);
   if (!config) {
     addDiagnostic("M365 OAuth runtime configuration was not loaded.");
     return setStatus("M365 OAuth configuration is missing.");

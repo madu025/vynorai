@@ -2,6 +2,9 @@
 
 Status: Phase 0/1 safe Excel slice and multitenant Entra registration preparation completed. The production registrations expose only the Excel read/write delegated scopes and use an HTTPS production task-pane redirect URI. No production add-in deployment is enabled by this document. Real Excel-host sign-in and workbook evidence remains pending an eligible Microsoft 365 user/license.
 
+The production API registration requires `api.requestedAccessTokenVersion=2`. This keeps multitenant access tokens on
+the v2 issuer contract validated by the backend; changing it back to `null` or v1 makes the issuer validation fail closed.
+
 Local OAuth prerequisites are `M365_ENTRA_TENANT_ID`, `M365_ENTRA_API_CLIENT_ID`, `M365_ENTRA_CLIENT_ID`, and optionally
 `M365_ENTRA_API_AUDIENCE` (defaults to `api://<M365_ENTRA_API_CLIENT_ID>`), `M365_ENTRA_ISSUER`/`M365_ENTRA_JWKS_URL`. Production multitenant mode additionally sets `M365_ENTRA_MULTI_TENANT=true`;
 the browser then uses the `organizations` authority and the backend validates a tenant-specific v2 issuer, API audience,

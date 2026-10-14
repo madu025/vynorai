@@ -7,6 +7,16 @@ export interface M365ApiClient {
   }): Promise<any>;
 }
 
+export class M365ApiError extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly status: number,
+  ) {
+    super(code);
+    this.name = "M365ApiError";
+  }
+}
+
 export function createM365ApiClient(
   baseUrl: string,
   accessToken: string,
@@ -24,8 +34,10 @@ export function createM365ApiClient(
       body: JSON.stringify(body),
     });
     const payload = await response.json();
-    if (!response.ok)
-      throw new Error(payload?.error?.code || "M365 API request failed");
+    if (!response.ok) {
+      const code = payload?.error?.code || "M365_API_REQUEST_FAILED";
+      throw new M365ApiError(code, response.status);
+    }
     return payload;
   };
   return {

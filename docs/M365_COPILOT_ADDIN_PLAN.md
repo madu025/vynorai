@@ -16,6 +16,9 @@ Authorization Code + PKCE and never stores a client secret.
 Production M365 access additionally requires an enabled row in `m365_tenants`; each tenant has an independently
 configured allowed-action scope list and consent timestamp. The existing admin API exposes `/admin/m365/tenants` for
 enablement/revocation and `/admin/m365/identities/:tenantId/:objectId` for an explicit VynorAI-account identity binding.
+When a cryptographically valid identity reaches a disabled tenant gate, the backend records a metadata-only
+`M365_TENANT_ACCESS_REQUESTED` security event containing the Entra tenant/object IDs and required scope. It never stores
+the access token or selected workbook content; an administrator must still explicitly enable the tenant and link the identity.
 
 For a controlled test binding, run `npx tsx scripts/link-m365-identity.ts` from `backend/` with
 `M365_LINK_TENANT_ID`, `M365_LINK_OBJECT_ID`, and the existing VynorAI internal `M365_LINK_USER_ID` set only in

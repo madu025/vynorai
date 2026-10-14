@@ -46,20 +46,32 @@ async function requireM365Auth(
 ) {
   const authorization = req.headers.authorization;
   if (!authorization?.startsWith("Bearer "))
-    return res
-      .status(401)
-      .json({
-        error: {
-          code: "OAUTH_REQUIRED",
-          message: "Entra OAuth access token required",
-        },
-      });
+    return res.status(401).json({
+      error: {
+        code: "OAUTH_REQUIRED",
+        message: "Entra OAuth access token required",
+      },
+    });
   try {
     const m365Identity = await validateEntraAccessToken(
       authorization.slice("Bearer ".length).trim(),
     );
-    validateM365Identity(m365Identity, "m365.excel.read");
-    await requireM365TenantScope(m365Identity.tenantId, "m365.excel.read");
+    try {
+      validateM365Identity(m365Identity, "m365.excel.read");
+      await requireM365TenantScope(m365Identity.tenantId, "m365.excel.read");
+    } catch (error) {
+      const code = (error as Error).message || "M365_POLICY_DENIED";
+      if (code === "tenant_disabled") {
+        await logSecurityEvent({
+          eventType: "M365_TENANT_ACCESS_REQUESTED",
+          actor: m365Identity.objectId,
+          target: m365Identity.tenantId,
+          details: JSON.stringify({ requiredScope: "m365.excel.read" }),
+          ipAddress: req.ip,
+        });
+      }
+      return res.status(403).json({ error: { code } });
+    }
     const link = await dbGet<{
       user_id: string;
       email: string;
@@ -80,11 +92,9 @@ async function requireM365Auth(
     };
     next();
   } catch (error) {
-    return res
-      .status(401)
-      .json({
-        error: { code: (error as Error).message || "INVALID_OAUTH_TOKEN" },
-      });
+    return res.status(401).json({
+      error: { code: (error as Error).message || "INVALID_OAUTH_TOKEN" },
+    });
   }
 }
 

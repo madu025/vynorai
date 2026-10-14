@@ -6,6 +6,22 @@
   </head>
   <body>
     <p>Opening Microsoft sign-in…</p>
-    <script type="module" src="./dist/auth-dialog.js"></script>
+    <script>
+      (function () {
+        try {
+          var match = /[?&]authorize=([^&]*)/.exec(window.location.search);
+          if (!match) throw new Error("Microsoft sign-in address is missing.");
+          var authorize = decodeURIComponent(match[1].replace(/\+/g, " "));
+          var target = document.createElement("a");
+          target.href = authorize;
+          if (target.protocol !== "https:" || target.hostname !== "login.microsoftonline.com") {
+            throw new Error("Microsoft sign-in address is not allowed.");
+          }
+          window.location.replace(authorize);
+        } catch (error) {
+          document.body.textContent = error.message || "Unable to start Microsoft sign-in.";
+        }
+      })();
+    </script>
   </body>
 </html>

@@ -7,6 +7,19 @@
   </head>
   <body>
     <p>Completing sign-in…</p>
-    <script type="module" src="./dist/auth-callback.js"></script>
+    <script>
+      (function () {
+        function complete() {
+          var message = JSON.stringify({ callbackUrl: window.location.href });
+          try {
+            Office.context.ui.messageParent(message, { targetOrigin: window.location.protocol + "//" + window.location.host });
+          } catch (_) {
+            Office.context.ui.messageParent(message);
+          }
+        }
+        if (Office.onReady) Office.onReady(complete);
+        else Office.initialize = complete;
+      })();
+    </script>
   </body>
 </html>

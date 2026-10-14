@@ -13,8 +13,6 @@
     "src/oauth.ts",
     "src/officeExcel.ts",
     "src/api.ts",
-    "src/taskpane.ts",
-    "src/auth-dialog.ts",
-    "src/auth-callback.ts"
+    "src/taskpane.ts"
   ]
 }

@@ -6,23 +6,37 @@
     <title>VynorAI Excel</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     <style>
-      body { font: 14px system-ui, sans-serif; margin: 16px; color: #1f2937; }
-      button { margin: 4px 4px 8px 0; padding: 8px 12px; }
-      pre { white-space: pre-wrap; background: #f3f4f6; padding: 10px; max-height: 320px; overflow: auto; }
+      * { box-sizing: border-box; }
+      html, body { min-height: 100%; margin: 0; background: #ffffff; }
+      body { font: 14px system-ui, sans-serif; color: #1f2937; }
+      main { min-height: 100vh; padding: 20px; background: #ffffff; }
+      h1 { margin: 0 0 16px; font-size: 28px; color: #102a4c; }
+      h2 { margin: 22px 0 8px; font-size: 20px; color: #102a4c; }
+      #status { min-height: 20px; margin: 0 0 12px; }
+      .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+      button { margin: 0; padding: 9px 12px; border: 1px solid #64748b; border-radius: 4px; background: #ffffff; color: #102a4c; font: inherit; cursor: pointer; }
+      button:hover:not(:disabled) { background: #eff6ff; }
+      button:disabled { cursor: not-allowed; opacity: .5; }
+      pre { margin: 0; white-space: pre-wrap; background: #f3f4f6; padding: 10px; max-height: 320px; overflow: auto; }
       #diagnostics { color: #7f1d1d; font-size: 12px; }
       #apply:disabled { opacity: .5; }
     </style>
   </head>
   <body>
-    <h1>VynorAI Excel</h1>
-    <p id="status" role="status" aria-live="polite">Loading…</p>
-    <button id="sign-in" type="button">Sign in with Microsoft</button>
-    <button id="inspect" type="button">Inspect selected data</button>
-    <button id="apply" type="button" disabled>Confirm and apply</button>
-    <h2>Preview</h2>
-    <pre id="preview">No preview yet.</pre>
-    <h2>Diagnostics</h2>
-    <pre id="diagnostics">No sign-in diagnostics yet.</pre>
+    <main>
+      <h1>VynorAI Excel</h1>
+      <p id="status" role="status" aria-live="polite">Loading…</p>
+      <div class="actions">
+        <button id="sign-in" type="button">Sign in with Microsoft</button>
+        <button id="sign-out" type="button" disabled>Sign out</button>
+        <button id="inspect" type="button">Inspect selected data</button>
+        <button id="apply" type="button" disabled>Confirm and apply</button>
+      </div>
+      <h2>Preview</h2>
+      <pre id="preview">No preview yet.</pre>
+      <h2>Diagnostics</h2>
+      <pre id="diagnostics">No sign-in diagnostics yet.</pre>
+    </main>
     <script>
       (function () {
         var status = document.getElementById("status");
@@ -48,6 +62,12 @@
           note("Unhandled startup rejection: " + (event.reason && event.reason.message ? event.reason.message : "unknown"));
           if (status) status.textContent = "Add-in startup failed. Update Excel or use Excel for the web.";
         });
+        window.setTimeout(function () {
+          if (status && status.textContent === "Loading…") {
+            note("Task pane bundle did not initialize within five seconds.");
+            status.textContent = "Add-in scripts did not start. Close and reopen the task pane.";
+          }
+        }, 5000);
       })();
     </script>
     <script nomodule>

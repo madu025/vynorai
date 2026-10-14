@@ -21,11 +21,18 @@ const config = window.__VYNORAI_M365_CONFIG__;
 const status = document.querySelector<HTMLElement>("#status");
 const preview = document.querySelector<HTMLElement>("#preview");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
+const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const apply = document.querySelector<HTMLButtonElement>("#apply");
 const diagnostics = document.querySelector<HTMLElement>("#diagnostics");
 let accessToken = "";
 let currentPlan: any;
+const SESSION_KEY = "vynorai.m365.excel.session";
+
+interface StoredSession {
+  accessToken: string;
+  expiresAt: number;
+}
 
 function setStatus(message: string) {
   if (status) status.textContent = message;
@@ -40,6 +47,51 @@ function addDiagnostic(message: string) {
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;
+}
+
+function updateAuthenticationUi(signedIn: boolean) {
+  if (signIn) signIn.disabled = signedIn;
+  if (signOut) signOut.disabled = !signedIn;
+  if (inspect) inspect.disabled = !signedIn;
+}
+
+function saveSession(tokens: { accessToken: string; expiresIn: number }) {
+  const expiresAt = Date.now() + Math.max(0, tokens.expiresIn - 60) * 1000;
+  localStorage.setItem(
+    SESSION_KEY,
+    JSON.stringify({ accessToken: tokens.accessToken, expiresAt }),
+  );
+}
+
+function restoreSession(): boolean {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw) as StoredSession;
+    if (
+      !saved.accessToken ||
+      !Number.isFinite(saved.expiresAt) ||
+      saved.expiresAt <= Date.now()
+    ) {
+      localStorage.removeItem(SESSION_KEY);
+      return false;
+    }
+    accessToken = saved.accessToken;
+    return true;
+  } catch {
+    localStorage.removeItem(SESSION_KEY);
+    return false;
+  }
+}
+
+function signOutOfMicrosoft() {
+  accessToken = "";
+  currentPlan = undefined;
+  localStorage.removeItem(SESSION_KEY);
+  if (apply) apply.disabled = true;
+  if (preview) preview.textContent = "No preview yet.";
+  updateAuthenticationUi(false);
+  setStatus("Signed out. Sign in to inspect selected Excel data.");
 }
 
 function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
@@ -112,7 +164,10 @@ signIn?.addEventListener("click", async () => {
       await beginM365OAuth(config),
     );
     addDiagnostic("Exchanging the one-time authorization code.");
-    accessToken = (await completeM365OAuth(callbackUrl, config)).accessToken;
+    const tokens = await completeM365OAuth(callbackUrl, config);
+    accessToken = tokens.accessToken;
+    saveSession(tokens);
+    updateAuthenticationUi(true);
     addDiagnostic("Microsoft sign-in completed successfully.");
     setStatus("Signed in. Select data and inspect it.");
   } catch (error) {
@@ -120,6 +175,8 @@ signIn?.addEventListener("click", async () => {
     setStatus((error as Error).message);
   }
 });
+
+signOut?.addEventListener("click", signOutOfMicrosoft);
 
 inspect?.addEventListener("click", async () => {
   if (!config || !accessToken)
@@ -188,7 +245,16 @@ apply?.addEventListener("click", async () => {
 });
 
 async function initialize() {
-  if (!config) return setStatus("M365 OAuth configuration is missing.");
+  if (!config) {
+    addDiagnostic("M365 OAuth runtime configuration was not loaded.");
+    return setStatus("M365 OAuth configuration is missing.");
+  }
+  if (restoreSession()) {
+    updateAuthenticationUi(true);
+    addDiagnostic("Restored the unexpired Microsoft sign-in session.");
+    return setStatus("Signed in. Select data and inspect it.");
+  }
+  updateAuthenticationUi(false);
   setStatus("Sign in to inspect selected Excel data.");
 }
 

@@ -23,11 +23,20 @@ const preview = document.querySelector<HTMLElement>("#preview");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const apply = document.querySelector<HTMLButtonElement>("#apply");
+const diagnostics = document.querySelector<HTMLElement>("#diagnostics");
 let accessToken = "";
 let currentPlan: any;
 
 function setStatus(message: string) {
   if (status) status.textContent = message;
+}
+function addDiagnostic(message: string) {
+  if (!diagnostics) return;
+  const existing =
+    diagnostics.textContent === "No sign-in diagnostics yet."
+      ? ""
+      : `${diagnostics.textContent}\n`;
+  diagnostics.textContent = `${existing}${new Date().toISOString()} ${message}`;
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;
@@ -38,17 +47,23 @@ function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
     const office = (globalThis as any).Office;
     if (!office?.context?.ui?.displayDialogAsync)
       return reject(new Error("Office sign-in dialog is unavailable."));
+    addDiagnostic("Opening Office Dialog API sign-in window.");
     office.context.ui.displayDialogAsync(
       createOfficeAuthDialogUrl(authorizeUrl),
       { height: 75, width: 50 },
       (result: any) => {
-        if (result.status !== office.AsyncResultStatus.Succeeded)
+        if (result.status !== office.AsyncResultStatus.Succeeded) {
+          addDiagnostic(
+            `Dialog open failed: ${result.error?.code || "unknown"} ${result.error?.message || ""}`,
+          );
           return reject(
             new Error(
               `Unable to open the Microsoft sign-in dialog (${result.error?.code || "unknown"}).`,
             ),
           );
+        }
         const dialog = result.value;
+        addDiagnostic("Dialog opened successfully.");
         const closeWithError = (message: string) => {
           dialog.close();
           reject(new Error(message));
@@ -73,10 +88,14 @@ function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
         );
         dialog.addEventHandler(
           office.EventType.DialogEventReceived,
-          (event: any) =>
+          (event: any) => {
+            addDiagnostic(
+              `Dialog event: ${event.error || "unknown"} ${event.message || "closed"}`,
+            );
             closeWithError(
               `Microsoft sign-in dialog event ${event.error || "unknown"}: ${event.message || "closed"}`,
-            ),
+            );
+          },
         );
       },
     );
@@ -93,6 +112,7 @@ signIn?.addEventListener("click", async () => {
     accessToken = (await completeM365OAuth(callbackUrl, config)).accessToken;
     setStatus("Signed in. Select data and inspect it.");
   } catch (error) {
+    addDiagnostic((error as Error).message);
     setStatus((error as Error).message);
   }
 });

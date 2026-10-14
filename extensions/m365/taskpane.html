@@ -9,6 +9,7 @@
       body { font: 14px system-ui, sans-serif; margin: 16px; color: #1f2937; }
       button { margin: 4px 4px 8px 0; padding: 8px 12px; }
       pre { white-space: pre-wrap; background: #f3f4f6; padding: 10px; max-height: 320px; overflow: auto; }
+      #diagnostics { color: #7f1d1d; font-size: 12px; }
       #apply:disabled { opacity: .5; }
     </style>
   </head>
@@ -20,6 +21,8 @@
     <button id="apply" type="button" disabled>Confirm and apply</button>
     <h2>Preview</h2>
     <pre id="preview">No preview yet.</pre>
+    <h2>Diagnostics</h2>
+    <pre id="diagnostics">No sign-in diagnostics yet.</pre>
     <script>
       (function () {
         var status = document.getElementById("status");
@@ -34,7 +37,7 @@
     <script nomodule>
       document.getElementById("status").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";
     </script>
-    <script src="./runtime-config.js?v=20261014.5"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261014.5"></script>
+    <script src="./runtime-config.js?v=20261014.6"></script>
+    <script src="./dist/taskpane.bundle.js?v=20261014.6"></script>
   </body>
 </html>

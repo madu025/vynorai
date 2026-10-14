@@ -50,8 +50,14 @@ function validRequest(body) {
 function docker(args) {
   return new Promise((resolve) => {
     const child = spawn("docker", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const stdout = [];
     const stderr = [];
+    let outputBytes = 0;
     let bytes = 0;
+    child.stdout.on("data", (chunk) => {
+      outputBytes += chunk.length;
+      if (outputBytes <= 16_384) stdout.push(chunk);
+    });
     child.stderr.on("data", (chunk) => {
       bytes += chunk.length;
       if (bytes <= 16_384) stderr.push(chunk);
@@ -59,11 +65,31 @@ function docker(args) {
     child.on("close", (code) =>
       resolve({
         code,
+        output: Buffer.concat(stdout).toString("utf8").slice(-4000),
         stderr: Buffer.concat(stderr).toString("utf8").slice(-4000),
       }),
     );
-    child.on("error", (error) => resolve({ code: 127, stderr: error.message }));
+    child.on("error", (error) =>
+      resolve({ code: 127, output: "", stderr: error.message }),
+    );
   });
+}
+
+function safeDiagnostic(value) {
+  return String(value || "")
+    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/VYNOR_MODEL_TOKEN=\S+/g, "VYNOR_MODEL_TOKEN=[REDACTED]")
+    .replace(/vynor_live_[a-f0-9]{32}/gi, "[REDACTED_KEY]")
+    .slice(-4000);
+}
+
+function reportFailure(label, result) {
+  if (result.code === 0) return;
+  console.error(
+    `[BackgroundLauncher] ${label} failed (${result.code}): ${safeDiagnostic(
+      `${result.output || ""}\n${result.stderr || ""}`,
+    )}`,
+  );
 }
 
 async function runSandbox(body) {
@@ -115,11 +141,29 @@ async function runSandbox(body) {
   const result = await docker(args);
   clearTimeout(timer);
   active.delete(body.taskId);
+  reportFailure("sandbox", result);
+  let outputCopy;
   if (result.code !== 127) {
-    await docker(["cp", `${name}:/output/.`, body.outputDirectory]);
+    outputCopy = await docker([
+      "cp",
+      `${name}:/output/.`,
+      body.outputDirectory,
+    ]);
+    reportFailure("output copy", outputCopy);
     await promoteCache(
       path.join(body.outputDirectory, "dependency-cache"),
       seed,
+    );
+  }
+  const proofMissing = !fs.existsSync(
+    path.join(body.outputDirectory, "proof.json"),
+  );
+  if (proofMissing) {
+    const containerLogs = await docker(["logs", name]);
+    console.error(
+      `[BackgroundLauncher] proof.json missing for ${body.taskId}: ${safeDiagnostic(
+        `${containerLogs.output || ""}\n${containerLogs.stderr || ""}`,
+      )}`,
     );
   }
   await docker(["rm", "-f", name]);
@@ -129,9 +173,13 @@ async function runSandbox(body) {
       ? "canceled"
       : timedOut
         ? "timeout"
-        : result.code === 0
-          ? "completed"
-          : "sandbox_error",
+        : proofMissing
+          ? "sandbox_output_missing_proof"
+          : outputCopy?.code
+            ? "sandbox_output_copy_failed"
+            : result.code === 0
+              ? "completed"
+              : "sandbox_error",
     timedOut,
     startedAt,
     finishedAt: new Date().toISOString(),

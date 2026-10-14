@@ -52,9 +52,8 @@ describe("Live Swarm & GitHub Remote Integration", () => {
 
     const report = await engine.runSwarm([mockIssue]);
     expect(report.prsCreated).toHaveLength(1);
-    expect(report.prsCreated[0].prUrl).toContain(
-      "https://github.com/vynorai/vynorai/pull/live-test-01",
-    );
+    expect(report.prsCreated[0].status).toBe("dry_run");
+    expect(report.prsCreated[0].prUrl).toBeUndefined();
     expect(report.markdownBriefing).toContain(
       "VynorAI Self-Driving Maintenance Briefing",
     );

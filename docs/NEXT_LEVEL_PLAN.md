@@ -794,6 +794,106 @@ Phase 5 gate: no pass-rate regression, zero false-verified/adversarial safety vi
 non-inferior verified completion, and acceptable credits/time/gross margin per verified completion.
 An inconclusive result does not ship by default.
 
+## Complete Cloud PR / Auto-deploy delivery plan (reviewed 2026-10-14)
+
+This is one end-to-end delivery plan, not a collection of independent feature
+upgrades. It reuses the existing `WorktreeManager`, `MaintenanceSwarmEngine`,
+`GitHubIntegrationProvider`, background launcher sandbox, `TaskRuntime` approval
+receipts and release scripts. No duplicate PR-agent or deployment subsystem is
+permitted.
+
+### Invariants
+
+- The developer worktree is never mutated by a cloud run; every mutation starts
+  in a disposable worktree or launcher sandbox with a checked base revision.
+- Untrusted issue text, repository files and model output cannot grant network,
+  filesystem, GitHub, secret or deployment authority.
+- Push, PR creation, merge and deployment are separate actions. Each action has
+  a durable run manifest, an explicit actor/approval receipt and a bounded
+  capability policy. A UI flag alone is not an approval.
+- Production deployment is fail-closed when sandbox isolation, GitHub scope,
+  health evidence, artifact provenance or rollback evidence is missing.
+- A run stores hashes, IDs, states, budgets and evidence digests only; it never
+  stores GitHub tokens, provider keys, raw prompts, raw diffs or repository
+  contents in telemetry.
+
+### Stages and acceptance gates
+
+**A — Delivery contract and policy (first implementation slice).** Add one
+versioned cloud-delivery manifest and a state machine for sandbox, verification,
+approval, push, PR, staging, canary, deploy and rollback. Validate repository,
+branch, action, actor, budget and rollback SHA server-side. Missing or stale
+approval fails closed.
+
+**B — Isolated execution.** Route all cloud edits/tests through the existing
+launcher/worktree boundary. Enforce CPU, memory, process, disk, wall-clock,
+workspace and network allowlists. Prove symlink/junction escape, secret
+exfiltration, fork/process, timeout and child-cleanup cases with real boundary
+tests.
+
+**C — PR-only mode.** Start with issue triage → isolated patch → repository
+verification → signed/hash-linked manifest → human approval → branch push →
+draft PR. A failed push or GitHub call is a failed run; it must never become a
+synthetic `pr_created` result. Clean up the worktree while retaining the remote
+branch and manifest for review.
+
+**D — Staging deployment.** Merge remains human-controlled. After an approved
+merge, deploy only a pinned artifact/base SHA to staging. Require `/ready`,
+`/health`, worker health, smoke tests and log-error checks. Any failure invokes
+the recorded previous SHA rollback and marks the run failed.
+
+**E — Production canary.** Use a stable randomized 1–5% canary with an explicit
+feature flag, exposure event, cost/latency/error/false-completion thresholds and
+automatic rollback. Do not count rate-limited or provider-degraded runs as
+quality evidence.
+
+**F — Production auto-deploy.** Enable only after repeated real canary runs meet
+the predeclared gates: no false-verified safety violation, no approval bypass,
+non-inferior verified completion, bounded p95 latency/credits and a successful
+rollback drill. Keep both client and server kill switches and support old
+extension versions.
+
+### Required manifest and evidence
+
+Every run records: `runId`, `taskId`, repository and base/head SHA, branch,
+requested action, mode, policy version, capability digest, resource limits,
+verification receipt digest, approval actor/time/scope, artifact digest,
+deployment target, health evidence digest, previous rollback SHA, state
+transitions and timestamps.
+Raw source, prompts, tokens and secrets are excluded. State transitions are
+monotonic except an explicit `rolled_back` terminal transition.
+
+### Measurement and stop rules
+
+Measure PR creation success, approval bypasses, sandbox violations, test pass
+rate, verification freshness, rollback success, false completion, p50/p95
+latency, credits, upstream cost and gross margin per verified completion. Stop
+promotion on any safety violation, missing evidence, synthetic success,
+unbounded cost, failed rollback or inconclusive A/B result. Parallel workers and
+automatic merge remain disabled until the measured evidence bottleneck and
+conflict policy justify them.
+
+### Current implementation gap
+
+The repository already has worktree, GitHub, sandbox and approval foundations.
+Stage A now includes the core delivery manifest/state machine, server-owned
+`cloud_delivery_manifests` persistence, approval-evidence matching, atomic
+manifest writes and fail-closed PR push/PR creation (including removal of
+synthetic PR success). The GitHub client now performs a live repository push-
+permission preflight, and the backend has deterministic readiness/smoke,
+canary-threshold and pinned rollback-evidence gates. Non-dry cloud PR runs now
+require the HTTPS server-control client and mirror every manifest transition to
+the backend. Worktree and gVisor launcher checks now reject traversal,
+out-of-root paths and symlink escapes before execution. Backend transitions now
+verify signed artifact attestations with a configured public key before any
+deployment state. The core executor now owns provider-neutral sequencing and
+`HttpsVpsDeploymentAdapter` provides the concrete HTTPS controller contract for
+fixed deploy, health and rollback endpoints. GitHub App installation scope
+audit, controller integration, key-rotation/attestation drills and live
+rollback drills still require operator credentials and an approved staging
+environment; they are intentionally not claimed as completed by repository
+tests. No production deploy is part of this step.
+
 ### Plan governance and future candidates
 
 Every new idea is classified as `in_scope`, `future_candidate`, or `rejected`. An in-scope change
@@ -802,12 +902,12 @@ A database/cache/context/model-routing/permission/production decision also updat
 `docs/ARCHITECTURE_DECISIONS.md`. Every phase gate updates this plan and the P0.3 status in
 `docs/VYNORAI_PRODUCTION_COMPLETION_PLAN.md`.
 
-| Candidate                         | Admission trigger                                                                                                 | Current decision                   |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| Parallel implementation subagents | Sequential complex tasks show a measured evidence bottleneck.                                                     | Deferred; scheduler stays unwired. |
-| Durable content memory            | Measured restart/compaction loss outweighs explicit privacy/retention cost.                                       | Deferred.                          |
-| Cross-IDE receipt UI              | VS Code gates pass and the target IDE has a real integration harness. Protocol compatibility is tested meanwhile. | Deferred.                          |
-| Automated PR/deploy               | Isolation, review, explicit approval and rollback drill all pass under the production plan.                       | Out of scope.                      |
+| Candidate                         | Admission trigger                                                                                                 | Current decision                                                                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Parallel implementation subagents | Sequential complex tasks show a measured evidence bottleneck.                                                     | Deferred; scheduler stays unwired.                                                                            |
+| Durable content memory            | Measured restart/compaction loss outweighs explicit privacy/retention cost.                                       | Deferred.                                                                                                     |
+| Cross-IDE receipt UI              | VS Code gates pass and the target IDE has a real integration harness. Protocol compatibility is tested meanwhile. | Deferred.                                                                                                     |
+| Automated PR/deploy               | Isolation, review, explicit approval and rollback drill all pass under the production plan.                       | Implemented as the fail-closed Cloud PR/Auto-deploy plan; default remains PR-only until external drills pass. |
 
 ### Implementation order and stop rules
 

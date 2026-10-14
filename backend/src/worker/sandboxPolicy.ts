@@ -59,6 +59,28 @@ function expectedModelRelayUrl(env: NodeJS.ProcessEnv): string {
   return env.BG_SANDBOX_MODEL_URL || DEFAULT_MODEL_RELAY_URL;
 }
 
+function insideTaskStaging(
+  candidate: string,
+  taskId: string,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  const rootValue = env.BG_STAGING_DIR || "/var/lib/vynor-background/staging";
+  const root = rootValue.startsWith("/")
+    ? path.posix.normalize(rootValue)
+    : path.resolve(rootValue);
+  const taskRoot = rootValue.startsWith("/")
+    ? path.posix.join(root, taskId)
+    : path.join(root, taskId);
+  const resolved = candidate.startsWith("/")
+    ? path.posix.normalize(candidate)
+    : path.resolve(candidate);
+  const separator = rootValue.startsWith("/") ? "/" : path.sep;
+  const prefix = taskRoot.endsWith(separator)
+    ? taskRoot
+    : `${taskRoot}${separator}`;
+  return resolved.startsWith(prefix) && resolved !== taskRoot;
+}
+
 /**
  * Validate the complete launcher request. This deliberately permits only the
  * configured internal model relay; the sandbox cannot choose an arbitrary
@@ -82,10 +104,12 @@ export function assertSandboxLaunchRequest(
   if (
     !safeAbsolutePath(request.inputArchive) ||
     !safeAbsolutePath(request.outputDirectory) ||
-    request.inputArchive === request.outputDirectory
+    request.inputArchive === request.outputDirectory ||
+    !insideTaskStaging(request.inputArchive, request.taskId, env) ||
+    !insideTaskStaging(request.outputDirectory, request.taskId, env)
   )
     throw new Error("INVALID_SANDBOX_PATH");
-  if (!request.modelToken || request.modelToken.length > 8192)
+  if (!request.modelToken || request.modelToken.length >= 4096)
     throw new Error("INVALID_SANDBOX_TOKEN");
   if (!/^[a-f0-9]{64}$/i.test(request.cacheKey))
     throw new Error("INVALID_SANDBOX_CACHE_KEY");

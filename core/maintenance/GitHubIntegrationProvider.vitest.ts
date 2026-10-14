@@ -53,6 +53,32 @@ describe("GitHubIntegrationProvider", () => {
       const provider = new GitHubIntegrationProvider({ token: "" });
       expect(provider.hasAuthentication()).toBe(false);
     });
+
+    it("should fail closed when the repository does not grant push access", async () => {
+      const provider = new GitHubIntegrationProvider({
+        token: "ghp_scope_test_token",
+        fetchFn: vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ permissions: { pull: true } }),
+        } as Response),
+      });
+      await expect(
+        provider.assertRepositoryWriteAccess("madu025", "vynorai"),
+      ).rejects.toThrow(/GITHUB_WRITE_SCOPE_REQUIRED/);
+    });
+
+    it("should accept an explicit push permission", async () => {
+      const provider = new GitHubIntegrationProvider({
+        token: "ghp_scope_test_token",
+        fetchFn: vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ permissions: { push: true }, archived: false }),
+        } as Response),
+      });
+      await expect(
+        provider.assertRepositoryWriteAccess("madu025", "vynorai"),
+      ).resolves.toBeUndefined();
+    });
   });
 
   describe("API Interactions (Mocked Fetch)", () => {
@@ -124,10 +150,20 @@ describe("GitHubIntegrationProvider", () => {
         draft: false,
       };
 
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockPrResponse,
-      } as Response);
+      const mockFetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith("/repos/madu025/vynorai"))
+          return {
+            ok: true,
+            json: async () => ({
+              permissions: { push: true },
+              archived: false,
+            }),
+          } as Response;
+        return {
+          ok: true,
+          json: async () => mockPrResponse,
+        } as Response;
+      });
 
       const provider = new GitHubIntegrationProvider({
         token: "ghp_mock_token_12345",
@@ -158,10 +194,20 @@ describe("GitHubIntegrationProvider", () => {
         body: "Swarm PR body",
       };
 
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => mockPrResponse,
-      } as Response);
+      const mockFetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith("/repos/madu025/vynorai"))
+          return {
+            ok: true,
+            json: async () => ({
+              permissions: { push: true },
+              archived: false,
+            }),
+          } as Response;
+        return {
+          ok: true,
+          json: async () => mockPrResponse,
+        } as Response;
+      });
 
       const provider = new GitHubIntegrationProvider({
         token: "ghp_valid_token",
@@ -181,6 +227,18 @@ describe("GitHubIntegrationProvider", () => {
           dryRun: false,
           pushToRemote: false, // don't push actual git network in unit test
           githubRepo: { owner: "madu025", repo: "vynorai" },
+          verificationDigest: "a".repeat(64),
+          deliveryApproval: {
+            actor: "test@example.com",
+            scope: "create PR for GH-88",
+            approvedAt: "2026-10-14T00:00:00.000Z",
+            receiptDigest: "a".repeat(64),
+          },
+          deliveryControl: {
+            createManifest: vi.fn().mockResolvedValue(undefined),
+            approve: vi.fn().mockResolvedValue(undefined),
+            transition: vi.fn().mockResolvedValue(undefined),
+          },
         },
         provider,
       );
@@ -212,6 +270,9 @@ describe("GitHubIntegrationProvider", () => {
         deletions: 2,
         diff: "mock diff",
       });
+      (engine as any).worktreeManager.getRevision = vi
+        .fn()
+        .mockResolvedValue("b".repeat(40));
       (engine as any).worktreeManager.removeWorktree = vi
         .fn()
         .mockResolvedValue(undefined);

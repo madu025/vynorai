@@ -32,6 +32,19 @@ import {
   validateParams,
   validateQuery,
 } from "../middleware/validate.js";
+import {
+  approveAndPersistCloudDelivery,
+  createAndPersistCloudDeliveryManifest,
+  getCloudDeliveryManifest,
+  listCloudDeliveryManifests,
+  transitionAndPersistCloudDelivery,
+  type CloudDeliveryMode,
+  type CloudDeliveryState,
+} from "../services/cloudDeliveryControl.js";
+import {
+  artifactPublicKeyFromEnvironment,
+  verifyArtifactAttestation,
+} from "../services/cloudArtifactProvenance.js";
 
 export const AdminProviderParamSchema = z.object({
   provider: z.string().min(1),
@@ -155,6 +168,71 @@ export const AdminEmailBroadcastSchema = z.object({
   subject: z.string().min(1, "Subject and message are required"),
   message: z.string().min(1, "Subject and message are required"),
   targetPlan: z.string().optional(),
+});
+
+export const AdminCloudDeliveryRunParamSchema = z.object({
+  runId: z.string().uuid(),
+});
+
+export const AdminCloudDeliveryCreateSchema = z.object({
+  runId: z.string().uuid().optional(),
+  taskId: z.string().min(1).max(256),
+  owner: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),
+  repo: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/),
+  baseBranch: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,190}$/),
+  headBranch: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,190}$/),
+  baseSha: z.string().regex(/^[a-f0-9]{40,64}$/i),
+  headSha: z.string().regex(/^[a-f0-9]{40,64}$/i),
+  mode: z.enum([
+    "pr_only",
+    "staging_auto_deploy",
+    "production_canary",
+    "production_auto_deploy",
+  ]),
+  verificationDigest: z.string().regex(/^[a-f0-9]{40,64}$/i),
+  capabilityDigest: z
+    .string()
+    .regex(/^[a-f0-9]{40,64}$/i)
+    .optional(),
+});
+
+export const AdminCloudDeliveryApprovalSchema = z.object({
+  actor: z.string().min(1).max(160),
+  scope: z.string().min(1).max(500),
+  approvedAt: z.string().datetime({ offset: true }),
+  receiptDigest: z.string().regex(/^[a-f0-9]{40,64}$/i),
+});
+
+export const AdminCloudDeliveryTransitionSchema = z.object({
+  state: z.enum([
+    "sandboxed",
+    "verified",
+    "awaiting_approval",
+    "pushed",
+    "pr_created",
+    "staging_deployed",
+    "canary_verified",
+    "deployed",
+    "failed",
+    "rolled_back",
+  ]),
+  artifactDigest: z
+    .string()
+    .regex(/^[a-f0-9]{40,64}$/i)
+    .optional(),
+  artifactSignature: z.string().max(16_384).optional(),
+  artifactKeyId: z
+    .string()
+    .regex(/^[A-Za-z0-9_.:-]{1,128}$/)
+    .optional(),
+  deploymentTarget: z.string().max(128).optional(),
+  healthDigest: z
+    .string()
+    .regex(/^[a-f0-9]{40,64}$/i)
+    .optional(),
+  ready: z.boolean().optional(),
+  smokePassed: z.boolean().optional(),
+  logErrorsFree: z.boolean().optional(),
 });
 
 export const adminRouter = Router();
@@ -1557,6 +1635,129 @@ adminRouter.post(
       error:
         "Maintenance Swarm is not connected to a production worker. No job was started.",
     });
+  },
+);
+
+/**
+ * Cloud delivery control plane. These endpoints only persist and advance a
+ * fail-closed manifest; they do not grant a worker GitHub or deployment
+ * credentials. The worker must present this server-owned state before each
+ * external action.
+ */
+adminRouter.get(
+  "/cloud-delivery/manifests",
+  requireAdmin,
+  validateQuery(
+    z.object({
+      limit: z
+        .union([z.number().int(), z.string().regex(/^\d+$/).transform(Number)])
+        .optional(),
+    }),
+  ),
+  async (req: Request, res: Response) => {
+    const query = ((req as any).validatedQuery || {}) as { limit?: number };
+    const manifests = await listCloudDeliveryManifests(query.limit);
+    return res.json({ ok: true, manifests });
+  },
+);
+
+adminRouter.get(
+  "/cloud-delivery/manifests/:runId",
+  requireAdmin,
+  validateParams(AdminCloudDeliveryRunParamSchema),
+  async (req: Request, res: Response) => {
+    const manifest = await getCloudDeliveryManifest(String(req.params.runId));
+    if (!manifest) return res.status(404).json({ error: "Manifest not found" });
+    return res.json({ ok: true, manifest });
+  },
+);
+
+adminRouter.post(
+  "/cloud-delivery/manifests",
+  requireAdmin,
+  validateBody(AdminCloudDeliveryCreateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const manifest = await createAndPersistCloudDeliveryManifest({
+        runId: req.body.runId,
+        taskId: req.body.taskId,
+        owner: req.body.owner,
+        repo: req.body.repo,
+        baseBranch: req.body.baseBranch,
+        headBranch: req.body.headBranch,
+        baseSha: req.body.baseSha,
+        headSha: req.body.headSha,
+        mode: req.body.mode as CloudDeliveryMode,
+        verificationDigest: req.body.verificationDigest,
+        capabilityDigest: req.body.capabilityDigest,
+      });
+      return res.status(201).json({ ok: true, manifest });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Invalid manifest";
+      return res.status(400).json({ ok: false, error: message });
+    }
+  },
+);
+
+adminRouter.post(
+  "/cloud-delivery/manifests/:runId/approve",
+  requireAdmin,
+  validateParams(AdminCloudDeliveryRunParamSchema),
+  validateBody(AdminCloudDeliveryApprovalSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const manifest = await approveAndPersistCloudDelivery(
+        String(req.params.runId),
+        req.body,
+      );
+      return res.json({ ok: true, manifest });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Approval rejected";
+      const status = message === "CLOUD_MANIFEST_NOT_FOUND" ? 404 : 409;
+      return res.status(status).json({ ok: false, error: message });
+    }
+  },
+);
+
+adminRouter.post(
+  "/cloud-delivery/manifests/:runId/transition",
+  requireAdmin,
+  validateParams(AdminCloudDeliveryRunParamSchema),
+  validateBody(AdminCloudDeliveryTransitionSchema),
+  async (req: Request, res: Response) => {
+    try {
+      let artifactAttestationDigest: string | undefined;
+      if (req.body.artifactSignature || req.body.artifactKeyId) {
+        const key = artifactPublicKeyFromEnvironment();
+        artifactAttestationDigest = verifyArtifactAttestation({
+          artifactDigest: req.body.artifactDigest,
+          signatureBase64: req.body.artifactSignature,
+          publicKeyPem: key.publicKeyPem,
+          keyId: req.body.artifactKeyId || key.keyId,
+        }).attestationDigest;
+      }
+      const manifest = await transitionAndPersistCloudDelivery(
+        String(req.params.runId),
+        req.body.state as CloudDeliveryState,
+        {
+          artifactDigest: req.body.artifactDigest,
+          artifactAttestationDigest,
+          deploymentTarget: req.body.deploymentTarget,
+          healthDigest: req.body.healthDigest,
+          ready: req.body.ready,
+          smokePassed: req.body.smokePassed,
+          logErrorsFree: req.body.logErrorsFree,
+        },
+      );
+      return res.json({ ok: true, manifest });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Transition rejected";
+      const status = message === "CLOUD_MANIFEST_NOT_FOUND" ? 404 : 409;
+      return res.status(status).json({ ok: false, error: message });
+    }
   },
 );
 

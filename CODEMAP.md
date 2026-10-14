@@ -555,12 +555,16 @@ VynorAI's 10-year proactive autonomous CI/CD background agent running the comple
   - Invoke `SelfHealingEngine` to apply targeted edits until GREEN verification passes.
   - Commit verified changes and push branch to remote `origin`.
   - Create a GitHub Pull Request via `GitHubIntegrationProvider` with reproduction receipts.
+  - When an explicit delivery executor, signed artifact provenance and deployment target are configured,
+    advance staging/canary/production only through the server-owned delivery manifest and health gates.
   - Persist the executive morning digest via `MorningBriefing`.
 - [core/maintenance/WorktreeManager.ts](core/maintenance/WorktreeManager.ts): **Zero-Interruption Git Worktree Sandbox Manager**:
   - Manages isolated worktree workspaces in `.vynor-worktrees/` ensuring developer working tree and active IDE branch are never disrupted.
   - Windows-safe execution: uses `shell: false` in `child_process.spawn` to prevent `cmd.exe` path truncation on directory paths containing spaces.
   - Correct Git flag order: `git worktree add -b <branchName> <path>`.
   - Handles branch creation, commit creation, and remote branch pushing (`pushBranch`).
+  - Rejects traversal task IDs, unsafe Git refs and commit/diff/push paths outside the disposable worktree root before invoking Git.
+  - [core/maintenance/WorktreeManager.vitest.ts](core/maintenance/WorktreeManager.vitest.ts): Verifies path/ref isolation guards.
   - Automated directory pruning, locking, and clean removal on job completion.
 - [core/maintenance/SelfHealingEngine.ts](core/maintenance/SelfHealingEngine.ts): **Autonomous Error Signature Parsing & TDD Self-Healing Engine**:
   - Regex-based error signature extractor parsing Vitest/Jest `AssertionError` (Expected vs Received), TypeScript compiler errors (`error TS\d+: ...`), and stack trace source line locators.
@@ -569,17 +573,31 @@ VynorAI's 10-year proactive autonomous CI/CD background agent running the comple
 - [core/maintenance/GitHubIntegrationProvider.ts](core/maintenance/GitHubIntegrationProvider.ts): **Zero-Dependency Native Cloud GitHub REST Integration**:
   - `parseGitHubRemote(url)`: Robust parser supporting HTTPS (`https://github.com/owner/repo.git`) and SSH (`git@github.com:owner/repo.git`) remotes.
   - `fetchIssues(owner, repo, options)`: Fetches open GitHub issues via `GET /repos/:owner/:repo/issues` with automated pagination, token authentication via `GITHUB_TOKEN` / `GH_TOKEN`, and fallback to local blueprints when offline.
+  - `assertRepositoryWriteAccess(owner, repo)`: Performs a live repository permission preflight and fails closed unless GitHub reports explicit `push` or `admin` access; token presence alone is insufficient.
   - `createPullRequest(params)`: Creates real pull requests on GitHub via `POST /repos/:owner/:repo/pulls` with detailed markdown descriptions, reproduction test receipts, and verification evidence.
   - `addLabels(owner, repo, issueNumber, labels)`: Automatically applies `automated`, `vynor-swarm` labels.
   - `findExistingPr(owner, repo, headBranch)`: Prevents duplicate PR creation across swarm runs.
 - [core/maintenance/IssueTriageProvider.ts](core/maintenance/IssueTriageProvider.ts): Autonomous issue discovery and prioritization across GitHub Issues, local blueprints (`.vynor/blueprints/*.md`), Sentry crash stack traces, and `npm audit`/`cargo audit` security CVEs.
 - [core/maintenance/MorningBriefing.ts](core/maintenance/MorningBriefing.ts): Generates the executive morning report (`.vynor/briefings/briefing-<DATE>.md`) summarizing PRs ready for review with reproduction proofs.
 - [core/maintenance/types.ts](core/maintenance/types.ts): Shared TypeScript interfaces for issues, reproduction specs, worktree allocations, GitHub PR records, and briefing summaries.
+- [core/maintenance/cloudDeliveryPolicy.ts](core/maintenance/cloudDeliveryPolicy.ts): Fail-closed Cloud PR/deployment manifest, ordered delivery state machine, approval/evidence matching, action gates, and atomic manifest persistence. It is the policy boundary reused by PR, staging, canary and rollback orchestration.
+- [core/maintenance/cloudDeliveryClient.ts](core/maintenance/cloudDeliveryClient.ts): HTTPS-only worker client for the server-owned manifest API; sends hash/ID metadata and bounded transitions without exposing its admin credential in errors.
+- [core/maintenance/cloudDeploymentExecutor.ts](core/maintenance/cloudDeploymentExecutor.ts): Provider-neutral staging/canary/production/rollback executor; only an operator-supplied adapter performs deployment I/O, while manifest transitions require health, smoke, log and provenance evidence.
+- [core/maintenance/cloudDeploymentAdapter.ts](core/maintenance/cloudDeploymentAdapter.ts): HTTPS VPS deployment-controller adapter with fixed deploy/health/rollback endpoints, strict target/SHA validation and bounded failures.
+- [backend/src/services/cloudDeliveryControl.ts](backend/src/services/cloudDeliveryControl.ts): Server-owned Cloud PR/deployment manifest store and fail-closed approval/state transition API; persists hashes, receipts and transitions without raw source, prompts or secrets.
+- [backend/src/services/cloudDeploymentGate.ts](backend/src/services/cloudDeploymentGate.ts): Deterministic staging readiness/smoke gate, bounded 1–5% canary bucket, threshold decision and pinned rollback-evidence checks.
+- [backend/src/services/cloudArtifactProvenance.ts](backend/src/services/cloudArtifactProvenance.ts): SHA-256 artifact digest and server-key signature verification; only the attestation digest/key ID is suitable for manifest persistence.
 - **Verification & Test Suites**:
   - [core/maintenance/SelfHealingEngine.vitest.ts](core/maintenance/SelfHealingEngine.vitest.ts): Validates failure signature parsing, iterative repair recovery, and attempt bounding.
   - [core/maintenance/GitHubIntegrationProvider.vitest.ts](core/maintenance/GitHubIntegrationProvider.vitest.ts): Validates URL parsing (HTTPS/SSH), mock PR creation, label application, and error recovery.
   - [core/maintenance/EcommerceSwarmEndToEnd.vitest.ts](core/maintenance/EcommerceSwarmEndToEnd.vitest.ts): Full autonomous e-commerce bug fix simulation (discount calculation bug -> reproduction test -> self-healing -> green).
   - [core/maintenance/MaintenanceSwarmEngine.vitest.ts](core/maintenance/MaintenanceSwarmEngine.vitest.ts): Orchestrator unit tests.
+  - [core/maintenance/cloudDeliveryPolicy.vitest.ts](core/maintenance/cloudDeliveryPolicy.vitest.ts): Validates approval evidence matching, ordered PR actions, deployment-mode gates, and fail-closed behavior.
+  - [core/maintenance/cloudDeliveryClient.vitest.ts](core/maintenance/cloudDeliveryClient.vitest.ts): Validates HTTPS enforcement, server transition requests, and bounded error handling.
+  - [core/maintenance/cloudDeploymentExecutor.vitest.ts](core/maintenance/cloudDeploymentExecutor.vitest.ts): Verifies staging health gates, inconclusive canary handling and rollback on a safety violation.
+  - [core/maintenance/cloudDeploymentAdapter.vitest.ts](core/maintenance/cloudDeploymentAdapter.vitest.ts): Verifies HTTPS-only controller access, fixed endpoint use and invalid health/target rejection.
+  - [backend/test/cloudDeliveryAdminRoute.test.ts](backend/test/cloudDeliveryAdminRoute.test.ts): Exercises the authenticated server control-plane API, approval bypass rejection and ordered state transitions.
+  - [backend/test/cloudArtifactProvenance.test.ts](backend/test/cloudArtifactProvenance.test.ts): Verifies real RSA signatures, digest mismatch rejection and missing-key fail-closed behavior.
   - [core/maintenance/run-actual-live-swarm.ts](core/maintenance/run-actual-live-swarm.ts): 100% real on-disk git worktree and GitHub API live execution script.
 
 ### 5.8 Dynamic Grammar & Language Synthesis Engine (`core/syntax/`)

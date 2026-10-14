@@ -32,7 +32,14 @@ export class MorningBriefingGenerator {
     );
     lines.push("");
 
-    if (prsCreated.length > 0) {
+    const realPullRequests = prsCreated.filter(
+      (task) => task.status === "pr_created",
+    );
+    const dryRunPreviews = prsCreated.filter(
+      (task) => task.status === "dry_run",
+    );
+
+    if (realPullRequests.length > 0) {
       lines.push(`## 🚀 Pull Requests Ready for Review (${prsCreated.length})`);
       lines.push("");
       lines.push(
@@ -40,7 +47,7 @@ export class MorningBriefingGenerator {
       );
       lines.push("");
 
-      for (const task of prsCreated) {
+      for (const task of realPullRequests) {
         const prLink = task.prUrl
           ? `[View PR #${task.prNumber || ""}](${task.prUrl})`
           : `\`branch: ${task.branchName}\``;
@@ -65,7 +72,27 @@ export class MorningBriefingGenerator {
         }
         lines.push("");
       }
-    } else {
+    }
+
+    if (dryRunPreviews.length > 0) {
+      lines.push(`## Dry-run previews (${dryRunPreviews.length})`);
+      lines.push("");
+      lines.push(
+        "No branch, commit, push, or pull request was created; these entries are a local preview only:",
+      );
+      lines.push("");
+      for (const task of dryRunPreviews) {
+        lines.push(
+          `- **${task.issue.id}** — ${task.prTitle || task.issue.title}`,
+        );
+        lines.push(`  - Branch preview: \`${task.branchName}\``);
+        if (task.verificationEvidence)
+          lines.push(`  - Verification preview: ${task.verificationEvidence}`);
+      }
+      lines.push("");
+    }
+
+    if (realPullRequests.length === 0 && dryRunPreviews.length === 0) {
       lines.push("## ℹ️ No Pull Requests Created Tonight");
       lines.push(
         "All scanned components are healthy or require human architectural decisions.",

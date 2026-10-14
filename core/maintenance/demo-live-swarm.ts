@@ -130,10 +130,10 @@ describe("Reproduction: PROD-REV-902", () => {
   const report = await engine.runSwarm([rawIssue]);
   const pr = report.prsCreated[0];
 
-  console.log(`Pull Request Generated:`);
+  console.log(`Dry-run Preview (no Pull Request created):`);
   console.log(`  PR Title    : ${pr.prTitle}`);
   console.log(`  Branch      : ${pr.branchName}`);
-  console.log(`  Link        : ${pr.prUrl}`);
+  console.log(`  Link        : none (dry-run)`);
   console.log(
     `  Diff Stats  : ${pr.diffSummary?.filesChanged} files changed (+${pr.diffSummary?.additions} / -${pr.diffSummary?.deletions})`,
   );
@@ -141,7 +141,7 @@ describe("Reproduction: PROD-REV-902", () => {
 
   console.log("📍 [STEP 7: IDE TOAST NOTIFICATION DISPATCHED]");
   console.log(
-    `  [System Toast]: 🎉 VynorAI Swarm completed: PR #406 ready for review! [View PR] [Apply to Local]\n`,
+    `  [System Toast]: VynorAI Swarm dry-run completed; no remote PR or branch was created.\n`,
   );
 
   console.log(

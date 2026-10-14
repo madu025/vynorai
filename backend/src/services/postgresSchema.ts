@@ -561,6 +561,47 @@ CREATE INDEX IF NOT EXISTS idx_request_economics_scope_created ON request_econom
 CREATE INDEX IF NOT EXISTS idx_task_outcomes_scope_created ON task_outcomes (scope, created_at DESC);
 `,
   },
+  {
+    version: "030_cloud_delivery_manifests",
+    sql: `
+CREATE TABLE IF NOT EXISTS cloud_delivery_manifests (
+  run_id                  VARCHAR(36) PRIMARY KEY,
+  task_id                 VARCHAR(256) NOT NULL,
+  policy_version          VARCHAR(32) NOT NULL,
+  repository_owner        VARCHAR(100) NOT NULL,
+  repository_name         VARCHAR(100) NOT NULL,
+  base_branch             VARCHAR(191) NOT NULL,
+  head_branch             VARCHAR(191) NOT NULL,
+  base_sha                VARCHAR(64) NOT NULL,
+  head_sha                VARCHAR(64) NOT NULL,
+  rollback_sha            VARCHAR(64) NOT NULL,
+  mode                    VARCHAR(32) NOT NULL,
+  state                   VARCHAR(32) NOT NULL,
+  verification_digest     VARCHAR(64) NOT NULL,
+  capability_digest       VARCHAR(64) NOT NULL,
+  approval_actor          VARCHAR(160),
+  approval_scope          VARCHAR(500),
+  approval_at             TEXT,
+  approval_receipt_digest VARCHAR(64),
+  artifact_digest         VARCHAR(64),
+  artifact_attestation_digest VARCHAR(64),
+  deployment_target       VARCHAR(128),
+  health_digest           VARCHAR(64),
+  transitions             TEXT NOT NULL DEFAULT '[]',
+  created_at              TEXT DEFAULT ${NOW},
+  updated_at              TEXT DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_cloud_delivery_state_updated ON cloud_delivery_manifests(state, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_delivery_repository ON cloud_delivery_manifests(repository_owner, repository_name, updated_at DESC);
+`,
+  },
+  {
+    version: "031_cloud_artifact_attestation",
+    sql: `
+ALTER TABLE cloud_delivery_manifests
+  ADD COLUMN IF NOT EXISTS artifact_attestation_digest VARCHAR(64);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

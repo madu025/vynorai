@@ -86,6 +86,26 @@ export class GitHubIntegrationProvider {
   }
 
   /**
+   * Verify the token can write to this repository before any branch push or
+   * PR action. Presence of a token alone is not a permission grant.
+   */
+  async assertRepositoryWriteAccess(
+    owner: string,
+    repo: string,
+  ): Promise<void> {
+    if (!this.hasAuthentication())
+      throw new Error("GITHUB_AUTH_REQUIRED_FOR_WRITE");
+    const res = await this.request(`/repos/${owner}/${repo}`);
+    if (!res.ok)
+      throw new Error(`GITHUB_REPOSITORY_ACCESS_FAILED_${res.status}`);
+    const data: any = await res.json().catch(() => ({}));
+    if (data.archived || data.disabled)
+      throw new Error("GITHUB_REPOSITORY_NOT_WRITABLE");
+    if (data.permissions?.push !== true && data.permissions?.admin !== true)
+      throw new Error("GITHUB_WRITE_SCOPE_REQUIRED");
+  }
+
+  /**
    * Helper to make authenticated requests to GitHub REST API.
    */
   private async request(

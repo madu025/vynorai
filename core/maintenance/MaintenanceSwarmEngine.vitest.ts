@@ -190,7 +190,7 @@ describe("VynorAI Proactive Self-Driving Maintenance Swarm", () => {
       expect(report.totalIssuesScanned).toBe(2);
       expect(report.prsCreated.length).toBe(2);
       expect(report.prsCreated[0].issue.id).toBe("SEC-vite");
-      expect(report.prsCreated[0].status).toBe("pr_created");
+      expect(report.prsCreated[0].status).toBe("dry_run");
       expect(report.markdownBriefing).toContain("SEC-vite");
     });
   });

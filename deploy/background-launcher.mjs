@@ -19,7 +19,18 @@ const active = new Map();
 function insideStaging(candidate, taskId) {
   const taskRoot = path.join(stagingRoot, taskId);
   const resolved = path.resolve(candidate);
-  return resolved.startsWith(`${taskRoot}${path.sep}`) && resolved !== taskRoot;
+  if (!resolved.startsWith(`${taskRoot}${path.sep}`) || resolved === taskRoot)
+    return false;
+  try {
+    const realTaskRoot = fs.realpathSync(taskRoot);
+    const realCandidate = fs.realpathSync(candidate);
+    return (
+      realCandidate.startsWith(`${realTaskRoot}${path.sep}`) &&
+      realCandidate !== realTaskRoot
+    );
+  } catch {
+    return false;
+  }
 }
 
 function validRequest(body) {

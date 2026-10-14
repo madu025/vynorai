@@ -9,8 +9,10 @@ import {
 const base = {
   version: 1 as const,
   taskId: "123e4567-e89b-12d3-a456-426614174000",
-  inputArchive: "/var/lib/vynor-background/staging/task/project.zip",
-  outputDirectory: "/var/lib/vynor-background/staging/task/output",
+  inputArchive:
+    "/var/lib/vynor-background/staging/123e4567-e89b-12d3-a456-426614174000/project.zip",
+  outputDirectory:
+    "/var/lib/vynor-background/staging/123e4567-e89b-12d3-a456-426614174000/output",
   modelRelayUrl: "http://vynor-bg-egress:8080/model/v1/chat/completions",
   modelToken: "scoped-task-token",
   cacheKey: "a".repeat(64),
@@ -54,6 +56,37 @@ test("sandbox policy rejects path traversal and limits above the hard cap", () =
         {},
       ),
     /INVALID_SANDBOX_LIMIT_MEMORYMB/,
+  );
+  assert.throws(
+    () =>
+      assertSandboxLaunchRequest({ ...base, modelToken: "x".repeat(4096) }, {}),
+    /INVALID_SANDBOX_TOKEN/,
+  );
+});
+
+test("sandbox policy rejects paths outside the task staging directory", () => {
+  assert.throws(
+    () =>
+      assertSandboxLaunchRequest(
+        {
+          ...base,
+          outputDirectory: "/var/lib/vynor-background/staging/other/output",
+        },
+        {},
+      ),
+    /INVALID_SANDBOX_PATH/,
+  );
+  assert.throws(
+    () =>
+      assertSandboxLaunchRequest(
+        {
+          ...base,
+          inputArchive:
+            "/var/lib/vynor-background/staging/123e4567-e89b-12d3-a456-426614174000",
+        },
+        {},
+      ),
+    /INVALID_SANDBOX_PATH/,
   );
 });
 

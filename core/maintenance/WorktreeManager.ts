@@ -18,13 +18,43 @@ export interface WorktreeInstance {
 }
 
 export class WorktreeManager {
+  private readonly projectRoot: string;
+  private readonly worktreeBaseDir: string;
+
   constructor(
-    private readonly projectRoot: string,
-    private readonly worktreeBaseDir: string = path.join(
-      projectRoot,
-      ".vynor-worktrees",
-    ),
-  ) {}
+    projectRoot: string,
+    worktreeBaseDir: string = path.join(projectRoot, ".vynor-worktrees"),
+  ) {
+    this.projectRoot = path.resolve(projectRoot);
+    this.worktreeBaseDir = path.resolve(worktreeBaseDir);
+    if (this.projectRoot === this.worktreeBaseDir)
+      throw new Error("WORKTREE_BASE_MUST_BE_ISOLATED");
+  }
+
+  private assertTaskId(taskId: string): void {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(taskId))
+      throw new Error("INVALID_WORKTREE_TASK_ID");
+  }
+
+  private assertBranchName(branchName: string): void {
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,190}$/.test(branchName) ||
+      branchName.includes("..") ||
+      branchName.includes("@{") ||
+      branchName.endsWith("/") ||
+      branchName.endsWith(".")
+    )
+      throw new Error("INVALID_WORKTREE_BRANCH");
+  }
+
+  private assertWorktreePath(worktreePath: string): void {
+    const resolved = path.resolve(worktreePath);
+    const base = this.worktreeBaseDir.endsWith(path.sep)
+      ? this.worktreeBaseDir
+      : `${this.worktreeBaseDir}${path.sep}`;
+    if (!resolved.startsWith(base))
+      throw new Error("WORKTREE_PATH_OUTSIDE_SANDBOX");
+  }
 
   /**
    * Run a git command in the main project root or inside a worktree.
@@ -66,6 +96,17 @@ export class WorktreeManager {
     return res.exitCode === 0;
   }
 
+  /** Return a full immutable revision for a manifest or fail closed. */
+  async getRevision(ref = "HEAD", cwd = this.projectRoot): Promise<string> {
+    if (cwd !== this.projectRoot) this.assertWorktreePath(cwd);
+    const result = await this.runGit(["rev-parse", "--verify", ref], cwd);
+    const revision = result.stdout.trim();
+    if (result.exitCode !== 0 || !/^[a-f0-9]{40}$/i.test(revision)) {
+      throw new Error(`Unable to resolve immutable git revision: ${ref}`);
+    }
+    return revision;
+  }
+
   /**
    * Create an isolated worktree for a specific maintenance task.
    */
@@ -74,6 +115,9 @@ export class WorktreeManager {
     branchName: string,
     baseBranch = "main",
   ): Promise<WorktreeInstance> {
+    this.assertTaskId(taskId);
+    this.assertBranchName(branchName);
+    this.assertBranchName(baseBranch);
     await fs.mkdir(this.worktreeBaseDir, { recursive: true });
     const targetDir = path.join(this.worktreeBaseDir, taskId);
 
@@ -121,6 +165,8 @@ export class WorktreeManager {
     branchName?: string,
     keepBranch = true,
   ): Promise<void> {
+    this.assertTaskId(taskId);
+    if (branchName) this.assertBranchName(branchName);
     const targetDir = path.join(this.worktreeBaseDir, taskId);
 
     // Remove worktree from git registration
@@ -141,6 +187,9 @@ export class WorktreeManager {
    * Commit all changes in the worktree and create a formatted commit.
    */
   async commitChanges(worktreePath: string, message: string): Promise<boolean> {
+    this.assertWorktreePath(worktreePath);
+    if (!message || message.length > 500)
+      throw new Error("INVALID_COMMIT_MESSAGE");
     const addResult = await this.runGit(["add", "-A"], worktreePath);
     if (addResult.exitCode !== 0) return false;
 
@@ -163,6 +212,8 @@ export class WorktreeManager {
     deletions: number;
     diff: string;
   }> {
+    this.assertWorktreePath(worktreePath);
+    this.assertBranchName(baseBranch);
     const diffResult = await this.runGit(
       ["diff", `${baseBranch}...HEAD`],
       worktreePath,
@@ -213,6 +264,9 @@ export class WorktreeManager {
     worktreePath: string = this.projectRoot,
     force = false,
   ): Promise<{ success: boolean; error?: string }> {
+    this.assertBranchName(branchName);
+    this.assertBranchName(remote);
+    this.assertWorktreePath(worktreePath);
     const args = ["push", "-u", remote, branchName];
     if (force) args.push("--force");
 

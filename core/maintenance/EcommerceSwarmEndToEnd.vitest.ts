@@ -148,19 +148,19 @@ describe("E-Commerce Full-Stack Autonomous Swarm (End-to-End Verification)", () 
     for (let i = 0; i < 7; i++) {
       const pr = report.prsCreated[i];
       const stageNum = i + 1;
-      expect(pr.status).toBe("pr_created");
+      expect(pr.status).toBe("dry_run");
       expect(pr.branchName).toBe(`vynor/auto-fix-ecommerce-stage-${stageNum}`);
       expect(pr.reproductionTestPath).toBe(
         `tests/repro-ecommerce-stage-${stageNum}.test.ts`,
       );
       expect(pr.verificationEvidence).toContain("passed");
-      expect(pr.prUrl).toContain(`ecommerce-stage-${stageNum}`);
+      expect(pr.prUrl).toBeUndefined();
     }
 
     // 3. Verify the final Morning Briefing document contains full architectural summary
     const briefing = report.markdownBriefing;
     expect(briefing).toContain("VynorAI Self-Driving Maintenance Briefing");
-    expect(briefing).toContain("Pull Requests Ready for Review (7)");
+    expect(briefing).toContain("Dry-run previews (7)");
     expect(briefing).toContain("Core Environment & Database Config");
     expect(briefing).toContain("Database Models (Users, Products, Orders)");
     expect(briefing).toContain("Customer Authentication & Security");

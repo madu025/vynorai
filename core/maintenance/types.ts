@@ -5,6 +5,17 @@
  * reproduction testing, PR generation, and developer morning briefings.
  */
 
+import type {
+  CloudDeliveryManifest,
+  CloudDeliveryState,
+} from "./cloudDeliveryPolicy.js";
+import type {
+  CloudArtifactProvenance,
+  CanaryObservation,
+  CanaryPolicy,
+  CloudDeploymentExecutor,
+} from "./cloudDeploymentExecutor.js";
+
 export type IssueSourceType =
   | "github_issue"
   | "sentry_crash"
@@ -56,6 +67,7 @@ export type MaintenanceTaskStatus =
   | "patch_applied"
   | "verification_verified_green"
   | "pr_created"
+  | "dry_run"
   | "reproduction_failed"
   | "fix_failed"
   | "verification_failed";
@@ -78,6 +90,7 @@ export interface MaintenanceTaskResult {
   verificationEvidence?: string;
   durationMs: number;
   error?: string;
+  cloudDeliveryState?: CloudDeliveryState;
 }
 
 export interface MorningBriefingReport {
@@ -95,6 +108,33 @@ export interface MorningBriefingReport {
 export interface GitHubRepoRef {
   owner: string;
   repo: string;
+}
+
+export interface CloudDeliveryApproval {
+  actor: string;
+  scope: string;
+  approvedAt: string;
+  receiptDigest: string;
+}
+
+export interface CloudDeliveryControlClient {
+  createManifest(manifest: CloudDeliveryManifest): Promise<void>;
+  approve(runId: string, approval: CloudDeliveryApproval): Promise<void>;
+  transition(
+    runId: string,
+    state: CloudDeliveryState,
+    evidence?: {
+      artifactDigest?: string;
+      artifactAttestationDigest?: string;
+      artifactSignature?: string;
+      artifactKeyId?: string;
+      deploymentTarget?: string;
+      healthDigest?: string;
+      ready?: boolean;
+      smokePassed?: boolean;
+      logErrorsFree?: boolean;
+    },
+  ): Promise<void>;
 }
 
 export interface GitHubPullRequestResult {
@@ -119,4 +159,23 @@ export interface MaintenanceSwarmConfig {
   githubToken?: string;
   githubRepo?: GitHubRepoRef;
   pushToRemote?: boolean;
+  /** Cloud delivery is PR-only by default; deploy modes require later gates. */
+  deliveryMode?:
+    | "pr_only"
+    | "staging_auto_deploy"
+    | "production_canary"
+    | "production_auto_deploy";
+  /** Required for any non-dry cloud push/PR action. */
+  deliveryApproval?: CloudDeliveryApproval;
+  /** Digest of a real, current verification receipt; never inferred from model text. */
+  verificationDigest?: string;
+  capabilityDigest?: string;
+  /** Server-owned manifest API; required for any non-dry cloud PR run. */
+  deliveryControl?: CloudDeliveryControlClient;
+  /** Explicit provider executor; non-PR modes fail closed without it. */
+  deliveryExecutor?: CloudDeploymentExecutor;
+  deploymentTarget?: string;
+  deliveryArtifactProvenance?: CloudArtifactProvenance;
+  canaryObservation?: CanaryObservation;
+  canaryPolicy?: CanaryPolicy;
 }

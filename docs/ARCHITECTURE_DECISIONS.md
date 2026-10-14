@@ -12,6 +12,27 @@ anything about production environment values is marked "not verified".
   `?` placeholders and `ON CONFLICT` upserts, no `rowid`, no `INSERT OR REPLACE`.
 - New tables need both the SQLite schema (`backend/src/db.ts`) and a PostgreSQL migration
   (`backend/src/services/postgresSchema.ts`). Check with the `vynor-postgres-check` skill.
+- Cloud PR/deployment control is server-owned: `cloud_delivery_manifests` stores only immutable
+  repository revisions, SHA-256 evidence/approval digests, bounded state transitions and timestamps.
+  It never stores prompts, source diffs, provider credentials or GitHub tokens. The default mode is
+  `pr_only`; staging/canary/production actions remain blocked unless the manifest is approved and
+  advances through the ordered state machine.
+- Staging/canary promotion is evidence-driven: readiness and smoke must pass, canary exposure is
+  deterministically bounded to 1–5%, false-verified results always roll back, and inconclusive
+  samples never promote. The deployment gate does not itself hold provider or VPS credentials.
+- Non-dry cloud PR workers must mirror each manifest creation, approval and transition through the
+  HTTPS server-control client. A missing client is a hard failure; local JSON is only an evidence
+  cache and never the authority for push or deployment.
+- Deployment artifacts must carry a signature verified by the server-configured public key over the
+  pinned SHA-256 artifact digest. Store only the resulting attestation digest and key ID; never store
+  the signature, artifact bytes or private key in the delivery manifest.
+- Deployment sequencing is provider-neutral in core (`cloudDeploymentExecutor.ts`); only an explicitly
+  configured adapter can perform VPS/provider I/O. No model text or request field can become a shell
+  command, target, credential or deployment permission.
+- The shipped VPS adapter uses an operator-owned HTTPS deployment controller with fixed
+  `/v1/cloud-deployments/deploy`, `/v1/cloud-deployments/health` and
+  `/v1/cloud-deployments/rollback` endpoints. It validates target and revision
+  hashes, requires structured health evidence and fails closed on non-HTTPS or malformed responses.
 
 ## Caching: four different things, do not mix them up
 

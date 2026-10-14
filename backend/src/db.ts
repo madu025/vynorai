@@ -957,6 +957,57 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "030_cloud_delivery_manifests",
+    description:
+      "Durable fail-closed Cloud PR and deployment control-plane manifests",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS cloud_delivery_manifests (
+        run_id                  VARCHAR(36) PRIMARY KEY,
+        task_id                 VARCHAR(256) NOT NULL,
+        policy_version          VARCHAR(32) NOT NULL,
+        repository_owner        VARCHAR(100) NOT NULL,
+        repository_name         VARCHAR(100) NOT NULL,
+        base_branch             VARCHAR(191) NOT NULL,
+        head_branch             VARCHAR(191) NOT NULL,
+        base_sha                VARCHAR(64) NOT NULL,
+        head_sha                VARCHAR(64) NOT NULL,
+        rollback_sha            VARCHAR(64) NOT NULL,
+        mode                    VARCHAR(32) NOT NULL,
+        state                   VARCHAR(32) NOT NULL,
+        verification_digest     VARCHAR(64) NOT NULL,
+        capability_digest       VARCHAR(64) NOT NULL,
+        approval_actor          VARCHAR(160),
+        approval_scope          VARCHAR(500),
+        approval_at             DATETIME,
+        approval_receipt_digest VARCHAR(64),
+        artifact_digest         VARCHAR(64),
+        artifact_attestation_digest VARCHAR(64),
+        deployment_target       VARCHAR(128),
+        health_digest           VARCHAR(64),
+        transitions             TEXT NOT NULL DEFAULT '[]',
+        created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_cloud_delivery_state_updated ON cloud_delivery_manifests(state, updated_at DESC)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_cloud_delivery_repository ON cloud_delivery_manifests(repository_owner, repository_name, updated_at DESC)",
+      );
+    },
+  },
+  {
+    version: "031_cloud_artifact_attestation",
+    description:
+      "Add hash-only signed artifact attestation evidence to cloud delivery manifests",
+    up: async () => {
+      await addColumnIfNotExists(
+        "cloud_delivery_manifests",
+        "artifact_attestation_digest VARCHAR(64)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

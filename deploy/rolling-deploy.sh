@@ -35,6 +35,14 @@ docker exec vynor-caddy caddy reload --config /etc/caddy/deploy/Caddyfile --adap
 echo "Building image…"
 $COMPOSE build vynor-backend
 
+# The background worker launches this image through the root-owned runsc
+# launcher. Rebuild it in the same rollout, otherwise the worker can run an
+# older runner even when the backend image is current.
+if docker inspect vynor-background-worker >/dev/null 2>&1; then
+  echo "Building background runner image..."
+  $COMPOSE --profile background-image build vynor-background-runner-image
+fi
+
 for worker in "${WORKERS[@]}"; do
   echo "Replacing $worker…"
   $COMPOSE up -d --no-deps --no-build "$worker"

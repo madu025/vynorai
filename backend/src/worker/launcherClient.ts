@@ -1,4 +1,5 @@
 import http from "http";
+import { assertSandboxLaunchRequest } from "./sandboxPolicy.js";
 
 export interface SandboxLaunchRequest {
   version: 1;
@@ -29,6 +30,7 @@ export interface SandboxLaunchResult {
 export function launchSandbox(
   request: SandboxLaunchRequest,
 ): Promise<SandboxLaunchResult> {
+  assertSandboxLaunchRequest(request);
   const socketPath =
     process.env.BG_LAUNCHER_SOCKET || "/run/vynor-bg/launcher.sock";
   const body = Buffer.from(JSON.stringify(request));

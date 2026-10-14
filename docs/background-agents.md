@@ -1,6 +1,6 @@
 # VynorAI Background Agents
 
-Status: Proposed — owner approval is required before Phase 1  
+Status: Phase 1 safety slice implemented — production rollout remains gated
 Last updated: 2026-10-05  
 Owners: VynorAI engineering and operations
 
@@ -949,6 +949,18 @@ gVisor integration tests. Known Windows-only path failures are reported, never
 hidden as passes.
 
 ## 24. Rollout and rollback
+
+### 24.1 Implemented safety slice (2026-10-14)
+
+The worker now validates every request before it crosses the launcher socket.
+`backend/src/worker/sandboxPolicy.ts` enforces the approved 45-minute, 1536 MB,
+1 CPU, 512 PID and 2048 MB disk ceilings; rejects malformed paths and scoped
+tokens; and permits only the configured internal model relay. Invalid or wider
+environment limits fail closed. Focused policy/output-safety tests, background
+queue regression tests, backend typecheck and documentation-link checks pass.
+
+This does not create GitHub branches/PRs, grant GitHub permissions, change the
+runtime host, deploy a worker, or remove the explicit human approval gate.
 
 - All paths are behind `BG_ENABLED=false` and an internal-user allowlist.
 - Rollout: internal owner account, then 5%, 25%, 50%, 100% of entitled users.

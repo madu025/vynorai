@@ -33,6 +33,7 @@ import type { BackgroundProofPackV1 } from "../services/backgroundTypes.js";
 import { sendBackgroundPush } from "../services/backgroundNotifications.js";
 import { cancelSandbox, launchSandbox } from "./launcherClient.js";
 import { assertSafePatch, readSandboxFile } from "./outputSafety.js";
+import { sandboxLimitsFromEnvironment } from "./sandboxPolicy.js";
 
 const workerId = `${os.hostname()}:${process.pid}`;
 const leaseMs = 90_000;
@@ -127,13 +128,7 @@ async function runTask(taskId: string): Promise<void> {
         .createHash("sha256")
         .update(`${task.user_id}:${task.manifest_digest}`)
         .digest("hex"),
-      limits: {
-        runtimeSeconds: Number(process.env.BG_TASK_TIMEOUT_MINUTES || 45) * 60,
-        memoryMb: Math.min(1536, Number(process.env.BG_TASK_MEMORY_MB || 1536)),
-        cpus: Math.min(1, Number(process.env.BG_TASK_CPUS || 1)),
-        pids: Math.min(512, Number(process.env.BG_TASK_PIDS || 512)),
-        diskMb: Math.min(2048, Number(process.env.BG_TASK_DISK_MB || 2048)),
-      },
+      limits: sandboxLimitsFromEnvironment(),
     });
     await finalizeTask(task, staging, result);
   } catch (error) {

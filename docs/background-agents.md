@@ -1,6 +1,6 @@
 # VynorAI Background Agents
 
-Status: Phase 1 safety slice implemented — production rollout remains gated
+Status: Phase 1 safety slice and stale-staging cleanup implemented — production rollout remains gated
 Last updated: 2026-10-05  
 Owners: VynorAI engineering and operations
 
@@ -858,6 +858,7 @@ Metrics contain IDs/counts/timings, never prompt/source/diff/tool output:
 - task duration, verification pass rate, cap-stop rate, failure/refund rate;
 - model/compute/net credits, estimate error, settlement/reconcile count;
 - upload bytes, artifact bytes, cache hit/size/evictions, purge lag;
+- stale staging count, cleanup removals/failures and cleanup age;
 - API latency/error rate and SSE connections.
 
 `deploy/watchdog.sh` Phase 5 checks worker readiness, queue depth threshold,
@@ -883,6 +884,7 @@ BG_ARTIFACT_RETENTION_DAYS=7
 BG_CACHE_MAX_GB=20
 BG_COMPUTE_CREDITS_PER_HOUR=100000
 BG_STALE_HEARTBEAT_SECONDS=300
+BG_STAGING_GRACE_MINUTES=90
 BG_ARTIFACT_MASTER_KEY=<secret>
 BG_WORKER_SERVICE_TOKEN=<secret or mTLS configuration>
 BG_VAPID_PUBLIC_KEY=<phase 4>
@@ -961,6 +963,11 @@ queue regression tests, backend typecheck and documentation-link checks pass.
 
 This does not create GitHub branches/PRs, grant GitHub permissions, change the
 runtime host, deploy a worker, or remove the explicit human approval gate.
+
+The worker also removes old inactive UUID task directories after a bounded grace
+period, never touching active task IDs or unknown staging names. The VPS
+watchdog alerts when a directory remains older than the cleanup grace plus a
+two-hour operational buffer.
 
 - All paths are behind `BG_ENABLED=false` and an internal-user allowlist.
 - Rollout: internal owner account, then 5%, 25%, 50%, 100% of entitled users.

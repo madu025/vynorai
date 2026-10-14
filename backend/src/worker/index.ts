@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import { initDb } from "../db.js";
 import {
+  billingAll as dbAll,
   billingGet as dbGet,
   billingRun as dbRun,
 } from "../services/billingDb.js";
@@ -34,6 +35,7 @@ import { sendBackgroundPush } from "../services/backgroundNotifications.js";
 import { cancelSandbox, launchSandbox } from "./launcherClient.js";
 import { assertSafePatch, readSandboxFile } from "./outputSafety.js";
 import { sandboxLimitsFromEnvironment } from "./sandboxPolicy.js";
+import { cleanupStaleStaging } from "./stagingCleanup.js";
 
 const workerId = `${os.hostname()}:${process.pid}`;
 const leaseMs = 90_000;
@@ -424,6 +426,29 @@ async function reconcile() {
     );
     await enqueueBackgroundTask(taskId, Number(task.priority) > 0);
   }
+  await cleanupStaging();
+}
+
+async function cleanupStaging() {
+  const activeRows = await dbAll<{ id: string }>(
+    "SELECT id FROM background_tasks WHERE status IN ('running','cancel_requested')",
+  );
+  const result = await cleanupStaleStaging({
+    root: process.env.BG_STAGING_DIR || "/var/lib/vynor-background/staging",
+    activeTaskIds: new Set(activeRows.map((row) => row.id)),
+    graceMs: Math.max(
+      15 * 60_000,
+      Number(process.env.BG_STAGING_GRACE_MINUTES || 90) * 60_000,
+    ),
+  });
+  if (result.removed.length > 0)
+    console.warn(
+      `[BackgroundWorker] removed ${result.removed.length} stale staging director${result.removed.length === 1 ? "y" : "ies"}`,
+    );
+  for (const error of result.errors)
+    console.error(
+      `[BackgroundWorker] staging cleanup failed for ${error.taskId}: ${error.message}`,
+    );
 }
 
 async function start() {

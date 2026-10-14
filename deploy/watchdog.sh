@@ -6,6 +6,7 @@
 #     serving from the other worker); at most 3 restarts per worker per hour
 #   - postgres / redis / caddy stopped -> start it
 #   - disk above 85% -> prune old Docker images, build cache and journal
+#   - old background staging directories -> alert if worker cleanup is stuck
 # Everything else is reported to Telegram: public health failures, low
 # memory, DeepSeek balance, TLS expiry, plus a daily summary at 08:00.
 #
@@ -139,7 +140,21 @@ elif [ "$disk" -lt 80 ]; then
   resolve disk "Disk usage is back to ${disk}%."
 fi
 
-# ── 5. Memory ────────────────────────────────────────────────────────────────
+# ── 5b. Background staging cleanup ─────────────────────────────────────────
+# The worker removes task staging after every terminal state. A directory older
+# than the worker's 90-minute grace plus a buffer indicates a cleanup failure.
+# Report only the count; never put paths or source data in an alert.
+staging_root=/var/lib/vynor-background/staging
+if [ -d "$staging_root" ]; then
+  stale_staging=$(find "$staging_root" -mindepth 1 -maxdepth 1 -type d -mmin +120 -print 2>/dev/null | wc -l)
+  if [ "$stale_staging" -gt 0 ]; then
+    issue staging "${stale_staging} background staging director$( [ "$stale_staging" = 1 ] && echo y || echo ies ) older than 2 hours; cleanup needs attention."
+  else
+    resolve staging "Background staging cleanup is current."
+  fi
+fi
+
+# ── 6. Memory ────────────────────────────────────────────────────────────────
 avail=$(awk '/MemAvailable/ {a=$2} /MemTotal/ {t=$2} END {printf "%d", a*100/t}' /proc/meminfo)
 if [ "$avail" -lt 8 ]; then
   [ "$(bump mem)" -ge 3 ] && [ ! -f "$STATE/issue.mem" ] && diagnose "only ${avail}% memory available" && issue mem "Only ${avail}% memory available.

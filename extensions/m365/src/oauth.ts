@@ -129,7 +129,7 @@ export function createOfficeAuthDialogUrl(
   ) {
     throw new Error("M365 OAuth authority is not allowed");
   }
-  const dialog = new URL("/m365/auth-dialog.html?v=20261014.2", origin);
+  const dialog = new URL("/m365/auth-dialog.html?v=20261014.3", origin);
   dialog.searchParams.set("authorize", authorize.toString());
   return dialog.toString();
 }

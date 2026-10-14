@@ -12,7 +12,7 @@
 
 The M365 sub-product remains under `extensions/m365/`. Its first safe Excel slice is implemented by
 `extensions/m365/src/excel.ts` (range profiling, bounded chunks, preview plans, and the confirmation gate),
-`extensions/m365/src/oauth.ts` (Entra Authorization Code + PKCE), `extensions/m365/src/auth-dialog.ts` and
+`extensions/m365/src/oauth.ts` (Entra Authorization Code + PKCE), `extensions/m365/src/taskpane.ts` (bundled taskpane runtime), `extensions/m365/src/auth-dialog.ts` and
 `extensions/m365/src/auth-callback.ts` (Office Dialog API authentication handoff), `extensions/m365/src/officeExcel.ts`
 (Office.js selected-range inspection and confirmed workbook operations), and `extensions/m365/src/api.ts`
 (correlated OAuth API calls),

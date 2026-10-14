@@ -96,6 +96,10 @@ async function runSandbox(body) {
   const name = `vynor-bg-${body.taskId}`;
   const startedAt = new Date().toISOString();
   fs.mkdirSync(body.outputDirectory, { recursive: true, mode: 0o700 });
+  // Output must survive container exit so the worker can validate proof.json
+  // and patch.json. Keep it private on the host, but writable by the
+  // non-root runner UID inside the sandbox.
+  fs.chownSync(body.outputDirectory, 65532, 65532);
   fs.mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
   const seed = path.join(cacheRoot, body.cacheKey);
   const args = [
@@ -113,7 +117,7 @@ async function runSandbox(body) {
     "--user=65532:65532",
     `--tmpfs=/work:rw,noexec,nosuid,nodev,size=${body.limits.diskMb}m,uid=65532,gid=65532`,
     "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=128m,uid=65532,gid=65532",
-    "--tmpfs=/output:rw,noexec,nosuid,nodev,size=320m,uid=65532,gid=65532",
+    `--mount=type=bind,src=${path.resolve(body.outputDirectory)},dst=/output`,
     "--tmpfs=/cache:rw,noexec,nosuid,nodev,size=256m,uid=65532,gid=65532",
     `--mount=type=bind,src=${path.resolve(body.inputArchive)},dst=/input/project.zip,readonly`,
     `--mount=type=bind,src=${path.resolve(path.join(path.dirname(body.inputArchive), "prompt.txt"))},dst=/input/prompt.txt,readonly`,

@@ -4,6 +4,7 @@ import { logSecurityEvent } from "../services/securityAudit.js";
 import {
   createM365ApprovalToken,
   consumeM365ApprovalToken,
+  reportM365ApprovalResult,
   validateEntraAccessToken,
   validateM365Identity,
 } from "../services/m365Policy.js";
@@ -36,6 +37,27 @@ const applySchema = z.object({
   sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   approvalToken: z.string().min(1),
   confirmed: z.literal(true),
+});
+
+const applyResultSchema = z.object({
+  planId: z.string().min(1).max(100),
+  sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  approvalToken: z.string().min(1),
+  status: z.enum([
+    "applied",
+    "partial_failure",
+    "client_failure",
+    "source_verification_failed",
+  ]),
+  sourceUnchanged: z.boolean().optional(),
+  results: z
+    .array(
+      z.object({
+        kind: z.enum(["table", "chart", "new-sheet", "pivot-table"]),
+        status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),
+      }),
+    )
+    .max(4),
 });
 
 function identity(req: Request) {
@@ -202,6 +224,71 @@ m365Router.post(
       message:
         "Approval granted; the Office client may apply the unchanged-source plan.",
     });
+  },
+);
+
+m365Router.post(
+  "/excel/apply-result",
+  requireM365Auth,
+  validateBody(applyResultSchema),
+  async (req: Request, res: Response) => {
+    const tenant = identity(req);
+    try {
+      validateM365Identity(tenant, "m365.excel.write");
+      await requireM365TenantScope(tenant.tenantId, "m365.excel.write");
+      const failures = req.body.results.filter(
+        (result: { status: string }) => result.status === "failed",
+      ).length;
+      if (
+        req.body.status === "applied" &&
+        (req.body.results.length === 0 ||
+          failures > 0 ||
+          req.body.sourceUnchanged !== true)
+      )
+        throw new Error("invalid_apply_result");
+      if (
+        req.body.status === "partial_failure" &&
+        (req.body.results.length === 0 || failures === 0)
+      )
+        throw new Error("invalid_apply_result");
+      if (req.body.status === "client_failure" && req.body.results.length !== 0)
+        throw new Error("invalid_apply_result");
+      await reportM365ApprovalResult(
+        req.body.approvalToken,
+        {
+          planId: req.body.planId,
+          tenantId: tenant.tenantId,
+          objectId: tenant.objectId,
+          sourceFingerprint: req.body.sourceFingerprint,
+        },
+        {
+          status: req.body.status,
+          sourceUnchanged: req.body.sourceUnchanged,
+          actionCount: req.body.results.length,
+          failureCount: failures,
+        },
+      );
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_APPLY_RESULT",
+        actor: (req as any).user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          operationId: req.body.planId,
+          status: req.body.status,
+          sourceUnchanged: req.body.sourceUnchanged,
+          actionCount: req.body.results.length,
+          failureCount: failures,
+          failedKinds: req.body.results
+            .filter((result: { status: string }) => result.status === "failed")
+            .map((result: { kind: string }) => result.kind),
+        }),
+      });
+    } catch (error) {
+      return res
+        .status(409)
+        .json({ error: { code: (error as Error).message } });
+    }
+    res.json({ recorded: true, operationId: req.body.planId });
   },
 );
 

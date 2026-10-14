@@ -2,6 +2,8 @@
 
 This development package contains the first Excel slice. It uses Entra Authorization Code + PKCE, maps an explicit user instruction to the table/chart/new-sheet/PivotTable allowlist, reads only the selected range, sends a bounded preview request to the existing VynorAI backend, and requires an approval response before Office.js writes anything. Ambiguous instructions produce no mutation plan.
 
+After an approved apply attempt, the client sends one metadata-only result receipt containing action kinds/statuses and the source-preservation result. It never sends cell values or raw Office error text in that receipt.
+
 Configure the task pane at runtime with `window.__VYNORAI_M365_CONFIG__`:
 
 ```js

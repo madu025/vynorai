@@ -20,7 +20,9 @@ When a cryptographically valid identity reaches a disabled tenant gate, the back
 `M365_TENANT_ACCESS_REQUESTED` security event containing the Entra tenant/object IDs and required scope. It never stores
 the access token or selected workbook content; an administrator must still explicitly enable the tenant and link the identity.
 Workbook mutation approvals are short-lived and recorded by JWT ID in `m365_approval_uses`; the first approval request
-consumes the ID atomically across API workers and a replay fails closed.
+consumes the ID atomically across API workers and a replay fails closed. The client may then record one metadata-only
+apply-result receipt (action kinds/statuses and source-preservation state, never cell values or raw Office error text),
+which is mirrored to the existing security audit ledger.
 
 For a controlled test binding, run `npx tsx scripts/link-m365-identity.ts` from `backend/` with
 `M365_LINK_TENANT_ID`, `M365_LINK_OBJECT_ID`, and the existing VynorAI internal `M365_LINK_USER_ID` set only in

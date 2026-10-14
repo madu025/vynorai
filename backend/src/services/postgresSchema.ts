@@ -645,6 +645,16 @@ CREATE TABLE IF NOT EXISTS m365_approval_uses (
 CREATE INDEX IF NOT EXISTS idx_m365_approval_expiry ON m365_approval_uses(expires_at_ms);
 `,
   },
+  {
+    version: "035_m365_apply_result_receipt",
+    sql: `
+ALTER TABLE m365_approval_uses ADD COLUMN IF NOT EXISTS result_reported_at TEXT;
+ALTER TABLE m365_approval_uses ADD COLUMN IF NOT EXISTS result_status VARCHAR(32);
+ALTER TABLE m365_approval_uses ADD COLUMN IF NOT EXISTS source_unchanged SMALLINT CHECK(source_unchanged IN (0, 1));
+ALTER TABLE m365_approval_uses ADD COLUMN IF NOT EXISTS action_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE m365_approval_uses ADD COLUMN IF NOT EXISTS failure_count INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

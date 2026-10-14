@@ -15,6 +15,21 @@ export interface M365ApiClient {
     sourceFingerprint: string;
     approvalToken: string;
   }): Promise<any>;
+  reportExcelResult(input: {
+    planId: string;
+    sourceFingerprint: string;
+    approvalToken: string;
+    status:
+      | "applied"
+      | "partial_failure"
+      | "client_failure"
+      | "source_verification_failed";
+    sourceUnchanged?: boolean;
+    results: Array<{
+      kind: "table" | "chart" | "new-sheet" | "pivot-table";
+      status: "created" | "exists" | "failed" | "skipped_unsupported";
+    }>;
+  }): Promise<any>;
   diagnose(): Promise<M365AccessDiagnostics>;
 }
 
@@ -103,6 +118,8 @@ export function createM365ApiClient(
     planExcel: (input) => request("POST", "/v1/m365/excel/plan", input),
     approveExcel: (input) =>
       request("POST", "/v1/m365/excel/apply", { ...input, confirmed: true }),
+    reportExcelResult: (input) =>
+      request("POST", "/v1/m365/excel/apply-result", input),
     diagnose: () => request("GET", "/v1/m365/diagnostics"),
   };
 }

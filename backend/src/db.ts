@@ -1063,6 +1063,33 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "035_m365_apply_result_receipt",
+    description:
+      "Metadata-only result receipt for approved Microsoft 365 workbook mutations",
+    up: async () => {
+      await addColumnIfNotExists(
+        "m365_approval_uses",
+        "result_reported_at DATETIME",
+      );
+      await addColumnIfNotExists(
+        "m365_approval_uses",
+        "result_status VARCHAR(32)",
+      );
+      await addColumnIfNotExists(
+        "m365_approval_uses",
+        "source_unchanged INTEGER CHECK(source_unchanged IN (0, 1))",
+      );
+      await addColumnIfNotExists(
+        "m365_approval_uses",
+        "action_count INTEGER NOT NULL DEFAULT 0",
+      );
+      await addColumnIfNotExists(
+        "m365_approval_uses",
+        "failure_count INTEGER NOT NULL DEFAULT 0",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

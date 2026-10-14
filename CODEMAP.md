@@ -16,8 +16,8 @@ The M365 sub-product remains under `extensions/m365/`. Its first safe Excel slic
 `extensions/m365/auth-dialog.html` / `extensions/m365/auth-callback.html` (Office Dialog API authentication handoff), `extensions/m365/src/officeExcel.ts`
 (Office.js selected-range inspection and confirmed workbook operations), and `extensions/m365/src/api.ts`
 (correlated OAuth API calls),
-`backend/src/routes/m365.ts` (authenticated plan and approval endpoints),
-`backend/src/services/m365Policy.ts` (fail-closed tenant/scope checks and database-backed single-use approval tokens),
+`backend/src/routes/m365.ts` (authenticated plan, approval, and metadata-only apply-result endpoints),
+`backend/src/services/m365Policy.ts` (fail-closed tenant/scope checks, database-backed single-use approval tokens, and one-time result receipts),
 `backend/src/services/m365TenantRegistry.ts` (tenant enablement, scoped actions, and emergency disablement), and
 `backend/src/services/m365ExcelPlan.ts` (server-side source fingerprint and plan construction), `backend/src/services/m365Diagnostics.ts` (read-only per-gate access report behind `GET /v1/m365/diagnostics`), and `extensions/m365/src/diagnostics.ts` (redacted step log, token-claim and Office host summaries for the task pane self-test). Shared versioned
 contract types are in `packages/m365-contracts/src/index.ts`. It reuses existing VynorAI OAuth identity binding, quota,

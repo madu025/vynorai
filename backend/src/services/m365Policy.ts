@@ -218,3 +218,48 @@ export async function consumeM365ApprovalToken(
   );
   if (consumed.changes !== 1) throw new Error("approval_replayed");
 }
+
+/** Records one bounded, content-free client outcome for a previously consumed approval. */
+export async function reportM365ApprovalResult(
+  token: string,
+  expected: {
+    planId: string;
+    tenantId: string;
+    objectId: string;
+    sourceFingerprint: string;
+  },
+  result: {
+    status:
+      | "applied"
+      | "partial_failure"
+      | "client_failure"
+      | "source_verification_failed";
+    sourceUnchanged?: boolean;
+    actionCount: number;
+    failureCount: number;
+  },
+): Promise<void> {
+  const claims = verifyM365ApprovalToken(token, expected);
+  const recorded = await dbRun(
+    `UPDATE m365_approval_uses
+       SET result_reported_at = CURRENT_TIMESTAMP, result_status = ?,
+         source_unchanged = ?, action_count = ?, failure_count = ?
+     WHERE jti = ? AND plan_id = ? AND tenant_id = ? AND object_id = ?
+       AND result_reported_at IS NULL`,
+    [
+      result.status,
+      result.sourceUnchanged === undefined
+        ? null
+        : result.sourceUnchanged
+          ? 1
+          : 0,
+      result.actionCount,
+      result.failureCount,
+      claims.jti,
+      expected.planId,
+      expected.tenantId,
+      expected.objectId,
+    ],
+  );
+  if (recorded.changes !== 1) throw new Error("approval_result_unavailable");
+}

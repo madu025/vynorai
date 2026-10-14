@@ -417,25 +417,33 @@ apply?.addEventListener("click", async () => {
   )
     return log.record("apply:confirm", "skip", "user cancelled");
   log.record("apply:confirm", "pass", "user confirmed");
+  const approvedPlan = currentPlan;
+  const expectedFingerprint = previewFingerprint;
+  let approvalGranted = false;
+  let resultReported = false;
   if (apply) apply.disabled = true;
+  if (inspect) inspect.disabled = true;
+  if (signOut) signOut.disabled = true;
+  if (instruction) instruction.disabled = true;
   try {
     setStatus("Requesting approval...");
     await apiClient().approveExcel({
-      planId: currentPlan.planId,
-      sourceFingerprint: currentPlan.sourceFingerprint,
-      approvalToken: currentPlan.approvalToken,
+      planId: approvedPlan.planId,
+      sourceFingerprint: approvedPlan.sourceFingerprint,
+      approvalToken: approvedPlan.approvalToken,
     });
+    approvalGranted = true;
     setStatus("Applying approved changes...");
     const report = await log.step(
       "excel:apply",
       () =>
         applyApprovedExcelPlan(
           officeRuntime(),
-          currentPlan,
+          approvedPlan,
           true,
-          currentPlan.approvalToken,
+          approvedPlan.approvalToken,
           {
-            expectedSourceFingerprint: previewFingerprint,
+            expectedSourceFingerprint: expectedFingerprint,
             supportsExcelApi,
             requirements: ACTION_REQUIREMENTS,
             onAction: (result) =>
@@ -461,6 +469,30 @@ apply?.addEventListener("click", async () => {
     const failed = report.results.filter(
       (result) => result.status === "failed",
     );
+    const auditStatus = !report.sourceUnchangedAfterApply
+      ? "source_verification_failed"
+      : failed.length
+        ? "partial_failure"
+        : "applied";
+    let auditWarning = "";
+    try {
+      await apiClient().reportExcelResult({
+        planId: approvedPlan.planId,
+        sourceFingerprint: approvedPlan.sourceFingerprint,
+        approvalToken: approvedPlan.approvalToken,
+        status: auditStatus,
+        sourceUnchanged: report.sourceUnchangedAfterApply,
+        results: report.results.map((result) => ({
+          kind: result.kind as "table" | "chart" | "new-sheet" | "pivot-table",
+          status: result.status,
+        })),
+      });
+      resultReported = true;
+      log.record("api:apply-result", "pass", { status: auditStatus });
+    } catch (error) {
+      auditWarning = " The server audit receipt could not be confirmed.";
+      log.record("api:apply-result", "fail", describeError(error));
+    }
     const done = report.results
       .filter(
         (result) => result.status === "created" || result.status === "exists",
@@ -472,11 +504,33 @@ apply?.addEventListener("click", async () => {
     previewFingerprint = "";
     setStatus(
       failed.length
-        ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.`
-        : `Applied: ${done.join("; ")}. Source data unchanged: ${report.sourceUnchangedAfterApply ? "yes" : "NO"}.`,
+        ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`
+        : `Applied: ${done.join("; ")}. Source data unchanged: ${report.sourceUnchangedAfterApply ? "yes" : "NO"}.${auditWarning}`,
     );
   } catch (error) {
+    if (approvalGranted && !resultReported) {
+      try {
+        const failureStatus = String((error as Error)?.message).includes(
+          "source_changed_since_preview",
+        )
+          ? "source_verification_failed"
+          : "client_failure";
+        await apiClient().reportExcelResult({
+          planId: approvedPlan.planId,
+          sourceFingerprint: approvedPlan.sourceFingerprint,
+          approvalToken: approvedPlan.approvalToken,
+          status: failureStatus,
+          results: [],
+        });
+        log.record("api:apply-result", "pass", { status: failureStatus });
+      } catch (reportError) {
+        log.record("api:apply-result", "fail", describeError(reportError));
+      }
+    }
     handleApiError("apply", error);
+  } finally {
+    if (instruction) instruction.disabled = false;
+    updateAuthenticationUi(Boolean(accessToken));
   }
 });
 

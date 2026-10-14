@@ -75,3 +75,32 @@ test("M365 API reports network failures and calls diagnostics with GET", async (
     body: undefined,
   });
 });
+
+test("M365 API reports only bounded workbook result metadata", async () => {
+  let seen: { url: string; body?: string } | undefined;
+  const client = createM365ApiClient(
+    "https://api.example",
+    "t",
+    async (url, init) => {
+      seen = { url: String(url), body: String(init?.body) };
+      return new Response(JSON.stringify({ recorded: true }), { status: 200 });
+    },
+  );
+  await client.reportExcelResult({
+    planId: "m365_plan",
+    sourceFingerprint: "a".repeat(64),
+    approvalToken: "approval",
+    status: "applied",
+    sourceUnchanged: true,
+    results: [{ kind: "chart", status: "created" }],
+  });
+  assert.equal(seen?.url, "https://api.example/v1/m365/excel/apply-result");
+  assert.deepEqual(JSON.parse(seen!.body!), {
+    planId: "m365_plan",
+    sourceFingerprint: "a".repeat(64),
+    approvalToken: "approval",
+    status: "applied",
+    sourceUnchanged: true,
+    results: [{ kind: "chart", status: "created" }],
+  });
+});

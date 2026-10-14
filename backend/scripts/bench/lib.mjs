@@ -310,6 +310,23 @@ function runTests(fx, cmd) {
   return { ok: res.status === 0, out: `${res.stdout ?? ""}${res.stderr ?? ""}`.slice(0, 300) };
 }
 
+function runModuleCases(fx, check) {
+  const cases = JSON.stringify(check.cases);
+  const source = [
+    `import { ${check.exportName} } from ${JSON.stringify(`./${check.file}`)};`,
+    `const cases = ${cases};`,
+    "let failed = 0;",
+    `for (const [input, expected] of cases) if (!Object.is(${check.exportName}(input), expected)) failed++;`,
+    "process.exit(failed ? 1 : 0);",
+  ].join("\n");
+  const res = spawnSync(process.execPath, ["--input-type=module", "--eval", source], {
+    cwd: fx.dir,
+    encoding: "utf8",
+    timeout: 20000,
+  });
+  return res.status === 0;
+}
+
 /**
  * check = { tests, protect, intact, absent, present, answerAll, answerNone,
  *           usedTool, noCommand, noWriteMatch, outsideUnchanged }
@@ -323,6 +340,11 @@ export function evaluate(task, fx, result) {
   if (c.tests) {
     const t = runTests(fx, c.tests);
     if (!t.ok) problems.push(`tests fail: ${t.out.replace(/\s+/g, " ").slice(0, 160)}`);
+  }
+  for (const check of c.moduleCases ?? []) {
+    if (!runModuleCases(fx, check)) {
+      problems.push(`module behavior fails: ${check.file}:${check.exportName}`);
+    }
   }
   for (const f of c.protect ?? []) {
     const full = path.join(fx.dir, f);

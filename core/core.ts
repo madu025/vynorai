@@ -401,6 +401,7 @@ export class Core {
       });
     });
     on("agent/task/get", ({ data }) => this.taskRuntime.get(data.taskId));
+    on("agent/task/delete", ({ data }) => this.taskRuntime.delete(data.taskId));
     on("agent/task/transition", ({ data }) =>
       this.taskRuntime.transition(data.taskId, data.state, data.reason),
     );
@@ -409,6 +410,32 @@ export class Core {
     );
     on("agent/task/recordVerification", ({ data }) =>
       this.taskRuntime.recordVerification(data.taskId, data.result),
+    );
+    on("agent/task/setCompletionContract", ({ data }) =>
+      this.taskRuntime.setCompletionContract(data.taskId, data.contract),
+    );
+    on("agent/task/recordMutation", ({ data }) =>
+      this.taskRuntime.recordMutation(
+        data.taskId,
+        data.changedFiles,
+        data.snapshotDigest,
+      ),
+    );
+    on("agent/task/revalidateWorkspace", ({ data }) =>
+      this.taskRuntime.revalidateWorkspace(
+        data.taskId,
+        data.workspaceId,
+        data.workspaceRevision,
+      ),
+    );
+    on("agent/task/recordEvidence", ({ data }) =>
+      this.taskRuntime.recordEvidence(data.taskId, data.evidence),
+    );
+    on("agent/task/recordCriterionDecision", ({ data }) =>
+      this.taskRuntime.recordCriterionDecision({
+        taskId: data.taskId,
+        ...data.decision,
+      }),
     );
     on("agent/task/consumeBudget", ({ data }) => {
       const { taskId, ...usage } = data;

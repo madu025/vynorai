@@ -16,6 +16,19 @@ const EDIT_TOOLS = new Set<string>([
 
 export const SIDE_REVIEW_MAX_DIFF_CHARS = 8000;
 
+/** Side review is reserved for complex or deterministically high-risk work. */
+export function requiresIndependentSideReview(
+  files: string[],
+  scope?: "simple" | "medium" | "complex",
+): boolean {
+  if (scope === "complex") return true;
+  return files.some((file) =>
+    /(^|[/_.-])(auth|security|permission|billing|payment|deploy|release|migration|schema|database|db)([/_.-]|$)/i.test(
+      file.replace(/\\/g, "/"),
+    ),
+  );
+}
+
 type ToolCall = NonNullable<ChatHistoryItem["toolCallStates"]>[number];
 
 const normalizePath = (f: string) => f.replace(/\\/g, "/").replace(/^\.\//, "");

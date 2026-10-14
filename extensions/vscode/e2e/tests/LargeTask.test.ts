@@ -75,15 +75,92 @@ function lastJournalEvent(
 function journalSaysTurnEnded(
   event: { type: string; state?: string; kind?: string } | undefined,
 ): boolean {
-  // A task that stays in "verifying" (its checks are older than its last
-  // command) ends on the response verification: the transition that follows
-  // is verifying -> verifying, which the runtime refuses and does not record.
+  // A response verification is terminal only when it was explicitly recorded.
+  // A task transition to "verifying" is still waiting for fresh checks or the
+  // required independent review; ending the driver there would score a valid
+  // product run as a false completion.
   if (event?.type === "verification.recorded" && event.kind === "response")
     return true;
   return (
     event?.type === "task.transitioned" &&
-    ["completed", "verifying", "failed", "canceled"].includes(event.state ?? "")
+    ["completed", "failed", "canceled"].includes(event.state ?? "")
   );
+}
+
+/**
+ * A bounded, content-free projection of the task journal for benchmark
+ * evidence. The task goal, criterion text and tool output never leave the
+ * local profile; only stable IDs, policies and statuses are recorded.
+ */
+function latestTaskReceipt(since: number):
+  | {
+      id: string;
+      state: string;
+      scope?: string;
+      criteria: Array<{
+        id: string;
+        required: boolean;
+        policy: string[];
+        status: string;
+      }>;
+      evidence: Array<{ criterionId: string; kind: string; status: string }>;
+      verification: Array<{ kind: string; status: string }>;
+      mutationGeneration: number;
+    }
+  | undefined {
+  try {
+    const dir = path.join(
+      path.resolve(process.env.CONTINUE_GLOBAL_DIR ?? ""),
+      "agent-tasks",
+    );
+    const candidates = fs
+      .readdirSync(dir)
+      .filter((file) => file.endsWith(".json"))
+      .map((file) => ({
+        file,
+        full: path.join(dir, file),
+        mtime: fs.statSync(path.join(dir, file)).mtimeMs,
+      }))
+      .filter((item) => item.mtime >= since)
+      .sort((a, b) => b.mtime - a.mtime);
+    for (const item of candidates) {
+      const task = JSON.parse(fs.readFileSync(item.full, "utf8"));
+      if (!task?.id || Number(task.createdAt) < since) continue;
+      return {
+        id: task.id,
+        state: String(task.state ?? "unknown"),
+        scope: task.contract?.scope,
+        criteria: Array.isArray(task.contract?.criteria)
+          ? task.contract.criteria.map((criterion: any) => ({
+              id: String(criterion.id),
+              required: criterion.required === true,
+              policy: Array.isArray(criterion.evidencePolicy)
+                ? criterion.evidencePolicy.map(String)
+                : [],
+              status: String(criterion.status ?? "unknown"),
+            }))
+          : [],
+        evidence: Array.isArray(task.evidence)
+          ? task.evidence.map((receipt: any) => ({
+              criterionId: String(receipt.criterionId),
+              kind: String(receipt.kind),
+              status: String(receipt.status),
+            }))
+          : [],
+        verification: Array.isArray(task.verification)
+          ? task.verification.map((result: any) => ({
+              kind: String(result.kind),
+              status: String(result.status),
+            }))
+          : [],
+        mutationGeneration: Number(task.mutationGeneration ?? 0),
+      };
+    }
+  } catch {
+    // The runner still records the external result if the local journal is
+    // unavailable; the manifest will classify the missing receipt separately.
+  }
+  return undefined;
 }
 
 /** A frozen window answers nothing; never wait on it forever. */
@@ -100,13 +177,25 @@ function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   ]).finally(() => timer && clearTimeout(timer));
 }
 
-async function clickAll(view: WebView, css: string): Promise<number> {
+async function clickUnseen(
+  view: WebView,
+  css: string,
+  seen: Set<string>,
+): Promise<number> {
   const buttons = await view.findWebElements(By.css(css)).catch(() => []);
   let clicked = 0;
   for (const b of buttons) {
+    const id = await b.getAttribute("data-testid").catch(() => "");
+    // Historical tool cards retain their approve button in the DOM. Retrying
+    // those stale controls forever made the benchmark driver look active after
+    // a turn had already stopped. A new tool call has a distinct test id.
+    if (!id || seen.has(id)) continue;
     await b
       .click()
-      .then(() => clicked++)
+      .then(() => {
+        seen.add(id);
+        clicked++;
+      })
       .catch(() => undefined);
   }
   return clicked;
@@ -155,6 +244,8 @@ describe("VynorAI large task through the extension", function () {
     let journalChangedAt = Date.now();
     let everStreamed = false;
     let end = "time limit";
+    const approvedToolCalls = new Set<string>();
+    const pressedContinueButtons = new Set<string>();
     const log = (m: string) =>
       fs.appendFileSync(
         path.join(at, "progress.log"),
@@ -169,12 +260,20 @@ describe("VynorAI large task through the extension", function () {
       while (Date.now() - started < LIMIT_MS) {
         await sleep(1_000);
         approvals += await within(
-          clickAll(view, "[data-testid*='accept-tool-call-button']"),
+          clickUnseen(
+            view,
+            "[data-testid*='accept-tool-call-button']",
+            approvedToolCalls,
+          ),
           30_000,
           "approve buttons",
         );
         const pressed = await within(
-          clickAll(view, "[data-testid='continue-task-button']"),
+          clickUnseen(
+            view,
+            "[data-testid='continue-task-button']",
+            pressedContinueButtons,
+          ),
           30_000,
           "continue button",
         );
@@ -226,7 +325,11 @@ describe("VynorAI large task through the extension", function () {
       end = `error: ${e.message}`;
       log(end);
     }
+    let reply = "";
     try {
+      reply = await within(lastReply(view), 20_000, "last reply").catch(
+        () => "",
+      );
       await view.switchBack();
       const png = await within(
         view.getDriver().takeScreenshot(),
@@ -240,14 +343,16 @@ describe("VynorAI large task through the extension", function () {
     );
     const run = {
       id: task.id,
+      // Used only by the local scorer to inspect the isolated session
+      // metadata. It is not copied into the reproducibility manifest.
+      globalDir: path.resolve(process.env.CONTINUE_GLOBAL_DIR ?? ""),
       end,
       seconds: Math.round((Date.now() - started) / 1000),
       approvals,
       continues,
       tokens: creditsAfter - creditsBefore,
-      reply: end.startsWith("error")
-        ? ""
-        : (await lastReply(view).catch(() => "")).slice(-1500),
+      reply: end.startsWith("error") ? "" : reply.slice(-1500),
+      taskReceipt: latestTaskReceipt(started),
     };
     fs.writeFileSync(path.join(at, "run.json"), JSON.stringify(run, null, 2));
     console.log("LARGE_TASK_RUN", JSON.stringify({ ...run, reply: undefined }));

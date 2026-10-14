@@ -56,6 +56,10 @@ import type {
 import type {
   AgentTask,
   AgentTaskBudget,
+  CompletionContract,
+  CompletionContractInput,
+  CriterionDecisionReceipt,
+  EvidenceReceipt,
   ImplementationSubagent,
   ImplementationSubagentRole,
   SubagentAuthority,
@@ -95,6 +99,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     {
       sessionId: string;
       goal: string;
+      contract?: CompletionContractInput;
       budget?: Partial<
         Pick<
           AgentTaskBudget,
@@ -105,6 +110,7 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     AgentTask,
   ];
   "agent/task/get": [{ taskId: string }, AgentTask | undefined];
+  "agent/task/delete": [{ taskId: string }, void];
   "agent/task/transition": [
     { taskId: string; state: TaskState; reason?: string },
     AgentTask,
@@ -124,6 +130,40 @@ export type ToCoreFromIdeOrWebviewProtocol = {
     {
       taskId: string;
       result: Omit<VerificationResult, "id" | "createdAt">;
+    },
+    AgentTask,
+  ];
+  "agent/task/setCompletionContract": [
+    {
+      taskId: string;
+      contract: CompletionContractInput;
+    },
+    AgentTask,
+  ];
+  "agent/task/recordMutation": [
+    { taskId: string; changedFiles: string[]; snapshotDigest?: string },
+    AgentTask,
+  ];
+  "agent/task/revalidateWorkspace": [
+    { taskId: string; workspaceId: string; workspaceRevision: number },
+    AgentTask,
+  ];
+  "agent/task/recordEvidence": [
+    {
+      taskId: string;
+      evidence: Omit<
+        EvidenceReceipt,
+        "id" | "createdAt" | "mutationGeneration"
+      > & { mutationGeneration?: number };
+    },
+    AgentTask,
+  ];
+  "agent/task/recordCriterionDecision": [
+    {
+      taskId: string;
+      decision: Omit<CriterionDecisionReceipt, "id" | "createdAt"> & {
+        statement?: string;
+      };
     },
     AgentTask,
   ];

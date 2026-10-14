@@ -12,6 +12,12 @@ import type {
   AgentTask,
   AgentTaskBudget,
   ApprovalReceipt,
+  CompletionContract,
+  CompletionContractInput,
+  CompletionCriterion,
+  CriterionDecisionReceipt,
+  CriterionStatus,
+  EvidenceReceipt,
   ImplementationSubagent,
   ImplementationSubagentRole,
   SubagentAuthority,
@@ -91,6 +97,154 @@ function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+const CRITERION_ID = /^[a-z][a-z0-9._-]{0,63}$/i;
+const ABSOLUTE_PATH =
+  /(?:^|[\s("'`])(?:[a-z]:[\\/]|\\\\|\/(?:home|users|tmp|private|var)\b)/i;
+
+function assertSafeText(value: string, label: string, max: number): string {
+  const text = String(value ?? "")
+    .trim()
+    .slice(0, max);
+  if (!text) throw new Error(`${label} is required`);
+  if (ABSOLUTE_PATH.test(text))
+    throw new Error(`${label} must not contain an absolute path`);
+  return text;
+}
+
+function normalizeContract(input: CompletionContract): CompletionContract {
+  if (input.version !== 1)
+    throw new Error("Unsupported completion contract version");
+  if (!["simple", "medium", "complex"].includes(input.scope))
+    throw new Error("Invalid completion contract scope");
+  if (
+    !Number.isFinite(input.confidence) ||
+    input.confidence < 0 ||
+    input.confidence > 1
+  )
+    throw new Error("Invalid completion contract confidence");
+  if (
+    !Array.isArray(input.criteria) ||
+    input.criteria.length === 0 ||
+    input.criteria.length > 32
+  )
+    throw new Error("Completion contract must contain 1 to 32 criteria");
+  const ids = new Set<string>();
+  const criteria = input.criteria.map((criterion): CompletionCriterion => {
+    const id = String(criterion.id ?? "").trim();
+    if (!CRITERION_ID.test(id) || ids.has(id))
+      throw new Error("Invalid or duplicate completion criterion id");
+    ids.add(id);
+    const statement = assertSafeText(
+      criterion.statement,
+      "Completion criterion statement",
+      500,
+    );
+    const evidencePolicy = (
+      Array.isArray(criterion.evidencePolicy) ? criterion.evidencePolicy : []
+    )
+      .map((item) => String(item).trim().slice(0, 80))
+      .filter(Boolean)
+      .slice(0, 8);
+    if (!evidencePolicy.length)
+      throw new Error("Completion criterion evidence policy is required");
+    if (
+      !["user_explicit", "inferred", "repository_required"].includes(
+        criterion.provenance,
+      )
+    )
+      throw new Error("Invalid completion criterion provenance");
+    if (
+      ![
+        "pending",
+        "passed",
+        "failed",
+        "blocked",
+        "user_skipped",
+        "stale",
+      ].includes(criterion.status)
+    )
+      throw new Error("Invalid completion criterion status");
+    return {
+      id,
+      statement,
+      provenance: criterion.provenance,
+      required: Boolean(criterion.required),
+      evidencePolicy,
+      status: criterion.status ?? "pending",
+      reason: criterion.reason
+        ? assertSafeText(criterion.reason, "Completion criterion reason", 500)
+        : undefined,
+      mutationGeneration: criterion.mutationGeneration,
+    };
+  });
+  return {
+    id: input.id,
+    version: 1,
+    taskId: input.taskId,
+    goalVersion: input.goalVersion,
+    workspaceId: input.workspaceId,
+    scope: input.scope,
+    confidence: input.confidence,
+    criteria,
+    createdAt: input.createdAt || Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
+function normalizeTask(task: AgentTask): AgentTask {
+  // Journals written before the contract protocol are deliberately upgraded
+  // in memory and retain their old completion semantics.
+  if (task.schemaVersion && task.schemaVersion > 2)
+    throw new Error("Unsupported newer agent task schema");
+  task.schemaVersion ??= 2;
+  task.goalVersion ??= 1;
+  task.approvals ??= [];
+  task.checkpoints ??= [];
+  task.verification ??= [];
+  task.evidence ??= [];
+  task.criterionDecisions ??= [];
+  task.mutationGeneration ??= 0;
+  task.executionGuard ??= {
+    autonomousSteps: 0,
+    maxAutonomousSteps: MAX_AUTONOMOUS_STEPS,
+    repeatedActionLimit: 3,
+    actionDigests: {},
+    cancelRequested: false,
+  };
+  if (task.contract) {
+    const legacyContract = task.contract as Partial<CompletionContract>;
+    task.contract = normalizeContract({
+      ...task.contract,
+      id: legacyContract.id ?? `legacy-${task.id}`,
+      taskId: legacyContract.taskId ?? task.id,
+      goalVersion: legacyContract.goalVersion ?? task.goalVersion ?? 1,
+      workspaceId: legacyContract.workspaceId ?? task.workspaceId,
+    });
+  }
+  return task;
+}
+
+function contractIsComplete(task: AgentTask): boolean {
+  if (!task.contract) return true;
+  return task.contract.criteria
+    .filter((criterion) => criterion.required)
+    .every((criterion) => {
+      if (criterion.status === "user_skipped")
+        return (task.criterionDecisions ?? []).some(
+          (decision) =>
+            decision.criterionId === criterion.id &&
+            decision.decision === "skipped",
+        );
+      if (criterion.status !== "passed") return false;
+      return (task.evidence ?? []).some(
+        (receipt) =>
+          receipt.criterionId === criterion.id &&
+          receipt.status === "passed" &&
+          receipt.mutationGeneration === (task.mutationGeneration ?? 0),
+      );
+    });
+}
+
 export class TaskRuntime {
   private readonly mutex = new Mutex();
   private readonly journal: TaskJournal;
@@ -116,6 +270,7 @@ export class TaskRuntime {
     workspaceId: string;
     workspaceRevision: number;
     goal: string;
+    contract?: CompletionContractInput;
     budget?: Partial<
       Pick<AgentTaskBudget, "maxInputTokens" | "maxOutputTokens" | "maxCostUsd">
     >;
@@ -123,15 +278,31 @@ export class TaskRuntime {
     return this.mutex.runExclusive(async () => {
       const now = Date.now();
       const task: AgentTask = {
+        schemaVersion: 2,
         id: randomUUID(),
         sessionId: input.sessionId,
         workspaceId: input.workspaceId,
         workspaceRevision: input.workspaceRevision,
+        goalVersion: 1,
         state: "gathering",
         goalDigest: digest(input.goal),
         approvals: [],
         checkpoints: [],
         verification: [],
+        evidence: [],
+        criterionDecisions: [],
+        contract: input.contract
+          ? normalizeContract({
+              ...input.contract,
+              id: randomUUID(),
+              taskId: "pending",
+              goalVersion: 1,
+              workspaceId: input.workspaceId,
+              createdAt: now,
+              updatedAt: now,
+            })
+          : undefined,
+        mutationGeneration: 0,
         executionGuard: {
           autonomousSteps: 0,
           maxAutonomousSteps: MAX_AUTONOMOUS_STEPS,
@@ -144,6 +315,7 @@ export class TaskRuntime {
         createdAt: now,
         updatedAt: now,
       };
+      if (task.contract) task.contract.taskId = task.id;
       this.tasks.set(task.id, task);
       this.persist(task, "task.started", { state: task.state });
       return structuredClone(task);
@@ -152,8 +324,20 @@ export class TaskRuntime {
 
   get(taskId: string): AgentTask | undefined {
     const task = this.tasks.get(taskId) ?? this.journal.load(taskId);
-    if (task) this.tasks.set(taskId, task);
+    if (task) {
+      const wasLegacy = !task.schemaVersion;
+      normalizeTask(task);
+      if (wasLegacy) this.journal.save(task);
+      this.tasks.set(taskId, task);
+    }
     return task ? structuredClone(task) : undefined;
+  }
+
+  async delete(taskId: string): Promise<void> {
+    return this.mutex.runExclusive(async () => {
+      this.journal.delete(taskId);
+      this.tasks.delete(taskId);
+    });
   }
 
   listResumable(workspaceId: string, sessionId?: string): AgentTask[] {
@@ -166,7 +350,7 @@ export class TaskRuntime {
           !TERMINAL_STATES.has(task.state),
       )
       .sort((left, right) => right.updatedAt - left.updatedAt)
-      .map((task) => structuredClone(task));
+      .map((task) => structuredClone(normalizeTask(task)));
   }
 
   async mutate(
@@ -205,6 +389,10 @@ export class TaskRuntime {
             "Mutation task cannot complete without passed test, typecheck, lint, build, or diff-review evidence",
           );
         }
+        if (!contractIsComplete(task))
+          throw new Error(
+            "Completion contract is missing fresh passed evidence for a required criterion",
+          );
       }
       if (!TRANSITIONS[task.state].includes(state)) {
         throw new Error(`Invalid task transition: ${task.state} -> ${state}`);
@@ -255,6 +443,7 @@ export class TaskRuntime {
       const task = this.requireTask(taskId);
       const verification: VerificationResult = {
         ...result,
+        mutationGeneration: task.mutationGeneration ?? 0,
         id: randomUUID(),
         createdAt: Date.now(),
       };
@@ -265,6 +454,213 @@ export class TaskRuntime {
         "verification.recorded",
         verification as unknown as Record<string, unknown>,
       );
+      return structuredClone(task);
+    });
+  }
+
+  async setCompletionContract(
+    taskId: string,
+    contract: CompletionContractInput,
+  ): Promise<AgentTask> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(taskId);
+      if (TERMINAL_STATES.has(task.state)) throw new Error("Task is terminal");
+      task.contract = normalizeContract({
+        ...contract,
+        id: randomUUID(),
+        taskId: task.id,
+        goalVersion: task.goalVersion ?? 1,
+        workspaceId: task.workspaceId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      task.updatedAt = Date.now();
+      this.persist(task, "contract.recorded", {
+        version: task.contract.version,
+        scope: task.contract.scope,
+        criterionCount: task.contract.criteria.length,
+      });
+      return structuredClone(task);
+    });
+  }
+
+  async recordMutation(
+    taskId: string,
+    changedFiles: string[],
+    snapshotDigest?: string,
+  ): Promise<AgentTask> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(taskId);
+      if (TERMINAL_STATES.has(task.state)) throw new Error("Task is terminal");
+      const files = [...new Set(changedFiles.map(canonicalScopePath))].sort();
+      if (!files.length)
+        throw new Error("A mutation must identify at least one changed file");
+      const generation = (task.mutationGeneration ?? 0) + 1;
+      task.mutationGeneration = generation;
+      task.changedSurface = {
+        generation,
+        files,
+        digest:
+          snapshotDigest && /^[a-f0-9]{64}$/i.test(snapshotDigest)
+            ? snapshotDigest
+            : digest(files.join("\n")),
+        capturedAt: Date.now(),
+      };
+      if (task.contract)
+        task.contract.criteria = task.contract.criteria.map((criterion) =>
+          criterion.status === "passed"
+            ? { ...criterion, status: "stale", mutationGeneration: generation }
+            : criterion,
+        );
+      task.updatedAt = Date.now();
+      this.persist(task, "mutation.recorded", {
+        generation,
+        fileCount: files.length,
+        surfaceDigest: task.changedSurface.digest,
+      });
+      return structuredClone(task);
+    });
+  }
+
+  /** Rebinds a resumed task to the current workspace snapshot. A different
+   * workspace is a hard failure; a newer revision invalidates passed evidence
+   * because the journal cannot prove which files changed outside the task. */
+  async revalidateWorkspace(
+    taskId: string,
+    workspaceId: string,
+    workspaceRevision: number,
+  ): Promise<AgentTask> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(taskId);
+      if (task.workspaceId !== workspaceId)
+        throw new Error(
+          "Task workspace identity does not match current workspace",
+        );
+      if (TERMINAL_STATES.has(task.state)) return structuredClone(task);
+      if (workspaceRevision !== task.workspaceRevision) {
+        task.workspaceRevision = workspaceRevision;
+        task.mutationGeneration = (task.mutationGeneration ?? 0) + 1;
+        task.changedSurface = undefined;
+        if (task.contract)
+          task.contract.criteria = task.contract.criteria.map((criterion) =>
+            criterion.status === "passed"
+              ? {
+                  ...criterion,
+                  status: "stale",
+                  mutationGeneration: task.mutationGeneration,
+                }
+              : criterion,
+          );
+        task.updatedAt = Date.now();
+        this.persist(task, "workspace.revalidated", {
+          workspaceRevision,
+          mutationGeneration: task.mutationGeneration,
+        });
+      }
+      return structuredClone(task);
+    });
+  }
+
+  async recordEvidence(
+    taskId: string,
+    input: Omit<EvidenceReceipt, "id" | "createdAt" | "mutationGeneration"> & {
+      mutationGeneration?: number;
+    },
+  ): Promise<AgentTask> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(taskId);
+      if (TERMINAL_STATES.has(task.state)) throw new Error("Task is terminal");
+      if (!task.contract)
+        throw new Error(
+          "Cannot record criterion evidence without a completion contract",
+        );
+      const criterion = task.contract.criteria.find(
+        (item) => item.id === input.criterionId,
+      );
+      if (!criterion) throw new Error("Unknown completion criterion");
+      const generation =
+        input.mutationGeneration ?? task.mutationGeneration ?? 0;
+      if (generation !== (task.mutationGeneration ?? 0))
+        throw new Error(
+          "Evidence is stale for the current mutation generation",
+        );
+      const status: Exclude<CriterionStatus, "pending" | "stale"> =
+        input.status;
+      const receipt: EvidenceReceipt = {
+        ...input,
+        id: randomUUID(),
+        mutationGeneration: generation,
+        createdAt: Date.now(),
+        summary: assertSafeText(input.summary, "Evidence summary", 1000),
+      };
+      task.evidence ??= [];
+      task.evidence.push(receipt);
+      criterion.status = status;
+      criterion.reason = receipt.summary;
+      criterion.mutationGeneration = generation;
+      task.contract.updatedAt = Date.now();
+      task.updatedAt = Date.now();
+      this.persist(task, "evidence.recorded", {
+        criterionId: criterion.id,
+        status,
+        generation,
+        sourceDigest: receipt.sourceDigest,
+      });
+      return structuredClone(task);
+    });
+  }
+
+  async recordCriterionDecision(input: {
+    taskId: string;
+    criterionId: string;
+    decision: "corrected" | "skipped";
+    reason: string;
+    statement?: string;
+  }): Promise<AgentTask> {
+    return this.mutex.runExclusive(async () => {
+      const task = this.requireTask(input.taskId);
+      if (TERMINAL_STATES.has(task.state)) throw new Error("Task is terminal");
+      if (!task.contract)
+        throw new Error(
+          "Cannot decide a criterion without a completion contract",
+        );
+      const criterion = task.contract.criteria.find(
+        (item) => item.id === input.criterionId,
+      );
+      if (!criterion) throw new Error("Unknown completion criterion");
+      const reason = assertSafeText(
+        input.reason,
+        "Criterion decision reason",
+        500,
+      );
+      if (input.decision === "corrected") {
+        criterion.statement = assertSafeText(
+          input.statement ?? "",
+          "Corrected criterion statement",
+          500,
+        );
+        criterion.provenance = "user_explicit";
+        criterion.status = "pending";
+      } else {
+        criterion.status = "user_skipped";
+      }
+      criterion.reason = reason;
+      const receipt: CriterionDecisionReceipt = {
+        id: randomUUID(),
+        criterionId: criterion.id,
+        decision: input.decision,
+        reason,
+        createdAt: Date.now(),
+      };
+      task.criterionDecisions ??= [];
+      task.criterionDecisions.push(receipt);
+      task.contract.updatedAt = Date.now();
+      task.updatedAt = Date.now();
+      this.persist(task, "criterion.decision", {
+        criterionId: criterion.id,
+        decision: receipt.decision,
+        reason,
+      });
       return structuredClone(task);
     });
   }
@@ -649,13 +1045,7 @@ export class TaskRuntime {
   private requireTask(taskId: string): AgentTask {
     const task = this.tasks.get(taskId) ?? this.journal.load(taskId);
     if (!task) throw new Error("Task not found");
-    task.executionGuard ??= {
-      autonomousSteps: 0,
-      maxAutonomousSteps: MAX_AUTONOMOUS_STEPS,
-      repeatedActionLimit: 3,
-      actionDigests: {},
-      cancelRequested: false,
-    };
+    normalizeTask(task);
     for (const subagent of task.subagents ?? []) {
       subagent.dependsOn ??= [];
       subagent.baseWorkspaceRevision ??= task.workspaceRevision;

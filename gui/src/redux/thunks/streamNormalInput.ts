@@ -116,8 +116,12 @@ import {
   resolveTaskScope,
   taskScopeAutoPrompt,
 } from "../util/taskScope";
+import { draftCompletionContract } from "core/agent/completionContract";
+import type { CompletionCriterion, AgentTask } from "core/agent/types";
+import type { TaskScopeAssessment } from "../util/taskScope";
 import type { VerificationCommandCandidate } from "core/workspace/types";
 import { hasPassedRequiredVerification } from "core/agent/verification";
+import { planVerification } from "core/agent/VerificationDiscovery";
 
 // Agent lifecycle persistence is local bookkeeping. It must never hold the
 // visible turn open indefinitely if the extension host is restarting or
@@ -178,6 +182,90 @@ function buildReasoningCompletionOptions(
   }
 
   return reasoningOptions;
+}
+
+const MUTATION_TOOLS = new Set([
+  "edit_existing_file",
+  "single_find_and_replace",
+  "multi_edit",
+  "create_new_file",
+  "create_rule_block",
+  "apply_diff",
+  "rename_symbol",
+]);
+
+function contractEvidenceForTask(
+  task: AgentTask,
+  criterion: CompletionCriterion,
+): Array<{
+  kind: "test" | "typecheck" | "lint" | "build" | "review" | "inspection";
+  summary: string;
+}> {
+  const generation = task.mutationGeneration ?? 0;
+  const mutation = task.approvals.some(
+    (approval) =>
+      approval.decision === "approved" && MUTATION_TOOLS.has(approval.toolName),
+  );
+  const checks = (task.verification ?? []).filter(
+    (result) =>
+      result.status === "passed" &&
+      result.kind !== "response" &&
+      result.kind !== "inspection" &&
+      (result.mutationGeneration ?? generation) === generation,
+  );
+  const receipts: Array<{
+    kind: "test" | "typecheck" | "lint" | "build" | "review" | "inspection";
+    summary: string;
+  }> = [];
+  for (const policy of criterion.evidencePolicy) {
+    if (policy === "changed_surface") {
+      if (mutation && !task.changedSurface) return [];
+      continue;
+    }
+    if (policy === "inspection") {
+      if (mutation) return [];
+      receipts.push({
+        kind: "inspection",
+        summary:
+          "No workspace mutation was recorded; the bounded outcome was inspected.",
+      });
+      continue;
+    }
+    if (policy === "independent_review") {
+      const review = checks.find((result) => result.kind === "review");
+      if (!review) return [];
+      receipts.push({ kind: "review", summary: review.summary });
+      continue;
+    }
+    if (policy === "focused_check" || policy === "relevant_checks") {
+      const check = checks.find((result) =>
+        policy === "focused_check"
+          ? ["test", "typecheck", "lint", "build"].includes(result.kind)
+          : true,
+      );
+      if (!check) {
+        // A read-only medium task can still use inspection evidence; it must
+        // not acquire a compulsory full-suite or todo workflow.
+        if (!mutation && !receipts.length) {
+          receipts.push({
+            kind: "inspection",
+            summary:
+              "No workspace mutation was recorded; the bounded outcome was inspected.",
+          });
+          continue;
+        }
+        return [];
+      }
+      const checkKind =
+        check.kind === "response" || check.kind === "inspection"
+          ? "inspection"
+          : check.kind;
+      receipts.push({ kind: checkKind, summary: check.summary });
+      continue;
+    }
+    return [];
+  }
+  return receipts;
 }
 
 export const streamNormalInput = createAsyncThunk<
@@ -345,6 +433,7 @@ export const streamNormalInput = createAsyncThunk<
     // UserPromptSubmit hooks: exit 2 stops the turn; stdout is attached to the
     // prompt as a context item (persisted, so the whole tool loop sees it).
     let promptHistory = state.session.history;
+    let scopeAssessment: TaskScopeAssessment | undefined;
     if (depth === 0 && !resumeTaskId && latestUserPrompt) {
       const promptHook = await runHooks(extra.ideMessenger, {
         event: "UserPromptSubmit",
@@ -415,6 +504,7 @@ export const streamNormalInput = createAsyncThunk<
           return "";
         }
       });
+      scopeAssessment = assessment;
       // A network/provider failure must not add a fabricated assessment. The
       // stable agent prompt already contains a semantic fallback for this case.
       if (receivedScopeResponse) {
@@ -425,6 +515,29 @@ export const streamNormalInput = createAsyncThunk<
 
     let taskId = resumeTaskId ?? state.session.activeTaskId;
     if (resumeTaskId && state.session.mode === "agent") {
+      // Resume is a lifecycle boundary: revalidate workspace identity and
+      // revision before any new model/tool round can reuse old evidence.
+      try {
+        const workspace = await extra.ideMessenger.request(
+          "workspace/getSnapshot",
+          undefined,
+          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+        );
+        if (workspace.status === "success") {
+          await extra.ideMessenger.request(
+            "agent/task/revalidateWorkspace",
+            {
+              taskId: resumeTaskId,
+              workspaceId: workspace.content.id,
+              workspaceRevision: workspace.content.revision,
+            },
+            AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+          );
+        }
+      } catch {
+        // The existing resume path remains available; verification will still
+        // refuse stale evidence if the local journal cannot be revalidated.
+      }
       await extra.ideMessenger.request(
         "checkpoints/setActiveTask",
         {
@@ -453,6 +566,9 @@ export const streamNormalInput = createAsyncThunk<
             goal: renderChatMessage(
               (latestUserRequest ?? latestUserPrompt).message,
             ),
+            contract: scopeAssessment
+              ? draftCompletionContract(scopeAssessment)
+              : undefined,
           },
           AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
         );
@@ -1046,12 +1162,27 @@ export const streamNormalInput = createAsyncThunk<
         : undefined;
     if (pendingVerification) {
       let candidates: VerificationCommandCandidate[] = [];
+      let unresolvedCriteria: string[] = [];
       try {
         const plan = await extra.ideMessenger.request(
           "workspace/getVerificationPlan",
           undefined,
         );
         if (plan.status === "success") candidates = plan.content;
+        if (taskId) {
+          const task = await extra.ideMessenger.request("agent/task/get", {
+            taskId,
+          });
+          if (task.status === "success") {
+            const planned = planVerification(
+              candidates,
+              task.content?.contract,
+              pendingVerification.files,
+            );
+            candidates = planned.checks.map((item) => item.candidate);
+            unresolvedCriteria = planned.unresolvedCriterionIds;
+          }
+        }
       } catch {
         // The gate still works without detected commands.
       }
@@ -1072,13 +1203,12 @@ export const streamNormalInput = createAsyncThunk<
         pendingVerification.files,
         candidates,
       );
+      const planWarning = unresolvedCriteria.length
+        ? `\n\nUNRESOLVED COMPLETION CRITERIA\nThe repository does not expose a safe discovered command for: ${unresolvedCriteria.join(", ")}. Do not claim those outcomes are verified; report them as blocked or ask for an approved repository-defined check.`
+        : "";
       dispatch(
         appendAutoPrompt(
-          premortem
-            ? `${gate}
-
-${PREMORTEM_GUIDANCE}`
-            : gate,
+          `${premortem ? `${gate}\n\n${PREMORTEM_GUIDANCE}` : gate}${planWarning}`,
         ),
       );
       unwrapResult(await dispatch(streamNormalInput({ depth: depth + 1 })));
@@ -1144,7 +1274,9 @@ ${PREMORTEM_GUIDANCE}`
         finalReply?.message.role === "assistant" &&
         turnEdits(getState().session.history).files.length > 0
       ) {
-        void dispatch(runSideReview({ messageId: finalReply.message.id }));
+        await dispatch(
+          runSideReview({ messageId: finalReply.message.id, taskId }),
+        ).unwrap();
       }
       if (taskId) {
         try {
@@ -1237,6 +1369,40 @@ ${PREMORTEM_GUIDANCE}`
             },
             AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
           );
+          let contractEvidenceSatisfied = true;
+          if (task.status === "success" && task.content?.contract) {
+            for (const criterion of task.content.contract.criteria) {
+              if (!criterion.required || criterion.status === "user_skipped") {
+                continue;
+              }
+              const evidence = contractEvidenceForTask(task.content, criterion);
+              if (!evidence.length) {
+                contractEvidenceSatisfied = false;
+                continue;
+              }
+              for (const receipt of evidence) {
+                try {
+                  await extra.ideMessenger.request(
+                    "agent/task/recordEvidence",
+                    {
+                      taskId,
+                      evidence: {
+                        criterionId: criterion.id,
+                        kind: receipt.kind,
+                        status: "passed",
+                        summary: receipt.summary,
+                      },
+                    },
+                    AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+                  );
+                } catch {
+                  contractEvidenceSatisfied = false;
+                }
+              }
+            }
+          }
+          verificationSatisfied =
+            verificationSatisfied && contractEvidenceSatisfied;
           if (verificationSatisfied) {
             const activeStep =
               task.status === "success"

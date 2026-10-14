@@ -7,6 +7,7 @@
 import { WebView } from "vscode-extension-tester";
 import {
   approvalCount,
+  backgroundAvailable,
   clickStop,
   creditsUsed,
   isStreaming,
@@ -223,12 +224,13 @@ describe("VynorAI smart E2E (real model)", function () {
     );
   });
 
-  it("modes: Background is hidden while the feature is off", async () => {
+  it("modes: Background visibility matches server availability", async () => {
     await smartScenario(
-      "background-hidden",
-      "With BG_ENABLED=false on the server, the mode menu has no Background option.",
+      "background-availability",
+      "The mode menu shows Background exactly when the authenticated server capability is available.",
       async () => {
         await freshAgent();
+        const expected = await backgroundAvailable();
         const { By } = await import("vscode-extension-tester");
         const dropdown = await view.findWebElement(
           By.css("[data-testid='mode-select-button']"),
@@ -237,8 +239,12 @@ describe("VynorAI smart E2E (real model)", function () {
         await sleep(800);
         const text = await pageText(view);
         await dropdown.click();
-        if (/\bBackground\b/.test(text))
-          throw new CheckFailed("Background option visible", text);
+        const visible = /\bBackground\b/.test(text);
+        if (visible !== expected)
+          throw new CheckFailed(
+            `Background visibility mismatch (expected ${expected}, got ${visible})`,
+            text,
+          );
       },
       { retries: 0 },
     );

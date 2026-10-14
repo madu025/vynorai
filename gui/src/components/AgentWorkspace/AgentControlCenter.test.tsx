@@ -14,6 +14,7 @@ const task: AgentTask = {
   sessionId: "session-1",
   workspaceId: "mock-workspace",
   workspaceRevision: 1,
+  goalVersion: 1,
   state: "executing",
   goalDigest: "digest",
   approvals: [],
@@ -27,6 +28,45 @@ const task: AgentTask = {
       createdAt: now,
     },
   ],
+  evidence: [
+    {
+      id: "evidence-1",
+      criterionId: "api-behavior",
+      kind: "test",
+      status: "passed",
+      summary: "Focused API test passed",
+      mutationGeneration: 1,
+      createdAt: now,
+    },
+  ],
+  mutationGeneration: 1,
+  changedSurface: {
+    generation: 1,
+    files: ["backend/src/api.ts"],
+    digest: "a".repeat(64),
+    capturedAt: now,
+  },
+  contract: {
+    id: "contract-1",
+    version: 1,
+    taskId: "00000000-0000-4000-8000-000000000001",
+    goalVersion: 1,
+    workspaceId: "mock-workspace",
+    scope: "medium",
+    confidence: 0.9,
+    criteria: [
+      {
+        id: "api-behavior",
+        statement: "API behavior is verified",
+        provenance: "inferred",
+        required: true,
+        evidencePolicy: ["focused_check"],
+        status: "pending",
+      },
+    ],
+    createdAt: now,
+    updatedAt: now,
+  },
   budget: {
     inputTokens: 10,
     outputTokens: 5,
@@ -127,6 +167,11 @@ describe("AgentControlCenter", () => {
     expect(screen.getByText("npm run test")).toBeInTheDocument();
     expect(screen.getByText(/approval required/i)).toBeInTheDocument();
     expect(screen.getByText("Run evidence")).toBeInTheDocument();
+    expect(screen.getByText("API behavior is verified")).toBeInTheDocument();
+    expect(screen.getByText("evidence")).toBeInTheDocument();
+    expect(screen.getByLabelText("Changed surface")).toHaveTextContent(
+      "backend/src/api.ts",
+    );
     expect(
       screen.getByText("test evidence from run_terminal_command: passed"),
     ).toBeInTheDocument();
@@ -219,5 +264,63 @@ describe("AgentControlCenter", () => {
       "Could not cancel agent task. Try again.",
     );
     expect(screen.getByText("Implement change")).toBeInTheDocument();
+  });
+
+  it("requires an explicit confirmation before recording a criterion skip", async () => {
+    const messenger = new MockIdeMessenger();
+    messenger.responses["agent/task/get"] = task;
+    messenger.responseHandlers["agent/task/recordCriterionDecision"] = async (
+      input,
+    ) => {
+      expect(input.decision.decision).toBe("skipped");
+      return {
+        ...task,
+        contract: {
+          ...task.contract!,
+          criteria: task.contract!.criteria.map((criterion) => ({
+            ...criterion,
+            status: "user_skipped" as const,
+          })),
+        },
+      };
+    };
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const initial = getEmptyRootState();
+    const store = createMockStore(
+      {
+        session: {
+          ...initial.session,
+          id: "session-1",
+          mode: "agent",
+          activeTaskId: task.id,
+          activeTaskState: "executing",
+        },
+        workspace: {
+          loading: false,
+          snapshot: messenger.responses["workspace/getSnapshot"],
+        },
+      },
+      messenger,
+    );
+
+    render(
+      <Provider store={store}>
+        <IdeMessengerContext.Provider value={messenger}>
+          <AgentControlCenter />
+        </IdeMessengerContext.Provider>
+      </Provider>,
+    );
+
+    const skip = await screen.findByRole("button", {
+      name: /Skip verification for API behavior/i,
+    });
+    fireEvent.click(skip);
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith(
+        "Skip this verification criterion? The task will show it as user-skipped, not passed.",
+      ),
+    );
+    expect(await screen.findByText("user skipped")).toBeInTheDocument();
+    confirm.mockRestore();
   });
 });

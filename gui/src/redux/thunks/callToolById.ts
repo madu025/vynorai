@@ -43,6 +43,22 @@ type CallToolInputs = {
 const CORE_TOOL_TIMEOUT_MS = 120_000;
 const AGENT_RUNTIME_REQUEST_TIMEOUT_MS = 15_000;
 const PRIVACY_PLACEHOLDER = /__PII_(?:EMAIL|PHONE|NIC|CARD)_\d+__/;
+const MUTATING_TOOLS = new Set([
+  "edit_existing_file",
+  "single_find_and_replace",
+  "multi_edit",
+  "create_new_file",
+  "create_rule_block",
+  "apply_diff",
+  "rename_symbol",
+]);
+
+function changedFilesForTool(toolCallState: any): string[] {
+  if (!MUTATING_TOOLS.has(toolCallState.toolCall.function.name)) return [];
+  const args = toolCallState.parsedArgs ?? {};
+  const filepath = typeof args.filepath === "string" ? args.filepath : "";
+  return filepath ? [filepath] : [];
+}
 
 export function hasUnrestoredPrivacyPlaceholder(value: unknown): boolean {
   try {
@@ -375,6 +391,18 @@ async function callToolByIdImpl(
   }
 
   if (state.session.activeTaskId) {
+    const changedFiles = !error ? changedFilesForTool(toolCallState) : [];
+    if (changedFiles.length) {
+      try {
+        await extra.ideMessenger.request(
+          "agent/task/recordMutation",
+          { taskId: state.session.activeTaskId, changedFiles },
+          AGENT_RUNTIME_REQUEST_TIMEOUT_MS,
+        );
+      } catch {
+        // A local ledger outage must not hide the actual tool result.
+      }
+    }
     const evidence = verificationFromToolResult({
       toolName: toolCallState.toolCall.function.name,
       command: commandOf(toolCallState),

@@ -15,19 +15,23 @@ import {
   parseSideReview,
   sideReviewPrompt,
   turnEdits,
+  requiresIndependentSideReview,
 } from "../util/sideReview";
+import { currentTaskScope } from "../util/taskScope";
 
 /**
  * Background "You should know" review of the files an agent turn changed.
- * Runs after the turn, never blocks it, and fails silently: it is a hint.
+ * Runs before the task completion receipt. Ordinary turns skip it; complex or
+ * high-risk turns receive a review evidence receipt that the core contract can
+ * require before completion.
  */
 export const runSideReview = createAsyncThunk<
   void,
-  { messageId: string },
+  { messageId: string; taskId?: string },
   ThunkApiType
 >(
   "session/sideReview",
-  async ({ messageId }, { dispatch, extra, getState }) => {
+  async ({ messageId, taskId }, { dispatch, extra, getState }) => {
     const state = getState();
     if (state.ui.sideReviewEnabled === false) return;
     const selected = selectSelectedChatModel(state);
@@ -39,6 +43,13 @@ export const runSideReview = createAsyncThunk<
     );
     const { files, request } = turnEdits(state.session.history);
     if (files.length === 0) return;
+    if (
+      !requiresIndependentSideReview(
+        files,
+        currentTaskScope(state.session.history),
+      )
+    )
+      return;
 
     dispatch(setSideReview({ messageId, note: { status: "running" } }));
     try {
@@ -72,6 +83,12 @@ export const runSideReview = createAsyncThunk<
         dispatch(
           setSideReview({ messageId, note: { status: "done", text: null } }),
         );
+        await recordReviewEvidence(
+          extra,
+          taskId,
+          "blocked",
+          "Independent review could not inspect a non-empty diff.",
+        );
         return;
       }
       const result = await extra.ideMessenger.request("llm/complete", {
@@ -82,10 +99,62 @@ export const runSideReview = createAsyncThunk<
       const text =
         result.status === "success" ? parseSideReview(result.content) : null;
       dispatch(setSideReview({ messageId, note: { status: "done", text } }));
+      await recordReviewEvidence(
+        extra,
+        taskId,
+        result.status !== "success" ? "blocked" : text ? "failed" : "passed",
+        result.status !== "success"
+          ? "Independent review did not return a reliable result."
+          : text
+            ? `Independent review found issues: ${text}`
+            : "Independent review found no blocking issue in the changed surface.",
+      );
     } catch {
       dispatch(
         setSideReview({ messageId, note: { status: "done", text: null } }),
       );
+      await recordReviewEvidence(
+        extra,
+        taskId,
+        "blocked",
+        "Independent review failed before producing a reliable receipt.",
+      );
     }
   },
 );
+
+async function recordReviewEvidence(
+  extra: ThunkApiType["extra"],
+  taskId: string | undefined,
+  status: "passed" | "failed" | "blocked",
+  summary: string,
+): Promise<void> {
+  if (!taskId) return;
+  try {
+    const task = await extra.ideMessenger.request("agent/task/get", { taskId });
+    if (task.status !== "success" || !task.content?.contract) return;
+    const criterion = task.content.contract.criteria.find((item) =>
+      item.evidencePolicy.includes("independent_review"),
+    );
+    if (!criterion) return;
+    await extra.ideMessenger.request("agent/task/recordVerification", {
+      taskId,
+      result: {
+        kind: "review",
+        status: status === "blocked" ? "skipped" : status,
+        summary,
+      },
+    });
+    await extra.ideMessenger.request("agent/task/recordEvidence", {
+      taskId,
+      evidence: {
+        criterionId: criterion.id,
+        kind: "review",
+        status,
+        summary,
+      },
+    });
+  } catch {
+    // Completion remains blocked because the core has no persisted receipt.
+  }
+}

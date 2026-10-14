@@ -40,6 +40,15 @@ export class TaskJournal {
     return JSON.parse(fs.readFileSync(target, "utf8")) as AgentTask;
   }
 
+  /** Remove local task content and its event log for explicit user deletion. */
+  delete(taskId: string): void {
+    this.assertTaskId(taskId);
+    for (const suffix of [".json", ".events.jsonl"]) {
+      const target = path.join(this.directory, `${taskId}${suffix}`);
+      if (fs.existsSync(target)) fs.unlinkSync(target);
+    }
+  }
+
   list(): AgentTask[] {
     return fs
       .readdirSync(this.directory, { withFileTypes: true })

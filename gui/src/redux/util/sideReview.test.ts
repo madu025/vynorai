@@ -6,6 +6,7 @@ import { pendingPremortem } from "./judgment";
 import {
   diffForFiles,
   parseSideReview,
+  requiresIndependentSideReview,
   SIDE_REVIEW_MAX_DIFF_CHARS,
   sideReviewPrompt,
   turnChanges,
@@ -29,6 +30,16 @@ const editCall = (name: string, filepath: string, status = "done") =>
   }) as unknown as ChatHistoryItem;
 
 describe("side review", () => {
+  it("reserves independent review for complex or high-risk surfaces", () => {
+    expect(requiresIndependentSideReview(["src/app.ts"], "simple")).toBe(false);
+    expect(requiresIndependentSideReview(["src/app.ts"], "complex")).toBe(true);
+    expect(
+      requiresIndependentSideReview(["backend/src/auth/session.ts"], "medium"),
+    ).toBe(true);
+    expect(
+      requiresIndependentSideReview(["gui/src/Checkout.tsx"], "medium"),
+    ).toBe(false);
+  });
   it("collects files this turn changed, past auto prompts, with the real request", () => {
     const history = [
       user("old request"),

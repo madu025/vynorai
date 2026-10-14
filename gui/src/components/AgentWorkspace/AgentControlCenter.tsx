@@ -275,6 +275,35 @@ export function AgentControlCenter() {
     }
   };
 
+  const skipCriterion = async (criterionId: string) => {
+    if (!visibleTask || isStreaming || busyTaskId) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Skip this verification criterion? The task will show it as user-skipped, not passed.",
+      )
+    )
+      return;
+    try {
+      const result = await ideMessenger.request(
+        "agent/task/recordCriterionDecision",
+        {
+          taskId: visibleTask.id,
+          decision: {
+            criterionId,
+            decision: "skipped",
+            reason:
+              "User explicitly approved a verification skip from Agent Control Center",
+          },
+        },
+      );
+      if (result.status === "success") setTask(result.content);
+      else setError(result.error);
+    } catch {
+      setError("Could not record the verification skip. Try again.");
+    }
+  };
+
   const restoreTask = async () => {
     if (!visibleTask || isStreaming || busyTaskId) return;
     setBusyTaskId(visibleTask.id);
@@ -466,6 +495,81 @@ export function AgentControlCenter() {
                   </code>
                 ))}
               </div>
+            </div>
+          )}
+          {(visibleTask?.contract?.criteria.length ?? 0) > 0 && (
+            <div className="mt-2" aria-label="Completion criteria">
+              <div className="text-description-muted mb-1 text-[9px] font-medium uppercase tracking-wide">
+                Completion criteria
+              </div>
+              <div className="space-y-1" role="list">
+                {visibleTask!.contract!.criteria.map((criterion) => (
+                  <div
+                    key={criterion.id}
+                    role="listitem"
+                    className="bg-lightgray/5 flex min-w-0 items-center gap-2 rounded px-2 py-1 text-[9px]"
+                  >
+                    {criterion.status === "passed" ? (
+                      <CheckCircleIcon
+                        className="text-success h-3 w-3 shrink-0"
+                        aria-hidden="true"
+                      />
+                    ) : criterion.status === "failed" ||
+                      criterion.status === "blocked" ? (
+                      <ExclamationTriangleIcon
+                        className="text-error h-3 w-3 shrink-0"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <PauseCircleIcon
+                        className="text-warning h-3 w-3 shrink-0"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      title={criterion.statement}
+                    >
+                      {criterion.statement}
+                    </span>
+                    <span className="text-description-muted shrink-0 uppercase">
+                      {criterion.status.replace("_", " ")}
+                    </span>
+                    <span className="text-description-muted shrink-0">
+                      {(visibleTask!.evidence ?? []).filter(
+                        (receipt) =>
+                          receipt.criterionId === criterion.id &&
+                          receipt.mutationGeneration ===
+                            (visibleTask!.mutationGeneration ?? 0),
+                      ).length > 0
+                        ? "evidence"
+                        : "no evidence"}
+                    </span>
+                    {criterion.status !== "passed" &&
+                      criterion.status !== "user_skipped" && (
+                        <button
+                          type="button"
+                          className="text-warning hover:bg-warning/10 cursor-pointer rounded border border-solid border-current bg-transparent px-1 py-0.5 text-[8px]"
+                          onClick={() => void skipCriterion(criterion.id)}
+                          aria-label={`Skip verification for ${criterion.statement}`}
+                        >
+                          Skip
+                        </button>
+                      )}
+                  </div>
+                ))}
+              </div>
+              {visibleTask!.changedSurface && (
+                <div
+                  className="text-description-muted mt-1 truncate text-[9px]"
+                  title={visibleTask!.changedSurface.files.join(", ")}
+                  aria-label="Changed surface"
+                >
+                  Changed surface:{" "}
+                  {visibleTask!.changedSurface.files.slice(0, 4).join(", ")}
+                  {visibleTask!.changedSurface.files.length > 4 ? " …" : ""}
+                </div>
+              )}
             </div>
           )}
           {(visibleTask?.verification.length ?? 0) > 0 && (

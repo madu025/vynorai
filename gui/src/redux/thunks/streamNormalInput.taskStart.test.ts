@@ -134,6 +134,15 @@ describe("a prompt whose task could not be started", () => {
     expect(requests.find((r) => r.type === "agent/task/start")?.data.goal).toBe(
       "build a complete booking platform",
     );
+    expect(
+      requests.find((r) => r.type === "agent/task/start")?.data.contract,
+    ).toMatchObject({
+      version: 1,
+      scope: "complex",
+      criteria: expect.arrayContaining([
+        expect.objectContaining({ id: "booking", statement: "booking" }),
+      ]),
+    });
   });
 
   it("refuses non-todo tools until a complex task has a todo list", async () => {

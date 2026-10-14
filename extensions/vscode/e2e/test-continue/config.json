@@ -4,6 +4,28 @@
   },
   "models": [
     {
+      "title": "VynorAI Auto",
+      "provider": "vynorai",
+      "model": "vynor-auto",
+      "apiBase": "https://vynor.lk/v1",
+      "apiKey": "${{ secrets.VYNORAI_API_KEY }}",
+      "contextLength": 256000,
+      "completionOptions": {
+        "maxTokens": 16384
+      }
+    },
+    {
+      "title": "VynorAI Coder",
+      "provider": "vynorai",
+      "model": "deepseek/deepseek-flash",
+      "apiBase": "https://vynor.lk/v1",
+      "apiKey": "${{ secrets.VYNORAI_API_KEY }}",
+      "contextLength": 256000,
+      "completionOptions": {
+        "maxTokens": 8192
+      }
+    },
+    {
       "title": "TEST LLM",
       "provider": "test",
       "model": "this field is not used"
@@ -42,7 +64,9 @@
                 ]
               }
             ],
-            ["REPEAT_LAST_MSG"]
+            [
+              "REPEAT_LAST_MSG"
+            ]
           ]
         }
       }
@@ -53,7 +77,11 @@
       "model": "claude-sonnet-4-5",
       "requestOptions": {
         "extraBodyProperties": {
-          "chatStream": [["REPEAT_SYSTEM_MSG"]]
+          "chatStream": [
+            [
+              "REPEAT_SYSTEM_MSG"
+            ]
+          ]
         }
       }
     },
@@ -63,16 +91,22 @@
       "model": "claude-sonnet-4-5",
       "requestOptions": {
         "extraBodyProperties": {
-          "chatStream": [["REPEAT_LAST_MSG"]]
+          "chatStream": [
+            [
+              "REPEAT_LAST_MSG"
+            ]
+          ]
         }
       }
     }
   ],
   "systemMessage": "TEST_SYS_MSG",
   "tabAutocompleteModel": {
-    "title": "TEST LLM",
-    "provider": "test",
-    "model": "this field is not used"
+    "title": "VynorAI Autocomplete",
+    "provider": "vynorai",
+    "model": "deepseek/deepseek-flash",
+    "apiBase": "https://vynor.lk/v1",
+    "apiKey": "${{ secrets.VYNORAI_API_KEY }}"
   },
   "tabAutocompleteOptions": {
     "useCache": false

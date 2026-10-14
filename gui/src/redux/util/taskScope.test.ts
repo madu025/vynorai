@@ -26,6 +26,12 @@ describe("task scope preflight", () => {
     expect(prompt).toContain("Build something for my shop");
   });
 
+  test("teaches the semantic risk boundary for authorization work", () => {
+    const prompt = taskScopePrompt("Protect an admin delete operation");
+    expect(prompt).toContain("authorization behavior");
+    expect(prompt).toContain("negative/positive tests");
+  });
+
   test("parses and bounds a valid JSON result", () => {
     expect(
       parseTaskScope(

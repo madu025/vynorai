@@ -33,7 +33,7 @@ Scope definitions:
 - medium: a few related changes whose boundaries are mostly known.
 - complex: a product, subsystem or cross-cutting change with multiple capabilities, roles, modules, unknown boundaries, or meaningful security/data/deployment risk.
 
-Examples are principles, not phrases to match: a complete commerce site implies catalogue, cart, checkout, orders, data and administration, so it is complex; one label change in a named file is simple. Apply the same reasoning in every language.
+Examples are principles, not phrases to match: a complete commerce site implies catalogue, cart, checkout, orders, data and administration, so it is complex; protecting an admin delete operation is at least medium and usually complex because authorization behavior, preserved lookup behavior and negative/positive tests are separate outcomes even when one file changes; one label change in a named file is simple. Apply the same reasoning in every language.
 
 Return exactly one JSON object and no markdown:
 {"scope":"simple|medium|complex","confidence":0.0,"impliedDeliverables":["concrete outcome"],"reason":"one short semantic reason"}

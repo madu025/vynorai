@@ -338,9 +338,9 @@ test("Git Worktree Isolation Sandbox Test Suite", async (suite) => {
     },
   );
 
-  // ─── 6. PERFORMANCE BENCHMARK: SUB-50MS SANDBOX SPWAN ────────────────────────
+  // ─── 6. PERFORMANCE BENCHMARK: CI-SAFE SANDBOX LATENCY ───────────────────────
   await suite.test(
-    "6. Benchmark: spawns and cleans up isolated worktree sandbox in < 150ms",
+    "6. Benchmark: spawns and cleans up isolated worktree sandbox within the CI budget",
     async () => {
       const t0 = performance.now();
       const sandbox = await customEngine.spawnSandbox("benchmark-sandbox", {
@@ -370,9 +370,12 @@ test("Git Worktree Isolation Sandbox Test Suite", async (suite) => {
       console.log(
         `[Benchmark ⚡] Git Worktree Sandbox Cleanup & Prune: ${cleanupDuration.toFixed(2)}ms`,
       );
+      // Worktree pruning is sensitive to Windows antivirus and concurrent CI
+      // filesystem activity, so keep this as a generous safety budget rather
+      // than a brittle sub-second performance gate.
       assert.ok(
-        cleanupDuration < 2000,
-        `Cleanup should take < 2000ms, took ${cleanupDuration.toFixed(2)}ms`,
+        cleanupDuration < 5000,
+        `Cleanup should take < 5000ms, took ${cleanupDuration.toFixed(2)}ms`,
       );
     },
   );

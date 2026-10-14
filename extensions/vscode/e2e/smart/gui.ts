@@ -68,6 +68,14 @@ export async function openPanel(): Promise<{
   return attachToPanel();
 }
 
+/** Run a workbench command through the normal top-level document. */
+export async function executeWorkbenchCommand(command: string) {
+  await retry(async () => {
+    await VSBrowser.instance.driver.switchTo().defaultContent();
+    await new Workbench().executeCommand(command);
+  }, 60_000);
+}
+
 /**
  * The extension bundle is large: loading it takes ~6 s and its commands are
  * registered at the end of activation (~8 s after start). The command palette
@@ -77,6 +85,9 @@ export async function openPanel(): Promise<{
  */
 async function waitForExtensionActive() {
   await retry(async () => {
+    // `openResources` and a previous webview can leave ChromeDriver focused
+    // inside an iframe. Workbench queries only exist in the top-level page.
+    await VSBrowser.instance.driver.switchTo().defaultContent();
     const statusBar = await new Workbench().getStatusBar();
     await statusBar.findElement(By.xpath("//*[contains(., 'VynorAI')]"));
   }, 60_000);
@@ -117,13 +128,23 @@ export async function attachToPanel(
     for (const iframe of await driver.findElements(By.css("iframe"))) {
       const src = (await iframe.getAttribute("src")) || "";
       if (/extensionId=vynorai\.vynorai/i.test(src)) {
-        await driver.switchTo().frame(iframe);
-        const appFrame = await driver.findElement(By.css("iframe"));
-        await driver.switchTo().frame(appFrame);
-        return;
+        try {
+          await driver.switchTo().frame(iframe);
+          const appFrame = await driver.findElement(By.css("iframe"));
+          await driver.switchTo().frame(appFrame);
+          const ready = await driver.executeScript(
+            "return !!document.querySelector(arguments[0])",
+            readySelector,
+          );
+          if (ready) return;
+        } catch {
+          // A stale/hidden extension iframe can remain after reload. Try the
+          // next VynorAI frame instead of binding the test to the first one.
+        }
+        await driver.switchTo().defaultContent();
       }
     }
-    throw new Error("VynorAI webview not found");
+    throw new Error(`VynorAI webview with ${readySelector} not found`);
   }, 30_000);
   // A new session/sign-in can reload the React app asynchronously. Do not
   // query controls while the webview is still on its loading/config state.
@@ -288,6 +309,20 @@ export async function creditsUsed(): Promise<number> {
   });
   const data: any = await response.json();
   return Number(data?.tokens?.used ?? 0);
+}
+
+/** Read the same server capability that the extension uses for mode gating. */
+export async function backgroundAvailable(): Promise<boolean> {
+  const response = await fetch(`${API_BASE}/v1/background/availability`, {
+    headers: { authorization: `Bearer ${e2eApiKey()}` },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `background availability request failed (${response.status})`,
+    );
+  }
+  const data: any = await response.json();
+  return data?.available === true;
 }
 
 export function sleep(ms: number) {

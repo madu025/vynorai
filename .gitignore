@@ -154,6 +154,9 @@ manual-testing-sandbox/.idea/**
 manual-testing-sandbox/.continue/**
 extensions/intellij/.idea/**
 
+# Runtime profile and generated indexes from live VS Code E2E verification
+extensions/vscode/e2e/live-continue/
+
 **/.idea/workspace.xml
 **/.idea/usage.statistics.xml
 **/.idea/shelf/

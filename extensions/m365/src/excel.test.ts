@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   assertConfirmedApproval,
   createExcelPreviewPlan,
+  excelSafeBaseName,
   profileExcelRange,
 } from "./excel.js";
 
@@ -38,4 +39,14 @@ test("mutation gate requires confirmation and approval token", () => {
   assert.throws(() => assertConfirmedApproval(false), /confirmation/);
   assert.throws(() => assertConfirmedApproval(true), /approval token/);
   assert.doesNotThrow(() => assertConfirmedApproval(true, "approval"));
+});
+
+test("generated result sheet names fit Excel's 31-character limit", () => {
+  const plan = createExcelPreviewPlan(
+    { ...input, worksheetName: "Quarterly Revenue Summary 2026" },
+    ["table", "chart", "new-sheet", "pivot-table"],
+  );
+  for (const action of plan.actions)
+    assert.ok(action.targetSheet.length <= 31, action.targetSheet);
+  assert.equal(excelSafeBaseName("2026"), "S_2026");
 });

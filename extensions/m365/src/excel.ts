@@ -38,7 +38,8 @@ type ExcelActionPlan = {
 
 const DEFAULT_CHUNK_ROWS = 500;
 
-function fingerprint(input: ExcelRangeInput): string {
+/** Local FNV-1a fingerprint of the exact source cells; used to prove the source is unchanged. */
+export function fingerprintExcelRange(input: ExcelRangeInput): string {
   let hash = 2166136261;
   const serialized = JSON.stringify({
     workbookId: input.workbookId,
@@ -89,7 +90,7 @@ export function profileExcelRange(
     blankCells,
     duplicateHeaderNames: [...duplicateHeaderNames].sort(),
     chunkCount: Math.max(1, Math.ceil(dataRows / chunkRows)),
-    sourceFingerprint: fingerprint(input),
+    sourceFingerprint: fingerprintExcelRange(input),
   };
 }
 
@@ -100,8 +101,7 @@ export function createExcelPreviewPlan(
 ): Omit<ExcelActionPlan, "planId" | "approvalToken" | "expiresAt"> {
   const profile = profileExcelRange(input, chunkRows);
   const safeActions = [...new Set(requestedActions)];
-  const baseName =
-    input.worksheetName.replace(/[^A-Za-z0-9_]/g, "_").slice(0, 24) || "Sheet";
+  const baseName = excelSafeBaseName(input.worksheetName);
   const actions = safeActions.map((kind) => ({
     kind,
     name: `${baseName}_Vynor_${kind.replace("-", "_")}`,
@@ -158,4 +158,16 @@ export function assertConfirmedApproval(
     throw new Error(
       "A valid approval token is required before workbook mutation",
     );
+}
+
+/**
+ * Excel caps sheet names at 31 characters and object names must start with a letter or "_".
+ * 18 characters + "_Vynor_Result" (13) stays within the sheet-name limit.
+ */
+export function excelSafeBaseName(worksheetName: string): string {
+  const base =
+    String(worksheetName)
+      .replace(/[^A-Za-z0-9_]/g, "_")
+      .slice(0, 18) || "Sheet";
+  return /^[A-Za-z_]/.test(base) ? base : `S_${base}`.slice(0, 18);
 }

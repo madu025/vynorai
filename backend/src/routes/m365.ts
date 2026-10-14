@@ -1,5 +1,4 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { dbGet } from "../db.js";
 import { getOrInitMonthlyUsage } from "../services/monthlyQuota.js";
 import { logSecurityEvent } from "../services/securityAudit.js";
 import {
@@ -10,6 +9,10 @@ import {
 } from "../services/m365Policy.js";
 import { createServerExcelPreviewPlan } from "../services/m365ExcelPlan.js";
 import { requireM365TenantScope } from "../services/m365TenantRegistry.js";
+import {
+  diagnoseM365Identity,
+  findM365IdentityLink,
+} from "../services/m365Diagnostics.js";
 import { z, validateBody } from "../middleware/validate.js";
 
 const excelPlanSchema = z.object({
@@ -72,13 +75,9 @@ async function requireM365Auth(
       }
       return res.status(403).json({ error: { code } });
     }
-    const link = await dbGet<{
-      user_id: string;
-      email: string;
-      subscription_plan?: string;
-    }>(
-      "SELECT l.user_id, u.email, s.plan_name as subscription_plan FROM m365_identity_links l JOIN users u ON u.id = l.user_id LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' WHERE l.tenant_id = ? AND l.object_id = ? AND l.enabled = 1 ORDER BY s.valid_until DESC LIMIT 1",
-      [m365Identity.tenantId, m365Identity.objectId],
+    const link = await findM365IdentityLink(
+      m365Identity.tenantId,
+      m365Identity.objectId,
     );
     if (!link)
       return res
@@ -99,6 +98,34 @@ async function requireM365Auth(
 }
 
 export const m365Router = Router();
+
+/** Per-gate access report for the task pane; needs a valid Entra token, changes no access state. */
+m365Router.get("/diagnostics", async (req: Request, res: Response) => {
+  const authorization = req.headers.authorization;
+  if (!authorization?.startsWith("Bearer "))
+    return res.json({
+      stages: [{ name: "token", ok: false, code: "OAUTH_REQUIRED" }],
+      ready: { read: false, write: false },
+    });
+  let m365Identity;
+  try {
+    m365Identity = await validateEntraAccessToken(
+      authorization.slice("Bearer ".length).trim(),
+    );
+  } catch (error) {
+    return res.json({
+      stages: [
+        {
+          name: "token",
+          ok: false,
+          code: (error as Error).message || "INVALID_OAUTH_TOKEN",
+        },
+      ],
+      ready: { read: false, write: false },
+    });
+  }
+  res.json(await diagnoseM365Identity(m365Identity));
+});
 m365Router.post(
   "/excel/plan",
   requireM365Auth,

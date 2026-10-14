@@ -1,3 +1,13 @@
+export interface M365AccessDiagnostics {
+  stages: Array<{
+    name: string;
+    ok: boolean;
+    code?: string;
+    detail?: Record<string, unknown>;
+  }>;
+  ready: { read: boolean; write: boolean };
+}
+
 export interface M365ApiClient {
   planExcel(input: unknown): Promise<any>;
   approveExcel(input: {
@@ -5,12 +15,23 @@ export interface M365ApiClient {
     sourceFingerprint: string;
     approvalToken: string;
   }): Promise<any>;
+  diagnose(): Promise<M365AccessDiagnostics>;
+}
+
+export interface M365RequestTrace {
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  correlationId: string;
+  code?: string;
 }
 
 export class M365ApiError extends Error {
   constructor(
     public readonly code: string,
     public readonly status: number,
+    public readonly correlationId?: string,
   ) {
     super(code);
     this.name = "M365ApiError";
@@ -21,28 +42,67 @@ export function createM365ApiClient(
   baseUrl: string,
   accessToken: string,
   fetcher: typeof fetch = fetch,
+  onTrace: (trace: M365RequestTrace) => void = () => {},
 ): M365ApiClient {
   if (!accessToken) throw new Error("M365 OAuth access token is required");
-  const request = async (path: string, body: unknown) => {
-    const response = await fetcher(`${baseUrl.replace(/\/$/, "")}${path}`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json",
-        "x-correlation-id": crypto.randomUUID(),
-      },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      const code = payload?.error?.code || "M365_API_REQUEST_FAILED";
-      throw new M365ApiError(code, response.status);
+  const request = async (
+    method: "GET" | "POST",
+    path: string,
+    body?: unknown,
+  ) => {
+    const correlationId = crypto.randomUUID();
+    const started = Date.now();
+    let response: Response;
+    try {
+      response = await fetcher(`${baseUrl.replace(/\/$/, "")}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          "x-correlation-id": correlationId,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch {
+      onTrace({
+        method,
+        path,
+        status: 0,
+        durationMs: Date.now() - started,
+        correlationId,
+        code: "NETWORK_ERROR",
+      });
+      throw new M365ApiError("NETWORK_ERROR", 0, correlationId);
     }
+    // A proxy or gateway error page is HTML, not the JSON error contract.
+    const payload = await response.json().catch(() => undefined);
+    const code = response.ok
+      ? undefined
+      : payload?.error?.code ||
+        (typeof payload?.error === "string" ? payload.error : undefined) ||
+        `HTTP_${response.status}`;
+    onTrace({
+      method,
+      path,
+      status: response.status,
+      durationMs: Date.now() - started,
+      correlationId,
+      code,
+    });
+    if (!response.ok)
+      throw new M365ApiError(code!, response.status, correlationId);
+    if (payload === undefined)
+      throw new M365ApiError(
+        "INVALID_JSON_RESPONSE",
+        response.status,
+        correlationId,
+      );
     return payload;
   };
   return {
-    planExcel: (input) => request("/v1/m365/excel/plan", input),
+    planExcel: (input) => request("POST", "/v1/m365/excel/plan", input),
     approveExcel: (input) =>
-      request("/v1/m365/excel/apply", { ...input, confirmed: true }),
+      request("POST", "/v1/m365/excel/apply", { ...input, confirmed: true }),
+    diagnose: () => request("GET", "/v1/m365/diagnostics"),
   };
 }

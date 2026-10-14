@@ -18,7 +18,9 @@
       button:hover:not(:disabled) { background: #eff6ff; }
       button:disabled { cursor: not-allowed; opacity: .5; }
       pre { margin: 0; white-space: pre-wrap; background: #f3f4f6; padding: 10px; max-height: 320px; overflow: auto; }
-      #diagnostics { color: #7f1d1d; font-size: 12px; }
+      #diagnostics { color: #1f2937; font-size: 12px; }
+      #diagnostics-summary { min-height: 18px; margin: 8px 0; font-weight: 600; }
+      .actions + .actions { margin-top: 8px; }
       #apply:disabled { opacity: .5; }
     </style>
   </head>
@@ -35,6 +37,12 @@
       <h2>Preview</h2>
       <pre id="preview">No preview yet.</pre>
       <h2>Diagnostics</h2>
+      <div class="actions">
+        <button id="self-test" type="button">Run self-test</button>
+        <button id="copy-diagnostics" type="button">Copy diagnostics</button>
+        <button id="clear-diagnostics" type="button">Clear</button>
+      </div>
+      <p id="diagnostics-summary" aria-live="polite"></p>
       <pre id="diagnostics">No sign-in diagnostics yet.</pre>
     </main>
     <script>
@@ -42,6 +50,7 @@
         var status = document.getElementById("status");
         var diagnostics = document.getElementById("diagnostics");
         function note(message) {
+          if (window.__VYNORAI_DIAG_NOTE__) return window.__VYNORAI_DIAG_NOTE__(message);
           if (!diagnostics) return;
           var prior = diagnostics.textContent === "No sign-in diagnostics yet." ? "" : diagnostics.textContent + "\n";
           diagnostics.textContent = prior + new Date().toISOString() + " " + message;
@@ -73,7 +82,7 @@
     <script nomodule>
       document.getElementById("status").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";
     </script>
-    <script src="./runtime-config.js?v=20261014.6"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261014.6"></script>
+    <script src="./runtime-config.js?v=20261014.7"></script>
+    <script src="./dist/taskpane.bundle.js?v=20261014.7"></script>
   </body>
 </html>

@@ -36,8 +36,7 @@ export function createServerExcelPreviewPlan(
       .update(JSON.stringify(input))
       .digest("hex"),
   };
-  const baseName =
-    input.worksheetName.replace(/[^A-Za-z0-9_]/g, "_").slice(0, 24) || "Sheet";
+  const baseName = excelSafeBaseName(input.worksheetName);
   const actions = [...new Set(requestedActions)].map((kind) => ({
     kind,
     name: `${baseName}_Vynor_${kind.replace("-", "_")}`,
@@ -69,4 +68,16 @@ export function createServerExcelPreviewPlan(
     warnings,
     requiresConfirmation: true,
   };
+}
+
+/**
+ * Excel caps sheet names at 31 characters and object names must start with a letter or "_".
+ * 18 characters + "_Vynor_Result" (13) stays within the sheet-name limit.
+ */
+export function excelSafeBaseName(worksheetName: string): string {
+  const base =
+    String(worksheetName)
+      .replace(/[^A-Za-z0-9_]/g, "_")
+      .slice(0, 18) || "Sheet";
+  return /^[A-Za-z_]/.test(base) ? base : `S_${base}`.slice(0, 18);
 }

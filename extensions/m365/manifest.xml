@@ -11,6 +11,6 @@
   <SupportUrl DefaultValue="https://vynor.lk/support" />
   <AppDomains><AppDomain>https://vynor.lk</AppDomain></AppDomains>
   <Hosts><Host Name="Workbook" /></Hosts>
-  <DefaultSettings><SourceLocation DefaultValue="https://vynor.lk/m365/taskpane.html?v=20261014.6" /></DefaultSettings>
+  <DefaultSettings><SourceLocation DefaultValue="https://vynor.lk/m365/taskpane.html?v=20261014.7" /></DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>

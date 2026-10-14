@@ -24,3 +24,54 @@ test("M365 API preserves structured policy errors for recovery UI", async () => 
       error.status === 401,
   );
 });
+
+test("M365 API turns a gateway HTML error into a traced HTTP code", async () => {
+  const traces: any[] = [];
+  const client = createM365ApiClient(
+    "https://api.example/",
+    "test-token",
+    async () => new Response("<html>Bad gateway</html>", { status: 502 }),
+    (trace) => traces.push(trace),
+  );
+  await assert.rejects(
+    () => client.planExcel({}),
+    (error: unknown) =>
+      error instanceof M365ApiError &&
+      error.code === "HTTP_502" &&
+      typeof error.correlationId === "string",
+  );
+  assert.equal(traces[0].status, 502);
+  assert.equal(traces[0].path, "/v1/m365/excel/plan");
+  assert.equal(traces[0].correlationId.length > 0, true);
+});
+
+test("M365 API reports network failures and calls diagnostics with GET", async () => {
+  const offline = createM365ApiClient("https://api.example", "t", async () => {
+    throw new TypeError("Failed to fetch");
+  });
+  await assert.rejects(() => offline.diagnose(), /NETWORK_ERROR/);
+
+  let seen: { url: string; method?: string; body?: unknown } | undefined;
+  const client = createM365ApiClient(
+    "https://api.example",
+    "t",
+    async (url, init) => {
+      seen = { url: String(url), method: init?.method, body: init?.body };
+      return new Response(
+        JSON.stringify({ stages: [], ready: { read: true, write: true } }),
+        {
+          status: 200,
+        },
+      );
+    },
+  );
+  assert.deepEqual((await client.diagnose()).ready, {
+    read: true,
+    write: true,
+  });
+  assert.deepEqual(seen, {
+    url: "https://api.example/v1/m365/diagnostics",
+    method: "GET",
+    body: undefined,
+  });
+});

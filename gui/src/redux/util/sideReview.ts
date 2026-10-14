@@ -16,6 +16,13 @@ const EDIT_TOOLS = new Set<string>([
 
 export const SIDE_REVIEW_MAX_DIFF_CHARS = 8000;
 
+export type SideReviewResult = {
+  blocking: string[];
+  warnings: string[];
+  /** False when the model did not follow the required review format. */
+  reliable: boolean;
+};
+
 /** Side review is reserved for complex or deterministically high-risk work. */
 export function requiresIndependentSideReview(
   files: string[],
@@ -209,9 +216,33 @@ ${request.slice(0, 1500)}
 The diff:
 ${diff}
 
-List at most 3 concrete problems a careful senior engineer would flag: a secret or credential in code, debug or leftover code, a likely bug or broken import, missing error handling at a boundary, a change outside what was asked, or a test that should exist and does not.
-One short line each, starting with "- ". Name the file.
-If nothing is worth flagging, reply exactly: NONE`;
+List at most 3 concrete problems a careful senior engineer would flag. Use exactly one of these prefixes for every line:
+[block] file: a security problem, likely correctness bug, broken boundary, or missing evidence that makes completion unsafe.
+[warn] file: a non-blocking concern that is useful to mention but must not prevent completion.
+Do not treat style, naming, or an optional extra test as [block]. Name the file. If nothing is worth flagging, reply exactly: NONE.`;
+}
+
+/** Parse the strict review protocol. Unstructured output is not reliable. */
+export function parseSideReviewResult(text: string): SideReviewResult {
+  const trimmed = text.trim();
+  if (!trimmed) return { blocking: [], warnings: [], reliable: false };
+  if (/^none\.?$/i.test(trimmed))
+    return { blocking: [], warnings: [], reliable: true };
+  const lines = trimmed
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length > 3) return { blocking: [], warnings: [], reliable: false };
+  const blocking: string[] = [];
+  const warnings: string[] = [];
+  for (const line of lines) {
+    const match = line.match(/^\[(block|warn)\]\s+(.+)$/i);
+    if (!match) return { blocking: [], warnings: [], reliable: false };
+    const formatted = `- ${match[2].trim()}`;
+    if (match[1].toLowerCase() === "block") blocking.push(formatted);
+    else warnings.push(formatted);
+  }
+  return { blocking, warnings, reliable: true };
 }
 
 /** The note to show, or null when the reviewer found nothing. */
@@ -220,8 +251,8 @@ export function parseSideReview(text: string): string | null {
   if (!trimmed || /^none\.?$/i.test(trimmed)) return null;
   const lines = trimmed
     .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith("- "))
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
     .slice(0, 3);
   return lines.length ? lines.join("\n") : null;
 }

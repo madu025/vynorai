@@ -12,7 +12,7 @@ import {
   filesMissingFromDiff,
   turnChanges,
   newFileDiff,
-  parseSideReview,
+  parseSideReviewResult,
   sideReviewPrompt,
   turnEdits,
   requiresIndependentSideReview,
@@ -96,18 +96,32 @@ export const runSideReview = createAsyncThunk<
         prompt: sideReviewPrompt(request, diff),
         completionOptions: { maxTokens: 300, temperature: 0, reasoning: false },
       });
+      const parsed =
+        result.status === "success"
+          ? parseSideReviewResult(result.content)
+          : undefined;
       const text =
-        result.status === "success" ? parseSideReview(result.content) : null;
+        parsed?.reliable && (parsed.blocking.length || parsed.warnings.length)
+          ? [...parsed.blocking, ...parsed.warnings].join("\n")
+          : null;
       dispatch(setSideReview({ messageId, note: { status: "done", text } }));
       await recordReviewEvidence(
         extra,
         taskId,
-        result.status !== "success" ? "blocked" : text ? "failed" : "passed",
+        result.status !== "success" || !parsed?.reliable
+          ? "blocked"
+          : parsed.blocking.length
+            ? "failed"
+            : "passed",
         result.status !== "success"
           ? "Independent review did not return a reliable result."
-          : text
-            ? `Independent review found issues: ${text}`
-            : "Independent review found no blocking issue in the changed surface.",
+          : !parsed?.reliable
+            ? "Independent review returned an unstructured result."
+            : parsed.blocking.length
+              ? `Independent review found blocking issues: ${parsed.blocking.join(" ")}`
+              : parsed.warnings.length
+                ? `Independent review found non-blocking warnings: ${parsed.warnings.join(" ")}`
+                : "Independent review found no blocking issue in the changed surface.",
       );
     } catch {
       dispatch(

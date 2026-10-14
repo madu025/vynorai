@@ -734,6 +734,20 @@ without a blocking finding (`1/1`). The side-review receipt kept both defective 
 a larger blinded balanced set and predeclared recall/false-block/overhead ceilings are still
 required before Phase 4 is promoted.
 
+#### Phase 4 live protocol measurement (2026-10-14)
+
+The reviewer now has an explicit, fail-closed response protocol: `[block]` findings
+can block completion, `[warn]` findings are displayed but do not fail the required
+independent-review criterion, and empty or unstructured output is recorded as an
+unreliable review and blocks completion. The live blinded corpus runner is
+`backend/scripts/bench/phase4-review-live.ts` and retains no review text or source
+snippets. The real production run is recorded in
+`backend/bench-results/phase4-review-live-20261014T052729Z.md`: 5/6 blocking
+defects caught, 5/6 controls clear, and 1 unreliable reviewer output. That is an
+implementation and measurement improvement, not a Phase 4 promotion: the recall,
+false-block and reviewer-reliability ceilings are not all met yet and repeated
+independent runs are still required.
+
 ### Phase 5: exact-cost comparison, canary and controlled rollout
 
 1. Add stable request classes and a correlation/task/run ID for scope, optional contract call, main

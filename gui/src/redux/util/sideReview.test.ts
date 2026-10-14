@@ -6,6 +6,7 @@ import { pendingPremortem } from "./judgment";
 import {
   diffForFiles,
   parseSideReview,
+  parseSideReviewResult,
   requiresIndependentSideReview,
   SIDE_REVIEW_MAX_DIFF_CHARS,
   sideReviewPrompt,
@@ -80,6 +81,32 @@ describe("side review", () => {
       parseSideReview("Here:\n- src/auth.ts: API key hardcoded\n- a\n- b\n- c"),
     ).toBe("- src/auth.ts: API key hardcoded\n- a\n- b");
     expect(sideReviewPrompt("x", "diff")).toMatch(/reply exactly: NONE/);
+  });
+
+  it("separates blocking findings from warnings", () => {
+    expect(
+      parseSideReviewResult(
+        "[block] src/auth.ts: authorization is missing\n[warn] src/auth.ts: add an edge-case test",
+      ),
+    ).toEqual({
+      blocking: ["- src/auth.ts: authorization is missing"],
+      warnings: ["- src/auth.ts: add an edge-case test"],
+      reliable: true,
+    });
+  });
+
+  it("fails closed for unstructured reviewer output", () => {
+    expect(
+      parseSideReviewResult("- src/auth.ts: authorization is missing"),
+    ).toEqual({
+      blocking: [],
+      warnings: [],
+      reliable: false,
+    });
+    expect(parseSideReviewResult("").reliable).toBe(false);
+    expect(
+      parseSideReviewResult("[block] a\n[warn] b\n[warn] c\n[warn] d").reliable,
+    ).toBe(false);
   });
 });
 

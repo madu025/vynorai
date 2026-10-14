@@ -66,9 +66,12 @@ async function prepareTask(
     task.upload_artifact_id,
     Number(process.env.BG_MAX_UPLOAD_BYTES || 100 * 1024 * 1024),
   );
+  // The root-owned launcher bind-mounts these files into the non-root
+  // runsc UID (65532). The staging directory remains 0700; the files need
+  // read permission for the sandbox user, but are never writable there.
   await fs.promises.writeFile(path.join(staging, "project.zip"), archive, {
     flag: "wx",
-    mode: 0o600,
+    mode: 0o644,
   });
   const prompt = decryptCredential(
     (
@@ -81,7 +84,7 @@ async function prepareTask(
   if (!prompt) throw new Error("TASK_PROMPT_UNAVAILABLE");
   await fs.promises.writeFile(path.join(staging, "prompt.txt"), prompt, {
     flag: "wx",
-    mode: 0o600,
+    mode: 0o644,
   });
   await fs.promises.mkdir(path.join(staging, "output"), { mode: 0o700 });
   return { task: { ...task, status: "running" }, staging };

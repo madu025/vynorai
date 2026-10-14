@@ -95,11 +95,12 @@ function reportFailure(label, result) {
 async function runSandbox(body) {
   const name = `vynor-bg-${body.taskId}`;
   const startedAt = new Date().toISOString();
-  fs.mkdirSync(body.outputDirectory, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(body.outputDirectory, { recursive: true, mode: 0o770 });
   // Output must survive container exit so the worker can validate proof.json
   // and patch.json. Keep it private on the host, but writable by the
   // non-root runner UID inside the sandbox.
-  fs.chownSync(body.outputDirectory, 65532, 65532);
+  fs.chownSync(body.outputDirectory, 65532, 1000);
+  fs.chmodSync(body.outputDirectory, 0o770);
   fs.mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
   const seed = path.join(cacheRoot, body.cacheKey);
   const args = [

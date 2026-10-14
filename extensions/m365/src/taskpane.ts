@@ -44,7 +44,9 @@ function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
       (result: any) => {
         if (result.status !== office.AsyncResultStatus.Succeeded)
           return reject(
-            new Error("Unable to open the Microsoft sign-in dialog."),
+            new Error(
+              `Unable to open the Microsoft sign-in dialog (${result.error?.code || "unknown"}).`,
+            ),
           );
         const dialog = result.value;
         const closeWithError = (message: string) => {
@@ -69,8 +71,12 @@ function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
             }
           },
         );
-        dialog.addEventHandler(office.EventType.DialogEventReceived, () =>
-          closeWithError("Microsoft sign-in was closed or failed."),
+        dialog.addEventHandler(
+          office.EventType.DialogEventReceived,
+          (event: any) =>
+            closeWithError(
+              `Microsoft sign-in dialog event ${event.error || "unknown"}: ${event.message || "closed"}`,
+            ),
         );
       },
     );

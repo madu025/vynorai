@@ -1,6 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { validateM365Identity } from "../src/services/m365Policy.js";
+import {
+  entraConfiguration,
+  validateM365Identity,
+} from "../src/services/m365Policy.js";
+
+test("M365 Entra audience defaults to the API Application ID URI", () => {
+  const previous = {
+    tenant: process.env.M365_ENTRA_TENANT_ID,
+    api: process.env.M365_ENTRA_API_CLIENT_ID,
+    client: process.env.M365_ENTRA_CLIENT_ID,
+    audience: process.env.M365_ENTRA_API_AUDIENCE,
+  };
+  process.env.M365_ENTRA_TENANT_ID = "tenant-a";
+  process.env.M365_ENTRA_API_CLIENT_ID = "api-a";
+  process.env.M365_ENTRA_CLIENT_ID = "client-a";
+  delete process.env.M365_ENTRA_API_AUDIENCE;
+  assert.equal(entraConfiguration().apiAudience, "api://api-a");
+  process.env.M365_ENTRA_API_AUDIENCE = "api://custom-api";
+  assert.equal(entraConfiguration().apiAudience, "api://custom-api");
+  Object.assign(process.env, {
+    M365_ENTRA_TENANT_ID: previous.tenant,
+    M365_ENTRA_API_CLIENT_ID: previous.api,
+    M365_ENTRA_CLIENT_ID: previous.client,
+    M365_ENTRA_API_AUDIENCE: previous.audience,
+  });
+});
 
 test("M365 identity denies missing tenant configuration", () => {
   const previous = {

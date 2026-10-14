@@ -31,6 +31,7 @@ let jwksCache: { expiresAt: number; keys: JwksResponse["keys"] } | undefined;
 export function entraConfiguration(): {
   tenantId: string;
   apiClientId: string;
+  apiAudience: string;
   allowedClientIds: string[];
   issuer: string;
   jwksUrl: string;
@@ -51,6 +52,10 @@ export function entraConfiguration(): {
   return {
     tenantId,
     apiClientId,
+    // Entra's default Application ID URI is api://<application-client-id>.
+    // A resource access token carries that URI in aud, not the bare client ID.
+    apiAudience:
+      process.env.M365_ENTRA_API_AUDIENCE?.trim() || `api://${apiClientId}`,
     allowedClientIds,
     multiTenant,
     issuer:
@@ -84,7 +89,7 @@ export async function validateEntraAccessToken(
   });
   const claims = jwt.verify(token, publicKey, {
     algorithms: ["RS256"],
-    audience: settings.apiClientId,
+    audience: settings.apiAudience,
   }) as EntraClaims;
   const expectedIssuer = settings.multiTenant
     ? `https://login.microsoftonline.com/${claims.tid}/v2.0`

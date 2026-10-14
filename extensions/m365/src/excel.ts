@@ -36,6 +36,11 @@ type ExcelActionPlan = {
   requiresConfirmation: true;
 };
 
+type ComparableExcelPlan = Omit<
+  ExcelActionPlan,
+  "planId" | "approvalToken" | "expiresAt"
+>;
+
 const DEFAULT_CHUNK_ROWS = 500;
 
 /** Local FNV-1a fingerprint of the exact source cells; used to prove the source is unchanged. */
@@ -144,6 +149,33 @@ export function createExcelPreviewPlan(
     warnings,
     requiresConfirmation: true,
   };
+}
+
+/** Confirms that the server authorized the exact local preview, excluding its hash implementation. */
+export function excelPlansMatch(
+  local: ComparableExcelPlan,
+  server: Partial<ExcelActionPlan>,
+): boolean {
+  const comparableProfile = (profile: any) => ({
+    rowCount: profile?.rowCount,
+    columnCount: profile?.columnCount,
+    headerCount: profile?.headerCount,
+    blankCells: profile?.blankCells,
+    duplicateHeaderNames: profile?.duplicateHeaderNames,
+    chunkCount: profile?.chunkCount,
+  });
+  return (
+    server.contractVersion === local.contractVersion &&
+    server.workbookId === local.workbookId &&
+    server.worksheetName === local.worksheetName &&
+    server.sourceAddress === local.sourceAddress &&
+    server.requiresConfirmation === true &&
+    JSON.stringify(comparableProfile(server.profile)) ===
+      JSON.stringify(comparableProfile(local.profile)) &&
+    JSON.stringify(server.chunks) === JSON.stringify(local.chunks) &&
+    JSON.stringify(server.actions) === JSON.stringify(local.actions) &&
+    JSON.stringify(server.warnings) === JSON.stringify(local.warnings)
+  );
 }
 
 export function assertConfirmedApproval(

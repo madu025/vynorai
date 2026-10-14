@@ -3,9 +3,9 @@ import { getOrInitMonthlyUsage } from "../services/monthlyQuota.js";
 import { logSecurityEvent } from "../services/securityAudit.js";
 import {
   createM365ApprovalToken,
+  consumeM365ApprovalToken,
   validateEntraAccessToken,
   validateM365Identity,
-  verifyM365ApprovalToken,
 } from "../services/m365Policy.js";
 import { createServerExcelPreviewPlan } from "../services/m365ExcelPlan.js";
 import { requireM365TenantScope } from "../services/m365TenantRegistry.js";
@@ -179,7 +179,7 @@ m365Router.post(
     try {
       validateM365Identity(tenant, "m365.excel.write");
       await requireM365TenantScope(tenant.tenantId, "m365.excel.write");
-      verifyM365ApprovalToken(req.body.approvalToken, {
+      await consumeM365ApprovalToken(req.body.approvalToken, {
         planId: req.body.planId,
         tenantId: tenant.tenantId,
         objectId: tenant.objectId,

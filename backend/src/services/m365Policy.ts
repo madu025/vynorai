@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
+import { dbRun } from "../db.js";
 
 export const M365_SCOPES = ["m365.excel.read", "m365.excel.write"] as const;
 export type M365Scope = (typeof M365_SCOPES)[number];
@@ -175,7 +176,7 @@ export function verifyM365ApprovalToken(
     objectId: string;
     sourceFingerprint: string;
   },
-): void {
+): { jti: string; expiresAtMs: number } {
   const claims = jwt.verify(token, config.jwtSecret) as Record<string, unknown>;
   for (const [key, value] of Object.entries({
     kind: "m365_excel_approval",
@@ -183,4 +184,37 @@ export function verifyM365ApprovalToken(
   })) {
     if (claims[key] !== value) throw new Error("approval_mismatch");
   }
+  if (typeof claims.jti !== "string" || typeof claims.exp !== "number")
+    throw new Error("approval_invalid");
+  return { jti: claims.jti, expiresAtMs: claims.exp * 1000 };
+}
+
+/** Atomically consumes an approval across all API workers so it cannot authorize a replay. */
+export async function consumeM365ApprovalToken(
+  token: string,
+  expected: {
+    planId: string;
+    tenantId: string;
+    objectId: string;
+    sourceFingerprint: string;
+  },
+): Promise<void> {
+  const claims = verifyM365ApprovalToken(token, expected);
+  await dbRun("DELETE FROM m365_approval_uses WHERE expires_at_ms < ?", [
+    Date.now(),
+  ]);
+  const consumed = await dbRun(
+    `INSERT INTO m365_approval_uses
+       (jti, plan_id, tenant_id, object_id, expires_at_ms)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(jti) DO NOTHING`,
+    [
+      claims.jti,
+      expected.planId,
+      expected.tenantId,
+      expected.objectId,
+      claims.expiresAtMs,
+    ],
+  );
+  if (consumed.changes !== 1) throw new Error("approval_replayed");
 }

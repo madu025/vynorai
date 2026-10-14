@@ -1,6 +1,6 @@
 # VynorAI Microsoft 365 Copilot Add-in Plan
 
-Status: Phase 0/1 safe Excel slice and multitenant Entra registration preparation completed. The production registrations expose only the Excel read/write delegated scopes and use an HTTPS production task-pane redirect URI. No production add-in deployment is enabled by this document. Real Excel-host sign-in and workbook evidence remains pending an eligible Microsoft 365 user/license.
+Status: Phase 0/1 safe Excel slice and multitenant Entra registration preparation completed. The production registrations expose only the Excel read/write delegated scopes and use an HTTPS production task-pane redirect URI. Real Excel-host OAuth sign-in completed with a licensed organizational account on 2026-10-14. Workbook plan/apply evidence remains gated by explicit tenant enablement and `{tenantId, objectId}` account binding; deployment and production data changes still require owner approval.
 
 The production API registration requires `api.requestedAccessTokenVersion=2`. This keeps multitenant access tokens on
 the v2 issuer contract validated by the backend, including `ver=2.0` and the bare API client ID in `aud`; changing it
@@ -19,6 +19,8 @@ enablement/revocation and `/admin/m365/identities/:tenantId/:objectId` for an ex
 When a cryptographically valid identity reaches a disabled tenant gate, the backend records a metadata-only
 `M365_TENANT_ACCESS_REQUESTED` security event containing the Entra tenant/object IDs and required scope. It never stores
 the access token or selected workbook content; an administrator must still explicitly enable the tenant and link the identity.
+Workbook mutation approvals are short-lived and recorded by JWT ID in `m365_approval_uses`; the first approval request
+consumes the ID atomically across API workers and a replay fails closed.
 
 For a controlled test binding, run `npx tsx scripts/link-m365-identity.ts` from `backend/` with
 `M365_LINK_TENANT_ID`, `M365_LINK_OBJECT_ID`, and the existing VynorAI internal `M365_LINK_USER_ID` set only in
@@ -179,8 +181,8 @@ The add-in never contains a VynorAI secret or provider key. Graph calls that nee
 
 ### Phase 0: Feasibility and tenant prerequisites
 
-- Confirm a Microsoft 365 developer/test tenant, Copilot entitlement for agent testing, Entra admin consent, and supported target clients.
-- Decide the first workflow: Word summarize/rewrite plus Outlook draft reply.
+- Confirm a licensed Microsoft 365 organizational account, Entra consent, and supported Excel clients; Copilot entitlement is deferred until the declarative-agent phase.
+- Use selected-range Excel inspect, structured preview, and confirmed table/chart/new-sheet/PivotTable actions as the first workflow.
 - Record data residency, retention, supported languages, and paid/free plan behavior.
 - Write a threat model and permission matrix before registering an application.
 
@@ -264,4 +266,4 @@ Release gate: no production publication until all Phase 0-5 exit evidence is att
 
 ## First implementation slice
 
-Start with Phase 0 and Phase 1 only. Do not register broad Graph permissions or publish an agent until the workflow, tenant boundary, and permission matrix are approved. The first measurable slice is: a signed-in test user selects Word text, receives a VynorAI summary, and cannot write it back without confirmation.
+Start with Phase 0 and Phase 1 only. Do not register broad Graph permissions or publish an agent until the workflow, tenant boundary, and permission matrix are approved. The first measurable slice is: a signed-in organizational user selects Excel data, receives a bounded structured preview, and cannot mutate the workbook without a fresh single-use approval and explicit confirmation.

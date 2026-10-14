@@ -11,7 +11,7 @@ import {
   describeOfficeHost,
   formatEntry,
 } from "./diagnostics.js";
-import { createExcelPreviewPlan } from "./excel.js";
+import { createExcelPreviewPlan, excelPlansMatch } from "./excel.js";
 import {
   beginM365OAuth,
   completeM365OAuth,
@@ -169,6 +169,8 @@ const API_MESSAGES: Record<string, string> = {
   NETWORK_ERROR: "VynorAI could not be reached. Check the network and retry.",
   approval_mismatch:
     "The approval no longer matches this preview. Inspect again.",
+  approval_replayed:
+    "This approval was already used. Inspect the selection again for a new preview.",
 };
 
 function handleApiError(step: string, error: unknown) {
@@ -347,13 +349,7 @@ inspect?.addEventListener("click", async () => {
       actions: plan.actions?.map((action: any) => action.kind),
       expiresAt: plan.expiresAt,
     });
-    const consistent =
-      plan.profile?.rowCount === localPreview.profile.rowCount &&
-      plan.profile?.columnCount === localPreview.profile.columnCount &&
-      JSON.stringify(plan.actions?.map((action: any) => action.targetSheet)) ===
-        JSON.stringify(
-          localPreview.actions.map((action) => action.targetSheet),
-        );
+    const consistent = excelPlansMatch(localPreview, plan);
     log.record(
       "preview:server-matches-local",
       consistent ? "pass" : "fail",

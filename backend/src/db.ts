@@ -1045,6 +1045,24 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "034_m365_approval_replay_guard",
+    description:
+      "Single-use approval ledger for Microsoft 365 workbook mutations",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_approval_uses (
+        jti VARCHAR(128) PRIMARY KEY,
+        plan_id VARCHAR(100) NOT NULL,
+        tenant_id VARCHAR(128) NOT NULL,
+        object_id VARCHAR(128) NOT NULL,
+        expires_at_ms BIGINT NOT NULL,
+        consumed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_approval_expiry ON m365_approval_uses(expires_at_ms)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

@@ -631,6 +631,20 @@ CREATE TABLE IF NOT EXISTS m365_tenants (
 CREATE INDEX IF NOT EXISTS idx_m365_tenant_status ON m365_tenants(status, updated_at DESC);
 `,
   },
+  {
+    version: "034_m365_approval_replay_guard",
+    sql: `
+CREATE TABLE IF NOT EXISTS m365_approval_uses (
+  jti VARCHAR(128) PRIMARY KEY,
+  plan_id VARCHAR(100) NOT NULL,
+  tenant_id VARCHAR(128) NOT NULL,
+  object_id VARCHAR(128) NOT NULL,
+  expires_at_ms BIGINT NOT NULL,
+  consumed_at TEXT DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_m365_approval_expiry ON m365_approval_uses(expires_at_ms);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

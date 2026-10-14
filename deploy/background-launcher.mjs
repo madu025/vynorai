@@ -103,12 +103,26 @@ async function runSandbox(body) {
   fs.chmodSync(body.outputDirectory, 0o770);
   fs.mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
   const seed = path.join(cacheRoot, body.cacheKey);
+  const egress = await docker([
+    "inspect",
+    "--format={{(index .NetworkSettings.Networks \"vynor-bg-sandbox\").IPAddress}}",
+    "vynor-bg-egress",
+  ]);
+  const egressIp = egress.output.trim();
+  const validEgressIp =
+    egressIp.split(".").length === 4 &&
+    egressIp.split(".").every((part) =>
+      /^(?:0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255,
+    );
+  if (!validEgressIp)
+    throw new Error("BACKGROUND_EGRESS_IP_UNAVAILABLE");
   const args = [
     "run",
     "--name",
     name,
     "--runtime=runsc",
     "--network=vynor-bg-sandbox",
+    `--add-host=vynor-bg-egress:${egressIp}`,
     "--read-only",
     "--cap-drop=ALL",
     "--security-opt=no-new-privileges:true",

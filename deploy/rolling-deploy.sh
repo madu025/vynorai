@@ -38,7 +38,9 @@ $COMPOSE build vynor-backend
 # The background worker launches this image through the root-owned runsc
 # launcher. Rebuild it in the same rollout, otherwise the worker can run an
 # older runner even when the backend image is current.
+BACKGROUND_RUNNING=0
 if docker inspect vynor-background-worker >/dev/null 2>&1; then
+  BACKGROUND_RUNNING=1
   echo "Building background runner image..."
   $COMPOSE --profile background-image build vynor-background-runner-image
 fi
@@ -48,5 +50,10 @@ for worker in "${WORKERS[@]}"; do
   $COMPOSE up -d --no-deps --no-build "$worker"
   wait_healthy "$worker"
 done
+
+if [ "$BACKGROUND_RUNNING" -eq 1 ]; then
+  echo "Replacing vynor-background-worker..."
+  $COMPOSE up -d --no-deps --no-build vynor-background-worker
+fi
 
 echo "Rollout complete: $(git log --oneline -1)"

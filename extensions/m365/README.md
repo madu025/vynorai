@@ -31,3 +31,6 @@ The production manifest uses `https://vynor.lk/m365/taskpane.html`. OAuth runs i
 `auth-dialog.html`, `auth-callback.html`, `manifest.xml`, `dist/`, `logo.png`, and a copy of `runtime-config.production.js` named
 `runtime-config.js` to the VPS `extensions/m365/` directory before Caddy reload. The runtime configuration contains
 public Entra IDs only; backend secrets remain in the server's `backend/.env`.
+
+The task pane uses modern browser modules. Test on a current Microsoft 365 Apps / WebView2 Excel client, or use Excel
+for the web when a legacy desktop Excel webview reports that it cannot start the add-in.

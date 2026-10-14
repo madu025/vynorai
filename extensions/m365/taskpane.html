@@ -20,6 +20,20 @@
     <button id="apply" type="button" disabled>Confirm and apply</button>
     <h2>Preview</h2>
     <pre id="preview">No preview yet.</pre>
+    <script>
+      (function () {
+        var status = document.getElementById("status");
+        window.addEventListener("error", function (event) {
+          if (status && event.message) status.textContent = "Add-in startup failed: " + event.message;
+        });
+        window.addEventListener("unhandledrejection", function () {
+          if (status) status.textContent = "Add-in startup failed. Update Excel or use Excel for the web.";
+        });
+      })();
+    </script>
+    <script nomodule>
+      document.getElementById("status").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";
+    </script>
     <script src="./runtime-config.js?v=20261014.2"></script>
     <script type="module" src="./dist/taskpane.js?v=20261014.2"></script>
   </body>

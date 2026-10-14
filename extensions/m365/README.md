@@ -23,3 +23,10 @@ backend on port 3333, then run `npm run dev-server`. The dev server serves the t
 `/v1/*` to the backend, so the browser does not make a mixed-content HTTP request.
 
 No client secret belongs in this package. `manifest.xml` is development-only and must pass host/URL/permission review before tenant deployment.
+
+## Production static host
+
+The production manifest uses `https://vynor.lk/m365/taskpane.html`. Build locally with `npm run build`, then publish
+`taskpane.html`, `manifest.xml`, `dist/`, `logo.png`, and a copy of `runtime-config.production.js` named
+`runtime-config.js` to the VPS `extensions/m365/` directory before Caddy reload. The runtime configuration contains
+public Entra IDs only; backend secrets remain in the server's `backend/.env`.

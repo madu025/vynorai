@@ -77,6 +77,7 @@ services:
     command: caddy run --config /etc/caddy/deploy/Caddyfile --adapter caddyfile
     volumes:
       - ./deploy:/etc/caddy/deploy:ro
+      - ./extensions/m365:/srv/m365:ro
       - vynor-caddy-data:/data
       - vynor-caddy-config:/config
     depends_on:

@@ -35,6 +35,12 @@
 vynor.lk {
 	tls internal
 	encode zstd gzip
+	# Office.js task-pane assets. This is served before the API proxy so OAuth
+	# redirects and Excel load the exact public HTTPS origin in the manifest.
+	handle_path /m365/* {
+		root * /srv/m365
+		file_server
+	}
 	# Worker/model-relay endpoints are reachable only on vynor-net. Never route
 	# them from the public origin, even when a caller has a scoped token.
 	@internal path /internal/*

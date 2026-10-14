@@ -1008,6 +1008,43 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "032_m365_identity_links",
+    description:
+      "Explicit Entra tenant/object identity bindings for Microsoft 365 OAuth",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_identity_links (
+        tenant_id VARCHAR(128) NOT NULL,
+        object_id VARCHAR(128) NOT NULL,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (tenant_id, object_id)
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_identity_user ON m365_identity_links(user_id)",
+      );
+    },
+  },
+  {
+    version: "033_m365_tenant_registry",
+    description:
+      "Explicit tenant enablement, scope policy, and consent evidence for Microsoft 365 OAuth",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_tenants (
+        tenant_id VARCHAR(128) PRIMARY KEY,
+        status VARCHAR(16) NOT NULL CHECK(status IN ('enabled', 'disabled')),
+        display_name VARCHAR(256),
+        allowed_scopes TEXT NOT NULL,
+        consented_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_tenant_status ON m365_tenants(status, updated_at DESC)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

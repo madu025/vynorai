@@ -8,6 +8,21 @@
 
 ## 1. High-Level Architecture Overview
 
+### 1.1 Microsoft 365 add-in first Excel slice
+
+The M365 sub-product remains under `extensions/m365/`. Its first safe Excel slice is implemented by
+`extensions/m365/src/excel.ts` (range profiling, bounded chunks, preview plans, and the confirmation gate),
+`extensions/m365/src/oauth.ts` (Entra Authorization Code + PKCE), `extensions/m365/src/officeExcel.ts`
+(Office.js selected-range inspection and confirmed workbook operations), and `extensions/m365/src/api.ts`
+(correlated OAuth API calls),
+`backend/src/routes/m365.ts` (authenticated plan and approval endpoints),
+`backend/src/services/m365Policy.ts` (fail-closed tenant/scope checks and short-lived approval tokens),
+`backend/src/services/m365TenantRegistry.ts` (tenant enablement, scoped actions, and emergency disablement), and
+`backend/src/services/m365ExcelPlan.ts` (server-side source fingerprint and plan construction). Shared versioned
+contract types are in `packages/m365-contracts/src/index.ts`. It reuses existing VynorAI OAuth identity binding, quota,
+billing and security audit services; it does not create a second gateway or billing system. Entra JWKS validation,
+real tenant consent, and Office.js end-to-end mutation evidence remain pending until a test tenant is approved.
+
 VynorAI is a multi-tier AI coding platform: an IDE extension (VS Code, Antigravity, Cursor, Windsurf, JetBrains, CLI) backed by a metered cloud proxy. It provides cost-optimized frontier models (DeepSeek V4.1 Flash by default), Sri Lankan payments (PayHere, LKR), a zero-token deterministic Golden Vault engine, with request tiers picked by an in-process classifier. Background jobs (conversation compaction) run on DeepSeek Flash or, when configured, a GPU server (`backgroundLlm.ts`).
 
 ### 1.1 Request pipeline (`/v1/chat/completions`)

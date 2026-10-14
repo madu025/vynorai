@@ -602,6 +602,35 @@ ALTER TABLE cloud_delivery_manifests
   ADD COLUMN IF NOT EXISTS artifact_attestation_digest VARCHAR(64);
 `,
   },
+  {
+    version: "032_m365_identity_links",
+    sql: `
+CREATE TABLE IF NOT EXISTS m365_identity_links (
+  tenant_id VARCHAR(128) NOT NULL,
+  object_id VARCHAR(128) NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  enabled SMALLINT NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  created_at TEXT DEFAULT ${NOW},
+  PRIMARY KEY (tenant_id, object_id)
+);
+CREATE INDEX IF NOT EXISTS idx_m365_identity_user ON m365_identity_links(user_id);
+`,
+  },
+  {
+    version: "033_m365_tenant_registry",
+    sql: `
+CREATE TABLE IF NOT EXISTS m365_tenants (
+  tenant_id VARCHAR(128) PRIMARY KEY,
+  status VARCHAR(16) NOT NULL CHECK(status IN ('enabled', 'disabled')),
+  display_name VARCHAR(256),
+  allowed_scopes TEXT NOT NULL,
+  consented_at TEXT,
+  created_at TEXT DEFAULT ${NOW},
+  updated_at TEXT DEFAULT ${NOW}
+);
+CREATE INDEX IF NOT EXISTS idx_m365_tenant_status ON m365_tenants(status, updated_at DESC);
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

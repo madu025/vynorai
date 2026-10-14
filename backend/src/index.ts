@@ -16,6 +16,7 @@ import { paymentRouter } from "./routes/payment.js";
 import { proxyRouter } from "./routes/proxy.js";
 import { backgroundRouter } from "./routes/background.js";
 import { backgroundInternalRouter } from "./routes/backgroundInternal.js";
+import { m365Router } from "./routes/m365.js";
 import { initCacheTable } from "./services/cacheEngine.js";
 import { startHealthMonitor } from "./services/healthMonitor.js";
 import { getRedis, redisStatus } from "./services/redisStore.js";
@@ -257,6 +258,7 @@ app.use("/api/payment", paymentRouter);
 app.use("/v1/memory", memoryRouter);
 app.use("/v1/background", backgroundRouter);
 app.use("/internal/background", backgroundInternalRouter);
+app.use("/v1/m365", m365Router);
 app.use("/v1", proxyRouter);
 app.use(releasesRouter);
 

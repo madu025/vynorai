@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VynorAI Excel</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 16px; color: #1f2937; }
+      button { margin: 4px 4px 8px 0; padding: 8px 12px; }
+      pre { white-space: pre-wrap; background: #f3f4f6; padding: 10px; max-height: 320px; overflow: auto; }
+      #apply:disabled { opacity: .5; }
+    </style>
+  </head>
+  <body>
+    <h1>VynorAI Excel</h1>
+    <p id="status" role="status" aria-live="polite">Loading…</p>
+    <button id="sign-in" type="button">Sign in with Microsoft</button>
+    <button id="inspect" type="button">Inspect selected data</button>
+    <button id="apply" type="button" disabled>Confirm and apply</button>
+    <h2>Preview</h2>
+    <pre id="preview">No preview yet.</pre>
+    <script src="./runtime-config.js"></script>
+    <script type="module" src="./dist/taskpane.js"></script>
+  </body>
+</html>

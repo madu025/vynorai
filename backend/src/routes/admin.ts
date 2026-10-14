@@ -492,6 +492,31 @@ import {
   logSecurityEvent,
   getRecentSecurityEvents,
 } from "../services/securityAudit.js";
+import {
+  listM365Tenants,
+  upsertM365Tenant,
+} from "../services/m365TenantRegistry.js";
+
+const AdminM365TenantParamSchema = z.object({
+  tenantId: z.string().regex(/^[A-Za-z0-9-]{1,128}$/),
+});
+const AdminM365IdentityParamSchema = z.object({
+  tenantId: z.string().regex(/^[A-Za-z0-9-]{1,128}$/),
+  objectId: z.string().regex(/^[A-Za-z0-9-]{1,128}$/),
+});
+const AdminM365TenantSchema = z.object({
+  status: z.enum(["enabled", "disabled"]),
+  displayName: z.string().trim().min(1).max(256).nullable().optional(),
+  allowedScopes: z
+    .array(z.enum(["m365.excel.read", "m365.excel.write"]))
+    .min(1)
+    .max(2),
+  consentedAt: z.string().datetime({ offset: true }).nullable().optional(),
+});
+const AdminM365IdentitySchema = z.object({
+  userId: z.string().min(1),
+  enabled: z.boolean().default(true),
+});
 
 /**
  * GET /admin/users
@@ -1872,5 +1897,82 @@ adminRouter.post(
       recipients: sentCount,
       targetPlan: targetPlan || "all",
     });
+  },
+);
+
+/** Microsoft 365 tenant controls are separate from account billing and fail closed by default. */
+adminRouter.get(
+  "/m365/tenants",
+  requireAdmin,
+  async (_req: Request, res: Response) => {
+    const tenants = await listM365Tenants();
+    res.json({ tenants, count: tenants.length });
+  },
+);
+
+adminRouter.put(
+  "/m365/tenants/:tenantId",
+  requireAdmin,
+  validateParams(AdminM365TenantParamSchema),
+  validateBody(AdminM365TenantSchema),
+  async (req: Request, res: Response) => {
+    const tenant = await upsertM365Tenant({
+      tenantId: String(req.params.tenantId),
+      ...req.body,
+    });
+    await logSecurityEvent({
+      eventType:
+        tenant.status === "enabled"
+          ? "M365_TENANT_ENABLED"
+          : "M365_TENANT_DISABLED",
+      severity: "WARN",
+      actor: (req as any).adminUser?.email || "ADMIN",
+      target: tenant.tenantId,
+      details: JSON.stringify({
+        allowedScopes: tenant.allowedScopes,
+        hasConsentEvidence: Boolean(tenant.consentedAt),
+      }),
+      ipAddress: req.ip,
+    });
+    res.json({ tenant });
+  },
+);
+
+adminRouter.put(
+  "/m365/identities/:tenantId/:objectId",
+  requireAdmin,
+  validateParams(AdminM365IdentityParamSchema),
+  validateBody(AdminM365IdentitySchema),
+  async (req: Request, res: Response) => {
+    const user = await dbGet<{ id: string }>(
+      "SELECT id FROM users WHERE id = ?",
+      [req.body.userId],
+    );
+    if (!user) return res.status(404).json({ error: "User not found" });
+    await dbRun(
+      `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = excluded.enabled`,
+      [
+        String(req.params.tenantId),
+        String(req.params.objectId),
+        req.body.userId,
+        req.body.enabled ? 1 : 0,
+      ],
+    );
+    await logSecurityEvent({
+      eventType: req.body.enabled
+        ? "M365_IDENTITY_LINKED"
+        : "M365_IDENTITY_DISABLED",
+      severity: "WARN",
+      actor: (req as any).adminUser?.email || "ADMIN",
+      target: String(req.params.tenantId),
+      details: JSON.stringify({
+        objectId: String(req.params.objectId),
+        userId: req.body.userId,
+      }),
+      ipAddress: req.ip,
+    });
+    res.json({ ok: true });
   },
 );

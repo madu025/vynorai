@@ -26,7 +26,8 @@ No client secret belongs in this package. `manifest.xml` is development-only and
 
 ## Production static host
 
-The production manifest uses `https://vynor.lk/m365/taskpane.html`. Build locally with `npm run build`, then publish
-`taskpane.html`, `manifest.xml`, `dist/`, `logo.png`, and a copy of `runtime-config.production.js` named
+The production manifest uses `https://vynor.lk/m365/taskpane.html`. OAuth runs in the Office Dialog API and returns to
+`https://vynor.lk/m365/auth-callback.html`. Build locally with `npm run build`, then publish `taskpane.html`,
+`auth-dialog.html`, `auth-callback.html`, `manifest.xml`, `dist/`, `logo.png`, and a copy of `runtime-config.production.js` named
 `runtime-config.js` to the VPS `extensions/m365/` directory before Caddy reload. The runtime configuration contains
 public Entra IDs only; backend secrets remain in the server's `backend/.env`.

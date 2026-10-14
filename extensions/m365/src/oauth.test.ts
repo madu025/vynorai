@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { beginM365OAuth, completeM365OAuth } from "./oauth.js";
+import {
+  beginM365OAuth,
+  completeM365OAuth,
+  createOfficeAuthDialogUrl,
+} from "./oauth.js";
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -49,6 +53,25 @@ test("M365 OAuth uses the organizations authority for multitenant sign-in", asyn
   };
   const authorize = new URL(await beginM365OAuth(config, storage));
   assert.equal(authorize.pathname, "/organizations/oauth2/v2.0/authorize");
+});
+
+test("M365 OAuth opens only Microsoft sign-in URLs in an Office dialog", () => {
+  const dialog = new URL(
+    createOfficeAuthDialogUrl(
+      "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize",
+      "https://addin.example",
+    ),
+  );
+  assert.equal(dialog.origin, "https://addin.example");
+  assert.equal(dialog.pathname, "/m365/auth-dialog.html");
+  assert.throws(
+    () =>
+      createOfficeAuthDialogUrl(
+        "https://example.invalid/sign-in",
+        "https://addin.example",
+      ),
+    /not allowed/,
+  );
 });
 
 test("M365 OAuth exchanges a code and clears the one-time verifier", async () => {

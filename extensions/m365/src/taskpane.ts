@@ -3,6 +3,7 @@ import { createExcelPreviewPlan } from "./excel.js";
 import {
   beginM365OAuth,
   completeM365OAuth,
+  createOfficeAuthDialogUrl,
   type M365OAuthConfig,
 } from "./oauth.js";
 import {
@@ -32,10 +33,59 @@ function officeRuntime(): any {
   return (globalThis as any).Excel;
 }
 
+function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const office = (globalThis as any).Office;
+    if (!office?.context?.ui?.displayDialogAsync)
+      return reject(new Error("Office sign-in dialog is unavailable."));
+    office.context.ui.displayDialogAsync(
+      createOfficeAuthDialogUrl(authorizeUrl),
+      { height: 75, width: 50 },
+      (result: any) => {
+        if (result.status !== office.AsyncResultStatus.Succeeded)
+          return reject(
+            new Error("Unable to open the Microsoft sign-in dialog."),
+          );
+        const dialog = result.value;
+        const closeWithError = (message: string) => {
+          dialog.close();
+          reject(new Error(message));
+        };
+        dialog.addEventHandler(
+          office.EventType.DialogMessageReceived,
+          (message: any) => {
+            try {
+              const payload = JSON.parse(message.message) as {
+                callbackUrl?: string;
+              };
+              if (!payload.callbackUrl)
+                return closeWithError(
+                  "Microsoft sign-in did not return a callback.",
+                );
+              dialog.close();
+              resolve(payload.callbackUrl);
+            } catch {
+              closeWithError("Microsoft sign-in returned an invalid callback.");
+            }
+          },
+        );
+        dialog.addEventHandler(office.EventType.DialogEventReceived, () =>
+          closeWithError("Microsoft sign-in was closed or failed."),
+        );
+      },
+    );
+  });
+}
+
 signIn?.addEventListener("click", async () => {
   if (!config) return setStatus("M365 OAuth configuration is missing.");
   try {
-    window.location.assign(await beginM365OAuth(config));
+    setStatus("Opening Microsoft sign-in...");
+    const callbackUrl = await signInWithOfficeDialog(
+      await beginM365OAuth(config),
+    );
+    accessToken = (await completeM365OAuth(callbackUrl, config)).accessToken;
+    setStatus("Signed in. Select data and inspect it.");
   } catch (error) {
     setStatus((error as Error).message);
   }
@@ -109,16 +159,7 @@ apply?.addEventListener("click", async () => {
 
 async function initialize() {
   if (!config) return setStatus("M365 OAuth configuration is missing.");
-  if (window.location.search.includes("code=")) {
-    try {
-      accessToken = (await completeM365OAuth(window.location.href, config))
-        .accessToken;
-      window.history.replaceState({}, "", window.location.pathname);
-      setStatus("Signed in. Select data and inspect it.");
-    } catch (error) {
-      setStatus((error as Error).message);
-    }
-  } else setStatus("Sign in to inspect selected Excel data.");
+  setStatus("Sign in to inspect selected Excel data.");
 }
 
 void initialize();

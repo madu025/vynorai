@@ -118,6 +118,22 @@ export async function completeM365OAuth(
   };
 }
 
+export function createOfficeAuthDialogUrl(
+  authorizeUrl: string,
+  origin: string = window.location.origin,
+): string {
+  const authorize = new URL(authorizeUrl);
+  if (
+    authorize.protocol !== "https:" ||
+    authorize.hostname !== "login.microsoftonline.com"
+  ) {
+    throw new Error("M365 OAuth authority is not allowed");
+  }
+  const dialog = new URL("/m365/auth-dialog.html", origin);
+  dialog.searchParams.set("authorize", authorize.toString());
+  return dialog.toString();
+}
+
 function randomBase64Url(bytes: number): string {
   const data = new Uint8Array(bytes);
   crypto.getRandomValues(data);

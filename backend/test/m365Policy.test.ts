@@ -5,7 +5,7 @@ import {
   validateM365Identity,
 } from "../src/services/m365Policy.js";
 
-test("M365 Entra audience defaults to the API Application ID URI", () => {
+test("M365 Entra v2 audience defaults to the API client ID", () => {
   const previous = {
     tenant: process.env.M365_ENTRA_TENANT_ID,
     api: process.env.M365_ENTRA_API_CLIENT_ID,
@@ -16,7 +16,7 @@ test("M365 Entra audience defaults to the API Application ID URI", () => {
   process.env.M365_ENTRA_API_CLIENT_ID = "api-a";
   process.env.M365_ENTRA_CLIENT_ID = "client-a";
   delete process.env.M365_ENTRA_API_AUDIENCE;
-  assert.equal(entraConfiguration().apiAudience, "api://api-a");
+  assert.equal(entraConfiguration().apiAudience, "api-a");
   process.env.M365_ENTRA_API_AUDIENCE = "api://custom-api";
   assert.equal(entraConfiguration().apiAudience, "api://custom-api");
   Object.assign(process.env, {

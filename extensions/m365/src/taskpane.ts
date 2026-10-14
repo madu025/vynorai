@@ -105,6 +105,7 @@ function handleApiError(error: unknown) {
     [
       "invalid_entra_identity",
       "invalid_entra_token",
+      "invalid_entra_token_version",
       "invalid_entra_issuer",
       "jwt expired",
     ].includes(error.code)

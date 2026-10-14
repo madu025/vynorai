@@ -20,6 +20,7 @@ interface EntraClaims {
   azp?: string;
   appid?: string;
   exp?: number;
+  ver?: string;
 }
 
 interface JwksResponse {
@@ -52,10 +53,8 @@ export function entraConfiguration(): {
   return {
     tenantId,
     apiClientId,
-    // Entra's default Application ID URI is api://<application-client-id>.
-    // A resource access token carries that URI in aud, not the bare client ID.
-    apiAudience:
-      process.env.M365_ENTRA_API_AUDIENCE?.trim() || `api://${apiClientId}`,
+    // Entra v2 access tokens identify the target API with its client ID in aud.
+    apiAudience: process.env.M365_ENTRA_API_AUDIENCE?.trim() || apiClientId,
     allowedClientIds,
     multiTenant,
     issuer:
@@ -91,6 +90,7 @@ export async function validateEntraAccessToken(
     algorithms: ["RS256"],
     audience: settings.apiAudience,
   }) as EntraClaims;
+  if (claims.ver !== "2.0") throw new Error("invalid_entra_token_version");
   const expectedIssuer = settings.multiTenant
     ? `https://login.microsoftonline.com/${claims.tid}/v2.0`
     : settings.issuer;

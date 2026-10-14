@@ -26,10 +26,26 @@
     <script>
       (function () {
         var status = document.getElementById("status");
+        var diagnostics = document.getElementById("diagnostics");
+        function note(message) {
+          if (!diagnostics) return;
+          var prior = diagnostics.textContent === "No sign-in diagnostics yet." ? "" : diagnostics.textContent + "\n";
+          diagnostics.textContent = prior + new Date().toISOString() + " " + message;
+        }
         window.addEventListener("error", function (event) {
-          if (status && event.message) status.textContent = "Add-in startup failed: " + event.message;
+          // Office can raise this generic event for a cross-origin hosted script even
+          // while the task pane and its sign-in dialog are functioning correctly.
+          if (event.message === "Script error.") {
+            note("Non-fatal external script event reported by the Excel WebView.");
+            return;
+          }
+          if (event.message) {
+            note("Startup error: " + event.message);
+            if (status) status.textContent = "Add-in startup failed: " + event.message;
+          }
         });
-        window.addEventListener("unhandledrejection", function () {
+        window.addEventListener("unhandledrejection", function (event) {
+          note("Unhandled startup rejection: " + (event.reason && event.reason.message ? event.reason.message : "unknown"));
           if (status) status.textContent = "Add-in startup failed. Update Excel or use Excel for the web.";
         });
       })();

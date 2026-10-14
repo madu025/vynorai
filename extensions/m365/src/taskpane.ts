@@ -72,6 +72,7 @@ function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
           office.EventType.DialogMessageReceived,
           (message: any) => {
             try {
+              addDiagnostic("OAuth callback received from the Office dialog.");
               const payload = JSON.parse(message.message) as {
                 callbackUrl?: string;
               };
@@ -79,6 +80,7 @@ function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
                 return closeWithError(
                   "Microsoft sign-in did not return a callback.",
                 );
+              setStatus("Completing Microsoft sign-in...");
               dialog.close();
               resolve(payload.callbackUrl);
             } catch {
@@ -109,7 +111,9 @@ signIn?.addEventListener("click", async () => {
     const callbackUrl = await signInWithOfficeDialog(
       await beginM365OAuth(config),
     );
+    addDiagnostic("Exchanging the one-time authorization code.");
     accessToken = (await completeM365OAuth(callbackUrl, config)).accessToken;
+    addDiagnostic("Microsoft sign-in completed successfully.");
     setStatus("Signed in. Select data and inspect it.");
   } catch (error) {
     addDiagnostic((error as Error).message);

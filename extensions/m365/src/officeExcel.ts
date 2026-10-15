@@ -591,6 +591,14 @@ export async function rollbackCreatedItems(
       table.load("isNullObject");
       await context.sync();
       if (table.isNullObject) continue;
+      // convertToRange keeps the table style as direct cell formatting, so remove the style
+      // first; otherwise "undo" would leave the blue header and banding on the source cells.
+      try {
+        (table as { style: string | null }).style = null;
+        await context.sync();
+      } catch {
+        // Hosts that refuse an empty style still get the range conversion below.
+      }
       table.convertToRange();
       await context.sync();
       report.convertedTables.push(name);

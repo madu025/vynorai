@@ -774,9 +774,8 @@ function renderInsights(result: LocalInsights) {
         kind: suggestion.kind,
         chartType: suggestion.chartType,
       });
-      setStatus(
-        "Column choice set. Click Inspect and preview; nothing changes until you confirm.",
-      );
+      setStatus("Preparing the preview. Nothing changes until you confirm.");
+      showInstructionAndPreview();
     });
     insightsActions.appendChild(button);
   }
@@ -836,9 +835,14 @@ function useRecommendation(
   log.record("analysis:use-recommendation", "pass", {
     kind: recommendation.kind,
   });
-  setStatus(
-    "Instruction set. Click Inspect and preview; nothing changes until you confirm.",
-  );
+  setStatus("Preparing the preview. Nothing changes until you confirm.");
+  showInstructionAndPreview();
+}
+
+/** A chip is only useful if the person sees what happened: bring the request into view and preview it. */
+function showInstructionAndPreview() {
+  instruction?.scrollIntoView({ block: "center", behavior: "smooth" });
+  window.setTimeout(() => inspect?.click(), 50);
 }
 
 /** AI analysis: advisory only. Nothing here reads more than the selection or writes to Excel. */

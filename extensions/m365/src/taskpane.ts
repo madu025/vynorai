@@ -20,6 +20,7 @@ import {
   type Language,
 } from "./i18n.js";
 import { previewSummarySi } from "./messagesSi.js";
+import { buildOutcomes, type OutcomeChart } from "./outcome.js";
 import {
   answerQuestion,
   normalizeInstruction,
@@ -65,6 +66,7 @@ import {
   inspectWorkbookOverview,
   rollbackItemsFromApplyReport,
   rollbackCreatedItems,
+  revealExcelResult,
 } from "./officeExcel.js";
 import {
   formatFormulaInspection,
@@ -105,6 +107,9 @@ const summary = document.querySelector<HTMLElement>("#diagnostics-summary");
 const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
 let currentPlan: any;
+/** Headers and rows of the last inspected selection; used only to draw the preview picture. */
+let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
+let lastRevealSheet = "";
 let previewFingerprint = "";
 let pendingSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
@@ -459,6 +464,10 @@ inspect?.addEventListener("click", async () => {
       }),
     );
     const layout = getExcelHeaderLayout(input);
+    lastRange = {
+      headers: layout.headers.map(String),
+      rows: input.values.slice(layout.headerRowCount),
+    };
     const interpreted = interpretInstruction(
       instructionText,
       layout.headers,
@@ -571,6 +580,10 @@ inspect?.addEventListener("click", async () => {
 function markChangeNote(state: "preview" | "applied" | "partial" | "undone") {
   const note = document.querySelector<HTMLElement>("#change-note");
   if (!note) return;
+  if (state === "preview" || state === "undone") {
+    const showResult = document.querySelector<HTMLElement>("#show-result");
+    if (showResult) showResult.hidden = true;
+  }
   if (state === "preview") {
     note.dataset.i18n = "nothing_changed";
     note.textContent = localizeMessage(
@@ -696,6 +709,16 @@ apply?.addEventListener("click", async () => {
     currentPlan = undefined;
     previewFingerprint = "";
     markChangeNote(failed.length ? "partial" : "applied");
+    const reveal = report.results.find(
+      (result) => result.status === "created" || result.status === "exists",
+    );
+    lastRevealSheet = reveal?.targetSheet ?? "";
+    if (lastRevealSheet) {
+      await revealExcelResult(officeRuntime(), lastRevealSheet);
+      const showResult =
+        document.querySelector<HTMLButtonElement>("#show-result");
+      if (showResult) showResult.hidden = false;
+    }
     setStatus(
       failed.length
         ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`
@@ -1220,6 +1243,7 @@ function setupLayout() {
             `${Number(parsed?.profile?.columnCount ?? 0)} columns. ` +
             `Your source data stays unchanged.` +
             (warnings.length ? ` ${warnings.join(" ")}` : "");
+    renderOutcomes(actions);
     resultCard.hidden = false;
   };
   if (preview)
@@ -1236,6 +1260,130 @@ const rollbackButton = document.querySelector<HTMLButtonElement>("#rollback");
 const stepsContainer = document.querySelector<HTMLElement>("#steps");
 const overviewButton = document.querySelector<HTMLButtonElement>("#overview");
 const languageButton = document.querySelector<HTMLButtonElement>("#language");
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const PALETTE = ["#123a6b", "#d9822b", "#2e8b57", "#8e44ad"];
+
+function drawChart(chart: OutcomeChart): SVGElement {
+  const width = 300;
+  const height = 150;
+  const pad = 18;
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const all = chart.series.flatMap((entry) => entry.values);
+  const max = Math.max(1, ...all);
+  const count = Math.max(1, chart.categories.length);
+  const step = (width - pad * 2) / count;
+  const add = (name: string, attrs: Record<string, string>) => {
+    const node = document.createElementNS(SVG_NS, name);
+    for (const [key, value] of Object.entries(attrs))
+      node.setAttribute(key, value);
+    svg.appendChild(node);
+    return node;
+  };
+  add("line", {
+    x1: String(pad),
+    y1: String(height - pad),
+    x2: String(width - pad),
+    y2: String(height - pad),
+    stroke: "#9aa5b5",
+  });
+  const y = (value: number) =>
+    height - pad - (value / max) * (height - pad * 2);
+  chart.series.forEach((entry, index) => {
+    const color = PALETTE[index % PALETTE.length];
+    if (chart.type === "line") {
+      const points = entry.values
+        .map((value, at) => `${pad + step * (at + 0.5)},${y(value)}`)
+        .join(" ");
+      add("polyline", {
+        points,
+        fill: "none",
+        stroke: color,
+        "stroke-width": "2",
+      });
+    } else {
+      const barWidth = (step * 0.8) / chart.series.length;
+      entry.values.forEach((value, at) =>
+        add("rect", {
+          x: String(pad + step * at + step * 0.1 + barWidth * index),
+          y: String(y(value)),
+          width: String(barWidth),
+          height: String(height - pad - y(value)),
+          fill: color,
+        }),
+      );
+    }
+  });
+  chart.categories.forEach((name, at) => {
+    const label = add("text", {
+      x: String(pad + step * (at + 0.5)),
+      y: String(height - 4),
+      "text-anchor": "middle",
+      "font-size": "8",
+      fill: "#4b5563",
+    });
+    label.textContent = name.slice(0, 6);
+  });
+  return svg;
+}
+
+/** The first thing a person sees: what will exist afterwards, drawn from their own data. */
+function renderOutcomes(actions: any[]) {
+  const container = document.querySelector<HTMLElement>("#outcomes");
+  if (!container) return;
+  container.textContent = "";
+  if (!lastRange) return;
+  for (const outcome of buildOutcomes(
+    actions,
+    lastRange.headers,
+    lastRange.rows,
+  )) {
+    const box = document.createElement("div");
+    box.className = "outcome";
+    const title = document.createElement("strong");
+    title.textContent =
+      language === "si"
+        ? localizeMessage(language, outcome.kind) +
+          (outcome.chart
+            ? `: ${outcome.chart.series.map((s) => s.name).join(", ")}`
+            : "")
+        : outcome.title;
+    const where = document.createElement("div");
+    where.className = "where";
+    where.textContent =
+      language === "si"
+        ? `${outcome.where} පත්‍රිකාවේ සාදනු ඇත`
+        : `Will be created on sheet ${outcome.where}`;
+    box.appendChild(title);
+    box.appendChild(where);
+    if (outcome.chart) {
+      box.appendChild(drawChart(outcome.chart));
+      const legend = document.createElement("div");
+      legend.className = "legend";
+      legend.textContent = outcome.chart.series
+        .map(
+          (entry, index) => `${["■", "▲", "●", "◆"][index % 4]} ${entry.name}`,
+        )
+        .join("   ");
+      box.appendChild(legend);
+    } else if (outcome.table) {
+      const table = document.createElement("table");
+      const head = table.insertRow();
+      for (const name of outcome.table.headers) {
+        const th = document.createElement("th");
+        th.textContent = name;
+        head.appendChild(th);
+      }
+      for (const row of outcome.table.rows) {
+        const tr = table.insertRow();
+        for (const value of row) tr.insertCell().textContent = value;
+      }
+      box.appendChild(table);
+    }
+    container.appendChild(box);
+  }
+}
 
 /** One checkbox per planned action; changing it re-plans with only the chosen steps. */
 function renderSteps(
@@ -1271,6 +1419,10 @@ function renderSteps(
     stepsContainer.appendChild(row);
   }
 }
+
+document.querySelector("#show-result")?.addEventListener("click", () => {
+  if (lastRevealSheet) void revealExcelResult(officeRuntime(), lastRevealSheet);
+});
 
 rollbackButton?.addEventListener("click", async () => {
   if (!lastCreated || !config || !accessToken) return;

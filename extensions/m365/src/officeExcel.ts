@@ -86,6 +86,28 @@ export function rollbackItemsFromApplyReport(
 }
 
 const MAX_SHEET_NAME = 31;
+/** Brings a sheet the add-in created to the front so the person sees the result straight away. */
+export async function revealExcelResult(
+  runtime: ExcelRuntimeLike,
+  sheetName: string,
+): Promise<boolean> {
+  try {
+    return await runtime.run(async (context: any) => {
+      const sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
+      sheet.load("isNullObject");
+      await context.sync();
+      if (sheet.isNullObject) return false;
+      sheet.activate();
+      sheet.getRange("A1").select();
+      await context.sync();
+      return true;
+    });
+  } catch {
+    // Showing the result is a convenience; the work itself is already done.
+    return false;
+  }
+}
+
 export const MAX_EXCEL_SELECTION_CELLS = 100_000;
 export const MAX_EXCEL_SELECTION_COLUMNS = 100;
 export const MAX_EXCEL_SELECTION_TEXT_CHARS = 2_000_000;

@@ -39,6 +39,7 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     preview_title: "පෙරදසුන",
     nothing_changed: "ඔබේ වැඩපොතේ තවමත් කිසිදු වෙනසක් සිදු කර නැත.",
     insights_title: "අවබෝධතා",
+    show_result: "ප්‍රතිඵලය පෙන්වන්න",
   },
   ta: {
     hero: "உங்கள் தரவுடன் என்ன செய்ய விரும்புகிறீர்கள்?",
@@ -68,6 +69,7 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     preview_title: "முன்னோட்டம்",
     nothing_changed: "உங்கள் பணிப்புத்தகத்தில் இன்னும் எதுவும் மாறவில்லை.",
     insights_title: "நுண்ணறிவுகள்",
+    show_result: "முடிவைக் காட்டு",
   },
 };
 

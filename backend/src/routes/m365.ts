@@ -150,6 +150,10 @@ const excelPlanSchema = z.object({
         })
         .strict()
         .optional(),
+      quality: z
+        .object({ mode: z.enum(["data", "formula"]) })
+        .strict()
+        .optional(),
       statistics: z
         .object({
           mode: z.enum(["describe", "correlation", "forecast", "insights"]),

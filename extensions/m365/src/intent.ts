@@ -86,6 +86,7 @@ export interface InstructionSpecs {
     values: number[];
     aggregation?: "sum" | "count" | "average" | "min" | "max";
   };
+  quality?: { mode?: "data" | "formula" };
   clean?: {
     operations: CleanOperation[];
     fillBlanks?: string | number;
@@ -1483,12 +1484,18 @@ function interpretFormatAndQuality(
   rows: Cell[][],
   result: InterpretedInstruction,
 ) {
+  const formulaAudit =
+    /\b(?:audit|inspect|check|find|identify)\b[^.\n]{0,80}\bformulas?\b|\bformulas?\b[^.\n]{0,80}\b(?:errors?|circular|references?)\b/i.test(
+      text,
+    );
   if (
     /\b(?:data\s+)?quality\b|\bhealth\s*check\b|\bfind\s+(?:problems|issues|errors)\b|\bcheck\s+(?:the\s+)?data\b|\baudit\b/i.test(
       text,
     )
-  )
+  ) {
     result.actions.push("quality");
+    if (formulaAudit) result.specs.quality = { mode: "formula" };
+  }
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
     /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(

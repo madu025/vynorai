@@ -37,6 +37,11 @@ function fakeWorkbook(
       rowCount: data.length,
       columnCount: data[0]?.length ?? 0,
       values: data,
+      formulas: data.map((row) =>
+        row.map((cell) =>
+          typeof cell === "string" && cell.startsWith("=") ? cell : "",
+        ),
+      ),
       format: { font: {}, fill: {}, autofitColumns() {} },
       conditionalFormats: {
         add(type: string) {
@@ -786,4 +791,27 @@ test("apply requires confirmation, approval and the previewed fingerprint", asyn
     }),
     /fingerprint/,
   );
+});
+
+test("formula quality audit writes a report sheet and never changes source formulas", async () => {
+  const excel = fakeWorkbook([
+    ["Label", "Value"],
+    ["Broken", "=1/0"],
+    ["Circular", "=B3"],
+  ]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["quality"], 500, {
+    quality: { mode: "formula" },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created", JSON.stringify(report));
+  assert.ok(excel.calls.some((call) => call.includes("write ")));
+  assert.ok(excel.calls.some((call) => call.includes("mark ")));
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });

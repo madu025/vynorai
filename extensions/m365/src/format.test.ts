@@ -201,6 +201,16 @@ test("a fill-blanks instruction can target a named column", () => {
   });
 });
 
+test("formula audit requests use the formula quality mode", () => {
+  const parsed = interpretInstruction(
+    "Audit formulas for errors and circular references",
+    ["Customer", "Sales"],
+    [["Asha", 10]],
+  );
+  assert.deepEqual(parsed.actions, ["quality"]);
+  assert.deepEqual(parsed.specs.quality, { mode: "formula" });
+});
+
 test("quality requests are recognised", () => {
   for (const text of [
     "Check the data quality",

@@ -1044,6 +1044,13 @@ export function buildOutcomes(
         );
       }
     } else if (action.kind === "quality") {
+      if (spec.qualityMode === "formula")
+        item.details.push(
+          say(
+            "Audits formula cells, errors, references and possible direct circular references in a new report sheet.",
+            "නව වාර්තා පත්‍රිකාවක සූත්‍ර කොටු, දෝෂ, යොමු සහ සෘජු වටකුරු යොමු පරීක්ෂා කරයි.",
+          ),
+        );
       item.details.push(
         say(
           "Checks blanks, duplicates, mixed text and numbers, extra spaces and outliers.",

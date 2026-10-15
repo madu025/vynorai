@@ -26,7 +26,7 @@ import {
   buildForecastCells,
   buildInsightReportCells,
 } from "./statistics.js";
-import type { FormulaSelection } from "./formulaInspector.js";
+import { inspectFormulas, type FormulaSelection } from "./formulaInspector.js";
 
 type ExcelRangeInput = {
   workbookId: string;
@@ -1359,6 +1359,74 @@ export async function applyApprovedExcelPlan(
                   // The table is the answer; the chart is a convenience.
                 }
               }
+              await context.sync();
+            }
+          } else if (
+            action.kind === "quality" &&
+            action.spec?.qualityMode === "formula"
+          ) {
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const formulaRange = sourceRange();
+              formulaRange.load(["formulas", "values"]);
+              await context.sync();
+              const report = inspectFormulas({
+                worksheetName: plan.worksheetName,
+                address: plan.sourceAddress,
+                formulas: formulaRange.formulas,
+                values: formulaRange.values,
+              });
+              const rows: any[][] = [
+                ["Formula audit", "Value"],
+                ["Formula cells", report.formulaCellCount],
+                ["Error cells", report.errorCellCount],
+                [
+                  "Possible direct circular references",
+                  report.possibleCircularReferenceCount,
+                ],
+                [],
+                [
+                  "Address",
+                  "Formula",
+                  "References",
+                  "Errors",
+                  "Possible circular reference",
+                  "Explanation",
+                  "Repair guidance",
+                ],
+                ...report.items
+                  .slice(0, 500)
+                  .map((item) => [
+                    item.address,
+                    literal(item.formula),
+                    item.references.join(", "),
+                    item.errors.join(", "),
+                    item.possibleCircularReference ? "Yes" : "No",
+                    item.explanation,
+                    item.repair
+                      ? `${item.repair.candidate ? `Suggested repair: ${item.repair.candidate}. ` : ""}${item.repair.guidance}`
+                      : "",
+                  ]),
+              ];
+              if (report.items.length > 500)
+                rows.push([
+                  "Note",
+                  `Only the first 500 of ${report.items.length} formula cells are listed.`,
+                ]);
+              const width = Math.max(...rows.map((row) => row.length), 1);
+              const padded = rows.map((row) => {
+                const cells = row.map((cell) => literal(cell));
+                while (cells.length < width) cells.push("");
+                return cells;
+              });
+              sheet.getRangeByIndexes(0, 0, padded.length, width).values =
+                padded;
+              sheet.getRangeByIndexes(0, 0, 1, width).format.font.bold = true;
+              sheet.getRangeByIndexes(5, 0, 1, width).format.font.bold = true;
+              sheet
+                .getRangeByIndexes(0, 0, padded.length, width)
+                .format.autofitColumns();
               await context.sync();
             }
           } else if (action.kind === "quality") {

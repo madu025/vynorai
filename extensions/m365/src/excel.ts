@@ -148,6 +148,7 @@ export interface ExcelColumnSpecs {
     values: number[];
     aggregation?: ExcelAggregation;
   };
+  quality?: { mode?: "data" | "formula" };
   namedRange?: { source: number };
   slicer?: { source: number };
   chart?: {
@@ -292,6 +293,7 @@ export interface ExcelActionSpec {
     values: Array<{ column: string; index: number }>;
     aggregation: ExcelAggregation;
   };
+  qualityMode?: "data" | "formula";
   categoryColumn?: string;
   categoryIndex?: number;
   valueColumn?: string;
@@ -450,6 +452,7 @@ function resolveColumnSpecs(
   format?: ExcelActionSpec;
   view?: ExcelActionSpec;
   statistics?: ExcelActionSpec;
+  quality?: ExcelActionSpec;
   dashboard?: ExcelActionSpec;
   namedRange?: ExcelActionSpec;
   slicer?: ExcelActionSpec;
@@ -487,12 +490,21 @@ function resolveColumnSpecs(
     format?: ExcelActionSpec;
     view?: ExcelActionSpec;
     statistics?: ExcelActionSpec;
+    quality?: ExcelActionSpec;
     dashboard?: ExcelActionSpec;
     namedRange?: ExcelActionSpec;
     slicer?: ExcelActionSpec;
     split?: ExcelActionSpec;
     unpivot?: ExcelActionSpec;
   } = {};
+  if (specs.quality) {
+    if (!requested.has("quality"))
+      fail("EXCEL_SPEC_UNUSED", "Quality options need the quality action.");
+    const mode = specs.quality.mode ?? "data";
+    if (mode !== "data" && mode !== "formula")
+      fail("EXCEL_SPEC_INVALID", "Choose a valid quality report mode.");
+    resolved.quality = { qualityMode: mode };
+  }
   if (requested.has("dashboard") && !specs.dashboard)
     fail("EXCEL_SPEC_INVALID", "A dashboard needs explicit column choices.");
   if (specs.namedRange) {
@@ -2148,6 +2160,9 @@ export function createExcelPreviewPlan(
     ...(kind === "view" && resolved.view ? { spec: resolved.view } : {}),
     ...(kind === "statistics" && resolved.statistics
       ? { spec: resolved.statistics }
+      : {}),
+    ...(kind === "quality" && resolved.quality
+      ? { spec: resolved.quality }
       : {}),
     ...(kind === "dashboard" && resolved.dashboard
       ? { spec: resolved.dashboard }

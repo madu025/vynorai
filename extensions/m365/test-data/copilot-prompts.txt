@@ -38,6 +38,7 @@ Data quality	quality	Create a data quality report
 Data quality	quality	Check this range for blanks and duplicates
 Data quality	quality	Find outliers and text numbers
 Data quality	quality	Profile data quality for the selected table
+Data quality	quality	Audit formulas for errors and circular references
 Statistics	statistics	Describe Sales and Cost
 Statistics	statistics	Correlation between Sales and Cost
 Statistics	statistics	Forecast Sales for the next 4 periods

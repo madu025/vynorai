@@ -86,7 +86,11 @@ export interface InstructionSpecs {
     values: number[];
     aggregation?: "sum" | "count" | "average" | "min" | "max";
   };
-  clean?: { operations: CleanOperation[]; fillBlanks?: string | number };
+  clean?: {
+    operations: CleanOperation[];
+    fillBlanks?: string | number;
+    fillBlanksColumn?: number;
+  };
   format?: {
     freezeHeader?: boolean;
     totalRow?: boolean;
@@ -567,23 +571,38 @@ export function interpretInstruction(
     )
   )
     operations.add("text-to-date");
+  const targetedFillMatch =
+    /\bfill\s+(?:in\s+)?(?:the\s+)?blank(?:s|\s+cells?)?\s+(.+?)\s+values?\s+(?:with|using)\s+["']?([^"'\n,.]+?)["']?(?:\s|$)/i.exec(
+      text,
+    );
   const fillMatch =
     /\bfill\s+(?:in\s+)?(?:the\s+)?blank(?:s|\s+cells?)?\s+(?:with|using)\s+["']?([^"'\n,.]+?)["']?(?:\s|$)/i.exec(
       text,
     );
-  if (fillMatch) {
-    const raw = fillMatch[1].trim();
+  if (targetedFillMatch || fillMatch) {
+    const requestedColumn = targetedFillMatch?.[1].trim();
+    const raw = (targetedFillMatch?.[2] ?? fillMatch?.[1] ?? "").trim();
     if (raw.length === 0 || raw.length > 100 || /[\u0000-\u001f]/.test(raw))
       result.problems.push("The blank-cell fill value is not allowed.");
     else {
-      const numeric = /^-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$/.test(raw)
-        ? Number(raw.replace(/,/g, ""))
-        : undefined;
-      operations.add("fill-blanks");
-      result.specs.clean = {
-        operations: [],
-        fillBlanks: numeric !== undefined ? numeric : raw,
-      };
+      const fillBlanksColumn = requestedColumn
+        ? findHeader(headers, requestedColumn)
+        : -1;
+      if (requestedColumn && fillBlanksColumn < 0) {
+        result.problems.push(
+          `"${requestedColumn}" is not a column of your data. Available: ${headers.join(", ")}.`,
+        );
+      } else {
+        const numeric = /^-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$/.test(raw)
+          ? Number(raw.replace(/,/g, ""))
+          : undefined;
+        operations.add("fill-blanks");
+        result.specs.clean = {
+          operations: [],
+          fillBlanks: numeric !== undefined ? numeric : raw,
+          ...(fillBlanksColumn >= 0 ? { fillBlanksColumn } : {}),
+        };
+      }
     }
   } else if (/\bfill\s+(?:in\s+)?(?:the\s+)?blanks?\b/i.test(text)) {
     result.problems.push("Say what value should replace blank cells.");
@@ -604,6 +623,9 @@ export function interpretInstruction(
     result.specs.clean = {
       ...(result.specs.clean?.fillBlanks !== undefined
         ? { fillBlanks: result.specs.clean.fillBlanks }
+        : {}),
+      ...(result.specs.clean?.fillBlanksColumn !== undefined
+        ? { fillBlanksColumn: result.specs.clean.fillBlanksColumn }
         : {}),
       operations: CLEAN_OPERATIONS.filter((operation) =>
         operations.has(operation),

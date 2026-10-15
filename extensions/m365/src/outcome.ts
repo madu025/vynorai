@@ -364,7 +364,7 @@ export function buildOutcomes(
           );
         if (operation === "fill-blanks")
           return say(
-            `blank cells with ${String(spec.fillBlanks)}`,
+            `blank${spec.fillBlanksColumn ? ` in ${spec.fillBlanksColumn}` : ""} cells with ${String(spec.fillBlanks)}`,
             `à·„à·’à·ƒà·Š à¶­à·“à¶»à·” ${String(spec.fillBlanks)} à·€à¶½à·’à¶±à·Š`,
           );
         if (operation === "fuzzy-dedupe")

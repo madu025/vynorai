@@ -66,6 +66,7 @@ export function cleanRows(
   rows: Cell[][],
   operations: readonly CleanOperation[],
   fillValue?: FillBlankValue,
+  fillColumn?: number,
 ): {
   rows: Cell[][];
   changes: CleanChanges;
@@ -107,6 +108,7 @@ export function cleanRows(
       if (
         operations.includes("fill-blanks") &&
         fillValue !== undefined &&
+        (fillColumn === undefined || fillColumn === column) &&
         (value === null || (typeof value === "string" && value.trim() === ""))
       ) {
         value = fillValue;

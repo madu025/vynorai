@@ -146,6 +146,7 @@ const excelPlanSchema = z.object({
           fillBlanks: z
             .union([z.string().min(1).max(100), z.number().finite()])
             .optional(),
+          fillBlanksColumn: z.number().int().min(0).max(99).optional(),
         })
         .strict()
         .optional(),

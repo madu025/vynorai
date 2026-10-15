@@ -932,6 +932,56 @@ test("server and add-in agree on explicit fill-blanks and reject formula values"
   );
 });
 
+test("server and add-in agree on a target-column blank fill and reject bad targets", () => {
+  const targetInput = {
+    ...input,
+    values: [
+      ["Customer", "Status", "Sales"],
+      ["Asha", null, 10],
+      ["Bimal", "Open", 20],
+    ],
+    address: "Sheet1!A1:C3",
+  };
+  const specs = {
+    clean: {
+      operations: ["fill-blanks"],
+      fillBlanks: "Unknown",
+      fillBlanksColumn: 1,
+    },
+  };
+  const actions = ["clean"] as const;
+  const server = createServerExcelPreviewPlan(
+    targetInput,
+    [...actions],
+    500,
+    specs,
+  );
+  const client = createExcelPreviewPlan(
+    targetInput as any,
+    [...actions],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(client as any, server as any), true);
+  assert.deepEqual(server.actions[0].spec, {
+    operations: ["fill-blanks"],
+    fillBlanks: "Unknown",
+    fillBlanksColumn: "Status",
+    fillBlanksColumnIndex: 1,
+  });
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(targetInput, [...actions], 500, {
+        clean: {
+          operations: ["fill-blanks"],
+          fillBlanks: "Unknown",
+          fillBlanksColumn: 9,
+        },
+      }),
+    /valid column for filling blanks/,
+  );
+});
+
 test("the server refuses unsafe computed columns and unknown clean steps", () => {
   const call = (specs: unknown, actions: string[]) =>
     createServerExcelPreviewPlan(input, actions, 500, specs as any);

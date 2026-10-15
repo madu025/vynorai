@@ -77,6 +77,25 @@ test("clean fills only blank cells with an explicit safe value", () => {
   assert.equal(cleaned.filledBlanks, 3);
 });
 
+test("clean can fill blanks in one named column without touching other columns", () => {
+  const cleaned = cleanRows(
+    [
+      ["Asha", null, 10],
+      ["Bimal", "Open", null],
+      ["Chamara", "  ", 30],
+    ],
+    ["fill-blanks"],
+    "Unknown",
+    1,
+  );
+  assert.deepEqual(cleaned.rows, [
+    ["Asha", "Unknown", 10],
+    ["Bimal", "Open", null],
+    ["Chamara", "Unknown", 30],
+  ]);
+  assert.equal(cleaned.filledBlanks, 2);
+});
+
 test("fuzzy dedupe removes only rows within one edit of an earlier row", () => {
   const result = cleanRows(
     [
@@ -814,6 +833,39 @@ test("apply fills blanks on a new result sheet and never the source sheet", asyn
     ["Region", "Sales"],
     ["North", 0],
     ["South", 1500],
+  ]);
+  assert.ok(
+    Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),
+  );
+});
+
+test("apply fills only the requested column on a new result sheet", async () => {
+  const fillInput = {
+    workbookId: "book",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:C3",
+    hasHeaders: true,
+    values: [
+      ["Customer", "Status", "Sales"],
+      ["Asha", null, null],
+      ["Bimal", "Open", 1500],
+    ],
+  };
+  const plan = createExcelPreviewPlan(fillInput as any, ["clean"], undefined, {
+    clean: {
+      operations: ["fill-blanks"],
+      fillBlanks: "Unknown",
+      fillBlanksColumn: 1,
+    },
+  });
+  const excel = fakeWorkbook(fillInput.values as any[][]);
+  await applyApprovedExcelPlan(excel.runtime, plan, true, "approval", {
+    expectedSourceFingerprint: plan.sourceFingerprint,
+  });
+  assert.deepEqual(excel.written["Cleaned Sheet1!0,0,3,3.values"], [
+    ["Customer", "Status", "Sales"],
+    ["Asha", "Unknown", null],
+    ["Bimal", "Open", 1500],
   ]);
   assert.ok(
     Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),

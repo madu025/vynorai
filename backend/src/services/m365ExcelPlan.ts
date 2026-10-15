@@ -109,7 +109,11 @@ export interface ExcelColumnSpecs {
     inputMessage?: { column: number; title?: string; message?: string };
     dependentDropdown?: { child: number; parent: number };
   };
-  clean?: { operations: string[]; fillBlanks?: string | number };
+  clean?: {
+    operations: string[];
+    fillBlanks?: string | number;
+    fillBlanksColumn?: number;
+  };
   addColumn?: {
     name: string;
     left?: number;
@@ -207,6 +211,9 @@ export interface ExcelActionSpec {
   columnsColumn?: string;
   columnsIndex?: number;
   operations?: string[];
+  fillBlanks?: string | number;
+  fillBlanksColumn?: string;
+  fillBlanksColumnIndex?: number;
   columnName?: string;
   leftColumn?: string;
   leftIndex?: number;
@@ -615,6 +622,7 @@ function resolveColumnSpecs(
     )
       fail("EXCEL_SPEC_INVALID", "Choose valid, unique clean-up steps.");
     const fillBlanks = specs.clean.fillBlanks;
+    const fillBlanksColumn = specs.clean.fillBlanksColumn;
     if (operations.includes("fill-blanks")) {
       if (
         !(
@@ -633,6 +641,15 @@ function resolveColumnSpecs(
     } else if (fillBlanks !== undefined) {
       fail("EXCEL_SPEC_UNUSED", "A fill value needs the fill-blanks step.");
     }
+    if (
+      fillBlanksColumn !== undefined &&
+      (!Number.isInteger(fillBlanksColumn) ||
+        fillBlanksColumn < 0 ||
+        fillBlanksColumn >= headers.length)
+    )
+      fail("EXCEL_SPEC_INVALID", "Choose a valid column for filling blanks.");
+    if (fillBlanksColumn !== undefined && !operations.includes("fill-blanks"))
+      fail("EXCEL_SPEC_UNUSED", "A fill column needs the fill-blanks step.");
     if (operations.includes("fuzzy-dedupe") && dataRows.length > 5000)
       fail(
         "EXCEL_SPEC_TOO_LARGE",
@@ -641,6 +658,12 @@ function resolveColumnSpecs(
     resolved.clean = {
       operations: allowed.filter((operation) => operations.includes(operation)),
       ...(fillBlanks !== undefined ? { fillBlanks } : {}),
+      ...(fillBlanksColumn !== undefined
+        ? {
+            fillBlanksColumn: headers[fillBlanksColumn],
+            fillBlanksColumnIndex: fillBlanksColumn,
+          }
+        : {}),
     };
   }
   if (specs.addColumn) {

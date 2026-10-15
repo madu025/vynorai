@@ -184,6 +184,23 @@ test("format instructions become explicit options, and 'format as a table' stays
   });
 });
 
+test("a fill-blanks instruction can target a named column", () => {
+  const parsed = interpretInstruction(
+    "Fill blank Status values with Unknown",
+    ["Customer", "Status", "Sales"],
+    [
+      ["Asha", null, 10],
+      ["Bimal", "Open", 20],
+    ],
+  );
+  assert.deepEqual(parsed.actions, ["clean"]);
+  assert.deepEqual(parsed.specs.clean, {
+    operations: ["fill-blanks"],
+    fillBlanks: "Unknown",
+    fillBlanksColumn: 1,
+  });
+});
+
 test("quality requests are recognised", () => {
   for (const text of [
     "Check the data quality",

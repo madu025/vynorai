@@ -47,3 +47,13 @@ test("the person's own request steers the recommendations as data", () => {
     /short action phrase/,
   );
 });
+
+test("raw line breaks and trailing commas in model JSON are repaired, not trusted", async () => {
+  const { extractJsonObject } = await import("../src/services/m365Analysis.js");
+  const parsed = extractJsonObject(
+    '{"summary": "පළමු පේළිය\nදෙවන පේළිය", "list": [1, 2,],}',
+  ) as any;
+  assert.equal(parsed.summary, "පළමු පේළිය දෙවන පේළිය");
+  assert.deepEqual(parsed.list, [1, 2]);
+  assert.throws(() => extractJsonObject("{not json}"));
+});

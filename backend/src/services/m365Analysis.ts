@@ -234,7 +234,20 @@ export function extractJsonObject(text: string): unknown {
   try {
     return JSON.parse(candidate);
   } catch {
-    throw new M365AnalysisError("AI_ANALYSIS_INVALID", 502, "unparseable JSON");
+    // Models sometimes put raw line breaks inside strings or leave a trailing comma, especially
+    // in Sinhala or Tamil. Repair only those two defects; the strict schema still decides.
+    const repaired = candidate
+      .replace(/[\u0000-\u001F]+/g, " ")
+      .replace(/,\s*([}\]])/g, "$1");
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      throw new M365AnalysisError(
+        "AI_ANALYSIS_INVALID",
+        502,
+        "unparseable JSON",
+      );
+    }
   }
 }
 

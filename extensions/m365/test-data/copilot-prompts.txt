@@ -63,6 +63,7 @@ Lookups	add-column	Add column Manager from Staff by Name
 Lookups	add-column	Lookup Segment from CustomerMap using Customer
 Lookups	add-column	Bring Region from Customers by Customer
 Lookups	add-column	Fetch Owner from AccountMap matching Customer
+Lookups	add-column	Add column Manager from Staff by Name and Customer
 Charts	-	Create a combo chart of Sales and Cost
 Charts	-	Add sparklines for monthly Sales
 Charts	-	Create a histogram of Sales

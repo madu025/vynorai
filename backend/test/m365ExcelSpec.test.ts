@@ -50,6 +50,45 @@ test("server and add-in build the same safe combine plan", () => {
   assert.equal(server.actions[0].spec.separator, " - ");
 });
 
+test("server and add-in build the same safe multi-key lookup plan", () => {
+  const specs = {
+    addColumn: {
+      name: "Manager",
+      lookup: {
+        sheet: "Staff",
+        sourceKey: 0,
+        keyIndex: 0,
+        keyHeader: "Month",
+        returnIndex: 3,
+        returnHeader: "Cost",
+        rows: 40,
+        sourceKeys: [0, 1],
+        keyIndexes: [0, 1],
+        keyHeaders: ["Month", "Region"],
+      },
+    },
+  };
+  const actions = ["add-column"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec?.sourceKeyIndexes, [0, 1]);
+  assert.deepEqual(server.actions[0].spec?.lookupKeyHeaders, [
+    "Month",
+    "Region",
+  ]);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        addColumn: {
+          ...specs.addColumn,
+          lookup: { ...specs.addColumn.lookup, sourceKeys: [0, 0] },
+        },
+      }),
+    /not valid/,
+  );
+});
+
 test("server and add-in build the same safe split plan", () => {
   const specs = {
     split: {

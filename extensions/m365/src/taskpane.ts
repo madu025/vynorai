@@ -620,26 +620,41 @@ inspect?.addEventListener("click", async () => {
             (header) =>
               header.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
           );
-        const keyAt = find(other.headers, lookupWish.keyHeader);
+        const keyHeaders = lookupWish.keyHeaders ?? [lookupWish.keyHeader];
+        const keyAt = keyHeaders.map((header) => find(other.headers, header));
         const returnAt = find(other.headers, lookupWish.returnHeader);
-        if (keyAt < 0)
+        if (keyAt.some((index) => index < 0))
           throw new Error(
-            `The sheet "${other.sheet}" has no "${lookupWish.keyHeader}" column to match on. It has: ${other.headers.join(", ")}.`,
+            `The sheet "${other.sheet}" has no all of the key columns (${keyHeaders.join(", ")}) to match on. It has: ${other.headers.join(", ")}.`,
           );
         if (returnAt < 0)
           throw new Error(
             `The sheet "${other.sheet}" has no "${lookupWish.returnHeader}" column. It has: ${other.headers.join(", ")}.`,
           );
+        const sourceKeyIndexes = keyHeaders.map((header) =>
+          find(layout.headers, header),
+        );
+        if (sourceKeyIndexes.some((index) => index < 0))
+          throw new Error(
+            `Your selected data has no all of the key columns (${keyHeaders.join(", ")}). It has: ${layout.headers.join(", ")}.`,
+          );
         specs.addColumn = {
           name: other.headers[returnAt],
           lookup: {
             sheet: other.sheet,
-            sourceKey: find(layout.headers, lookupWish.keyHeader),
-            keyIndex: keyAt,
-            keyHeader: other.headers[keyAt],
+            sourceKey: sourceKeyIndexes[0],
+            keyIndex: keyAt[0],
+            keyHeader: other.headers[keyAt[0]],
             returnIndex: returnAt,
             returnHeader: other.headers[returnAt],
             rows: other.rows,
+            ...(keyAt.length > 1
+              ? {
+                  sourceKeys: sourceKeyIndexes,
+                  keyIndexes: keyAt,
+                  keyHeaders: keyAt.map((index) => other.headers[index]),
+                }
+              : {}),
           },
         };
       } catch (error) {

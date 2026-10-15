@@ -452,9 +452,15 @@ export function buildOutcomes(
         ),
       );
     } else if (action.kind === "add-column" && spec.lookupSheet) {
+      const sourceKeys = Array.isArray(spec.sourceKeyColumns)
+        ? spec.sourceKeyColumns.join(" + ")
+        : String(spec.sourceKeyColumn ?? "");
+      const lookupKeys = Array.isArray(spec.lookupKeyHeaders)
+        ? spec.lookupKeyHeaders.join(" + ")
+        : String(spec.lookupKeyHeader ?? "");
       item.details.push(
         say(
-          `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${spec.sourceKeyColumn} with ${spec.lookupKeyHeader}.`,
+          `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}.`,
           `"${spec.lookupSheet}" පත්‍රිකාවෙන් "${spec.lookupReturnHeader}" ගෙන එයි — ${spec.sourceKeyColumn} සහ ${spec.lookupKeyHeader} ගැළපීමෙන්.`,
         ),
       );

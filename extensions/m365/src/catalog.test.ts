@@ -92,6 +92,7 @@ test("anything unsafe is still rejected", () => {
 
 import { interpretInstruction } from "./intent.js";
 import { createExcelPreviewPlan } from "./excel.js";
+import { buildLookupFormula } from "./officeExcel.js";
 
 test("group A: a lookup request names the sheet, the column and the key", () => {
   const staffHeaders = ["Name", "Dept", "Sales"];
@@ -169,4 +170,52 @@ test("group A: a lookup column plan is explicit and rejects unusable choices", (
   assert.throws(() => bad({ ...good, sourceKey: 9 }), /not valid/);
   assert.throws(() => bad({ ...good, returnIndex: 0 }), /not valid/);
   assert.throws(() => bad({ ...good, rows: 0 }), /not valid/);
+});
+
+test("group A: a lookup can match two key columns", () => {
+  const found = interpretInstruction(
+    "Add column Manager from Staff by Name and Customer",
+    ["Name", "Customer", "Sales"],
+    [["Amal", "A-1", 10]],
+  );
+  assert.deepEqual(found.specs.lookup, {
+    sheet: "Staff",
+    returnHeader: "Manager",
+    keyHeader: "Name",
+    keyHeaders: ["Name", "Customer"],
+  });
+  const input = {
+    workbookId: "w",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:D3",
+    hasHeaders: true,
+    values: [
+      ["Name", "Customer", "Region", "Sales"],
+      ["Amal", "A-1", "North", 10],
+      ["Nimali", "N-2", "South", 20],
+    ],
+  } as any;
+  const plan = createExcelPreviewPlan(input, ["add-column"], 500, {
+    addColumn: {
+      name: "Manager",
+      lookup: {
+        sheet: "Staff",
+        sourceKey: 0,
+        keyIndex: 0,
+        keyHeader: "Name",
+        returnIndex: 3,
+        returnHeader: "Manager",
+        rows: 40,
+        sourceKeys: [0, 1],
+        keyIndexes: [0, 1],
+        keyHeaders: ["Name", "Customer"],
+      },
+    },
+  });
+  assert.deepEqual(plan.actions[0].spec?.sourceKeyIndexes, [0, 1]);
+  assert.deepEqual(plan.actions[0].spec?.lookupKeyIndexes, [0, 1]);
+  assert.equal(
+    buildLookupFormula("Staff", 2, [0, 1], [0, 1], 3, 40),
+    `=IFERROR(INDEX('Staff'!D$2:D41,MATCH(1,INDEX(('Staff'!A$2:A41=A2)*('Staff'!B$2:B41=B2),0),0)),"")`,
+  );
 });

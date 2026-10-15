@@ -238,6 +238,41 @@ export function localExcelAddress(address: string): string {
   return separator === -1 ? address : address.slice(separator + 1);
 }
 
+/** Builds a deterministic INDEX/MATCH formula for one or more lookup keys. */
+export function buildLookupFormula(
+  sheetName: string,
+  sourceRow: number,
+  sourceKeyIndexes: number[],
+  lookupKeyIndexes: number[],
+  returnIndex: number,
+  lookupRows: number,
+): string {
+  if (
+    sourceKeyIndexes.length < 1 ||
+    sourceKeyIndexes.length !== lookupKeyIndexes.length ||
+    !Number.isInteger(sourceRow) ||
+    sourceRow < 1 ||
+    !Number.isInteger(returnIndex) ||
+    !Number.isInteger(lookupRows) ||
+    lookupRows < 1
+  )
+    throw new Error("Invalid lookup formula choices");
+  const quoted = `'${String(sheetName).replace(/'/g, "''")}'`;
+  const last = lookupRows + 1;
+  const returnLetter = expressionColumnLetter(returnIndex);
+  const sourceLetters = sourceKeyIndexes.map(expressionColumnLetter);
+  const lookupRanges = lookupKeyIndexes.map((index) => {
+    const letter = expressionColumnLetter(index);
+    return `${quoted}!${letter}$2:${letter}${last}`;
+  });
+  if (sourceLetters.length === 1)
+    return `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(${sourceLetters[0]}${sourceRow},${lookupRanges[0]},0)),"")`;
+  const matches = lookupRanges
+    .map((range, index) => `(${range}=${sourceLetters[index]}${sourceRow})`)
+    .join("*");
+  return `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(1,INDEX(${matches},0),0)),"")`;
+}
+
 async function readValuesInChunks(
   context: ExcelContextLike,
   range: any,
@@ -1589,29 +1624,50 @@ export async function applyApprovedExcelPlan(
                 const header = (used.values?.[0] ?? []).map((cell: any) =>
                   String(cell ?? ""),
                 );
+                const sourceKeyIndexes = spec.sourceKeyIndexes ?? [
+                  spec.sourceKeyIndex,
+                ];
+                const lookupKeyIndexes = spec.lookupKeyIndexes ?? [
+                  spec.lookupKeyIndex,
+                ];
+                const lookupKeyHeaders = spec.lookupKeyHeaders ?? [
+                  spec.lookupKeyHeader,
+                ];
+                const sourceKeyColumns = spec.sourceKeyColumns ?? [
+                  spec.sourceKeyColumn,
+                ];
                 if (
                   used.isNullObject ||
-                  header[spec.lookupKeyIndex as number] !==
-                    spec.lookupKeyHeader ||
+                  sourceKeyIndexes.length !== lookupKeyIndexes.length ||
+                  sourceKeyIndexes.length !== lookupKeyHeaders.length ||
+                  sourceKeyIndexes.length !== sourceKeyColumns.length ||
+                  sourceKeyIndexes.some(
+                    (index: number) =>
+                      !Number.isInteger(index) ||
+                      headers[index] !==
+                        sourceKeyColumns[sourceKeyIndexes.indexOf(index)],
+                  ) ||
+                  lookupKeyIndexes.some(
+                    (index: number) =>
+                      header[index] !==
+                      lookupKeyHeaders[lookupKeyIndexes.indexOf(index)],
+                  ) ||
                   header[spec.lookupReturnIndex as number] !==
                     spec.lookupReturnHeader
                 )
                   throw new Error(
                     "The lookup sheet changed after the preview. Preview again.",
                   );
-                const quoted = `'${String(spec.lookupSheet).replace(/'/g, "''")}'`;
-                const last = Number(spec.lookupRows) + 1;
-                const keyLetter = expressionColumnLetter(
-                  spec.lookupKeyIndex as number,
-                );
-                const returnLetter = expressionColumnLetter(
-                  spec.lookupReturnIndex as number,
-                );
-                const sourceLetter = expressionColumnLetter(
-                  spec.sourceKeyIndex as number,
-                );
-                lookupFormula = (rowNumber) =>
-                  `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(${sourceLetter}${rowNumber},${quoted}!${keyLetter}$2:${keyLetter}${last},0)),"")`;
+                lookupFormula = (rowNumber) => {
+                  return buildLookupFormula(
+                    spec.lookupSheet,
+                    rowNumber,
+                    sourceKeyIndexes,
+                    lookupKeyIndexes,
+                    spec.lookupReturnIndex as number,
+                    spec.lookupRows as number,
+                  );
+                };
               }
               let expressionAst: ExprNode | undefined;
               if (spec.expression !== undefined) {

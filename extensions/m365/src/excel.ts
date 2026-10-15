@@ -206,6 +206,9 @@ export interface ExcelColumnSpecs {
       returnIndex: number;
       returnHeader: string;
       rows: number;
+      sourceKeys?: number[];
+      keyIndexes?: number[];
+      keyHeaders?: string[];
     };
   };
   split?: { source: number; firstName: string; lastName: string };
@@ -294,8 +297,12 @@ export interface ExcelActionSpec {
   lookupSheet?: string;
   sourceKeyColumn?: string;
   sourceKeyIndex?: number;
+  sourceKeyColumns?: string[];
+  sourceKeyIndexes?: number[];
   lookupKeyHeader?: string;
   lookupKeyIndex?: number;
+  lookupKeyHeaders?: string[];
+  lookupKeyIndexes?: number[];
   lookupReturnHeader?: string;
   lookupReturnIndex?: number;
   lookupRows?: number;
@@ -647,6 +654,9 @@ function resolveColumnSpecs(
           returnIndex: number;
           returnHeader: string;
           rows: number;
+          sourceKeys?: number[];
+          keyIndexes?: number[];
+          keyHeaders?: string[];
         }
       | undefined;
     if (derived !== undefined) {
@@ -740,19 +750,28 @@ function resolveColumnSpecs(
         value.trim().length > 0 &&
         value.length <= max &&
         !/[\u0000-\u001F]/.test(value);
+      const sourceKeys = lookup.sourceKeys ?? [lookup.sourceKey];
+      const keyIndexes = lookup.keyIndexes ?? [lookup.keyIndex];
+      const keyHeaders = lookup.keyHeaders ?? [lookup.keyHeader];
       if (
         !text(lookup.sheet, 31) ||
         /[\[\]:*?/\\]/.test(lookup.sheet) ||
-        !text(lookup.keyHeader, 60) ||
+        sourceKeys.length < 1 ||
+        sourceKeys.length > 5 ||
+        sourceKeys.length !== keyIndexes.length ||
+        sourceKeys.length !== keyHeaders.length ||
+        sourceKeys.some((index) => !inRange(index)) ||
+        new Set(sourceKeys).size !== sourceKeys.length ||
+        keyIndexes.some(
+          (index) => !Number.isInteger(index) || index < 0 || index > 99,
+        ) ||
+        new Set(keyIndexes).size !== keyIndexes.length ||
+        keyHeaders.some((header) => !text(header, 60)) ||
         !text(lookup.returnHeader, 60) ||
-        !inRange(lookup.sourceKey) ||
-        !Number.isInteger(lookup.keyIndex) ||
-        lookup.keyIndex < 0 ||
-        lookup.keyIndex > 99 ||
         !Number.isInteger(lookup.returnIndex) ||
         lookup.returnIndex < 0 ||
         lookup.returnIndex > 99 ||
-        lookup.keyIndex === lookup.returnIndex ||
+        keyIndexes.includes(lookup.returnIndex) ||
         !Number.isInteger(lookup.rows) ||
         lookup.rows < 1 ||
         lookup.rows > 100000
@@ -763,8 +782,12 @@ function resolveColumnSpecs(
         lookupSheet: lookup.sheet,
         sourceKeyColumn: headers[lookup.sourceKey],
         sourceKeyIndex: lookup.sourceKey,
+        sourceKeyColumns: sourceKeys.map((index) => headers[index]),
+        sourceKeyIndexes: sourceKeys,
         lookupKeyHeader: lookup.keyHeader,
         lookupKeyIndex: lookup.keyIndex,
+        lookupKeyHeaders: keyHeaders,
+        lookupKeyIndexes: keyIndexes,
         lookupReturnHeader: lookup.returnHeader,
         lookupReturnIndex: lookup.returnIndex,
         lookupRows: lookup.rows,

@@ -23,7 +23,12 @@ export interface InstructionSpecs {
     extraValues?: number[];
   };
   /** Bring a column from another sheet; the pane resolves the sheet's headers. */
-  lookup?: { sheet: string; returnHeader: string; keyHeader: string };
+  lookup?: {
+    sheet: string;
+    returnHeader: string;
+    keyHeader: string;
+    keyHeaders?: string[];
+  };
   pivot?: {
     filter?: number;
     rows: number;
@@ -499,12 +504,18 @@ export function interpretInstruction(
 
   const lookupMatch = LOOKUP_PHRASE.exec(rawInstruction.trim());
   if (lookupMatch) {
-    const keyHeader = lookupMatch[3].trim();
-    const keyAt = headers.findIndex(
-      (header) =>
-        header.trim().toLocaleLowerCase() === keyHeader.toLocaleLowerCase(),
+    const keyHeaders = lookupMatch[3]
+      .split(/\band\b|,/i)
+      .map((header) => header.trim())
+      .filter(Boolean);
+    const keyHeader = keyHeaders[0] ?? "";
+    const sourceKeyAt = keyHeaders.map((wanted) =>
+      headers.findIndex(
+        (header) =>
+          header.trim().toLocaleLowerCase() === wanted.toLocaleLowerCase(),
+      ),
     );
-    if (keyAt < 0) {
+    if (sourceKeyAt.some((index) => index < 0)) {
       result.problems.push(
         `"${keyHeader}" is not a column of your data. Available: ${headers.join(", ")}.`,
       );
@@ -515,7 +526,12 @@ export function interpretInstruction(
           lookup: {
             sheet: lookupMatch[2].trim(),
             returnHeader: lookupMatch[1].trim(),
-            keyHeader: headers[keyAt],
+            keyHeader: headers[sourceKeyAt[0]],
+            ...(keyHeaders.length > 1
+              ? {
+                  keyHeaders: sourceKeyAt.map((index) => headers[index]),
+                }
+              : {}),
           },
         },
         problems: [],

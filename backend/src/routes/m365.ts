@@ -297,6 +297,21 @@ const excelPlanSchema = z.object({
               returnIndex: z.number().int().min(0).max(99),
               returnHeader: z.string().min(1).max(60),
               rows: z.number().int().min(1).max(100000),
+              sourceKeys: z
+                .array(z.number().int().min(0).max(99))
+                .min(1)
+                .max(5)
+                .optional(),
+              keyIndexes: z
+                .array(z.number().int().min(0).max(99))
+                .min(1)
+                .max(5)
+                .optional(),
+              keyHeaders: z
+                .array(z.string().min(1).max(60))
+                .min(1)
+                .max(5)
+                .optional(),
             })
             .strict()
             .optional(),

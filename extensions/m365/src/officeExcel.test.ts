@@ -60,6 +60,7 @@ function fakeWorkbook(
             colorScale: { criteria: {} },
             iconSet: { style: "" },
             topBottom: { rule: {}, format: { fill: {} } },
+            textComparison: { rule: {}, format: { fill: {} } },
           };
         },
       },
@@ -504,6 +505,33 @@ test("apply creates a top-bottom conditional format on a copied result sheet", a
   assert.equal(report.results[0].status, "created", JSON.stringify(report));
   assert.ok(
     excel.calls.includes("conditional.add TopBottom"),
+    excel.calls.join("\n"),
+  );
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
+test("apply creates a text-contains conditional format on a copied result sheet", async () => {
+  const excel = fakeWorkbook([
+    ["Status", "Region"],
+    ["Pending", "North"],
+    ["Done", "South"],
+  ]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["format"], 500, {
+    format: {
+      conditional: [{ column: 1, rule: "text-contains", text: "Pending" }],
+    },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created", JSON.stringify(report));
+  assert.ok(
+    excel.calls.includes("conditional.add ContainsText"),
     excel.calls.join("\n"),
   );
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));

@@ -735,6 +735,55 @@ test("server and add-in agree on bounded top and bottom conditional formats", ()
   );
 });
 
+test("server and add-in agree on text-contains conditional formatting", () => {
+  const specs = {
+    format: {
+      conditional: [{ column: 1, rule: "text-contains", text: "Pending" }],
+    },
+  } as any;
+  const client = createExcelPreviewPlan(
+    {
+      ...input,
+      values: [
+        ["Status", "Region"],
+        ["Pending", "North"],
+        ["Done", "South"],
+      ],
+    },
+    ["format"],
+    500,
+    specs,
+  );
+  const server = createServerExcelPreviewPlan(
+    {
+      ...input,
+      values: [
+        ["Status", "Region"],
+        ["Pending", "North"],
+        ["Done", "South"],
+      ],
+    },
+    ["format"],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(client as any, server as any), true);
+  assert.deepEqual(server.actions[0].spec?.conditional, [
+    { column: "Region", index: 1, rule: "text-contains", text: "Pending" },
+  ]);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["format"], 500, {
+        format: {
+          conditional: [
+            { column: 1, rule: "text-contains", text: "line\nfeed" },
+          ],
+        },
+      } as any),
+    /1 to 80 visible characters/,
+  );
+});
+
 test("server and add-in agree on an unambiguous text-date conversion", () => {
   const specs = { clean: { operations: ["text-to-date"] } };
   const actions = ["clean"] as const;

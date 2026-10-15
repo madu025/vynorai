@@ -1470,6 +1470,14 @@ export async function applyApprovedExcelPlan(
                       type: rule.rule === "top-n" ? "TopItems" : "BottomItems",
                     };
                     topBottom.topBottom.format.fill.color = "#C6EFCE";
+                  } else if (rule.rule === "text-contains") {
+                    const contains =
+                      range.conditionalFormats.add("ContainsText");
+                    contains.textComparison.rule = {
+                      operator: "Contains",
+                      text: rule.text,
+                    };
+                    contains.textComparison.format.fill.color = "#FFF2CC";
                   } else if (rule.rule === "duplicates") {
                     const dupes = range.conditionalFormats.add("Custom");
                     const letter = expressionColumnLetter(rule.index);

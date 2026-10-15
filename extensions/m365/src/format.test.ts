@@ -74,6 +74,18 @@ test("format instructions become explicit options, and 'format as a table' stays
   assert.deepEqual(rankedPlan.actions[0].spec?.conditional, [
     { column: "Sales", index: 2, rule: "top-n", n: 2 },
   ]);
+  const contains = interpretInstruction(
+    "Highlight Status cells containing Pending",
+    ["Status", "Sales"],
+    [
+      ["Pending", 100],
+      ["Done", 200],
+    ],
+  );
+  assert.deepEqual(contains.actions, ["format"]);
+  assert.deepEqual(contains.specs.format?.conditional, [
+    { column: 0, rule: "text-contains", text: "Pending" },
+  ]);
   const dropdown = interpretInstruction(
     "Add a drop-down for Region",
     headers,

@@ -231,12 +231,14 @@ const excelPlanSchema = z.object({
                     "custom-formula",
                     "top-n",
                     "bottom-n",
+                    "text-contains",
                   ]),
                   operator: z
                     .enum([">", ">=", "<", "<=", "=", "<>"])
                     .optional(),
                   value: z.number().finite().optional(),
                   n: z.number().int().min(1).max(100).optional(),
+                  text: z.string().trim().min(1).max(80).optional(),
                 })
                 .strict(),
             )

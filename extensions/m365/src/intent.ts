@@ -100,10 +100,12 @@ export interface InstructionSpecs {
         | "icon-set"
         | "custom-formula"
         | "top-n"
-        | "bottom-n";
+        | "bottom-n"
+        | "text-contains";
       operator?: ">" | ">=" | "<" | "<=" | "=" | "<>";
       value?: number;
       n?: number;
+      text?: string;
     }>;
     validation?: Array<{
       column: number;
@@ -1449,7 +1451,7 @@ function interpretFormatAndQuality(
     result.actions.push("quality");
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -1542,6 +1544,16 @@ function interpretFormatAndQuality(
   ];
   const escapeRegExp = (value: string) =>
     value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const [column, header] of headers.entries()) {
+    const match = new RegExp(
+      `${escapeRegExp(String(header))}\\s+(?:cells?\\s+)?contain(?:s|ing)\\s+(.+?)(?:\\s+(?:with|using)\\s+(?:a\\s+)?conditional\\s+format(?:ting)?\\b|[.,]|$)`,
+      "i",
+    ).exec(text);
+    if (!match) continue;
+    const value = match[1].trim().replace(/^["']|["']$/g, "");
+    if (value.length >= 1 && value.length <= 80)
+      conditional.push({ column, rule: "text-contains", text: value });
+  }
   for (const [column, header] of headers.entries()) {
     if (!isNumericColumn(rows, column)) continue;
     for (const comparison of comparisonWords) {

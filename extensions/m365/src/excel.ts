@@ -181,10 +181,12 @@ export interface ExcelColumnSpecs {
         | "icon-set"
         | "custom-formula"
         | "top-n"
-        | "bottom-n";
+        | "bottom-n"
+        | "text-contains";
       operator?: ">" | ">=" | "<" | "<=" | "=" | "<>";
       value?: number;
       n?: number;
+      text?: string;
     }>;
     validation?: Array<{
       column: number;
@@ -327,6 +329,7 @@ export interface ExcelActionSpec {
     operator?: string;
     value?: number;
     n?: number;
+    text?: string;
   }>;
   validation?: Array<{
     column: string;
@@ -1191,6 +1194,7 @@ function resolveColumnSpecs(
       "custom-formula",
       "top-n",
       "bottom-n",
+      "text-contains",
     ];
     const conditional: Array<{
       column: string;
@@ -1199,11 +1203,16 @@ function resolveColumnSpecs(
       operator?: string;
       value?: number;
       n?: number;
+      text?: string;
     }> = [];
     for (const entry of options.conditional ?? []) {
       if (!inRange(entry.column) || !conditionalRules.includes(entry.rule))
         fail("EXCEL_SPEC_INVALID", "Choose a valid column and highlight rule.");
-      if (entry.rule !== "duplicates" && !numeric(entry.column))
+      if (
+        entry.rule !== "duplicates" &&
+        entry.rule !== "text-contains" &&
+        !numeric(entry.column)
+      )
         fail(
           "EXCEL_SPEC_VALUE_NOT_NUMERIC",
           "That highlight rule needs a column of numbers.",
@@ -1233,6 +1242,18 @@ function resolveColumnSpecs(
             "Top or bottom highlights need a rank from 1 to 100.",
           );
       }
+      if (entry.rule === "text-contains") {
+        if (
+          typeof entry.text !== "string" ||
+          entry.text.trim().length < 1 ||
+          entry.text.trim().length > 80 ||
+          /[\r\n\u0000-\u001F]/.test(entry.text)
+        )
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Text conditional formats need 1 to 80 visible characters.",
+          );
+      }
       if (
         conditional.some(
           (item) => item.index === entry.column && item.rule === entry.rule,
@@ -1250,7 +1271,9 @@ function resolveColumnSpecs(
           ? { operator: entry.operator, value: entry.value }
           : entry.rule === "top-n" || entry.rule === "bottom-n"
             ? { n: entry.n }
-            : {}),
+            : entry.rule === "text-contains"
+              ? { text: entry.text!.trim() }
+              : {}),
       });
     }
     const validation: Array<{

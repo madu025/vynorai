@@ -425,6 +425,33 @@ test("a format outcome explains a top conditional format", () => {
   assert.match(item.details.join("\n"), /Sales: highlight top values \(3\)/);
 });
 
+test("a format outcome explains a text-contains conditional format", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "format",
+        targetSheet: "Sheet1_Vynor_Format",
+        spec: {
+          conditional: [
+            {
+              column: "Status",
+              index: 0,
+              rule: "text-contains",
+              text: "Pending",
+            },
+          ],
+        },
+      },
+    ],
+    ["Status"],
+    [["Pending"]],
+  );
+  assert.match(
+    item.details.join("\n"),
+    /Status: highlight matching text \(Pending\)/,
+  );
+});
+
 test("a repeat run gets a numbered sheet name that still fits Excel's limit", () => {
   const taken = new Set(["Sheet1_Vynor_Result", "Sheet1_Vynor_Result (2)"]);
   assert.equal(

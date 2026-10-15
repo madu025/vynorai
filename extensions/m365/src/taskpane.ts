@@ -537,6 +537,8 @@ inspect?.addEventListener("click", async () => {
         String(header).length > 1 &&
         instructionText.toLowerCase().includes(String(header).toLowerCase()),
     );
+    const followRegex = /(that|it|same|those|these|ඒකටම|eka|ekata)/i;
+    let overrideRan = false;
     if (
       earlier &&
       actions.includes("chart") &&
@@ -546,6 +548,7 @@ inspect?.addEventListener("click", async () => {
       const named = /(line|pie|bar|area|column|scatter)/i.exec(
         instructionText,
       )?.[1];
+      overrideRan = true;
       specs.chart = {
         category: earlier.rows,
         value: earlier.values,
@@ -562,6 +565,13 @@ inspect?.addEventListener("click", async () => {
       chartAction: actions.includes("chart"),
       namesAColumn,
       applied: Object.keys(lastAppliedSpecs ?? {}),
+      cond: [
+        Boolean(earlier),
+        actions.includes("chart"),
+        !namesAColumn,
+        followRegex.test(instructionText),
+      ],
+      overrideRan,
       text: instructionText,
       textMatches: /(that|it|same|those|these)/i.test(instructionText),
       chartSpec: specs.chart,

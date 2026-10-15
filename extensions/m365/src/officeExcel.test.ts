@@ -31,6 +31,7 @@ function fakeWorkbook(
       rowCount: data.length,
       columnCount: data[0]?.length ?? 0,
       values: data,
+      format: { font: {}, autofitColumns() {} },
       load() {},
       getCell(row: number) {
         return {
@@ -53,6 +54,10 @@ function fakeWorkbook(
             if (key === "values") {
               calls.push(`write ${name}!${address}`);
               if (name === "Sales") cells = value;
+              return true;
+            }
+            if (key === "formulas") {
+              calls.push(`formula ${name}!${address}`);
               return true;
             }
             object[key] = value;
@@ -78,6 +83,11 @@ function fakeWorkbook(
             if (key === "values") {
               calls.push(`write ${name}!A1 normalized`);
               object.values = value;
+              return true;
+            }
+            if (key === "formulas") {
+              calls.push(`formula ${name}!A1 normalized`);
+              object.formulas = value;
               return true;
             }
             object[key] = value;
@@ -289,6 +299,36 @@ test("apply writes a normalized copy to the result sheet for two-row headers", a
   );
   assert.ok(excel.calls.includes("write Result of Sales!A1 normalized"));
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
+test("an insight report writes only live formulas to a new marked result sheet", async () => {
+  const source = [
+    ["Region", "Sales"],
+    ["North", 100],
+    ["South", 200],
+    ["North", 300],
+  ];
+  const excel = fakeWorkbook(source.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["statistics"], 500, {
+    statistics: { mode: "insights", value: 1, category: 0 },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(
+    report.results.map((result) => `${result.kind}:${result.status}`),
+    ["statistics:created"],
+  );
+  assert.equal(report.results[0].targetSheet, "Insights of Sales");
+  assert.equal(report.results[0].createdSheet, true);
+  assert.ok(excel.calls.includes("formula Insights of Sales!A1 normalized"));
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+  assert.ok(!excel.calls.some((call) => call.startsWith("formula Sales!")));
 });
 
 test("apply refuses to write when the source changed after the preview", async () => {

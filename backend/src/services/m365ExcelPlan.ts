@@ -42,11 +42,13 @@ export type ExcelHighlightRule =
 
 export interface ExcelColumnSpecs {
   statistics?: {
-    mode: "describe" | "correlation" | "forecast";
+    mode: "describe" | "correlation" | "forecast" | "insights";
     columns?: number[];
     pair?: [number, number];
     value?: number;
     periods?: number;
+    category?: number;
+    date?: number;
   };
   chart?: {
     category: number;
@@ -112,11 +114,13 @@ export interface ExcelColumnSpecs {
 
 export interface ExcelActionSpec {
   statistics?: {
-    mode: "describe" | "correlation" | "forecast";
+    mode: "describe" | "correlation" | "forecast" | "insights";
     columns?: Array<{ column: string; index: number }>;
     pair?: Array<{ column: string; index: number }>;
     value?: { column: string; index: number };
     periods?: number;
+    category?: { column: string; index: number };
+    date?: { column: string; index: number };
   };
   categoryColumn?: string;
   categoryIndex?: number;
@@ -763,8 +767,13 @@ function resolveColumnSpecs(
         "Statistics options need the statistics action.",
       );
     const stats = specs.statistics;
-    if (!["describe", "correlation", "forecast"].includes(stats.mode))
-      fail("EXCEL_SPEC_INVALID", "Choose describe, correlation or forecast.");
+    if (
+      !["describe", "correlation", "forecast", "insights"].includes(stats.mode)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "Choose describe, correlation, forecast or insights.",
+      );
     const named = (index: number) => ({
       column: headers[index],
       index,
@@ -798,13 +807,37 @@ function resolveColumnSpecs(
       if (pair.length !== 2 || pair[0] === pair[1])
         fail("EXCEL_SPEC_INVALID", "Choose two different numeric columns.");
       out.statistics!.pair = pair.map(checkNumeric).map(named);
-    } else {
+    } else if (stats.mode === "forecast") {
       const value = checkNumeric(stats.value);
       const periods = stats.periods ?? 3;
       if (!Number.isInteger(periods) || periods < 1 || periods > 24)
         fail("EXCEL_SPEC_INVALID", "Choose 1 to 24 periods to forecast.");
       out.statistics!.value = named(value);
       out.statistics!.periods = periods;
+    } else {
+      const value = checkNumeric(stats.value);
+      const checkOptional = (
+        index: unknown,
+        label: string,
+      ): number | undefined => {
+        if (index === undefined) return undefined;
+        if (!inRange(index) || index === value)
+          fail(
+            "EXCEL_SPEC_INVALID",
+            `Choose a different existing ${label} column.`,
+          );
+        return index as number;
+      };
+      const category = checkOptional(stats.category, "category");
+      const date = checkOptional(stats.date, "date");
+      if (category !== undefined && date !== undefined && category === date)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose different category and date columns.",
+        );
+      out.statistics!.value = named(value);
+      if (category !== undefined) out.statistics!.category = named(category);
+      if (date !== undefined) out.statistics!.date = named(date);
     }
     resolved.statistics = out;
   }

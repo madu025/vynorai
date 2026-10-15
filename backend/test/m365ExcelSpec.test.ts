@@ -33,6 +33,28 @@ test("server and add-in build the same plan for explicit column choices", () => 
   assert.equal(server.actions[1].spec.rowsColumn, "Region");
 });
 
+test("server and add-in agree on a deterministic insight report", () => {
+  const actions = ["statistics"] as const;
+  const specs = {
+    statistics: { mode: "insights" as const, value: 2, category: 1, date: 0 },
+  };
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  const statistics = server.actions[0].spec.statistics;
+  assert.equal(statistics.mode, "insights");
+  assert.equal(statistics.value.column, "Sales");
+  assert.equal(statistics.category.column, "Region");
+  assert.equal(statistics.date.column, "Month");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["statistics"], 500, {
+        statistics: { mode: "insights", value: 2, category: 2 },
+      } as any),
+    /different existing category/,
+  );
+});
+
 test("a plan with different column choices is not accepted as the same plan", () => {
   const actions = ["chart"] as const;
   const server = createServerExcelPreviewPlan(input, [...actions], 500, {

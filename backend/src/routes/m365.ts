@@ -122,7 +122,7 @@ const excelPlanSchema = z.object({
         .optional(),
       statistics: z
         .object({
-          mode: z.enum(["describe", "correlation", "forecast"]),
+          mode: z.enum(["describe", "correlation", "forecast", "insights"]),
           columns: z.array(z.number().int().min(0).max(99)).max(8).optional(),
           pair: z
             .tuple([
@@ -132,6 +132,8 @@ const excelPlanSchema = z.object({
             .optional(),
           value: z.number().int().min(0).max(99).optional(),
           periods: z.number().int().min(1).max(24).optional(),
+          category: z.number().int().min(0).max(99).optional(),
+          date: z.number().int().min(0).max(99).optional(),
         })
         .strict()
         .optional(),

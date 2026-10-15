@@ -12,6 +12,7 @@ import {
   describeColumns,
   linearForecast,
   numericSeries,
+  buildInsightReportPreview,
 } from "./statistics.js";
 
 export type OutcomeLanguage = "en" | "si" | "ta";
@@ -511,7 +512,7 @@ export function buildOutcomes(
               `${strength === "strong" ? "ශක්තිමත්" : strength === "moderate" ? "මධ්‍යම" : "දුර්වල"} ${(result.r as number) > 0 ? "ධනාත්මක" : "ඍණාත්මක"} සම්බන්ධයක්`,
             ),
           );
-      } else {
+      } else if (stats.mode === "forecast") {
         const value = stats.value as { column: string; index: number };
         const periods = Number(stats.periods ?? 3);
         const known = numericSeries(rows as any, value.index);
@@ -529,6 +530,31 @@ export function buildOutcomes(
           say(
             `A straight-line trend through ${known.length} values, extended ${periods} periods.`,
             `අගයන් ${known.length} හරහා සරල රේඛා ප්‍රවණතාවක්, කාල පරිච්ඡේද ${periods} දක්වා දිගු කර ඇත.`,
+          ),
+        );
+      } else {
+        const value = stats.value as { column: string; index: number };
+        const preview = buildInsightReportPreview(
+          rows as any,
+          headers,
+          value.index,
+          stats.category?.index,
+          stats.date?.index,
+        );
+        item.title = say(
+          "Deterministic insight report",
+          "නිශ්චිත අවබෝධතා වාර්තාව",
+        );
+        item.table = {
+          headers: preview.headers,
+          rows: preview.rows,
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          say(
+            "Writes live formulas for change, trend, IQR anomalies and contributors. Nothing is sent to AI.",
+            "වෙනස, ප්‍රවණතාව, IQR අසාමාන්‍යතා සහ දායකයන් සඳහා සජීවී සූත්‍ර ලියයි. AI වෙත කිසිවක් නොයැවේ.",
           ),
         );
       }
@@ -615,6 +641,8 @@ export function friendlySheetName(
     label = `Pivot - ${spec.valuesColumn} by ${spec.rowsColumn}`;
   else if (action.kind === "statistics" && spec.statistics?.mode === "forecast")
     label = `Forecast of ${spec.statistics.value?.column ?? sourceSheet}`;
+  else if (action.kind === "statistics" && spec.statistics?.mode === "insights")
+    label = `Insights of ${spec.statistics.value?.column ?? sourceSheet}`;
   else if (
     action.kind === "statistics" &&
     spec.statistics?.mode === "correlation"

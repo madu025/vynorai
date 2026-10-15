@@ -53,11 +53,13 @@ export interface InstructionSpecs {
     limit?: number;
   };
   statistics?: {
-    mode: "describe" | "correlation" | "forecast";
+    mode: "describe" | "correlation" | "forecast" | "insights";
     columns?: number[];
     pair?: [number, number];
     value?: number;
     periods?: number;
+    category?: number;
+    date?: number;
   };
   clean?: { operations: CleanOperation[] };
   format?: {
@@ -760,6 +762,37 @@ function interpretStatistics(
   const mentioned = headerPositions(headers, text)
     .filter((entry) => isNumericColumn(rows, entry.index))
     .map((entry) => entry.index);
+  if (
+    /\b(?:insight|insights|anomal(?:y|ies)|outliers?|trends?|recommend(?:ed|ation)?\s+(?:next\s+)?actions?)\b/i.test(
+      text,
+    )
+  ) {
+    const value = mentioned[0] ?? numericAll[0];
+    if (value === undefined) {
+      result.problems.push("An insight report needs a numeric column.");
+      return;
+    }
+    const date = headers.findIndex((header) =>
+      /\b(date|month|quarter|year|week)\b/i.test(header),
+    );
+    const category = headers.findIndex(
+      (header, index) =>
+        index !== date &&
+        index !== value &&
+        !isNumericColumn(rows, index) &&
+        /\b(region|category|status|customer|department|product|type)\b/i.test(
+          header,
+        ),
+    );
+    result.actions.push("statistics");
+    result.specs.statistics = {
+      mode: "insights",
+      value,
+      ...(category >= 0 ? { category } : {}),
+      ...(date >= 0 ? { date } : {}),
+    };
+    return;
+  }
   if (/\bcorrelat(?:e|ion|ions)\b|\brelationship\s+between\b/i.test(text)) {
     const pair = mentioned.length >= 2 ? mentioned : numericAll;
     if (pair.length >= 2) {

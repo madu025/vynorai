@@ -93,6 +93,20 @@ export function correlation(
 export function linearForecast(values: number[], periods: number): number[] {
   const n = values.length;
   if (n < 3) return [];
+  const slope = linearSlope(values);
+  if (slope === undefined) return [];
+  const my = values.reduce((t, v) => t + v, 0) / n;
+  const intercept = my - slope * ((n + 1) / 2);
+  return Array.from(
+    { length: periods },
+    (_, step) => Math.round((intercept + slope * (n + step + 1)) * 100) / 100,
+  );
+}
+
+/** Slope for equally-spaced observations numbered 1..n. */
+function linearSlope(values: number[]): number | undefined {
+  const n = values.length;
+  if (n < 3) return undefined;
   const mx = (n + 1) / 2;
   const my = values.reduce((t, v) => t + v, 0) / n;
   let sxy = 0;
@@ -101,12 +115,7 @@ export function linearForecast(values: number[], periods: number): number[] {
     sxy += (at + 1 - mx) * (value - my);
     sxx += (at + 1 - mx) ** 2;
   });
-  const slope = sxx === 0 ? 0 : sxy / sxx;
-  const intercept = my - slope * mx;
-  return Array.from(
-    { length: periods },
-    (_, step) => Math.round((intercept + slope * (n + step + 1)) * 100) / 100,
-  );
+  return sxx === 0 ? 0 : sxy / sxx;
 }
 
 export function numericSeries(rows: Cell[][], index: number): number[] {
@@ -198,4 +207,143 @@ export function buildForecastCells(
     ]);
   }
   return out;
+}
+
+export interface InsightReportPreview {
+  headers: [string, string];
+  rows: Array<[string, string]>;
+}
+
+/**
+ * The preview counterpart of the live insight-report formulas. It is deliberately deterministic:
+ * no workbook values leave Excel, and the apply layer re-creates the same measures as formulas.
+ */
+export function buildInsightReportPreview(
+  rows: Cell[][],
+  headers: string[],
+  valueIndex: number,
+  categoryIndex?: number,
+  dateIndex?: number,
+): InsightReportPreview {
+  const series = toNumbers(rows, valueIndex);
+  const values = [...series].sort((a, b) => a - b);
+  const count = values.length;
+  const first = series[0];
+  const last = series.at(-1);
+  const q1 = quantile(values, 0.25);
+  const q3 = quantile(values, 0.75);
+  const iqr = q3 - q1;
+  const slope = linearSlope(series) ?? 0;
+  const anomalies =
+    count && Number.isFinite(iqr)
+      ? values.filter(
+          (value) => value < q1 - 1.5 * iqr || value > q3 + 1.5 * iqr,
+        ).length
+      : 0;
+  const report: Array<[string, string]> = [
+    ["Data rows", String(count)],
+    [
+      "Average",
+      String(round(values.reduce((total, value) => total + value, 0) / count)),
+    ],
+    [
+      "Percent change",
+      first !== undefined && first !== 0 && last !== undefined
+        ? `${round(((last - first) / Math.abs(first)) * 100)}%`
+        : "",
+    ],
+    ["IQR anomalies", String(anomalies)],
+    ["Trend", slope > 0 ? "Rising" : slope < 0 ? "Falling" : "Flat"],
+  ];
+  const forecast = linearForecast(series, 1)[0];
+  if (forecast !== undefined)
+    report.push(["Next-period estimate", String(forecast)]);
+  report.push([
+    "Suggested next action",
+    first !== undefined && last !== undefined && last < first
+      ? "Review the declining trend and lowest contributor"
+      : "Review the largest contributor and unusual values",
+  ]);
+  if (dateIndex !== undefined)
+    report.push([
+      "Seasonality hint",
+      rows.length >= 12
+        ? "At least 12 periods: review seasonal pattern"
+        : "Need 12 periods for seasonal hint",
+    ]);
+  if (categoryIndex !== undefined) {
+    const totals = new Map<string, number>();
+    for (const row of rows) {
+      const category = String(row[categoryIndex] ?? "").trim();
+      const value = row[valueIndex];
+      if (category && typeof value === "number")
+        totals.set(category, (totals.get(category) ?? 0) + value);
+    }
+    const ranked = [...totals.entries()].sort(
+      (left, right) => right[1] - left[1],
+    );
+    if (ranked.length)
+      report.push(
+        ["Top contributor", `${ranked[0][0]} (${round(ranked[0][1])})`],
+        [
+          "Bottom contributor",
+          `${ranked.at(-1)![0]} (${round(ranked.at(-1)![1])})`,
+        ],
+      );
+  }
+  return { headers: ["Insight", "Result"], rows: report };
+}
+
+/** Live, source-referencing formulas for the deterministic insight report result sheet. */
+export function buildInsightReportCells(
+  range: RangeInfo,
+  headers: string[],
+  valueIndex: number,
+  categoryIndex?: number,
+  dateIndex?: number,
+): string[][] {
+  const value = columnRange(range, valueIndex);
+  const cells: string[][] = [
+    ["Insight", `Result for ${headers[valueIndex]}`],
+    ["Data rows", `=COUNT(${value})`],
+    ["Average", `=IFERROR(AVERAGE(${value}),"")`],
+    [
+      "Percent change",
+      `=IFERROR((INDEX(${value},ROWS(${value}))-INDEX(${value},1))/ABS(INDEX(${value},1)),"")`,
+    ],
+    [
+      "IQR anomalies",
+      `=LET(x,${value},q1,QUARTILE.INC(x,1),q3,QUARTILE.INC(x,3),iqr,q3-q1,COUNTIF(x,"<"&(q1-1.5*iqr))+COUNTIF(x,">"&(q3+1.5*iqr)))`,
+    ],
+    [
+      "Trend",
+      `=IFERROR(IF(COUNT(${value})<3,"Flat",IF(SLOPE(${value},SEQUENCE(ROWS(${value})))>0,"Rising",IF(SLOPE(${value},SEQUENCE(ROWS(${value})))<0,"Falling","Flat"))),"Flat")`,
+    ],
+    [
+      "Next-period estimate",
+      `=IFERROR(FORECAST(ROWS(${value})+1,${value},SEQUENCE(ROWS(${value}))),"")`,
+    ],
+    [
+      "Suggested next action",
+      '=IF(B4<0,"Review the declining trend and lowest contributor","Review the largest contributor and unusual values")',
+    ],
+  ];
+  if (dateIndex !== undefined) {
+    const date = columnRange(range, dateIndex);
+    cells.push([
+      "Seasonality hint",
+      `=IF(COUNTA(${date})>=12,"At least 12 periods: review seasonal pattern","Need 12 periods for seasonal hint")`,
+    ]);
+  }
+  if (categoryIndex !== undefined) {
+    const category = columnRange(range, categoryIndex);
+    const totals = `LET(c,UNIQUE(${category}),s,SUMIF(${category},c,${value})`;
+    cells.push(
+      ["Top contributor", `=${totals},INDEX(c,MATCH(MAX(s),s,0)))`],
+      ["Top contribution", `=${totals},MAX(s))`],
+      ["Bottom contributor", `=${totals},INDEX(c,MATCH(MIN(s),s,0)))`],
+      ["Bottom contribution", `=${totals},MIN(s))`],
+    );
+  }
+  return cells;
 }

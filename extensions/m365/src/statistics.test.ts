@@ -6,6 +6,8 @@ import { buildOutcomes } from "./outcome.js";
 import {
   buildDescribeCells,
   buildForecastCells,
+  buildInsightReportCells,
+  buildInsightReportPreview,
   correlation,
   describeColumns,
   linearForecast,
@@ -116,4 +118,75 @@ test("a dashboard request becomes a chart, a pivot and statistics", () => {
     asked.specs as any,
   );
   assert.equal(plan.actions.length, 3);
+});
+
+test("an insight request previews deterministic trend, IQR and contributor evidence", () => {
+  const asked = interpretInstruction(
+    "Explain insights for Sales by Region",
+    headers,
+    rows as any,
+  );
+  assert.deepEqual(asked.actions, ["statistics"]);
+  assert.deepEqual(asked.specs.statistics, {
+    mode: "insights",
+    value: 2,
+    category: 1,
+    date: 0,
+  });
+  const plan = createExcelPreviewPlan(
+    input,
+    ["statistics"],
+    500,
+    asked.specs as any,
+  );
+  const spec = plan.actions[0].spec!.statistics!;
+  assert.equal(spec.mode, "insights");
+  assert.equal(spec.value?.column, "Sales");
+  assert.equal(spec.category?.column, "Region");
+  const preview = buildInsightReportPreview(rows as any, headers, 2, 1, 0);
+  assert.deepEqual(
+    preview.rows.find(([label]) => label === "Trend"),
+    ["Trend", "Rising"],
+  );
+  assert.deepEqual(
+    preview.rows.find(([label]) => label === "Top contributor"),
+    ["Top contributor", "North (400)"],
+  );
+  assert.deepEqual(
+    preview.rows.find(([label]) => label === "Next-period estimate"),
+    ["Next-period estimate", "500"],
+  );
+  assert.deepEqual(
+    buildInsightReportPreview(
+      [
+        ["Jan", "North", 300],
+        ["Feb", "South", 100],
+        ["Mar", "East", 200],
+      ] as any,
+      ["Month", "Region", "Sales"],
+      2,
+      1,
+      0,
+    ).rows.find(([label]) => label === "Trend"),
+    ["Trend", "Falling"],
+    "trend uses the selected-row order, not values sorted for IQR",
+  );
+  const cells = buildInsightReportCells(
+    { sheetName: "Sheet1", startColumn: 0, startRow: 1, endRow: 5 },
+    headers,
+    2,
+    1,
+    0,
+  );
+  assert.match(cells[4][1], /^=LET\(x,'Sheet1'!\$C\$2:\$C\$5/);
+  assert.match(cells[4][1], /"<"&\(q1-1\.5\*iqr\)/);
+  assert.match(cells.at(-1)![1], /^=LET\(c,UNIQUE\('Sheet1'!\$B\$2/);
+  assert.equal(
+    interpretInstruction(
+      "Forecast and recommend next actions for Sales by Month",
+      headers,
+      rows as any,
+    ).specs.statistics?.mode,
+    "insights",
+  );
 });

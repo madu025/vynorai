@@ -23,6 +23,7 @@ import {
   buildCorrelationCells,
   buildDescribeCells,
   buildForecastCells,
+  buildInsightReportCells,
 } from "./statistics.js";
 import type { FormulaSelection } from "./formulaInspector.js";
 
@@ -977,12 +978,20 @@ export async function applyApprovedExcelPlan(
                   spec.pair?.[0]?.index ?? 0,
                   spec.pair?.[1]?.index ?? 0,
                 );
-              else
+              else if (spec.mode === "forecast")
                 cells = buildForecastCells(
                   range,
                   headers,
                   spec.value?.index ?? 0,
                   spec.periods ?? 3,
+                );
+              else
+                cells = buildInsightReportCells(
+                  range,
+                  headers,
+                  spec.value?.index ?? 0,
+                  spec.category?.index,
+                  spec.date?.index,
                 );
               const width = Math.max(...cells.map((row) => row.length));
               const grid = sheet.getRangeByIndexes(0, 0, cells.length, width);

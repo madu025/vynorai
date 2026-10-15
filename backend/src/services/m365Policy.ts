@@ -3,7 +3,12 @@ import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 import { dbRun } from "../db.js";
 
-export const M365_SCOPES = ["m365.excel.read", "m365.excel.write"] as const;
+export const M365_SCOPES = [
+  "m365.excel.read",
+  "m365.excel.write",
+  "m365.text.read",
+  "m365.text.write",
+] as const;
 export type M365Scope = (typeof M365_SCOPES)[number];
 
 export interface M365Identity {

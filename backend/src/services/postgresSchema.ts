@@ -655,6 +655,12 @@ ALTER TABLE m365_approval_uses ADD COLUMN IF NOT EXISTS action_count INTEGER NOT
 ALTER TABLE m365_approval_uses ADD COLUMN IF NOT EXISTS failure_count INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    version: "036_m365_tenant_ai_policy",
+    sql: `
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS ai_enabled SMALLINT NOT NULL DEFAULT 1;
+`,
+  },
 ];
 
 /** Applies pending PostgreSQL migrations, each in its own transaction. */

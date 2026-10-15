@@ -38,6 +38,7 @@
       .composer:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(18, 58, 107, .15); }
       textarea { display: block; width: 100%; min-height: 64px; border: 0; outline: 0; resize: none; background: transparent; font: inherit; color: inherit; }
       .composer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+      .step { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
       .pills { display: flex; flex-direction: column; gap: 8px; }
       .pill { width: 100%; padding: 12px 14px; text-align: left; border: 1px solid var(--line); border-radius: 14px; background: var(--card); font-weight: 600; }
       .pill:hover { background: #eef2f7; }
@@ -64,38 +65,40 @@
         <button id="menu-toggle" class="icon-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More options">&#8943;</button>
         <div id="menu" role="menu" hidden>
           <button id="toggle-diagnostics" type="button" role="menuitem">Show diagnostics</button>
-          <button id="self-test" type="button" role="menuitem">Run self-test</button>
-          <button id="copy-diagnostics" type="button" role="menuitem">Copy diagnostics</button>
-          <button id="clear-diagnostics" type="button" role="menuitem">Clear diagnostics</button>
-          <button id="sign-out" type="button" role="menuitem" disabled>Sign out</button>
-          <p class="menu-version" id="build-id">Build 20261015.16</p>
+          <button id="overview" type="button" role="menuitem" data-i18n="menu_overview">Workbook overview</button>
+          <button id="language" type="button" role="menuitem">Language: English</button>
+          <button id="self-test" type="button" role="menuitem" data-i18n="menu_selftest">Run self-test</button>
+          <button id="copy-diagnostics" type="button" role="menuitem" data-i18n="menu_copy">Copy diagnostics</button>
+          <button id="clear-diagnostics" type="button" role="menuitem" data-i18n="menu_clear">Clear diagnostics</button>
+          <button id="sign-out" type="button" role="menuitem" disabled data-i18n="menu_signout">Sign out</button>
+          <p class="menu-version" id="build-id">Build 20261015.17</p>
         </div>
       </header>
       <p id="status" role="status" aria-live="polite">Loading…</p>
 
       <section id="signin-card">
-        <h1>Welcome to VynorAI</h1>
-        <p>Sign in with your work account to analyze and build from your selected data.</p>
-        <button id="sign-in" class="primary" type="button">Sign in with Microsoft</button>
+        <h1 data-i18n="welcome_title">Welcome to VynorAI</h1>
+        <p data-i18n="welcome_body">Sign in with your work account to analyze and build from your selected data.</p>
+        <button id="sign-in" class="primary" type="button" data-i18n="signin">Sign in with Microsoft</button>
       </section>
 
       <div class="workspace">
-        <p class="hero">What would you like to do with your data?</p>
+        <p class="hero" data-i18n="hero">What would you like to do with your data?</p>
         <div class="composer">
           <label for="instruction" hidden>Describe what to create</label>
-          <textarea id="instruction" placeholder="Describe what you would like to create from the selected data"></textarea>
+          <textarea id="instruction" data-i18n-placeholder="placeholder" placeholder="Describe what you would like to create from the selected data"></textarea>
           <div class="composer-bar">
-            <button id="analyze" class="ghost" type="button" disabled>Analyze with AI</button>
-            <button id="inspect" class="primary" type="button" disabled>Inspect and preview</button>
+            <button id="analyze" class="ghost" type="button" disabled data-i18n="analyze">Analyze with AI</button>
+            <button id="inspect" class="primary" type="button" disabled data-i18n="inspect">Inspect and preview</button>
           </div>
         </div>
 
         <div class="pills" aria-label="Suggestions">
-          <button class="pill" type="button" data-instruction="Create a chart.">Create a chart</button>
-          <button class="pill" type="button" data-instruction="Create a PivotTable.">Create a PivotTable</button>
-          <button class="pill" type="button" data-instruction="Format as a table.">Format as a table</button>
-          <button class="pill" type="button" data-instruction="Create a new result sheet.">Create a result sheet</button>
-          <button class="pill" type="button" data-instruction="Clean the data.">Clean the data (trim, numbers, duplicates)</button>
+          <button class="pill" type="button" data-instruction="Create a chart." data-i18n="pill_chart">Create a chart</button>
+          <button class="pill" type="button" data-instruction="Create a PivotTable." data-i18n="pill_pivot">Create a PivotTable</button>
+          <button class="pill" type="button" data-instruction="Format as a table." data-i18n="pill_table">Format as a table</button>
+          <button class="pill" type="button" data-instruction="Create a new result sheet." data-i18n="pill_sheet">Create a result sheet</button>
+          <button class="pill" type="button" data-instruction="Clean the data." data-i18n="pill_clean">Clean the data (trim, numbers, duplicates)</button>
         </div>
 
         <section id="ai-consent" class="card" hidden>
@@ -114,18 +117,20 @@
         <div id="ai-result"></div>
 
         <section id="insights-card" class="card" hidden>
-          <h2>Insights</h2>
+          <h2 data-i18n="insights_title">Insights</h2>
           <p class="muted">Calculated here in the task pane. Nothing is sent anywhere.</p>
           <div id="insights-list"></div>
           <div id="insights-actions" class="pills"></div>
         </section>
 
         <section id="result-card" class="card" hidden>
-          <h2>Preview</h2>
+          <h2 data-i18n="preview_title">Preview</h2>
           <p id="preview-summary"></p>
-          <p class="muted">Nothing has changed in your workbook yet.</p>
+          <div id="steps" aria-label="Steps"></div>
+          <p class="muted" data-i18n="nothing_changed">Nothing has changed in your workbook yet.</p>
           <div class="row">
-            <button id="apply" class="primary" type="button" disabled>Confirm and apply</button>
+            <button id="apply" class="primary" type="button" disabled data-i18n="apply">Confirm and apply</button>
+            <button id="rollback" class="ghost" type="button" hidden data-i18n="undo">Undo what was created</button>
           </div>
           <details>
             <summary>Show details</summary>
@@ -177,7 +182,7 @@
     <script nomodule>
       document.getElementById("status").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";
     </script>
-    <script src="./runtime-config.js?v=20261015.16"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261015.16"></script>
+    <script src="./runtime-config.js?v=20261015.17"></script>
+    <script src="./dist/taskpane.bundle.js?v=20261015.17"></script>
   </body>
 </html>

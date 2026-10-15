@@ -111,3 +111,128 @@ export function isSafeColumnName(name: unknown): name is string {
     !/[\r\n]/.test(name)
   );
 }
+
+export interface ViewSpec {
+  sort?: { index: number; direction: "asc" | "desc" };
+  filter?: {
+    index: number;
+    operator: ">" | ">=" | "<" | "<=" | "=" | "!=" | "contains";
+    value: string | number;
+  };
+  highlight?: {
+    index: number;
+    rule:
+      | "top-n"
+      | "bottom-n"
+      | "above-average"
+      | "below-average"
+      | "duplicates";
+    n?: number;
+  };
+}
+
+const isBlank = (cell: Cell) =>
+  cell === null || (typeof cell === "string" && cell.trim() === "");
+
+function compareCells(left: Cell, right: Cell): number {
+  if (isBlank(left) && isBlank(right)) return 0;
+  if (isBlank(left)) return 1;
+  if (isBlank(right)) return -1;
+  if (typeof left === "number" && typeof right === "number")
+    return left - right;
+  return String(left).localeCompare(String(right), undefined, {
+    sensitivity: "base",
+    numeric: true,
+  });
+}
+
+/**
+ * Deterministic sorted / filtered / highlighted copy of the data rows. The original rows are never
+ * modified; the result is written to a separate view sheet.
+ */
+export function applyView(
+  rows: Cell[][],
+  spec: ViewSpec,
+): { rows: Cell[][]; highlighted: number[] } {
+  let result = rows.map((row) => [...row]);
+  if (spec.filter) {
+    const { index, operator, value } = spec.filter;
+    result = result.filter((row) => {
+      const cell = row[index];
+      if (isBlank(cell)) return false;
+      if (operator === "contains")
+        return String(cell)
+          .toLocaleLowerCase()
+          .includes(String(value).toLocaleLowerCase());
+      if (operator === "=" || operator === "!=") {
+        const same =
+          typeof cell === "number" && typeof value === "number"
+            ? cell === value
+            : String(cell).trim().toLocaleLowerCase() ===
+              String(value).trim().toLocaleLowerCase();
+        return operator === "=" ? same : !same;
+      }
+      if (typeof cell !== "number" || typeof value !== "number") return false;
+      if (operator === ">") return cell > value;
+      if (operator === ">=") return cell >= value;
+      if (operator === "<") return cell < value;
+      return cell <= value;
+    });
+  }
+  if (spec.sort) {
+    const { index, direction } = spec.sort;
+    const factor = direction === "asc" ? 1 : -1;
+    result = result
+      .map((row, position) => ({ row, position }))
+      .sort((a, b) => {
+        const blankA = isBlank(a.row[index]);
+        const blankB = isBlank(b.row[index]);
+        if (blankA || blankB) return compareCells(a.row[index], b.row[index]);
+        return (
+          factor * compareCells(a.row[index], b.row[index]) ||
+          a.position - b.position
+        );
+      })
+      .map((entry) => entry.row);
+  }
+  const highlighted: number[] = [];
+  if (spec.highlight) {
+    const { index, rule, n } = spec.highlight;
+    const numbers = result
+      .map((row, position) => ({ value: row[index], position }))
+      .filter(
+        (entry): entry is { value: number; position: number } =>
+          typeof entry.value === "number",
+      );
+    if (rule === "top-n" || rule === "bottom-n") {
+      const ordered = [...numbers].sort((a, b) =>
+        rule === "top-n" ? b.value - a.value : a.value - b.value,
+      );
+      for (const entry of ordered.slice(0, n ?? 1))
+        highlighted.push(entry.position);
+    } else if (rule === "above-average" || rule === "below-average") {
+      const mean =
+        numbers.reduce((total, entry) => total + entry.value, 0) /
+        Math.max(1, numbers.length);
+      for (const entry of numbers)
+        if (rule === "above-average" ? entry.value > mean : entry.value < mean)
+          highlighted.push(entry.position);
+    } else {
+      const counts = new Map<string, number>();
+      for (const row of result) {
+        if (isBlank(row[index])) continue;
+        const key = String(row[index]).trim().toLocaleLowerCase();
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      result.forEach((row, position) => {
+        if (isBlank(row[index])) return;
+        if (
+          (counts.get(String(row[index]).trim().toLocaleLowerCase()) ?? 0) > 1
+        )
+          highlighted.push(position);
+      });
+    }
+    highlighted.sort((a, b) => a - b);
+  }
+  return { rows: result, highlighted };
+}

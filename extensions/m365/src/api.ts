@@ -32,11 +32,24 @@ export interface M365ApiClient {
         | "new-sheet"
         | "pivot-table"
         | "clean"
-        | "add-column";
+        | "add-column"
+        | "view";
       status: "created" | "exists" | "failed" | "skipped_unsupported";
     }>;
   }): Promise<any>;
   diagnose(): Promise<M365AccessDiagnostics>;
+  assistText(input: {
+    host: "word" | "powerpoint" | "outlook";
+    task: string;
+    tone?: string;
+    text: string;
+    consent: true;
+  }): Promise<any>;
+  reportRollback(input: {
+    planId: string;
+    removedSheets: number;
+    convertedTables: number;
+  }): Promise<any>;
   analyzeExcel(input: { summary: unknown; consent: true }): Promise<any>;
 }
 
@@ -128,6 +141,9 @@ export function createM365ApiClient(
     reportExcelResult: (input) =>
       request("POST", "/v1/m365/excel/apply-result", input),
     diagnose: () => request("GET", "/v1/m365/diagnostics"),
+    assistText: (input) => request("POST", "/v1/m365/text/assist", input),
+    reportRollback: (input) =>
+      request("POST", "/v1/m365/excel/rollback", input),
     analyzeExcel: (input) => request("POST", "/v1/m365/excel/analyze", input),
   };
 }

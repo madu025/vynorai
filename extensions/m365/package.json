@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && esbuild src/taskpane.ts --bundle --format=iife --target=es2020 --outfile=dist/taskpane.bundle.js",
+    "build": "tsc && esbuild src/taskpane.ts --bundle --format=iife --target=es2020 --outfile=dist/taskpane.bundle.js && esbuild src/text.ts --bundle --format=iife --target=es2020 --outfile=dist/text.bundle.js",
     "dev-server": "node scripts/dev-server.mjs"
   },
   "devDependencies": {

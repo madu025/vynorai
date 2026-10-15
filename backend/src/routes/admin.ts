@@ -508,10 +508,18 @@ const AdminM365TenantSchema = z.object({
   status: z.enum(["enabled", "disabled"]),
   displayName: z.string().trim().min(1).max(256).nullable().optional(),
   allowedScopes: z
-    .array(z.enum(["m365.excel.read", "m365.excel.write"]))
+    .array(
+      z.enum([
+        "m365.excel.read",
+        "m365.excel.write",
+        "m365.text.read",
+        "m365.text.write",
+      ]),
+    )
     .min(1)
-    .max(2),
+    .max(4),
   consentedAt: z.string().datetime({ offset: true }).nullable().optional(),
+  aiEnabled: z.boolean().optional(),
 });
 const AdminM365IdentitySchema = z.object({
   userId: z.string().min(1),
@@ -1931,6 +1939,7 @@ adminRouter.put(
       details: JSON.stringify({
         allowedScopes: tenant.allowedScopes,
         hasConsentEvidence: Boolean(tenant.consentedAt),
+        aiEnabled: tenant.aiEnabled,
       }),
       ipAddress: req.ip,
     });
@@ -1974,5 +1983,55 @@ adminRouter.put(
       ipAddress: req.ip,
     });
     res.json({ ok: true });
+  },
+);
+
+/**
+ * Microsoft 365 operations view: how often each tenant used the add-in, and the recent metadata-only
+ * audit trail. Both read the existing audit log; they never expose tokens or workbook values.
+ */
+adminRouter.get(
+  "/m365/usage",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+    const since = new Date(Date.now() - days * 86_400_000)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
+    const rows = await dbAll<{
+      target: string;
+      event_type: string;
+      count: number | string;
+    }>(
+      "SELECT target, event_type, COUNT(*) as count FROM security_audit_logs WHERE event_type LIKE 'M365_%' AND created_at >= ? GROUP BY target, event_type ORDER BY target, event_type",
+      [since],
+    );
+    const tenants: Record<string, Record<string, number>> = {};
+    for (const row of rows) {
+      const key = row.target || "unknown";
+      (tenants[key] ||= {})[row.event_type] = Number(row.count);
+    }
+    res.json({ days, tenants });
+  },
+);
+
+adminRouter.get(
+  "/m365/audit",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    const tenantId =
+      typeof req.query.tenantId === "string" &&
+      /^[A-Za-z0-9-]{1,128}$/.test(req.query.tenantId)
+        ? req.query.tenantId
+        : undefined;
+    const events = await dbAll(
+      `SELECT id, event_type, severity, actor, target, details, created_at FROM security_audit_logs WHERE event_type LIKE 'M365_%'${
+        tenantId ? " AND target = ?" : ""
+      } ORDER BY created_at DESC LIMIT ?`,
+      tenantId ? [tenantId, limit] : [limit],
+    );
+    res.json({ events, count: events.length });
   },
 );

@@ -16,7 +16,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SRC="$ROOT/extensions/m365"
 
 (cd "$SRC" && npm run build)
-[ -f "$SRC/dist/taskpane.bundle.js" ] || { echo "dist/taskpane.bundle.js missing" >&2; exit 1; }
+for bundle in taskpane text; do
+  [ -f "$SRC/dist/$bundle.bundle.js" ] || { echo "dist/$bundle.bundle.js missing" >&2; exit 1; }
+done
 [ -f "$SRC/runtime-config.production.js" ] || { echo "runtime-config.production.js missing" >&2; exit 1; }
 
 SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST")
@@ -24,7 +26,9 @@ SCP=(scp -i "$KEY" -o BatchMode=yes)
 
 # Upload next to the target first, then rename, so a half-copied bundle is never served.
 "${SSH[@]}" "git -C '$REMOTE_DIR' pull -q && mkdir -p '$REMOTE_DIR/dist'"
-"${SCP[@]}" "$SRC/dist/taskpane.bundle.js" "$HOST:$REMOTE_DIR/dist/taskpane.bundle.js.new"
+for bundle in taskpane text; do
+  "${SCP[@]}" "$SRC/dist/$bundle.bundle.js" "$HOST:$REMOTE_DIR/dist/$bundle.bundle.js.new"
+done
 "${SCP[@]}" "$SRC/runtime-config.production.js" "$HOST:$REMOTE_DIR/runtime-config.js.new"
-"${SSH[@]}" "cd '$REMOTE_DIR' && mv -f dist/taskpane.bundle.js.new dist/taskpane.bundle.js && mv -f runtime-config.js.new runtime-config.js"
+"${SSH[@]}" "cd '$REMOTE_DIR' && mv -f dist/taskpane.bundle.js.new dist/taskpane.bundle.js && mv -f dist/text.bundle.js.new dist/text.bundle.js && mv -f runtime-config.js.new runtime-config.js"
 echo "Published add-in build output. The manifest was not changed."

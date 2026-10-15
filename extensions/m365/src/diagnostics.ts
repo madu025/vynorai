@@ -192,6 +192,7 @@ export const ACTION_REQUIREMENTS: Record<string, string> = {
   "pivot-table": "1.8",
   clean: "1.4",
   "add-column": "1.4",
+  view: "1.4",
 };
 
 function stringClaim(value: unknown): string | undefined {

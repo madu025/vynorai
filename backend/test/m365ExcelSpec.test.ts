@@ -119,3 +119,60 @@ test("the server refuses unsafe computed columns and unknown clean steps", () =>
     /valid, unique/,
   );
 });
+
+test("server and add-in agree on chart v2, pivot v2 and view plans", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "stacked-column" as const,
+      extraValues: [3],
+    },
+    pivot: {
+      rows: 1,
+      values: 2,
+      aggregation: "average" as const,
+      columns: 0,
+    },
+    view: {
+      sort: { column: 2, direction: "desc" as const },
+      filter: { column: 2, operator: ">" as const, value: 1400 },
+      highlight: { column: 2, rule: "top-n" as const, n: 2 },
+    },
+  };
+  const actions = ["chart", "pivot-table", "view"] as const;
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  const view = server.actions.find((a: any) => a.kind === "view");
+  assert.equal(view.targetSheet, "Sheet1_Vynor_View");
+  assert.equal(view.spec.filter.column, "Sales");
+});
+
+test("the server refuses unusable chart v2, pivot v2 and view choices", () => {
+  const call = (specs: unknown, actions: string[]) =>
+    createServerExcelPreviewPlan(input, actions, 500, specs as any);
+  assert.throws(
+    () =>
+      call({ chart: { category: 1, value: 2, chartType: "radar" } }, ["chart"]),
+    /Unsupported chart type/,
+  );
+  assert.throws(
+    () =>
+      call({ pivot: { rows: 1, values: 2, aggregation: "median" } }, [
+        "pivot-table",
+      ]),
+    /aggregation/,
+  );
+  assert.throws(
+    () => call({ view: {} }, ["view"]),
+    /sort, filter or highlight/,
+  );
+  assert.throws(
+    () =>
+      call({ view: { highlight: { column: 2, rule: "top-n", n: 500 } } }, [
+        "view",
+      ]),
+    /1-100/,
+  );
+});

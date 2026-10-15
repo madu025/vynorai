@@ -8,6 +8,43 @@ import {
 type Cell = string | number | boolean | null;
 
 export interface InstructionSpecs {
+  chart?: {
+    category: number;
+    value: number;
+    chartType:
+      | "column"
+      | "line"
+      | "bar"
+      | "pie"
+      | "stacked-column"
+      | "stacked-bar"
+      | "area";
+    extraValues?: number[];
+  };
+  pivot?: {
+    rows: number;
+    values: number;
+    aggregation?: "sum" | "count" | "average" | "min" | "max";
+    columns?: number;
+  };
+  view?: {
+    sort?: { column: number; direction: "asc" | "desc" };
+    filter?: {
+      column: number;
+      operator: ">" | ">=" | "<" | "<=" | "=" | "!=" | "contains";
+      value: string | number;
+    };
+    highlight?: {
+      column: number;
+      rule:
+        | "top-n"
+        | "bottom-n"
+        | "above-average"
+        | "below-average"
+        | "duplicates";
+      n?: number;
+    };
+  };
   clean?: { operations: CleanOperation[] };
   addColumn?: {
     name: string;
@@ -18,7 +55,7 @@ export interface InstructionSpecs {
 }
 
 export interface InterpretedInstruction {
-  actions: Array<"clean" | "add-column">;
+  actions: Array<"clean" | "add-column" | "chart" | "pivot-table" | "view">;
   specs: InstructionSpecs;
   problems: string[];
 }
@@ -40,9 +77,11 @@ const findHeader = (headers: string[], text: string): number => {
  * real headers is reported as a problem instead of being guessed.
  */
 export function interpretInstruction(
-  instruction: string,
+  rawInstruction: string,
   headers: string[],
+  rows: Cell[][] = [],
 ): InterpretedInstruction {
+  const instruction = normalizeInstruction(rawInstruction);
   const result: InterpretedInstruction = {
     actions: [],
     specs: {},
@@ -121,7 +160,208 @@ export function interpretInstruction(
       }
     }
   }
+  interpretChartAndPivot(text, headers, rows, result);
+  interpretView(text, headers, rows, result);
   return result;
+}
+
+/**
+ * Maps common Sinhala and Singlish words to the English keywords the deterministic readers use,
+ * so the same instructions work in all three without sending anything to a model.
+ */
+export function normalizeInstruction(text: string): string {
+  const table: Array<[RegExp, string]> = [
+    [
+      /ප්‍රස්තාරය?|ප්‍රස්ථාරය?|prasthara(ya)?|grap[h]? eka|chart eka/gi,
+      "chart",
+    ],
+    [/පිවට්|pivot eka/gi, "pivot"],
+    [/වගුව|wagu(wa)?|table eka/gi, "table"],
+    [/පිරිසිදු|pirisidu|clean karanna|saaf/gi, "clean"],
+    [/අනුපිටපත්|anupitapath|duplicate eka/gi, "duplicates"],
+    [/අලුත් (පත්‍රය|sheet)|alut sheet|new sheet eka/gi, "new sheet"],
+    [/වර්ග කරන්න|warga karanna|sort karanna/gi, "sort"],
+    [/ඉහළම|ihalama|uda/gi, "top"],
+    [/පහළම|pahalama/gi, "bottom"],
+    [/මුළු|mulu|total eka/gi, "total"],
+    [/සාමාන්‍යය|saamanya/gi, "average"],
+    [/හදන්න|හදලා දෙන්න|hadanna|hadala denna|karanna/gi, ""],
+    [/විකුණුම්|wikunum/gi, "Sales"],
+  ];
+  let out = text;
+  for (const [pattern, replacement] of table)
+    out = out.replace(pattern, replacement);
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+
+const CHART_TYPE_WORDS: Array<
+  [RegExp, NonNullable<InstructionSpecs["chart"]>["chartType"]]
+> = [
+  [/stacked\s+(column|columns)/i, "stacked-column"],
+  [/stacked\s+bar/i, "stacked-bar"],
+  [/\barea\b/i, "area"],
+  [/\bpie\b/i, "pie"],
+  [/\bline\b/i, "line"],
+  [/\bbar\b/i, "bar"],
+  [/\bcolumn\b/i, "column"],
+];
+
+function headerPositions(headers: string[], text: string) {
+  const lower = text.toLocaleLowerCase();
+  const found: Array<{ index: number; at: number }> = [];
+  headers.forEach((header, index) => {
+    const name = header.toLocaleLowerCase().trim();
+    if (!name) return;
+    const at = lower.search(
+      new RegExp(
+        `(^|[^\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\p{L}\\p{N}]|$)`,
+        "u",
+      ),
+    );
+    if (at >= 0) found.push({ index, at });
+  });
+  return found.sort((a, b) => a.at - b.at);
+}
+
+function isNumericColumn(rows: Cell[][], index: number): boolean {
+  const cells = rows
+    .map((row) => row[index])
+    .filter((cell) => cell !== null && cell !== undefined && cell !== "");
+  return cells.length > 0 && cells.every((cell) => typeof cell === "number");
+}
+
+function interpretChartAndPivot(
+  text: string,
+  headers: string[],
+  rows: Cell[][],
+  result: InterpretedInstruction,
+) {
+  const positions = headerPositions(headers, text);
+  const numeric = positions.filter((entry) =>
+    isNumericColumn(rows, entry.index),
+  );
+  const labels = positions.filter(
+    (entry) => !isNumericColumn(rows, entry.index),
+  );
+  const byMatch = /\b(?:by|per|across|for each|each)\s+/i.exec(text);
+  const afterBy = byMatch
+    ? labels.filter((entry) => entry.at >= (byMatch.index ?? 0))
+    : [];
+  const categoryEntry = afterBy[0] ?? (byMatch ? undefined : undefined);
+  if (/\b(chart|graph|plot)\b/i.test(text) && categoryEntry && numeric.length) {
+    const chartType =
+      CHART_TYPE_WORDS.find(([pattern]) => pattern.test(text))?.[1] ?? "column";
+    const [first, ...rest] = numeric.map((entry) => entry.index);
+    result.actions.push("chart");
+    result.specs.chart = {
+      category: categoryEntry.index,
+      value: first,
+      chartType,
+      ...(rest.length ? { extraValues: rest.slice(0, 4) } : {}),
+    };
+  }
+  if (/\bpivot\b/i.test(text) && categoryEntry && numeric.length) {
+    const aggregation = /\b(count|how many)\b/i.test(text)
+      ? "count"
+      : /\b(average|avg|mean)\b/i.test(text)
+        ? "average"
+        : /\b(minimum|min|lowest)\b/i.test(text)
+          ? "min"
+          : /\b(maximum|max|highest)\b/i.test(text)
+            ? "max"
+            : "sum";
+    const columns = afterBy[1];
+    result.actions.push("pivot-table");
+    result.specs.pivot = {
+      rows: categoryEntry.index,
+      values: numeric[0].index,
+      aggregation,
+      ...(columns ? { columns: columns.index } : {}),
+    };
+  }
+}
+
+function interpretView(
+  text: string,
+  headers: string[],
+  rows: Cell[][],
+  result: InterpretedInstruction,
+) {
+  const view: NonNullable<InstructionSpecs["view"]> = {};
+  const header = (name: string) => {
+    const found = headerPositions(headers, name)[0];
+    return found ? found.index : -1;
+  };
+  const top = /\b(top|bottom)\s+(\d{1,3})\b(?:\s+(?:by|of|in)\s+)?(.*)$/i.exec(
+    text,
+  );
+  if (top) {
+    const column = header(top[3]);
+    if (column >= 0 && isNumericColumn(rows, column)) {
+      const rule = top[1].toLowerCase() === "top" ? "top-n" : "bottom-n";
+      view.highlight = { column, rule, n: Number(top[2]) };
+      view.sort = { column, direction: rule === "top-n" ? "desc" : "asc" };
+    }
+  }
+  const sort =
+    /\bsort(?:ed)?\s+(?:by|on)\s+(.+?)(?:\s+(descending|desc|ascending|asc|highest first|lowest first))?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
+      text,
+    );
+  if (sort && !view.sort) {
+    const column = header(sort[1]);
+    if (column >= 0)
+      view.sort = {
+        column,
+        direction: /desc|highest/i.test(sort[2] ?? "") ? "desc" : "asc",
+      };
+  }
+  const above = /\bhighlight\s+(above|below)\s+average\s+(.+?)(?:[.,]|$)/i.exec(
+    text,
+  );
+  if (above) {
+    const column = header(above[2]);
+    if (column >= 0 && isNumericColumn(rows, column))
+      view.highlight = {
+        column,
+        rule:
+          above[1].toLowerCase() === "above"
+            ? "above-average"
+            : "below-average",
+      };
+  }
+  const dup = /\bhighlight\s+duplicates?(?:\s+in\s+(.+?))?(?:[.,]|$)/i.exec(
+    text,
+  );
+  if (dup) {
+    const column = dup[1] ? header(dup[1]) : 0;
+    if (column >= 0) view.highlight = { column, rule: "duplicates" };
+  }
+  const filter =
+    /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
+      text,
+    );
+  if (filter) {
+    const column = header(filter[1]);
+    const operator = filter[2].toLowerCase() as NonNullable<
+      NonNullable<InstructionSpecs["view"]>["filter"]
+    >["operator"];
+    const raw = filter[3].trim();
+    if (column >= 0 && raw) {
+      const asNumber = Number(raw.replace(/,/g, ""));
+      view.filter = {
+        column,
+        operator,
+        value:
+          operator !== "contains" && raw !== "" && Number.isFinite(asNumber)
+            ? asNumber
+            : raw,
+      };
+    }
+  }
+  if (view.sort || view.filter || view.highlight) {
+    result.actions.push("view");
+    result.specs.view = view;
+  }
 }
 
 export interface Answer {

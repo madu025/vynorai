@@ -52,3 +52,12 @@ task pane opens, and Caddy serves it with `Cache-Control: no-store`.
   (Integrated apps, Centralized Deployment) so the manifest is pushed to assigned users or groups and later manifest
   updates reach them without manual downloads.
 - The menu (`...`) shows the loaded build id, so a user can confirm which version is running.
+
+## Other Office apps
+
+`text.html` and `src/text.ts` provide writing assistance (summarize, rewrite, fix grammar, translate to
+Sinhala or English, draft a reply) for Word, PowerPoint and Outlook. Each app has its own manifest:
+`manifest-word.xml`, `manifest-powerpoint.xml`, `manifest-outlook.xml`. The text is sent only after the person
+ticks a consent box, is limited to 8000 characters, passes the shared PII shield, and the answer must match a
+strict schema. Inserting is additive (Word: after the selection; Outlook: top of a draft). PowerPoint is copy
+only, and nothing is ever sent as an email. The API scopes are `m365.text.read` and `m365.text.write`.

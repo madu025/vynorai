@@ -48,7 +48,8 @@ type ExcelActionPlan = {
       | "new-sheet"
       | "pivot-table"
       | "clean"
-      | "add-column";
+      | "add-column"
+      | "view";
     name: string;
     targetSheet: string;
     preservesSource: true;
@@ -68,6 +69,7 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "pivot-table",
   "clean",
   "add-column",
+  "view",
 ];
 
 type ComparableExcelPlan = Omit<
@@ -77,19 +79,58 @@ type ComparableExcelPlan = Omit<
 
 const DEFAULT_CHUNK_ROWS = 500;
 
+export type ExcelChartType =
+  | "column"
+  | "line"
+  | "bar"
+  | "pie"
+  | "stacked-column"
+  | "stacked-bar"
+  | "area";
+export type ExcelAggregation = "sum" | "count" | "average" | "min" | "max";
+export type ExcelFilterOperator =
+  | ">"
+  | ">="
+  | "<"
+  | "<="
+  | "="
+  | "!="
+  | "contains";
+export type ExcelHighlightRule =
+  | "top-n"
+  | "bottom-n"
+  | "above-average"
+  | "below-average"
+  | "duplicates";
+
 export interface ExcelColumnSpecs {
   chart?: {
     category: number;
     value: number;
-    chartType: "column" | "line" | "bar" | "pie";
+    chartType: ExcelChartType;
+    extraValues?: number[];
   };
-  pivot?: { rows: number; values: number };
+  pivot?: {
+    rows: number;
+    values: number;
+    aggregation?: ExcelAggregation;
+    columns?: number;
+  };
   clean?: { operations: string[] };
   addColumn?: {
     name: string;
     left: number;
     operator: "+" | "-" | "*" | "/";
     right: number;
+  };
+  view?: {
+    sort?: { column: number; direction: "asc" | "desc" };
+    filter?: {
+      column: number;
+      operator: ExcelFilterOperator;
+      value: string | number;
+    };
+    highlight?: { column: number; rule: ExcelHighlightRule; n?: number };
   };
 }
 
@@ -98,12 +139,16 @@ export interface ExcelActionSpec {
   categoryIndex?: number;
   valueColumn?: string;
   valueIndex?: number;
-  chartType?: "column" | "line" | "bar" | "pie";
+  chartType?: ExcelChartType;
+  extraValueColumns?: string[];
+  extraValueIndexes?: number[];
   rowsColumn?: string;
   rowsIndex?: number;
   valuesColumn?: string;
   valuesIndex?: number;
-  aggregation?: "sum";
+  aggregation?: ExcelAggregation;
+  columnsColumn?: string;
+  columnsIndex?: number;
   operations?: string[];
   columnName?: string;
   leftColumn?: string;
@@ -111,6 +156,19 @@ export interface ExcelActionSpec {
   operator?: "+" | "-" | "*" | "/";
   rightColumn?: string;
   rightIndex?: number;
+  sort?: { column: string; index: number; direction: "asc" | "desc" };
+  filter?: {
+    column: string;
+    index: number;
+    operator: ExcelFilterOperator;
+    value: string | number;
+  };
+  highlight?: {
+    column: string;
+    index: number;
+    rule: ExcelHighlightRule;
+    n?: number;
+  };
 }
 
 /**
@@ -127,6 +185,7 @@ function resolveColumnSpecs(
   pivot?: ExcelActionSpec;
   clean?: ExcelActionSpec;
   addColumn?: ExcelActionSpec;
+  view?: ExcelActionSpec;
 } {
   if (!specs) return {};
   const fail = (code: string, message: string): never => {
@@ -147,19 +206,44 @@ function resolveColumnSpecs(
     pivot?: ExcelActionSpec;
     clean?: ExcelActionSpec;
     addColumn?: ExcelActionSpec;
+    view?: ExcelActionSpec;
   } = {};
+  const chartTypes = [
+    "column",
+    "line",
+    "bar",
+    "pie",
+    "stacked-column",
+    "stacked-bar",
+    "area",
+  ];
   if (specs.chart) {
     if (!requested.has("chart"))
       fail("EXCEL_SPEC_UNUSED", "A chart column choice needs a chart action.");
     const { category, value, chartType } = specs.chart;
+    const extra = specs.chart.extraValues ?? [];
     if (!inRange(category) || !inRange(value) || category === value)
       fail("EXCEL_SPEC_INVALID", "Choose two different columns for the chart.");
-    if (!["column", "line", "bar", "pie"].includes(chartType))
+    if (!chartTypes.includes(chartType))
       fail("EXCEL_SPEC_INVALID", "Unsupported chart type.");
     if (!numeric(value))
       fail(
         "EXCEL_SPEC_VALUE_NOT_NUMERIC",
         "The chart value column must contain numbers.",
+      );
+    if (
+      !Array.isArray(extra) ||
+      extra.length > 4 ||
+      new Set(extra).size !== extra.length ||
+      extra.some(
+        (index) => !inRange(index) || index === category || index === value,
+      )
+    )
+      fail("EXCEL_SPEC_INVALID", "Extra chart series must be other columns.");
+    if (extra.some((index) => !numeric(index)))
+      fail(
+        "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+        "Every chart series column must contain numbers.",
       );
     resolved.chart = {
       categoryColumn: headers[category],
@@ -167,6 +251,12 @@ function resolveColumnSpecs(
       valueColumn: headers[value],
       valueIndex: value,
       chartType,
+      ...(extra.length
+        ? {
+            extraValueColumns: extra.map((index) => headers[index]),
+            extraValueIndexes: extra,
+          }
+        : {}),
     };
   }
   if (specs.pivot) {
@@ -176,25 +266,39 @@ function resolveColumnSpecs(
         "A PivotTable column choice needs a PivotTable action.",
       );
     const { rows, values } = specs.pivot;
+    const aggregation = specs.pivot.aggregation ?? "sum";
+    const columns = specs.pivot.columns;
     if (!inRange(rows) || !inRange(values) || rows === values)
       fail(
         "EXCEL_SPEC_INVALID",
         "Choose two different columns for the PivotTable.",
       );
-    if (!numeric(values))
+    if (!["sum", "count", "average", "min", "max"].includes(aggregation))
+      fail("EXCEL_SPEC_INVALID", "Unsupported PivotTable aggregation.");
+    if (aggregation !== "count" && !numeric(values))
       fail(
         "EXCEL_SPEC_VALUE_NOT_NUMERIC",
         "The PivotTable value column must contain numbers.",
+      );
+    if (
+      columns !== undefined &&
+      (!inRange(columns) || columns === rows || columns === values)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "The PivotTable column field must be a different column.",
       );
     resolved.pivot = {
       rowsColumn: headers[rows],
       rowsIndex: rows,
       valuesColumn: headers[values],
       valuesIndex: values,
-      aggregation: "sum",
+      aggregation,
+      ...(columns !== undefined
+        ? { columnsColumn: headers[columns], columnsIndex: columns }
+        : {}),
     };
   }
-
   if (specs.clean) {
     if (!requested.has("clean"))
       fail("EXCEL_SPEC_UNUSED", "Clean options need the clean action.");
@@ -243,6 +347,85 @@ function resolveColumnSpecs(
       rightColumn: headers[right],
       rightIndex: right,
     };
+  }
+  if (specs.view) {
+    if (!requested.has("view"))
+      fail("EXCEL_SPEC_UNUSED", "View options need the view action.");
+    const { sort, filter, highlight } = specs.view;
+    if (!sort && !filter && !highlight)
+      fail("EXCEL_SPEC_INVALID", "A view needs a sort, filter or highlight.");
+    const view: ExcelActionSpec = {};
+    if (sort) {
+      if (!inRange(sort.column) || !["asc", "desc"].includes(sort.direction))
+        fail("EXCEL_SPEC_INVALID", "Choose a column and direction to sort by.");
+      view.sort = {
+        column: headers[sort.column],
+        index: sort.column,
+        direction: sort.direction,
+      };
+    }
+    if (filter) {
+      const operators = [">", ">=", "<", "<=", "=", "!=", "contains"];
+      if (!inRange(filter.column) || !operators.includes(filter.operator))
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose a column and operator to filter by.",
+        );
+      const isText = filter.operator === "contains";
+      if (
+        typeof filter.value === "string"
+          ? filter.value.length === 0 || filter.value.length > 80
+          : typeof filter.value !== "number" || !Number.isFinite(filter.value)
+      )
+        fail("EXCEL_SPEC_INVALID", "The filter value is not allowed.");
+      if (
+        (isText && typeof filter.value !== "string") ||
+        ([">", ">=", "<", "<="].includes(filter.operator) &&
+          (typeof filter.value !== "number" || !numeric(filter.column)))
+      )
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          "Comparisons need a number and a numeric column.",
+        );
+      view.filter = {
+        column: headers[filter.column],
+        index: filter.column,
+        operator: filter.operator,
+        value: filter.value,
+      };
+    }
+    if (highlight) {
+      const rules = [
+        "top-n",
+        "bottom-n",
+        "above-average",
+        "below-average",
+        "duplicates",
+      ];
+      if (!inRange(highlight.column) || !rules.includes(highlight.rule))
+        fail("EXCEL_SPEC_INVALID", "Choose a column and rule to highlight.");
+      if (highlight.rule !== "duplicates" && !numeric(highlight.column))
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          "This highlight rule needs a numeric column.",
+        );
+      const n = highlight.n;
+      if (
+        ["top-n", "bottom-n"].includes(highlight.rule) &&
+        (!Number.isInteger(n) || (n as number) < 1 || (n as number) > 100)
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose how many rows to highlight (1-100).",
+        );
+      view.highlight = {
+        column: headers[highlight.column],
+        index: highlight.column,
+        rule: highlight.rule,
+        ...(["top-n", "bottom-n"].includes(highlight.rule) ? { n } : {}),
+      };
+    }
+    resolved.view = view;
   }
   return resolved;
 }
@@ -443,9 +626,11 @@ export function createExcelPreviewPlan(
       ? `${baseName}_Vynor_Clean`
       : kind === "add-column"
         ? `${baseName}_Vynor_Calc`
-        : kind === "table" && !layout.normalization
-          ? input.worksheetName
-          : resultSheet;
+        : kind === "view"
+          ? `${baseName}_Vynor_View`
+          : kind === "table" && !layout.normalization
+            ? input.worksheetName
+            : resultSheet;
   const resolved = resolveColumnSpecs(
     layout.headers,
     input.values.slice(layout.headerRowCount),
@@ -468,6 +653,7 @@ export function createExcelPreviewPlan(
     ...(kind === "add-column" && resolved.addColumn
       ? { spec: resolved.addColumn }
       : {}),
+    ...(kind === "view" && resolved.view ? { spec: resolved.view } : {}),
   }));
   const chunks = Array.from({ length: profile.chunkCount }, (_, index) => ({
     index,

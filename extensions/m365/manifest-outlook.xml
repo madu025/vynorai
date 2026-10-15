@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0" xsi:type="MailApp">
+  <Id>e17443d6-81da-46b1-99e1-d866e50e3bce</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>VynorAI</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="VynorAI Writing (Outlook)" />
+  <Description DefaultValue="Summarize a message or draft a reply. Nothing is ever sent for you." />
+  <IconUrl DefaultValue="https://vynor.lk/m365/logo.png" />
+  <HighResolutionIconUrl DefaultValue="https://vynor.lk/m365/logo.png" />
+  <SupportUrl DefaultValue="https://vynor.lk/support" />
+  <AppDomains><AppDomain>https://vynor.lk</AppDomain></AppDomains>
+  <Hosts><Host Name="Mailbox" /></Hosts>
+  <Requirements>
+    <Sets><Set Name="Mailbox" MinVersion="1.5" /></Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://vynor.lk/m365/text.html" />
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://vynor.lk/m365/text.html" />
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadWriteItem</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+</OfficeApp>

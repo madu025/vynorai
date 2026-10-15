@@ -8,12 +8,21 @@ import {
   reportM365ApprovalResult,
   validateEntraAccessToken,
   validateM365Identity,
+  type M365Scope,
 } from "../services/m365Policy.js";
+import {
+  assistRequestSchema,
+  assistText,
+  TEXT_ASSIST_CONTRACT_VERSION,
+} from "../services/m365TextAssist.js";
 import {
   createServerExcelPreviewPlan,
   InvalidExcelRangeError,
 } from "../services/m365ExcelPlan.js";
-import { requireM365TenantScope } from "../services/m365TenantRegistry.js";
+import {
+  getM365Tenant,
+  requireM365TenantScope,
+} from "../services/m365TenantRegistry.js";
 import {
   diagnoseM365Identity,
   findM365IdentityLink,
@@ -21,6 +30,7 @@ import {
 import {
   analyzeSchemaSummary,
   ANALYSIS_CONTRACT_VERSION,
+  assertAnalysisRateLimit,
   M365AnalysisError,
 } from "../services/m365Analysis.js";
 import { z, validateBody } from "../middleware/validate.js";
@@ -43,10 +53,11 @@ const excelPlanSchema = z.object({
         "pivot-table",
         "clean",
         "add-column",
+        "view",
       ]),
     )
     .min(1)
-    .max(6),
+    .max(7),
   chunkRows: z.number().int().min(1).max(5000).optional(),
   specs: z
     .object({
@@ -54,7 +65,19 @@ const excelPlanSchema = z.object({
         .object({
           category: z.number().int().min(0).max(99),
           value: z.number().int().min(0).max(99),
-          chartType: z.enum(["column", "line", "bar", "pie"]),
+          chartType: z.enum([
+            "column",
+            "line",
+            "bar",
+            "pie",
+            "stacked-column",
+            "stacked-bar",
+            "area",
+          ]),
+          extraValues: z
+            .array(z.number().int().min(0).max(99))
+            .max(4)
+            .optional(),
         })
         .strict()
         .optional(),
@@ -62,6 +85,10 @@ const excelPlanSchema = z.object({
         .object({
           rows: z.number().int().min(0).max(99),
           values: z.number().int().min(0).max(99),
+          aggregation: z
+            .enum(["sum", "count", "average", "min", "max"])
+            .optional(),
+          columns: z.number().int().min(0).max(99).optional(),
         })
         .strict()
         .optional(),
@@ -71,6 +98,40 @@ const excelPlanSchema = z.object({
             .array(z.enum(["trim", "text-to-number", "dedupe"]))
             .min(1)
             .max(3),
+        })
+        .strict()
+        .optional(),
+      view: z
+        .object({
+          sort: z
+            .object({
+              column: z.number().int().min(0).max(99),
+              direction: z.enum(["asc", "desc"]),
+            })
+            .strict()
+            .optional(),
+          filter: z
+            .object({
+              column: z.number().int().min(0).max(99),
+              operator: z.enum([">", ">=", "<", "<=", "=", "!=", "contains"]),
+              value: z.union([z.string().min(1).max(80), z.number().finite()]),
+            })
+            .strict()
+            .optional(),
+          highlight: z
+            .object({
+              column: z.number().int().min(0).max(99),
+              rule: z.enum([
+                "top-n",
+                "bottom-n",
+                "above-average",
+                "below-average",
+                "duplicates",
+              ]),
+              n: z.number().int().min(1).max(100).optional(),
+            })
+            .strict()
+            .optional(),
         })
         .strict()
         .optional(),
@@ -123,64 +184,73 @@ const applyResultSchema = z.object({
     .max(4),
 });
 
+const rollbackSchema = z
+  .object({
+    planId: z.string().min(1).max(100),
+    removedSheets: z.number().int().min(0).max(10),
+    convertedTables: z.number().int().min(0).max(1),
+  })
+  .strict();
+
 function identity(req: Request) {
   return (req as any).m365Identity;
 }
 
-async function requireM365Auth(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  const authorization = req.headers.authorization;
-  if (!authorization?.startsWith("Bearer "))
-    return res.status(401).json({
-      error: {
-        code: "OAUTH_REQUIRED",
-        message: "Entra OAuth access token required",
-      },
-    });
-  try {
-    const m365Identity = await validateEntraAccessToken(
-      authorization.slice("Bearer ".length).trim(),
-    );
+function requireM365Scope(requiredScope: M365Scope) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const authorization = req.headers.authorization;
+    if (!authorization?.startsWith("Bearer "))
+      return res.status(401).json({
+        error: {
+          code: "OAUTH_REQUIRED",
+          message: "Entra OAuth access token required",
+        },
+      });
     try {
-      validateM365Identity(m365Identity, "m365.excel.read");
-      await requireM365TenantScope(m365Identity.tenantId, "m365.excel.read");
-    } catch (error) {
-      const code = (error as Error).message || "M365_POLICY_DENIED";
-      if (code === "tenant_disabled") {
-        await logSecurityEvent({
-          eventType: "M365_TENANT_ACCESS_REQUESTED",
-          actor: m365Identity.objectId,
-          target: m365Identity.tenantId,
-          details: JSON.stringify({ requiredScope: "m365.excel.read" }),
-          ipAddress: req.ip,
-        });
+      const m365Identity = await validateEntraAccessToken(
+        authorization.slice("Bearer ".length).trim(),
+      );
+      try {
+        validateM365Identity(m365Identity, requiredScope);
+        await requireM365TenantScope(m365Identity.tenantId, requiredScope);
+      } catch (error) {
+        const code = (error as Error).message || "M365_POLICY_DENIED";
+        if (code === "tenant_disabled") {
+          await logSecurityEvent({
+            eventType: "M365_TENANT_ACCESS_REQUESTED",
+            actor: m365Identity.objectId,
+            target: m365Identity.tenantId,
+            details: JSON.stringify({ requiredScope }),
+            ipAddress: req.ip,
+          });
+        }
+        return res.status(403).json({ error: { code } });
       }
-      return res.status(403).json({ error: { code } });
+      const link = await findM365IdentityLink(
+        m365Identity.tenantId,
+        m365Identity.objectId,
+      );
+      if (!link)
+        return res
+          .status(403)
+          .json({ error: { code: "M365_IDENTITY_NOT_LINKED" } });
+      (req as any).m365Identity = m365Identity;
+      (req as any).user = {
+        id: link.user_id,
+        email: link.email,
+        subscriptionPlan: link.subscription_plan || "free",
+      };
+      next();
+    } catch (error) {
+      return res.status(401).json({
+        error: { code: (error as Error).message || "INVALID_OAUTH_TOKEN" },
+      });
     }
-    const link = await findM365IdentityLink(
-      m365Identity.tenantId,
-      m365Identity.objectId,
-    );
-    if (!link)
-      return res
-        .status(403)
-        .json({ error: { code: "M365_IDENTITY_NOT_LINKED" } });
-    (req as any).m365Identity = m365Identity;
-    (req as any).user = {
-      id: link.user_id,
-      email: link.email,
-      subscriptionPlan: link.subscription_plan || "free",
-    };
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      error: { code: (error as Error).message || "INVALID_OAUTH_TOKEN" },
-    });
-  }
+  };
 }
+
+const requireM365Auth = requireM365Scope("m365.excel.read");
+const requireM365TextAuth = requireM365Scope("m365.text.read");
 
 export const m365Router = Router();
 
@@ -385,6 +455,19 @@ m365Router.post(
     const tenant = identity(req);
     const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
     res.setHeader("x-correlation-id", correlationId);
+    const tenantRecord = await getM365Tenant(tenant.tenantId);
+    if (tenantRecord && !tenantRecord.aiEnabled) {
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_ANALYSIS_DENIED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          reason: "ai_disabled_by_admin",
+          correlationId,
+        }),
+      });
+      return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
+    }
     if (req.body?.consent !== true) {
       await logSecurityEvent({
         eventType: "M365_EXCEL_ANALYSIS_DENIED",
@@ -422,6 +505,90 @@ m365Router.post(
       const code = known ? error.code : "AI_ANALYSIS_FAILED";
       await logSecurityEvent({
         eventType: "M365_EXCEL_ANALYSIS_FAILED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ code, correlationId }),
+      });
+      return res.status(known ? error.status : 500).json({ error: { code } });
+    }
+  },
+);
+
+/** Audit receipt for an undo of items this add-in created; carries counts only. */
+m365Router.post(
+  "/excel/rollback",
+  requireM365Auth,
+  validateBody(rollbackSchema),
+  async (req: Request, res: Response) => {
+    const tenant = identity(req);
+    try {
+      validateM365Identity(tenant, "m365.excel.write");
+      await requireM365TenantScope(tenant.tenantId, "m365.excel.write");
+    } catch (error) {
+      return res
+        .status(403)
+        .json({ error: { code: (error as Error).message } });
+    }
+    await logSecurityEvent({
+      eventType: "M365_EXCEL_ROLLBACK",
+      actor: (req as any).user.id,
+      target: tenant.tenantId,
+      details: JSON.stringify({
+        operationId: req.body.planId,
+        removedSheets: req.body.removedSheets,
+        convertedTables: req.body.convertedTables,
+      }),
+    });
+    res.json({ recorded: true, operationId: req.body.planId });
+  },
+);
+
+/**
+ * Writing assistance for Word, PowerPoint and Outlook text. Advisory only: the add-in shows the
+ * result and inserts it only after the person confirms. Nothing is ever sent or saved by this API.
+ */
+m365Router.post(
+  "/text/assist",
+  requireM365TextAuth,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const tenant = identity(req);
+    const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
+    res.setHeader("x-correlation-id", correlationId);
+    const tenantRecord = await getM365Tenant(tenant.tenantId);
+    if (tenantRecord && !tenantRecord.aiEnabled) {
+      return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
+    }
+    if (req.body?.consent !== true)
+      return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
+    const parsed = assistRequestSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res.status(422).json({ error: { code: "TEXT_REQUEST_INVALID" } });
+    try {
+      assertAnalysisRateLimit(`text:${user.id}`);
+      const result = await assistText(user, parsed.data);
+      await logSecurityEvent({
+        eventType: "M365_TEXT_ASSIST_COMPLETED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          host: parsed.data.host,
+          task: parsed.data.task,
+          inputChars: parsed.data.text.length,
+          outputChars: result.text.length,
+          correlationId,
+        }),
+      });
+      return res.json({
+        contractVersion: TEXT_ASSIST_CONTRACT_VERSION,
+        advisoryOnly: true,
+        result,
+      });
+    } catch (error) {
+      const known = error instanceof M365AnalysisError;
+      const code = known ? error.code : "AI_ASSIST_FAILED";
+      await logSecurityEvent({
+        eventType: "M365_TEXT_ASSIST_FAILED",
         actor: user.id,
         target: tenant.tenantId,
         details: JSON.stringify({ code, correlationId }),

@@ -1,10 +1,8 @@
 import { dbGet } from "../db.js";
-import {
-  M365_SCOPES,
-  validateM365Identity,
-  type M365Identity,
-} from "./m365Policy.js";
+import { validateM365Identity, type M365Identity } from "./m365Policy.js";
 import { getM365Tenant, requireM365TenantScope } from "./m365TenantRegistry.js";
+
+const M365_SCOPES = ["m365.excel.read", "m365.excel.write"] as const;
 
 export interface M365IdentityLink {
   user_id: string;

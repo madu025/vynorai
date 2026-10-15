@@ -9,7 +9,16 @@ import {
   type SchemaSummary,
 } from "./analysis.js";
 import {
+  LANGUAGE_NAMES,
+  applyLanguage,
+  loadLanguage,
+  nextLanguage,
+  saveLanguage,
+  type Language,
+} from "./i18n.js";
+import {
   answerQuestion,
+  normalizeInstruction,
   interpretInstruction,
   looksLikeQuestion,
 } from "./intent.js";
@@ -47,6 +56,8 @@ import {
 import {
   applyApprovedExcelPlan,
   inspectSelectedExcelRange,
+  inspectWorkbookOverview,
+  rollbackCreatedItems,
 } from "./officeExcel.js";
 
 declare global {
@@ -84,6 +95,11 @@ let accessToken = "";
 let currentPlan: any;
 let previewFingerprint = "";
 let pendingSpecs: ExcelColumnSpecs | undefined;
+let excludedKinds = new Set<string>();
+let lastCreated:
+  | { planId: string; sheets: string[]; tables: string[] }
+  | undefined;
+let language: Language = loadLanguage();
 let lastSummary: SchemaSummary | undefined;
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
 const SESSION_KEY = "vynorai.m365.excel.session.v2";
@@ -377,6 +393,7 @@ signOut?.addEventListener("click", signOutOfMicrosoft);
 
 instruction?.addEventListener("input", () => {
   pendingSpecs = undefined;
+  excludedKinds = new Set<string>();
   currentPlan = undefined;
   previewFingerprint = "";
   if (apply) apply.disabled = true;
@@ -388,7 +405,7 @@ inspect?.addEventListener("click", async () => {
     return setStatus("Sign in before inspecting Excel data.");
   if (apply) apply.disabled = true;
   currentPlan = undefined;
-  const instructionText = instruction?.value || "";
+  const instructionText = normalizeInstruction(instruction?.value || "");
   try {
     setStatus("Inspecting the selected range...");
     const input = await log.step(
@@ -402,13 +419,19 @@ inspect?.addEventListener("click", async () => {
       }),
     );
     const layout = getExcelHeaderLayout(input);
-    const interpreted = interpretInstruction(instructionText, layout.headers);
-    const actions = [
+    const interpreted = interpretInstruction(
+      instructionText,
+      layout.headers,
+      input.values.slice(layout.headerRowCount),
+    );
+    const wanted = [
       ...new Set([
         ...selectExcelActions(instructionText),
         ...interpreted.actions,
       ]),
     ];
+    const filtered = wanted.filter((kind) => !excludedKinds.has(kind));
+    const actions = filtered.length > 0 ? filtered : wanted;
     const specs: ExcelColumnSpecs = {
       ...(pendingSpecs ?? {}),
       ...interpreted.specs,
@@ -488,6 +511,8 @@ inspect?.addEventListener("click", async () => {
         2,
       );
     if (apply) apply.disabled = false;
+    renderSteps(wanted, plan.actions);
+    if (rollbackButton) rollbackButton.hidden = true;
     try {
       renderInsights(buildLocalInsights(input));
     } catch {
@@ -594,6 +619,23 @@ apply?.addEventListener("click", async () => {
       .map(
         (result) => `${result.kind}: ${result.name} (${result.targetSheet})`,
       );
+    const created = report.results.filter(
+      (result) => result.status === "created",
+    );
+    lastCreated = {
+      planId: approvedPlan.planId,
+      sheets: created
+        .filter(
+          (result) => result.kind !== "table" || approvedPlan.normalization,
+        )
+        .map((result) => result.targetSheet),
+      tables: created
+        .filter((result) => result.kind === "table")
+        .map((result) => result.name),
+    };
+    if (rollbackButton)
+      rollbackButton.hidden =
+        lastCreated.sheets.length + lastCreated.tables.length === 0;
     currentPlan = undefined;
     previewFingerprint = "";
     setStatus(
@@ -1069,6 +1111,117 @@ function setupLayout() {
 }
 
 setupLayout();
+
+const rollbackButton = document.querySelector<HTMLButtonElement>("#rollback");
+const stepsContainer = document.querySelector<HTMLElement>("#steps");
+const overviewButton = document.querySelector<HTMLButtonElement>("#overview");
+const languageButton = document.querySelector<HTMLButtonElement>("#language");
+
+/** One checkbox per planned action; changing it re-plans with only the chosen steps. */
+function renderSteps(
+  wanted: string[],
+  planned: Array<{ kind: string; targetSheet: string }>,
+) {
+  if (!stepsContainer) return;
+  stepsContainer.textContent = "";
+  if (wanted.length < 2) return;
+  for (const kind of wanted) {
+    const row = document.createElement("label");
+    row.className = "step";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = !excludedKinds.has(kind);
+    box.addEventListener("change", () => {
+      if (box.checked) excludedKinds.delete(kind);
+      else excludedKinds.add(kind);
+      if (excludedKinds.size >= wanted.length) {
+        excludedKinds.delete(kind);
+        box.checked = true;
+        return;
+      }
+      inspect?.click();
+    });
+    const target = planned.find((action) => action.kind === kind)?.targetSheet;
+    row.appendChild(box);
+    row.appendChild(
+      document.createTextNode(` ${kind}${target ? ` → ${target}` : ""}`),
+    );
+    stepsContainer.appendChild(row);
+  }
+}
+
+rollbackButton?.addEventListener("click", async () => {
+  if (!lastCreated || !config || !accessToken) return;
+  const items = lastCreated;
+  if (
+    !window.confirm(
+      "Remove the result sheets and Table this add-in created? Your original data is not touched.",
+    )
+  )
+    return log.record("rollback:confirm", "skip", "user cancelled");
+  try {
+    const report = await log.step("excel:rollback", () =>
+      rollbackCreatedItems(officeRuntime(), items, true),
+    );
+    await apiClient()
+      .reportRollback({
+        planId: items.planId,
+        removedSheets: Math.min(10, report.removedSheets.length),
+        convertedTables: Math.min(1, report.convertedTables.length),
+      })
+      .catch((error) =>
+        log.record("api:rollback", "fail", describeError(error)),
+      );
+    lastCreated = undefined;
+    if (rollbackButton) rollbackButton.hidden = true;
+    setStatus(
+      `Removed ${report.removedSheets.length} sheet(s) and converted ${report.convertedTables.length} table(s) back to a range.`,
+    );
+  } catch (error) {
+    handleApiError("rollback", error);
+  }
+});
+
+overviewButton?.addEventListener("click", async () => {
+  try {
+    const overview = await log.step("excel:overview", () =>
+      inspectWorkbookOverview(officeRuntime()),
+    );
+    const lines = [
+      `${overview.sheets.length} sheet(s): ${overview.sheets
+        .map((sheet) => `${sheet.name} (${sheet.rows}×${sheet.columns})`)
+        .join(", ")}.`,
+      overview.tables.length
+        ? `${overview.tables.length} table(s): ${overview.tables
+            .map(
+              (table) =>
+                `${table.name} on ${table.sheet} (${table.rows}×${table.columns})`,
+            )
+            .join(", ")}.`
+        : "No Excel tables.",
+    ];
+    showAnswer(lines.join(" "));
+    setStatus("Workbook overview ready. Only names and sizes were read.");
+  } catch (error) {
+    setStatus((error as Error).message);
+  }
+});
+
+function refreshLanguage() {
+  applyLanguage(document, language);
+  if (languageButton)
+    languageButton.textContent = `${translateLabel()}: ${LANGUAGE_NAMES[language]}`;
+}
+function translateLabel(): string {
+  return language === "si" ? "භාෂාව" : language === "ta" ? "மொழி" : "Language";
+}
+languageButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  language = nextLanguage(language);
+  saveLanguage(language);
+  refreshLanguage();
+});
+refreshLanguage();
 
 async function initialize() {
   localStorage.removeItem(LEGACY_SESSION_KEY);

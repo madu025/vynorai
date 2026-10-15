@@ -1090,6 +1090,17 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "036_m365_tenant_ai_policy",
+    description:
+      "Per-tenant switch that lets an administrator disable AI analysis for a Microsoft 365 tenant",
+    up: async () => {
+      await addColumnIfNotExists(
+        "m365_tenants",
+        "ai_enabled INTEGER NOT NULL DEFAULT 1",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

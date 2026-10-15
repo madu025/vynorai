@@ -9,6 +9,11 @@ import {
   type SchemaSummary,
 } from "./analysis.js";
 import {
+  answerQuestion,
+  interpretInstruction,
+  looksLikeQuestion,
+} from "./intent.js";
+import {
   buildLocalInsights,
   suggestionToPlanInput,
   type LocalInsights,
@@ -29,6 +34,7 @@ import {
 import {
   createExcelPreviewPlan,
   excelPlansMatch,
+  getExcelHeaderLayout,
   type ExcelColumnSpecs,
   selectExcelActions,
 } from "./excel.js";
@@ -382,18 +388,7 @@ inspect?.addEventListener("click", async () => {
     return setStatus("Sign in before inspecting Excel data.");
   if (apply) apply.disabled = true;
   currentPlan = undefined;
-  const actions = selectExcelActions(instruction?.value || "");
-  if (actions.length === 0) {
-    log.record(
-      "instruction:actions",
-      "fail",
-      "no explicit allowlisted workbook action",
-    );
-    return setStatus(
-      "Say what to create: a table, chart, new result sheet, or PivotTable.",
-    );
-  }
-  log.record("instruction:actions", "pass", { actions });
+  const instructionText = instruction?.value || "";
   try {
     setStatus("Inspecting the selected range...");
     const input = await log.step(
@@ -406,9 +401,50 @@ inspect?.addEventListener("click", async () => {
         columns: value.values[0]?.length ?? 0,
       }),
     );
+    const layout = getExcelHeaderLayout(input);
+    const interpreted = interpretInstruction(instructionText, layout.headers);
+    const actions = [
+      ...new Set([
+        ...selectExcelActions(instructionText),
+        ...interpreted.actions,
+      ]),
+    ];
+    const specs: ExcelColumnSpecs = {
+      ...(pendingSpecs ?? {}),
+      ...interpreted.specs,
+    };
+    if (actions.length === 0) {
+      if (looksLikeQuestion(instructionText)) {
+        const answer = answerQuestion(
+          instructionText,
+          layout.headers,
+          input.values.slice(layout.headerRowCount),
+        );
+        log.record(
+          "question:local",
+          answer ? "pass" : "fail",
+          answer ? "answered locally" : "no deterministic answer",
+        );
+        showAnswer(
+          answer?.answer ??
+            "I could not answer that from the selected columns. Mention a column name, for example: top Region by Sales.",
+        );
+        return setStatus("Answered from the selected data. Nothing was sent.");
+      }
+      log.record(
+        "instruction:actions",
+        "fail",
+        interpreted.problems.join(" ") || "no explicit allowlisted action",
+      );
+      return setStatus(
+        interpreted.problems[0] ??
+          "Say what to create: a table, chart, result sheet, PivotTable, clean-up, or a computed column. Or ask a question about the data.",
+      );
+    }
+    log.record("instruction:actions", "pass", { actions });
     const localPreview = await log.step(
       "local:preview",
-      () => createExcelPreviewPlan(input, actions, undefined, pendingSpecs),
+      () => createExcelPreviewPlan(input, actions, undefined, specs),
       (value) => ({
         actions: value.actions.length,
         warnings: value.warnings.length,
@@ -417,7 +453,7 @@ inspect?.addEventListener("click", async () => {
     const plan = await apiClient().planExcel({
       ...input,
       actions,
-      ...(pendingSpecs ? { specs: pendingSpecs } : {}),
+      ...(Object.keys(specs).length ? { specs } : {}),
     });
     log.record("api:plan", "pass", {
       planId: plan.planId,
@@ -596,6 +632,18 @@ const insightsCard = document.querySelector<HTMLElement>("#insights-card");
 const insightsList = document.querySelector<HTMLElement>("#insights-list");
 const insightsActions =
   document.querySelector<HTMLElement>("#insights-actions");
+
+/** Shows a locally computed answer in the insights card. */
+function showAnswer(text: string) {
+  const list = document.querySelector<HTMLElement>("#insights-list");
+  const card = document.querySelector<HTMLElement>("#insights-card");
+  if (!list || !card) return;
+  list.textContent = "";
+  const row = document.createElement("p");
+  row.textContent = text;
+  list.appendChild(row);
+  card.hidden = false;
+}
 
 /** Local, private insights: shown to the person, never sent anywhere. */
 function renderInsights(result: LocalInsights) {

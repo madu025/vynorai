@@ -35,9 +35,18 @@ const excelPlanSchema = z.object({
     .max(100_000),
   hasHeaders: z.boolean().optional(),
   actions: z
-    .array(z.enum(["table", "chart", "new-sheet", "pivot-table"]))
+    .array(
+      z.enum([
+        "table",
+        "chart",
+        "new-sheet",
+        "pivot-table",
+        "clean",
+        "add-column",
+      ]),
+    )
     .min(1)
-    .max(4),
+    .max(6),
   chunkRows: z.number().int().min(1).max(5000).optional(),
   specs: z
     .object({
@@ -53,6 +62,24 @@ const excelPlanSchema = z.object({
         .object({
           rows: z.number().int().min(0).max(99),
           values: z.number().int().min(0).max(99),
+        })
+        .strict()
+        .optional(),
+      clean: z
+        .object({
+          operations: z
+            .array(z.enum(["trim", "text-to-number", "dedupe"]))
+            .min(1)
+            .max(3),
+        })
+        .strict()
+        .optional(),
+      addColumn: z
+        .object({
+          name: z.string().min(1).max(40),
+          left: z.number().int().min(0).max(99),
+          operator: z.enum(["+", "-", "*", "/"]),
+          right: z.number().int().min(0).max(99),
         })
         .strict()
         .optional(),
@@ -82,7 +109,14 @@ const applyResultSchema = z.object({
   results: z
     .array(
       z.object({
-        kind: z.enum(["table", "chart", "new-sheet", "pivot-table"]),
+        kind: z.enum([
+          "table",
+          "chart",
+          "new-sheet",
+          "pivot-table",
+          "clean",
+          "add-column",
+        ]),
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),
       }),
     )

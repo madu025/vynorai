@@ -3,6 +3,12 @@ import {
   fingerprintExcelRange,
 } from "./excel.js";
 
+import {
+  cleanRows,
+  computedColumnFormula,
+  type CleanOperation,
+} from "./transform.js";
+
 type ExcelRangeInput = {
   workbookId: string;
   worksheetName: string;
@@ -220,6 +226,32 @@ export async function applyApprovedExcelPlan(
       normalizedSource = target;
     };
 
+    const readSourceValues = async () => {
+      const range = sourceRange();
+      range.load(["rowCount", "columnCount"]);
+      await context.sync();
+      return readValuesInChunks(
+        context,
+        range,
+        Number(range.rowCount),
+        Number(range.columnCount),
+        500,
+      );
+    };
+    const splitHeader = (values: any[][]) =>
+      plan.normalization
+        ? {
+            headers: plan.normalization.headers as string[],
+            rows: values.slice(plan.normalization.headerRowCount),
+          }
+        : {
+            headers: (values[0] ?? []).map((cell) => String(cell ?? "")),
+            rows: values.slice(1),
+          };
+    // A text cell that starts with "=" would be evaluated as a formula when written back.
+    const literal = (cell: any) =>
+      typeof cell === "string" && cell.startsWith("=") ? `'${cell}` : cell;
+
     for (const action of plan.actions) {
       const result: ExcelActionResult = {
         kind: action.kind,
@@ -350,6 +382,58 @@ export async function applyApprovedExcelPlan(
                   pivot.hierarchies.getItem(action.spec.valuesColumn),
                 );
                 total.summarizeBy = "Sum";
+                await context.sync();
+              }
+            }
+          } else if (action.kind === "clean") {
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers, rows } = splitHeader(await readSourceValues());
+              const cleaned = cleanRows(
+                rows,
+                (action.spec?.operations ?? ["trim"]) as CleanOperation[],
+              );
+              const out = [headers, ...cleaned.rows].map((row) =>
+                row.map(literal),
+              );
+              sheet.getRangeByIndexes(0, 0, out.length, headers.length).values =
+                out;
+              await context.sync();
+            }
+          } else if (action.kind === "add-column") {
+            const spec = action.spec;
+            if (!spec?.columnName)
+              throw new Error("add-column needs explicit column choices");
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers, rows } = splitHeader(await readSourceValues());
+              const out = [
+                [...headers, spec.columnName],
+                ...rows.map((row) => [...row, ""]),
+              ].map((row) => row.map(literal));
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                out.length,
+                headers.length + 1,
+              ).values = out;
+              await context.sync();
+              if (rows.length > 0) {
+                sheet.getRangeByIndexes(
+                  1,
+                  headers.length,
+                  rows.length,
+                  1,
+                ).formulas = rows.map((_row, index) => [
+                  computedColumnFormula(
+                    index + 2,
+                    spec.leftIndex,
+                    spec.operator,
+                    spec.rightIndex,
+                  ),
+                ]);
                 await context.sync();
               }
             }

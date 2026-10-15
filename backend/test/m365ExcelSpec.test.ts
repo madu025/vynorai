@@ -69,3 +69,53 @@ test("plans without column choices are unchanged", () => {
   const server = createServerExcelPreviewPlan(input, ["chart"], 500);
   assert.equal(server.actions[0].spec, undefined);
 });
+
+test("server and add-in agree on clean and computed-column plans", () => {
+  const specs = {
+    clean: { operations: ["trim", "dedupe"] },
+    addColumn: { name: "Profit", left: 2, operator: "-" as const, right: 3 },
+  };
+  const actions = ["clean", "add-column"] as const;
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(
+    server.actions.map((a: any) => [a.kind, a.targetSheet]),
+    [
+      ["clean", "Sheet1_Vynor_Clean"],
+      ["add-column", "Sheet1_Vynor_Calc"],
+    ],
+  );
+  assert.equal(server.actions[1].spec.rightColumn, "Cost");
+});
+
+test("the server refuses unsafe computed columns and unknown clean steps", () => {
+  const call = (specs: unknown, actions: string[]) =>
+    createServerExcelPreviewPlan(input, actions, 500, specs as any);
+  assert.throws(
+    () =>
+      call(
+        { addColumn: { name: "=SUM(A1)", left: 2, operator: "-", right: 3 } },
+        ["add-column"],
+      ),
+    /not allowed/,
+  );
+  assert.throws(
+    () =>
+      call({ addColumn: { name: "P", left: 2, operator: "^", right: 3 } }, [
+        "add-column",
+      ]),
+    /Unsupported operator/,
+  );
+  assert.throws(
+    () =>
+      call({ addColumn: { name: "P", left: 1, operator: "+", right: 3 } }, [
+        "add-column",
+      ]),
+    /must contain numbers/,
+  );
+  assert.throws(
+    () => call({ clean: { operations: ["drop-table"] } }, ["clean"]),
+    /valid, unique/,
+  );
+});

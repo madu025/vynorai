@@ -42,7 +42,13 @@ type ExcelActionPlan = {
   normalization?: ExcelHeaderNormalization;
   chunks: Array<{ index: number; startRow: number; rowCount: number }>;
   actions: Array<{
-    kind: "table" | "chart" | "new-sheet" | "pivot-table";
+    kind:
+      | "table"
+      | "chart"
+      | "new-sheet"
+      | "pivot-table"
+      | "clean"
+      | "add-column";
     name: string;
     targetSheet: string;
     preservesSource: true;
@@ -60,6 +66,8 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "table",
   "chart",
   "pivot-table",
+  "clean",
+  "add-column",
 ];
 
 type ComparableExcelPlan = Omit<
@@ -76,6 +84,13 @@ export interface ExcelColumnSpecs {
     chartType: "column" | "line" | "bar" | "pie";
   };
   pivot?: { rows: number; values: number };
+  clean?: { operations: string[] };
+  addColumn?: {
+    name: string;
+    left: number;
+    operator: "+" | "-" | "*" | "/";
+    right: number;
+  };
 }
 
 export interface ExcelActionSpec {
@@ -89,6 +104,13 @@ export interface ExcelActionSpec {
   valuesColumn?: string;
   valuesIndex?: number;
   aggregation?: "sum";
+  operations?: string[];
+  columnName?: string;
+  leftColumn?: string;
+  leftIndex?: number;
+  operator?: "+" | "-" | "*" | "/";
+  rightColumn?: string;
+  rightIndex?: number;
 }
 
 /**
@@ -100,7 +122,12 @@ function resolveColumnSpecs(
   dataRows: any[][],
   specs: ExcelColumnSpecs | undefined,
   requested: Set<string>,
-): { chart?: ExcelActionSpec; pivot?: ExcelActionSpec } {
+): {
+  chart?: ExcelActionSpec;
+  pivot?: ExcelActionSpec;
+  clean?: ExcelActionSpec;
+  addColumn?: ExcelActionSpec;
+} {
   if (!specs) return {};
   const fail = (code: string, message: string): never => {
     throw new InvalidExcelRangeError(code, message);
@@ -115,7 +142,12 @@ function resolveColumnSpecs(
       .filter((cell) => cell !== null && cell !== undefined && cell !== "");
     return cells.length > 0 && cells.every((cell) => typeof cell === "number");
   };
-  const resolved: { chart?: ExcelActionSpec; pivot?: ExcelActionSpec } = {};
+  const resolved: {
+    chart?: ExcelActionSpec;
+    pivot?: ExcelActionSpec;
+    clean?: ExcelActionSpec;
+    addColumn?: ExcelActionSpec;
+  } = {};
   if (specs.chart) {
     if (!requested.has("chart"))
       fail("EXCEL_SPEC_UNUSED", "A chart column choice needs a chart action.");
@@ -160,6 +192,56 @@ function resolveColumnSpecs(
       valuesColumn: headers[values],
       valuesIndex: values,
       aggregation: "sum",
+    };
+  }
+
+  if (specs.clean) {
+    if (!requested.has("clean"))
+      fail("EXCEL_SPEC_UNUSED", "Clean options need the clean action.");
+    const operations = specs.clean.operations;
+    const allowed = ["trim", "text-to-number", "dedupe"];
+    if (
+      !Array.isArray(operations) ||
+      operations.length === 0 ||
+      new Set(operations).size !== operations.length ||
+      operations.some((operation) => !allowed.includes(operation))
+    )
+      fail("EXCEL_SPEC_INVALID", "Choose valid, unique clean-up steps.");
+    resolved.clean = {
+      operations: allowed.filter((operation) => operations.includes(operation)),
+    };
+  }
+  if (specs.addColumn) {
+    if (!requested.has("add-column"))
+      fail(
+        "EXCEL_SPEC_UNUSED",
+        "A computed column needs the add-column action.",
+      );
+    const { name, left, operator, right } = specs.addColumn;
+    if (
+      typeof name !== "string" ||
+      name.trim().length === 0 ||
+      name.length > 40 ||
+      /^[=+\-@\t\r]/.test(name.trim()) ||
+      /[\r\n]/.test(name)
+    )
+      fail("EXCEL_SPEC_INVALID", "The new column name is not allowed.");
+    if (!["+", "-", "*", "/"].includes(operator))
+      fail("EXCEL_SPEC_INVALID", "Unsupported operator.");
+    if (!inRange(left) || !inRange(right) || left === right)
+      fail("EXCEL_SPEC_INVALID", "Choose two different columns to combine.");
+    if (!numeric(left) || !numeric(right))
+      fail(
+        "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+        "Both columns of a computed column must contain numbers.",
+      );
+    resolved.addColumn = {
+      columnName: name.trim(),
+      leftColumn: headers[left],
+      leftIndex: left,
+      operator,
+      rightColumn: headers[right],
+      rightIndex: right,
     };
   }
   return resolved;
@@ -342,7 +424,7 @@ export function profileExcelRange(
 
 export function createExcelPreviewPlan(
   input: ExcelRangeInput,
-  requestedActions: Array<"table" | "chart" | "new-sheet" | "pivot-table">,
+  requestedActions: ExcelActionKind[],
   chunkRows = DEFAULT_CHUNK_ROWS,
   specs?: ExcelColumnSpecs,
 ): Omit<ExcelActionPlan, "planId" | "approvalToken" | "expiresAt"> {
@@ -356,6 +438,14 @@ export function createExcelPreviewPlan(
   );
   const baseName = excelSafeBaseName(input.worksheetName);
   const resultSheet = `${baseName}_Vynor_Result`;
+  const targetFor = (kind: ExcelActionKind) =>
+    kind === "clean"
+      ? `${baseName}_Vynor_Clean`
+      : kind === "add-column"
+        ? `${baseName}_Vynor_Calc`
+        : kind === "table" && !layout.normalization
+          ? input.worksheetName
+          : resultSheet;
   const resolved = resolveColumnSpecs(
     layout.headers,
     input.values.slice(layout.headerRowCount),
@@ -365,10 +455,7 @@ export function createExcelPreviewPlan(
   const actions = safeActions.map((kind) => ({
     kind,
     name: `${baseName}_Vynor_${kind.replace("-", "_")}`,
-    targetSheet:
-      kind === "table" && !layout.normalization
-        ? input.worksheetName
-        : resultSheet,
+    targetSheet: targetFor(kind),
     preservesSource: true as const,
     description: layout.normalization
       ? `Preview ${kind} using a normalized copy of ${input.address} on ${resultSheet}; source data remains unchanged.`
@@ -376,6 +463,10 @@ export function createExcelPreviewPlan(
     ...(kind === "chart" && resolved.chart ? { spec: resolved.chart } : {}),
     ...(kind === "pivot-table" && resolved.pivot
       ? { spec: resolved.pivot }
+      : {}),
+    ...(kind === "clean" && resolved.clean ? { spec: resolved.clean } : {}),
+    ...(kind === "add-column" && resolved.addColumn
+      ? { spec: resolved.addColumn }
       : {}),
   }));
   const chunks = Array.from({ length: profile.chunkCount }, (_, index) => ({

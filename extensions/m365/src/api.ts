@@ -26,7 +26,13 @@ export interface M365ApiClient {
       | "source_verification_failed";
     sourceUnchanged?: boolean;
     results: Array<{
-      kind: "table" | "chart" | "new-sheet" | "pivot-table";
+      kind:
+        | "table"
+        | "chart"
+        | "new-sheet"
+        | "pivot-table"
+        | "clean"
+        | "add-column";
       status: "created" | "exists" | "failed" | "skipped_unsupported";
     }>;
   }): Promise<any>;

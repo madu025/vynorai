@@ -7,6 +7,12 @@
 
 import { parseExpression } from "./expression.js";
 import { previewExpressionValue } from "./previewValue.js";
+import {
+  correlation,
+  describeColumns,
+  linearForecast,
+  numericSeries,
+} from "./statistics.js";
 
 export type OutcomeLanguage = "en" | "si" | "ta";
 
@@ -49,6 +55,7 @@ const KIND_TITLES: Record<string, [string, string]> = {
   summary: ["Summary by group", "කණ්ඩායම් අනුව සාරාංශය"],
   format: ["Presentable copy", "ඉදිරිපත් කිරීමට සුදුසු පිටපත"],
   quality: ["Data quality report", "දත්ත ගුණාත්මක වාර්තාව"],
+  statistics: ["Statistics", "සංඛ්‍යාලේඛන"],
 };
 
 export function kindTitle(kind: string, language: OutcomeLanguage): string {
@@ -445,6 +452,86 @@ export function buildOutcomes(
           `පිටපතක් පිරිසිදු කරයි: ${(spec.operations ?? []).join(", ")}`,
         ),
       );
+    } else if (action.kind === "statistics" && spec.statistics) {
+      const stats = spec.statistics;
+      if (stats.mode === "describe") {
+        const columns = (stats.columns ?? []) as Array<{
+          column: string;
+          index: number;
+        }>;
+        const measures = describeColumns(
+          rows as any,
+          columns.map((entry) => entry.index),
+        );
+        item.table = {
+          headers: ["Measure", ...columns.map((entry) => entry.column)],
+          rows: measures.map((entry) => [
+            entry.measure,
+            ...entry.values.map((value) => String(value)),
+          ]),
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          say(
+            "Live formulas: they update when your data changes.",
+            "සජීවී සූත්‍ර: දත්ත වෙනස් වන විට යාවත්කාලීන වේ.",
+          ),
+        );
+      } else if (stats.mode === "correlation") {
+        const pair = (stats.pair ?? []) as Array<{
+          column: string;
+          index: number;
+        }>;
+        const result = correlation(rows as any, pair[0].index, pair[1].index);
+        item.table = {
+          headers: ["Pair", "Correlation (r)", "R squared"],
+          rows: [
+            [
+              `${pair[0].column} and ${pair[1].column}`,
+              String(result.r),
+              String(result.rSquared),
+            ],
+          ],
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        const strength =
+          typeof result.r === "number"
+            ? Math.abs(result.r) >= 0.7
+              ? "strong"
+              : Math.abs(result.r) >= 0.4
+                ? "moderate"
+                : "weak"
+            : "";
+        if (strength && typeof result.r === "number")
+          item.details.push(
+            say(
+              `A ${strength} ${result.r > 0 ? "positive" : "negative"} relationship`,
+              `${strength === "strong" ? "ශක්තිමත්" : strength === "moderate" ? "මධ්‍යම" : "දුර්වල"} ${(result.r as number) > 0 ? "ධනාත්මක" : "ඍණාත්මක"} සම්බන්ධයක්`,
+            ),
+          );
+      } else {
+        const value = stats.value as { column: string; index: number };
+        const periods = Number(stats.periods ?? 3);
+        const known = numericSeries(rows as any, value.index);
+        const next = linearForecast(known, periods);
+        item.table = {
+          headers: ["Period", `Forecast ${value.column}`],
+          rows: next.map((entry, at) => [
+            String(known.length + at + 1),
+            String(entry),
+          ]),
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          say(
+            `A straight-line trend through ${known.length} values, extended ${periods} periods.`,
+            `අගයන් ${known.length} හරහා සරල රේඛා ප්‍රවණතාවක්, කාල පරිච්ඡේද ${periods} දක්වා දිගු කර ඇත.`,
+          ),
+        );
+      }
     } else if (action.kind === "quality") {
       item.details.push(
         say(
@@ -498,6 +585,7 @@ const KIND_PREFIX: Record<string, string> = {
   format: "Formatted",
   view: "View of",
   quality: "Quality of",
+  statistics: "Statistics of",
   summary: "Summary of",
   "add-column": "Calc of",
   "new-sheet": "Result of",
@@ -525,6 +613,13 @@ export function friendlySheetName(
     spec.rowsColumn
   )
     label = `Pivot - ${spec.valuesColumn} by ${spec.rowsColumn}`;
+  else if (action.kind === "statistics" && spec.statistics?.mode === "forecast")
+    label = `Forecast of ${spec.statistics.value?.column ?? sourceSheet}`;
+  else if (
+    action.kind === "statistics" &&
+    spec.statistics?.mode === "correlation"
+  )
+    label = `Correlation ${spec.statistics.pair?.map((entry: any) => entry.column).join(" and ") ?? ""}`;
   else if (action.kind === "chart") label = `Chart of ${sourceSheet}`;
   else if (action.kind === "pivot-table") label = `Pivot of ${sourceSheet}`;
   else label = `${KIND_PREFIX[action.kind] ?? "Result of"} ${sourceSheet}`;

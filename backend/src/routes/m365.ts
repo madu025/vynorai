@@ -65,6 +65,7 @@ const excelPlanSchema = z.object({
         "summary",
         "format",
         "quality",
+        "statistics",
         "view",
       ]),
     )
@@ -116,6 +117,21 @@ const excelPlanSchema = z.object({
             .array(z.enum(["trim", "text-to-number", "dedupe"]))
             .min(1)
             .max(3),
+        })
+        .strict()
+        .optional(),
+      statistics: z
+        .object({
+          mode: z.enum(["describe", "correlation", "forecast"]),
+          columns: z.array(z.number().int().min(0).max(99)).max(8).optional(),
+          pair: z
+            .tuple([
+              z.number().int().min(0).max(99),
+              z.number().int().min(0).max(99),
+            ])
+            .optional(),
+          value: z.number().int().min(0).max(99).optional(),
+          periods: z.number().int().min(1).max(24).optional(),
         })
         .strict()
         .optional(),
@@ -280,6 +296,7 @@ const applyResultSchema = z.object({
           "summary",
           "format",
           "quality",
+          "statistics",
           "view",
         ]),
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),

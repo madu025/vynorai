@@ -52,6 +52,13 @@ export interface InstructionSpecs {
     };
     limit?: number;
   };
+  statistics?: {
+    mode: "describe" | "correlation" | "forecast";
+    columns?: number[];
+    pair?: [number, number];
+    value?: number;
+    periods?: number;
+  };
   clean?: { operations: CleanOperation[] };
   format?: {
     freezeHeader?: boolean;
@@ -99,6 +106,7 @@ export interface InterpretedInstruction {
     | "summary"
     | "format"
     | "quality"
+    | "statistics"
   >;
   specs: InstructionSpecs;
   problems: string[];
@@ -265,6 +273,7 @@ export function interpretInstruction(
   }
   interpretChartAndPivot(text, headers, rows, result);
   interpretSummary(text, headers, rows, result);
+  interpretStatistics(text, headers, rows, result);
   interpretFormatAndQuality(text, headers, rows, result);
   interpretView(text, headers, rows, result);
   return result;
@@ -281,6 +290,8 @@ export function normalizeInstruction(text: string): string {
       /\b(\w+)\s+(?:walata|walin)\s+(\w+)\s+(?:anuwa|walin|walata)\s+(total|sum|average|count)(?:\s+ekak)?\b/gi,
       "summary $3 of $1 by $2",
     ],
+    // A dashboard is the three views people ask for together: a chart, a pivot and key statistics.
+    [/\b(?:kpi\s+)?dashboard\b/gi, "chart and pivot and statistics"],
     [/pivot\s*tables?\b/gi, "pivot"],
     [/\b(\w+)\s+(?:walata|walin|anuwa)\b/gi, "by $1"],
     [/\beka\b/gi, ""],
@@ -733,6 +744,63 @@ function interpretSummary(
  * "make it presentable", "freeze the header", "data bars on Sales", "highlight negative values",
  * "highlight duplicates in Region", "drop-down for Region", "add a total row" and data quality checks.
  */
+/**
+ * "Describe Sales and Cost", "correlation between Sales and Cost", "forecast Sales for the next 4
+ * periods": deterministic statistics written as live formulas on a new sheet.
+ */
+function interpretStatistics(
+  text: string,
+  headers: string[],
+  rows: Cell[][],
+  result: InterpretedInstruction,
+) {
+  const numericAll = headers
+    .map((_, index) => index)
+    .filter((index) => isNumericColumn(rows, index));
+  const mentioned = headerPositions(headers, text)
+    .filter((entry) => isNumericColumn(rows, entry.index))
+    .map((entry) => entry.index);
+  if (/\bcorrelat(?:e|ion|ions)\b|\brelationship\s+between\b/i.test(text)) {
+    const pair = mentioned.length >= 2 ? mentioned : numericAll;
+    if (pair.length >= 2) {
+      result.actions.push("statistics");
+      result.specs.statistics = {
+        mode: "correlation",
+        pair: [pair[0], pair[1]],
+      };
+    } else result.problems.push("Correlation needs two numeric columns.");
+    return;
+  }
+  if (/\b(?:forecast|predict|project|extrapolate)\b/i.test(text)) {
+    const column = mentioned[0] ?? numericAll[0];
+    if (column === undefined) {
+      result.problems.push("A forecast needs a numeric column.");
+      return;
+    }
+    const periods = /\b(?:next|for|another)\s+(\d{1,2})\b/i.exec(text);
+    result.actions.push("statistics");
+    result.specs.statistics = {
+      mode: "forecast",
+      value: column,
+      periods: periods ? Math.min(24, Math.max(1, Number(periods[1]))) : 3,
+    };
+    return;
+  }
+  if (
+    /\b(?:descriptive\s+)?statistics\b|\bstats\b|\bdescribe\b|\bstandard\s+deviation\b|\bmedian\b|\bquartiles?\b/i.test(
+      text,
+    )
+  ) {
+    const columns = (mentioned.length ? mentioned : numericAll).slice(0, 8);
+    if (!columns.length) {
+      result.problems.push("Statistics need at least one numeric column.");
+      return;
+    }
+    result.actions.push("statistics");
+    result.specs.statistics = { mode: "describe", columns };
+  }
+}
+
 function interpretFormatAndQuality(
   text: string,
   headers: string[],

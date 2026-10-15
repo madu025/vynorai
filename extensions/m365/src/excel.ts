@@ -58,6 +58,7 @@ type ExcelActionPlan = {
       | "summary"
       | "format"
       | "quality"
+      | "statistics"
       | "view";
     name: string;
     targetSheet: string;
@@ -81,6 +82,7 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "summary",
   "format",
   "quality",
+  "statistics",
   "view",
 ];
 
@@ -116,6 +118,13 @@ export type ExcelHighlightRule =
   | "duplicates";
 
 export interface ExcelColumnSpecs {
+  statistics?: {
+    mode: "describe" | "correlation" | "forecast";
+    columns?: number[];
+    pair?: [number, number];
+    value?: number;
+    periods?: number;
+  };
   chart?: {
     category: number;
     value: number;
@@ -190,6 +199,13 @@ export interface ExcelColumnSpecs {
 }
 
 export interface ExcelActionSpec {
+  statistics?: {
+    mode: "describe" | "correlation" | "forecast";
+    columns?: Array<{ column: string; index: number }>;
+    pair?: Array<{ column: string; index: number }>;
+    value?: { column: string; index: number };
+    periods?: number;
+  };
   categoryColumn?: string;
   categoryIndex?: number;
   valueColumn?: string;
@@ -284,6 +300,7 @@ function resolveColumnSpecs(
   summary?: ExcelActionSpec;
   format?: ExcelActionSpec;
   view?: ExcelActionSpec;
+  statistics?: ExcelActionSpec;
 } {
   if (!specs) return {};
   const fail = (code: string, message: string): never => {
@@ -307,6 +324,7 @@ function resolveColumnSpecs(
     summary?: ExcelActionSpec;
     format?: ExcelActionSpec;
     view?: ExcelActionSpec;
+    statistics?: ExcelActionSpec;
   } = {};
   const chartTypes = [
     "column",
@@ -828,6 +846,58 @@ function resolveColumnSpecs(
       validation,
     };
   }
+  if (specs.statistics) {
+    if (!requested.has("statistics"))
+      fail(
+        "EXCEL_SPEC_UNUSED",
+        "Statistics options need the statistics action.",
+      );
+    const stats = specs.statistics;
+    if (!["describe", "correlation", "forecast"].includes(stats.mode))
+      fail("EXCEL_SPEC_INVALID", "Choose describe, correlation or forecast.");
+    const named = (index: number) => ({
+      column: headers[index],
+      index,
+    });
+    const checkNumeric = (index: unknown): number => {
+      if (!inRange(index))
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose existing columns for the statistics.",
+        );
+      if (!numeric(index as number))
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          "Statistics need numeric columns.",
+        );
+      return index as number;
+    };
+    const out: ExcelActionSpec = { statistics: { mode: stats.mode } };
+    if (stats.mode === "describe") {
+      const columns = (stats.columns ?? []).map(checkNumeric);
+      if (!columns.length || new Set(columns).size !== columns.length)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose one or more different numeric columns.",
+        );
+      if (columns.length > 8)
+        fail("EXCEL_SPEC_INVALID", "Choose at most 8 columns.");
+      out.statistics!.columns = columns.map(named);
+    } else if (stats.mode === "correlation") {
+      const pair = stats.pair ?? [];
+      if (pair.length !== 2 || pair[0] === pair[1])
+        fail("EXCEL_SPEC_INVALID", "Choose two different numeric columns.");
+      out.statistics!.pair = pair.map(checkNumeric).map(named);
+    } else {
+      const value = checkNumeric(stats.value);
+      const periods = stats.periods ?? 3;
+      if (!Number.isInteger(periods) || periods < 1 || periods > 24)
+        fail("EXCEL_SPEC_INVALID", "Choose 1 to 24 periods to forecast.");
+      out.statistics!.value = named(value);
+      out.statistics!.periods = periods;
+    }
+    resolved.statistics = out;
+  }
   if (specs.view) {
     if (!requested.has("view"))
       fail("EXCEL_SPEC_UNUSED", "View options need the view action.");
@@ -1217,11 +1287,14 @@ export function createExcelPreviewPlan(
               ? `${baseName}_Vynor_Totals`
               : kind === "view"
                 ? `${baseName}_Vynor_View`
-                : resultSheet;
+                : kind === "statistics"
+                  ? `${baseName}_Vynor_Stats`
+                  : resultSheet;
   if (
     (requested.has("summary") ||
       requested.has("format") ||
-      requested.has("quality")) &&
+      requested.has("quality") ||
+      requested.has("statistics")) &&
     layout.normalization
   )
     throw new InvalidExcelRangeError(
@@ -1255,6 +1328,9 @@ export function createExcelPreviewPlan(
       ? { spec: resolved.summary }
       : {}),
     ...(kind === "view" && resolved.view ? { spec: resolved.view } : {}),
+    ...(kind === "statistics" && resolved.statistics
+      ? { spec: resolved.statistics }
+      : {}),
   }));
   const chunks = Array.from({ length: profile.chunkCount }, (_, index) => ({
     index,

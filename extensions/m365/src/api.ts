@@ -36,6 +36,7 @@ export interface M365ApiClient {
         | "summary"
         | "format"
         | "quality"
+        | "statistics"
         | "view";
       status: "created" | "exists" | "failed" | "skipped_unsupported";
     }>;

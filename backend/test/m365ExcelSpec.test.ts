@@ -227,3 +227,38 @@ test("the apply-result schema accepts every action kind a plan can contain", asy
     "apply-result must accept every result from a ten-action plan",
   );
 });
+
+test("server and add-in agree on statistics plans and the server refuses bad ones", () => {
+  for (const specs of [
+    { statistics: { mode: "describe" as const, columns: [2, 3] } },
+    {
+      statistics: {
+        mode: "correlation" as const,
+        pair: [2, 3] as [number, number],
+      },
+    },
+    { statistics: { mode: "forecast" as const, value: 2, periods: 4 } },
+  ]) {
+    const server = createServerExcelPreviewPlan(
+      input,
+      ["statistics"],
+      500,
+      specs,
+    );
+    const local = createExcelPreviewPlan(
+      input as any,
+      ["statistics"],
+      500,
+      specs,
+    );
+    assert.equal(excelPlansMatch(local, server), true);
+    assert.equal(server.actions[0].targetSheet, "Sheet1_Vynor_Stats");
+  }
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["statistics"], 500, {
+        statistics: { mode: "correlation", pair: [1, 2] },
+      }),
+    /numeric/,
+  );
+});

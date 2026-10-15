@@ -132,6 +132,7 @@ const EXACT: Record<string, string> = {
   summary: "සාරාංශ වගුව",
   format: "හැඩසවි කිරීම",
   quality: "දත්ත ගුණාත්මක වාර්තාව",
+  statistics: "සංඛ්‍යාලේඛන",
   view: "පෙරහන් කළ දසුන",
 };
 

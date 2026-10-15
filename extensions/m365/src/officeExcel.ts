@@ -16,8 +16,14 @@ import {
   buildSummaryTable,
   cleanRows,
   computedColumnFormula,
+  parseLocalRange,
   type CleanOperation,
 } from "./transform.js";
+import {
+  buildCorrelationCells,
+  buildDescribeCells,
+  buildForecastCells,
+} from "./statistics.js";
 import type { FormulaSelection } from "./formulaInspector.js";
 
 type ExcelRangeInput = {
@@ -937,6 +943,85 @@ export async function applyApprovedExcelPlan(
                   headers.length,
                 ).format.fill.color = "#FFF2CC";
               if (view.highlighted.length > 0) await context.sync();
+            }
+          } else if (action.kind === "statistics") {
+            const spec = action.spec?.statistics;
+            if (!spec)
+              throw new Error("statistics needs explicit column choices");
+            if (plan.normalization)
+              throw new Error("Statistics need a range with one header row");
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers } = splitHeader(await readSourceValues());
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const range = {
+                sheetName: plan.worksheetName,
+                startColumn: parsed.startColumn,
+                startRow: parsed.startRow,
+                endRow: parsed.endRow,
+              };
+              let cells: string[][];
+              if (spec.mode === "describe")
+                cells = buildDescribeCells(
+                  range,
+                  headers,
+                  (spec.columns ?? []).map((entry: any) => entry.index),
+                );
+              else if (spec.mode === "correlation")
+                cells = buildCorrelationCells(
+                  range,
+                  headers,
+                  spec.pair?.[0]?.index ?? 0,
+                  spec.pair?.[1]?.index ?? 0,
+                );
+              else
+                cells = buildForecastCells(
+                  range,
+                  headers,
+                  spec.value?.index ?? 0,
+                  spec.periods ?? 3,
+                );
+              const width = Math.max(...cells.map((row) => row.length));
+              const grid = sheet.getRangeByIndexes(0, 0, cells.length, width);
+              grid.formulas = cells.map((row, rowIndex) =>
+                row.map((cell, columnIndex) =>
+                  rowIndex === 0 ||
+                  (spec.mode !== "forecast" && columnIndex === 0)
+                    ? literal(cell)
+                    : cell,
+                ),
+              );
+              await context.sync();
+              sheet.getRangeByIndexes(0, 0, 1, width).format.font.bold = true;
+              grid.format.autofitColumns();
+              if (spec.mode === "forecast" && cells.length > 3) {
+                try {
+                  const chart = sheet.charts.add(
+                    "Line",
+                    sheet.getRangeByIndexes(0, 1, cells.length, 2),
+                    "Columns",
+                  );
+                  chart.name = action.name;
+                  chart.title.text = `${spec.value?.column ?? "Value"} forecast`;
+                  chart.setPosition("E2");
+                  chart.series
+                    .getItemAt(0)
+                    .setXAxisValues(
+                      sheet.getRangeByIndexes(1, 0, cells.length - 1, 1),
+                    );
+                  chart.series
+                    .getItemAt(1)
+                    .setXAxisValues(
+                      sheet.getRangeByIndexes(1, 0, cells.length - 1, 1),
+                    );
+                } catch {
+                  // The table is the answer; the chart is a convenience.
+                }
+              }
+              await context.sync();
             }
           } else if (action.kind === "quality") {
             if (plan.normalization)

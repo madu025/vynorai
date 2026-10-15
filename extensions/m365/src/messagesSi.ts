@@ -50,6 +50,8 @@ const EXACT: Record<string, string> = {
   "Instruction set. Click Inspect and preview; nothing changes until you confirm.":
     "උපදෙස සකසන ලදී. “පරීක්ෂා කර පෙරදසුන බලන්න” ඔබන්න; ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
   "Use this recommendation": "මෙම නිර්දේශය භාවිතා කරන්න",
+  "OAuth state validation failed: that sign-in attempt expired or was replaced. Press Sign in once more":
+    "එම පිවිසුම් උත්සාහය කල් ඉකුත් විය හෝ අලුත් එකකින් ප්‍රතිස්ථාපනය විය. නැවත පිවිසෙන්න ඔබන්න.",
   "AI analysis needs your explicit consent first.":
     "AI විශ්ලේෂණයට පළමුව ඔබේ පැහැදිලි කැමැත්ත අවශ්‍යයි.",
   "The AI answer did not match the expected format and was discarded.":

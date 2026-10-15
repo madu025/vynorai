@@ -411,13 +411,22 @@ signIn?.addEventListener("click", async () => {
   if (!config) return setStatus("M365 OAuth configuration is missing.");
   try {
     setStatus("Opening Microsoft sign-in...");
+    // Each attempt keeps its own state and verifier in memory, so an older or parallel attempt
+    // (another click, another pane) can never overwrite them and break this one.
+    const attemptValues = new Map<string, string>();
+    const attemptStorage = {
+      getItem: (key: string) => attemptValues.get(key) ?? null,
+      setItem: (key: string, value: string) =>
+        void attemptValues.set(key, value),
+      removeItem: (key: string) => void attemptValues.delete(key),
+    };
     const authorizeUrl = await log.step("oauth:authorize-url", () =>
-      beginM365OAuth(config),
+      beginM365OAuth(config, attemptStorage),
     );
     const callbackUrl = await signInWithOfficeDialog(authorizeUrl);
     const tokens = await log.step(
       "oauth:token-exchange",
-      () => completeM365OAuth(callbackUrl, config),
+      () => completeM365OAuth(callbackUrl, config, attemptStorage),
       (value) => ({ expiresIn: value.expiresIn, tokenType: value.tokenType }),
     );
     accessToken = tokens.accessToken;

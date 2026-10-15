@@ -79,7 +79,9 @@ export async function completeM365OAuth(
     !verifier ||
     callback.searchParams.get("state") !== expectedState
   )
-    throw new Error("OAuth state validation failed");
+    throw new Error(
+      "OAuth state validation failed: that sign-in attempt expired or was replaced. Press Sign in once more",
+    );
   const oauthError = callback.searchParams.get("error");
   if (oauthError) throw new Error(`OAuth authorization failed: ${oauthError}`);
   const code = callback.searchParams.get("code");

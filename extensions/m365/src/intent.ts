@@ -119,6 +119,7 @@ export interface InstructionSpecs {
 
 export interface InterpretedInstruction {
   actions: Array<
+    | "table"
     | "clean"
     | "add-column"
     | "split-column"
@@ -167,6 +168,12 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+  if (
+    /\b(?:format|create|turn|make)\b.*\b(?:as\s+(?:an?\s+)?|into\s+(?:an?\s+)?)?(?:excel\s+)?table\b/i.test(
+      text,
+    )
+  )
+    result.actions.push("table");
 
   const combineMatch =
     /\b(?:combine|concatenate|join)\s+["']?([^"'\n,]+?)["']?\s+and\s+["']?([^"'\n,]+?)["']?\s+into\s+(?:one\s+)?column(?:\s+(?:called|named)\s+["']?([^"'\n,.]+?)["']?)?(?:\s*\.|$)/i.exec(

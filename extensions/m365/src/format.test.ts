@@ -49,6 +49,7 @@ test("format instructions become explicit options, and 'format as a table' stays
   ]);
   const table = interpretInstruction("Format as a table", headers, rows);
   assert.equal(table.specs.format, undefined);
+  assert.deepEqual(table.actions, ["table"]);
   assert.ok(!table.actions.includes("format"));
 });
 

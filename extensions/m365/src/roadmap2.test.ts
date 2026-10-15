@@ -504,6 +504,19 @@ test("a waterfall chart uses a label column and one numeric series", () => {
   });
 });
 
+test("a named-range request resolves the selected column", () => {
+  const parsed = interpretInstruction(
+    "Create a named range for Sales",
+    headers,
+    rows,
+  );
+  assert.deepEqual(parsed, {
+    actions: ["named-range"],
+    specs: { namedRange: { source: 2 } },
+    problems: [],
+  });
+});
+
 test("Sinhala and Singlish keywords map to the same actions", () => {
   assert.match(normalizeInstruction("Sales by Region ප්‍රස්තාරයක්"), /chart/);
   assert.match(normalizeInstruction("data pirisidu karanna"), /clean/);

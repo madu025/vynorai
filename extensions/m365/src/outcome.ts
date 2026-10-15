@@ -49,6 +49,7 @@ const KIND_TITLES: Record<string, [string, string]> = {
   unpivot: ["Unpivoted long table", "දිගු ආකෘති වගුව"],
   chart: ["Chart", "ප්‍රස්තාරය"],
   "pivot-table": ["PivotTable", "PivotTable"],
+  "named-range": ["Named range", "නම් කළ පරාසය"],
   table: ["Formatted table", "හැඩසවි කළ වගුව"],
   "new-sheet": ["Result sheet", "ප්‍රතිඵල පත්‍රිකාව"],
   clean: ["Cleaned copy of the data", "පිරිසිදු කළ දත්ත පිටපත"],

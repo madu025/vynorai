@@ -59,6 +59,7 @@ const excelPlanSchema = z.object({
         "table",
         "chart",
         "new-sheet",
+        "named-range",
         "pivot-table",
         "clean",
         "add-column",
@@ -78,6 +79,10 @@ const excelPlanSchema = z.object({
   chunkRows: z.number().int().min(1).max(5000).optional(),
   specs: z
     .object({
+      namedRange: z
+        .object({ source: z.number().int().min(0).max(99) })
+        .strict()
+        .optional(),
       chart: z
         .object({
           category: z.number().int().min(0).max(99),
@@ -407,6 +412,7 @@ const applyResultSchema = z.object({
           "table",
           "chart",
           "new-sheet",
+          "named-range",
           "pivot-table",
           "clean",
           "add-column",
@@ -431,6 +437,7 @@ const rollbackSchema = z
     planId: z.string().min(1).max(100),
     removedSheets: z.number().int().min(0).max(10),
     convertedTables: z.number().int().min(0).max(1),
+    removedNames: z.number().int().min(0).max(10),
   })
   .strict();
 
@@ -818,6 +825,7 @@ m365Router.post(
         operationId: req.body.planId,
         removedSheets: req.body.removedSheets,
         convertedTables: req.body.convertedTables,
+        removedNames: req.body.removedNames,
       }),
     });
     res.json({ recorded: true, operationId: req.body.planId });

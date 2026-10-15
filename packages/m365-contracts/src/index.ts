@@ -2,7 +2,12 @@ export const M365_CONTRACT_VERSION = "2026-10-14.excel.v1" as const;
 
 export type ExcelCell = string | number | boolean | null;
 export type ExcelRow = ExcelCell[];
-export type ExcelActionKind = "table" | "chart" | "new-sheet" | "pivot-table";
+export type ExcelActionKind =
+  | "table"
+  | "chart"
+  | "new-sheet"
+  | "named-range"
+  | "pivot-table";
 
 export interface ExcelRangeInput {
   workbookId: string;

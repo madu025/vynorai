@@ -14,6 +14,7 @@ const cells = [
 function fakeWorkbook() {
   const calls: string[] = [];
   const sheets = new Map<string, any>();
+  const names = new Set<string>();
   const nullable = (exists: boolean) => ({ isNullObject: !exists, load() {} });
   const column = (index: number, label = `col${index}`) => ({
     label,
@@ -44,6 +45,20 @@ function fakeWorkbook() {
     const sheet: any = {
       name,
       getRange: (address: string) => sourceRange(address),
+      getRangeByIndexes: (
+        row: number,
+        columnIndex: number,
+        rows: number,
+        columns: number,
+      ) =>
+        row === 19
+          ? (() => {
+              throw new Error("summary block unsupported");
+            })()
+          : Object.assign(sourceRange(name + "!A1"), {
+              label:
+                "range " + row + "," + columnIndex + "," + rows + "," + columns,
+            }),
       charts: {
         getItemOrNullObject: () => nullable(false),
         add(type: string, range: any, by: string) {
@@ -130,6 +145,22 @@ function fakeWorkbook() {
     },
     tables: { getItemOrNullObject: () => nullable(false) },
     pivotTables: { getItemOrNullObject: () => nullable(false) },
+    names: {
+      items: [],
+      load() {},
+      getItemOrNullObject: (name: string) => ({
+        isNullObject: !names.has(name),
+        load() {},
+        delete() {
+          names.delete(name);
+          calls.push("name.delete " + name);
+        },
+      }),
+      add(name: string, formula: string) {
+        names.add(name);
+        calls.push("name.add " + name + " " + formula);
+      },
+    },
   };
   return {
     calls,
@@ -271,6 +302,33 @@ test("apply creates a waterfall chart from category and value columns", async ()
     excel.calls.join("\n"),
   );
   assert.ok(excel.calls.includes("series.x col1+1-1"));
+});
+
+test("apply creates a named range on a copied result sheet", async () => {
+  const plan = createExcelPreviewPlan(
+    input as any,
+    ["named-range"],
+    undefined,
+    {
+      namedRange: { source: 2 },
+    },
+  );
+  const excel = fakeWorkbook();
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.ok(
+    excel.calls.some((call) =>
+      /^name\.add VynorAI_Sales_3 ='.*'!\$C\$2:\$C\$4$/.test(call),
+    ),
+    excel.calls.join("\n"),
+  );
+  assert.equal(report.results[0].createdSheet, true);
 });
 
 test("without column choices the existing whole-range behaviour is unchanged", () => {

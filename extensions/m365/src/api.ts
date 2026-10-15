@@ -30,6 +30,7 @@ export interface M365ApiClient {
         | "table"
         | "chart"
         | "new-sheet"
+        | "named-range"
         | "pivot-table"
         | "clean"
         | "add-column"
@@ -58,6 +59,7 @@ export interface M365ApiClient {
     planId: string;
     removedSheets: number;
     convertedTables: number;
+    removedNames: number;
   }): Promise<any>;
   analyzeExcel(input: {
     summary: unknown;

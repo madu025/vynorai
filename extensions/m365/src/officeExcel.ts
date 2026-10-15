@@ -73,7 +73,7 @@ export interface ExcelApplyReport {
 export function rollbackItemsFromApplyReport(
   planId: string,
   results: ExcelActionResult[],
-): { planId: string; sheets: string[]; tables: string[] } {
+): { planId: string; sheets: string[]; tables: string[]; names: string[] } {
   return {
     planId,
     sheets: [
@@ -88,6 +88,16 @@ export function rollbackItemsFromApplyReport(
         results
           .filter(
             (result) => result.kind === "table" && result.status === "created",
+          )
+          .map((result) => result.name),
+      ),
+    ],
+    names: [
+      ...new Set(
+        results
+          .filter(
+            (result) =>
+              result.kind === "named-range" && result.status === "created",
           )
           .map((result) => result.name),
       ),
@@ -586,10 +596,14 @@ export async function applyApprovedExcelPlan(
     pivotList.load?.("items/name");
     const tableList = context.workbook.tables;
     tableList.load?.("items/name");
+    const nameList = context.workbook.names;
+    nameList?.load?.("items/name");
     await context.sync();
     for (const item of pivotList.items ?? [])
       takenObjects.add(String(item.name));
     for (const item of tableList.items ?? [])
+      takenObjects.add(String(item.name));
+    for (const item of nameList?.items ?? [])
       takenObjects.add(String(item.name));
     const uniqueObject = (base: string): string => {
       if (!takenObjects.has(base)) return base;
@@ -633,6 +647,7 @@ export async function applyApprovedExcelPlan(
       target.values = copiedValues.map((row) => row.map(literal));
       await context.sync();
       normalizedSource = target;
+      return copiedValues.length;
     };
 
     const readSourceValues = async () => {
@@ -666,7 +681,8 @@ export async function applyApprovedExcelPlan(
       const objectName =
         planned.kind === "pivot-table" ||
         planned.kind === "table" ||
-        planned.kind === "dashboard"
+        planned.kind === "dashboard" ||
+        planned.kind === "named-range"
           ? uniqueObject(planned.name)
           : planned.name;
       takenObjects.add(objectName);
@@ -745,7 +761,38 @@ export async function applyApprovedExcelPlan(
               // Older hosts: the legacy name check still applies.
             }
           }
-          if (action.kind === "new-sheet") {
+          if (action.kind === "named-range") {
+            const spec = action.spec;
+            if (!Number.isInteger(spec?.namedRangeIndex))
+              throw new Error("named range needs a validated source column");
+            const existingName = context.workbook.names.getItemOrNullObject(
+              action.name,
+            );
+            existingName.load("isNullObject");
+            await context.sync();
+            if (!existingName.isNullObject) {
+              if (result.createdSheet) {
+                sheet.delete();
+                await context.sync();
+                result.createdSheet = false;
+              }
+              result.status = "exists";
+            } else {
+              const copiedRowCount = await writeSourceCopy(sheet);
+              const startRow = plan.normalization ? 3 : 2;
+              const endRow = Math.max(startRow, copiedRowCount);
+              const escapedSheet = String(action.targetSheet).replace(
+                /'/g,
+                "''",
+              );
+              const column = columnLetter(spec.namedRangeIndex as number);
+              context.workbook.names.add(
+                action.name,
+                `='${escapedSheet}'!$${column}$${startRow}:$${column}$${endRow}`,
+              );
+              await context.sync();
+            }
+          } else if (action.kind === "new-sheet") {
             if (sheetExists) {
               result.status = "exists";
             } else if (plan.normalization) {
@@ -2115,10 +2162,12 @@ export async function inspectWorkbookOverview(
 const CREATED_SHEET =
   /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|Format|Report|View)(?: (d{1,2}))?$/;
 const CREATED_TABLE = /^[A-Za-z0-9_]{1,18}_Vynor_table(?:_\d{1,2})?$/;
+const CREATED_NAME = /^VynorAI_[A-Za-z0-9_]+_\d+(?:_\d+)?$/;
 
 export interface RollbackReport {
   removedSheets: string[];
   convertedTables: string[];
+  removedNames: string[];
   skipped: string[];
 }
 
@@ -2129,7 +2178,7 @@ export interface RollbackReport {
  */
 export async function rollbackCreatedItems(
   runtime: ExcelRuntimeLike,
-  items: { sheets: string[]; tables: string[] },
+  items: { sheets: string[]; tables: string[]; names?: string[] },
   confirmed: boolean,
 ): Promise<RollbackReport> {
   if (!confirmed)
@@ -2138,8 +2187,22 @@ export async function rollbackCreatedItems(
     const report: RollbackReport = {
       removedSheets: [],
       convertedTables: [],
+      removedNames: [],
       skipped: [],
     };
+    for (const name of [...new Set(items.names ?? [])]) {
+      if (!CREATED_NAME.test(name)) {
+        report.skipped.push(name);
+        continue;
+      }
+      const named = context.workbook.names.getItemOrNullObject(name);
+      named.load("isNullObject");
+      await context.sync();
+      if (named.isNullObject) continue;
+      named.delete();
+      await context.sync();
+      report.removedNames.push(name);
+    }
     for (const name of [...new Set(items.tables)]) {
       if (!CREATED_TABLE.test(name)) {
         report.skipped.push(name);

@@ -9,6 +9,7 @@ import {
 type Cell = string | number | boolean | null;
 
 export interface InstructionSpecs {
+  namedRange?: { source: number };
   chart?: {
     category: number;
     value: number;
@@ -139,6 +140,7 @@ export interface InstructionSpecs {
 export interface InterpretedInstruction {
   actions: Array<
     | "table"
+    | "named-range"
     | "clean"
     | "add-column"
     | "lookup-columns"
@@ -199,6 +201,24 @@ export function interpretInstruction(
     )
   )
     result.actions.push("table");
+
+  const namedRangeMatch =
+    /\b(?:create|define|add)\s+(?:a\s+)?named\s+range\s+for\s+["']?([^"'.,]+?)["']?\s*\.?$/i.exec(
+      text,
+    );
+  if (namedRangeMatch) {
+    const source = findHeader(headers, namedRangeMatch[1].trim());
+    if (source < 0)
+      result.problems.push(
+        `"${namedRangeMatch[1].trim()}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    else
+      return {
+        actions: ["named-range"],
+        specs: { namedRange: { source } },
+        problems: [],
+      };
+  }
 
   const combineMatch =
     /\b(?:combine|concatenate|join)\s+["']?([^"'\n,]+?)["']?\s+and\s+["']?([^"'\n,]+?)["']?\s+into\s+(?:one\s+)?column(?:\s+(?:called|named)\s+["']?([^"'\n,.]+?)["']?)?(?:\s*\.|$)/i.exec(

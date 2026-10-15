@@ -720,6 +720,16 @@ test("server and add-in agree on a waterfall plan", () => {
   assert.equal(server.actions[0].spec?.categoryColumn, "Region");
 });
 
+test("server and add-in agree on a named-range plan", () => {
+  const specs = { namedRange: { source: 2 } };
+  const actions = ["named-range"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].kind, "named-range");
+  assert.equal(server.actions[0].spec?.namedRangeName, "VynorAI_Sales_3");
+});
+
 test("the server refuses unusable chart v2, pivot v2 and view choices", () => {
   const call = (specs: unknown, actions: string[]) =>
     createServerExcelPreviewPlan(input, actions, 500, specs as any);

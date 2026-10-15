@@ -58,6 +58,7 @@ export interface ExcelColumnSpecs {
     values: number[];
     aggregation?: ExcelAggregation;
   };
+  namedRange?: { source: number };
   chart?: {
     category: number;
     value: number;
@@ -171,6 +172,9 @@ export interface ExcelActionSpec {
   categoryIndex?: number;
   valueColumn?: string;
   valueIndex?: number;
+  namedRangeColumn?: string;
+  namedRangeIndex?: number;
+  namedRangeName?: string;
   chartType?: ExcelChartType;
   extraValueColumns?: string[];
   extraValueIndexes?: number[];
@@ -294,6 +298,7 @@ function resolveColumnSpecs(
   view?: ExcelActionSpec;
   statistics?: ExcelActionSpec;
   dashboard?: ExcelActionSpec;
+  namedRange?: ExcelActionSpec;
   split?: ExcelActionSpec;
   unpivot?: ExcelActionSpec;
 } {
@@ -329,11 +334,32 @@ function resolveColumnSpecs(
     view?: ExcelActionSpec;
     statistics?: ExcelActionSpec;
     dashboard?: ExcelActionSpec;
+    namedRange?: ExcelActionSpec;
     split?: ExcelActionSpec;
     unpivot?: ExcelActionSpec;
   } = {};
   if (requested.has("dashboard") && !specs.dashboard)
     fail("EXCEL_SPEC_INVALID", "A dashboard needs explicit column choices.");
+  if (specs.namedRange) {
+    if (!requested.has("named-range"))
+      fail(
+        "EXCEL_SPEC_UNUSED",
+        "A named-range column choice needs a named-range action.",
+      );
+    if (!inRange(specs.namedRange.source))
+      fail("EXCEL_SPEC_INVALID", "Choose a valid column for the named range.");
+    const header = headers[specs.namedRange.source] ?? "Column";
+    const safeHeader =
+      header
+        .replace(/[^A-Za-z0-9_]/g, "_")
+        .replace(/^(\d)/, "_$1")
+        .slice(0, 40) || "Column";
+    resolved.namedRange = {
+      namedRangeColumn: header,
+      namedRangeIndex: specs.namedRange.source,
+      namedRangeName: `VynorAI_${safeHeader}_${specs.namedRange.source + 1}`,
+    };
+  }
   const chartTypes = [
     "column",
     "line",
@@ -1551,6 +1577,7 @@ export function createServerExcelPreviewPlan(
   );
   const actions = [
     "new-sheet",
+    "named-range",
     "table",
     "chart",
     "pivot-table",
@@ -1569,7 +1596,11 @@ export function createServerExcelPreviewPlan(
     .filter((kind) => requested.has(kind))
     .map((kind) => ({
       kind,
-      name: `${baseName}_Vynor_${kind.replace("-", "_")}`,
+      name:
+        kind === "named-range" && resolved.namedRange
+          ? (resolved.namedRange.namedRangeName ??
+            `${baseName}_Vynor_named_range`)
+          : `${baseName}_Vynor_${kind.replace("-", "_")}`,
       targetSheet:
         kind === "clean"
           ? `${baseName}_Vynor_Clean`
@@ -1591,9 +1622,11 @@ export function createServerExcelPreviewPlan(
                           ? `${baseName}_Vynor_View`
                           : kind === "statistics"
                             ? `${baseName}_Vynor_Stats`
-                            : kind === "dashboard"
-                              ? `${baseName}_Vynor_Dashboard`
-                              : `${baseName}_Vynor_Result`,
+                            : kind === "named-range"
+                              ? `${baseName}_Vynor_Names`
+                              : kind === "dashboard"
+                                ? `${baseName}_Vynor_Dashboard`
+                                : `${baseName}_Vynor_Result`,
       preservesSource: true,
       description: layout.normalization
         ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
@@ -1627,6 +1660,9 @@ export function createServerExcelPreviewPlan(
         : {}),
       ...(kind === "dashboard" && resolved.dashboard
         ? { spec: resolved.dashboard }
+        : {}),
+      ...(kind === "named-range" && resolved.namedRange
+        ? { spec: resolved.namedRange }
         : {}),
     }));
   const warnings = [

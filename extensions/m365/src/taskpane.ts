@@ -132,7 +132,7 @@ let previewFingerprint = "";
 let pendingSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
 let lastCreated:
-  | { planId: string; sheets: string[]; tables: string[] }
+  | { planId: string; sheets: string[]; tables: string[]; names: string[] }
   | undefined;
 let language: Language = loadLanguage();
 let lastSummary: SchemaSummary | undefined;
@@ -944,7 +944,12 @@ apply?.addEventListener("click", async () => {
         status: auditStatus,
         sourceUnchanged: report.sourceUnchangedAfterApply,
         results: report.results.map((result) => ({
-          kind: result.kind as "table" | "chart" | "new-sheet" | "pivot-table",
+          kind: result.kind as
+            | "table"
+            | "chart"
+            | "new-sheet"
+            | "named-range"
+            | "pivot-table",
           status: result.status,
         })),
       });
@@ -1551,6 +1556,7 @@ function setupLayout() {
       table: "table",
       chart: "chart",
       "pivot-table": "PivotTable",
+      "named-range": "named range",
     })[kind] || kind;
   const renderSummary = () => {
     if (!preview || !resultCard) return;
@@ -1972,6 +1978,7 @@ rollbackButton?.addEventListener("click", async () => {
         planId: items.planId,
         removedSheets: Math.min(10, report.removedSheets.length),
         convertedTables: Math.min(1, report.convertedTables.length),
+        removedNames: Math.min(10, report.removedNames.length),
       })
       .catch((error) =>
         log.record("api:rollback", "fail", describeError(error)),
@@ -1980,7 +1987,7 @@ rollbackButton?.addEventListener("click", async () => {
     if (rollbackButton) rollbackButton.hidden = true;
     markChangeNote("undone");
     setStatus(
-      `Removed ${report.removedSheets.length} sheet(s) and converted ${report.convertedTables.length} table(s) back to a range.`,
+      `Removed ${report.removedSheets.length} sheet(s), ${report.removedNames.length} named range(s), and converted ${report.convertedTables.length} table(s) back to a range.`,
     );
   } catch (error) {
     handleApiError("rollback", error);

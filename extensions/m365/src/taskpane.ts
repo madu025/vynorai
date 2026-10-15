@@ -694,13 +694,7 @@ function markChangeNote(state: "preview" | "applied" | "partial" | "undone") {
 apply?.addEventListener("click", async () => {
   if (!config || !accessToken || !currentPlan || !previewFingerprint)
     return setStatus("Create a preview before applying.");
-  if (
-    !(await askInPane(
-      "Apply the approved Excel changes? Original source data will be preserved.",
-      "Apply",
-    ))
-  )
-    return log.record("apply:confirm", "skip", "user cancelled");
+  // The "Confirm and apply" button is the confirmation: one click, no second dialog.
   log.record("apply:confirm", "pass", "user confirmed");
   const approvedPlan = currentPlan;
   const expectedFingerprint = previewFingerprint;
@@ -799,6 +793,9 @@ apply?.addEventListener("click", async () => {
       ? ""
       : doneSentence(report.results, report.sourceUnchangedAfterApply);
     markChangeNote(failed.length ? "partial" : "applied");
+    document
+      .querySelector("#change-note")
+      ?.scrollIntoView?.({ block: "center" });
     const reveal = report.results.find(
       (result) => result.status === "created" || result.status === "exists",
     );
@@ -1622,6 +1619,34 @@ rollbackButton?.addEventListener("click", async () => {
     );
   } catch (error) {
     handleApiError("rollback", error);
+  }
+});
+
+const cleanupButton = document.querySelector<HTMLButtonElement>("#cleanup");
+cleanupButton?.addEventListener("click", async () => {
+  const names = await listWorksheetNames(officeRuntime());
+  const mine = names.filter((name) =>
+    /_Vynor_[A-Za-z]+(?:\s*\(\d+\))?$/.test(name),
+  );
+  const older = mine.filter((name) => name !== lastRevealSheet);
+  if (!older.length)
+    return setStatus("There are no older VynorAI result sheets.");
+  if (
+    !(await askInPane(
+      `Remove ${older.length} older VynorAI result sheet(s)? The latest result and your original data stay.`,
+      "Remove",
+    ))
+  )
+    return;
+  try {
+    const report = await rollbackCreatedItems(
+      officeRuntime(),
+      { sheets: older, tables: [] },
+      true,
+    );
+    setStatus(`Removed ${report.removedSheets.length} older result sheet(s).`);
+  } catch (error) {
+    handleApiError("cleanup", error);
   }
 });
 

@@ -32,6 +32,7 @@ import {
   M365ApiError,
   type M365RequestTrace,
 } from "./api.js";
+import { askInPane } from "./confirmDialog.js";
 import {
   ACTION_REQUIREMENTS,
   DiagnosticsLog,
@@ -530,9 +531,10 @@ apply?.addEventListener("click", async () => {
   if (!config || !accessToken || !currentPlan || !previewFingerprint)
     return setStatus("Create a preview before applying.");
   if (
-    !window.confirm(
+    !(await askInPane(
       "Apply the approved Excel changes? Original source data will be preserved.",
-    )
+      "Apply",
+    ))
   )
     return log.record("apply:confirm", "skip", "user cancelled");
   log.record("apply:confirm", "pass", "user confirmed");
@@ -1154,9 +1156,10 @@ rollbackButton?.addEventListener("click", async () => {
   if (!lastCreated || !config || !accessToken) return;
   const items = lastCreated;
   if (
-    !window.confirm(
+    !(await askInPane(
       "Remove the result sheets and Table this add-in created? Your original data is not touched.",
-    )
+      "Remove",
+    ))
   )
     return log.record("rollback:confirm", "skip", "user cancelled");
   try {

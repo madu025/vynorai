@@ -1,4 +1,5 @@
 import { createM365ApiClient, M365ApiError } from "./api.js";
+import { askInPane } from "./confirmDialog.js";
 import {
   beginM365OAuth,
   completeM365OAuth,
@@ -252,7 +253,10 @@ insert?.addEventListener("click", async () => {
   const text = output?.value || "";
   if (!host || !text) return;
   if (
-    !window.confirm("Insert this text into the document? Nothing is replaced.")
+    !(await askInPane(
+      "Insert this text into the document? Nothing is replaced.",
+      "Insert",
+    ))
   )
     return;
   try {

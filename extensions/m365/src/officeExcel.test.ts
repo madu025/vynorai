@@ -242,7 +242,10 @@ test("apply creates each object with Office.js argument order and keeps source u
     "pivot-table:created",
   ]);
   assert.equal(report.sourceUnchangedAfterApply, true);
-  assert.ok(excel.calls.includes("table.add range:A1:B3 true"));
+  assert.ok(
+    excel.calls.includes("table.add range:A1 true"),
+    "the table is made from the copied result range, not the Sales source range",
+  );
   assert.ok(excel.calls.includes("chart.add ColumnClustered range:A1:B3"));
   assert.ok(
     excel.calls.includes("pivot.add string range:A1:B3 range:A3"),

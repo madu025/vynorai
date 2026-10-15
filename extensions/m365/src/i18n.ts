@@ -14,6 +14,17 @@ type Dictionary = Record<string, string>;
 const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
   si: {
     hero: "ඔබේ දත්ත සමඟ කුමක් කිරීමට අවශ්‍යද?",
+    hero_hint:
+      "VynorAI ඔබේ වගුව ස්වයංක්‍රීයව සොයා, වෙනස්කම් කිරීමට පෙර නව ප්‍රතිඵල පත්‍රිකාවක පෙරදසුනක් පෙන්වයි.",
+    instruction_label: "සෑදිය යුතු දේ විස්තර කරන්න",
+    conversation_label: "VynorAI සංවාදය",
+    suggestions_label: "යෝජනා",
+    outcomes_label: "සාදනු ලබන දෑ",
+    adjust_preview: "පෙරදසුන සකසන්න",
+    steps_aria: "පියවර",
+    request_change: "වැඩපොතේ වෙනසක් ඉල්ලන්න",
+    conversation_you: "ඔබ",
+    conversation_attention: "අවධානය අවශ්‍යයි",
     placeholder: "තෝරාගත් දත්ත භාවිතයෙන් සෑදිය යුතු දේ විස්තර කරන්න",
     analyze: "AI මගින් විශ්ලේෂණය කරන්න",
     inspect: "පරීක්ෂා කර පෙරදසුන බලන්න",
@@ -24,6 +35,19 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     pill_table: "වගුවක් ලෙස හැඩසව්වන්න",
     pill_sheet: "ප්‍රතිඵල පත්‍රිකාවක් සාදන්න",
     pill_clean: "දත්ත පිරිසිදු කරන්න",
+    more_suggestions: "තවත්…",
+    review_toggle: "පියවරෙන් පියවර පරීක්ෂා කරන්න",
+    replace_toggle:
+      "යෙදීමෙන් පසු පැරණි VynorAI ප්‍රතිඵල පත්‍රිකා ප්‍රතිස්ථාපනය කරන්න",
+    preview_safe: "තවම වෙනස්කම් නැත",
+    tweak_chart: "ප්‍රස්තාර වර්ගය",
+    tweak_aggregation: "සාරාංශ කරන ආකාරය",
+    tweak_category: "කාණ්ඩය",
+    tweak_value: "අගය",
+    reasoned: "පියවර",
+    steps_label: "කින් විශ්ලේෂණය කළා",
+    cleanup: "පැරණි ප්‍රතිඵල ඉවත් කරන්න",
+    menu_language_button: "භාෂාව: English",
     welcome_title: "VynorAI වෙත සාදරයෙන් පිළිගනිමු",
     welcome_body:
       "තෝරාගත් දත්ත විශ්ලේෂණය කිරීම සඳහා ඔබේ කාර්යාල ගිණුමෙන් පිවිසෙන්න.",
@@ -53,6 +77,17 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
   },
   ta: {
     hero: "உங்கள் தரவுடன் என்ன செய்ய விரும்புகிறீர்கள்?",
+    hero_hint:
+      "VynorAI உங்கள் அட்டவணையை தானாகக் கண்டுபிடித்து, மாற்றம் செய்வதற்கு முன் புதிய முடிவுத் தாளின் முன்னோட்டத்தைக் காட்டும்.",
+    instruction_label: "உருவாக்க வேண்டியதை விவரிக்கவும்",
+    conversation_label: "VynorAI உரையாடல்",
+    suggestions_label: "பரிந்துரைகள்",
+    outcomes_label: "உருவாக்கப்படுபவை",
+    adjust_preview: "முன்னோட்டத்தைச் சரிசெய்",
+    steps_aria: "படிகள்",
+    request_change: "பணிப்புத்தக மாற்றத்தைக் கோரு",
+    conversation_you: "நீங்கள்",
+    conversation_attention: "கவனம் தேவை",
     placeholder:
       "தேர்ந்தெடுத்த தரவிலிருந்து எதை உருவாக்க வேண்டும் என்று விவரிக்கவும்",
     analyze: "AI மூலம் பகுப்பாய்வு",
@@ -64,6 +99,18 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     pill_table: "அட்டவணையாக வடிவமை",
     pill_sheet: "முடிவு தாள் உருவாக்கு",
     pill_clean: "தரவைச் சுத்தம் செய்",
+    more_suggestions: "மேலும்…",
+    review_toggle: "ஒவ்வொரு படியையும் மதிப்பாய்வு செய்",
+    replace_toggle: "பயன்படுத்திய பின் பழைய VynorAI முடிவுத் தாள்களை மாற்று",
+    preview_safe: "இன்னும் மாற்றங்கள் இல்லை",
+    tweak_chart: "விளக்கப்பட வகை",
+    tweak_aggregation: "சுருக்கம்",
+    tweak_category: "வகை",
+    tweak_value: "மதிப்பு",
+    reasoned: "இதில்",
+    steps_label: "படிகள் பரிசீலிக்கப்பட்டன",
+    cleanup: "பழைய முடிவுகளை அகற்று",
+    menu_language_button: "மொழி: English",
     welcome_title: "VynorAI-க்கு வரவேற்கிறோம்",
     welcome_body:
       "தேர்ந்தெடுத்த தரவை பகுப்பாய்வு செய்ய உங்கள் பணிக் கணக்கில் உள்நுழையவும்.",
@@ -173,6 +220,21 @@ export function applyLanguage(root: ParentNode, language: Language): void {
         language,
         element.dataset.i18nPlaceholder ?? "",
         element.dataset.i18nDefault,
+      ),
+    );
+  }
+  for (const element of root.querySelectorAll<HTMLElement>(
+    "[data-i18n-aria-label]",
+  )) {
+    if (element.dataset.i18nAriaLabelDefault === undefined)
+      element.dataset.i18nAriaLabelDefault =
+        element.getAttribute("aria-label") ?? "";
+    element.setAttribute(
+      "aria-label",
+      translate(
+        language,
+        element.dataset.i18nAriaLabel ?? "",
+        element.dataset.i18nAriaLabelDefault,
       ),
     );
   }

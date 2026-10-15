@@ -1210,9 +1210,7 @@ export function createExcelPreviewPlan(
               ? `${baseName}_Vynor_Totals`
               : kind === "view"
                 ? `${baseName}_Vynor_View`
-                : kind === "table" && !layout.normalization
-                  ? input.worksheetName
-                  : resultSheet;
+                : resultSheet;
   if (
     (requested.has("summary") ||
       requested.has("format") ||

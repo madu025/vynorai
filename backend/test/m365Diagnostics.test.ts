@@ -112,6 +112,10 @@ test("M365 server plan keeps generated sheet and object names valid for Excel", 
   );
   for (const action of plan.actions)
     assert.ok(action.targetSheet.length <= 31, action.targetSheet);
+  assert.notEqual(
+    plan.actions.find((action: any) => action.kind === "table")?.targetSheet,
+    "Quarterly Revenue Summary 2026",
+  );
   assert.match(excelSafeBaseName("2026"), /^S_2026$/);
   assert.match(excelSafeBaseName("Sales"), /^Sales$/);
 });

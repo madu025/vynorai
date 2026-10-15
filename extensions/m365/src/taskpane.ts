@@ -91,7 +91,8 @@ declare global {
 }
 
 const config = window.__VYNORAI_M365_CONFIG__;
-const status = document.querySelector<HTMLElement>("#status");
+const status = document.querySelector<HTMLElement>("#status-text");
+const statusContainer = document.querySelector<HTMLElement>("#status");
 const preview = document.querySelector<HTMLElement>("#preview");
 const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
@@ -135,6 +136,7 @@ let lastCreated:
   | undefined;
 let language: Language = loadLanguage();
 let lastSummary: SchemaSummary | undefined;
+let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
 const SESSION_KEY = "vynorai.m365.excel.session.v2";
 
@@ -175,6 +177,49 @@ let lastStatus = "";
 function setStatus(message: string) {
   lastStatus = message;
   if (status) status.textContent = localizeMessage(language, message);
+  const normalized = message.toLocaleLowerCase();
+  const tone =
+    /failed|error|could not|unavailable|missing|expired|rejected|invalid|no credits|blocked/.test(
+      normalized,
+    )
+      ? "error"
+      : /ready|signed in|completed|done|applied|removed|answered/.test(
+            normalized,
+          )
+        ? "success"
+        : /opening|completing|inspecting|reading|requesting|applying|analyzing/.test(
+              normalized,
+            )
+          ? "busy"
+          : "idle";
+  if (statusContainer) {
+    statusContainer.dataset.tone = tone;
+    statusContainer.setAttribute("aria-busy", String(tone === "busy"));
+  }
+}
+
+/** In-memory only: requests are visible for this pane session but never persisted with workbook data. */
+function renderConversation(
+  kind: "user" | "assistant" | "error",
+  text: string,
+) {
+  const history = document.querySelector<HTMLElement>("#conversation-history");
+  if (!history || !text) return;
+  const item = document.createElement("article");
+  item.className = `message ${kind}`;
+  const label = document.createElement("span");
+  label.className = "message-label";
+  label.textContent =
+    kind === "user"
+      ? translate(language, "conversation_you", "You")
+      : kind === "error"
+        ? translate(language, "conversation_attention", "Needs attention")
+        : "VynorAI";
+  const body = document.createElement("span");
+  body.textContent = localizeMessage(language, text);
+  item.append(label, body);
+  history.appendChild(item);
+  while (history.childElementCount > 12) history.firstElementChild?.remove();
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;
@@ -255,6 +300,10 @@ function signOutOfMicrosoft() {
   localStorage.removeItem(LEGACY_SESSION_KEY);
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
+  document
+    .querySelector<HTMLElement>("#conversation-history")
+    ?.replaceChildren();
+  lastConversationRequest = "";
   updateAuthenticationUi(false);
   log.record("session:sign-out", "pass", "local session removed");
   setStatus("Signed out. Sign in to inspect selected Excel data.");
@@ -303,11 +352,12 @@ function handleApiError(step: string, error: unknown) {
   log.record(step, "fail", describeError(error));
   if (!(error instanceof M365ApiError)) {
     const text = (error as Error).message ?? "";
-    setStatus(
-      /requested resource doesn't exist|ItemNotFound/i.test(text)
-        ? "Excel could not find that sheet or range. Click a cell inside your table and try again."
-        : text,
-    );
+    const message = /requested resource doesn't exist|ItemNotFound/i.test(text)
+      ? "Excel could not find that sheet or range. Click a cell inside your table and try again."
+      : text;
+    setStatus(message);
+    renderConversation("error", message);
+    statusContainer?.focus?.();
     return;
   }
   if (
@@ -320,15 +370,17 @@ function handleApiError(step: string, error: unknown) {
     ].includes(error.code)
   ) {
     signOutOfMicrosoft();
-    setStatus(
-      "Microsoft session changed or expired. Sign in again to continue.",
-    );
+    const message =
+      "Microsoft session changed or expired. Sign in again to continue.";
+    setStatus(message);
+    renderConversation("error", message);
     return;
   }
-  setStatus(
+  const message =
     API_MESSAGES[error.code] ||
-      `VynorAI request failed (${error.code}). See Diagnostics.`,
-  );
+    `VynorAI request failed (${error.code}). See Diagnostics.`;
+  setStatus(message);
+  renderConversation("error", message);
 }
 
 function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
@@ -458,6 +510,7 @@ instruction?.addEventListener("input", () => {
   excludedKinds = new Set<string>();
   currentPlan = undefined;
   previewFingerprint = "";
+  lastConversationRequest = "";
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
 });
@@ -468,6 +521,10 @@ inspect?.addEventListener("click", async () => {
   if (apply) apply.disabled = true;
   currentPlan = undefined;
   const instructionText = normalizeInstruction(instruction?.value || "");
+  if (instructionText && instructionText !== lastConversationRequest) {
+    renderConversation("user", instructionText);
+    lastConversationRequest = instructionText;
+  }
   try {
     if (isFormulaInspectionRequest(instructionText)) {
       setStatus("Inspecting selected formulas locally...");
@@ -529,9 +586,10 @@ inspect?.addEventListener("click", async () => {
     const filtered = wanted.filter((kind) => !excludedKinds.has(kind));
     const actions = filtered.length > 0 ? filtered : wanted;
     const { lookup: lookupWish, ...plannedSpecs } = interpreted.specs;
+    // A preview adjustment is deliberate user input, so it overrides the original phrase.
     let specs: ExcelColumnSpecs = {
-      ...(pendingSpecs ?? {}),
       ...plannedSpecs,
+      ...(pendingSpecs ?? {}),
     };
     // Follow-up: "add a chart for that" reuses the columns of the last applied pivot.
     const followed = applyFollowUpChart(
@@ -684,6 +742,11 @@ inspect?.addEventListener("click", async () => {
         : "") +
         "Preview ready. Nothing has changed yet. Review it before applying.",
     );
+    renderConversation(
+      "assistant",
+      `Preview ready for ${actions.join(", ")}. Your original data will stay unchanged.`,
+    );
+    document.querySelector<HTMLElement>("#preview-heading")?.focus();
     // "Review as you go" off: apply straight away, like Copilot's edit mode.
     if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
   } catch (error) {
@@ -850,10 +913,46 @@ apply?.addEventListener("click", async () => {
         document.querySelector<HTMLButtonElement>("#show-result");
       if (showResult) showResult.hidden = false;
     }
+    let replaced = 0;
+    const replaceOlder =
+      document.querySelector<HTMLInputElement>("#replace-toggle");
+    if (!failed.length && replaceOlder?.checked && lastRevealSheet) {
+      try {
+        // Only sheets with the Office custom property set by VynorAI are returned here.
+        const older = (await listVynorSheets(officeRuntime())).filter(
+          (sheet) => sheet !== lastRevealSheet,
+        );
+        if (older.length) {
+          const removed = await rollbackCreatedItems(
+            officeRuntime(),
+            { sheets: older, tables: [] },
+            true,
+          );
+          replaced = removed.removedSheets.length;
+          renderChanged([
+            ...report.results.map(
+              (result) => `${result.kind} - ${result.targetSheet}`,
+            ),
+            `Removed ${replaced} older VynorAI result sheet(s).`,
+          ]);
+        }
+      } catch (error) {
+        log.record("excel:replace-older", "fail", describeError(error));
+      }
+    }
+    document.querySelector<HTMLElement>("#change-note")?.focus();
+    renderConversation(
+      failed.length ? "error" : "assistant",
+      failed.length
+        ? `Applied ${done.length} of ${report.results.length} planned changes.`
+        : doneSentence(report.results, report.sourceUnchangedAfterApply) +
+            (replaced ? ` Removed ${replaced} older result sheet(s).` : ""),
+    );
     setStatus(
       failed.length
         ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`
         : doneSentence(report.results, report.sourceUnchangedAfterApply) +
+            (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
             auditWarning,
     );
   } catch (error) {
@@ -1380,6 +1479,7 @@ function setupLayout() {
       void label;
     }
     renderOutcomes(actions);
+    configurePreviewTweaks(actions);
     resultCard.hidden = false;
   };
   if (preview)
@@ -1538,6 +1638,113 @@ function renderOutcomes(actions: any[]) {
   }
   void refreshSheetNames(container, actions);
 }
+
+type TweakSelect = HTMLSelectElement | null;
+const tweakChartType =
+  document.querySelector<HTMLSelectElement>("#tweak-chart-type");
+const tweakAggregation =
+  document.querySelector<HTMLSelectElement>("#tweak-aggregation");
+const tweakCategory =
+  document.querySelector<HTMLSelectElement>("#tweak-category");
+const tweakValue = document.querySelector<HTMLSelectElement>("#tweak-value");
+
+function setTweakOptions(
+  select: TweakSelect,
+  choices: Array<{ value: string; label: string }>,
+  selected?: number | string,
+) {
+  if (!select) return;
+  select.replaceChildren();
+  for (const choice of choices) {
+    const option = document.createElement("option");
+    option.value = choice.value;
+    option.textContent = choice.label;
+    option.selected = String(selected ?? "") === choice.value;
+    select.appendChild(option);
+  }
+}
+
+/** Small, deterministic adjustments. Each selection re-runs the existing client/server planner. */
+function configurePreviewTweaks(actions: any[]) {
+  const panel = document.querySelector<HTMLElement>("#preview-tweaks");
+  if (!panel || !lastRange) return;
+  const hasChart = actions.some((action) => action.kind === "chart");
+  const hasPivot = actions.some((action) => action.kind === "pivot-table");
+  panel.hidden = !hasChart && !hasPivot;
+  if (panel.hidden) return;
+  const columns = lastRange.headers.map((header, index) => ({
+    value: String(index),
+    label: header,
+  }));
+  const chart = previewSpecs?.chart;
+  const pivot = previewSpecs?.pivot;
+  const chartTypes = [
+    ["column", "Column"],
+    ["bar", "Bar"],
+    ["line", "Line"],
+    ["pie", "Pie"],
+    ["area", "Area"],
+    ["stacked-column", "Stacked column"],
+  ].map(([value, label]) => ({ value, label }));
+  setTweakOptions(tweakChartType, chartTypes, chart?.chartType ?? "column");
+  setTweakOptions(
+    tweakAggregation,
+    ["sum", "count", "average", "min", "max"].map((value) => ({
+      value,
+      label: value[0].toUpperCase() + value.slice(1),
+    })),
+    pivot?.aggregation ?? "sum",
+  );
+  setTweakOptions(tweakCategory, columns, chart?.category ?? pivot?.rows ?? 0);
+  setTweakOptions(tweakValue, columns, chart?.value ?? pivot?.values ?? 0);
+  if (tweakChartType) tweakChartType.closest("label")!.hidden = !hasChart;
+  if (tweakAggregation) tweakAggregation.closest("label")!.hidden = !hasPivot;
+}
+
+function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
+  const next: ExcelColumnSpecs = {
+    ...previewSpecs,
+    ...(previewSpecs?.chart ? { chart: { ...previewSpecs.chart } } : {}),
+    ...(previewSpecs?.pivot ? { pivot: { ...previewSpecs.pivot } } : {}),
+  };
+  update(next);
+  pendingSpecs = next;
+  setStatus("Preview adjusted. Rechecking the plan...");
+  void inspect?.click();
+}
+
+tweakChartType?.addEventListener("change", () => {
+  if (!tweakChartType.value) return;
+  replanWithTweak((specs) => {
+    if (specs.chart)
+      specs.chart.chartType = tweakChartType.value as NonNullable<
+        ExcelColumnSpecs["chart"]
+      >["chartType"];
+  });
+});
+tweakAggregation?.addEventListener("change", () => {
+  if (!tweakAggregation.value) return;
+  replanWithTweak((specs) => {
+    if (specs.pivot)
+      specs.pivot.aggregation = tweakAggregation.value as NonNullable<
+        ExcelColumnSpecs["pivot"]
+      >["aggregation"];
+  });
+});
+tweakCategory?.addEventListener("change", () => {
+  replanWithTweak((specs) => {
+    const column = Number(tweakCategory.value);
+    if (specs.chart) specs.chart.category = column;
+    else if (specs.pivot) specs.pivot.rows = column;
+  });
+});
+tweakValue?.addEventListener("change", () => {
+  replanWithTweak((specs) => {
+    const column = Number(tweakValue.value);
+    if (specs.chart) specs.chart.value = column;
+    else if (specs.pivot) specs.pivot.values = column;
+  });
+});
 
 /** The preview shows the sheet name the apply will really use (a repeat run gets "(2)"). */
 async function refreshSheetNames(container: HTMLElement, actions: any[]) {

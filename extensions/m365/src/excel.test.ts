@@ -51,6 +51,11 @@ test("profiles selected Excel data and creates bounded chunks", () => {
     true,
   );
   assert.match(plan.warnings.join(" "), /chunks/);
+  assert.notEqual(
+    plan.actions.find((action) => action.kind === "table")?.targetSheet,
+    input.worksheetName,
+    "a formatted table is planned on a VynorAI result sheet, never the source sheet",
+  );
 });
 
 test("mutation gate requires confirmation and approval token", () => {

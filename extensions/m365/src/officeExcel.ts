@@ -505,7 +505,6 @@ export async function applyApprovedExcelPlan(
       if (name === plan.worksheetName) return name;
       const known = resolvedTargets.get(name);
       if (known) return known;
-      if (planned.kind === "table") return name;
       const chosen = plannedSheetName(
         planned,
         plan.worksheetName,
@@ -543,7 +542,7 @@ export async function applyApprovedExcelPlan(
       return normalizedSource;
     };
 
-    const writeNormalizedCopy = async (sheet: any) => {
+    const writeSourceCopy = async (sheet: any) => {
       const range = sourceRange();
       range.load(["rowCount", "columnCount"]);
       await context.sync();
@@ -554,17 +553,19 @@ export async function applyApprovedExcelPlan(
         Number(range.columnCount),
         500,
       );
-      const normalizedValues = [
-        plan.normalization.headers,
-        ...values.slice(plan.normalization.headerRowCount),
-      ];
+      const copiedValues = plan.normalization
+        ? [
+            plan.normalization.headers,
+            ...values.slice(plan.normalization.headerRowCount),
+          ]
+        : values;
       const target = sheet.getRangeByIndexes(
         0,
         0,
-        normalizedValues.length,
-        plan.normalization.headers.length,
+        copiedValues.length,
+        copiedValues[0]?.length ?? 0,
       );
-      target.values = normalizedValues;
+      target.values = copiedValues.map((row) => row.map(literal));
       await context.sync();
       normalizedSource = target;
     };
@@ -630,11 +631,28 @@ export async function applyApprovedExcelPlan(
           await context.sync();
           if (!existing.isNullObject) result.status = "exists";
           else {
-            const targetSheet = context.workbook.worksheets.getItem(
+            if (String(action.targetSheet).length > MAX_SHEET_NAME)
+              throw new Error(
+                `target sheet name exceeds ${MAX_SHEET_NAME} characters`,
+              );
+            const found = context.workbook.worksheets.getItemOrNullObject(
               action.targetSheet,
             );
-            targetSheet.tables.add(actionSourceRange(), true).name =
-              action.name;
+            found.load("isNullObject");
+            await context.sync();
+            const targetSheet = found.isNullObject
+              ? context.workbook.worksheets.add(action.targetSheet)
+              : found;
+            result.createdSheet = found.isNullObject;
+            if (result.createdSheet) {
+              try {
+                targetSheet.customProperties.add("vynorai", "result");
+              } catch {
+                // Older hosts fall back to the guarded legacy-name ownership check.
+              }
+            }
+            await writeSourceCopy(targetSheet);
+            targetSheet.tables.add(normalizedSource, true).name = action.name;
             await context.sync();
           }
         } else {
@@ -664,7 +682,7 @@ export async function applyApprovedExcelPlan(
             if (sheetExists) {
               result.status = "exists";
             } else if (plan.normalization) {
-              await writeNormalizedCopy(sheet);
+              await writeSourceCopy(sheet);
             } else {
               sheet.getRange("A1:C1").values = [
                 ["VynorAI result", "Source preserved", plan.sourceAddress],

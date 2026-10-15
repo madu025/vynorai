@@ -1035,9 +1035,7 @@ export function createServerExcelPreviewPlan(
                   ? `${baseName}_Vynor_Totals`
                   : kind === "view"
                     ? `${baseName}_Vynor_View`
-                    : kind === "table" && !layout.normalization
-                      ? input.worksheetName
-                      : `${baseName}_Vynor_Result`,
+                    : `${baseName}_Vynor_Result`,
       preservesSource: true,
       description: layout.normalization
         ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`

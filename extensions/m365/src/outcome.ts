@@ -437,7 +437,7 @@ export function resolveSheetName(
   taken: Set<string>,
   maxLength = 31,
 ): string {
-  if (kind === "table" || name === sourceSheet || !taken.has(name)) return name;
+  if (name === sourceSheet || !taken.has(name)) return name;
   const tag = name.match(/_Vynor_[A-Za-z]+$/)?.[0] ?? "";
   const stem = name.slice(0, name.length - tag.length);
   for (let attempt = 2; attempt < 100; attempt += 1) {
@@ -469,11 +469,7 @@ export function friendlySheetName(
   sourceSheet: string,
 ): string {
   const planned = String(action.targetSheet ?? "");
-  if (
-    action.kind === "table" ||
-    planned === sourceSheet ||
-    !/_Vynor_[A-Za-z]+$/.test(planned)
-  )
+  if (planned === sourceSheet || !/_Vynor_[A-Za-z]+$/.test(planned))
     return planned;
   const spec = action.spec ?? {};
   let label = "";
@@ -504,7 +500,6 @@ export function plannedSheetName(
 ): string {
   const base = friendlySheetName(action, sourceSheet);
   if (
-    action.kind === "table" ||
     base === sourceSheet ||
     !/_Vynor_[A-Za-z]+$/.test(String(action.targetSheet ?? ""))
   )

@@ -276,6 +276,11 @@ export function interpretInstruction(
  */
 export function normalizeInstruction(text: string): string {
   const table: Array<[RegExp, string]> = [
+    // "Sales walata Region anuwa total" means "total of Sales by Region".
+    [
+      /\b(\w+)\s+(?:walata|walin)\s+(\w+)\s+(?:anuwa|walin|walata)\s+(total|sum|average|count)(?:\s+ekak)?\b/gi,
+      "summary $3 of $1 by $2",
+    ],
     [/pivot\s*tables?\b/gi, "pivot"],
     [/\b(\w+)\s+(?:walata|walin|anuwa)\b/gi, "by $1"],
     [/\beka\b/gi, ""],

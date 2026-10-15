@@ -522,7 +522,7 @@ inspect?.addEventListener("click", async () => {
   currentPlan = undefined;
   const instructionText = normalizeInstruction(instruction?.value || "");
   if (instructionText && instructionText !== lastConversationRequest) {
-    renderConversation("user", instructionText);
+    renderConversation("user", instruction?.value?.trim() || instructionText);
     lastConversationRequest = instructionText;
   }
   try {
@@ -670,10 +670,11 @@ inspect?.addEventListener("click", async () => {
         "fail",
         interpreted.problems.join(" ") || "no explicit allowlisted action",
       );
-      return setStatus(
+      const hint =
         interpreted.problems[0] ??
-          "Say what to create: a table, chart, result sheet, PivotTable, clean-up, or a computed column. Or ask a question about the data.",
-      );
+        "Say what to create: a table, chart, result sheet, PivotTable, clean-up, or a computed column. Or ask a question about the data.";
+      renderConversation("error", hint);
+      return setStatus(hint);
     }
     log.record("instruction:actions", "pass", { actions });
     const localPreview = await log.step(

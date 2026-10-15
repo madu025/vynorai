@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createExcelPreviewPlan } from "./excel.js";
-import { interpretInstruction } from "./intent.js";
+import { interpretInstruction, normalizeInstruction } from "./intent.js";
 import { buildOutcomes } from "./outcome.js";
 
 const headers = ["Month", "Region", "Sales", "Cost", "Margin"];
@@ -186,4 +186,11 @@ test("a two-column calculation previews its real values", () => {
   );
   const [outcome] = buildOutcomes(plan.actions as any, headers, rows);
   assert.ok(outcome.table?.headers.includes("Profit"));
+});
+
+test("a Singlish total request becomes a summary by group", () => {
+  const raw = "Sales walata Region anuwa total ekak hadanna";
+  const asked = interpretInstruction(normalizeInstruction(raw), headers, rows);
+  assert.deepEqual(asked.actions, ["summary"]);
+  assert.equal(asked.specs.summary?.group, 1);
 });

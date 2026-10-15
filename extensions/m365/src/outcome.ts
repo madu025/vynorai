@@ -424,7 +424,10 @@ export function buildOutcomes(
       if (spec.highlight)
         item.details.push(
           say(
-            `Highlights ${spec.highlight.rule} in ${spec.highlight.column}`,
+            spec.highlight.rule === "top-n" ||
+              spec.highlight.rule === "bottom-n"
+              ? `Highlights the ${spec.highlight.rule === "top-n" ? "top" : "bottom"} ${spec.highlight.n ?? 1} in ${spec.highlight.column}`
+              : `Highlights ${spec.highlight.rule} in ${spec.highlight.column}`,
             `${spec.highlight.column} හි ${spec.highlight.rule} උද්දීපනය`,
           ),
         );

@@ -57,10 +57,16 @@ import {
 } from "./oauth.js";
 import {
   applyApprovedExcelPlan,
+  inspectSelectedExcelFormulas,
   inspectSelectedExcelRange,
   inspectWorkbookOverview,
   rollbackCreatedItems,
 } from "./officeExcel.js";
+import {
+  formatFormulaInspection,
+  inspectFormulas,
+  isFormulaInspectionRequest,
+} from "./formulaInspector.js";
 
 declare global {
   interface Window {
@@ -409,6 +415,23 @@ inspect?.addEventListener("click", async () => {
   currentPlan = undefined;
   const instructionText = normalizeInstruction(instruction?.value || "");
   try {
+    if (isFormulaInspectionRequest(instructionText)) {
+      setStatus("Inspecting selected formulas locally...");
+      const report = await log.step(
+        "excel:inspect-formulas",
+        async () =>
+          inspectFormulas(await inspectSelectedExcelFormulas(officeRuntime())),
+        (value) => ({
+          formulaCells: value.formulaCellCount,
+          errorCells: value.errorCellCount,
+          possibleCircularReferences: value.possibleCircularReferenceCount,
+        }),
+      );
+      showAnswer(formatFormulaInspection(report));
+      return setStatus(
+        "Formula inspection is ready. Nothing was sent or changed.",
+      );
+    }
     setStatus("Inspecting the selected range...");
     const input = await log.step(
       "excel:read-selection",

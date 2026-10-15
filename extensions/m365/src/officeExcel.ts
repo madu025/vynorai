@@ -18,6 +18,7 @@ import {
   computedColumnFormula,
   type CleanOperation,
 } from "./transform.js";
+import type { FormulaSelection } from "./formulaInspector.js";
 
 type ExcelRangeInput = {
   workbookId: string;
@@ -119,6 +120,34 @@ export async function inspectSelectedExcelRange(
     };
     assertValidExcelTabularRange(input);
     return input;
+  });
+}
+
+/** Reads a bounded selected range of formulas and displayed values without mutating the workbook. */
+export async function inspectSelectedExcelFormulas(
+  runtime: ExcelRuntimeLike,
+  maxCells = 2000,
+): Promise<FormulaSelection> {
+  if (!Number.isInteger(maxCells) || maxCells < 1 || maxCells > 10000)
+    throw new Error("maxCells must be an integer between 1 and 10000");
+  return runtime.run(async (context) => {
+    const selected = context.workbook.getSelectedRange();
+    selected.load(["address", "rowCount", "columnCount", "formulas", "values"]);
+    selected.worksheet.load("name");
+    await context.sync();
+    const cells = Number(selected.rowCount) * Number(selected.columnCount);
+    if (!Number.isSafeInteger(cells) || cells < 1)
+      throw new Error("Select at least one cell to inspect formulas.");
+    if (cells > maxCells)
+      throw new Error(
+        `Formula inspection is limited to ${maxCells} cells. Select a smaller range.`,
+      );
+    return {
+      worksheetName: selected.worksheet.name,
+      address: selected.address,
+      formulas: selected.formulas,
+      values: selected.values,
+    };
   });
 }
 

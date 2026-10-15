@@ -50,6 +50,13 @@ const EXACT: Record<string, string> = {
   "Instruction set. Click Inspect and preview; nothing changes until you confirm.":
     "උපදෙස සකසන ලදී. “පරීක්ෂා කර පෙරදසුන බලන්න” ඔබන්න; ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
   "Use this recommendation": "මෙම නිර්දේශය භාවිතා කරන්න",
+  Columns: "තීරු",
+  "Data quality": "දත්ත ගුණාත්මකභාවය",
+  Recommendations: "නිර්දේශ",
+  "No safe recommendation was found.": "ආරක්ෂිත නිර්දේශයක් හමු නොවීය.",
+  "Advice only: no workbook action is available for this.":
+    "උපදෙස් පමණි: මේ සඳහා වැඩපොතේ ක්‍රියාවක් නොමැත.",
+  Done: "සම්පූර්ණයි",
   "AI analysis needs your explicit consent first.":
     "AI විශ්ලේෂණයට පළමුව ඔබේ පැහැදිලි කැමැත්ත අවශ්‍යයි.",
   "Review exactly what will be sent, then confirm to continue.":

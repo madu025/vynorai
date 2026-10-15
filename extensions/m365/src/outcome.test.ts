@@ -41,3 +41,55 @@ test("other outcomes show a small table of the data they use", () => {
   assert.deepEqual(item.table?.headers, headers);
   assert.equal(item.table?.rows.length, 2);
 });
+
+import { resolveSheetName } from "./outcome.js";
+
+test("a format outcome lists the exact rules, including drop-downs and data bars", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "format",
+        targetSheet: "Sheet1_Vynor_Format",
+        spec: {
+          freezeHeader: true,
+          totalRow: true,
+          columnFormats: [{ index: 2, column: "Sales", format: "#,##0" }],
+          conditional: [{ column: "Sales", index: 2, rule: "data-bars" }],
+          validation: [
+            {
+              column: "Region",
+              index: 1,
+              rule: "list",
+              values: ["North", "South"],
+            },
+          ],
+        },
+      },
+    ],
+    headers,
+    rows,
+  );
+  const text = item.details.join("\n");
+  assert.match(text, /header row stays visible/);
+  assert.match(text, /Sales: data bars/);
+  assert.match(text, /Region: drop-down list \(North, South\)/);
+  assert.match(text, /total row/);
+  assert.deepEqual(item.table?.dropdownColumns, [1]);
+  assert.equal(item.table?.barColumns[0].index, 2);
+});
+
+test("a repeat run gets a numbered sheet name that still fits Excel's limit", () => {
+  const taken = new Set(["Sheet1_Vynor_Result", "Sheet1_Vynor_Result (2)"]);
+  assert.equal(
+    resolveSheetName("Sheet1_Vynor_Result", "chart", "Sheet1", taken),
+    "Sheet1_Vynor_Result (3)",
+  );
+  const long = "ABCDEFGHIJKLMNOPQR_Vynor_Result";
+  const name = resolveSheetName(long, "chart", "Sheet1", new Set([long]));
+  assert.ok(name.length <= 31);
+  assert.match(name, /_Vynor_Result \(2\)$/);
+  assert.equal(
+    resolveSheetName("Sheet1", "table", "Sheet1", new Set(["Sheet1"])),
+    "Sheet1",
+  );
+});

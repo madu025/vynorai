@@ -20,7 +20,12 @@ import {
   type Language,
 } from "./i18n.js";
 import { previewSummarySi } from "./messagesSi.js";
-import { buildOutcomes, type OutcomeChart } from "./outcome.js";
+import {
+  buildOutcomes,
+  kindTitle,
+  resolveSheetName,
+  type OutcomeChart,
+} from "./outcome.js";
 import {
   answerQuestion,
   normalizeInstruction,
@@ -67,6 +72,7 @@ import {
   rollbackItemsFromApplyReport,
   rollbackCreatedItems,
   revealExcelResult,
+  listWorksheetNames,
 } from "./officeExcel.js";
 import {
   formatFormulaInspection,
@@ -110,6 +116,7 @@ let currentPlan: any;
 /** Headers and rows of the last inspected selection; used only to draw the preview picture. */
 let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
 let lastRevealSheet = "";
+let currentSourceSheet = "";
 let previewFingerprint = "";
 let pendingSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
@@ -464,6 +471,7 @@ inspect?.addEventListener("click", async () => {
       }),
     );
     const layout = getExcelHeaderLayout(input);
+    currentSourceSheet = String(input.worksheetName ?? "");
     lastRange = {
       headers: layout.headers.map(String),
       rows: input.values.slice(layout.headerRowCount),
@@ -722,7 +730,8 @@ apply?.addEventListener("click", async () => {
     setStatus(
       failed.length
         ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`
-        : `Applied: ${done.join("; ")}. Source data unchanged: ${report.sourceUnchangedAfterApply ? "yes" : "NO"}.${auditWarning}`,
+        : doneSentence(report.results, report.sourceUnchangedAfterApply) +
+            auditWarning,
     );
   } catch (error) {
     if (approvalGranted && !resultReported) {
@@ -892,7 +901,7 @@ function renderAnalysis(result: AnalysisResult) {
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   add("p", result.summary);
   if (result.columns.length) {
-    add("h3", "Columns");
+    add("h3", localizeMessage(language, "Columns"));
     for (const column of result.columns)
       add(
         "p",
@@ -900,16 +909,16 @@ function renderAnalysis(result: AnalysisResult) {
       );
   }
   if (result.dataQuality.length) {
-    add("h3", "Data quality");
+    add("h3", localizeMessage(language, "Data quality"));
     for (const issue of result.dataQuality)
       add(
         "p",
         `[${issue.severity}] ${issue.message} (${percent(issue.confidence)})`,
       );
   }
-  add("h3", "Recommendations");
+  add("h3", localizeMessage(language, "Recommendations"));
   if (!result.recommendations.length)
-    add("p", "No safe recommendation was found.");
+    add("p", localizeMessage(language, "No safe recommendation was found."));
   for (const recommendation of result.recommendations) {
     const item = document.createElement("div");
     output.appendChild(item);
@@ -920,7 +929,14 @@ function renderAnalysis(result: AnalysisResult) {
     );
     const instructionText = recommendationToInstruction(recommendation);
     if (!instructionText) {
-      add("p", "Advice only: no workbook action is available for this.", item);
+      add(
+        "p",
+        localizeMessage(
+          language,
+          "Advice only: no workbook action is available for this.",
+        ),
+        item,
+      );
       continue;
     }
     const use = document.createElement("button");
@@ -1338,17 +1354,12 @@ function renderOutcomes(actions: any[]) {
     actions,
     lastRange.headers,
     lastRange.rows,
+    language,
   )) {
     const box = document.createElement("div");
     box.className = "outcome";
     const title = document.createElement("strong");
-    title.textContent =
-      language === "si"
-        ? localizeMessage(language, outcome.kind) +
-          (outcome.chart
-            ? `: ${outcome.chart.series.map((s) => s.name).join(", ")}`
-            : "")
-        : outcome.title;
+    title.textContent = outcome.title;
     const where = document.createElement("div");
     where.className = "where";
     where.textContent =
@@ -1370,19 +1381,89 @@ function renderOutcomes(actions: any[]) {
     } else if (outcome.table) {
       const table = document.createElement("table");
       const head = table.insertRow();
-      for (const name of outcome.table.headers) {
+      outcome.table.headers.forEach((name, index) => {
         const th = document.createElement("th");
-        th.textContent = name;
+        th.textContent = outcome.table!.dropdownColumns.includes(index)
+          ? `${name} ▾`
+          : name;
         head.appendChild(th);
-      }
+      });
       for (const row of outcome.table.rows) {
         const tr = table.insertRow();
-        for (const value of row) tr.insertCell().textContent = value;
+        row.forEach((value, index) => {
+          const td = tr.insertCell();
+          td.textContent = value;
+          const bar = outcome.table!.barColumns.find(
+            (entry) => entry.index === index,
+          );
+          if (bar) {
+            const share = Math.min(1, Math.max(0, Number(value) / bar.max));
+            td.style.background = `linear-gradient(to right, #9ec5f0 ${Math.round(share * 100)}%, transparent ${Math.round(share * 100)}%)`;
+          }
+        });
       }
       box.appendChild(table);
     }
+    if (outcome.details.length) {
+      const list = document.createElement("ul");
+      list.className = "details";
+      for (const line of outcome.details) {
+        const li = document.createElement("li");
+        li.textContent = line;
+        list.appendChild(li);
+      }
+      box.appendChild(list);
+    }
     container.appendChild(box);
   }
+  void refreshSheetNames(container, actions);
+}
+
+/** The preview shows the sheet name the apply will really use (a repeat run gets "(2)"). */
+async function refreshSheetNames(container: HTMLElement, actions: any[]) {
+  if (!lastRange || language === "si") return;
+  const existing = new Set(await listWorksheetNames(officeRuntime()));
+  if (!existing.size) return;
+  const source = currentSourceSheet;
+  const taken = new Set(existing);
+  const labels = container.querySelectorAll<HTMLElement>(".outcome .where");
+  const seen = new Map<string, string>();
+  actions.forEach((action, index) => {
+    const name = String(action.targetSheet ?? "");
+    let resolved = seen.get(name);
+    if (!resolved) {
+      resolved = resolveSheetName(name, action.kind, source, taken);
+      taken.add(resolved);
+      seen.set(name, resolved);
+    }
+    const label = labels[index];
+    if (label) label.textContent = `Will be created on sheet ${resolved}`;
+  });
+}
+
+/** A plain-language result line: what now exists and where, without internal object names. */
+function doneSentence(
+  results: Array<{ kind: string; targetSheet: string; status: string }>,
+  sourceUnchanged: boolean,
+): string {
+  const created = results.filter((entry) => entry.status === "created");
+  const exists = results.filter((entry) => entry.status === "exists");
+  const sheets = [...new Set(created.map((entry) => entry.targetSheet))];
+  const kinds = [
+    ...new Set(
+      created.map((entry) => kindTitle(entry.kind, language).toLowerCase()),
+    ),
+  ].join(", ");
+  if (language === "si") {
+    const base = created.length
+      ? `සම්පූර්ණයි. ${kinds} ${sheets.join(", ")} පත්‍රිකාවේ සාදන ලදී.`
+      : "අලුතින් කිසිවක් සාදා නැත.";
+    return `${base}${exists.length ? " සමහර අයිතම දැනටමත් තිබුණි." : ""} ${sourceUnchanged ? "ඔබේ මූලාශ්‍ර දත්ත වෙනස් වී නැත." : "මූලාශ්‍ර දත්ත පරීක්ෂා කරන්න."}`;
+  }
+  const base = created.length
+    ? `Done. ${kinds[0].toUpperCase()}${kinds.slice(1)} created on sheet ${sheets.join(", ")}.`
+    : "Nothing new was created.";
+  return `${base}${exists.length ? " Some items already existed." : ""} ${sourceUnchanged ? "Your original data was not changed." : "Please check your source data."}`;
 }
 
 /** One checkbox per planned action; changing it re-plans with only the chosen steps. */

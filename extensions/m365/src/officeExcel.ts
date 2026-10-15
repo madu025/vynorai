@@ -44,6 +44,8 @@ export type ExcelActionStatus =
   | "failed"
   | "skipped_unsupported";
 
+import { resolveSheetName } from "./outcome.js";
+
 export interface ExcelActionResult {
   kind: string;
   name: string;
@@ -105,6 +107,22 @@ export async function revealExcelResult(
   } catch {
     // Showing the result is a convenience; the work itself is already done.
     return false;
+  }
+}
+
+/** Names of the sheets in the workbook; used so the preview can show the sheet name an apply will really use. */
+export async function listWorksheetNames(
+  runtime: ExcelRuntimeLike,
+): Promise<string[]> {
+  try {
+    return await runtime.run(async (context: any) => {
+      const sheets = context.workbook.worksheets;
+      sheets.load("items/name");
+      await context.sync();
+      return (sheets.items ?? []).map((sheet: any) => String(sheet.name));
+    });
+  } catch {
+    return [];
   }
 }
 
@@ -324,20 +342,13 @@ export async function applyApprovedExcelPlan(
       if (kind === "table" || name === plan.worksheetName) return name;
       const known = resolvedTargets.get(name);
       if (known) return known;
-      let chosen = name;
-      if (takenNames.has(name)) {
-        const tag = name.match(/_Vynor_[A-Za-z]+$/)?.[0] ?? "";
-        const stem = name.slice(0, name.length - tag.length);
-        for (let attempt = 2; attempt < 100; attempt += 1) {
-          const suffix = ` (${attempt})`;
-          const room = MAX_SHEET_NAME - tag.length - suffix.length;
-          const candidate = `${stem.slice(0, Math.max(1, room))}${tag}${suffix}`;
-          if (!takenNames.has(candidate)) {
-            chosen = candidate;
-            break;
-          }
-        }
-      }
+      const chosen = resolveSheetName(
+        name,
+        kind,
+        plan.worksheetName,
+        takenNames,
+        MAX_SHEET_NAME,
+      );
       takenNames.add(chosen);
       resolvedTargets.set(name, chosen);
       return chosen;

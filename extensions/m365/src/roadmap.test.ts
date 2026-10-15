@@ -342,3 +342,19 @@ test("eval: deterministic role detection meets the accuracy floor on the synthet
   }
   assert.ok(correct / BANK.length >= 0.9, `accuracy ${correct}/${BANK.length}`);
 });
+
+test("a bare chart request is column-aware with a line chart over a time column", () => {
+  const monthly = ["Month", "Region", "Sales", "Cost"];
+  const rows = [
+    ["Jan", "North", 1200, 800],
+    ["Feb", "South", 1500, 950],
+  ];
+  const chart = interpretInstruction("Create a chart.", monthly, rows);
+  assert.deepEqual(chart.actions, ["chart"]);
+  assert.deepEqual(chart.specs.chart, {
+    category: 0,
+    value: 2,
+    chartType: "line",
+    extraValues: [3],
+  });
+});

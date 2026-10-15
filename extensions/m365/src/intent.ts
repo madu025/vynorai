@@ -247,11 +247,36 @@ function interpretChartAndPivot(
   const afterBy = byMatch
     ? labels.filter((entry) => entry.at >= (byMatch.index ?? 0))
     : [];
-  const categoryEntry = afterBy[0] ?? (byMatch ? undefined : undefined);
-  if (/\b(chart|graph|plot)\b/i.test(text) && categoryEntry && numeric.length) {
+  // A bare "create a chart" names no columns: fall back to the first label column and the numeric
+  // columns of the selection so the chart is still column-aware instead of plotting the raw range.
+  const bare = !byMatch && numeric.length === 0 && labels.length === 0;
+  const fallbackIndexes = headers.map((_, index) => index);
+  const fallbackLabel = bare
+    ? fallbackIndexes.find((index) => !isNumericColumn(rows, index))
+    : undefined;
+  const fallbackNumeric = bare
+    ? fallbackIndexes.filter(
+        (index) => index !== fallbackLabel && isNumericColumn(rows, index),
+      )
+    : [];
+  const categoryEntry =
+    afterBy[0] ??
+    (fallbackLabel !== undefined ? { index: fallbackLabel, at: 0 } : undefined);
+  const numericEntries = numeric.length
+    ? numeric
+    : fallbackNumeric.map((index) => ({ index, at: 0 }));
+  if (
+    /\b(chart|graph|plot)\b/i.test(text) &&
+    categoryEntry &&
+    numericEntries.length
+  ) {
+    const temporal = /\b(date|day|week|month|quarter|year|period|time)\b/i.test(
+      headers[categoryEntry.index] ?? "",
+    );
     const chartType =
-      CHART_TYPE_WORDS.find(([pattern]) => pattern.test(text))?.[1] ?? "column";
-    const [first, ...rest] = numeric.map((entry) => entry.index);
+      CHART_TYPE_WORDS.find(([pattern]) => pattern.test(text))?.[1] ??
+      (bare && temporal ? "line" : "column");
+    const [first, ...rest] = numericEntries.map((entry) => entry.index);
     result.actions.push("chart");
     result.specs.chart = {
       category: categoryEntry.index,
@@ -260,7 +285,7 @@ function interpretChartAndPivot(
       ...(rest.length ? { extraValues: rest.slice(0, 4) } : {}),
     };
   }
-  if (/\bpivot\b/i.test(text) && categoryEntry && numeric.length) {
+  if (/\bpivot\b/i.test(text) && categoryEntry && numericEntries.length) {
     const aggregation = /\b(count|how many)\b/i.test(text)
       ? "count"
       : /\b(average|avg|mean)\b/i.test(text)
@@ -274,7 +299,7 @@ function interpretChartAndPivot(
     result.actions.push("pivot-table");
     result.specs.pivot = {
       rows: categoryEntry.index,
-      values: numeric[0].index,
+      values: numericEntries[0].index,
       aggregation,
       ...(columns ? { columns: columns.index } : {}),
     };

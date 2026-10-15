@@ -466,7 +466,8 @@ test("chart and PivotTable column choices are read from plain words", () => {
   assert.equal(pivot.specs.pivot?.rows, 1);
   assert.equal(pivot.specs.pivot?.columns, 0);
   const plain = interpretInstruction("Create a chart.", headers, rows);
-  assert.equal(plain.specs.chart, undefined);
+  assert.equal(plain.specs.chart?.category, 0);
+  assert.ok(plain.specs.chart?.value !== undefined);
 });
 
 test("Sinhala and Singlish keywords map to the same actions", () => {

@@ -519,6 +519,7 @@ inspect?.addEventListener("click", async () => {
     } catch {
       // Insights are optional; the preview above is already valid.
     }
+    markChangeNote("preview");
     setStatus(
       "Preview ready. Nothing has changed yet. Review it before applying.",
     );
@@ -526,6 +527,23 @@ inspect?.addEventListener("click", async () => {
     handleApiError("inspect", error);
   }
 });
+
+/** The preview card says "nothing has changed"; after an apply that sentence must not stay. */
+function markChangeNote(state: "preview" | "applied" | "partial") {
+  const note = document.querySelector<HTMLElement>("#change-note");
+  if (!note) return;
+  if (state === "preview") {
+    note.dataset.i18n = "nothing_changed";
+    note.textContent = "Nothing has changed in your workbook yet.";
+    applyLanguage(note.parentElement ?? document, language);
+    return;
+  }
+  delete note.dataset.i18n;
+  note.textContent =
+    state === "applied"
+      ? "Applied. Your source data was not changed."
+      : "Partly applied. See the steps and Diagnostics.";
+}
 
 apply?.addEventListener("click", async () => {
   if (!config || !accessToken || !currentPlan || !previewFingerprint)
@@ -640,6 +658,7 @@ apply?.addEventListener("click", async () => {
         lastCreated.sheets.length + lastCreated.tables.length === 0;
     currentPlan = undefined;
     previewFingerprint = "";
+    markChangeNote(failed.length ? "partial" : "applied");
     setStatus(
       failed.length
         ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`

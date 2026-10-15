@@ -124,3 +124,66 @@ test("group G: icon sets and allowed ranges are understood and validated", () =>
   );
   assert.equal(limited.specs.format?.validation?.[0].rule, "max-length");
 });
+
+test("a bracketed two-column calculation is understood", () => {
+  const asked = interpretInstruction(
+    "Add a column Profit = [Sales] - [Cost]",
+    headers,
+    rows,
+  );
+  assert.deepEqual(asked.actions, ["add-column"]);
+  assert.equal(asked.specs.addColumn?.left, 2);
+  assert.equal(asked.specs.addColumn?.right, 3);
+});
+
+test("each format rule uses the column named in its own clause", () => {
+  const asked = interpretInstruction(
+    "Format it with arrow icons on Sales and allow Cost between 500 and 2000",
+    headers,
+    rows,
+  );
+  const icons = asked.specs.format?.conditional?.filter(
+    (rule) => rule.rule === "icon-set",
+  );
+  assert.deepEqual(
+    icons?.map((rule) => rule.column),
+    [2],
+  );
+  const range = asked.specs.format?.validation?.find(
+    (rule) => rule.rule === "between",
+  );
+  assert.equal(range?.column, 3);
+});
+
+test("show the top N keeps only N rows; highlight keeps them all", () => {
+  const show = interpretInstruction(
+    "Show the top 3 rows by Sales",
+    headers,
+    rows,
+  );
+  assert.equal(show.specs.view?.limit, 3);
+  const mark = interpretInstruction(
+    "Highlight the top 3 rows by Sales",
+    headers,
+    rows,
+  );
+  assert.equal(mark.specs.view?.limit, undefined);
+  const plan = createExcelPreviewPlan(input, ["view"], 500, show.specs as any);
+  assert.equal(plan.actions[0].spec?.limit, 3);
+});
+
+test("a two-column calculation previews its real values", () => {
+  const asked = interpretInstruction(
+    "Add a column Profit = Sales - Cost",
+    headers,
+    rows,
+  );
+  const plan = createExcelPreviewPlan(
+    input,
+    ["add-column"],
+    500,
+    asked.specs as any,
+  );
+  const [outcome] = buildOutcomes(plan.actions as any, headers, rows);
+  assert.ok(outcome.table?.headers.includes("Profit"));
+});

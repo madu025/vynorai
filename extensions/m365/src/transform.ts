@@ -129,6 +129,8 @@ export interface ViewSpec {
       | "duplicates";
     n?: number;
   };
+  /** Keep only the first N rows after filter and sort. */
+  limit?: number;
 }
 
 const isBlank = (cell: Cell) =>
@@ -195,6 +197,8 @@ export function applyView(
       })
       .map((entry) => entry.row);
   }
+  if (spec.limit !== undefined && spec.limit >= 1)
+    result = result.slice(0, spec.limit);
   const highlighted: number[] = [];
   if (spec.highlight) {
     const { index, rule, n } = spec.highlight;

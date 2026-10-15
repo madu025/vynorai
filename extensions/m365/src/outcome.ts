@@ -362,6 +362,40 @@ export function buildOutcomes(
               ...table.rows[at].slice(0, kept),
               previewExpressionValue(parsed.ast, row as unknown[]) ?? "…",
             ]);
+        } else if (spec.leftColumn && spec.rightColumn && spec.operator) {
+          const left = headers.indexOf(String(spec.leftColumn));
+          const right = headers.indexOf(String(spec.rightColumn));
+          if (left >= 0 && right >= 0) {
+            const kept = MAX_TABLE_COLUMNS - 1;
+            const compute = (row: unknown[]) => {
+              const x = Number(row[left]);
+              const y = Number(row[right]);
+              if (!Number.isFinite(x) || !Number.isFinite(y)) return "…";
+              const value =
+                spec.operator === "+"
+                  ? x + y
+                  : spec.operator === "-"
+                    ? x - y
+                    : spec.operator === "*"
+                      ? x * y
+                      : y === 0
+                        ? "#DIV/0!"
+                        : x / y;
+              return typeof value === "number"
+                ? String(Math.round(value * 100) / 100)
+                : value;
+            };
+            table.headers = [
+              ...table.headers.slice(0, kept),
+              String(spec.columnName),
+            ];
+            table.rows = rows
+              .slice(0, MAX_TABLE_ROWS)
+              .map((row, at) => [
+                ...table.rows[at].slice(0, kept),
+                compute(row as unknown[]),
+              ]);
+          }
         }
       } catch {
         // The picture is optional; the rule line above still tells the story.
@@ -392,6 +426,13 @@ export function buildOutcomes(
           say(
             `Highlights ${spec.highlight.rule} in ${spec.highlight.column}`,
             `${spec.highlight.column} හි ${spec.highlight.rule} උද්දීපනය`,
+          ),
+        );
+      if (spec.limit)
+        item.details.push(
+          say(
+            `Shows only the first ${spec.limit} rows`,
+            `පළමු පේළි ${spec.limit} පමණක් පෙන්වයි`,
           ),
         );
     } else if (action.kind === "clean") {
@@ -474,7 +515,7 @@ export function friendlySheetName(
   const spec = action.spec ?? {};
   let label = "";
   if (action.kind === "chart" && spec.valueColumn && spec.categoryColumn)
-    label = `${spec.valueColumn} by ${spec.categoryColumn}`;
+    label = `${[spec.valueColumn, ...(spec.extraValueColumns ?? [])].join(" & ")} by ${spec.categoryColumn}`;
   else if (
     action.kind === "pivot-table" &&
     spec.valuesColumn &&

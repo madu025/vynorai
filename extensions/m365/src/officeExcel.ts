@@ -776,7 +776,7 @@ export async function applyApprovedExcelPlan(
                 );
                 chart.name = action.name;
                 chart.setPosition("H3");
-                chart.title.text = `${spec.valueColumn} by ${spec.categoryColumn}`;
+                chart.title.text = `${[spec.valueColumn, ...(spec.extraValueColumns ?? [])].join(", ")} by ${spec.categoryColumn}`;
                 // Axis titles and the legend are presentation only: a host that refuses them must
                 // not fail the chart itself.
                 try {
@@ -921,6 +921,7 @@ export async function applyApprovedExcelPlan(
                 sort: spec.sort,
                 filter: spec.filter,
                 highlight: spec.highlight,
+                limit: spec.limit,
               });
               const out = [headers, ...view.rows].map((row) =>
                 row.map(literal),

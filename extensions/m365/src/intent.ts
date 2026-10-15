@@ -50,6 +50,7 @@ export interface InstructionSpecs {
         | "duplicates";
       n?: number;
     };
+    limit?: number;
   };
   clean?: { operations: CleanOperation[] };
   format?: {
@@ -246,8 +247,10 @@ export function interpretInstruction(
       }
     }
     if (!handled && operator && parts.length === 2) {
-      const left = findHeader(headers, parts[0]);
-      const right = findHeader(headers, parts[1]);
+      // "[Sales] - [Cost]" names the columns in brackets; the header lookup wants the bare name.
+      const bare = (value: string) => value.trim().replace(/^\[(.*)\]$/, "$1");
+      const left = findHeader(headers, bare(parts[0]));
+      const right = findHeader(headers, bare(parts[1]));
       if (!isSafeColumnName(name))
         result.problems.push("That column name is not allowed.");
       else if (left < 0 || right < 0)
@@ -456,6 +459,12 @@ function interpretView(
       const rule = top[1].toLowerCase() === "top" ? "top-n" : "bottom-n";
       view.highlight = { column, rule, n: Number(top[2]) };
       view.sort = { column, direction: rule === "top-n" ? "desc" : "asc" };
+      // "Show the top 3 rows" keeps only those rows; "highlight the top 3" keeps all of them.
+      if (
+        /\b(?:show|list|keep|only|just|give|display)\b/i.test(text) &&
+        !/\bhighlight\b/i.test(text)
+      )
+        view.limit = Number(top[2]);
     }
   }
   const sort =
@@ -750,17 +759,37 @@ function interpretFormatAndQuality(
   const conditional: NonNullable<InstructionSpecs["format"]>["conditional"] =
     [];
   const pickNumeric = mentionedNumeric.length ? mentionedNumeric : numericAll;
-  if (/\bdata\s*bars?\b/i.test(text))
-    for (const column of pickNumeric.slice(0, 3))
+  // "arrow icons on Sales and allow Cost between 1 and 9": each rule owns the columns named in its
+  // own clause (the words after its keyword, up to the next "and allow/add/with ...").
+  const clauseColumns = (keyword: RegExp): number[] => {
+    const found = keyword.exec(text);
+    if (!found) return pickNumeric;
+    const clause = text
+      .slice(found.index)
+      .split(
+        /\s+(?:and|then|,|;)\s+(?=(?:allow|add|with|make|highlight|format|freeze|use|show)\b)/i,
+      )[0]
+      .toLowerCase();
+    const own = numericAll.filter((index) =>
+      clause.includes(String(headers[index]).toLowerCase()),
+    );
+    return own.length ? own : pickNumeric;
+  };
+  const barKeyword = /\bdata\s*bars?\b/i;
+  const scaleKeyword = /\bcolou?r\s*scale\b/i;
+  const iconKeyword = /\bicon\s*sets?\b|\barrows?\b|\btraffic\s*lights?\b/i;
+  const negativeKeyword = /\bhighlight\s+(?:the\s+)?negative/i;
+  if (barKeyword.test(text))
+    for (const column of clauseColumns(barKeyword).slice(0, 3))
       conditional.push({ column, rule: "data-bars" });
-  if (/\bcolou?r\s*scale\b/i.test(text))
-    for (const column of pickNumeric.slice(0, 3))
+  if (scaleKeyword.test(text))
+    for (const column of clauseColumns(scaleKeyword).slice(0, 3))
       conditional.push({ column, rule: "color-scale" });
-  if (/\bicon\s*sets?\b|\barrows?\b|\btraffic\s*lights?\b/i.test(text))
-    for (const column of pickNumeric.slice(0, 3))
+  if (iconKeyword.test(text))
+    for (const column of clauseColumns(iconKeyword).slice(0, 3))
       conditional.push({ column, rule: "icon-set" });
-  if (/\bhighlight\s+(?:the\s+)?negative/i.test(text))
-    for (const column of pickNumeric.slice(0, 3))
+  if (negativeKeyword.test(text))
+    for (const column of clauseColumns(negativeKeyword).slice(0, 3))
       conditional.push({ column, rule: "negative" });
   if (/\bhighlight\s+(?:the\s+)?duplicates?/i.test(text)) {
     const targets = mentionedLabel.length ? mentionedLabel : mentionedNumeric;
@@ -780,7 +809,18 @@ function interpretFormatAndQuality(
     const high = Number(range[2].replace(/,/g, ""));
     if (Number.isFinite(low) && Number.isFinite(high) && low < high)
       validation.push({
-        column: pickNumeric[0],
+        column: (() => {
+          // The column named just before "between" (closest to it) owns the range.
+          const before = text.slice(0, range.index).toLowerCase();
+          const near = numericAll
+            .map((index) => ({
+              index,
+              at: before.lastIndexOf(String(headers[index]).toLowerCase()),
+            }))
+            .filter((entry) => entry.at >= 0)
+            .sort((x, y) => y.at - x.at)[0];
+          return near ? near.index : pickNumeric[0];
+        })(),
         rule: "between",
         min: low,
         max: high,

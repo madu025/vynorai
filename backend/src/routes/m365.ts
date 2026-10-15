@@ -150,6 +150,7 @@ const excelPlanSchema = z.object({
             })
             .strict()
             .optional(),
+          limit: z.number().int().min(1).max(1000).optional(),
         })
         .strict()
         .optional(),

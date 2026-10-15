@@ -99,6 +99,7 @@ export interface ExcelColumnSpecs {
       value: string | number;
     };
     highlight?: { column: number; rule: ExcelHighlightRule; n?: number };
+    limit?: number;
   };
 }
 
@@ -175,6 +176,7 @@ export interface ExcelActionSpec {
     rule: ExcelHighlightRule;
     n?: number;
   };
+  limit?: number;
 }
 
 /**
@@ -741,8 +743,8 @@ function resolveColumnSpecs(
   if (specs.view) {
     if (!requested.has("view"))
       fail("EXCEL_SPEC_UNUSED", "View options need the view action.");
-    const { sort, filter, highlight } = specs.view;
-    if (!sort && !filter && !highlight)
+    const { sort, filter, highlight, limit } = specs.view;
+    if (!sort && !filter && !highlight && limit === undefined)
       fail("EXCEL_SPEC_INVALID", "A view needs a sort, filter or highlight.");
     const view: ExcelActionSpec = {};
     if (sort) {
@@ -814,6 +816,11 @@ function resolveColumnSpecs(
         rule: highlight.rule,
         ...(["top-n", "bottom-n"].includes(highlight.rule) ? { n } : {}),
       };
+    }
+    if (limit !== undefined) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
+        fail("EXCEL_SPEC_INVALID", "Choose how many rows to show (1-1000).");
+      view.limit = limit;
     }
     resolved.view = view;
   }

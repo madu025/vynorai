@@ -543,11 +543,15 @@ inspect?.addEventListener("click", async () => {
       !namesAColumn &&
       /(that|it|same|those|these|ඒකටම|eka|ekata)/i.test(instructionText)
     ) {
+      const named = /(line|pie|bar|area|column|scatter)/i.exec(
+        instructionText,
+      )?.[1];
       specs.chart = {
-        chartType: "column",
-        ...(specs.chart ?? {}),
         category: earlier.rows,
         value: earlier.values,
+        chartType: (named?.toLowerCase() ?? "column") as NonNullable<
+          ExcelColumnSpecs["chart"]
+        >["chartType"],
         ...(earlier.extraValues?.length
           ? { extraValues: earlier.extraValues }
           : {}),
@@ -558,6 +562,8 @@ inspect?.addEventListener("click", async () => {
       chartAction: actions.includes("chart"),
       namesAColumn,
       applied: Object.keys(lastAppliedSpecs ?? {}),
+      chartSpec: specs.chart,
+      earlierPivot: earlier,
     });
     previewSpecs = specs;
     if (lookupWish) {

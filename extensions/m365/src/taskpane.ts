@@ -916,6 +916,15 @@ apply?.addEventListener("click", async () => {
       } catch {
         // Not supported by this host; the pane stays where it is.
       }
+      // Excel selects a new PivotTable a moment after it is built, which opens its field list
+      // over our pane. Moving the selection back out a little later closes that list again.
+      if (report.results.some((entry) => entry.kind === "pivot-table")) {
+        const sheetName = lastRevealSheet;
+        for (const delay of [1200, 3000])
+          window.setTimeout(() => {
+            void revealExcelResult(officeRuntime(), sheetName);
+          }, delay);
+      }
       const showResult =
         document.querySelector<HTMLButtonElement>("#show-result");
       if (showResult) showResult.hidden = false;
@@ -1903,6 +1912,20 @@ try {
     document.body.setAttribute("data-dev", "");
 } catch {
   // Left hidden.
+}
+
+// The apply bar sticks just above the composer, whatever height the composer has.
+try {
+  const composerBox = document.querySelector<HTMLElement>(".composer");
+  if (composerBox && typeof ResizeObserver !== "undefined")
+    new ResizeObserver(() =>
+      document.documentElement.style.setProperty(
+        "--composer-h",
+        `${composerBox.offsetHeight + 4}px`,
+      ),
+    ).observe(composerBox);
+} catch {
+  // Falls back to the default offset.
 }
 
 const reviewToggle = document.querySelector<HTMLInputElement>("#review-toggle");

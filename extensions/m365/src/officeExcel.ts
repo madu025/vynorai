@@ -691,40 +691,56 @@ export async function applyApprovedExcelPlan(
                 let valueIndex = spec.valueIndex as number;
                 let extraIndexes: number[] = spec.extraValueIndexes ?? [];
                 let secondary: number[] = spec.secondaryIndexes ?? [];
-                if (options.aggregateCharts) {
-                  // One summed row per category, written next to the chart, so a chart "for the
-                  // pivot" shows the same totals as the pivot instead of the raw rows.
-                  const { headers, rows } = splitHeader(
-                    await readSourceValues(),
+                const sourceData = splitHeader(await readSourceValues());
+                const seenCategories = sourceData.rows.map((row: any[]) =>
+                  String(row[categoryIndex] ?? ""),
+                );
+                const repeats =
+                  new Set(seenCategories).size < seenCategories.length &&
+                  !/date|day|week|month|quarter|year|period|time/i.test(
+                    String(spec.categoryColumn),
                   );
-                  const wanted = [valueIndex, ...extraIndexes];
-                  const totals = new Map<string, number[]>();
-                  for (const row of rows) {
-                    const key = String(row[categoryIndex] ?? "");
-                    const sums = totals.get(key) ?? wanted.map(() => 0);
-                    wanted.forEach((index, at) => {
-                      const n = Number(row[index]);
-                      if (Number.isFinite(n)) sums[at] += n;
-                    });
-                    totals.set(key, sums);
+                if (options.aggregateCharts || repeats) {
+                  // One summed row per category, written next to the chart, so a chart shows the
+                  // same totals a pivot would instead of one bar per raw row.
+                  try {
+                    const { headers, rows } = sourceData;
+                    const wanted = [valueIndex, ...extraIndexes];
+                    const totals = new Map<string, number[]>();
+                    for (const row of rows) {
+                      const key = String(row[categoryIndex] ?? "");
+                      const sums = totals.get(key) ?? wanted.map(() => 0);
+                      wanted.forEach((index, at) => {
+                        const n = Number(row[index]);
+                        if (Number.isFinite(n)) sums[at] += n;
+                      });
+                      totals.set(key, sums);
+                    }
+                    const out: (string | number)[][] = [
+                      [
+                        headers[categoryIndex],
+                        ...wanted.map((i) => headers[i]),
+                      ],
+                      ...[...totals].map(([key, sums]) => [key, ...sums]),
+                    ];
+                    const block = sheet.getRangeByIndexes(
+                      19,
+                      0,
+                      out.length,
+                      out[0].length,
+                    );
+                    if (typeof block.getColumn !== "function")
+                      throw new Error("summary block unsupported");
+                    block.values = out;
+                    await context.sync();
+                    source = block;
+                    secondary = secondary.map((i) => wanted.indexOf(i) + 1);
+                    categoryIndex = 0;
+                    valueIndex = 1;
+                    extraIndexes = extraIndexes.map((_, at) => at + 2);
+                  } catch {
+                    // The summary block could not be written: chart the raw rows instead.
                   }
-                  const out: (string | number)[][] = [
-                    [headers[categoryIndex], ...wanted.map((i) => headers[i])],
-                    ...[...totals].map(([key, sums]) => [key, ...sums]),
-                  ];
-                  const block = sheet.getRangeByIndexes(
-                    19,
-                    0,
-                    out.length,
-                    out[0].length,
-                  );
-                  block.values = out;
-                  await context.sync();
-                  source = block;
-                  secondary = secondary.map((i) => wanted.indexOf(i) + 1);
-                  categoryIndex = 0;
-                  valueIndex = 1;
-                  extraIndexes = extraIndexes.map((_, at) => at + 2);
                 }
                 const chartTypes: Record<string, string> = {
                   column: "ColumnClustered",

@@ -220,6 +220,51 @@ test("group A: a lookup can match two key columns", () => {
   );
 });
 
+test("group A: a lookup can return multiple columns on one result sheet", () => {
+  const found = interpretInstruction(
+    "Add columns Manager and Department from Staff by Name",
+    ["Name", "Sales"],
+    [["Amal", 10]],
+  );
+  assert.deepEqual(found.actions, ["lookup-columns"]);
+  assert.deepEqual(found.specs.lookupColumns, {
+    sheet: "Staff",
+    returnHeaders: ["Manager", "Department"],
+    keyHeader: "Name",
+  });
+  const input = {
+    workbookId: "w",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:B3",
+    hasHeaders: true,
+    values: [
+      ["Name", "Sales"],
+      ["Amal", 10],
+      ["Nimali", 20],
+    ],
+  } as any;
+  const plan = createExcelPreviewPlan(input, ["lookup-columns"], 500, {
+    lookupColumns: {
+      names: ["Manager", "Department"],
+      lookup: {
+        sheet: "Staff",
+        sourceKey: 0,
+        keyIndex: 0,
+        keyHeader: "Name",
+        returnIndexes: [1, 2],
+        returnHeaders: ["Manager", "Department"],
+        rows: 40,
+      },
+    },
+  });
+  assert.equal(plan.actions[0].targetSheet, "Sheet1_Vynor_Lookup");
+  assert.deepEqual(plan.actions[0].spec?.lookupReturnIndexes, [1, 2]);
+  assert.deepEqual(plan.actions[0].spec?.lookupReturnHeaders, [
+    "Manager",
+    "Department",
+  ]);
+});
+
 test("group A: approximate lookup is explicit and remains single-key", () => {
   const found = interpretInstruction(
     "Add column Tax Rate from Rates by Sales approximate",

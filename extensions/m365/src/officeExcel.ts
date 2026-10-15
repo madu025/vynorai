@@ -1603,6 +1603,130 @@ export async function applyApprovedExcelPlan(
                 await context.sync();
               }
             }
+          } else if (action.kind === "lookup-columns") {
+            const spec = action.spec;
+            const returnHeaders = spec?.lookupReturnHeaders;
+            const returnIndexes = spec?.lookupReturnIndexes;
+            if (
+              !spec?.lookupSheet ||
+              !Array.isArray(returnHeaders) ||
+              !Array.isArray(returnIndexes) ||
+              returnHeaders.length < 2 ||
+              returnHeaders.length !== returnIndexes.length
+            )
+              throw new Error(
+                "lookup-columns needs explicit lookup return columns",
+              );
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers, rows } = splitHeader(await readSourceValues());
+              const other = context.workbook.worksheets.getItemOrNullObject(
+                spec.lookupSheet,
+              );
+              other.load("isNullObject");
+              await context.sync();
+              if (other.isNullObject)
+                throw new Error(
+                  `The sheet "${spec.lookupSheet}" was not found any more.`,
+                );
+              const used = other.getUsedRangeOrNullObject(true);
+              used.load(["isNullObject", "values", "rowCount"]);
+              await context.sync();
+              const lookupHeader = (used.values?.[0] ?? []).map((cell: any) =>
+                String(cell ?? ""),
+              );
+              const sourceKeyIndexes = spec.sourceKeyIndexes ?? [
+                spec.sourceKeyIndex,
+              ];
+              const lookupKeyIndexes = spec.lookupKeyIndexes ?? [
+                spec.lookupKeyIndex,
+              ];
+              const lookupKeyHeaders = spec.lookupKeyHeaders ?? [
+                spec.lookupKeyHeader,
+              ];
+              const sourceKeyColumns = spec.sourceKeyColumns ?? [
+                spec.sourceKeyColumn,
+              ];
+              if (
+                used.isNullObject ||
+                sourceKeyIndexes.length !== lookupKeyIndexes.length ||
+                sourceKeyIndexes.length !== lookupKeyHeaders.length ||
+                sourceKeyIndexes.length !== sourceKeyColumns.length ||
+                sourceKeyIndexes.some(
+                  (index: number) =>
+                    !Number.isInteger(index) ||
+                    headers[index] !==
+                      sourceKeyColumns[sourceKeyIndexes.indexOf(index)],
+                ) ||
+                lookupKeyIndexes.some(
+                  (index: number) =>
+                    lookupHeader[index] !==
+                    lookupKeyHeaders[lookupKeyIndexes.indexOf(index)],
+                ) ||
+                returnIndexes.some(
+                  (index: number, at: number) =>
+                    lookupHeader[index] !== returnHeaders[at],
+                )
+              )
+                throw new Error(
+                  "The lookup sheet changed after the preview. Preview again.",
+                );
+              if (spec.lookupMatchMode === "approximate") {
+                if (sourceKeyIndexes.length !== 1)
+                  throw new Error(
+                    "Approximate lookup supports one key column only.",
+                  );
+                const keyValues = (used.values ?? [])
+                  .slice(1)
+                  .map((row: any[]) => row[lookupKeyIndexes[0]]);
+                const compare = (left: any, right: any) =>
+                  typeof left === "number" && typeof right === "number"
+                    ? left - right
+                    : String(left ?? "").localeCompare(
+                        String(right ?? ""),
+                        undefined,
+                        { numeric: true, sensitivity: "base" },
+                      );
+                for (let index = 1; index < keyValues.length; index += 1)
+                  if (compare(keyValues[index - 1], keyValues[index]) > 0)
+                    throw new Error(
+                      "Approximate lookup requires the lookup key column to be sorted ascending.",
+                    );
+              }
+              const out = [
+                [...headers, ...returnHeaders],
+                ...rows.map((row) => [...row, ...returnHeaders.map(() => "")]),
+              ].map((row) => row.map(literal));
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                out.length,
+                headers.length + returnHeaders.length,
+              ).values = out;
+              await context.sync();
+              if (rows.length > 0) {
+                sheet.getRangeByIndexes(
+                  1,
+                  headers.length,
+                  rows.length,
+                  returnIndexes.length,
+                ).formulas = rows.map((_row, index) =>
+                  returnIndexes.map((returnIndex) =>
+                    buildLookupFormula(
+                      spec.lookupSheet as string,
+                      index + 2,
+                      sourceKeyIndexes,
+                      lookupKeyIndexes,
+                      returnIndex,
+                      spec.lookupRows as number,
+                      spec.lookupMatchMode ?? "exact",
+                    ),
+                  ),
+                );
+                await context.sync();
+              }
+            }
           } else if (action.kind === "add-column") {
             const spec = action.spec;
             if (!spec?.columnName)

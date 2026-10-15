@@ -134,6 +134,7 @@ const EXACT: Record<string, string> = {
   quality: "දත්ත ගුණාත්මක වාර්තාව",
   statistics: "සංඛ්‍යාලේඛන",
   view: "පෙරහන් කළ දසුන",
+  "lookup-columns": "Lookup columns",
 };
 
 type Template = [RegExp, (...groups: string[]) => string];

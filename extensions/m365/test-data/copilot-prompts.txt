@@ -65,6 +65,7 @@ Lookups	add-column	Bring Region from Customers by Customer
 Lookups	add-column	Fetch Owner from AccountMap matching Customer
 Lookups	add-column	Add column Manager from Staff by Name and Customer
 Lookups	add-column	Add column Tax Rate from Rates by Sales approximate
+Lookups	lookup-columns	Add columns Manager and Department from Staff by Name
 Charts	-	Create a combo chart of Sales and Cost
 Charts	-	Add sparklines for monthly Sales
 Charts	-	Create a histogram of Sales

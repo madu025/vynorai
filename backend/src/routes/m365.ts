@@ -62,6 +62,7 @@ const excelPlanSchema = z.object({
         "pivot-table",
         "clean",
         "add-column",
+        "lookup-columns",
         "split-column",
         "unpivot",
         "summary",
@@ -319,6 +320,42 @@ const excelPlanSchema = z.object({
         })
         .strict()
         .optional(),
+      lookupColumns: z
+        .object({
+          names: z.array(z.string().min(1).max(40)).min(2).max(5),
+          lookup: z
+            .object({
+              sheet: z.string().min(1).max(31),
+              sourceKey: z.number().int().min(0).max(99),
+              keyIndex: z.number().int().min(0).max(99),
+              keyHeader: z.string().min(1).max(60),
+              returnIndexes: z
+                .array(z.number().int().min(0).max(99))
+                .min(2)
+                .max(5),
+              returnHeaders: z.array(z.string().min(1).max(60)).min(2).max(5),
+              rows: z.number().int().min(1).max(100000),
+              sourceKeys: z
+                .array(z.number().int().min(0).max(99))
+                .min(1)
+                .max(5)
+                .optional(),
+              keyIndexes: z
+                .array(z.number().int().min(0).max(99))
+                .min(1)
+                .max(5)
+                .optional(),
+              keyHeaders: z
+                .array(z.string().min(1).max(60))
+                .min(1)
+                .max(5)
+                .optional(),
+              matchMode: z.enum(["exact", "approximate"]).optional(),
+            })
+            .strict(),
+        })
+        .strict()
+        .optional(),
       split: z
         .object({
           source: z.number().int().min(0).max(99),
@@ -368,6 +405,7 @@ const applyResultSchema = z.object({
           "pivot-table",
           "clean",
           "add-column",
+          "lookup-columns",
           "split-column",
           "unpivot",
           "summary",

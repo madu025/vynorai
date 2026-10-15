@@ -56,6 +56,7 @@ type ExcelActionPlan = {
       | "pivot-table"
       | "clean"
       | "add-column"
+      | "lookup-columns"
       | "split-column"
       | "unpivot"
       | "summary"
@@ -83,6 +84,7 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "pivot-table",
   "clean",
   "add-column",
+  "lookup-columns",
   "split-column",
   "unpivot",
   "summary",
@@ -212,6 +214,22 @@ export interface ExcelColumnSpecs {
       matchMode?: "exact" | "approximate";
     };
   };
+  lookupColumns?: {
+    names: string[];
+    lookup: {
+      sheet: string;
+      sourceKey: number;
+      keyIndex: number;
+      keyHeader: string;
+      returnIndexes: number[];
+      returnHeaders: string[];
+      rows: number;
+      sourceKeys?: number[];
+      keyIndexes?: number[];
+      keyHeaders?: string[];
+      matchMode?: "exact" | "approximate";
+    };
+  };
   split?: { source: number; firstName: string; lastName: string };
   unpivot?: { values: number[]; name: string; value: string };
   summary?: {
@@ -307,6 +325,8 @@ export interface ExcelActionSpec {
   lookupMatchMode?: "exact" | "approximate";
   lookupReturnHeader?: string;
   lookupReturnIndex?: number;
+  lookupReturnHeaders?: string[];
+  lookupReturnIndexes?: number[];
   lookupRows?: number;
   expression?: string;
   canonical?: string;
@@ -366,6 +386,7 @@ function resolveColumnSpecs(
   pivot?: ExcelActionSpec;
   clean?: ExcelActionSpec;
   addColumn?: ExcelActionSpec;
+  lookupColumns?: ExcelActionSpec;
   summary?: ExcelActionSpec;
   format?: ExcelActionSpec;
   view?: ExcelActionSpec;
@@ -400,6 +421,7 @@ function resolveColumnSpecs(
     pivot?: ExcelActionSpec;
     clean?: ExcelActionSpec;
     addColumn?: ExcelActionSpec;
+    lookupColumns?: ExcelActionSpec;
     summary?: ExcelActionSpec;
     format?: ExcelActionSpec;
     view?: ExcelActionSpec;
@@ -845,6 +867,86 @@ function resolveColumnSpecs(
         rightIndex: right as number,
       };
     }
+  }
+  if (specs.lookupColumns) {
+    if (!requested.has("lookup-columns"))
+      fail(
+        "EXCEL_SPEC_UNUSED",
+        "Lookup columns need the lookup-columns action.",
+      );
+    const { names, lookup } = specs.lookupColumns;
+    const text = (value: unknown, max: number) =>
+      typeof value === "string" &&
+      value.trim().length > 0 &&
+      value.length <= max &&
+      !/[\u0000-\u001F]/.test(value);
+    const sourceKeys = lookup.sourceKeys ?? [lookup.sourceKey];
+    const keyIndexes = lookup.keyIndexes ?? [lookup.keyIndex];
+    const keyHeaders = lookup.keyHeaders ?? [lookup.keyHeader];
+    const returnIndexes = lookup.returnIndexes;
+    const returnHeaders = lookup.returnHeaders;
+    if (
+      !Array.isArray(names) ||
+      names.length < 2 ||
+      names.length > 5 ||
+      !Array.isArray(returnIndexes) ||
+      !Array.isArray(returnHeaders) ||
+      returnIndexes.length !== names.length ||
+      returnHeaders.length !== names.length ||
+      !text(lookup.sheet, 31) ||
+      /[\[\]:*?/\\]/.test(lookup.sheet) ||
+      sourceKeys.length < 1 ||
+      sourceKeys.length > 5 ||
+      sourceKeys.length !== keyIndexes.length ||
+      sourceKeys.length !== keyHeaders.length ||
+      sourceKeys.some((index) => !inRange(index)) ||
+      new Set(sourceKeys).size !== sourceKeys.length ||
+      keyIndexes.some(
+        (index) => !Number.isInteger(index) || index < 0 || index > 99,
+      ) ||
+      new Set(keyIndexes).size !== keyIndexes.length ||
+      (lookup.matchMode !== undefined &&
+        !["exact", "approximate"].includes(lookup.matchMode)) ||
+      (lookup.matchMode === "approximate" && sourceKeys.length !== 1) ||
+      keyHeaders.some((header) => !text(header, 60)) ||
+      returnHeaders.some((header) => !text(header, 60)) ||
+      names.some((name) => !text(name, 40)) ||
+      returnIndexes.some(
+        (index) =>
+          !Number.isInteger(index) ||
+          index < 0 ||
+          index > 99 ||
+          keyIndexes.includes(index),
+      ) ||
+      new Set(returnIndexes).size !== returnIndexes.length ||
+      !Number.isInteger(lookup.rows) ||
+      lookup.rows < 1 ||
+      lookup.rows > 100000
+    )
+      fail("EXCEL_SPEC_INVALID", "The lookup column choices are not valid.");
+    const outputNames: string[] = [];
+    const taken = [...headers];
+    for (const name of names) {
+      const output = uniqueColumnName(name.trim(), taken);
+      outputNames.push(output);
+      taken.push(output);
+    }
+    resolved.lookupColumns = {
+      columnName: outputNames[0],
+      lookupSheet: lookup.sheet,
+      sourceKeyColumn: headers[lookup.sourceKey],
+      sourceKeyIndex: lookup.sourceKey,
+      sourceKeyColumns: sourceKeys.map((index) => headers[index]),
+      sourceKeyIndexes: sourceKeys,
+      lookupKeyHeader: lookup.keyHeader,
+      lookupKeyIndex: lookup.keyIndex,
+      lookupKeyHeaders: keyHeaders,
+      lookupKeyIndexes: keyIndexes,
+      ...(lookup.matchMode ? { lookupMatchMode: lookup.matchMode } : {}),
+      lookupReturnHeaders: returnHeaders,
+      lookupReturnIndexes: returnIndexes,
+      lookupRows: lookup.rows,
+    };
   }
   if (specs.split) {
     if (!requested.has("split-column"))
@@ -1622,23 +1724,25 @@ export function createExcelPreviewPlan(
       ? `${baseName}_Vynor_Clean`
       : kind === "add-column"
         ? `${baseName}_Vynor_Calc`
-        : kind === "split-column"
-          ? `${baseName}_Vynor_Split`
-          : kind === "unpivot"
-            ? `${baseName}_Vynor_Unpivot`
-            : kind === "format"
-              ? `${baseName}_Vynor_Format`
-              : kind === "quality"
-                ? `${baseName}_Vynor_Report`
-                : kind === "summary"
-                  ? `${baseName}_Vynor_Totals`
-                  : kind === "view"
-                    ? `${baseName}_Vynor_View`
-                    : kind === "statistics"
-                      ? `${baseName}_Vynor_Stats`
-                      : kind === "dashboard"
-                        ? `${baseName}_Vynor_Dashboard`
-                        : resultSheet;
+        : kind === "lookup-columns"
+          ? `${baseName}_Vynor_Lookup`
+          : kind === "split-column"
+            ? `${baseName}_Vynor_Split`
+            : kind === "unpivot"
+              ? `${baseName}_Vynor_Unpivot`
+              : kind === "format"
+                ? `${baseName}_Vynor_Format`
+                : kind === "quality"
+                  ? `${baseName}_Vynor_Report`
+                  : kind === "summary"
+                    ? `${baseName}_Vynor_Totals`
+                    : kind === "view"
+                      ? `${baseName}_Vynor_View`
+                      : kind === "statistics"
+                        ? `${baseName}_Vynor_Stats`
+                        : kind === "dashboard"
+                          ? `${baseName}_Vynor_Dashboard`
+                          : resultSheet;
   if (
     (requested.has("summary") ||
       requested.has("format") ||
@@ -1672,6 +1776,9 @@ export function createExcelPreviewPlan(
     ...(kind === "clean" && resolved.clean ? { spec: resolved.clean } : {}),
     ...(kind === "add-column" && resolved.addColumn
       ? { spec: resolved.addColumn }
+      : {}),
+    ...(kind === "lookup-columns" && resolved.lookupColumns
+      ? { spec: resolved.lookupColumns }
       : {}),
     ...(kind === "unpivot" && resolved.unpivot
       ? { spec: resolved.unpivot }

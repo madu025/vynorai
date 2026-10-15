@@ -59,8 +59,8 @@ test("Excel Copilot catalogue KPI does not regress", () => {
   const prompts = loadCatalogue();
   assert.equal(
     prompts.length,
-    87,
-    "keep the initial acceptance prompt set intact",
+    88,
+    "keep the acceptance prompt catalogue count explicit",
   );
   const rows = new Map<
     string,

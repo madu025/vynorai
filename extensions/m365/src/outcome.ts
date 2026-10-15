@@ -58,6 +58,7 @@ const KIND_TITLES: Record<string, [string, string]> = {
   format: ["Presentable copy", "ඉදිරිපත් කිරීමට සුදුසු පිටපත"],
   quality: ["Data quality report", "දත්ත ගුණාත්මක වාර්තාව"],
   statistics: ["Statistics", "සංඛ්‍යාලේඛන"],
+  "lookup-columns": ["Lookup columns", "Lookup columns"],
 };
 
 export function kindTitle(kind: string, language: OutcomeLanguage): string {
@@ -449,6 +450,36 @@ export function buildOutcomes(
         say(
           `Splits ${spec.splitSourceColumn} into ${spec.splitFirstColumn} and ${spec.splitLastColumn}.`,
           `${spec.splitSourceColumn} ${spec.splitFirstColumn} සහ ${spec.splitLastColumn} ලෙස වෙන් කරයි.`,
+        ),
+      );
+    } else if (action.kind === "lookup-columns" && spec.lookupSheet) {
+      const sourceKeys = Array.isArray(spec.sourceKeyColumns)
+        ? spec.sourceKeyColumns.join(" + ")
+        : String(spec.sourceKeyColumn ?? "");
+      const lookupKeys = Array.isArray(spec.lookupKeyHeaders)
+        ? spec.lookupKeyHeaders.join(" + ")
+        : String(spec.lookupKeyHeader ?? "");
+      const returnHeaders = Array.isArray(spec.lookupReturnHeaders)
+        ? spec.lookupReturnHeaders
+        : [];
+      const keep = Math.max(0, MAX_TABLE_COLUMNS - returnHeaders.length);
+      table.headers = [...table.headers.slice(0, keep), ...returnHeaders];
+      table.rows = rows
+        .slice(0, MAX_TABLE_ROWS)
+        .map((row) => [
+          ...row.slice(0, keep).map(cell),
+          ...returnHeaders.map(() => "—"),
+        ]);
+      item.details.push(
+        say(
+          `Brings ${returnHeaders.join(", ")} from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}.`,
+          `"${spec.lookupSheet}" පත්‍රිකාවෙන් ${returnHeaders.join(", ")} ගෙන එයි — ${sourceKeys} සහ ${lookupKeys} ගැළපීමෙන්.`,
+        ),
+      );
+      item.details.push(
+        say(
+          "Values will be live formulas on the new result sheet; source data remains unchanged.",
+          "නව ප්‍රතිඵල පත්‍රිකාවේ සජීවී formulas භාවිතා වේ; මුල් දත්ත වෙනස් නොවේ.",
         ),
       );
     } else if (action.kind === "add-column" && spec.lookupSheet) {
@@ -993,6 +1024,7 @@ const KIND_PREFIX: Record<string, string> = {
   summary: "Summary of",
   dashboard: "Dashboard of",
   "add-column": "Calc of",
+  "lookup-columns": "Lookup of",
   "new-sheet": "Result of",
   table: "Table of",
 };

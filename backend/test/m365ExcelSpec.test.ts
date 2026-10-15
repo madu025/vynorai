@@ -127,6 +127,42 @@ test("server and add-in build the same approximate lookup plan and refuse multi-
   );
 });
 
+test("server and add-in build the same multiple-return lookup plan", () => {
+  const specs = {
+    lookupColumns: {
+      names: ["Manager", "Department"],
+      lookup: {
+        sheet: "Staff",
+        sourceKey: 0,
+        keyIndex: 0,
+        keyHeader: "Name",
+        returnIndexes: [1, 2],
+        returnHeaders: ["Manager", "Department"],
+        rows: 40,
+      },
+    },
+  };
+  const actions = ["lookup-columns"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].targetSheet, "Sheet1_Vynor_Lookup");
+  assert.deepEqual(server.actions[0].spec?.lookupReturnIndexes, [1, 2]);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        lookupColumns: {
+          ...specs.lookupColumns,
+          lookup: {
+            ...specs.lookupColumns.lookup,
+            returnIndexes: [1, 1],
+          },
+        },
+      } as any),
+    /not valid/,
+  );
+});
+
 test("server and add-in build the same safe split plan", () => {
   const specs = {
     split: {

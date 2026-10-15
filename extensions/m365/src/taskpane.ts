@@ -585,7 +585,11 @@ inspect?.addEventListener("click", async () => {
     ];
     const filtered = wanted.filter((kind) => !excludedKinds.has(kind));
     const actions = filtered.length > 0 ? filtered : wanted;
-    const { lookup: lookupWish, ...plannedSpecs } = interpreted.specs;
+    const {
+      lookup: lookupWish,
+      lookupColumns: lookupColumnsWish,
+      ...plannedSpecs
+    } = interpreted.specs;
     // A preview adjustment is deliberate user input, so it overrides the original phrase.
     let specs: ExcelColumnSpecs = {
       ...plannedSpecs,
@@ -662,6 +666,69 @@ inspect?.addEventListener("click", async () => {
         };
       } catch (error) {
         log.record("lookup:resolve", "fail", describeError(error));
+        return setStatus((error as Error).message);
+      }
+    }
+    if (lookupColumnsWish) {
+      try {
+        const other = await log.step("excel:read-lookup-sheet", () =>
+          readLookupSheetInfo(officeRuntime(), lookupColumnsWish.sheet),
+        );
+        if (other.sheet === input.worksheetName)
+          throw new Error(
+            "Look the value up in a different sheet than your data.",
+          );
+        const find = (headers: string[], name: string) =>
+          headers.findIndex(
+            (header) =>
+              header.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+          );
+        const keyHeaders = lookupColumnsWish.keyHeaders ?? [
+          lookupColumnsWish.keyHeader,
+        ];
+        const keyAt = keyHeaders.map((header) => find(other.headers, header));
+        const returnAt = lookupColumnsWish.returnHeaders.map((header) =>
+          find(other.headers, header),
+        );
+        if (keyAt.some((index) => index < 0))
+          throw new Error(
+            `The sheet "${other.sheet}" has no all of the key columns (${keyHeaders.join(", ")}) to match on. It has: ${other.headers.join(", ")}.`,
+          );
+        if (returnAt.some((index) => index < 0))
+          throw new Error(
+            `The sheet "${other.sheet}" does not contain every requested return column (${lookupColumnsWish.returnHeaders.join(", ")}). It has: ${other.headers.join(", ")}.`,
+          );
+        const sourceKeyIndexes = keyHeaders.map((header) =>
+          find(layout.headers, header),
+        );
+        if (sourceKeyIndexes.some((index) => index < 0))
+          throw new Error(
+            `Your selected data has no all of the key columns (${keyHeaders.join(", ")}). It has: ${layout.headers.join(", ")}.`,
+          );
+        specs.lookupColumns = {
+          names: returnAt.map((index) => other.headers[index]),
+          lookup: {
+            sheet: other.sheet,
+            sourceKey: sourceKeyIndexes[0],
+            keyIndex: keyAt[0],
+            keyHeader: other.headers[keyAt[0]],
+            returnIndexes: returnAt,
+            returnHeaders: returnAt.map((index) => other.headers[index]),
+            rows: other.rows,
+            ...(keyAt.length > 1
+              ? {
+                  sourceKeys: sourceKeyIndexes,
+                  keyIndexes: keyAt,
+                  keyHeaders: keyAt.map((index) => other.headers[index]),
+                }
+              : {}),
+            ...(lookupColumnsWish.matchMode
+              ? { matchMode: lookupColumnsWish.matchMode }
+              : {}),
+          },
+        };
+      } catch (error) {
+        log.record("lookup-columns:resolve", "fail", describeError(error));
         return setStatus((error as Error).message);
       }
     }

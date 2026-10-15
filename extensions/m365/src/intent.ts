@@ -30,6 +30,13 @@ export interface InstructionSpecs {
     keyHeaders?: string[];
     matchMode?: "exact" | "approximate";
   };
+  lookupColumns?: {
+    sheet: string;
+    returnHeaders: string[];
+    keyHeader: string;
+    keyHeaders?: string[];
+    matchMode?: "exact" | "approximate";
+  };
   pivot?: {
     filter?: number;
     rows: number;
@@ -129,6 +136,7 @@ export interface InterpretedInstruction {
     | "table"
     | "clean"
     | "add-column"
+    | "lookup-columns"
     | "split-column"
     | "unpivot"
     | "chart"
@@ -163,6 +171,10 @@ const findHeader = (headers: string[], text: string): number => {
 /** "Add column Manager from Staff by Name": bring a column from another sheet by a key. */
 export const LOOKUP_PHRASE =
   /^(?:please\s+)?(?:add|get|bring|fetch|lookup|vlookup|xlookup|pull)\s+(?:in\s+)?(?:the\s+)?(?:column\s+)?["']?([A-Za-z][\w ]{0,39}?)["']?\s+from\s+(?:the\s+)?(?:sheet\s+)?["']?([^"'\n]{1,31}?)["']?\s+(?:by|using|matching|on|with|where)\s+["']?([^"'\n]+?)["']?\s*\.?$/i;
+
+/** "Add columns Manager and Department from Staff by Name". */
+export const LOOKUP_COLUMNS_PHRASE =
+  /^(?:please\s+)?(?:add|get|bring|fetch|lookup|pull)\s+columns?\s+(.+?)\s+from\s+(?:the\s+)?(?:sheet\s+)?["']?([^"'\n]{1,31}?)["']?\s+(?:by|using|matching|on|with|where)\s+["']?([^"'\n]+?)["']?\s*\.?$/i;
 
 export function interpretInstruction(
   rawInstruction: string,
@@ -510,6 +522,50 @@ export function interpretInstruction(
     .replace(/\b(?:approximate|closest|nearest)\b/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
+  const lookupColumnsMatch = LOOKUP_COLUMNS_PHRASE.exec(lookupText);
+  if (lookupColumnsMatch) {
+    const returnHeaders = lookupColumnsMatch[1]
+      .split(/\band\b|,/i)
+      .map((header) => header.trim())
+      .filter(Boolean);
+    const keyHeaders = lookupColumnsMatch[3]
+      .split(/\band\b|,/i)
+      .map((header) => header.trim())
+      .filter(Boolean);
+    const sourceKeyAt = keyHeaders.map((wanted) =>
+      headers.findIndex(
+        (header) =>
+          header.trim().toLocaleLowerCase() === wanted.toLocaleLowerCase(),
+      ),
+    );
+    if (returnHeaders.length === 1) {
+      // Let the single-column lookup parser handle the ordinary "Add column ..." form.
+    } else if (returnHeaders.length > 5) {
+      result.problems.push(
+        "Choose two to five columns to bring from the lookup sheet.",
+      );
+    } else if (sourceKeyAt.some((index) => index < 0)) {
+      result.problems.push(
+        `"${keyHeaders[0] ?? ""}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    } else {
+      return {
+        actions: ["lookup-columns"],
+        specs: {
+          lookupColumns: {
+            sheet: lookupColumnsMatch[2].trim(),
+            returnHeaders,
+            keyHeader: headers[sourceKeyAt[0]],
+            ...(keyHeaders.length > 1
+              ? { keyHeaders: sourceKeyAt.map((index) => headers[index]) }
+              : {}),
+            ...(approximateLookup ? { matchMode: "approximate" as const } : {}),
+          },
+        },
+        problems: [],
+      } as InterpretedInstruction;
+    }
+  }
   const lookupMatch = LOOKUP_PHRASE.exec(lookupText);
   if (lookupMatch) {
     const keyHeaders = lookupMatch[3]

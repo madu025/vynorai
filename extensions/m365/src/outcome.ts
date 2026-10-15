@@ -203,6 +203,44 @@ export function buildOutcomes(
           ),
         );
     } else if (action.kind === "pivot-table") {
+      if (
+        Number.isInteger(spec.rowsIndex) &&
+        Number.isInteger(spec.valuesIndex)
+      ) {
+        // Show the answer itself: the grouped totals the PivotTable will contain.
+        const aggregation = String(spec.aggregation ?? "sum");
+        const groups = new Map<string, number[]>();
+        for (const row of rows) {
+          const key = cell(row[spec.rowsIndex]);
+          const list = groups.get(key) ?? [];
+          list.push(numeric(row[spec.valuesIndex]));
+          groups.set(key, list);
+        }
+        const reduce = (values: number[]) => {
+          if (aggregation === "count") return values.length;
+          if (aggregation === "min") return Math.min(...values);
+          if (aggregation === "max") return Math.max(...values);
+          const total = values.reduce((sum, value) => sum + value, 0);
+          return aggregation === "average" ? total / values.length : total;
+        };
+        const format = (value: number) => String(Math.round(value * 100) / 100);
+        const label = `${agg(aggregation)} — ${spec.valuesColumn}`;
+        const body = [...groups.entries()]
+          .slice(0, 6)
+          .map(([key, values]) => [key, format(reduce(values))]);
+        const everything = [...groups.values()].flat();
+        if (everything.length && aggregation !== "average")
+          body.push([
+            say("Grand total", "මුළු එකතුව"),
+            format(reduce(everything)),
+          ]);
+        item.table = {
+          headers: [String(spec.rowsColumn), label],
+          rows: body,
+          barColumns: [],
+          dropdownColumns: [],
+        };
+      }
       if (!spec.rowsColumn || !spec.valuesColumn)
         item.details.push(
           say(

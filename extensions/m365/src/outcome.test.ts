@@ -93,3 +93,33 @@ test("a repeat run gets a numbered sheet name that still fits Excel's limit", ()
     "Sheet1",
   );
 });
+
+test("a PivotTable outcome shows the grouped totals it will contain", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "pivot-table",
+        targetSheet: "Sheet1_Vynor_Result",
+        spec: {
+          rowsColumn: "Region",
+          rowsIndex: 1,
+          valuesColumn: "Sales",
+          valuesIndex: 2,
+          aggregation: "sum",
+        },
+      },
+    ],
+    headers,
+    [
+      ["Jan", "North", 1200, 800],
+      ["Feb", "South", 1500, 950],
+      ["Mar", "North", 1800, 1100],
+    ],
+  );
+  assert.deepEqual(item.table?.headers, ["Region", "Total — Sales"]);
+  assert.deepEqual(item.table?.rows, [
+    ["North", "3000"],
+    ["South", "1500"],
+    ["Grand total", "4500"],
+  ]);
+});

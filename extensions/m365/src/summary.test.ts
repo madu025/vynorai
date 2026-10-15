@@ -106,11 +106,25 @@ test("a summary instruction is read into explicit columns", () => {
     rows,
   );
   assert.equal(average.specs.summary?.values[0].aggregation, "average");
-  // Plain total questions and pivot or chart requests are not summaries.
+  // A grouped total is a workbook request; an ungrouped total remains a local question.
   assert.deepEqual(
     interpretInstruction("total Sales by Region", headers, rows).actions,
-    [],
+    ["summary"],
   );
+  const count = interpretInstruction(
+    "Count Order ID by Customer",
+    ["Order ID", "Customer", "Status"],
+    [
+      ["O-001", "Asha", "Open"],
+      ["O-002", "Asha", "Closed"],
+      ["O-003", "Bimal", "Open"],
+    ],
+  );
+  assert.deepEqual(count.actions, ["summary"]);
+  assert.deepEqual(count.specs.summary, {
+    group: 1,
+    values: [{ column: 0, aggregation: "count" }],
+  });
   assert.deepEqual(
     interpretInstruction("Summary pivot of Sales by Region", headers, rows)
       .actions,

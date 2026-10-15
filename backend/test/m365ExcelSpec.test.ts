@@ -792,6 +792,51 @@ test("server and add-in agree on a safe date-range conditional format", () => {
   );
 });
 
+test("server and add-in accept grouped count summaries over text columns", () => {
+  const countInput = {
+    ...input,
+    values: [
+      ["Order ID", "Customer", "Status"],
+      ["O-001", "Asha", "Open"],
+      ["O-002", "Asha", "Closed"],
+      ["O-003", "Bimal", "Open"],
+    ],
+  };
+  const actions = ["summary"] as const;
+  const specs = {
+    summary: {
+      group: 1,
+      values: [{ column: 0, aggregation: "count" as const }],
+    },
+  };
+  const server = createServerExcelPreviewPlan(
+    countInput,
+    [...actions],
+    500,
+    specs,
+  );
+  const local = createExcelPreviewPlan(
+    countInput as any,
+    [...actions],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec?.summaryValues, [
+    { column: "Order ID", index: 0, aggregation: "count" },
+  ]);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(countInput, [...actions], 500, {
+        summary: {
+          group: 1,
+          values: [{ column: 0, aggregation: "average" }],
+        },
+      } as any),
+    /must contain numbers unless the aggregation is count/,
+  );
+});
+
 test("server and add-in agree on bounded top and bottom conditional formats", () => {
   for (const rule of ["top-n", "bottom-n"] as const) {
     const specs = {

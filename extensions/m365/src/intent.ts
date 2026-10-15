@@ -1310,12 +1310,14 @@ function interpretSummary(
   rows: Cell[][],
   result: InterpretedInstruction,
 ) {
-  if (
-    !/\bsummary\b|\bsummari[sz]e\b|\btotals?\s+(?:table|sheet)\b|\bsubtotals?\b/i.test(
+  const summaryWords =
+    /\bsummary\b|\bsummari[sz]e\b|\btotals?\s+(?:table|sheet)\b|\bsubtotals?\b/i.test(
       text,
-    )
-  )
-    return;
+    ) ||
+    /\b(?:total|sum|average|avg|mean|count)\b[^.\n]{1,80}\b(?:by|per|for each|each)\b/i.test(
+      text,
+    );
+  if (!summaryWords) return;
   if (/\bpivot\b|\bchart\b|\bgraph\b/i.test(text)) return;
   const positions = headerPositions(headers, text);
   const byMatch = /\b(?:by|per|for each|each)\s+/i.exec(text);
@@ -1324,11 +1326,15 @@ function interpretSummary(
   const labelEntry = positions.find(
     (entry) => entry.at >= byMatch.index && !isNumeric(entry.index),
   );
+  const wantsCount = /\b(count|how many)\b/i.test(text);
   const measures = positions.filter(
-    (entry) => entry.at < byMatch.index && isNumeric(entry.index),
+    (entry) =>
+      entry.at < byMatch.index &&
+      (wantsCount || isNumeric(entry.index)) &&
+      entry.index !== labelEntry?.index,
   );
   if (!labelEntry || measures.length === 0) return;
-  const aggregation = /\b(count|how many)\b/i.test(text)
+  const aggregation = wantsCount
     ? "count"
     : /\b(average|avg|mean)\b/i.test(text)
       ? "average"

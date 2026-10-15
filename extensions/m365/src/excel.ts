@@ -1140,10 +1140,10 @@ function resolveColumnSpecs(
         );
       if (!aggregations.includes(entry.aggregation))
         fail("EXCEL_SPEC_INVALID", "Unsupported aggregation.");
-      if (!numeric(entry.column))
+      if (entry.aggregation !== "count" && !numeric(entry.column))
         fail(
           "EXCEL_SPEC_VALUE_NOT_NUMERIC",
-          "A summary value column must contain numbers.",
+          "A summary value column must contain numbers unless the aggregation is count.",
         );
       if (
         picked.some(

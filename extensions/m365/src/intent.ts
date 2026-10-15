@@ -224,6 +224,9 @@ export function interpretInstruction(
  */
 export function normalizeInstruction(text: string): string {
   const table: Array<[RegExp, string]> = [
+    [/pivot\s*tables?\b/gi, "pivot"],
+    [/\b(\w+)\s+(?:walata|walin|anuwa)\b/gi, "by $1"],
+    [/\beka\b/gi, ""],
     [
       /ප්‍රස්තාරය?|ප්‍රස්ථාරය?|prasthara(ya)?|grap[h]? ekak?\b|chart ekak?\b/gi,
       "chart",

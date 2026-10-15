@@ -203,16 +203,24 @@ export function buildOutcomes(
           ),
         );
     } else if (action.kind === "pivot-table") {
-      item.details.push(
-        say(
-          `${agg(spec.aggregation)} of ${spec.valuesColumn} for each ${spec.rowsColumn}` +
-            (spec.columnsColumn ? `, split by ${spec.columnsColumn}` : "") +
-            (spec.filterColumn ? `, filter on ${spec.filterColumn}` : ""),
-          `${spec.rowsColumn} එක් එකක් සඳහා ${spec.valuesColumn} හි ${agg(spec.aggregation)}` +
-            (spec.columnsColumn ? `, ${spec.columnsColumn} අනුව බෙදා` : "") +
-            (spec.filterColumn ? `, ${spec.filterColumn} මත පෙරහන` : ""),
-        ),
-      );
+      if (!spec.rowsColumn || !spec.valuesColumn)
+        item.details.push(
+          say(
+            "Summarizes your numbers by category in a PivotTable.",
+            "ඔබේ සංඛ්‍යා කාණ්ඩ අනුව PivotTable එකක සාරාංශ කරයි.",
+          ),
+        );
+      else
+        item.details.push(
+          say(
+            `${agg(spec.aggregation)} of ${spec.valuesColumn} for each ${spec.rowsColumn}` +
+              (spec.columnsColumn ? `, split by ${spec.columnsColumn}` : "") +
+              (spec.filterColumn ? `, filter on ${spec.filterColumn}` : ""),
+            `${spec.rowsColumn} එක් එකක් සඳහා ${spec.valuesColumn} හි ${agg(spec.aggregation)}` +
+              (spec.columnsColumn ? `, ${spec.columnsColumn} අනුව බෙදා` : "") +
+              (spec.filterColumn ? `, ${spec.filterColumn} මත පෙරහන` : ""),
+          ),
+        );
     } else if (action.kind === "summary") {
       const parts = (spec.summaryValues ?? [])
         .map((entry: any) => `${agg(entry.aggregation)} — ${entry.column}`)

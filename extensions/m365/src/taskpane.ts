@@ -117,6 +117,8 @@ let currentPlan: any;
 let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
 let lastRevealSheet = "";
 let currentSourceSheet = "";
+let currentRangeAddress = "";
+let lastDoneSentence = "";
 /** Set when the table was found around a single clicked cell instead of a dragged selection. */
 let autoDetectedAddress = "";
 let previewFingerprint = "";
@@ -478,6 +480,7 @@ inspect?.addEventListener("click", async () => {
     );
     const layout = getExcelHeaderLayout(input);
     currentSourceSheet = String(input.worksheetName ?? "");
+    currentRangeAddress = String(input.address ?? "");
     lastRange = {
       headers: layout.headers.map(String),
       rows: input.values.slice(layout.headerRowCount),
@@ -614,7 +617,7 @@ function markChangeNote(state: "preview" | "applied" | "partial" | "undone") {
   note.textContent = localizeMessage(
     language,
     state === "applied"
-      ? "Applied. Your source data was not changed."
+      ? lastDoneSentence || "Applied. Your source data was not changed."
       : state === "undone"
         ? "Undone. What this add-in created was removed."
         : "Partly applied. See the steps and Diagnostics.",
@@ -725,6 +728,9 @@ apply?.addEventListener("click", async () => {
         lastCreated.sheets.length + lastCreated.tables.length === 0;
     currentPlan = undefined;
     previewFingerprint = "";
+    lastDoneSentence = failed.length
+      ? ""
+      : doneSentence(report.results, report.sourceUnchangedAfterApply);
     markChangeNote(failed.length ? "partial" : "applied");
     const reveal = report.results.find(
       (result) => result.status === "created" || result.status === "exists",
@@ -1253,21 +1259,18 @@ function setupLayout() {
       Number(parsed?.profile?.rowCount ?? 0) -
         Number(parsed?.profile?.headerRowCount ?? 1),
     );
-    if (previewSummary)
+    if (previewSummary) {
+      const columnCount = Number(parsed?.profile?.columnCount ?? 0);
+      const from = currentRangeAddress ? ` (${currentRangeAddress})` : "";
       previewSummary.textContent =
         language === "si"
-          ? previewSummarySi({
-              actions: actions.map((action) => String(action.kind)),
-              sheets: sheets.map(String),
-              rows,
-              columns: Number(parsed?.profile?.columnCount ?? 0),
-              warnings: warnings.map(String),
-            })
-          : `${actions.map((action) => label(action.kind)).join(", ")} ` +
-            `on ${sheets.join(", ")}. ${rows} data rows, ` +
-            `${Number(parsed?.profile?.columnCount ?? 0)} columns. ` +
-            `Your source data stays unchanged.` +
+          ? `පේළි ${rows}ක් සහ තීරු ${columnCount}ක් භාවිතා කරයි${from}. ඔබේ මූලාශ්‍ර දත්ත වෙනස් නොවේ.` +
+            (warnings.length ? ` ${warnings.join(" ")}` : "")
+          : `Using ${rows} rows and ${columnCount} columns${from}. Your source data stays unchanged.` +
             (warnings.length ? ` ${warnings.join(" ")}` : "");
+      void sheets;
+      void label;
+    }
     renderOutcomes(actions);
     resultCard.hidden = false;
   };
@@ -1430,7 +1433,7 @@ function renderOutcomes(actions: any[]) {
 
 /** The preview shows the sheet name the apply will really use (a repeat run gets "(2)"). */
 async function refreshSheetNames(container: HTMLElement, actions: any[]) {
-  if (!lastRange || language === "si") return;
+  if (!lastRange) return;
   const existing = new Set(await listWorksheetNames(officeRuntime()));
   if (!existing.size) return;
   const source = currentSourceSheet;
@@ -1446,7 +1449,11 @@ async function refreshSheetNames(container: HTMLElement, actions: any[]) {
       seen.set(name, resolved);
     }
     const label = labels[index];
-    if (label) label.textContent = `Will be created on sheet ${resolved}`;
+    if (label)
+      label.textContent =
+        language === "si"
+          ? `${resolved} පත්‍රිකාවේ සාදනු ඇත`
+          : `Will be created on sheet ${resolved}`;
   });
 }
 
@@ -1578,6 +1585,9 @@ overviewButton?.addEventListener("click", async () => {
 
 function refreshLanguage() {
   applyLanguage(document, language);
+  const previewNode = document.querySelector<HTMLElement>("#preview");
+  if (previewNode && previewNode.textContent?.startsWith("{"))
+    previewNode.textContent = previewNode.textContent;
   if (lastStatus) setStatus(lastStatus);
   if (languageButton)
     languageButton.textContent = `${translateLabel()}: ${LANGUAGE_NAMES[language]}`;

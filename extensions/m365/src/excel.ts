@@ -735,11 +735,23 @@ const noHeaderLayout: ExcelHeaderLayout = {
 
 function assertUniqueHeaders(headers: string[]): void {
   const normalizedHeaders = headers.map((header) => header.toLocaleLowerCase());
-  if (new Set(normalizedHeaders).size !== normalizedHeaders.length)
+  if (new Set(normalizedHeaders).size !== normalizedHeaders.length) {
+    const seen = new Set<string>();
+    const repeated = [
+      ...new Set(
+        headers.filter((header, index) => {
+          const key = normalizedHeaders[index];
+          const again = seen.has(key);
+          seen.add(key);
+          return again;
+        }),
+      ),
+    ];
     throw new InvalidExcelRangeError(
       "EXCEL_HEADERS_MUST_BE_UNIQUE",
-      "Every selected column needs a unique header before creating a Table or PivotTable.",
+      `Two columns are both named "${repeated.slice(0, 3).join('", "')}". Every column needs a unique header, so rename one and try again.`,
     );
+  }
 }
 
 export function getExcelHeaderLayout(
@@ -1122,9 +1134,12 @@ export function assertConfirmedApproval(
  * 18 characters + "_Vynor_Result" (13) stays within the sheet-name limit.
  */
 export function excelSafeBaseName(worksheetName: string): string {
-  const base =
-    String(worksheetName)
-      .replace(/[^A-Za-z0-9_]/g, "_")
-      .slice(0, 18) || "Sheet";
+  // A sheet this add-in made ("Sales_Vynor_Result (2)") must not be stacked into another
+  // "..._Vynor_Forma_Vynor_Result" name when it is used as a source.
+  const origin = String(worksheetName).replace(
+    /_Vynor_[A-Za-z]+(?:\s*\(\d+\))?$/,
+    "",
+  );
+  const base = origin.replace(/[^A-Za-z0-9_]/g, "_").slice(0, 18) || "Sheet";
   return /^[A-Za-z_]/.test(base) ? base : `S_${base}`.slice(0, 18);
 }

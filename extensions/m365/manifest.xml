@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>9f17a1c0-46f8-4f2c-a5b3-4a3d04e0d365</Id>
-  <Version>0.2.0.0</Version>
+  <Version>0.2.1.0</Version>
   <ProviderName>VynorAI</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="VynorAI Excel" />
+  <DisplayName DefaultValue="VynorAI" />
   <Description DefaultValue="Preview and approve safe VynorAI Excel actions." />
   <IconUrl DefaultValue="https://vynor.lk/m365/logo.png" />
   <HighResolutionIconUrl DefaultValue="https://vynor.lk/m365/logo.png" />

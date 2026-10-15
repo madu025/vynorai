@@ -44,7 +44,7 @@ export type ExcelActionStatus =
   | "failed"
   | "skipped_unsupported";
 
-import { resolveSheetName } from "./outcome.js";
+import { plannedSheetName } from "./outcome.js";
 
 export interface ExcelActionResult {
   kind: string;
@@ -117,6 +117,51 @@ export async function revealExcelResult(
   } catch {
     // Showing the result is a convenience; the work itself is already done.
     return false;
+  }
+}
+
+/** Sheets this add-in created: the ownership marker, or the legacy "_Vynor_" name. */
+export async function listVynorSheets(
+  runtime: ExcelRuntimeLike,
+): Promise<string[]> {
+  try {
+    return await runtime.run(async (context: any) => {
+      const sheets = context.workbook.worksheets;
+      sheets.load("items/name");
+      await context.sync();
+      const items: any[] = sheets.items ?? [];
+      const markers = items.map((sheet) => {
+        try {
+          const marker = sheet.customProperties.getItemOrNullObject("vynorai");
+          marker.load("isNullObject");
+          return marker;
+        } catch {
+          return undefined;
+        }
+      });
+      try {
+        await context.sync();
+      } catch {
+        // No custom-property support: only the legacy names count.
+      }
+      return items
+        .filter((sheet, index) => {
+          const marker = markers[index];
+          let marked = false;
+          try {
+            marked = Boolean(marker) && marker.isNullObject === false;
+          } catch {
+            marked = false;
+          }
+          return (
+            marked ||
+            /_Vynor_[A-Za-z]+(?:\s*\(\d+\))?$/.test(String(sheet.name))
+          );
+        })
+        .map((sheet) => String(sheet.name));
+    });
+  } catch {
+    return [];
   }
 }
 
@@ -455,13 +500,14 @@ export async function applyApprovedExcelPlan(
       (existingSheets.items ?? []).map((sheet: any) => String(sheet.name)),
     );
     const resolvedTargets = new Map<string, string>();
-    const resolveTarget = (name: string, kind: string): string => {
-      if (kind === "table" || name === plan.worksheetName) return name;
+    const resolveTarget = (planned: any): string => {
+      const name = String(planned.targetSheet);
+      if (name === plan.worksheetName) return name;
       const known = resolvedTargets.get(name);
       if (known) return known;
-      const chosen = resolveSheetName(
-        name,
-        kind,
+      if (planned.kind === "table") return name;
+      const chosen = plannedSheetName(
+        planned,
         plan.worksheetName,
         takenNames,
         MAX_SHEET_NAME,
@@ -469,6 +515,23 @@ export async function applyApprovedExcelPlan(
       takenNames.add(chosen);
       resolvedTargets.set(name, chosen);
       return chosen;
+    };
+    // Pivot and table names are workbook-wide, so they get a number when one already exists.
+    const takenObjects = new Set<string>();
+    const pivotList = context.workbook.pivotTables;
+    pivotList.load?.("items/name");
+    const tableList = context.workbook.tables;
+    tableList.load?.("items/name");
+    await context.sync();
+    for (const item of pivotList.items ?? [])
+      takenObjects.add(String(item.name));
+    for (const item of tableList.items ?? [])
+      takenObjects.add(String(item.name));
+    const uniqueObject = (base: string): string => {
+      if (!takenObjects.has(base)) return base;
+      for (let n = 2; n < 100; n += 1)
+        if (!takenObjects.has(`${base}_${n}`)) return `${base}_${n}`;
+      return base;
     };
 
     const actionSourceRange = () => {
@@ -533,23 +596,16 @@ export async function applyApprovedExcelPlan(
       typeof cell === "string" && cell.startsWith("=") ? `'${cell}` : cell;
 
     for (const planned of plan.actions) {
-      const resolvedSheet = resolveTarget(planned.targetSheet, planned.kind);
-      // PivotTable and table names are workbook-wide: a re-run on "(2)"/"(3)" must not collide
-      // with the earlier object and silently report "already existed".
-      const suffix = resolvedSheet.startsWith(planned.targetSheet)
-        ? resolvedSheet.slice(planned.targetSheet.length)
-        : "";
+      const resolvedSheet = resolveTarget(planned);
+      const objectName =
+        planned.kind === "pivot-table" || planned.kind === "table"
+          ? uniqueObject(planned.name)
+          : planned.name;
+      takenObjects.add(objectName);
       const action = {
         ...planned,
         targetSheet: resolvedSheet,
-        name:
-          suffix &&
-          /^ \(\d+\)$/.test(suffix) &&
-          (planned.kind === "pivot-table" || planned.kind === "table")
-            ? planned.kind === "table"
-              ? `${planned.name}_${suffix.replace(/\D/g, "")}`
-              : `${planned.name}${suffix}`
-            : planned.name,
+        name: objectName,
       };
       const result: ExcelActionResult = {
         kind: action.kind,
@@ -596,6 +652,14 @@ export async function applyApprovedExcelPlan(
             ? found
             : context.workbook.worksheets.add(action.targetSheet);
           result.createdSheet = !sheetExists;
+          if (!sheetExists) {
+            try {
+              // Ownership marker, so cleanup and undo never depend on the sheet's name.
+              sheet.customProperties.add("vynorai", "result");
+            } catch {
+              // Older hosts: the legacy name check still applies.
+            }
+          }
           if (action.kind === "new-sheet") {
             if (sheetExists) {
               result.status = "exists";
@@ -1259,7 +1323,7 @@ export async function inspectWorkbookOverview(
 
 const CREATED_SHEET =
   /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|Format|Report|View)(?: (d{1,2}))?$/;
-const CREATED_TABLE = /^[A-Za-z0-9_]{1,18}_Vynor_table$/;
+const CREATED_TABLE = /^[A-Za-z0-9_]{1,18}_Vynor_table(?:_\d{1,2})?$/;
 
 export interface RollbackReport {
   removedSheets: string[];
@@ -1307,14 +1371,24 @@ export async function rollbackCreatedItems(
       report.convertedTables.push(name);
     }
     for (const name of [...new Set(items.sheets)]) {
-      if (!CREATED_SHEET.test(name)) {
-        report.skipped.push(name);
-        continue;
-      }
       const sheet = context.workbook.worksheets.getItemOrNullObject(name);
       sheet.load("isNullObject");
       await context.sync();
       if (sheet.isNullObject) continue;
+      // Ours when the ownership marker is there, or (older results) the legacy name matches.
+      let marked = false;
+      try {
+        const marker = sheet.customProperties.getItemOrNullObject("vynorai");
+        marker.load("isNullObject");
+        await context.sync();
+        marked = !marker.isNullObject;
+      } catch {
+        marked = false;
+      }
+      if (!marked && !CREATED_SHEET.test(name)) {
+        report.skipped.push(name);
+        continue;
+      }
       sheet.delete();
       await context.sync();
       report.removedSheets.push(name);

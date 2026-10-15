@@ -332,23 +332,14 @@ test("apply builds a multi-series stacked chart, an average pivot and a highligh
   assert.ok(excel.calls.includes("columns Month"));
   assert.ok(excel.calls.includes("values Sales"));
   assert.ok(excel.calls.includes("summarizeBy Average"));
-  const view = excel.written["Sheet1_Vynor_View!0,0,4,4.values"];
+  const view = excel.written["View of Sheet1!0,0,4,4.values"];
   assert.deepEqual(
     view.map((row: any[]) => row[0]),
     ["Month", "May", "Mar", "Feb"],
   );
-  assert.equal(
-    excel.written["Sheet1_Vynor_View!1,0,1,4.fill.color"],
-    "#FFF2CC",
-  );
-  assert.equal(
-    excel.written["Sheet1_Vynor_View!2,0,1,4.fill.color"],
-    "#FFF2CC",
-  );
-  assert.equal(
-    excel.written["Sheet1_Vynor_View!3,0,1,4.fill.color"],
-    undefined,
-  );
+  assert.equal(excel.written["View of Sheet1!1,0,1,4.fill.color"], "#FFF2CC");
+  assert.equal(excel.written["View of Sheet1!2,0,1,4.fill.color"], "#FFF2CC");
+  assert.equal(excel.written["View of Sheet1!3,0,1,4.fill.color"], undefined);
   assert.equal(report.sourceUnchangedAfterApply, true);
 });
 

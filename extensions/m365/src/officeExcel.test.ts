@@ -284,7 +284,7 @@ test("apply writes a normalized copy to the result sheet for two-row headers", a
     report.results.map((result) => `${result.kind}:${result.status}`),
     ["new-sheet:created", "table:created", "pivot-table:created"],
   );
-  assert.ok(excel.calls.includes("write Sales_Vynor_Result!A1 normalized"));
+  assert.ok(excel.calls.includes("write Result of Sales!A1 normalized"));
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 
@@ -335,7 +335,7 @@ test("one failing action is reported without stopping the others", async () => {
 
 test("an object created on a pre-existing result sheet never grants rollback ownership", async () => {
   const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
-  excel.addSheet("Sales_Vynor_Result");
+  excel.addSheet("Chart of Sales");
   const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
   const plan = createExcelPreviewPlan(input, ["chart"]);
   const report = await applyApprovedExcelPlan(
@@ -371,7 +371,7 @@ test("a failed action still tracks a worksheet that this apply call created", as
   assert.equal(report.results[0].createdSheet, true);
   assert.deepEqual(
     rollbackItemsFromApplyReport("test-plan", report.results).sheets,
-    ["Sales_Vynor_Result"],
+    ["Chart of Sales"],
   );
 });
 

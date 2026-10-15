@@ -448,3 +448,72 @@ export function resolveSheetName(
   }
   return name;
 }
+
+const KIND_PREFIX: Record<string, string> = {
+  clean: "Cleaned",
+  format: "Formatted",
+  view: "View of",
+  quality: "Quality of",
+  summary: "Summary of",
+  "add-column": "Calc of",
+  "new-sheet": "Result of",
+  table: "Table of",
+};
+
+/**
+ * A readable result-sheet name ("Sales by Month", "Pivot - Sales by Region") instead of the
+ * internal "<Sheet>_Vynor_Result". Names that are not the add-in's own stay untouched.
+ */
+export function friendlySheetName(
+  action: { kind: string; targetSheet: string; spec?: any },
+  sourceSheet: string,
+): string {
+  const planned = String(action.targetSheet ?? "");
+  if (
+    action.kind === "table" ||
+    planned === sourceSheet ||
+    !/_Vynor_[A-Za-z]+$/.test(planned)
+  )
+    return planned;
+  const spec = action.spec ?? {};
+  let label = "";
+  if (action.kind === "chart" && spec.valueColumn && spec.categoryColumn)
+    label = `${spec.valueColumn} by ${spec.categoryColumn}`;
+  else if (
+    action.kind === "pivot-table" &&
+    spec.valuesColumn &&
+    spec.rowsColumn
+  )
+    label = `Pivot - ${spec.valuesColumn} by ${spec.rowsColumn}`;
+  else if (action.kind === "chart") label = `Chart of ${sourceSheet}`;
+  else if (action.kind === "pivot-table") label = `Pivot of ${sourceSheet}`;
+  else label = `${KIND_PREFIX[action.kind] ?? "Result of"} ${sourceSheet}`;
+  const clean = label
+    .replace(/[\/?*[\]:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (clean || planned).slice(0, 27).trim();
+}
+
+/** friendlySheetName made unique among the sheets that already exist: "Name", "Name (2)", ... */
+export function plannedSheetName(
+  action: { kind: string; targetSheet: string; spec?: any },
+  sourceSheet: string,
+  taken: Set<string>,
+  maxLength = 31,
+): string {
+  const base = friendlySheetName(action, sourceSheet);
+  if (
+    action.kind === "table" ||
+    base === sourceSheet ||
+    !/_Vynor_[A-Za-z]+$/.test(String(action.targetSheet ?? ""))
+  )
+    return resolveSheetName(base, action.kind, sourceSheet, taken, maxLength);
+  if (!taken.has(base)) return base;
+  for (let attempt = 2; attempt < 100; attempt += 1) {
+    const suffix = ` (${attempt})`;
+    const candidate = `${base.slice(0, maxLength - suffix.length)}${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return base;
+}

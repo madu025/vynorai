@@ -242,11 +242,11 @@ test("apply writes the cleaned copy and the computed column to separate sheets o
   assert.equal(report.sourceUnchangedAfterApply, true);
   const keys = Object.keys(excel.written);
   assert.ok(keys.every((key) => !key.startsWith("Sheet1!")));
-  const cleanValues = excel.written["Sheet1_Vynor_Clean!0,0,5,4.values"];
+  const cleanValues = excel.written["Cleaned Sheet1!0,0,5,4.values"];
   assert.deepEqual(cleanValues[0], headers);
-  const calcValues = excel.written["Sheet1_Vynor_Calc!0,0,5,5.values"];
+  const calcValues = excel.written["Calc of Sheet1!0,0,5,5.values"];
   assert.deepEqual(calcValues[0], [...headers, "Profit"]);
-  const formulas = excel.written["Sheet1_Vynor_Calc!1,4,4,1.formulas"];
+  const formulas = excel.written["Calc of Sheet1!1,4,4,1.formulas"];
   assert.deepEqual(formulas, [["=C2-D2"], ["=C3-D3"], ["=C4-D4"], ["=C5-D5"]]);
 });
 

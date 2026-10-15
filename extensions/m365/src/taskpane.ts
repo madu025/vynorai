@@ -23,7 +23,7 @@ import { previewSummarySi } from "./messagesSi.js";
 import {
   buildOutcomes,
   kindTitle,
-  resolveSheetName,
+  plannedSheetName,
   type OutcomeChart,
 } from "./outcome.js";
 import {
@@ -75,6 +75,7 @@ import {
   revealExcelResult,
   readLookupSheetInfo,
   listWorksheetNames,
+  listVynorSheets,
 } from "./officeExcel.js";
 import {
   formatFormulaInspection,
@@ -1551,7 +1552,7 @@ async function refreshSheetNames(container: HTMLElement, actions: any[]) {
     const name = String(action.targetSheet ?? "");
     let resolved = seen.get(name);
     if (!resolved) {
-      resolved = resolveSheetName(name, action.kind, source, taken);
+      resolved = plannedSheetName(action, source, taken);
       taken.add(resolved);
       seen.set(name, resolved);
     }
@@ -1672,6 +1673,18 @@ document.querySelector("#more-pills")?.addEventListener("click", (event) => {
   (event.currentTarget as HTMLElement).setAttribute("hidden", "");
 });
 
+// Developer tools (technical details, diagnostics, self-test) only show with ?dev=1 or after
+// localStorage "vynor.dev" = "1"; normal users never see them.
+try {
+  if (
+    new URLSearchParams(window.location.search).get("dev") === "1" ||
+    localStorage.getItem("vynor.dev") === "1"
+  )
+    document.body.setAttribute("data-dev", "");
+} catch {
+  // Left hidden.
+}
+
 const reviewToggle = document.querySelector<HTMLInputElement>("#review-toggle");
 try {
   if (reviewToggle && localStorage.getItem("vynor.review") === "off")
@@ -1716,10 +1729,7 @@ function renderChanged(lines: string[]) {
 
 const cleanupButton = document.querySelector<HTMLButtonElement>("#cleanup");
 cleanupButton?.addEventListener("click", async () => {
-  const names = await listWorksheetNames(officeRuntime());
-  const mine = names.filter((name) =>
-    /_Vynor_[A-Za-z]+(?:\s*\(\d+\))?$/.test(name),
-  );
+  const mine = await listVynorSheets(officeRuntime());
   const older = mine.filter((name) => name !== lastRevealSheet);
   if (!older.length)
     return setStatus("There are no older VynorAI result sheets.");

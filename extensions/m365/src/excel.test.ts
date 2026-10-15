@@ -82,7 +82,7 @@ test("server preview must match the exact local selection and action plan", () =
 test("instruction planner selects only explicit allowlisted Excel actions", () => {
   assert.deepEqual(
     selectExcelActions("Create a chart and PivotTable on a new result sheet"),
-    ["chart", "new-sheet", "pivot-table"],
+    ["new-sheet", "chart", "pivot-table"],
   );
   assert.deepEqual(selectExcelActions("Create only a PivotTable"), [
     "pivot-table",
@@ -91,18 +91,37 @@ test("instruction planner selects only explicit allowlisted Excel actions", () =
   assert.deepEqual(selectExcelActions("Please improve this data"), []);
 });
 
-test("rejects merged, duplicate, and header-only table selections", () => {
+test("normalizes merged headers and rejects ambiguous or header-only selections", () => {
+  const normalized = createExcelPreviewPlan(
+    {
+      ...input,
+      values: [
+        ["Date", "Time", ""],
+        ["", "Start", "End"],
+        ["2026-09-02", "08:00", "09:00"],
+      ],
+    },
+    ["table", "pivot-table"],
+  );
+  assert.deepEqual(normalized.normalization, {
+    headerRowCount: 2,
+    headers: ["Date", "Time Start", "Time End"],
+  });
+  assert.deepEqual(
+    normalized.actions.map((action) => action.kind),
+    ["new-sheet", "table", "pivot-table"],
+  );
   assert.throws(
     () =>
       assertValidExcelTabularRange({
         ...input,
         values: [
-          ["Date", "Time", ""],
-          ["", "Start", "End"],
+          ["", "Time", ""],
+          ["Date", "Start", "End"],
           ["2026-09-02", "08:00", "09:00"],
         ],
       }),
-    /blank or merged header cells/,
+    /leading blank header cell/,
   );
   assert.throws(
     () =>

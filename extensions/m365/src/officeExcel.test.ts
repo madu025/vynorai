@@ -59,6 +59,31 @@ function fakeWorkbook(
           },
         });
       },
+      getRangeByIndexes: (
+        _row: number,
+        _column: number,
+        rows: number,
+        columns: number,
+      ) => {
+        const target = range(
+          name,
+          "A1",
+          Array.from({ length: rows }, () =>
+            Array.from({ length: columns }, () => ""),
+          ),
+        );
+        return new Proxy(target, {
+          set(object: any, key, value) {
+            if (key === "values") {
+              calls.push(`write ${name}!A1 normalized`);
+              object.values = value;
+              return true;
+            }
+            object[key] = value;
+            return true;
+          },
+        });
+      },
       tables: {
         add(source: any, hasHeaders: boolean) {
           calls.push(
@@ -173,16 +198,14 @@ test("inspect rejects a selection without a data row", async () => {
   );
 });
 
-test("inspect rejects a merged multi-row header before requesting a plan", async () => {
+test("inspect reads a merged multi-row header for normalized planning", async () => {
   const excel = fakeWorkbook([
     ["Date", "Time", ""],
     ["", "Start", "End"],
     ["2026-09-02", "08:00", "09:00"],
   ]);
-  await assert.rejects(
-    inspectSelectedExcelRange(excel.runtime, "book-1"),
-    /blank or merged header cells/,
-  );
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  assert.equal(input.values.length, 3);
 });
 
 test("apply creates each object with Office.js argument order and keeps source unchanged", async () => {
@@ -200,9 +223,9 @@ test("apply creates each object with Office.js argument order and keeps source u
     },
   );
   assert.deepEqual(seen, [
+    "new-sheet:created",
     "table:created",
     "chart:created",
-    "new-sheet:created",
     "pivot-table:created",
   ]);
   assert.equal(report.sourceUnchangedAfterApply, true);
@@ -225,8 +248,31 @@ test("apply creates each object with Office.js argument order and keeps source u
   );
   assert.deepEqual(
     again.results.map((result) => result.status),
-    ["exists", "exists", "created", "exists"],
+    ["exists", "exists", "exists", "exists"],
   );
+});
+
+test("apply writes a normalized copy to the result sheet for two-row headers", async () => {
+  const excel = fakeWorkbook([
+    ["Date", "Time", ""],
+    ["", "Start", "End"],
+    ["2026-09-02", "08:00", "09:00"],
+  ]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["table", "pivot-table"]);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(
+    report.results.map((result) => `${result.kind}:${result.status}`),
+    ["new-sheet:created", "table:created", "pivot-table:created"],
+  );
+  assert.ok(excel.calls.includes("write Sales_Vynor_Result!A1 normalized"));
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 
 test("apply refuses to write when the source changed after the preview", async () => {

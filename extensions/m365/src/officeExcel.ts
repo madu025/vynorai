@@ -183,6 +183,42 @@ export async function applyApprovedExcelPlan(
     const sourceRange = () =>
       source.getRange(localExcelAddress(plan.sourceAddress));
     const results: ExcelActionResult[] = [];
+    let normalizedSource: any | undefined;
+
+    const actionSourceRange = () => {
+      if (!plan.normalization) return sourceRange();
+      if (!normalizedSource)
+        throw new Error(
+          "normalized result sheet was not created; source data was not changed",
+        );
+      return normalizedSource;
+    };
+
+    const writeNormalizedCopy = async (sheet: any) => {
+      const range = sourceRange();
+      range.load(["rowCount", "columnCount"]);
+      await context.sync();
+      const values = await readValuesInChunks(
+        context,
+        range,
+        Number(range.rowCount),
+        Number(range.columnCount),
+        500,
+      );
+      const normalizedValues = [
+        plan.normalization.headers,
+        ...values.slice(plan.normalization.headerRowCount),
+      ];
+      const target = sheet.getRangeByIndexes(
+        0,
+        0,
+        normalizedValues.length,
+        plan.normalization.headers.length,
+      );
+      target.values = normalizedValues;
+      await context.sync();
+      normalizedSource = target;
+    };
 
     for (const action of plan.actions) {
       const result: ExcelActionResult = {
@@ -208,7 +244,11 @@ export async function applyApprovedExcelPlan(
           await context.sync();
           if (!existing.isNullObject) result.status = "exists";
           else {
-            source.tables.add(sourceRange(), true).name = action.name;
+            const targetSheet = context.workbook.worksheets.getItem(
+              action.targetSheet,
+            );
+            targetSheet.tables.add(actionSourceRange(), true).name =
+              action.name;
             await context.sync();
           }
         } else {
@@ -221,14 +261,21 @@ export async function applyApprovedExcelPlan(
           );
           found.load("isNullObject");
           await context.sync();
-          const sheet = found.isNullObject
-            ? context.workbook.worksheets.add(action.targetSheet)
-            : found;
+          const sheetExists = !found.isNullObject;
+          const sheet = sheetExists
+            ? found
+            : context.workbook.worksheets.add(action.targetSheet);
           if (action.kind === "new-sheet") {
-            sheet.getRange("A1:C1").values = [
-              ["VynorAI result", "Source preserved", plan.sourceAddress],
-            ];
-            await context.sync();
+            if (sheetExists) {
+              result.status = "exists";
+            } else if (plan.normalization) {
+              await writeNormalizedCopy(sheet);
+            } else {
+              sheet.getRange("A1:C1").values = [
+                ["VynorAI result", "Source preserved", plan.sourceAddress],
+              ];
+              await context.sync();
+            }
           } else if (action.kind === "chart") {
             const existing = sheet.charts.getItemOrNullObject(action.name);
             existing.load("isNullObject");
@@ -237,7 +284,7 @@ export async function applyApprovedExcelPlan(
             else {
               const chart = sheet.charts.add(
                 "ColumnClustered",
-                sourceRange(),
+                actionSourceRange(),
                 "Auto",
               );
               chart.name = action.name;
@@ -255,7 +302,7 @@ export async function applyApprovedExcelPlan(
               // Office.js order is (name, source, destination); A3 keeps clear of the A1 note.
               sheet.pivotTables.add(
                 action.name,
-                sourceRange(),
+                actionSourceRange(),
                 sheet.getRange("A3"),
               );
               await context.sync();

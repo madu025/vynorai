@@ -116,25 +116,29 @@ test("M365 server plan keeps generated sheet and object names valid for Excel", 
   assert.match(excelSafeBaseName("Sales"), /^Sales$/);
 });
 
-test("M365 server rejects ambiguous Excel table selections", async () => {
+test("M365 server normalizes a two-row merged header into a safe result-sheet plan", async () => {
   const { createServerExcelPreviewPlan } = await import(
     "../src/services/m365ExcelPlan.js"
   );
-  assert.throws(
-    () =>
-      createServerExcelPreviewPlan(
-        {
-          workbookId: "book",
-          worksheetName: "Mileage",
-          address: "A9:C12",
-          values: [
-            ["Date", "Time", ""],
-            ["", "Start", "End"],
-            ["2026-09-02", "08:00", "09:00"],
-          ],
-        },
-        ["table", "pivot-table"],
-      ),
-    /blank or merged header cells/,
+  const plan = createServerExcelPreviewPlan(
+    {
+      workbookId: "book",
+      worksheetName: "Mileage",
+      address: "A9:C12",
+      values: [
+        ["Date", "Time", ""],
+        ["", "Start", "End"],
+        ["2026-09-02", "08:00", "09:00"],
+      ],
+    },
+    ["table", "pivot-table"],
+  );
+  assert.deepEqual(plan.normalization, {
+    headerRowCount: 2,
+    headers: ["Date", "Time Start", "Time End"],
+  });
+  assert.deepEqual(
+    plan.actions.map((action: any) => action.kind),
+    ["new-sheet", "table", "pivot-table"],
   );
 });

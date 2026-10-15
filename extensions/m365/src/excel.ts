@@ -20,11 +20,16 @@ export class InvalidExcelRangeError extends Error {
 type ExcelRangeProfile = {
   rowCount: number;
   columnCount: number;
+  headerRowCount: number;
   headerCount: number;
   blankCells: number;
   duplicateHeaderNames: string[];
   chunkCount: number;
   sourceFingerprint: string;
+};
+type ExcelHeaderNormalization = {
+  headerRowCount: 2;
+  headers: string[];
 };
 type ExcelActionPlan = {
   contractVersion: "2026-10-14.excel.v1";
@@ -34,6 +39,7 @@ type ExcelActionPlan = {
   sourceAddress: string;
   sourceFingerprint: string;
   profile: ExcelRangeProfile;
+  normalization?: ExcelHeaderNormalization;
   chunks: Array<{ index: number; startRow: number; rowCount: number }>;
   actions: Array<{
     kind: "table" | "chart" | "new-sheet" | "pivot-table";
@@ -49,9 +55,9 @@ type ExcelActionPlan = {
 export type ExcelActionKind = ExcelActionPlan["actions"][number]["kind"];
 
 const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
+  "new-sheet",
   "table",
   "chart",
-  "new-sheet",
   "pivot-table",
 ];
 
@@ -63,6 +69,69 @@ type ComparableExcelPlan = Omit<
 const DEFAULT_CHUNK_ROWS = 500;
 
 const normalizedCell = (value: ExcelCell): string => String(value ?? "").trim();
+
+type ExcelHeaderLayout = {
+  headerRowCount: 0 | 1 | 2;
+  headers: string[];
+  normalization?: ExcelHeaderNormalization;
+};
+
+const noHeaderLayout: ExcelHeaderLayout = {
+  headerRowCount: 0,
+  headers: [],
+};
+
+function assertUniqueHeaders(headers: string[]): void {
+  const normalizedHeaders = headers.map((header) => header.toLocaleLowerCase());
+  if (new Set(normalizedHeaders).size !== normalizedHeaders.length)
+    throw new InvalidExcelRangeError(
+      "EXCEL_HEADERS_MUST_BE_UNIQUE",
+      "Every selected column needs a unique header before creating a Table or PivotTable.",
+    );
+}
+
+function getExcelHeaderLayout(input: ExcelRangeInput): ExcelHeaderLayout {
+  const firstRow = (input.values[0] ?? []).map(normalizedCell);
+  if (!firstRow.length)
+    throw new InvalidExcelRangeError(
+      "EXCEL_HEADERS_REQUIRED",
+      "Select a flat range with one complete header row.",
+    );
+  if (!firstRow.some((header) => !header)) {
+    assertUniqueHeaders(firstRow);
+    return { headerRowCount: 1, headers: firstRow };
+  }
+  if (input.values.length < 3)
+    throw new InvalidExcelRangeError(
+      "EXCEL_DATA_ROWS_REQUIRED",
+      "Select the two header rows and at least one data row below them.",
+    );
+  const secondRow = (input.values[1] ?? []).map(normalizedCell);
+  const inheritedHeaders: string[] = [];
+  let activeHeader = "";
+  for (let index = 0; index < firstRow.length; index += 1) {
+    if (firstRow[index]) activeHeader = firstRow[index];
+    if (!activeHeader)
+      throw new InvalidExcelRangeError(
+        "EXCEL_HEADERS_REQUIRED",
+        "The first selected row has a leading blank header cell. Select the complete merged header range.",
+      );
+    inheritedHeaders.push(activeHeader);
+  }
+  const headers = inheritedHeaders.map((topHeader, index) => {
+    const childHeader = secondRow[index];
+    return childHeader &&
+      childHeader.toLocaleLowerCase() !== topHeader.toLocaleLowerCase()
+      ? `${topHeader} ${childHeader}`
+      : topHeader;
+  });
+  assertUniqueHeaders(headers);
+  return {
+    headerRowCount: 2,
+    headers,
+    normalization: { headerRowCount: 2, headers },
+  };
+}
 
 /**
  * Table and PivotTable mutations need one flat, complete header row. Reject ambiguous
@@ -80,23 +149,9 @@ export function assertValidExcelTabularRange(input: ExcelRangeInput): void {
       "EXCEL_RANGE_NOT_RECTANGULAR",
       "Select one rectangular Excel range.",
     );
-  if (input.hasHeaders !== false) {
-    const headers = input.values[0].map(normalizedCell);
-    if (headers.some((header) => !header))
-      throw new InvalidExcelRangeError(
-        "EXCEL_HEADERS_REQUIRED",
-        "The first selected row has blank or merged header cells. Select a flat range with one complete header row.",
-      );
-    const normalizedHeaders = headers.map((header) =>
-      header.toLocaleLowerCase(),
-    );
-    if (new Set(normalizedHeaders).size !== normalizedHeaders.length)
-      throw new InvalidExcelRangeError(
-        "EXCEL_HEADERS_MUST_BE_UNIQUE",
-        "Every selected column needs a unique header before creating a Table or PivotTable.",
-      );
-  }
-  const dataOffset = input.hasHeaders === false ? 0 : 1;
+  const layout =
+    input.hasHeaders === false ? noHeaderLayout : getExcelHeaderLayout(input);
+  const dataOffset = layout.headerRowCount;
   const hasData = input.values
     .slice(dataOffset)
     .some((row) => row.some((value) => normalizedCell(value) !== ""));
@@ -153,7 +208,9 @@ export function profileExcelRange(
     throw new Error("chunkRows must be an integer between 1 and 5000");
   }
   assertValidExcelTabularRange(input);
-  const headers = input.hasHeaders === false ? [] : (input.values[0] ?? []);
+  const layout =
+    input.hasHeaders === false ? noHeaderLayout : getExcelHeaderLayout(input);
+  const headers = layout.headers;
   const seen = new Set<string>();
   const duplicateHeaderNames = new Set<string>();
   for (const value of headers) {
@@ -171,14 +228,12 @@ export function profileExcelRange(
       count + row.filter((value) => value === null || value === "").length,
     0,
   );
-  const dataRows = Math.max(
-    0,
-    input.values.length - (input.hasHeaders === false ? 0 : 1),
-  );
+  const dataRows = Math.max(0, input.values.length - layout.headerRowCount);
   return {
     rowCount: input.values.length,
     columnCount,
-    headerCount: headers.filter((value) => normalizedCell(value) !== "").length,
+    headerRowCount: layout.headerRowCount,
+    headerCount: headers.length,
     blankCells,
     duplicateHeaderNames: [...duplicateHeaderNames].sort(),
     chunkCount: Math.max(1, Math.ceil(dataRows / chunkRows)),
@@ -192,26 +247,35 @@ export function createExcelPreviewPlan(
   chunkRows = DEFAULT_CHUNK_ROWS,
 ): Omit<ExcelActionPlan, "planId" | "approvalToken" | "expiresAt"> {
   const profile = profileExcelRange(input, chunkRows);
-  const safeActions = [...new Set(requestedActions)];
+  const layout =
+    input.hasHeaders === false ? noHeaderLayout : getExcelHeaderLayout(input);
+  const requested = new Set(requestedActions);
+  if (layout.normalization) requested.add("new-sheet");
+  const safeActions = EXCEL_ACTION_ORDER.filter((action) =>
+    requested.has(action),
+  );
   const baseName = excelSafeBaseName(input.worksheetName);
+  const resultSheet = `${baseName}_Vynor_Result`;
   const actions = safeActions.map((kind) => ({
     kind,
     name: `${baseName}_Vynor_${kind.replace("-", "_")}`,
     targetSheet:
-      kind === "table" ? input.worksheetName : `${baseName}_Vynor_Result`,
+      kind === "table" && !layout.normalization
+        ? input.worksheetName
+        : resultSheet,
     preservesSource: true as const,
-    description: `Preview ${kind} using ${input.address}; source data remains unchanged.`,
+    description: layout.normalization
+      ? `Preview ${kind} using a normalized copy of ${input.address} on ${resultSheet}; source data remains unchanged.`
+      : `Preview ${kind} using ${input.address}; source data remains unchanged.`,
   }));
   const chunks = Array.from({ length: profile.chunkCount }, (_, index) => ({
     index,
-    startRow: (input.hasHeaders === false ? 0 : 1) + index * chunkRows,
+    startRow: layout.headerRowCount + index * chunkRows,
     rowCount: Math.min(
       chunkRows,
       Math.max(
         0,
-        input.values.length -
-          (input.hasHeaders === false ? 0 : 1) -
-          index * chunkRows,
+        input.values.length - layout.headerRowCount - index * chunkRows,
       ),
     ),
   }));
@@ -231,6 +295,7 @@ export function createExcelPreviewPlan(
     sourceAddress: input.address,
     sourceFingerprint: profile.sourceFingerprint,
     profile,
+    normalization: layout.normalization,
     chunks,
     actions,
     warnings,
@@ -246,6 +311,7 @@ export function excelPlansMatch(
   const comparableProfile = (profile: any) => ({
     rowCount: profile?.rowCount,
     columnCount: profile?.columnCount,
+    headerRowCount: profile?.headerRowCount,
     headerCount: profile?.headerCount,
     blankCells: profile?.blankCells,
     duplicateHeaderNames: profile?.duplicateHeaderNames,
@@ -260,6 +326,8 @@ export function excelPlansMatch(
     JSON.stringify(comparableProfile(server.profile)) ===
       JSON.stringify(comparableProfile(local.profile)) &&
     JSON.stringify(server.chunks) === JSON.stringify(local.chunks) &&
+    JSON.stringify(server.normalization) ===
+      JSON.stringify(local.normalization) &&
     JSON.stringify(server.actions) === JSON.stringify(local.actions) &&
     JSON.stringify(server.warnings) === JSON.stringify(local.warnings)
   );

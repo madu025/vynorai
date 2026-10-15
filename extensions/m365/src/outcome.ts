@@ -50,6 +50,7 @@ const KIND_TITLES: Record<string, [string, string]> = {
   chart: ["Chart", "ප්‍රස්තාරය"],
   "pivot-table": ["PivotTable", "PivotTable"],
   "named-range": ["Named range", "නම් කළ පරාසය"],
+  slicer: ["Slicer", "පෙරහන් පාලකය"],
   table: ["Formatted table", "හැඩසවි කළ වගුව"],
   "new-sheet": ["Result sheet", "ප්‍රතිඵල පත්‍රිකාව"],
   clean: ["Cleaned copy of the data", "පිරිසිදු කළ දත්ත පිටපත"],
@@ -118,6 +119,16 @@ export function buildOutcomes(
       where: String(action.targetSheet ?? ""),
       details: [],
     };
+    if (action.kind === "slicer") {
+      const column = String(spec.slicerColumn ?? "selected field");
+      item.details.push(
+        say(
+          `Creates a ${column} slicer on a copied result table; source data stays unchanged. ExcelApi 1.10 or later is required.`,
+          `${column} සඳහා පෙරහන් පාලකයක් නව copy table එකක සාදයි; මුල් දත්ත වෙනස් නොවේ. ExcelApi 1.10 හෝ පසු version එක අවශ්‍යයි.`,
+        ),
+      );
+      return item;
+    }
     if (action.kind === "unpivot") {
       const valueIndexes = Array.isArray(spec.unpivotValueIndexes)
         ? spec.unpivotValueIndexes.filter((index: unknown) =>

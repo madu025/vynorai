@@ -949,6 +949,7 @@ apply?.addEventListener("click", async () => {
             | "chart"
             | "new-sheet"
             | "named-range"
+            | "slicer"
             | "pivot-table",
           status: result.status,
         })),
@@ -1557,6 +1558,7 @@ function setupLayout() {
       chart: "chart",
       "pivot-table": "PivotTable",
       "named-range": "named range",
+      slicer: "slicer",
     })[kind] || kind;
   const renderSummary = () => {
     if (!preview || !resultCard) return;

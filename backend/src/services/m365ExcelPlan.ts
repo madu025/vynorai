@@ -59,6 +59,7 @@ export interface ExcelColumnSpecs {
     aggregation?: ExcelAggregation;
   };
   namedRange?: { source: number };
+  slicer?: { source: number };
   chart?: {
     category: number;
     value: number;
@@ -175,6 +176,9 @@ export interface ExcelActionSpec {
   namedRangeColumn?: string;
   namedRangeIndex?: number;
   namedRangeName?: string;
+  slicerColumn?: string;
+  slicerIndex?: number;
+  slicerName?: string;
   chartType?: ExcelChartType;
   extraValueColumns?: string[];
   extraValueIndexes?: number[];
@@ -299,6 +303,7 @@ function resolveColumnSpecs(
   statistics?: ExcelActionSpec;
   dashboard?: ExcelActionSpec;
   namedRange?: ExcelActionSpec;
+  slicer?: ExcelActionSpec;
   split?: ExcelActionSpec;
   unpivot?: ExcelActionSpec;
 } {
@@ -335,6 +340,7 @@ function resolveColumnSpecs(
     statistics?: ExcelActionSpec;
     dashboard?: ExcelActionSpec;
     namedRange?: ExcelActionSpec;
+    slicer?: ExcelActionSpec;
     split?: ExcelActionSpec;
     unpivot?: ExcelActionSpec;
   } = {};
@@ -358,6 +364,26 @@ function resolveColumnSpecs(
       namedRangeColumn: header,
       namedRangeIndex: specs.namedRange.source,
       namedRangeName: `VynorAI_${safeHeader}_${specs.namedRange.source + 1}`,
+    };
+  }
+  if (specs.slicer) {
+    if (!requested.has("slicer"))
+      fail(
+        "EXCEL_SPEC_UNUSED",
+        "A slicer column choice needs a slicer action.",
+      );
+    if (!inRange(specs.slicer.source))
+      fail("EXCEL_SPEC_INVALID", "Choose a valid column for the slicer.");
+    const header = headers[specs.slicer.source] ?? "Column";
+    const safeHeader =
+      header
+        .replace(/[^A-Za-z0-9_]/g, "_")
+        .replace(/^(\d)/, "_$1")
+        .slice(0, 40) || "Column";
+    resolved.slicer = {
+      slicerColumn: header,
+      slicerIndex: specs.slicer.source,
+      slicerName: `VynorAI_${safeHeader}_slicer`,
     };
   }
   const chartTypes = [
@@ -1578,6 +1604,7 @@ export function createServerExcelPreviewPlan(
   const actions = [
     "new-sheet",
     "named-range",
+    "slicer",
     "table",
     "chart",
     "pivot-table",
@@ -1600,7 +1627,9 @@ export function createServerExcelPreviewPlan(
         kind === "named-range" && resolved.namedRange
           ? (resolved.namedRange.namedRangeName ??
             `${baseName}_Vynor_named_range`)
-          : `${baseName}_Vynor_${kind.replace("-", "_")}`,
+          : kind === "slicer" && resolved.slicer
+            ? (resolved.slicer.slicerName ?? `${baseName}_Vynor_slicer`)
+            : `${baseName}_Vynor_${kind.replace("-", "_")}`,
       targetSheet:
         kind === "clean"
           ? `${baseName}_Vynor_Clean`
@@ -1624,9 +1653,11 @@ export function createServerExcelPreviewPlan(
                             ? `${baseName}_Vynor_Stats`
                             : kind === "named-range"
                               ? `${baseName}_Vynor_Names`
-                              : kind === "dashboard"
-                                ? `${baseName}_Vynor_Dashboard`
-                                : `${baseName}_Vynor_Result`,
+                              : kind === "slicer"
+                                ? `${baseName}_Vynor_Slicer`
+                                : kind === "dashboard"
+                                  ? `${baseName}_Vynor_Dashboard`
+                                  : `${baseName}_Vynor_Result`,
       preservesSource: true,
       description: layout.normalization
         ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
@@ -1663,6 +1694,9 @@ export function createServerExcelPreviewPlan(
         : {}),
       ...(kind === "named-range" && resolved.namedRange
         ? { spec: resolved.namedRange }
+        : {}),
+      ...(kind === "slicer" && resolved.slicer
+        ? { spec: resolved.slicer }
         : {}),
     }));
   const warnings = [

@@ -7,6 +7,7 @@ export type ExcelActionKind =
   | "chart"
   | "new-sheet"
   | "named-range"
+  | "slicer"
   | "pivot-table";
 
 export interface ExcelRangeInput {

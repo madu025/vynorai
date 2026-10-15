@@ -517,6 +517,15 @@ test("a named-range request resolves the selected column", () => {
   });
 });
 
+test("a slicer request resolves the selected column", () => {
+  const parsed = interpretInstruction("Add a slicer for Region", headers, rows);
+  assert.deepEqual(parsed, {
+    actions: ["slicer"],
+    specs: { slicer: { source: 1 } },
+    problems: [],
+  });
+});
+
 test("Sinhala and Singlish keywords map to the same actions", () => {
   assert.match(normalizeInstruction("Sales by Region ප්‍රස්තාරයක්"), /chart/);
   assert.match(normalizeInstruction("data pirisidu karanna"), /clean/);

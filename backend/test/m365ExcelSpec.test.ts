@@ -730,6 +730,27 @@ test("server and add-in agree on a named-range plan", () => {
   assert.equal(server.actions[0].spec?.namedRangeName, "VynorAI_Sales_3");
 });
 
+test("server and add-in agree on a slicer plan", () => {
+  const specs = { slicer: { source: 1 } };
+  const actions = ["slicer"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].kind, "slicer");
+  assert.equal(server.actions[0].targetSheet, "Sheet1_Vynor_Slicer");
+  assert.equal(server.actions[0].spec?.slicerName, "VynorAI_Region_slicer");
+});
+
+test("server refuses a slicer column outside the selected range", () => {
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["slicer"], 500, {
+        slicer: { source: 99 },
+      }),
+    /valid column for the slicer/,
+  );
+});
+
 test("the server refuses unusable chart v2, pivot v2 and view choices", () => {
   const call = (specs: unknown, actions: string[]) =>
     createServerExcelPreviewPlan(input, actions, 500, specs as any);

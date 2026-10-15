@@ -125,7 +125,19 @@ function fakeWorkbook() {
           };
         },
       },
-      tables: { add: () => ({}) },
+      tables: {
+        add: (_range: any, _headers: boolean) =>
+          new Proxy(
+            {},
+            {
+              set(object, key, value) {
+                object[key] = value;
+                if (key === "name") calls.push(`table.name ${value}`);
+                return true;
+              },
+            },
+          ),
+      },
     };
     sheets.set(name, sheet);
     return sheet;
@@ -159,6 +171,24 @@ function fakeWorkbook() {
       add(name: string, formula: string) {
         names.add(name);
         calls.push("name.add " + name + " " + formula);
+      },
+    },
+    slicers: {
+      items: [],
+      load() {},
+      add(_table: any, field: string, _sheet: any) {
+        calls.push(`slicer.add ${field}`);
+        return new Proxy(
+          {},
+          {
+            set(object, key, value) {
+              object[key] = value;
+              if (key === "name") calls.push(`slicer.name ${value}`);
+              if (key === "caption") calls.push(`slicer.caption ${value}`);
+              return true;
+            },
+          },
+        );
       },
     },
   };
@@ -328,6 +358,25 @@ test("apply creates a named range on a copied result sheet", async () => {
     ),
     excel.calls.join("\n"),
   );
+  assert.equal(report.results[0].createdSheet, true);
+});
+
+test("apply creates a slicer on a copied result table", async () => {
+  const plan = createExcelPreviewPlan(input as any, ["slicer"], undefined, {
+    slicer: { source: 1 },
+  });
+  const excel = fakeWorkbook();
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.ok(excel.calls.includes("table.name VynorAI_Region_slicer_data"));
+  assert.ok(excel.calls.includes("slicer.add Region"));
+  assert.ok(excel.calls.includes("slicer.name VynorAI_Region_slicer"));
   assert.equal(report.results[0].createdSheet, true);
 });
 

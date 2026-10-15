@@ -598,12 +598,21 @@ export async function applyApprovedExcelPlan(
     tableList.load?.("items/name");
     const nameList = context.workbook.names;
     nameList?.load?.("items/name");
+    let slicerList: any;
+    try {
+      slicerList = context.workbook.slicers;
+    } catch {
+      slicerList = undefined;
+    }
+    slicerList?.load?.("items/name");
     await context.sync();
     for (const item of pivotList.items ?? [])
       takenObjects.add(String(item.name));
     for (const item of tableList.items ?? [])
       takenObjects.add(String(item.name));
     for (const item of nameList?.items ?? [])
+      takenObjects.add(String(item.name));
+    for (const item of slicerList?.items ?? [])
       takenObjects.add(String(item.name));
     const uniqueObject = (base: string): string => {
       if (!takenObjects.has(base)) return base;
@@ -682,7 +691,8 @@ export async function applyApprovedExcelPlan(
         planned.kind === "pivot-table" ||
         planned.kind === "table" ||
         planned.kind === "dashboard" ||
-        planned.kind === "named-range"
+        planned.kind === "named-range" ||
+        planned.kind === "slicer"
           ? uniqueObject(planned.name)
           : planned.name;
       takenObjects.add(objectName);
@@ -792,6 +802,24 @@ export async function applyApprovedExcelPlan(
               );
               await context.sync();
             }
+          } else if (action.kind === "slicer") {
+            const spec = action.spec;
+            if (!Number.isInteger(spec?.slicerIndex) || !spec.slicerColumn)
+              throw new Error("slicer needs a validated source column");
+            await writeSourceCopy(sheet);
+            if (!normalizedSource)
+              throw new Error("slicer source copy was not created");
+            const tableName = uniqueObject(`${action.name}_data`);
+            const table = sheet.tables.add(normalizedSource, true);
+            table.name = tableName;
+            const slicer = context.workbook.slicers.add(
+              table,
+              spec.slicerColumn,
+              sheet,
+            );
+            slicer.name = action.name;
+            slicer.caption = String(spec.slicerColumn);
+            await context.sync();
           } else if (action.kind === "new-sheet") {
             if (sheetExists) {
               result.status = "exists";

@@ -157,7 +157,7 @@ export function describeAccessToken(
   }
 }
 
-const EXCEL_REQUIREMENT_SETS = ["1.1", "1.4", "1.7", "1.8", "1.9"];
+const EXCEL_REQUIREMENT_SETS = ["1.1", "1.4", "1.7", "1.8", "1.9", "1.10"];
 
 /** Office host facts and the Excel API sets each workbook action depends on. */
 export function describeOfficeHost(office: any): Record<string, unknown> {
@@ -200,6 +200,7 @@ export const ACTION_REQUIREMENTS: Record<string, string> = {
   quality: "1.4",
   statistics: "1.4",
   dashboard: "1.8",
+  slicer: "1.10",
   view: "1.4",
 };
 

@@ -10,6 +10,7 @@ type Cell = string | number | boolean | null;
 
 export interface InstructionSpecs {
   namedRange?: { source: number };
+  slicer?: { source: number };
   chart?: {
     category: number;
     value: number;
@@ -141,6 +142,7 @@ export interface InterpretedInstruction {
   actions: Array<
     | "table"
     | "named-range"
+    | "slicer"
     | "clean"
     | "add-column"
     | "lookup-columns"
@@ -216,6 +218,24 @@ export function interpretInstruction(
       return {
         actions: ["named-range"],
         specs: { namedRange: { source } },
+        problems: [],
+      };
+  }
+
+  const slicerMatch =
+    /\b(?:add|create|make)\s+(?:a\s+)?slicer\s+for\s+["']?([^"'.,]+?)["']?\s*\.?$/i.exec(
+      text,
+    );
+  if (slicerMatch) {
+    const source = findHeader(headers, slicerMatch[1].trim());
+    if (source < 0)
+      result.problems.push(
+        `"${slicerMatch[1].trim()}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    else
+      return {
+        actions: ["slicer"],
+        specs: { slicer: { source } },
         problems: [],
       };
   }

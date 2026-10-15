@@ -60,6 +60,7 @@ const excelPlanSchema = z.object({
         "chart",
         "new-sheet",
         "named-range",
+        "slicer",
         "pivot-table",
         "clean",
         "add-column",
@@ -80,6 +81,10 @@ const excelPlanSchema = z.object({
   specs: z
     .object({
       namedRange: z
+        .object({ source: z.number().int().min(0).max(99) })
+        .strict()
+        .optional(),
+      slicer: z
         .object({ source: z.number().int().min(0).max(99) })
         .strict()
         .optional(),
@@ -413,6 +418,7 @@ const applyResultSchema = z.object({
           "chart",
           "new-sheet",
           "named-range",
+          "slicer",
           "pivot-table",
           "clean",
           "add-column",

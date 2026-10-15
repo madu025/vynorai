@@ -31,6 +31,7 @@ export interface M365ApiClient {
         | "chart"
         | "new-sheet"
         | "named-range"
+        | "slicer"
         | "pivot-table"
         | "clean"
         | "add-column"

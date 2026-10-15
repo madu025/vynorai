@@ -90,7 +90,9 @@ test("office host description reports requirement sets", () => {
       diagnostics: { host: "Excel", platform: "PC", version: "16.0" },
       requirements: {
         isSetSupported: (name: string, version: string) =>
-          name === "ExcelApi" ? Number(version) <= 1.8 : true,
+          name === "ExcelApi" && version !== "1.10"
+            ? Number(version) <= 1.8
+            : name !== "ExcelApi",
       },
     },
   });
@@ -101,6 +103,7 @@ test("office host description reports requirement sets", () => {
     "1.7": true,
     "1.8": true,
     "1.9": false,
+    "1.10": false,
   });
   assert.deepEqual(describeOfficeHost(undefined), {
     officeLoaded: false,

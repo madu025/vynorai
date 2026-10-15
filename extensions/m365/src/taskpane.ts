@@ -553,6 +553,12 @@ inspect?.addEventListener("click", async () => {
           : {}),
       };
     }
+    log.record("followup:check", "pass", {
+      hasEarlier: Boolean(earlier),
+      chartAction: actions.includes("chart"),
+      namesAColumn,
+      applied: Object.keys(lastAppliedSpecs ?? {}),
+    });
     previewSpecs = specs;
     if (lookupWish) {
       try {

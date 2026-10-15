@@ -154,6 +154,17 @@ if (diagnostics && diagnostics.textContent !== DIAGNOSTICS_PLACEHOLDER) {
 }
 window.__VYNORAI_DIAG_NOTE__ = (message) => log.record("page", "info", message);
 
+/** Office dialog error codes, explained in words a person can act on. */
+function signInDialogMessage(code: unknown): string {
+  if (code === 12007)
+    return "A Microsoft sign-in window is already open. Finish it, or close it and press Sign in again.";
+  if (code === 12009)
+    return "The sign-in window was blocked. Allow pop-ups for this page, then press Sign in again.";
+  if (code === 12011)
+    return "The browser blocked the sign-in window. Allow pop-ups for Office, then press Sign in again.";
+  return `Unable to open the Microsoft sign-in dialog (${String(code ?? "unknown")}).`;
+}
+
 let lastStatus = "";
 function setStatus(message: string) {
   lastStatus = message;
@@ -263,6 +274,9 @@ const API_MESSAGES: Record<string, string> = {
   insufficient_scope:
     "Microsoft consent is missing a required Excel permission.",
   CREDITS_EXHAUSTED: "The linked VynorAI account has no credits available.",
+  HTTP_502: "The VynorAI service is busy or restarting. Try again in a moment.",
+  HTTP_503: "The VynorAI service is busy or restarting. Try again in a moment.",
+  HTTP_504: "The VynorAI service is busy or restarting. Try again in a moment.",
   NETWORK_ERROR: "VynorAI could not be reached. Check the network and retry.",
   approval_mismatch:
     "The approval no longer matches this preview. Inspect again.",
@@ -326,11 +340,7 @@ function signInWithOfficeDialog(authorizeUrl: string): Promise<string> {
             "fail",
             `${result.error?.code || "unknown"} ${result.error?.message || ""}`,
           );
-          return reject(
-            new Error(
-              `Unable to open the Microsoft sign-in dialog (${result.error?.code || "unknown"}).`,
-            ),
-          );
+          return reject(new Error(signInDialogMessage(result.error?.code)));
         }
         const dialog = result.value;
         log.record("oauth:dialog-open", "pass");

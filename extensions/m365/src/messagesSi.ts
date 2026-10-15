@@ -50,6 +50,54 @@ const EXACT: Record<string, string> = {
   "Instruction set. Click Inspect and preview; nothing changes until you confirm.":
     "උපදෙස සකසන ලදී. “පරීක්ෂා කර පෙරදසුන බලන්න” ඔබන්න; ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
   "Use this recommendation": "මෙම නිර්දේශය භාවිතා කරන්න",
+  "AI analysis needs your explicit consent first.":
+    "AI විශ්ලේෂණයට පළමුව ඔබේ පැහැදිලි කැමැත්ත අවශ්‍යයි.",
+  "The AI answer did not match the expected format and was discarded.":
+    "AI පිළිතුර අපේක්ෂිත ආකෘතියට නොගැළපුණු නිසා ඉවත දමන ලදී. නැවත උත්සාහ කරන්න.",
+  "Too many analysis requests. Wait a minute and try again.":
+    "විශ්ලේෂණ ඉල්ලීම් ඉතා වැඩියි. විනාඩියක් රැඳී නැවත උත්සාහ කරන්න.",
+  "The AI service is unavailable right now. Try again later.":
+    "AI සේවාව මේ මොහොතේ ලබා ගත නොහැක. පසුව නැවත උත්සාහ කරන්න.",
+  "The local summary was rejected. Select the range again.":
+    "දේශීය සාරාංශය ප්‍රතික්ෂේප විය. පරාසය නැවත තෝරන්න.",
+  "The summary was rejected because it contained more than allowed.":
+    "අවසර ඇති ප්‍රමාණයට වඩා අඩංගු නිසා සාරාංශය ප්‍රතික්ෂේප විය.",
+  "Your Microsoft 365 organization is not enabled in VynorAI yet.":
+    "ඔබේ Microsoft 365 සංවිධානය VynorAI හි තවම සක්‍රිය කර නැත.",
+  "Your organization is enabled in VynorAI, but not for this Excel action.":
+    "ඔබේ සංවිධානය VynorAI හි සක්‍රියයි, නමුත් මෙම Excel ක්‍රියාව සඳහා නොවේ.",
+  "Your Microsoft account must be linked to a VynorAI account by an administrator.":
+    "ඔබේ Microsoft ගිණුම පරිපාලකයෙකු විසින් VynorAI ගිණුමකට සම්බන්ධ කළ යුතුය.",
+  "Microsoft consent is missing a required Excel permission.":
+    "Microsoft කැමැත්තෙහි අවශ්‍ය Excel අවසරයක් නොමැත.",
+  "The linked VynorAI account has no credits available.":
+    "සම්බන්ධ VynorAI ගිණුමේ ක්‍රෙඩිට් ඉතිරි නැත.",
+  "VynorAI could not be reached. Check the network and retry.":
+    "VynorAI වෙත ළඟා විය නොහැක. ජාලය පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
+  "The approval no longer matches this preview. Inspect again.":
+    "අනුමැතිය මෙම පෙරදසුනට තවදුරටත් නොගැළපේ. නැවත පරීක්ෂා කරන්න.",
+  "This approval was already used. Inspect the selection again for a new preview.":
+    "මෙම අනුමැතිය දැනටමත් භාවිතා කර ඇත. නව පෙරදසුනක් සඳහා නැවත පරීක්ෂා කරන්න.",
+  "Select one complete header row and at least one data row.":
+    "සම්පූර්ණ ශීර්ෂ පේළියක් සහ අවම වශයෙන් දත්ත පේළියක් තෝරන්න.",
+  "The first selected row has blank or merged headers. Select a flat table with one complete header row.":
+    "තෝරාගත් පළමු පේළියේ හිස් හෝ ඒකාබද්ධ ශීර්ෂ ඇත. සම්පූර්ණ ශීර්ෂ පේළියක් සහිත සරල වගුවක් තෝරන්න.",
+  "Select one rectangular Excel range.":
+    "සෘජුකෝණාස්‍රාකාර Excel පරාසයක් තෝරන්න.",
+  "The selected range is too large. Select at most 100,000 cells and 100 columns.":
+    "තෝරාගත් පරාසය ඉතා විශාලයි. උපරිම කොටු 100,000ක් සහ තීරු 100ක් තෝරන්න.",
+  "The VynorAI service is busy or restarting. Try again in a moment.":
+    "VynorAI සේවාව කාර්යබහුලයි හෝ නැවත ආරම්භ වෙමින් පවතී. මොහොතකින් නැවත උත්සාහ කරන්න.",
+  "Click a cell inside your table (or select it) so it has a header row and at least one data row.":
+    "ඔබේ වගුව ඇතුළත කොටුවක් ක්ලික් කරන්න (හෝ වගුව තෝරන්න); එහි ශීර්ෂ පේළියක් සහ දත්ත පේළියක් තිබිය යුතුය.",
+  "Preparing the preview. Nothing changes until you confirm.":
+    "පෙරදසුන සූදානම් කරමින්. ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
+  "A Microsoft sign-in window is already open. Finish it, or close it and press Sign in again.":
+    "Microsoft පිවිසුම් කවුළුවක් දැනටමත් විවෘතයි. එය සම්පූර්ණ කරන්න, නැතහොත් වසා නැවත පිවිසෙන්න ඔබන්න.",
+  "The sign-in window was blocked. Allow pop-ups for this page, then press Sign in again.":
+    "පිවිසුම් කවුළුව අවහිර විය. මෙම පිටුවට pop-ups ඉඩ දී නැවත පිවිසෙන්න ඔබන්න.",
+  "The browser blocked the sign-in window. Allow pop-ups for Office, then press Sign in again.":
+    "බ්‍රවුසරය පිවිසුම් කවුළුව අවහිර කළා. Office සඳහා pop-ups ඉඩ දී නැවත පිවිසෙන්න ඔබන්න.",
   Columns: "තීරු",
   "Data quality": "දත්ත ගුණාත්මකභාවය",
   Recommendations: "නිර්දේශ",
@@ -57,8 +105,6 @@ const EXACT: Record<string, string> = {
   "Advice only: no workbook action is available for this.":
     "උපදෙස් පමණි: මේ සඳහා වැඩපොතේ ක්‍රියාවක් නොමැත.",
   Done: "සම්පූර්ණයි",
-  "AI analysis needs your explicit consent first.":
-    "AI විශ්ලේෂණයට පළමුව ඔබේ පැහැදිලි කැමැත්ත අවශ්‍යයි.",
   "Review exactly what will be sent, then confirm to continue.":
     "යවනු ලබන දේ හරියටම පරීක්ෂා කර, ඉදිරියට යාමට තහවුරු කරන්න.",
   "Nothing was sent.": "කිසිවක් යවා නැත.",

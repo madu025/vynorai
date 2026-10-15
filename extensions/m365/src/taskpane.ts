@@ -909,6 +909,12 @@ apply?.addEventListener("click", async () => {
     lastRevealSheet = reveal?.targetSheet ?? "";
     if (lastRevealSheet) {
       await revealExcelResult(officeRuntime(), lastRevealSheet);
+      try {
+        // Excel swaps in its own PivotTable Fields pane after a pivot is built: bring ours back.
+        await (globalThis as any).Office?.addin?.showAsTaskpane?.();
+      } catch {
+        // Not supported by this host; the pane stays where it is.
+      }
       const showResult =
         document.querySelector<HTMLButtonElement>("#show-result");
       if (showResult) showResult.hidden = false;

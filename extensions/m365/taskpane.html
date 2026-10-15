@@ -62,6 +62,8 @@
       main { min-height: 100vh; max-width: 440px; margin: auto; padding: 8px 10px 14px; }
       .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 38px; gap: 8px; }
       .brand { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 700; letter-spacing: .1px; }
+      header.topbar { position: absolute; top: 4px; right: 6px; z-index: 6; }
+      main { padding-top: 6px; }
       .brand-mark { display: grid; width: 21px; height: 21px; place-items: center; border-radius: 6px; background: linear-gradient(135deg, #155eef, #65b2ff); color: white; font-size: 12px; }
       .header-actions { display: flex; gap: 2px; }
       .icon-button { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; font-size: 19px; line-height: 1; }
@@ -152,7 +154,7 @@
     <a class="skip-link" href="#instruction">Skip to request</a>
     <main>
       <header class="topbar">
-        <div class="brand" aria-label="VynorAI Excel"><span class="brand-mark" aria-hidden="true">V</span>VynorAI</div>
+        <div class="brand" hidden aria-label="VynorAI"><span class="brand-mark" aria-hidden="true">V</span>VynorAI</div>
         <div class="header-actions">
           <button id="menu-toggle" class="icon-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More options">&#8943;</button>
           <div id="menu" role="menu" hidden>
@@ -163,7 +165,7 @@
             <button data-dev id="copy-diagnostics" type="button" role="menuitem" data-i18n="menu_copy">Copy diagnostics</button>
             <button data-dev id="clear-diagnostics" type="button" role="menuitem" data-i18n="menu_clear">Clear diagnostics</button>
             <button id="sign-out" type="button" role="menuitem" disabled data-i18n="menu_signout">Sign out</button>
-            <p class="menu-version" id="build-id">Build 20261015.68</p>
+            <p class="menu-version" id="build-id">Build 20261015.69</p>
           </div>
         </div>
       </header>
@@ -270,7 +272,7 @@
       })();
     </script>
     <script nomodule>document.getElementById("status-text").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";</script>
-    <script src="./runtime-config.js?v=20261015.68"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261015.68"></script>
+    <script src="./runtime-config.js?v=20261015.69"></script>
+    <script src="./dist/taskpane.bundle.js?v=20261015.69"></script>
   </body>
 </html>

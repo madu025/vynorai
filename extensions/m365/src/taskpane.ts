@@ -1652,6 +1652,13 @@ rollbackButton?.addEventListener("click", async () => {
   }
 });
 
+document.querySelector("#more-pills")?.addEventListener("click", (event) => {
+  document
+    .querySelectorAll<HTMLElement>(".pill.extra")
+    .forEach((pill) => pill.removeAttribute("hidden"));
+  (event.currentTarget as HTMLElement).setAttribute("hidden", "");
+});
+
 const cleanupButton = document.querySelector<HTMLButtonElement>("#cleanup");
 cleanupButton?.addEventListener("click", async () => {
   const names = await listWorksheetNames(officeRuntime());

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Router, Request, Response, NextFunction } from "express";
 import { getOrInitMonthlyUsage } from "../services/monthlyQuota.js";
 import { logSecurityEvent } from "../services/securityAudit.js";
@@ -38,6 +39,26 @@ const excelPlanSchema = z.object({
     .min(1)
     .max(4),
   chunkRows: z.number().int().min(1).max(5000).optional(),
+  specs: z
+    .object({
+      chart: z
+        .object({
+          category: z.number().int().min(0).max(99),
+          value: z.number().int().min(0).max(99),
+          chartType: z.enum(["column", "line", "bar", "pie"]),
+        })
+        .strict()
+        .optional(),
+      pivot: z
+        .object({
+          rows: z.number().int().min(0).max(99),
+          values: z.number().int().min(0).max(99),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict()
+    .optional(),
 });
 
 const applySchema = z.object({
@@ -175,6 +196,7 @@ m365Router.post(
         req.body,
         req.body.actions,
         req.body.chunkRows,
+        req.body.specs,
       );
     } catch (error) {
       if (error instanceof InvalidExcelRangeError)
@@ -183,7 +205,14 @@ m365Router.post(
         });
       throw error;
     }
-    const planId = cryptoId(plan.sourceFingerprint);
+    // The id covers the exact actions (including column choices), so an approval for one plan
+    // can never be replayed for a different set of workbook changes on the same source.
+    const planId = cryptoId(
+      crypto
+        .createHash("sha256")
+        .update(plan.sourceFingerprint + JSON.stringify(plan.actions))
+        .digest("hex"),
+    );
     const approvalToken = createM365ApprovalToken({
       planId,
       tenantId: tenant.tenantId,

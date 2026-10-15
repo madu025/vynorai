@@ -282,14 +282,50 @@ export async function applyApprovedExcelPlan(
             await context.sync();
             if (!existing.isNullObject) result.status = "exists";
             else {
-              const chart = sheet.charts.add(
-                "ColumnClustered",
-                actionSourceRange(),
-                "Auto",
-              );
-              chart.name = action.name;
-              chart.setPosition("H3");
-              await context.sync();
+              const spec = action.spec;
+              if (spec?.categoryColumn) {
+                if (
+                  options.supportsExcelApi &&
+                  !options.supportsExcelApi("1.7")
+                )
+                  throw new Error(
+                    "skipped_unsupported: column-aware charts need ExcelApi 1.7",
+                  );
+                const source = actionSourceRange();
+                const chartTypes: Record<string, string> = {
+                  column: "ColumnClustered",
+                  line: "Line",
+                  bar: "BarClustered",
+                  pie: "Pie",
+                };
+                const chart = sheet.charts.add(
+                  chartTypes[spec.chartType] ?? "ColumnClustered",
+                  source.getColumn(spec.valueIndex),
+                  "Columns",
+                );
+                chart.name = action.name;
+                chart.setPosition("H3");
+                chart.title.text = `${spec.valueColumn} by ${spec.categoryColumn}`;
+                await context.sync();
+                chart.series
+                  .getItemAt(0)
+                  .setXAxisValues(
+                    source
+                      .getColumn(spec.categoryIndex)
+                      .getOffsetRange(1, 0)
+                      .getResizedRange(-1, 0),
+                  );
+                await context.sync();
+              } else {
+                const chart = sheet.charts.add(
+                  "ColumnClustered",
+                  actionSourceRange(),
+                  "Auto",
+                );
+                chart.name = action.name;
+                chart.setPosition("H3");
+                await context.sync();
+              }
             }
           } else if (action.kind === "pivot-table") {
             const existing = context.workbook.pivotTables.getItemOrNullObject(
@@ -300,12 +336,22 @@ export async function applyApprovedExcelPlan(
             if (!existing.isNullObject) result.status = "exists";
             else {
               // Office.js order is (name, source, destination); A3 keeps clear of the A1 note.
-              sheet.pivotTables.add(
+              const pivot = sheet.pivotTables.add(
                 action.name,
                 actionSourceRange(),
                 sheet.getRange("A3"),
               );
               await context.sync();
+              if (action.spec?.rowsColumn) {
+                pivot.rowHierarchies.add(
+                  pivot.hierarchies.getItem(action.spec.rowsColumn),
+                );
+                const total = pivot.dataHierarchies.add(
+                  pivot.hierarchies.getItem(action.spec.valuesColumn),
+                );
+                total.summarizeBy = "Sum";
+                await context.sync();
+              }
             }
           } else {
             throw new Error(`unsupported action ${action.kind}`);

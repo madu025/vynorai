@@ -3,10 +3,16 @@ import {
   buildSchemaSummary,
   createAnalysisRequest,
   recommendationToInstruction,
+  recommendationToSpecs,
   validateAnalysisResult,
   type AnalysisResult,
   type SchemaSummary,
 } from "./analysis.js";
+import {
+  buildLocalInsights,
+  suggestionToPlanInput,
+  type LocalInsights,
+} from "./insights.js";
 import {
   createM365ApiClient,
   M365ApiError,
@@ -23,6 +29,7 @@ import {
 import {
   createExcelPreviewPlan,
   excelPlansMatch,
+  type ExcelColumnSpecs,
   selectExcelActions,
 } from "./excel.js";
 import {
@@ -70,6 +77,8 @@ const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
 let currentPlan: any;
 let previewFingerprint = "";
+let pendingSpecs: ExcelColumnSpecs | undefined;
+let lastSummary: SchemaSummary | undefined;
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
 const SESSION_KEY = "vynorai.m365.excel.session.v2";
 
@@ -361,6 +370,7 @@ signIn?.addEventListener("click", async () => {
 signOut?.addEventListener("click", signOutOfMicrosoft);
 
 instruction?.addEventListener("input", () => {
+  pendingSpecs = undefined;
   currentPlan = undefined;
   previewFingerprint = "";
   if (apply) apply.disabled = true;
@@ -398,13 +408,17 @@ inspect?.addEventListener("click", async () => {
     );
     const localPreview = await log.step(
       "local:preview",
-      () => createExcelPreviewPlan(input, actions),
+      () => createExcelPreviewPlan(input, actions, undefined, pendingSpecs),
       (value) => ({
         actions: value.actions.length,
         warnings: value.warnings.length,
       }),
     );
-    const plan = await apiClient().planExcel({ ...input, actions });
+    const plan = await apiClient().planExcel({
+      ...input,
+      actions,
+      ...(pendingSpecs ? { specs: pendingSpecs } : {}),
+    });
     log.record("api:plan", "pass", {
       planId: plan.planId,
       actions: plan.actions?.map((action: any) => action.kind),
@@ -438,6 +452,11 @@ inspect?.addEventListener("click", async () => {
         2,
       );
     if (apply) apply.disabled = false;
+    try {
+      renderInsights(buildLocalInsights(input));
+    } catch {
+      // Insights are optional; the preview above is already valid.
+    }
     setStatus(
       "Preview ready. Nothing has changed yet. Review it before applying.",
     );
@@ -573,6 +592,49 @@ apply?.addEventListener("click", async () => {
   }
 });
 
+const insightsCard = document.querySelector<HTMLElement>("#insights-card");
+const insightsList = document.querySelector<HTMLElement>("#insights-list");
+const insightsActions =
+  document.querySelector<HTMLElement>("#insights-actions");
+
+/** Local, private insights: shown to the person, never sent anywhere. */
+function renderInsights(result: LocalInsights) {
+  if (!insightsCard || !insightsList || !insightsActions) return;
+  insightsList.textContent = "";
+  insightsActions.textContent = "";
+  for (const insight of result.insights) {
+    const row = document.createElement("p");
+    const title = document.createElement("strong");
+    title.textContent = `${insight.title}: `;
+    row.appendChild(title);
+    row.appendChild(document.createTextNode(insight.detail));
+    insightsList.appendChild(row);
+  }
+  for (const suggestion of result.suggestions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pill";
+    button.textContent = suggestion.label;
+    button.addEventListener("click", () => {
+      const planInput = suggestionToPlanInput(suggestion);
+      if (instruction) {
+        instruction.value = planInput.instruction;
+        instruction.dispatchEvent(new Event("input"));
+      }
+      pendingSpecs = planInput.specs;
+      log.record("insights:use-suggestion", "pass", {
+        kind: suggestion.kind,
+        chartType: suggestion.chartType,
+      });
+      setStatus(
+        "Column choice set. Click Inspect and preview; nothing changes until you confirm.",
+      );
+    });
+    insightsActions.appendChild(button);
+  }
+  insightsCard.hidden = result.insights.length === 0;
+}
+
 /** AI analysis: advisory only. Nothing here reads more than the selection or writes to Excel. */
 let pendingSummary: SchemaSummary | undefined;
 
@@ -633,6 +695,9 @@ function renderAnalysis(result: AnalysisResult) {
     use.textContent = "Use this recommendation";
     use.addEventListener("click", () => {
       if (instruction) instruction.value = instructionText;
+      pendingSpecs = lastSummary
+        ? recommendationToSpecs(recommendation, lastSummary)
+        : undefined;
       currentPlan = undefined;
       previewFingerprint = "";
       if (apply) apply.disabled = true;
@@ -666,7 +731,11 @@ analyze?.addEventListener("click", async () => {
     );
     if (consentSummary)
       consentSummary.textContent = JSON.stringify(pendingSummary, null, 2);
-    if (consentPanel) consentPanel.hidden = false;
+    lastSummary = pendingSummary;
+    if (consentPanel) {
+      consentPanel.hidden = false;
+      consentPanel.scrollIntoView?.({ block: "nearest" });
+    }
     setStatus("Review exactly what will be sent, then confirm to continue.");
   } catch (error) {
     pendingSummary = undefined;

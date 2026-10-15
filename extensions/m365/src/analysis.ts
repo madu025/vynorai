@@ -116,6 +116,24 @@ const DATE_HEADER = /(date|time|day|month|year|period|when)/i;
 const DATE_STRING =
   /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?)?$|^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/;
 
+const MONTH_LABEL =
+  /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)$/i;
+const WEEKDAY_LABEL =
+  /^(mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(r(s(day)?)?)?|fri(day)?|sat(urday)?|sun(day)?)$/i;
+const PERIOD_LABEL =
+  /^(q[1-4]|[1-4]q|h[12]|fy\s?\d{2,4}|(19|20)\d{2}(\s?-?\s?q[1-4])?)$/i;
+
+/** Month, weekday, quarter and fiscal-period labels are time axes, never identifiers. */
+export function isTemporalLabel(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return (
+    MONTH_LABEL.test(text) ||
+    WEEKDAY_LABEL.test(text) ||
+    PERIOD_LABEL.test(text)
+  );
+}
+
 /** Replaces text shaped like personal data so it can never reach a prompt. */
 export function redactPersonalData(text: string): string {
   let out = String(text);
@@ -227,13 +245,28 @@ export function buildSchemaSummary(input: RangeInput): SchemaSummary {
     }
     const distinct = counts.size;
     const uniqueShare = distinct / present.length;
+    const temporalLabels = present.every(isTemporalLabel);
+    const yearColumn =
+      /\byear\b/i.test(header) &&
+      present.every(
+        (cell) =>
+          typeof cell === "number" &&
+          Number.isInteger(cell) &&
+          cell >= 1900 &&
+          cell <= 2100,
+      );
     const identifierByShape =
-      inferredType === "text" && present.length >= 5 && uniqueShare > 0.9;
-    const identifier = headerIdentifier || identifierByShape;
+      inferredType === "text" &&
+      present.length >= 5 &&
+      uniqueShare > 0.9 &&
+      !temporalLabels;
+    const identifier =
+      (headerIdentifier || identifierByShape) && !temporalLabels && !yearColumn;
 
     let roleHint: RoleHint = "unknown";
     if (identifier || containsPersonalData) roleHint = "identifier";
-    else if (inferredType === "date") roleHint = "date";
+    else if (inferredType === "date" || temporalLabels || yearColumn)
+      roleHint = "date";
     else if (inferredType === "number" || inferredType === "integer")
       roleHint = "measure";
     else if (
@@ -496,4 +529,43 @@ export function recommendationToInstruction(
     default:
       return undefined;
   }
+}
+
+/**
+ * Maps a recommendation to explicit column choices using the roles the local summary assigned.
+ * Returns undefined when the roles do not give a clear category and measure, so the existing
+ * whole-range preview is used instead of guessing.
+ */
+export function recommendationToSpecs(
+  recommendation: AnalysisRecommendation,
+  summary: SchemaSummary,
+):
+  | {
+      chart?: {
+        category: number;
+        value: number;
+        chartType: "column" | "line" | "bar" | "pie";
+      };
+      pivot?: { rows: number; values: number };
+    }
+  | undefined {
+  const role = (index: number) => summary.columns[index]?.roleHint;
+  const axis = recommendation.columns.find((index) =>
+    ["category", "date"].includes(role(index) as string),
+  );
+  const value = recommendation.columns.find(
+    (index) => role(index) === "measure",
+  );
+  if (axis === undefined || value === undefined) return undefined;
+  if (recommendation.kind === "chart")
+    return {
+      chart: {
+        category: axis,
+        value,
+        chartType: recommendation.chartType ?? "column",
+      },
+    };
+  if (recommendation.kind === "pivot-table")
+    return { pivot: { rows: axis, values: value } };
+  return undefined;
 }

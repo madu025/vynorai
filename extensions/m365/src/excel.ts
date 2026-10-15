@@ -47,6 +47,7 @@ type ExcelActionPlan = {
     targetSheet: string;
     preservesSource: true;
     description: string;
+    spec?: ExcelActionSpec;
   }>;
   warnings: string[];
   requiresConfirmation: true;
@@ -67,6 +68,102 @@ type ComparableExcelPlan = Omit<
 >;
 
 const DEFAULT_CHUNK_ROWS = 500;
+
+export interface ExcelColumnSpecs {
+  chart?: {
+    category: number;
+    value: number;
+    chartType: "column" | "line" | "bar" | "pie";
+  };
+  pivot?: { rows: number; values: number };
+}
+
+export interface ExcelActionSpec {
+  categoryColumn?: string;
+  categoryIndex?: number;
+  valueColumn?: string;
+  valueIndex?: number;
+  chartType?: "column" | "line" | "bar" | "pie";
+  rowsColumn?: string;
+  rowsIndex?: number;
+  valuesColumn?: string;
+  valuesIndex?: number;
+  aggregation?: "sum";
+}
+
+/**
+ * Resolves requested column choices to header names. The same rules run in the add-in and on the
+ * server, so a plan that differs between them is blocked before anything can be applied.
+ */
+function resolveColumnSpecs(
+  headers: string[],
+  dataRows: any[][],
+  specs: ExcelColumnSpecs | undefined,
+  requested: Set<string>,
+): { chart?: ExcelActionSpec; pivot?: ExcelActionSpec } {
+  if (!specs) return {};
+  const fail = (code: string, message: string): never => {
+    throw new InvalidExcelRangeError(code, message);
+  };
+  const inRange = (index: unknown): index is number =>
+    Number.isInteger(index) &&
+    (index as number) >= 0 &&
+    (index as number) < headers.length;
+  const numeric = (index: number) => {
+    const cells = dataRows
+      .map((row) => row[index])
+      .filter((cell) => cell !== null && cell !== undefined && cell !== "");
+    return cells.length > 0 && cells.every((cell) => typeof cell === "number");
+  };
+  const resolved: { chart?: ExcelActionSpec; pivot?: ExcelActionSpec } = {};
+  if (specs.chart) {
+    if (!requested.has("chart"))
+      fail("EXCEL_SPEC_UNUSED", "A chart column choice needs a chart action.");
+    const { category, value, chartType } = specs.chart;
+    if (!inRange(category) || !inRange(value) || category === value)
+      fail("EXCEL_SPEC_INVALID", "Choose two different columns for the chart.");
+    if (!["column", "line", "bar", "pie"].includes(chartType))
+      fail("EXCEL_SPEC_INVALID", "Unsupported chart type.");
+    if (!numeric(value))
+      fail(
+        "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+        "The chart value column must contain numbers.",
+      );
+    resolved.chart = {
+      categoryColumn: headers[category],
+      categoryIndex: category,
+      valueColumn: headers[value],
+      valueIndex: value,
+      chartType,
+    };
+  }
+  if (specs.pivot) {
+    if (!requested.has("pivot-table"))
+      fail(
+        "EXCEL_SPEC_UNUSED",
+        "A PivotTable column choice needs a PivotTable action.",
+      );
+    const { rows, values } = specs.pivot;
+    if (!inRange(rows) || !inRange(values) || rows === values)
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "Choose two different columns for the PivotTable.",
+      );
+    if (!numeric(values))
+      fail(
+        "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+        "The PivotTable value column must contain numbers.",
+      );
+    resolved.pivot = {
+      rowsColumn: headers[rows],
+      rowsIndex: rows,
+      valuesColumn: headers[values],
+      valuesIndex: values,
+      aggregation: "sum",
+    };
+  }
+  return resolved;
+}
 
 const normalizedCell = (value: ExcelCell): string => String(value ?? "").trim();
 
@@ -247,6 +344,7 @@ export function createExcelPreviewPlan(
   input: ExcelRangeInput,
   requestedActions: Array<"table" | "chart" | "new-sheet" | "pivot-table">,
   chunkRows = DEFAULT_CHUNK_ROWS,
+  specs?: ExcelColumnSpecs,
 ): Omit<ExcelActionPlan, "planId" | "approvalToken" | "expiresAt"> {
   const profile = profileExcelRange(input, chunkRows);
   const layout =
@@ -258,6 +356,12 @@ export function createExcelPreviewPlan(
   );
   const baseName = excelSafeBaseName(input.worksheetName);
   const resultSheet = `${baseName}_Vynor_Result`;
+  const resolved = resolveColumnSpecs(
+    layout.headers,
+    input.values.slice(layout.headerRowCount),
+    specs,
+    requested,
+  );
   const actions = safeActions.map((kind) => ({
     kind,
     name: `${baseName}_Vynor_${kind.replace("-", "_")}`,
@@ -269,6 +373,10 @@ export function createExcelPreviewPlan(
     description: layout.normalization
       ? `Preview ${kind} using a normalized copy of ${input.address} on ${resultSheet}; source data remains unchanged.`
       : `Preview ${kind} using ${input.address}; source data remains unchanged.`,
+    ...(kind === "chart" && resolved.chart ? { spec: resolved.chart } : {}),
+    ...(kind === "pivot-table" && resolved.pivot
+      ? { spec: resolved.pivot }
+      : {}),
   }));
   const chunks = Array.from({ length: profile.chunkCount }, (_, index) => ({
     index,

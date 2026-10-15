@@ -63,6 +63,7 @@ const excelPlanSchema = z.object({
         "clean",
         "add-column",
         "split-column",
+        "unpivot",
         "summary",
         "format",
         "quality",
@@ -310,6 +311,14 @@ const excelPlanSchema = z.object({
         })
         .strict()
         .optional(),
+      unpivot: z
+        .object({
+          values: z.array(z.number().int().min(0).max(99)).min(2).max(20),
+          name: z.string().min(1).max(40),
+          value: z.string().min(1).max(40),
+        })
+        .strict()
+        .optional(),
     })
     .strict()
     .optional(),
@@ -344,6 +353,7 @@ const applyResultSchema = z.object({
           "clean",
           "add-column",
           "split-column",
+          "unpivot",
           "summary",
           "format",
           "quality",

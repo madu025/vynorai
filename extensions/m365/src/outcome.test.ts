@@ -42,6 +42,37 @@ test("other outcomes show a small table of the data they use", () => {
   assert.equal(item.table?.rows.length, 2);
 });
 
+test("an unpivot outcome previews long-format rows from the selected data", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "unpivot",
+        targetSheet: "Sheet1_Vynor_Unpivot",
+        spec: {
+          unpivotValueIndexes: [2, 3],
+          unpivotNameColumn: "Measure",
+          unpivotValueColumn: "Amount",
+        },
+      },
+    ],
+    headers,
+    rows,
+  );
+  assert.deepEqual(item.table?.headers, [
+    "Month",
+    "Region",
+    "Measure",
+    "Amount",
+  ]);
+  assert.deepEqual(item.table?.rows, [
+    ["Jan", "North", "Sales", "1200"],
+    ["Jan", "North", "Cost", "800"],
+    ["Feb", "South", "Sales", "1500"],
+    ["Feb", "South", "Cost", "950"],
+  ]);
+  assert.match(item.details.join("\n"), /long-format rows/);
+});
+
 test("a rank outcome previews real descending ranks", () => {
   const [item] = buildOutcomes(
     [

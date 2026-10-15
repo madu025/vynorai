@@ -1453,6 +1453,68 @@ export async function applyApprovedExcelPlan(
               grid.format.autofitColumns();
               await context.sync();
             }
+          } else if (action.kind === "unpivot") {
+            const spec = action.spec;
+            if (
+              !Array.isArray(spec?.unpivotValueIndexes) ||
+              spec.unpivotValueIndexes.length < 2 ||
+              !spec.unpivotNameColumn ||
+              !spec.unpivotValueColumn
+            )
+              throw new Error(
+                "unpivot needs explicit value columns and output names",
+              );
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers, rows } = splitHeader(await readSourceValues());
+              const values = spec.unpivotValueIndexes as number[];
+              if (
+                values.some(
+                  (index) =>
+                    headers[index] !==
+                    spec.unpivotValueColumns?.[values.indexOf(index)],
+                )
+              )
+                throw new Error(
+                  "The unpivot source changed after the preview. Preview again.",
+                );
+              const dimensions = headers
+                .map((_header, index) => index)
+                .filter((index) => !values.includes(index));
+              const outHeaders = [
+                ...dimensions.map((index) => headers[index]),
+                spec.unpivotNameColumn,
+                spec.unpivotValueColumn,
+              ];
+              sheet.getRangeByIndexes(0, 0, 1, outHeaders.length).values = [
+                outHeaders,
+              ];
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const quotedSheet = `'${String(plan.worksheetName).replace(/'/g, "''")}'!`;
+              const formulas = rows.flatMap((_row, rowIndex) =>
+                values.map((valueIndex) => {
+                  const sourceRow = parsed.startRow + rowIndex + 2;
+                  const reference = (index: number) =>
+                    `=${quotedSheet}${columnLetter(parsed.startColumn + index)}${sourceRow}`;
+                  return [
+                    ...dimensions.map(reference),
+                    `="${String(headers[valueIndex]).replace(/"/g, '""')}"`,
+                    reference(valueIndex),
+                  ];
+                }),
+              );
+              if (formulas.length > 0)
+                sheet.getRangeByIndexes(
+                  1,
+                  0,
+                  formulas.length,
+                  outHeaders.length,
+                ).formulas = formulas;
+              await context.sync();
+            }
           } else if (action.kind === "split-column") {
             const spec = action.spec;
             if (

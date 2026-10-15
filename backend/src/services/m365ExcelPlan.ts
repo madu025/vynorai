@@ -114,6 +114,7 @@ export interface ExcelColumnSpecs {
     group?: "month" | "quarter" | "year";
   };
   split?: { source: number; firstName: string; lastName: string };
+  unpivot?: { values: number[]; name: string; value: string };
   summary?: {
     group: number;
     values: Array<{ column: number; aggregation: ExcelAggregation }>;
@@ -225,6 +226,10 @@ export interface ExcelActionSpec {
   splitSourceIndex?: number;
   splitFirstColumn?: string;
   splitLastColumn?: string;
+  unpivotValueColumns?: string[];
+  unpivotValueIndexes?: number[];
+  unpivotNameColumn?: string;
+  unpivotValueColumn?: string;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
@@ -261,6 +266,7 @@ function resolveColumnSpecs(
   statistics?: ExcelActionSpec;
   dashboard?: ExcelActionSpec;
   split?: ExcelActionSpec;
+  unpivot?: ExcelActionSpec;
 } {
   if (!specs) {
     if (requested.has("dashboard"))
@@ -294,6 +300,7 @@ function resolveColumnSpecs(
     statistics?: ExcelActionSpec;
     dashboard?: ExcelActionSpec;
     split?: ExcelActionSpec;
+    unpivot?: ExcelActionSpec;
   } = {};
   if (requested.has("dashboard") && !specs.dashboard)
     fail("EXCEL_SPEC_INVALID", "A dashboard needs explicit column choices.");
@@ -733,6 +740,37 @@ function resolveColumnSpecs(
       splitSourceIndex: source,
       splitFirstColumn: uniqueColumnName(firstName.trim(), headers),
       splitLastColumn: uniqueColumnName(lastName.trim(), headers),
+    };
+  }
+  if (specs.unpivot) {
+    if (!requested.has("unpivot"))
+      fail("EXCEL_SPEC_UNUSED", "Unpivot options need the unpivot action.");
+    const { values, name, value } = specs.unpivot;
+    if (
+      !Array.isArray(values) ||
+      values.length < 2 ||
+      values.length > 20 ||
+      values.some((index) => !inRange(index)) ||
+      new Set(values).size !== values.length ||
+      values.length >= headers.length
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "Choose two or more value columns and keep at least one identifier column.",
+      );
+    if (
+      typeof name !== "string" ||
+      typeof value !== "string" ||
+      !isSafeColumnName(name) ||
+      !isSafeColumnName(value) ||
+      name.trim() === value.trim()
+    )
+      fail("EXCEL_SPEC_INVALID", "The unpivot output names are not allowed.");
+    resolved.unpivot = {
+      unpivotValueColumns: values.map((index) => headers[index]),
+      unpivotValueIndexes: values,
+      unpivotNameColumn: uniqueColumnName(name.trim(), headers),
+      unpivotValueColumn: uniqueColumnName(value.trim(), headers),
     };
   }
   if (specs.summary) {
@@ -1190,6 +1228,16 @@ function uniqueColumnName(name: string, headers: string[]): string {
   return name;
 }
 
+function isSafeColumnName(name: unknown): name is string {
+  return (
+    typeof name === "string" &&
+    name.trim().length > 0 &&
+    name.length <= 40 &&
+    !/^[=+\-@\t\r]/.test(name.trim()) &&
+    !/[\r\n]/.test(name)
+  );
+}
+
 function assertUniqueHeaders(headers: string[]): void {
   const normalizedHeaders = headers.map((header) => header.toLocaleLowerCase());
   if (new Set(normalizedHeaders).size !== normalizedHeaders.length)
@@ -1358,6 +1406,7 @@ export function createServerExcelPreviewPlan(
     "clean",
     "add-column",
     "split-column",
+    "unpivot",
     "summary",
     "format",
     "quality",
@@ -1376,19 +1425,21 @@ export function createServerExcelPreviewPlan(
             ? `${baseName}_Vynor_Calc`
             : kind === "split-column"
               ? `${baseName}_Vynor_Split`
-              : kind === "format"
-                ? `${baseName}_Vynor_Format`
-                : kind === "quality"
-                  ? `${baseName}_Vynor_Report`
-                  : kind === "summary"
-                    ? `${baseName}_Vynor_Totals`
-                    : kind === "view"
-                      ? `${baseName}_Vynor_View`
-                      : kind === "statistics"
-                        ? `${baseName}_Vynor_Stats`
-                        : kind === "dashboard"
-                          ? `${baseName}_Vynor_Dashboard`
-                          : `${baseName}_Vynor_Result`,
+              : kind === "unpivot"
+                ? `${baseName}_Vynor_Unpivot`
+                : kind === "format"
+                  ? `${baseName}_Vynor_Format`
+                  : kind === "quality"
+                    ? `${baseName}_Vynor_Report`
+                    : kind === "summary"
+                      ? `${baseName}_Vynor_Totals`
+                      : kind === "view"
+                        ? `${baseName}_Vynor_View`
+                        : kind === "statistics"
+                          ? `${baseName}_Vynor_Stats`
+                          : kind === "dashboard"
+                            ? `${baseName}_Vynor_Dashboard`
+                            : `${baseName}_Vynor_Result`,
       preservesSource: true,
       description: layout.normalization
         ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
@@ -1401,8 +1452,8 @@ export function createServerExcelPreviewPlan(
       ...(kind === "add-column" && resolved.addColumn
         ? { spec: resolved.addColumn }
         : {}),
-      ...(kind === "split-column" && resolved.split
-        ? { spec: resolved.split }
+      ...(kind === "unpivot" && resolved.unpivot
+        ? { spec: resolved.unpivot }
         : {}),
       ...(kind === "split-column" && resolved.split
         ? { spec: resolved.split }

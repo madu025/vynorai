@@ -34,6 +34,7 @@ export interface M365ApiClient {
         | "clean"
         | "add-column"
         | "split-column"
+        | "unpivot"
         | "summary"
         | "format"
         | "quality"

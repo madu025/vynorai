@@ -46,6 +46,7 @@ const MAX_TABLE_ROWS = 4;
 const MAX_TABLE_COLUMNS = 5;
 
 const KIND_TITLES: Record<string, [string, string]> = {
+  unpivot: ["Unpivoted long table", "දිගු ආකෘති වගුව"],
   chart: ["Chart", "ප්‍රස්තාරය"],
   "pivot-table": ["PivotTable", "PivotTable"],
   table: ["Formatted table", "හැඩසවි කළ වගුව"],
@@ -115,6 +116,45 @@ export function buildOutcomes(
       where: String(action.targetSheet ?? ""),
       details: [],
     };
+    if (action.kind === "unpivot") {
+      const valueIndexes = Array.isArray(spec.unpivotValueIndexes)
+        ? spec.unpivotValueIndexes.filter((index: unknown) =>
+            Number.isInteger(index),
+          )
+        : [];
+      const dimensions = headers
+        .map((header, index) => ({ header, index }))
+        .filter(({ index }) => !valueIndexes.includes(index));
+      const previewRows: string[][] = [];
+      for (const row of rows.slice(0, MAX_TABLE_ROWS)) {
+        for (const index of valueIndexes) {
+          previewRows.push([
+            ...dimensions.map(({ index: dimensionIndex }) =>
+              cell(row[dimensionIndex]),
+            ),
+            cell(headers[index]),
+            cell(row[index]),
+          ]);
+        }
+      }
+      item.table = {
+        headers: [
+          ...dimensions.map(({ header }) => cell(header)),
+          String(spec.unpivotNameColumn ?? "Name"),
+          String(spec.unpivotValueColumn ?? "Value"),
+        ],
+        rows: previewRows.slice(0, MAX_TABLE_ROWS),
+        barColumns: [],
+        dropdownColumns: [],
+      };
+      item.details.push(
+        say(
+          `Turns ${valueIndexes.length} value columns into long-format rows; source data stays unchanged.`,
+          `Unpivot ${valueIndexes.length} value columns into long-format rows; source data stays unchanged.`,
+        ),
+      );
+      return item;
+    }
     if (action.kind === "chart" && Number.isInteger(spec.valueIndex)) {
       const valueIndexes = [
         spec.valueIndex,

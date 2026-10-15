@@ -157,6 +157,35 @@ test("instructions for a computed column and clean-up are read deterministically
   );
 });
 
+test("unpivot intent creates a safe long-format result plan", () => {
+  const unpivot = interpretInstruction(
+    "Unpivot Sales, Cost into Measure and Amount",
+    headers,
+  );
+  assert.deepEqual(unpivot.actions, ["unpivot"]);
+  assert.deepEqual(unpivot.specs.unpivot, {
+    values: [2, 3],
+    name: "Measure",
+    value: "Amount",
+  });
+  const plan = createExcelPreviewPlan(
+    input,
+    unpivot.actions,
+    500,
+    unpivot.specs,
+  );
+  assert.deepEqual(
+    plan.actions.map((action) => action.kind),
+    ["unpivot"],
+  );
+  assert.deepEqual(plan.actions[0].spec, {
+    unpivotValueColumns: ["Sales", "Cost"],
+    unpivotValueIndexes: [2, 3],
+    unpivotNameColumn: "Measure",
+    unpivotValueColumn: "Amount",
+  });
+});
+
 test("running total resolves one numeric source column without guessing", () => {
   const asked = interpretInstruction(
     "Add a running total column for Sales",

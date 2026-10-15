@@ -193,6 +193,7 @@ export const ACTION_REQUIREMENTS: Record<string, string> = {
   clean: "1.4",
   "add-column": "1.4",
   "split-column": "1.4",
+  unpivot: "1.4",
   summary: "1.4",
   format: "1.6",
   quality: "1.4",

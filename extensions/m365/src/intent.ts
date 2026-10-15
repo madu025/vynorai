@@ -115,6 +115,7 @@ export interface InstructionSpecs {
     group?: "month" | "quarter" | "year";
   };
   split?: { source: number; firstName: string; lastName: string };
+  unpivot?: { values: number[]; name: string; value: string };
 }
 
 export interface InterpretedInstruction {
@@ -123,6 +124,7 @@ export interface InterpretedInstruction {
     | "clean"
     | "add-column"
     | "split-column"
+    | "unpivot"
     | "chart"
     | "pivot-table"
     | "view"
@@ -204,6 +206,38 @@ export function interpretInstruction(
         },
         problems: [],
       };
+    }
+  }
+
+  const unpivotMatch =
+    /\bunpivot\s+(.+?)\s+into\s+["']?([^"'\n,]+?)["']?\s+and\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (unpivotMatch) {
+    const valueHeaders = unpivotMatch[1]
+      .split(/,|\band\b/i)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const values = valueHeaders.map((header) => findHeader(headers, header));
+    if (
+      values.length < 2 ||
+      values.some((index) => index < 0) ||
+      new Set(values).size !== values.length
+    )
+      result.problems.push(
+        `Choose at least two different value columns. Available: ${headers.join(", ")}.`,
+      );
+    else {
+      const name = unpivotMatch[2].trim();
+      const value = unpivotMatch[3].trim();
+      if (!isSafeColumnName(name) || !isSafeColumnName(value) || name === value)
+        result.problems.push("The unpivot output names are not allowed.");
+      else
+        return {
+          actions: ["unpivot"],
+          specs: { unpivot: { values, name, value } },
+          problems: [],
+        };
     }
   }
 

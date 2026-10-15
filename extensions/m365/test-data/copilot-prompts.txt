@@ -58,6 +58,7 @@ Text transforms	-	Split Customer into first and last name columns
 Text transforms	-	Combine Region and Status into one column
 Text transforms	-	Convert Date text into real dates
 Text transforms	-	Fill blank Status values with Unknown
+Text transforms	unpivot	Unpivot Sales, Cost into Measure and Amount
 Lookups	add-column	Add column Manager from Staff by Name
 Lookups	add-column	Lookup Segment from CustomerMap using Customer
 Lookups	add-column	Bring Region from Customers by Customer

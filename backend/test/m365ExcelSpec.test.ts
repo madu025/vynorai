@@ -65,6 +65,29 @@ test("server and add-in build the same safe split plan", () => {
   assert.equal(server.actions[0].spec.splitSourceColumn, "Month");
 });
 
+test("server and add-in build the same safe unpivot plan", () => {
+  const specs = {
+    unpivot: { values: [2, 3], name: "Measure", value: "Amount" },
+  };
+  const actions = ["unpivot"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec, {
+    unpivotValueColumns: ["Sales", "Cost"],
+    unpivotValueIndexes: [2, 3],
+    unpivotNameColumn: "Measure",
+    unpivotValueColumn: "Amount",
+  });
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        unpivot: { values: [0, 1, 2, 3], name: "Measure", value: "Amount" },
+      }),
+    /keep at least one identifier column/,
+  );
+});
+
 test("server and add-in accept fuzzy dedupe with a bounded row limit", () => {
   const fuzzyInput = {
     ...input,

@@ -37,3 +37,18 @@ public Entra IDs only; backend secrets remain in the server's `backend/.env`.
 The task pane uses a browser-compatible bundle. An unexpired sign-in access token is kept only in this add-in origin's
 local storage, is never logged, and can be removed with **Sign out**. Test on a current Microsoft 365 Apps / WebView2
 Excel client, or use Excel for the web when a legacy desktop Excel webview reports that it cannot start the add-in.
+
+## How updates reach users
+
+An Office add-in is a manifest plus a web app. Only the manifest is installed; everything the user sees
+(`taskpane.html`, `dist/taskpane.bundle.js`, `runtime-config.js`) is loaded from `https://vynor.lk/m365/` every time the
+task pane opens, and Caddy serves it with `Cache-Control: no-store`.
+
+- **UI, logic, backend and styling changes:** publish the static files (see `deploy/publish-m365.sh`). Users get them the
+  next time they open the task pane. Nothing is downloaded or re-added.
+- **Manifest changes** (new host, permission, domain, icon, `SourceLocation`) are rare and are the only thing that needs a
+  re-upload. Keep the manifest minimal and never put a cache-busting `?v=` in `SourceLocation`.
+- **Distribution:** sideloading is for development only. For real users deploy once through Microsoft 365 admin center
+  (Integrated apps, Centralized Deployment) so the manifest is pushed to assigned users or groups and later manifest
+  updates reach them without manual downloads.
+- The menu (`...`) shows the loaded build id, so a user can confirm which version is running.

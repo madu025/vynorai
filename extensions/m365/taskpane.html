@@ -21,6 +21,7 @@
       #menu { position: absolute; right: 0; top: 36px; z-index: 5; min-width: 200px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, .12); }
       #menu button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
       #menu button:hover:not(:disabled) { background: #eef2f7; }
+      .menu-version { margin: 6px 10px 2px; font-size: 11px; color: var(--muted); }
       #status { margin: 0; padding: 8px 12px; border-radius: 10px; background: #eef2f7; color: var(--ink); min-height: 36px; }
       .workspace, #signin-card { display: none; }
       body[data-auth="in"] .workspace { display: flex; flex-direction: column; gap: 14px; }
@@ -67,6 +68,7 @@
           <button id="copy-diagnostics" type="button" role="menuitem">Copy diagnostics</button>
           <button id="clear-diagnostics" type="button" role="menuitem">Clear diagnostics</button>
           <button id="sign-out" type="button" role="menuitem" disabled>Sign out</button>
+          <p class="menu-version" id="build-id">Build 20261015.14</p>
         </div>
       </header>
       <p id="status" role="status" aria-live="polite">Loading…</p>

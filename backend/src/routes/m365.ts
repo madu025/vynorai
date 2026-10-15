@@ -277,9 +277,11 @@ const excelPlanSchema = z.object({
               "moving-average",
               "yoy",
               "date-group",
+              "combine",
             ])
             .optional(),
           source: z.number().int().min(0).max(99).optional(),
+          source2: z.number().int().min(0).max(99).optional(),
           window: z.number().int().min(2).max(12).optional(),
           lag: z.number().int().min(12).max(12).optional(),
           group: z.enum(["month", "quarter", "year"]).optional(),

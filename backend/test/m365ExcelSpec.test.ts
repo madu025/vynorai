@@ -33,6 +33,23 @@ test("server and add-in build the same plan for explicit column choices", () => 
   assert.equal(server.actions[1].spec.rowsColumn, "Region");
 });
 
+test("server and add-in build the same safe combine plan", () => {
+  const specs = {
+    addColumn: {
+      name: "Region - Status",
+      derived: "combine" as const,
+      source: 1,
+      source2: 2,
+    },
+  };
+  const actions = ["add-column"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec.sourceColumn2, "Sales");
+  assert.equal(server.actions[0].spec.separator, " - ");
+});
+
 test("server and add-in build the same safe running-total plan", () => {
   const actions = ["add-column"] as const;
   const specs = {

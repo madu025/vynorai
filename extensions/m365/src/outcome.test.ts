@@ -197,6 +197,36 @@ test("a date-group outcome previews month labels from Excel dates", () => {
   assert.match(item.details.join("\n"), /month grouping of Date/);
 });
 
+test("a combine outcome previews both source values", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "add-column",
+        targetSheet: "Sheet1_Vynor_Calc",
+        spec: {
+          columnName: "Region - Status",
+          derived: "combine",
+          sourceColumn: "Region",
+          sourceIndex: 1,
+          sourceColumn2: "Status",
+          sourceIndex2: 2,
+          separator: " - ",
+        },
+      },
+    ],
+    ["Month", "Region", "Status", "Sales"],
+    [
+      ["Jan", "North", "Active", 100],
+      ["Feb", "South", "Paused", 200],
+    ],
+  );
+  assert.deepEqual(
+    item.table?.rows.map((row) => row.at(-1)),
+    ["North - Active", "South - Paused"],
+  );
+  assert.match(item.details.join("\n"), /Region combined with Status/);
+});
+
 test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
   const [item] = buildOutcomes(
     [

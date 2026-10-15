@@ -105,8 +105,10 @@ export interface ExcelColumnSpecs {
       | "percent-change"
       | "moving-average"
       | "yoy"
-      | "date-group";
+      | "date-group"
+      | "combine";
     source?: number;
+    source2?: number;
     window?: number;
     lag?: number;
     group?: "month" | "quarter" | "year";
@@ -208,9 +210,13 @@ export interface ExcelActionSpec {
     | "percent-change"
     | "moving-average"
     | "yoy"
-    | "date-group";
+    | "date-group"
+    | "combine";
   sourceColumn?: string;
   sourceIndex?: number;
+  sourceColumn2?: string;
+  sourceIndex2?: number;
+  separator?: string;
   window?: number;
   lag?: number;
   group?: "month" | "quarter" | "year";
@@ -502,6 +508,7 @@ function resolveColumnSpecs(
       expression,
       derived,
       source,
+      source2,
       window,
       lag,
       group,
@@ -534,6 +541,7 @@ function resolveColumnSpecs(
           "moving-average",
           "yoy",
           "date-group",
+          "combine",
         ].includes(derived) ||
         expression !== undefined ||
         left !== undefined ||
@@ -548,40 +556,57 @@ function resolveColumnSpecs(
           "Choose a source column for the running total.",
         );
       const sourceIndex = source as number;
-      if (
-        derived === "moving-average" &&
-        (!Number.isInteger(window) ||
-          (window as number) < 2 ||
-          (window as number) > 12)
-      )
-        fail(
-          "EXCEL_SPEC_INVALID",
-          "Choose a moving-average window from 2 to 12.",
-        );
-      if (derived === "yoy" && (!Number.isInteger(lag) || lag !== 12))
-        fail("EXCEL_SPEC_INVALID", "YoY change requires a 12-period lag.");
-      if (
-        derived === "date-group" &&
-        !["month", "quarter", "year"].includes(group as string)
-      )
-        fail("EXCEL_SPEC_INVALID", "Choose month, quarter or year grouping.");
-      if (!numeric(sourceIndex))
-        fail(
-          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
-          `Column "${headers[sourceIndex]}" holds text, not numbers. Choose a numeric column.`,
-        );
-      resolved.addColumn = {
-        columnName: uniqueColumnName(name.trim(), headers),
-        derived,
-        sourceColumn: headers[sourceIndex],
-        sourceIndex,
-        ...(derived === "moving-average" ? { window: window as number } : {}),
-        ...(derived === "yoy" ? { lag: lag as number } : {}),
-        ...(derived === "date-group" ? { group } : {}),
-        ...(derived === "percent-change" || derived === "yoy"
-          ? { percentFormat: true }
-          : {}),
-      };
+      if (derived === "combine") {
+        if (!inRange(source2) || sourceIndex === source2)
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Choose two different columns to combine.",
+          );
+        resolved.addColumn = {
+          columnName: uniqueColumnName(name.trim(), headers),
+          derived,
+          sourceColumn: headers[sourceIndex],
+          sourceIndex,
+          sourceColumn2: headers[source2 as number],
+          sourceIndex2: source2 as number,
+          separator: " - ",
+        };
+      } else {
+        if (
+          derived === "moving-average" &&
+          (!Number.isInteger(window) ||
+            (window as number) < 2 ||
+            (window as number) > 12)
+        )
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Choose a moving-average window from 2 to 12.",
+          );
+        if (derived === "yoy" && (!Number.isInteger(lag) || lag !== 12))
+          fail("EXCEL_SPEC_INVALID", "YoY change requires a 12-period lag.");
+        if (
+          derived === "date-group" &&
+          !["month", "quarter", "year"].includes(group as string)
+        )
+          fail("EXCEL_SPEC_INVALID", "Choose month, quarter or year grouping.");
+        if (!numeric(sourceIndex))
+          fail(
+            "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+            `Column "${headers[sourceIndex]}" holds text, not numbers. Choose a numeric column.`,
+          );
+        resolved.addColumn = {
+          columnName: uniqueColumnName(name.trim(), headers),
+          derived,
+          sourceColumn: headers[sourceIndex],
+          sourceIndex,
+          ...(derived === "moving-average" ? { window: window as number } : {}),
+          ...(derived === "yoy" ? { lag: lag as number } : {}),
+          ...(derived === "date-group" ? { group } : {}),
+          ...(derived === "percent-change" || derived === "yoy"
+            ? { percentFormat: true }
+            : {}),
+        };
+      }
     } else if (lookup !== undefined) {
       if (
         expression !== undefined ||

@@ -1614,6 +1614,26 @@ export async function applyApprovedExcelPlan(
                       return `="Q"&ROUNDUP(MONTH(${sourceLetter}${rowNumber})/3,0)&" "&YEAR(${sourceLetter}${rowNumber})`;
                     }
                   : undefined;
+              const combineFormula =
+                spec.derived === "combine"
+                  ? (rowNumber: number) => {
+                      if (
+                        !Number.isInteger(spec.sourceIndex) ||
+                        !Number.isInteger(spec.sourceIndex2) ||
+                        spec.separator !== " - "
+                      )
+                        throw new Error(
+                          "The combine sources or separator is missing from the approved plan",
+                        );
+                      const leftLetter = expressionColumnLetter(
+                        spec.sourceIndex,
+                      );
+                      const rightLetter = expressionColumnLetter(
+                        spec.sourceIndex2,
+                      );
+                      return `=${leftLetter}${rowNumber}&" - "&${rightLetter}${rowNumber}`;
+                    }
+                  : undefined;
               const out = [
                 [...headers, spec.columnName],
                 ...rows.map((row) => [...row, ""]),
@@ -1652,12 +1672,14 @@ export async function applyApprovedExcelPlan(
                                 ? movingAverageFormula(index + 2)
                                 : dateGroupFormula
                                   ? dateGroupFormula(index + 2)
-                                  : computedColumnFormula(
-                                      index + 2,
-                                      spec.leftIndex as number,
-                                      spec.operator as "+",
-                                      spec.rightIndex as number,
-                                    ),
+                                  : combineFormula
+                                    ? combineFormula(index + 2)
+                                    : computedColumnFormula(
+                                        index + 2,
+                                        spec.leftIndex as number,
+                                        spec.operator as "+",
+                                        spec.rightIndex as number,
+                                      ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

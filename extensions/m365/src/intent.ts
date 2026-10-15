@@ -106,8 +106,10 @@ export interface InstructionSpecs {
       | "percent-change"
       | "moving-average"
       | "yoy"
-      | "date-group";
+      | "date-group"
+      | "combine";
     source?: number;
+    source2?: number;
     window?: number;
     lag?: number;
     group?: "month" | "quarter" | "year";
@@ -163,6 +165,38 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+
+  const combineMatch =
+    /\b(?:combine|concatenate|join)\s+["']?([^"'\n,]+?)["']?\s+and\s+["']?([^"'\n,]+?)["']?\s+into\s+(?:one\s+)?column(?:\s+(?:called|named)\s+["']?([^"'\n,.]+?)["']?)?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (combineMatch) {
+    const first = findHeader(headers, combineMatch[1].trim());
+    const second = findHeader(headers, combineMatch[2].trim());
+    const name =
+      combineMatch[3]?.trim() ||
+      `${headers[first >= 0 ? first : 0]} - ${headers[second >= 0 ? second : 1]}`;
+    if (first < 0 || second < 0 || first === second) {
+      result.problems.push(
+        `Choose two different existing columns. Available: ${headers.join(", ")}.`,
+      );
+    } else if (!isSafeColumnName(name)) {
+      result.problems.push("That column name is not allowed.");
+    } else {
+      return {
+        actions: ["add-column"],
+        specs: {
+          addColumn: {
+            name,
+            derived: "combine",
+            source: first,
+            source2: second,
+          },
+        },
+        problems: [],
+      };
+    }
+  }
 
   const dateGroupMatch =
     /\b(?:group|bucket)\s+["']?([^"'\n,.]+?)["']?\s+(?:by|into)\s+(month|quarter|year)(?:\s*\.|$)/i.exec(

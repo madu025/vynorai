@@ -625,6 +625,44 @@ test("apply writes date-group formulas to a new result sheet", async () => {
   assert.equal(report.sourceUnchangedAfterApply, true);
 });
 
+test("combine intent plans and applies a formula without changing the source", async () => {
+  const combineInput = {
+    ...input,
+    values: [
+      ["Region", "Status"],
+      ["North", "Active"],
+      ["South", "Paused"],
+    ],
+    address: "Sheet1!A1:B3",
+  };
+  const asked = interpretInstruction(
+    "Combine Region and Status into one column",
+    ["Region", "Status"],
+    combineInput.values.slice(1),
+  );
+  assert.deepEqual(asked.actions, ["add-column"]);
+  assert.equal(asked.specs.addColumn?.derived, "combine");
+  const plan = createExcelPreviewPlan(
+    combineInput as any,
+    ["add-column"],
+    undefined,
+    asked.specs,
+  );
+  const excel = fakeWorkbook(combineInput.values as any[][]);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(excel.written["Calc of Sheet1!1,2,2,1.formulas"], [
+    ['=A2&" - "&B2'],
+    ['=A3&" - "&B3'],
+  ]);
+  assert.equal(report.sourceUnchangedAfterApply, true);
+});
+
 test("apply writes converted ISO dates only to a formatted clean result sheet", async () => {
   const dateInput = {
     workbookId: "book",

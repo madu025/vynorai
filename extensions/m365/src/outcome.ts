@@ -404,9 +404,11 @@ export function buildOutcomes(
                   ? `YoY change of ${spec.sourceColumn}`
                   : spec.derived === "date-group"
                     ? `${spec.group} grouping of ${spec.sourceColumn}`
-                    : spec.expression
-                      ? spec.expression
-                      : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+                    : spec.derived === "combine"
+                      ? `${spec.sourceColumn} combined with ${spec.sourceColumn2}`
+                      : spec.expression
+                        ? spec.expression
+                        : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
       // Show the new column with its real values so the person sees the answer, not only a rule.
       try {
         if (spec.expression) {
@@ -575,6 +577,28 @@ export function buildOutcomes(
               ...table.rows[at].slice(0, kept),
               groupDate(row[source]),
             ]);
+        } else if (
+          spec.derived === "combine" &&
+          spec.sourceColumn &&
+          spec.sourceColumn2 &&
+          Number.isInteger(spec.sourceIndex) &&
+          Number.isInteger(spec.sourceIndex2)
+        ) {
+          const first = spec.sourceIndex as number;
+          const second = spec.sourceIndex2 as number;
+          const kept = MAX_TABLE_COLUMNS - 1;
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows.slice(0, MAX_TABLE_ROWS).map((row, at) => {
+            const left = row[first] == null ? "" : String(row[first]);
+            const right = row[second] == null ? "" : String(row[second]);
+            return [
+              ...table.rows[at].slice(0, kept),
+              left && right ? `${left} - ${right}` : left || right,
+            ];
+          });
         } else if (spec.leftColumn && spec.rightColumn && spec.operator) {
           const left = headers.indexOf(String(spec.leftColumn));
           const right = headers.indexOf(String(spec.rightColumn));

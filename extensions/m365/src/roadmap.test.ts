@@ -77,6 +77,22 @@ test("clean fills only blank cells with an explicit safe value", () => {
   assert.equal(cleaned.filledBlanks, 3);
 });
 
+test("fuzzy dedupe removes only rows within one edit of an earlier row", () => {
+  const result = cleanRows(
+    [
+      ["North", 10],
+      ["Noth", 10],
+      ["South", 20],
+    ],
+    ["fuzzy-dedupe"],
+  );
+  assert.deepEqual(result.rows, [
+    ["North", 10],
+    ["South", 20],
+  ]);
+  assert.equal(result.changes.duplicatesRemoved, 1);
+});
+
 // ---------------------------------------------------------------- R2 computed column
 test("computed column formulas come from validated indexes and a fixed operator list", () => {
   assert.equal(columnLetter(0), "A");

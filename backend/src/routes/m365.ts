@@ -123,6 +123,7 @@ const excelPlanSchema = z.object({
                 "text-to-date",
                 "fill-blanks",
                 "dedupe",
+                "fuzzy-dedupe",
               ]),
             )
             .min(1)

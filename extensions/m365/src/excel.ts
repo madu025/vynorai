@@ -563,6 +563,7 @@ function resolveColumnSpecs(
       "text-to-date",
       "fill-blanks",
       "dedupe",
+      "fuzzy-dedupe",
     ];
     if (
       !Array.isArray(operations) ||
@@ -590,6 +591,11 @@ function resolveColumnSpecs(
     } else if (fillBlanks !== undefined) {
       fail("EXCEL_SPEC_UNUSED", "A fill value needs the fill-blanks step.");
     }
+    if (operations.includes("fuzzy-dedupe") && dataRows.length > 5000)
+      fail(
+        "EXCEL_SPEC_TOO_LARGE",
+        "Fuzzy deduplication is limited to 5,000 data rows.",
+      );
     resolved.clean = {
       operations: allowed.filter((operation) => operations.includes(operation)),
       ...(fillBlanks !== undefined ? { fillBlanks } : {}),

@@ -5,13 +5,15 @@ export type CleanOperation =
   | "text-to-number"
   | "text-to-date"
   | "fill-blanks"
-  | "dedupe";
+  | "dedupe"
+  | "fuzzy-dedupe";
 export const CLEAN_OPERATIONS: readonly CleanOperation[] = [
   "trim",
   "text-to-number",
   "text-to-date",
   "fill-blanks",
   "dedupe",
+  "fuzzy-dedupe",
 ];
 
 export type ComputeOperator = "+" | "-" | "*" | "/";
@@ -113,16 +115,46 @@ export function cleanRows(
       return value;
     }),
   );
-  if (operations.includes("dedupe")) {
+  if (operations.includes("dedupe") || operations.includes("fuzzy-dedupe")) {
     const seen = new Set<string>();
     const kept: Cell[][] = [];
+    const fuzzyKeys: string[] = [];
+    const distance = (left: string, right: string): number => {
+      const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+      for (let i = 1; i <= left.length; i += 1) {
+        let diagonal = row[0];
+        row[0] = i;
+        for (let j = 1; j <= right.length; j += 1) {
+          const above = row[j];
+          row[j] = Math.min(
+            row[j] + 1,
+            row[j - 1] + 1,
+            diagonal + (left[i - 1] === right[j - 1] ? 0 : 1),
+          );
+          diagonal = above;
+        }
+      }
+      return row[right.length];
+    };
     for (const row of next) {
       const key = JSON.stringify(row);
-      if (seen.has(key)) {
+      const fuzzyKey = row
+        .map((cell) =>
+          String(cell ?? "")
+            .toLocaleLowerCase()
+            .replace(/\s+/g, " ")
+            .trim(),
+        )
+        .join(" | ");
+      const fuzzyDuplicate =
+        operations.includes("fuzzy-dedupe") &&
+        fuzzyKeys.some((candidate) => distance(candidate, fuzzyKey) <= 1);
+      if (seen.has(key) || fuzzyDuplicate) {
         changes.duplicatesRemoved += 1;
         continue;
       }
       seen.add(key);
+      fuzzyKeys.push(fuzzyKey);
       kept.push(row);
     }
     next = kept;

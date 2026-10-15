@@ -258,6 +258,11 @@ export function buildOutcomes(
             `blank cells with ${String(spec.fillBlanks)}`,
             `à·„à·’à·ƒà·Š à¶­à·“à¶»à·” ${String(spec.fillBlanks)} à·€à¶½à·’à¶±à·Š`,
           );
+        if (operation === "fuzzy-dedupe")
+          return say(
+            "near-duplicate rows (one-character tolerance)",
+            "එක් අක්ෂරයක වෙනසක් ඇති ආසන්න duplicate පේළි",
+          );
         if (operation === "dedupe")
           return say(
             "exact duplicate rows",

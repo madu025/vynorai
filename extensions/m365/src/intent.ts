@@ -437,6 +437,12 @@ export function interpretInstruction(
     /\bdedup(?:e|licate)s?\b|remove\s+duplicates?|duplicate\s+rows?/i.test(text)
   )
     operations.add("dedupe");
+  if (
+    /fuzzy\s+(?:dedup(?:e|licate)s?|duplicates?)|near[-\s]?duplicate/i.test(
+      text,
+    )
+  )
+    operations.add("fuzzy-dedupe");
   if (/\bclean\b|\btidy\b/i.test(text)) operations.add("dedupe");
   if (operations.size > 0) {
     result.actions.push("clean");

@@ -65,6 +65,32 @@ test("server and add-in build the same safe split plan", () => {
   assert.equal(server.actions[0].spec.splitSourceColumn, "Month");
 });
 
+test("server and add-in accept fuzzy dedupe with a bounded row limit", () => {
+  const fuzzyInput = {
+    ...input,
+    values: [
+      ["Region", "Sales"],
+      ["North", 10],
+      ["Noth", 10],
+    ],
+  };
+  const specs = { clean: { operations: ["fuzzy-dedupe"] } };
+  const local = createExcelPreviewPlan(
+    fuzzyInput as any,
+    ["clean"],
+    500,
+    specs,
+  );
+  const server = createServerExcelPreviewPlan(
+    fuzzyInput,
+    ["clean"],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec.operations, ["fuzzy-dedupe"]);
+});
+
 test("server and add-in build the same safe running-total plan", () => {
   const actions = ["add-column"] as const;
   const specs = {

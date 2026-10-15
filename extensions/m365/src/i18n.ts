@@ -98,6 +98,16 @@ export function localizeMessage(language: Language, text: string): string {
   return language === "si" ? localizeMessageSi(text) : text;
 }
 
+/**
+ * The language an AI answer should be written in: the script the person typed in wins, then the
+ * language chosen in the pane, then English.
+ */
+export function responseLanguage(typed: string, pane: Language): Language {
+  if (/[඀-෿]/.test(typed)) return "si";
+  if (/[஀-௿]/.test(typed)) return "ta";
+  return pane;
+}
+
 export function loadLanguage(
   storage: Pick<Storage, "getItem"> | undefined = safeStorage(),
 ): Language {

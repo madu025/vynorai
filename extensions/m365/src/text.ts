@@ -218,6 +218,7 @@ run?.addEventListener("click", async () => {
       task: (taskSelect?.value || "summarize") as TextTask,
       tone: (toneSelect?.value || undefined) as TextTone | undefined,
       text: sourceBox?.value || "",
+      language: "auto",
       consent: consent?.checked === true,
     });
     run.disabled = true;

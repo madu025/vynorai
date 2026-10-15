@@ -57,7 +57,7 @@ export interface DraftRequestInput {
   audience?: string;
   tone?: "formal" | "friendly" | "concise";
   length: "short" | "standard" | "detailed";
-  language: "en" | "si";
+  language: "auto" | "en" | "si" | "ta";
   includeTable?: boolean;
   memo?: { to: string; from: string; subject: string };
   consent: boolean;

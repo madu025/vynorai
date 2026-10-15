@@ -322,9 +322,10 @@ export function buildSchemaSummary(input: RangeInput): SchemaSummary {
 export function createAnalysisRequest(
   summary: SchemaSummary,
   consent: boolean,
-): { summary: SchemaSummary; consent: true } {
+  language: "en" | "si" | "ta" = "en",
+): { summary: SchemaSummary; language: "en" | "si" | "ta"; consent: true } {
   if (consent !== true) throw new AnalysisConsentError();
-  return { summary, consent: true };
+  return { summary, language, consent: true };
 }
 
 const ROLES: RoleHint[] = [

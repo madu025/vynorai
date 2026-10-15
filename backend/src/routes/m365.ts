@@ -578,7 +578,13 @@ m365Router.post(
       return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
     }
     try {
-      const analysis = await analyzeSchemaSummary(user, req.body.summary);
+      const analysis = await analyzeSchemaSummary(
+        user,
+        req.body.summary,
+        req.body.language === "si" || req.body.language === "ta"
+          ? req.body.language
+          : "en",
+      );
       const analysisId = `m365a_${analysis.summaryHash.slice(0, 24)}`;
       await logSecurityEvent({
         eventType: "M365_EXCEL_ANALYSIS_COMPLETED",

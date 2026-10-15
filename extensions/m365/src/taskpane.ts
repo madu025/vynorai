@@ -12,6 +12,7 @@ import {
   LANGUAGE_NAMES,
   applyLanguage,
   localizeMessage,
+  responseLanguage,
   translate,
   loadLanguage,
   nextLanguage,
@@ -908,6 +909,7 @@ consentSend?.addEventListener("click", async () => {
     request = createAnalysisRequest(
       pendingSummary,
       consentCheck?.checked === true,
+      responseLanguage(instruction?.value || "", language),
     );
   } catch (error) {
     if (error instanceof AnalysisConsentError)

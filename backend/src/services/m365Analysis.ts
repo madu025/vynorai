@@ -189,9 +189,24 @@ const SYSTEM_PROMPT = [
   "You may only recommend analysis. Never output formulas, macros, code, cell edits or instructions to delete or overwrite data.",
 ].join("\n");
 
-export function buildAnalysisMessages(summary: SchemaSummary) {
+export const ANALYSIS_LANGUAGES = ["en", "si", "ta"] as const;
+export type AnalysisLanguage = (typeof ANALYSIS_LANGUAGES)[number];
+const LANGUAGE_NAMES: Record<AnalysisLanguage, string> = {
+  en: "English",
+  si: "Sinhala (සිංහල)",
+  ta: "Tamil (தமிழ்)",
+};
+
+export function buildAnalysisMessages(
+  summary: SchemaSummary,
+  language: AnalysisLanguage = "en",
+) {
   return [
-    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: `${SYSTEM_PROMPT}
+Write every human-readable string (summary, reason, message, title) in ${LANGUAGE_NAMES[language]}. Keep JSON keys, enum values and column names exactly as given.`,
+    },
     {
       role: "user",
       content: `Worksheet summary:\n${JSON.stringify(summary)}`,
@@ -437,6 +452,7 @@ export function resetAnalysisRateLimitForTests(): void {
 export async function analyzeSchemaSummary(
   user: AuthenticatedUser,
   rawSummary: unknown,
+  language: AnalysisLanguage = "en",
 ): Promise<{
   result: AnalysisResult;
   summaryHash: string;
@@ -448,7 +464,7 @@ export async function analyzeSchemaSummary(
   assertPrivateSummary(checked.data);
   const { summary, maskedCount } = shieldSummary(checked.data);
   assertAnalysisRateLimit(user.id);
-  const messages = buildAnalysisMessages(summary);
+  const messages = buildAnalysisMessages(summary, language);
   const chars = messages.reduce((sum, m) => sum + m.content.length, 0);
   const text = await runner(user, messages, Math.ceil(chars / 4) + 2000);
   const { result, droppedRecommendations } = parseAnalysisResponse(

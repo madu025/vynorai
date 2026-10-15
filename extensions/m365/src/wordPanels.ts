@@ -95,7 +95,11 @@ export function initWordPanels(deps: WordPanelDeps): void {
           | "short"
           | "standard"
           | "detailed",
-        language: (value("#draft-language") || "en") as "en" | "si",
+        language: (value("#draft-language") || "auto") as
+          | "auto"
+          | "en"
+          | "si"
+          | "ta",
         includeTable: $<HTMLInputElement>("#draft-table")?.checked === true,
         memo: {
           to: value("#memo-to"),

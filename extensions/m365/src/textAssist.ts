@@ -52,12 +52,14 @@ export function buildAssistRequest(input: {
   task: TextTask;
   tone?: TextTone;
   text: string;
+  language?: "auto" | "en" | "si" | "ta";
   consent: boolean;
 }): {
   host: TextHost;
   task: TextTask;
   tone?: TextTone;
   text: string;
+  language?: "auto" | "en" | "si" | "ta";
   consent: true;
 } {
   if (input.consent !== true) throw new TextConsentError();
@@ -71,6 +73,7 @@ export function buildAssistRequest(input: {
     task: input.task,
     ...(input.tone ? { tone: input.tone } : {}),
     text,
+    ...(input.language ? { language: input.language } : {}),
     consent: true,
   };
 }

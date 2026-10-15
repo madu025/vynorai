@@ -54,7 +54,11 @@ export interface M365ApiClient {
     removedSheets: number;
     convertedTables: number;
   }): Promise<any>;
-  analyzeExcel(input: { summary: unknown; consent: true }): Promise<any>;
+  analyzeExcel(input: {
+    summary: unknown;
+    language?: "en" | "si" | "ta";
+    consent: true;
+  }): Promise<any>;
 }
 
 export interface M365RequestTrace {

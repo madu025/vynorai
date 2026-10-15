@@ -13,7 +13,7 @@ export const DRAFT_KINDS = [
   "minutes",
 ] as const;
 export const DRAFT_LENGTHS = ["short", "standard", "detailed"] as const;
-export const DRAFT_LANGUAGES = ["en", "si"] as const;
+export const DRAFT_LANGUAGES = ["auto", "en", "si", "ta"] as const;
 export const DRAFT_TONES = ["formal", "friendly", "concise"] as const;
 export const MAX_BRIEF_CHARS = 4000;
 export const MAX_DRAFT_CHARS = 24_000;
@@ -150,7 +150,11 @@ export function buildDraftMessages(input: DraftRequest) {
   const language =
     input.language === "si"
       ? "Write the document text in Sinhala (keep names, numbers and product terms as given)."
-      : "Write the document text in English.";
+      : input.language === "ta"
+        ? "Write the document text in Tamil (keep names, numbers and product terms as given)."
+        : input.language === "en"
+          ? "Write the document text in English."
+          : "Write the document text in the language the brief is written in (Sinhala, Tamil or English); keep names, numbers and product terms as given.";
   return [
     {
       role: "system",

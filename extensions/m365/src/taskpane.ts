@@ -562,6 +562,8 @@ inspect?.addEventListener("click", async () => {
       chartAction: actions.includes("chart"),
       namesAColumn,
       applied: Object.keys(lastAppliedSpecs ?? {}),
+      text: instructionText,
+      textMatches: /(that|it|same|those|these)/i.test(instructionText),
       chartSpec: specs.chart,
       earlierPivot: earlier,
     });

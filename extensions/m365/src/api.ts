@@ -33,6 +33,7 @@ export interface M365ApiClient {
         | "pivot-table"
         | "clean"
         | "add-column"
+        | "split-column"
         | "summary"
         | "format"
         | "quality"

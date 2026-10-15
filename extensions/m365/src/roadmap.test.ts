@@ -663,6 +663,55 @@ test("combine intent plans and applies a formula without changing the source", a
   assert.equal(report.sourceUnchangedAfterApply, true);
 });
 
+test("split intent plans and applies first/last formulas on a new sheet", async () => {
+  const splitInput = {
+    ...input,
+    address: "Sheet1!A1:B3",
+    values: [
+      ["Customer", "Sales"],
+      ["Prasad Dissanayake", 100],
+      ["Nimal Perera", 200],
+    ],
+  };
+  const asked = interpretInstruction(
+    "Split Customer into first and last name columns",
+    ["Customer", "Sales"],
+    splitInput.values.slice(1),
+  );
+  assert.deepEqual(asked.actions, ["split-column"]);
+  const plan = createExcelPreviewPlan(
+    splitInput as any,
+    ["split-column"],
+    undefined,
+    asked.specs,
+  );
+  const excel = fakeWorkbook(splitInput.values as any[][]);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    {
+      expectedSourceFingerprint: plan.sourceFingerprint,
+    },
+  );
+  const formulaKey = Object.keys(excel.written).find((key) =>
+    key.endsWith("!1,2,2,2.formulas"),
+  );
+  assert.ok(formulaKey);
+  assert.deepEqual(excel.written[formulaKey], [
+    [
+      '=IFERROR(LEFT(A2,FIND(" ",A2&" ")-1),"")',
+      '=IFERROR(TRIM(MID(A2,FIND(" ",A2&" ")+1,999)),"")',
+    ],
+    [
+      '=IFERROR(LEFT(A3,FIND(" ",A3&" ")-1),"")',
+      '=IFERROR(TRIM(MID(A3,FIND(" ",A3&" ")+1,999)),"")',
+    ],
+  ]);
+  assert.equal(report.sourceUnchangedAfterApply, true);
+});
+
 test("apply writes converted ISO dates only to a formatted clean result sheet", async () => {
   const dateInput = {
     workbookId: "book",

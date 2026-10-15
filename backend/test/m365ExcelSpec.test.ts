@@ -50,6 +50,21 @@ test("server and add-in build the same safe combine plan", () => {
   assert.equal(server.actions[0].spec.separator, " - ");
 });
 
+test("server and add-in build the same safe split plan", () => {
+  const specs = {
+    split: {
+      source: 0,
+      firstName: "Customer First",
+      lastName: "Customer Last",
+    },
+  };
+  const actions = ["split-column"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec.splitSourceColumn, "Month");
+});
+
 test("server and add-in build the same safe running-total plan", () => {
   const actions = ["add-column"] as const;
   const specs = {

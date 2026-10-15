@@ -114,12 +114,14 @@ export interface InstructionSpecs {
     lag?: number;
     group?: "month" | "quarter" | "year";
   };
+  split?: { source: number; firstName: string; lastName: string };
 }
 
 export interface InterpretedInstruction {
   actions: Array<
     | "clean"
     | "add-column"
+    | "split-column"
     | "chart"
     | "pivot-table"
     | "view"
@@ -196,6 +198,30 @@ export function interpretInstruction(
         problems: [],
       };
     }
+  }
+
+  const splitMatch =
+    /\b(?:split|separate)\s+["']?([^"'\n,.]+?)["']?\s+into\s+(?:first\s+and\s+last|two)\s+(?:name\s+)?columns?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (splitMatch) {
+    const source = findHeader(headers, splitMatch[1].trim());
+    if (source < 0)
+      result.problems.push(
+        `"${splitMatch[1].trim()}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    else
+      return {
+        actions: ["split-column"],
+        specs: {
+          split: {
+            source,
+            firstName: `${headers[source]} First`,
+            lastName: `${headers[source]} Last`,
+          },
+        },
+        problems: [],
+      };
   }
 
   const dateGroupMatch =

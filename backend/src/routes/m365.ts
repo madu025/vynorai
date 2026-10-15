@@ -62,6 +62,7 @@ const excelPlanSchema = z.object({
         "pivot-table",
         "clean",
         "add-column",
+        "split-column",
         "summary",
         "format",
         "quality",
@@ -300,6 +301,14 @@ const excelPlanSchema = z.object({
         })
         .strict()
         .optional(),
+      split: z
+        .object({
+          source: z.number().int().min(0).max(99),
+          firstName: z.string().min(1).max(40),
+          lastName: z.string().min(1).max(40),
+        })
+        .strict()
+        .optional(),
     })
     .strict()
     .optional(),
@@ -333,6 +342,7 @@ const applyResultSchema = z.object({
           "pivot-table",
           "clean",
           "add-column",
+          "split-column",
           "summary",
           "format",
           "quality",

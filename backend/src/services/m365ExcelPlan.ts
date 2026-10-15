@@ -113,6 +113,7 @@ export interface ExcelColumnSpecs {
     lag?: number;
     group?: "month" | "quarter" | "year";
   };
+  split?: { source: number; firstName: string; lastName: string };
   summary?: {
     group: number;
     values: Array<{ column: number; aggregation: ExcelAggregation }>;
@@ -220,6 +221,10 @@ export interface ExcelActionSpec {
   window?: number;
   lag?: number;
   group?: "month" | "quarter" | "year";
+  splitSourceColumn?: string;
+  splitSourceIndex?: number;
+  splitFirstColumn?: string;
+  splitLastColumn?: string;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
@@ -255,6 +260,7 @@ function resolveColumnSpecs(
   view?: ExcelActionSpec;
   statistics?: ExcelActionSpec;
   dashboard?: ExcelActionSpec;
+  split?: ExcelActionSpec;
 } {
   if (!specs) {
     if (requested.has("dashboard"))
@@ -287,6 +293,7 @@ function resolveColumnSpecs(
     view?: ExcelActionSpec;
     statistics?: ExcelActionSpec;
     dashboard?: ExcelActionSpec;
+    split?: ExcelActionSpec;
   } = {};
   if (requested.has("dashboard") && !specs.dashboard)
     fail("EXCEL_SPEC_INVALID", "A dashboard needs explicit column choices.");
@@ -698,6 +705,29 @@ function resolveColumnSpecs(
         rightIndex: right as number,
       };
     }
+  }
+  if (specs.split) {
+    if (!requested.has("split-column"))
+      fail("EXCEL_SPEC_UNUSED", "A split needs the split-column action.");
+    const { source, firstName, lastName } = specs.split;
+    if (
+      !inRange(source) ||
+      typeof firstName !== "string" ||
+      typeof lastName !== "string"
+    )
+      fail("EXCEL_SPEC_INVALID", "The split column choices are not valid.");
+    if (
+      firstName.trim() === lastName.trim() ||
+      firstName.length > 40 ||
+      lastName.length > 40
+    )
+      fail("EXCEL_SPEC_INVALID", "The split output names are not valid.");
+    resolved.split = {
+      splitSourceColumn: headers[source],
+      splitSourceIndex: source,
+      splitFirstColumn: uniqueColumnName(firstName.trim(), headers),
+      splitLastColumn: uniqueColumnName(lastName.trim(), headers),
+    };
   }
   if (specs.summary) {
     if (!requested.has("summary"))
@@ -1321,6 +1351,7 @@ export function createServerExcelPreviewPlan(
     "pivot-table",
     "clean",
     "add-column",
+    "split-column",
     "summary",
     "format",
     "quality",
@@ -1337,19 +1368,21 @@ export function createServerExcelPreviewPlan(
           ? `${baseName}_Vynor_Clean`
           : kind === "add-column"
             ? `${baseName}_Vynor_Calc`
-            : kind === "format"
-              ? `${baseName}_Vynor_Format`
-              : kind === "quality"
-                ? `${baseName}_Vynor_Report`
-                : kind === "summary"
-                  ? `${baseName}_Vynor_Totals`
-                  : kind === "view"
-                    ? `${baseName}_Vynor_View`
-                    : kind === "statistics"
-                      ? `${baseName}_Vynor_Stats`
-                      : kind === "dashboard"
-                        ? `${baseName}_Vynor_Dashboard`
-                        : `${baseName}_Vynor_Result`,
+            : kind === "split-column"
+              ? `${baseName}_Vynor_Split`
+              : kind === "format"
+                ? `${baseName}_Vynor_Format`
+                : kind === "quality"
+                  ? `${baseName}_Vynor_Report`
+                  : kind === "summary"
+                    ? `${baseName}_Vynor_Totals`
+                    : kind === "view"
+                      ? `${baseName}_Vynor_View`
+                      : kind === "statistics"
+                        ? `${baseName}_Vynor_Stats`
+                        : kind === "dashboard"
+                          ? `${baseName}_Vynor_Dashboard`
+                          : `${baseName}_Vynor_Result`,
       preservesSource: true,
       description: layout.normalization
         ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
@@ -1361,6 +1394,12 @@ export function createServerExcelPreviewPlan(
       ...(kind === "clean" && resolved.clean ? { spec: resolved.clean } : {}),
       ...(kind === "add-column" && resolved.addColumn
         ? { spec: resolved.addColumn }
+        : {}),
+      ...(kind === "split-column" && resolved.split
+        ? { spec: resolved.split }
+        : {}),
+      ...(kind === "split-column" && resolved.split
+        ? { spec: resolved.split }
         : {}),
       ...(kind === "format" && resolved.format
         ? { spec: resolved.format }

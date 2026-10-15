@@ -380,6 +380,32 @@ export function buildOutcomes(
           "සජීවී සූත්‍ර භාවිතා කරයි; දත්ත වෙනස් වන විට යාවත්කාලීන වේ.",
         ),
       );
+    } else if (action.kind === "split-column") {
+      const source = Number(spec.splitSourceIndex);
+      const kept = MAX_TABLE_COLUMNS - 2;
+      const splitValue = (value: unknown) => {
+        const text = value == null ? "" : String(value).trim();
+        const at = text.indexOf(" ");
+        return [
+          at < 0 ? text : text.slice(0, at),
+          at < 0 ? "" : text.slice(at + 1).trim(),
+        ];
+      };
+      table.headers = [
+        ...table.headers.slice(0, kept),
+        String(spec.splitFirstColumn),
+        String(spec.splitLastColumn),
+      ];
+      table.rows = rows.slice(0, MAX_TABLE_ROWS).map((row, at) => {
+        const [first, last] = splitValue(row[source]);
+        return [...table.rows[at].slice(0, kept), first, last];
+      });
+      item.details.push(
+        say(
+          `Splits ${spec.splitSourceColumn} into ${spec.splitFirstColumn} and ${spec.splitLastColumn}.`,
+          `${spec.splitSourceColumn} ${spec.splitFirstColumn} සහ ${spec.splitLastColumn} ලෙස වෙන් කරයි.`,
+        ),
+      );
     } else if (action.kind === "add-column" && spec.lookupSheet) {
       item.details.push(
         say(

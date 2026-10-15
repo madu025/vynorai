@@ -1453,6 +1453,55 @@ export async function applyApprovedExcelPlan(
               grid.format.autofitColumns();
               await context.sync();
             }
+          } else if (action.kind === "split-column") {
+            const spec = action.spec;
+            if (
+              !spec?.splitSourceColumn ||
+              !Number.isInteger(spec.splitSourceIndex) ||
+              !spec.splitFirstColumn ||
+              !spec.splitLastColumn
+            )
+              throw new Error(
+                "split-column needs explicit source and output choices",
+              );
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers, rows } = splitHeader(await readSourceValues());
+              if (headers[spec.splitSourceIndex] !== spec.splitSourceColumn)
+                throw new Error(
+                  "The split source changed after the preview. Preview again.",
+                );
+              const sourceLetter = expressionColumnLetter(
+                spec.splitSourceIndex,
+              );
+              const out = [
+                [...headers, spec.splitFirstColumn, spec.splitLastColumn],
+                ...rows.map((row) => [...row, "", ""]),
+              ].map((row) => row.map(literal));
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                out.length,
+                headers.length + 2,
+              ).values = out;
+              await context.sync();
+              if (rows.length > 0) {
+                sheet.getRangeByIndexes(
+                  1,
+                  headers.length,
+                  rows.length,
+                  2,
+                ).formulas = rows.map((_row, index) => {
+                  const rowNumber = index + 2;
+                  return [
+                    `=IFERROR(LEFT(${sourceLetter}${rowNumber},FIND(" ",${sourceLetter}${rowNumber}&" ")-1),"")`,
+                    `=IFERROR(TRIM(MID(${sourceLetter}${rowNumber},FIND(" ",${sourceLetter}${rowNumber}&" ")+1,999)),"")`,
+                  ];
+                });
+                await context.sync();
+              }
+            }
           } else if (action.kind === "add-column") {
             const spec = action.spec;
             if (!spec?.columnName)

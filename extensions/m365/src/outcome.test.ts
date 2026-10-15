@@ -227,6 +227,39 @@ test("a combine outcome previews both source values", () => {
   assert.match(item.details.join("\n"), /Region combined with Status/);
 });
 
+test("a split outcome previews first and last name columns", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "split-column",
+        targetSheet: "Sheet1_Vynor_Split",
+        spec: {
+          splitSourceColumn: "Customer",
+          splitSourceIndex: 0,
+          splitFirstColumn: "Customer First",
+          splitLastColumn: "Customer Last",
+        },
+      },
+    ],
+    ["Customer", "Sales"],
+    [
+      ["Prasad Dissanayake", 100],
+      ["Nimal", 200],
+    ],
+  );
+  assert.deepEqual(item.table?.headers.slice(-2), [
+    "Customer First",
+    "Customer Last",
+  ]);
+  assert.deepEqual(
+    item.table?.rows.map((row) => row.slice(-2)),
+    [
+      ["Prasad", "Dissanayake"],
+      ["Nimal", ""],
+    ],
+  );
+});
+
 test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
   const [item] = buildOutcomes(
     [

@@ -11,6 +11,7 @@ import {
 import {
   LANGUAGE_NAMES,
   applyLanguage,
+  translate,
   loadLanguage,
   nextLanguage,
   saveLanguage,
@@ -1070,9 +1071,11 @@ function setupLayout() {
   toggleDiagnostics?.addEventListener("click", () => {
     if (!diagnosticsPanel) return;
     diagnosticsPanel.hidden = !diagnosticsPanel.hidden;
-    toggleDiagnostics.textContent = diagnosticsPanel.hidden
-      ? "Show diagnostics"
-      : "Hide diagnostics";
+    toggleDiagnostics.textContent = translate(
+      language,
+      diagnosticsPanel.hidden ? "menu_show_diag" : "menu_hide_diag",
+      diagnosticsPanel.hidden ? "Show diagnostics" : "Hide diagnostics",
+    );
     closeMenu();
   });
   // The self-test and copy actions report into the diagnostics panel, so reveal it.

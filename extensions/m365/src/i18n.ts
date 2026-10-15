@@ -26,6 +26,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     welcome_body:
       "තෝරාගත් දත්ත විශ්ලේෂණය කිරීමට ඔබේ කාර්යාල ගිණුමෙන් පිවිසෙන්න.",
     signin: "Microsoft සමඟ පිවිසෙන්න",
+    menu_show_diag: "රෝග විනිශ්චය පෙන්වන්න",
+    menu_hide_diag: "රෝග විනිශ්චය සඟවන්න",
     menu_selftest: "ස්වයං පරීක්ෂාව ධාවනය",
     menu_copy: "රෝග විනිශ්චය පිටපත් කරන්න",
     menu_clear: "රෝග විනිශ්චය මකන්න",
@@ -53,6 +55,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     welcome_body:
       "தேர்ந்தெடுத்த தரவை பகுப்பாய்வு செய்ய உங்கள் பணிக் கணக்கில் உள்நுழையவும்.",
     signin: "Microsoft மூலம் உள்நுழை",
+    menu_show_diag: "கண்டறிதலைக் காட்டு",
+    menu_hide_diag: "கண்டறிதலை மறை",
     menu_selftest: "சுய பரிசோதனையை இயக்கு",
     menu_copy: "கண்டறிதலை நகலெடு",
     menu_clear: "கண்டறிதலை அழி",

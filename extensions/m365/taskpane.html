@@ -64,14 +64,14 @@
         <span class="brand">VynorAI</span>
         <button id="menu-toggle" class="icon-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More options">&#8943;</button>
         <div id="menu" role="menu" hidden>
-          <button id="toggle-diagnostics" type="button" role="menuitem">Show diagnostics</button>
+          <button id="toggle-diagnostics" type="button" role="menuitem" data-i18n="menu_show_diag">Show diagnostics</button>
           <button id="overview" type="button" role="menuitem" data-i18n="menu_overview">Workbook overview</button>
           <button id="language" type="button" role="menuitem">Language: English</button>
           <button id="self-test" type="button" role="menuitem" data-i18n="menu_selftest">Run self-test</button>
           <button id="copy-diagnostics" type="button" role="menuitem" data-i18n="menu_copy">Copy diagnostics</button>
           <button id="clear-diagnostics" type="button" role="menuitem" data-i18n="menu_clear">Clear diagnostics</button>
           <button id="sign-out" type="button" role="menuitem" disabled data-i18n="menu_signout">Sign out</button>
-          <p class="menu-version" id="build-id">Build 20261015.22</p>
+          <p class="menu-version" id="build-id">Build 20261015.23</p>
         </div>
       </header>
       <p id="status" role="status" aria-live="polite">Loading…</p>
@@ -182,7 +182,7 @@
     <script nomodule>
       document.getElementById("status").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";
     </script>
-    <script src="./runtime-config.js?v=20261015.22"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261015.22"></script>
+    <script src="./runtime-config.js?v=20261015.23"></script>
+    <script src="./dist/taskpane.bundle.js?v=20261015.23"></script>
   </body>
 </html>

@@ -232,6 +232,7 @@ const excelPlanSchema = z.object({
                     "top-n",
                     "bottom-n",
                     "text-contains",
+                    "date-range",
                   ]),
                   operator: z
                     .enum([">", ">=", "<", "<=", "=", "<>"])
@@ -239,6 +240,14 @@ const excelPlanSchema = z.object({
                   value: z.number().finite().optional(),
                   n: z.number().int().min(1).max(100).optional(),
                   text: z.string().trim().min(1).max(80).optional(),
+                  startDate: z
+                    .string()
+                    .regex(/^\d{4}-\d{2}-\d{2}$/)
+                    .optional(),
+                  endDate: z
+                    .string()
+                    .regex(/^\d{4}-\d{2}-\d{2}$/)
+                    .optional(),
                 })
                 .strict(),
             )

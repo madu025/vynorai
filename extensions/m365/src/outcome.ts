@@ -88,6 +88,7 @@ const AGGREGATIONS: Record<string, [string, string]> = {
 };
 
 const CONDITIONAL: Record<string, [string, string]> = {
+  "date-range": ["highlight dates in range", "දින පරාසය උද්දීපනය"],
   "text-contains": ["highlight matching text", "ගැළපෙන පෙළ උද්දීපනය"],
   "custom-formula": ["custom numeric formula", "අභිරුචි සංඛ්‍යාත්මක සූත්‍රය"],
   "top-n": ["highlight top values", "ඉහළම අගයන් උද්දීපනය"],
@@ -271,7 +272,9 @@ export function buildOutcomes(
               ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.n})`
               : entry.rule === "text-contains"
                 ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.text})`
-                : `${entry.column}: ${si ? pair[1] : pair[0]}`,
+                : entry.rule === "date-range"
+                  ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.startDate} to ${entry.endDate})`
+                  : `${entry.column}: ${si ? pair[1] : pair[0]}`,
         );
         if (entry.rule === "data-bars" && entry.index < columns) {
           const max = Math.max(

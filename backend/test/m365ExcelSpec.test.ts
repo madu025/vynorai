@@ -714,6 +714,84 @@ test("server and add-in agree on a safe custom conditional formula", () => {
   );
 });
 
+test("server and add-in agree on a safe date-range conditional format", () => {
+  const dateInput = {
+    ...input,
+    values: [
+      ["Date", "Sales"],
+      [46023, 100],
+      [46112, 200],
+    ],
+  };
+  const actions = ["format"] as const;
+  const specs = {
+    format: {
+      conditional: [
+        {
+          column: 0,
+          rule: "date-range" as const,
+          startDate: "2026-01-01",
+          endDate: "2026-03-31",
+        },
+      ],
+    },
+  };
+  const server = createServerExcelPreviewPlan(
+    dateInput,
+    [...actions],
+    500,
+    specs,
+  );
+  const local = createExcelPreviewPlan(
+    dateInput as any,
+    [...actions],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec?.conditional, [
+    {
+      column: "Date",
+      index: 0,
+      rule: "date-range",
+      startDate: "2026-01-01",
+      endDate: "2026-03-31",
+    },
+  ]);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(dateInput, [...actions], 500, {
+        format: {
+          conditional: [
+            {
+              column: 0,
+              rule: "date-range",
+              startDate: "2026-03-32",
+              endDate: "2026-04-01",
+            },
+          ],
+        },
+      } as any),
+    /valid ISO dates/,
+  );
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(dateInput, [...actions], 500, {
+        format: {
+          conditional: [
+            {
+              column: 0,
+              rule: "date-range",
+              startDate: "2026-04-01",
+              endDate: "2026-01-01",
+            },
+          ],
+        },
+      } as any),
+    /ascending order/,
+  );
+});
+
 test("server and add-in agree on bounded top and bottom conditional formats", () => {
   for (const rule of ["top-n", "bottom-n"] as const) {
     const specs = {

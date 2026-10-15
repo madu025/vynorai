@@ -1478,6 +1478,21 @@ export async function applyApprovedExcelPlan(
                       text: rule.text,
                     };
                     contains.textComparison.format.fill.color = "#FFF2CC";
+                  } else if (rule.rule === "date-range") {
+                    const start = /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+                      rule.startDate ?? "",
+                    );
+                    const end = /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+                      rule.endDate ?? "",
+                    );
+                    if (!start || !end)
+                      throw new Error("date range needs validated ISO dates");
+                    const custom = range.conditionalFormats.add("Custom");
+                    const letter = expressionColumnLetter(rule.index);
+                    const dateFormula = (parts: RegExpExecArray) =>
+                      `DATE(${Number(parts[1])},${Number(parts[2])},${Number(parts[3])})`;
+                    custom.custom.rule.formula = `=AND(ISNUMBER(${letter}2),${letter}2>=${dateFormula(start)},${letter}2<=${dateFormula(end)})`;
+                    custom.custom.format.fill.color = "#FFF2CC";
                   } else if (rule.rule === "duplicates") {
                     const dupes = range.conditionalFormats.add("Custom");
                     const letter = expressionColumnLetter(rule.index);

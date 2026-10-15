@@ -77,6 +77,7 @@ Conditional formatting	format	Add icon sets to Quantity
 Conditional formatting	format	Highlight Sales where Sales > 1000 using a custom conditional format
 Conditional formatting	format	Highlight the top 3 values in Sales with conditional formatting
 Conditional formatting	format	Highlight Status cells containing Pending
+Conditional formatting	format	Highlight Date between 2026-01-01 and 2026-03-31 with conditional formatting
 Named ranges and slicers	named-range	Create a named range for Sales
 Named ranges and slicers	slicer	Add a slicer for Region
 Named ranges and slicers	format	Create a dependent drop-down for Status based on Region

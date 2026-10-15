@@ -91,11 +91,14 @@ export interface ExcelColumnSpecs {
         | "custom-formula"
         | "top-n"
         | "bottom-n"
-        | "text-contains";
+        | "text-contains"
+        | "date-range";
       operator?: ">" | ">=" | "<" | "<=" | "=" | "<>";
       value?: number;
       n?: number;
       text?: string;
+      startDate?: string;
+      endDate?: string;
     }>;
     validation?: Array<{
       column: number;
@@ -1089,6 +1092,7 @@ function resolveColumnSpecs(
       "top-n",
       "bottom-n",
       "text-contains",
+      "date-range",
     ];
     const conditional: Array<{
       column: string;
@@ -1098,6 +1102,8 @@ function resolveColumnSpecs(
       value?: number;
       n?: number;
       text?: string;
+      startDate?: string;
+      endDate?: string;
     }> = [];
     for (const entry of options.conditional ?? []) {
       if (!inRange(entry.column) || !conditionalRules.includes(entry.rule))
@@ -1105,6 +1111,7 @@ function resolveColumnSpecs(
       if (
         entry.rule !== "duplicates" &&
         entry.rule !== "text-contains" &&
+        entry.rule !== "date-range" &&
         !numeric(entry.column)
       )
         fail(
@@ -1148,6 +1155,32 @@ function resolveColumnSpecs(
             "Text conditional formats need 1 to 80 visible characters.",
           );
       }
+      if (entry.rule === "date-range") {
+        const parseDate = (value: unknown) => {
+          if (typeof value !== "string") return undefined;
+          const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+          if (!match) return undefined;
+          const year = Number(match[1]);
+          const month = Number(match[2]);
+          const day = Number(match[3]);
+          const stamp = Date.UTC(year, month - 1, day);
+          const parsed = new Date(stamp);
+          return year >= 1900 &&
+            year <= 9999 &&
+            parsed.getUTCFullYear() === year &&
+            parsed.getUTCMonth() === month - 1 &&
+            parsed.getUTCDate() === day
+            ? stamp
+            : undefined;
+        };
+        const start = parseDate(entry.startDate);
+        const end = parseDate(entry.endDate);
+        if (start === undefined || end === undefined || start > end)
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Date conditional formats need valid ISO dates in ascending order.",
+          );
+      }
       if (
         conditional.some(
           (item) => item.index === entry.column && item.rule === entry.rule,
@@ -1167,7 +1200,12 @@ function resolveColumnSpecs(
             ? { n: entry.n }
             : entry.rule === "text-contains"
               ? { text: entry.text!.trim() }
-              : {}),
+              : entry.rule === "date-range"
+                ? {
+                    startDate: entry.startDate!.trim(),
+                    endDate: entry.endDate!.trim(),
+                  }
+                : {}),
       });
     }
     const validation: Array<{

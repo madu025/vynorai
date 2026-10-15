@@ -452,6 +452,34 @@ test("a format outcome explains a text-contains conditional format", () => {
   );
 });
 
+test("a format outcome explains a date-range conditional format", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "format",
+        targetSheet: "Sheet1_Vynor_Format",
+        spec: {
+          conditional: [
+            {
+              column: "Date",
+              index: 0,
+              rule: "date-range",
+              startDate: "2026-01-01",
+              endDate: "2026-03-31",
+            },
+          ],
+        },
+      },
+    ],
+    ["Date"],
+    [[46023]],
+  );
+  assert.match(
+    item.details.join("\n"),
+    /Date: highlight dates in range \(2026-01-01 to 2026-03-31\)/,
+  );
+});
+
 test("a repeat run gets a numbered sheet name that still fits Excel's limit", () => {
   const taken = new Set(["Sheet1_Vynor_Result", "Sheet1_Vynor_Result (2)"]);
   assert.equal(

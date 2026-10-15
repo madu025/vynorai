@@ -537,6 +537,48 @@ test("apply creates a text-contains conditional format on a copied result sheet"
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 
+test("apply creates a date-range conditional format on a copied result sheet", async () => {
+  const excel = fakeWorkbook([
+    ["Date", "Sales"],
+    [46023, 100],
+    [46112, 200],
+  ]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["format"], 500, {
+    format: {
+      conditional: [
+        {
+          column: 0,
+          rule: "date-range",
+          startDate: "2026-01-01",
+          endDate: "2026-03-31",
+        },
+      ],
+    },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created", JSON.stringify(report));
+  assert.ok(
+    excel.calls.includes("conditional.add Custom"),
+    excel.calls.join("\n"),
+  );
+  assert.ok(
+    excel.calls.some((call) =>
+      call.includes(
+        "custom.formula = =AND(ISNUMBER(A2),A2>=DATE(2026,1,1),A2<=DATE(2026,3,31))",
+      ),
+    ),
+    excel.calls.join("\n"),
+  );
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
 test("an insight report writes only live formulas to a new marked result sheet", async () => {
   const source = [
     ["Region", "Sales"],

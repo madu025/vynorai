@@ -86,6 +86,45 @@ test("format instructions become explicit options, and 'format as a table' stays
   assert.deepEqual(contains.specs.format?.conditional, [
     { column: 0, rule: "text-contains", text: "Pending" },
   ]);
+  const dates = interpretInstruction(
+    "Highlight Date between 2026-01-01 and 2026-03-31 with conditional formatting",
+    ["Date", "Sales"],
+    [
+      [46023, 100],
+      [46112, 200],
+    ],
+  );
+  assert.deepEqual(dates.actions, ["format"]);
+  assert.deepEqual(dates.specs.format?.conditional, [
+    {
+      column: 0,
+      rule: "date-range",
+      startDate: "2026-01-01",
+      endDate: "2026-03-31",
+    },
+  ]);
+  const datePlan = createExcelPreviewPlan(
+    {
+      ...input,
+      values: [
+        ["Date", "Sales"],
+        [46023, 100],
+        [46112, 200],
+      ],
+    } as any,
+    ["format"],
+    500,
+    { format: { conditional: dates.specs.format?.conditional } },
+  );
+  assert.deepEqual(datePlan.actions[0].spec?.conditional, [
+    {
+      column: "Date",
+      index: 0,
+      rule: "date-range",
+      startDate: "2026-01-01",
+      endDate: "2026-03-31",
+    },
+  ]);
   const dropdown = interpretInstruction(
     "Add a drop-down for Region",
     headers,

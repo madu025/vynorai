@@ -655,6 +655,9 @@ inspect?.addEventListener("click", async () => {
                   keyHeaders: keyAt.map((index) => other.headers[index]),
                 }
               : {}),
+            ...(lookupWish.matchMode
+              ? { matchMode: lookupWish.matchMode }
+              : {}),
           },
         };
       } catch (error) {

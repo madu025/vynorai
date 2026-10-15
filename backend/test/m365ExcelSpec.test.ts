@@ -89,6 +89,44 @@ test("server and add-in build the same safe multi-key lookup plan", () => {
   );
 });
 
+test("server and add-in build the same approximate lookup plan and refuse multi-key approximate", () => {
+  const specs = {
+    addColumn: {
+      name: "Tax Rate",
+      lookup: {
+        sheet: "Rates",
+        sourceKey: 2,
+        keyIndex: 2,
+        keyHeader: "Sales",
+        returnIndex: 3,
+        returnHeader: "Cost",
+        rows: 40,
+        matchMode: "approximate" as const,
+      },
+    },
+  };
+  const actions = ["add-column"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.lookupMatchMode, "approximate");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        addColumn: {
+          ...specs.addColumn,
+          lookup: {
+            ...specs.addColumn.lookup,
+            sourceKeys: [0, 1],
+            keyIndexes: [0, 1],
+            keyHeaders: ["Month", "Region"],
+          },
+        },
+      }),
+    /not valid/,
+  );
+});
+
 test("server and add-in build the same safe split plan", () => {
   const specs = {
     split: {

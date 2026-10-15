@@ -219,3 +219,82 @@ test("group A: a lookup can match two key columns", () => {
     `=IFERROR(INDEX('Staff'!D$2:D41,MATCH(1,INDEX(('Staff'!A$2:A41=A2)*('Staff'!B$2:B41=B2),0),0)),"")`,
   );
 });
+
+test("group A: approximate lookup is explicit and remains single-key", () => {
+  const found = interpretInstruction(
+    "Add column Tax Rate from Rates by Sales approximate",
+    ["Sales", "Region"],
+    [[100, "North"]],
+  );
+  assert.equal(found.specs.lookup?.matchMode, "approximate");
+  const plan = createExcelPreviewPlan(
+    {
+      workbookId: "w",
+      worksheetName: "Sheet1",
+      address: "Sheet1!A1:B2",
+      hasHeaders: true,
+      values: [
+        ["Sales", "Region"],
+        [100, "North"],
+      ],
+    } as any,
+    ["add-column"],
+    500,
+    {
+      addColumn: {
+        name: "Tax Rate",
+        lookup: {
+          sheet: "Rates",
+          sourceKey: 0,
+          keyIndex: 0,
+          keyHeader: "Sales",
+          returnIndex: 1,
+          returnHeader: "Tax Rate",
+          rows: 20,
+          matchMode: "approximate",
+        },
+      },
+    },
+  );
+  assert.equal(plan.actions[0].spec?.lookupMatchMode, "approximate");
+  assert.throws(
+    () =>
+      createExcelPreviewPlan(
+        {
+          workbookId: "w",
+          worksheetName: "Sheet1",
+          address: "Sheet1!A1:C2",
+          hasHeaders: true,
+          values: [
+            ["Sales", "Region", "Cost"],
+            [100, "North", 50],
+          ],
+        } as any,
+        ["add-column"],
+        500,
+        {
+          addColumn: {
+            name: "Tax Rate",
+            lookup: {
+              sheet: "Rates",
+              sourceKey: 0,
+              keyIndex: 0,
+              keyHeader: "Sales",
+              returnIndex: 2,
+              returnHeader: "Tax Rate",
+              rows: 20,
+              sourceKeys: [0, 1],
+              keyIndexes: [0, 1],
+              keyHeaders: ["Sales", "Region"],
+              matchMode: "approximate",
+            },
+          },
+        } as any,
+      ),
+    /not valid/,
+  );
+  assert.equal(
+    buildLookupFormula("Rates", 2, [0], [0], 1, 20, "approximate"),
+    `=IFERROR(INDEX('Rates'!B$2:B21,MATCH(A2,'Rates'!A$2:A21,1)),"")`,
+  );
+});

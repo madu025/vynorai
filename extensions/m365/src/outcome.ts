@@ -458,9 +458,13 @@ export function buildOutcomes(
       const lookupKeys = Array.isArray(spec.lookupKeyHeaders)
         ? spec.lookupKeyHeaders.join(" + ")
         : String(spec.lookupKeyHeader ?? "");
+      const matchDescription =
+        spec.lookupMatchMode === "approximate"
+          ? " using approximate matching (lookup values must be sorted ascending)"
+          : "";
       item.details.push(
         say(
-          `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}.`,
+          `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}${matchDescription}.`,
           `"${spec.lookupSheet}" පත්‍රිකාවෙන් "${spec.lookupReturnHeader}" ගෙන එයි — ${spec.sourceKeyColumn} සහ ${spec.lookupKeyHeader} ගැළපීමෙන්.`,
         ),
       );

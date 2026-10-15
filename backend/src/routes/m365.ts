@@ -312,6 +312,7 @@ const excelPlanSchema = z.object({
                 .min(1)
                 .max(5)
                 .optional(),
+              matchMode: z.enum(["exact", "approximate"]).optional(),
             })
             .strict()
             .optional(),

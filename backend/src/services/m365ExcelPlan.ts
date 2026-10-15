@@ -203,6 +203,7 @@ export interface ExcelActionSpec {
   lookupKeyIndex?: number;
   lookupKeyHeaders?: string[];
   lookupKeyIndexes?: number[];
+  lookupMatchMode?: "exact" | "approximate";
   lookupReturnHeader?: string;
   lookupReturnIndex?: number;
   lookupRows?: number;
@@ -557,6 +558,7 @@ function resolveColumnSpecs(
           sourceKeys?: number[];
           keyIndexes?: number[];
           keyHeaders?: string[];
+          matchMode?: "exact" | "approximate";
         }
       | undefined;
     if (derived !== undefined) {
@@ -666,6 +668,9 @@ function resolveColumnSpecs(
           (index) => !Number.isInteger(index) || index < 0 || index > 99,
         ) ||
         new Set(keyIndexes).size !== keyIndexes.length ||
+        (lookup.matchMode !== undefined &&
+          !["exact", "approximate"].includes(lookup.matchMode)) ||
+        (lookup.matchMode === "approximate" && sourceKeys.length !== 1) ||
         keyHeaders.some((header) => !text(header, 60)) ||
         !text(lookup.returnHeader, 60) ||
         !Number.isInteger(lookup.returnIndex) ||
@@ -688,6 +693,7 @@ function resolveColumnSpecs(
         lookupKeyIndex: lookup.keyIndex,
         lookupKeyHeaders: keyHeaders,
         lookupKeyIndexes: keyIndexes,
+        ...(lookup.matchMode ? { lookupMatchMode: lookup.matchMode } : {}),
         lookupReturnHeader: lookup.returnHeader,
         lookupReturnIndex: lookup.returnIndex,
         lookupRows: lookup.rows,

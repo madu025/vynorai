@@ -28,6 +28,7 @@ export interface InstructionSpecs {
     returnHeader: string;
     keyHeader: string;
     keyHeaders?: string[];
+    matchMode?: "exact" | "approximate";
   };
   pivot?: {
     filter?: number;
@@ -502,7 +503,14 @@ export function interpretInstruction(
     };
   }
 
-  const lookupMatch = LOOKUP_PHRASE.exec(rawInstruction.trim());
+  const approximateLookup = /\b(?:approximate|closest|nearest)\b/i.test(
+    rawInstruction,
+  );
+  const lookupText = rawInstruction
+    .replace(/\b(?:approximate|closest|nearest)\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  const lookupMatch = LOOKUP_PHRASE.exec(lookupText);
   if (lookupMatch) {
     const keyHeaders = lookupMatch[3]
       .split(/\band\b|,/i)
@@ -532,6 +540,7 @@ export function interpretInstruction(
                   keyHeaders: sourceKeyAt.map((index) => headers[index]),
                 }
               : {}),
+            ...(approximateLookup ? { matchMode: "approximate" as const } : {}),
           },
         },
         problems: [],

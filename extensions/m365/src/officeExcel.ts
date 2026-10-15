@@ -246,6 +246,7 @@ export function buildLookupFormula(
   lookupKeyIndexes: number[],
   returnIndex: number,
   lookupRows: number,
+  matchMode: "exact" | "approximate" = "exact",
 ): string {
   if (
     sourceKeyIndexes.length < 1 ||
@@ -254,7 +255,9 @@ export function buildLookupFormula(
     sourceRow < 1 ||
     !Number.isInteger(returnIndex) ||
     !Number.isInteger(lookupRows) ||
-    lookupRows < 1
+    lookupRows < 1 ||
+    !["exact", "approximate"].includes(matchMode) ||
+    (matchMode === "approximate" && sourceKeyIndexes.length !== 1)
   )
     throw new Error("Invalid lookup formula choices");
   const quoted = `'${String(sheetName).replace(/'/g, "''")}'`;
@@ -265,8 +268,9 @@ export function buildLookupFormula(
     const letter = expressionColumnLetter(index);
     return `${quoted}!${letter}$2:${letter}${last}`;
   });
+  const matchType = matchMode === "approximate" ? 1 : 0;
   if (sourceLetters.length === 1)
-    return `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(${sourceLetters[0]}${sourceRow},${lookupRanges[0]},0)),"")`;
+    return `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(${sourceLetters[0]}${sourceRow},${lookupRanges[0]},${matchType})),"")`;
   const matches = lookupRanges
     .map((range, index) => `(${range}=${sourceLetters[index]}${sourceRow})`)
     .join("*");
@@ -1658,6 +1662,24 @@ export async function applyApprovedExcelPlan(
                   throw new Error(
                     "The lookup sheet changed after the preview. Preview again.",
                   );
+                if (spec.lookupMatchMode === "approximate") {
+                  const keyValues = (used.values ?? [])
+                    .slice(1)
+                    .map((row: any[]) => row[lookupKeyIndexes[0]]);
+                  const compare = (left: any, right: any) =>
+                    typeof left === "number" && typeof right === "number"
+                      ? left - right
+                      : String(left ?? "").localeCompare(
+                          String(right ?? ""),
+                          undefined,
+                          { numeric: true, sensitivity: "base" },
+                        );
+                  for (let index = 1; index < keyValues.length; index += 1)
+                    if (compare(keyValues[index - 1], keyValues[index]) > 0)
+                      throw new Error(
+                        "Approximate lookup requires the lookup key column to be sorted ascending.",
+                      );
+                }
                 lookupFormula = (rowNumber) => {
                   return buildLookupFormula(
                     spec.lookupSheet,
@@ -1666,6 +1688,7 @@ export async function applyApprovedExcelPlan(
                     lookupKeyIndexes,
                     spec.lookupReturnIndex as number,
                     spec.lookupRows as number,
+                    spec.lookupMatchMode ?? "exact",
                   );
                 };
               }

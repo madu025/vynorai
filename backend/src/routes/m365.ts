@@ -177,6 +177,7 @@ const applyResultSchema = z.object({
           "pivot-table",
           "clean",
           "add-column",
+          "view",
         ]),
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),
       }),

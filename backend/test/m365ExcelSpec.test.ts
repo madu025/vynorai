@@ -176,3 +176,24 @@ test("the server refuses unusable chart v2, pivot v2 and view choices", () => {
     /1-100/,
   );
 });
+
+test("the apply-result schema accepts every action kind a plan can contain", async () => {
+  const { readFileSync } = await import("node:fs");
+  const route = readFileSync(
+    new URL("../src/routes/m365.ts", import.meta.url),
+    "utf8",
+  );
+  const block = route.slice(route.indexOf("const applyResultSchema"));
+  const end = block.indexOf("const rollbackSchema");
+  const schema = block.slice(0, end);
+  for (const kind of [
+    "table",
+    "chart",
+    "new-sheet",
+    "pivot-table",
+    "clean",
+    "add-column",
+    "view",
+  ])
+    assert.ok(schema.includes(`"${kind}"`), `apply-result misses ${kind}`);
+});

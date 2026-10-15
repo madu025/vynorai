@@ -31,6 +31,7 @@ export interface M365ApiClient {
     }>;
   }): Promise<any>;
   diagnose(): Promise<M365AccessDiagnostics>;
+  analyzeExcel(input: { summary: unknown; consent: true }): Promise<any>;
 }
 
 export interface M365RequestTrace {
@@ -121,5 +122,6 @@ export function createM365ApiClient(
     reportExcelResult: (input) =>
       request("POST", "/v1/m365/excel/apply-result", input),
     diagnose: () => request("GET", "/v1/m365/diagnostics"),
+    analyzeExcel: (input) => request("POST", "/v1/m365/excel/analyze", input),
   };
 }

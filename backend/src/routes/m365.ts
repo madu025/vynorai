@@ -17,6 +17,11 @@ import {
   diagnoseM365Identity,
   findM365IdentityLink,
 } from "../services/m365Diagnostics.js";
+import {
+  analyzeSchemaSummary,
+  ANALYSIS_CONTRACT_VERSION,
+  M365AnalysisError,
+} from "../services/m365Analysis.js";
 import { z, validateBody } from "../middleware/validate.js";
 
 const excelPlanSchema = z.object({
@@ -303,6 +308,72 @@ m365Router.post(
     res.json({ recorded: true, operationId: req.body.planId });
   },
 );
+
+/**
+ * AI worksheet analysis. Advisory only: it receives a privacy-preserving schema summary (never
+ * cell values), needs explicit consent, and returns recommendations that can never mutate a
+ * workbook. Applying anything still goes through plan, approval token and source fingerprint.
+ */
+m365Router.post(
+  "/excel/analyze",
+  requireM365Auth,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const tenant = identity(req);
+    const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
+    res.setHeader("x-correlation-id", correlationId);
+    if (req.body?.consent !== true) {
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_ANALYSIS_DENIED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ reason: "consent_required", correlationId }),
+      });
+      return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
+    }
+    try {
+      const analysis = await analyzeSchemaSummary(user, req.body.summary);
+      const analysisId = `m365a_${analysis.summaryHash.slice(0, 24)}`;
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_ANALYSIS_COMPLETED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          operationId: analysisId,
+          correlationId,
+          columnCount: req.body.summary.columnCount,
+          rowCount: req.body.summary.rowCount,
+          maskedCount: analysis.maskedCount,
+          recommendationCount: analysis.result.recommendations.length,
+          droppedRecommendations: analysis.droppedRecommendations,
+        }),
+      });
+      return res.json({
+        contractVersion: ANALYSIS_CONTRACT_VERSION,
+        analysisId,
+        advisoryOnly: true,
+        result: analysis.result,
+      });
+    } catch (error) {
+      const known = error instanceof M365AnalysisError;
+      const code = known ? error.code : "AI_ANALYSIS_FAILED";
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_ANALYSIS_FAILED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ code, correlationId }),
+      });
+      return res.status(known ? error.status : 500).json({ error: { code } });
+    }
+  },
+);
+
+function safeCorrelationId(value: unknown): string {
+  const text = Array.isArray(value) ? value[0] : value;
+  return typeof text === "string" && /^[A-Za-z0-9._-]{8,64}$/.test(text)
+    ? text
+    : cryptoId(String(Date.now()) + Math.random());
+}
 
 function cryptoId(value: string): string {
   return `m365_${value.slice(0, 24)}`;

@@ -1,4 +1,13 @@
 import {
+  AnalysisConsentError,
+  buildSchemaSummary,
+  createAnalysisRequest,
+  recommendationToInstruction,
+  validateAnalysisResult,
+  type AnalysisResult,
+  type SchemaSummary,
+} from "./analysis.js";
+import {
   createM365ApiClient,
   M365ApiError,
   type M365RequestTrace,
@@ -41,6 +50,14 @@ const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
+const analyze = document.querySelector<HTMLButtonElement>("#analyze");
+const consentPanel = document.querySelector<HTMLElement>("#ai-consent");
+const consentSummary = document.querySelector<HTMLElement>("#ai-summary");
+const consentCheck =
+  document.querySelector<HTMLInputElement>("#ai-consent-check");
+const consentSend = document.querySelector<HTMLButtonElement>("#ai-send");
+const consentCancel = document.querySelector<HTMLButtonElement>("#ai-cancel");
+const analysisOutput = document.querySelector<HTMLElement>("#ai-result");
 const apply = document.querySelector<HTMLButtonElement>("#apply");
 const selfTest = document.querySelector<HTMLButtonElement>("#self-test");
 const copyDiagnostics =
@@ -117,6 +134,8 @@ function updateAuthenticationUi(signedIn: boolean) {
   if (signIn) signIn.disabled = signedIn;
   if (signOut) signOut.disabled = !signedIn;
   if (inspect) inspect.disabled = !signedIn;
+  if (analyze) analyze.disabled = !signedIn;
+  document.body.dataset.auth = signedIn ? "in" : "out";
 }
 
 function saveSession(tokens: { accessToken: string; expiresIn: number }) {
@@ -152,6 +171,8 @@ function signOutOfMicrosoft() {
   accessToken = "";
   currentPlan = undefined;
   previewFingerprint = "";
+  if (analysisOutput) analysisOutput.textContent = "";
+  if (consentPanel) consentPanel.hidden = true;
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(LEGACY_SESSION_KEY);
   if (apply) apply.disabled = true;
@@ -162,6 +183,16 @@ function signOutOfMicrosoft() {
 }
 
 const API_MESSAGES: Record<string, string> = {
+  AI_CONSENT_REQUIRED: "AI analysis needs your explicit consent first.",
+  AI_ANALYSIS_INVALID:
+    "The AI answer did not match the expected format and was discarded.",
+  AI_ANALYSIS_RATE_LIMITED:
+    "Too many analysis requests. Wait a minute and try again.",
+  AI_PROVIDER_UNAVAILABLE:
+    "The AI service is unavailable right now. Try again later.",
+  AI_SUMMARY_INVALID: "The local summary was rejected. Select the range again.",
+  AI_SUMMARY_NOT_PRIVATE:
+    "The summary was rejected because it contained more than allowed.",
   tenant_disabled:
     "Your Microsoft 365 organization is not enabled in VynorAI yet.",
   tenant_scope_disabled:
@@ -542,6 +573,154 @@ apply?.addEventListener("click", async () => {
   }
 });
 
+/** AI analysis: advisory only. Nothing here reads more than the selection or writes to Excel. */
+let pendingSummary: SchemaSummary | undefined;
+
+function resetAnalysisConsent() {
+  pendingSummary = undefined;
+  if (consentPanel) consentPanel.hidden = true;
+  if (consentCheck) consentCheck.checked = false;
+  if (consentSend) consentSend.disabled = true;
+  if (consentSummary) consentSummary.textContent = "";
+}
+
+function renderAnalysis(result: AnalysisResult) {
+  if (!analysisOutput) return;
+  const output = analysisOutput;
+  output.textContent = "";
+  const add = (tag: string, text: string, parent: HTMLElement = output) => {
+    const element = document.createElement(tag);
+    element.textContent = text; // model text is data, never markup
+    parent.appendChild(element);
+    return element;
+  };
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
+  add("p", result.summary);
+  if (result.columns.length) {
+    add("h3", "Columns");
+    for (const column of result.columns)
+      add(
+        "p",
+        `${column.name}: ${column.inferredType}, ${column.role} (${percent(column.confidence)}) - ${column.reason}`,
+      );
+  }
+  if (result.dataQuality.length) {
+    add("h3", "Data quality");
+    for (const issue of result.dataQuality)
+      add(
+        "p",
+        `[${issue.severity}] ${issue.message} (${percent(issue.confidence)})`,
+      );
+  }
+  add("h3", "Recommendations");
+  if (!result.recommendations.length)
+    add("p", "No safe recommendation was found.");
+  for (const recommendation of result.recommendations) {
+    const item = document.createElement("div");
+    output.appendChild(item);
+    add(
+      "p",
+      `${recommendation.title} - ${recommendation.kind}${recommendation.chartType ? ` (${recommendation.chartType})` : ""}, ${percent(recommendation.confidence)} - ${recommendation.reason}`,
+      item,
+    );
+    const instructionText = recommendationToInstruction(recommendation);
+    if (!instructionText) {
+      add("p", "Advice only: no workbook action is available for this.", item);
+      continue;
+    }
+    const use = document.createElement("button");
+    use.type = "button";
+    use.textContent = "Use this recommendation";
+    use.addEventListener("click", () => {
+      if (instruction) instruction.value = instructionText;
+      currentPlan = undefined;
+      previewFingerprint = "";
+      if (apply) apply.disabled = true;
+      if (preview) preview.textContent = "No preview yet.";
+      log.record("analysis:use-recommendation", "pass", {
+        kind: recommendation.kind,
+      });
+      setStatus(
+        "Instruction set. Click Inspect and preview; nothing changes until you confirm.",
+      );
+    });
+    item.appendChild(use);
+  }
+}
+
+analyze?.addEventListener("click", async () => {
+  if (!config || !accessToken)
+    return setStatus("Sign in before analyzing Excel data.");
+  resetAnalysisConsent();
+  if (analysisOutput) analysisOutput.textContent = "";
+  try {
+    const input = await log.step(
+      "analysis:read-selection",
+      () => inspectSelectedExcelRange(officeRuntime(), crypto.randomUUID()),
+      (value) => ({ rows: value.values.length }),
+    );
+    pendingSummary = await log.step(
+      "analysis:local-summary",
+      () => buildSchemaSummary(input),
+      (value) => ({ columns: value.columnCount, rows: value.rowCount }),
+    );
+    if (consentSummary)
+      consentSummary.textContent = JSON.stringify(pendingSummary, null, 2);
+    if (consentPanel) consentPanel.hidden = false;
+    setStatus("Review exactly what will be sent, then confirm to continue.");
+  } catch (error) {
+    pendingSummary = undefined;
+    setStatus((error as Error).message);
+  }
+});
+
+consentCheck?.addEventListener("change", () => {
+  if (consentSend)
+    consentSend.disabled = !(consentCheck.checked && pendingSummary);
+});
+
+consentCancel?.addEventListener("click", () => {
+  resetAnalysisConsent();
+  log.record("analysis:consent", "skip", "user cancelled");
+  setStatus("Nothing was sent.");
+});
+
+consentSend?.addEventListener("click", async () => {
+  if (!config || !accessToken || !pendingSummary) return;
+  let request;
+  try {
+    request = createAnalysisRequest(
+      pendingSummary,
+      consentCheck?.checked === true,
+    );
+  } catch (error) {
+    if (error instanceof AnalysisConsentError)
+      return setStatus("AI analysis needs your explicit consent first.");
+    throw error;
+  }
+  log.record("analysis:consent", "pass", "user agreed to send the summary");
+  const columnCount = pendingSummary.columnCount;
+  if (consentSend) consentSend.disabled = true;
+  try {
+    setStatus("Analyzing the summary...");
+    const response = await apiClient().analyzeExcel(request);
+    const result = validateAnalysisResult(response?.result, columnCount);
+    log.record("api:analysis", "pass", {
+      recommendations: result.recommendations.length,
+    });
+    resetAnalysisConsent();
+    renderAnalysis(result);
+    setStatus("Analysis ready. It is advice only; nothing has changed.");
+  } catch (error) {
+    resetAnalysisConsent();
+    if (error instanceof M365ApiError) handleApiError("analysis", error);
+    else {
+      log.record("analysis:validate", "fail", describeError(error));
+      setStatus(API_MESSAGES.AI_ANALYSIS_INVALID);
+    }
+  }
+});
+
 /** Checks every function the add-in relies on, in order, without changing the workbook. */
 async function runSelfTest() {
   const started = log.all().length;
@@ -666,6 +845,113 @@ clearDiagnostics?.addEventListener("click", () => {
   log.clear();
   if (summary) summary.textContent = "";
 });
+
+/** Layout behaviour only: none of this touches tokens, plans, approvals or the workbook. */
+function setupLayout() {
+  const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle");
+  const menu = document.querySelector<HTMLElement>("#menu");
+  const diagnosticsPanel =
+    document.querySelector<HTMLElement>("#diagnostics-panel");
+  const toggleDiagnostics = document.querySelector<HTMLButtonElement>(
+    "#toggle-diagnostics",
+  );
+  const resultCard = document.querySelector<HTMLElement>("#result-card");
+  const previewSummary =
+    document.querySelector<HTMLElement>("#preview-summary");
+
+  const closeMenu = () => {
+    if (menu) menu.hidden = true;
+    menuToggle?.setAttribute("aria-expanded", "false");
+  };
+  menuToggle?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!menu) return;
+    menu.hidden = !menu.hidden;
+    menuToggle.setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  menu?.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("#toggle-diagnostics") === null) closeMenu();
+  });
+  document.addEventListener("click", (event) => {
+    if (
+      menu &&
+      !menu.hidden &&
+      !(event.target as HTMLElement).closest("header")
+    )
+      closeMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMenu();
+  });
+  toggleDiagnostics?.addEventListener("click", () => {
+    if (!diagnosticsPanel) return;
+    diagnosticsPanel.hidden = !diagnosticsPanel.hidden;
+    toggleDiagnostics.textContent = diagnosticsPanel.hidden
+      ? "Show diagnostics"
+      : "Hide diagnostics";
+    closeMenu();
+  });
+  // The self-test and copy actions report into the diagnostics panel, so reveal it.
+  for (const id of ["#self-test", "#copy-diagnostics"])
+    document.querySelector(id)?.addEventListener("click", () => {
+      if (diagnosticsPanel?.hidden) toggleDiagnostics?.click();
+    });
+
+  for (const pill of document.querySelectorAll<HTMLButtonElement>(
+    ".pill[data-instruction]",
+  ))
+    pill.addEventListener("click", () => {
+      if (!instruction) return;
+      instruction.value = pill.dataset.instruction || "";
+      instruction.dispatchEvent(new Event("input"));
+      instruction.focus();
+    });
+
+  const label = (kind: string) =>
+    ({
+      "new-sheet": "result sheet",
+      table: "table",
+      chart: "chart",
+      "pivot-table": "PivotTable",
+    })[kind] || kind;
+  const renderSummary = () => {
+    if (!preview || !resultCard) return;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(preview.textContent || "");
+    } catch {
+      resultCard.hidden = true;
+      return;
+    }
+    const actions: any[] = Array.isArray(parsed?.actions) ? parsed.actions : [];
+    const sheets = [...new Set(actions.map((action) => action.targetSheet))];
+    const warnings: any[] = Array.isArray(parsed?.warnings)
+      ? parsed.warnings
+      : [];
+    const rows = Math.max(
+      0,
+      Number(parsed?.profile?.rowCount ?? 0) -
+        Number(parsed?.profile?.headerRowCount ?? 1),
+    );
+    if (previewSummary)
+      previewSummary.textContent =
+        `${actions.map((action) => label(action.kind)).join(", ")} ` +
+        `on ${sheets.join(", ")}. ${rows} data rows, ` +
+        `${Number(parsed?.profile?.columnCount ?? 0)} columns. ` +
+        `Your source data stays unchanged.` +
+        (warnings.length ? ` ${warnings.join(" ")}` : "");
+    resultCard.hidden = false;
+  };
+  if (preview)
+    new MutationObserver(renderSummary).observe(preview, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+}
+
+setupLayout();
 
 async function initialize() {
   localStorage.removeItem(LEGACY_SESSION_KEY);

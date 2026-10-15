@@ -13,6 +13,7 @@
     "src/oauth.ts",
     "src/officeExcel.ts",
     "src/api.ts",
+    "src/analysis.ts",
     "src/diagnostics.ts",
     "src/taskpane.ts"
   ]

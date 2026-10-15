@@ -90,7 +90,9 @@ function assertUniqueHeaders(headers: string[]): void {
     );
 }
 
-function getExcelHeaderLayout(input: ExcelRangeInput): ExcelHeaderLayout {
+export function getExcelHeaderLayout(
+  input: ExcelRangeInput,
+): ExcelHeaderLayout {
   const firstRow = (input.values[0] ?? []).map(normalizedCell);
   if (!firstRow.length)
     throw new InvalidExcelRangeError(

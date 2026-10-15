@@ -45,3 +45,23 @@ export interface ExcelActionPlan {
   approvalToken?: string;
   expiresAt?: string;
 }
+
+export const M365_ANALYSIS_CONTRACT_VERSION =
+  "2026-10-15.excel-analysis.v1" as const;
+
+export type AnalysisRecommendationKind =
+  | "chart"
+  | "pivot-table"
+  | "table"
+  | "filter"
+  | "grouping";
+
+/** Advisory only: a recommendation never carries a workbook operation. */
+export interface AnalysisRecommendation {
+  kind: AnalysisRecommendationKind;
+  title: string;
+  columns: number[];
+  chartType?: "column" | "line" | "bar" | "pie";
+  confidence: number;
+  reason: string;
+}

@@ -1708,6 +1708,8 @@ function configurePreviewTweaks(actions: any[]) {
 }
 
 function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
+  // Only a live, unapplied preview can be adjusted; never re-plan after an apply.
+  if (!currentPlan) return;
   const next: ExcelColumnSpecs = {
     ...previewSpecs,
     ...(previewSpecs?.chart ? { chart: { ...previewSpecs.chart } } : {}),
@@ -1719,7 +1721,8 @@ function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
   void inspect?.click();
 }
 
-tweakChartType?.addEventListener("change", () => {
+tweakChartType?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
   if (!tweakChartType.value) return;
   replanWithTweak((specs) => {
     if (specs.chart)
@@ -1728,7 +1731,8 @@ tweakChartType?.addEventListener("change", () => {
       >["chartType"];
   });
 });
-tweakAggregation?.addEventListener("change", () => {
+tweakAggregation?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
   if (!tweakAggregation.value) return;
   replanWithTweak((specs) => {
     if (specs.pivot)
@@ -1737,14 +1741,16 @@ tweakAggregation?.addEventListener("change", () => {
       >["aggregation"];
   });
 });
-tweakCategory?.addEventListener("change", () => {
+tweakCategory?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
   replanWithTweak((specs) => {
     const column = Number(tweakCategory.value);
     if (specs.chart) specs.chart.category = column;
     else if (specs.pivot) specs.pivot.rows = column;
   });
 });
-tweakValue?.addEventListener("change", () => {
+tweakValue?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
   replanWithTweak((specs) => {
     const column = Number(tweakValue.value);
     if (specs.chart) specs.chart.value = column;

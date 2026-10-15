@@ -704,6 +704,22 @@ test("server and add-in agree on a histogram plan", () => {
   assert.equal(server.actions[0].spec?.valueColumn, "Sales");
 });
 
+test("server and add-in agree on a waterfall plan", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "waterfall" as const,
+    },
+  };
+  const actions = ["chart"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.chartType, "waterfall");
+  assert.equal(server.actions[0].spec?.categoryColumn, "Region");
+});
+
 test("the server refuses unusable chart v2, pivot v2 and view choices", () => {
   const call = (specs: unknown, actions: string[]) =>
     createServerExcelPreviewPlan(input, actions, 500, specs as any);

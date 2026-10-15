@@ -1791,6 +1791,7 @@ function configurePreviewTweaks(actions: any[]) {
     ["area", "Area"],
     ["combo", "Combo"],
     ["histogram", "Histogram"],
+    ["waterfall", "Waterfall"],
     ["stacked-column", "Stacked column"],
   ].map(([value, label]) => ({ value, label }));
   setTweakOptions(tweakChartType, chartTypes, chart?.chartType ?? "column");

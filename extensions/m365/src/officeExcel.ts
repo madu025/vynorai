@@ -975,6 +975,7 @@ export async function applyApprovedExcelPlan(
                   area: "Area",
                   combo: "ColumnClustered",
                   histogram: "Histogram",
+                  waterfall: "Waterfall",
                 };
                 const chart = sheet.charts.add(
                   chartTypes[spec.chartType] ?? "ColumnClustered",

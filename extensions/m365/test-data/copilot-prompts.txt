@@ -70,8 +70,8 @@ Lookups	add-column	Add column Manager from Staff by Name using XLOOKUP
 Charts	-	Create a combo chart of Sales and Cost
 Charts	chart	Create a combo chart of Sales and Cost by Region
 Charts	-	Add sparklines for monthly Sales
-Charts	-	Create a histogram of Sales
-Charts	-	Make a waterfall chart of Profit
+Charts	chart	Create a histogram of Sales
+Charts	chart	Make a waterfall chart of Profit
 Conditional formatting	format	Apply a color scale to Sales
 Conditional formatting	format	Add icon sets to Quantity
 Conditional formatting	-	Highlight Sales above average with a formula rule

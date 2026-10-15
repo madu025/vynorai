@@ -488,6 +488,22 @@ test("a histogram uses the requested numeric column without a category", () => {
   });
 });
 
+test("a waterfall chart uses a label column and one numeric series", () => {
+  const chart = interpretInstruction(
+    "Make a waterfall chart of Profit",
+    ["Month", "Region", "Profit"],
+    [
+      ["Jan", "North", 400],
+      ["Feb", "South", -100],
+    ],
+  );
+  assert.deepEqual(chart.specs.chart, {
+    category: 0,
+    value: 2,
+    chartType: "waterfall",
+  });
+});
+
 test("Sinhala and Singlish keywords map to the same actions", () => {
   assert.match(normalizeInstruction("Sales by Region ප්‍රස්තාරයක්"), /chart/);
   assert.match(normalizeInstruction("data pirisidu karanna"), /clean/);

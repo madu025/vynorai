@@ -111,7 +111,8 @@ export type ExcelChartType =
   | "stacked-bar"
   | "area"
   | "combo"
-  | "histogram";
+  | "histogram"
+  | "waterfall";
 export type ExcelAggregation = "sum" | "count" | "average" | "min" | "max";
 export type ExcelFilterOperator =
   | ">"
@@ -447,6 +448,7 @@ function resolveColumnSpecs(
     "area",
     "combo",
     "histogram",
+    "waterfall",
   ];
   if (specs.chart) {
     if (!requested.has("chart"))
@@ -456,7 +458,9 @@ function resolveColumnSpecs(
     if (
       !inRange(category) ||
       !inRange(value) ||
-      (category === value && chartType !== "histogram")
+      (category === value &&
+        chartType !== "histogram" &&
+        chartType !== "waterfall")
     )
       fail("EXCEL_SPEC_INVALID", "Choose two different columns for the chart.");
     if (!chartTypes.includes(chartType))
@@ -470,6 +474,7 @@ function resolveColumnSpecs(
       !Array.isArray(extra) ||
       extra.length > 4 ||
       (chartType === "histogram" && extra.length > 0) ||
+      (chartType === "waterfall" && extra.length > 0) ||
       new Set(extra).size !== extra.length ||
       extra.some(
         (index) => !inRange(index) || index === category || index === value,

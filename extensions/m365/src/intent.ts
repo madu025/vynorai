@@ -21,7 +21,8 @@ export interface InstructionSpecs {
       | "stacked-bar"
       | "area"
       | "combo"
-      | "histogram";
+      | "histogram"
+      | "waterfall";
     extraValues?: number[];
   };
   /** Bring a column from another sheet; the pane resolves the sheet's headers. */
@@ -756,6 +757,7 @@ const CHART_TYPE_WORDS: Array<
 > = [
   [/\bcombo\b/i, "combo"],
   [/\bhistogram\b/i, "histogram"],
+  [/\bwaterfall\b/i, "waterfall"],
   [/stacked\s+(column|columns)/i, "stacked-column"],
   [/stacked\s+bar/i, "stacked-bar"],
   [/\barea\b/i, "area"],
@@ -879,12 +881,20 @@ function interpretChartAndPivot(
     : fallbackNumeric.map((index) => ({ index, at: 0 }));
   const requestedChartType =
     CHART_TYPE_WORDS.find(([pattern]) => pattern.test(text))?.[1] ?? "column";
+  const waterfallCategory =
+    fallbackIndexes.find((index) => !isNumericColumn(rows, index)) ??
+    numeric[0]?.index;
   const chartCategoryEntry =
     requestedChartType === "histogram"
       ? (numeric[0] ?? categoryEntry)
-      : categoryEntry;
+      : requestedChartType === "waterfall"
+        ? (categoryEntry ??
+          (waterfallCategory === undefined
+            ? undefined
+            : { index: waterfallCategory, at: 0 }))
+        : categoryEntry;
   if (
-    /\b(chart|graph|plot|histogram)\b/i.test(text) &&
+    /\b(chart|graph|plot|histogram|waterfall)\b/i.test(text) &&
     chartCategoryEntry &&
     numericEntries.length
   ) {
@@ -902,7 +912,7 @@ function interpretChartAndPivot(
     const histogramValue = numeric[0]?.index ?? first;
     result.actions.push("chart");
     result.specs.chart = {
-      category: isHistogram ? histogramValue : categoryEntry.index,
+      category: isHistogram ? histogramValue : chartCategoryEntry.index,
       value: isHistogram ? histogramValue : first,
       chartType,
       ...(isHistogram

@@ -251,6 +251,28 @@ test("apply creates a histogram from one numeric column", async () => {
   assert.ok(!excel.calls.some((call) => call.startsWith("series.x")));
 });
 
+test("apply creates a waterfall chart from category and value columns", async () => {
+  const plan = createExcelPreviewPlan(input as any, ["chart"], undefined, {
+    chart: { category: 1, value: 2, chartType: "waterfall" },
+  });
+  const excel = fakeWorkbook();
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.ok(
+    excel.calls.some((call) =>
+      /^chart\.add Waterfall col2 Columns$/.test(call),
+    ),
+    excel.calls.join("\n"),
+  );
+  assert.ok(excel.calls.includes("series.x col1+1-1"));
+});
+
 test("without column choices the existing whole-range behaviour is unchanged", () => {
   const plan = createExcelPreviewPlan(input as any, ["chart", "pivot-table"]);
   assert.ok(plan.actions.every((action) => action.spec === undefined));

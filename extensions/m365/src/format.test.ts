@@ -86,6 +86,18 @@ test("format instructions become explicit options, and 'format as a table' stays
   assert.deepEqual(contains.specs.format?.conditional, [
     { column: 0, rule: "text-contains", text: "Pending" },
   ]);
+  const validation = interpretInstruction(
+    "Only allow non-negative Quantity and limit Customer to 30 characters",
+    ["Quantity", "Customer"],
+    [
+      [4, "Asha"],
+      [0, "Bimal"],
+    ],
+  );
+  assert.deepEqual(validation.specs.format?.validation, [
+    { column: 0, rule: "non-negative" },
+    { column: 1, rule: "max-length", max: 30 },
+  ]);
   const dates = interpretInstruction(
     "Highlight Date between 2026-01-01 and 2026-03-31 with conditional formatting",
     ["Date", "Sales"],

@@ -1469,7 +1469,7 @@ function interpretFormatAndQuality(
     result.actions.push("quality");
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -1621,6 +1621,14 @@ function interpretFormatAndQuality(
   )
     for (const column of mentionedLabel.slice(0, 2))
       validation.push({ column, rule: "list" });
+  const nonNegative =
+    /\b(?:only\s+allow|allow\s+only|require|ensure)\s+(?:non[- ]negative|zero\s+or\s+positive)\s+(.+?)(?:\s+(?:values?|numbers?|data))?(?:[.,]|$)/i.exec(
+      text,
+    );
+  if (nonNegative) {
+    const column = headerPositions(headers, nonNegative[1])[0]?.index ?? -1;
+    if (column >= 0) validation.push({ column, rule: "non-negative" });
+  }
   const range =
     /\bbetween\s+(-?\d[\d,]*(?:\.\d+)?)\s+(?:and|to)\s+(-?\d[\d,]*(?:\.\d+)?)/i.exec(
       text,
@@ -1648,11 +1656,16 @@ function interpretFormatAndQuality(
       });
   }
   const length =
-    /\b(?:at\s+most|maximum|up\s+to)\s+(\d{1,3})\s+characters\b/i.exec(text);
-  if (length && mentionedLabel.length) {
-    const max = Number(length[1]);
-    if (max >= 1 && max <= 255)
-      validation.push({ column: mentionedLabel[0], rule: "max-length", max });
+    /\b(?:at\s+most|maximum|up\s+to)\s+(\d{1,3})\s+characters\b|\blimit\s+(.+?)\s+to\s+(\d{1,3})\s+characters\b/i.exec(
+      text,
+    );
+  if (length) {
+    const max = Number(length[1] ?? length[3]);
+    const column = length[2]
+      ? (headerPositions(headers, length[2])[0]?.index ?? -1)
+      : (mentionedLabel[0] ?? -1);
+    if (column >= 0 && max >= 1 && max <= 255)
+      validation.push({ column, rule: "max-length", max });
   }
   // "validation: Region at most 12 characters" is a length rule, not also a drop-down.
   if (!/\bdrop-?\s?down\b/i.test(text)) {

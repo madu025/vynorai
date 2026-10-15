@@ -43,6 +43,7 @@ import {
   type M365RequestTrace,
 } from "./api.js";
 import { askInPane } from "./confirmDialog.js";
+import { applyFollowUpChart } from "./followUp.js";
 import {
   ACTION_REQUIREMENTS,
   DiagnosticsLog,
@@ -526,57 +527,23 @@ inspect?.addEventListener("click", async () => {
     const filtered = wanted.filter((kind) => !excludedKinds.has(kind));
     const actions = filtered.length > 0 ? filtered : wanted;
     const { lookup: lookupWish, ...plannedSpecs } = interpreted.specs;
-    const specs: ExcelColumnSpecs = {
+    let specs: ExcelColumnSpecs = {
       ...(pendingSpecs ?? {}),
       ...plannedSpecs,
     };
     // Follow-up: "add a chart for that" reuses the columns of the last applied pivot.
-    const earlier = lastAppliedSpecs?.pivot;
-    const namesAColumn = layout.headers.some(
-      (header) =>
-        String(header).length > 1 &&
-        instructionText.toLowerCase().includes(String(header).toLowerCase()),
+    const followed = applyFollowUpChart(
+      specs,
+      lastAppliedSpecs,
+      instructionText,
+      layout.headers.map(String),
+      actions,
     );
-    const followRegex = /(that|it|same|those|these|ඒකටම|eka|ekata)/i;
-    let overrideRan = false;
-    if (
-      earlier &&
-      actions.includes("chart") &&
-      !namesAColumn &&
-      /(that|it|same|those|these|ඒකටම|eka|ekata)/i.test(instructionText)
-    ) {
-      const named = /(line|pie|bar|area|column|scatter)/i.exec(
-        instructionText,
-      )?.[1];
-      overrideRan = true;
-      specs.chart = {
-        category: earlier.rows,
-        value: earlier.values,
-        chartType: (named?.toLowerCase() ?? "column") as NonNullable<
-          ExcelColumnSpecs["chart"]
-        >["chartType"],
-        ...(earlier.extraValues?.length
-          ? { extraValues: earlier.extraValues }
-          : {}),
-      };
-    }
     log.record("followup:check", "pass", {
-      hasEarlier: Boolean(earlier),
-      chartAction: actions.includes("chart"),
-      namesAColumn,
-      applied: Object.keys(lastAppliedSpecs ?? {}),
-      cond: [
-        Boolean(earlier),
-        actions.includes("chart"),
-        !namesAColumn,
-        followRegex.test(instructionText),
-      ],
-      overrideRan,
-      text: instructionText,
-      textMatches: /(that|it|same|those|these)/i.test(instructionText),
-      chartSpec: specs.chart,
-      earlierPivot: earlier,
+      applied: followed.applied,
+      hadEarlier: Boolean(lastAppliedSpecs?.pivot),
     });
+    specs = followed.specs;
     previewSpecs = specs;
     if (lookupWish) {
       try {

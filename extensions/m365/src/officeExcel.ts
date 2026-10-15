@@ -104,11 +104,11 @@ export async function revealExcelResult(
       const used = sheet.getUsedRangeOrNullObject(true);
       used.load("isNullObject");
       const pivots = sheet.pivotTables;
-      pivots.load("count");
+      pivots.load("items/name");
       await context.sync();
       // Selecting a PivotTable makes Excel swap our task pane for its field list, so a pivot
       // sheet only gets A1 selected.
-      if (used.isNullObject || Number(pivots.count) > 0)
+      if (used.isNullObject || (pivots.items ?? []).length > 0)
         sheet.getRange("A1").select();
       else used.select();
       await context.sync();

@@ -1,3 +1,5 @@
+import { localizeMessageSi } from "./messagesSi.js";
+
 export type Language = "en" | "si" | "ta";
 
 export const LANGUAGE_ORDER: Language[] = ["en", "si", "ta"];
@@ -11,32 +13,32 @@ type Dictionary = Record<string, string>;
 
 const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
   si: {
-    hero: "ඔබේ දත්ත සමඟ මොනවා කරන්නද?",
-    placeholder: "තෝරාගත් දත්ත වලින් කුමක් සෑදිය යුතුදැයි විස්තර කරන්න",
-    analyze: "AI සමඟ විශ්ලේෂණය",
-    inspect: "පරීක්ෂා කර පෙරදසුන",
+    hero: "ඔබේ දත්ත සමඟ කුමක් කිරීමට අවශ්‍යද?",
+    placeholder: "තෝරාගත් දත්ත භාවිතයෙන් සෑදිය යුතු දේ විස්තර කරන්න",
+    analyze: "AI මගින් විශ්ලේෂණය කරන්න",
+    inspect: "පරීක්ෂා කර පෙරදසුන බලන්න",
     apply: "තහවුරු කර යොදන්න",
-    undo: "සෑදූ දේ ඉවත් කරන්න",
+    undo: "සාදන ලද දෑ ඉවත් කරන්න",
     pill_chart: "ප්‍රස්තාරයක් සාදන්න",
     pill_pivot: "PivotTable එකක් සාදන්න",
-    pill_table: "වගුවක් ලෙස හැඩගන්වන්න",
-    pill_sheet: "ප්‍රතිඵල පත්‍රයක් සාදන්න",
+    pill_table: "වගුවක් ලෙස හැඩසව්වන්න",
+    pill_sheet: "ප්‍රතිඵල පත්‍රිකාවක් සාදන්න",
     pill_clean: "දත්ත පිරිසිදු කරන්න",
     welcome_title: "VynorAI වෙත සාදරයෙන් පිළිගනිමු",
     welcome_body:
-      "තෝරාගත් දත්ත විශ්ලේෂණය කිරීමට ඔබේ කාර්යාල ගිණුමෙන් පිවිසෙන්න.",
-    signin: "Microsoft සමඟ පිවිසෙන්න",
-    menu_show_diag: "රෝග විනිශ්චය පෙන්වන්න",
-    menu_hide_diag: "රෝග විනිශ්චය සඟවන්න",
-    menu_selftest: "ස්වයං පරීක්ෂාව ධාවනය",
-    menu_copy: "රෝග විනිශ්චය පිටපත් කරන්න",
-    menu_clear: "රෝග විනිශ්චය මකන්න",
+      "තෝරාගත් දත්ත විශ්ලේෂණය කිරීම සඳහා ඔබේ කාර්යාල ගිණුමෙන් පිවිසෙන්න.",
+    signin: "Microsoft ගිණුමෙන් පිවිසෙන්න",
+    menu_show_diag: "දෝෂ විමර්ශන තොරතුරු පෙන්වන්න",
+    menu_hide_diag: "දෝෂ විමර්ශන තොරතුරු සඟවන්න",
+    menu_selftest: "ස්වයං පරීක්ෂාව ධාවනය කරන්න",
+    menu_copy: "දෝෂ විමර්ශන තොරතුරු පිටපත් කරන්න",
+    menu_clear: "දෝෂ විමර්ශන තොරතුරු මකන්න",
     menu_signout: "ඉවත් වන්න",
-    menu_overview: "වැඩපොත් දළ විශ්ලේෂණය",
+    menu_overview: "වැඩපොතේ සාරාංශය",
     menu_language: "භාෂාව",
     preview_title: "පෙරදසුන",
-    nothing_changed: "ඔබේ වැඩපොතේ තවම කිසිවක් වෙනස් වී නැත.",
-    insights_title: "අවබෝධ",
+    nothing_changed: "ඔබේ වැඩපොතේ තවමත් කිසිදු වෙනසක් සිදු කර නැත.",
+    insights_title: "අවබෝධතා",
   },
   ta: {
     hero: "உங்கள் தரவுடன் என்ன செய்ய விரும்புகிறீர்கள்?",
@@ -89,6 +91,11 @@ export function translate(
 ): string {
   if (language === "en") return fallback;
   return STRINGS[language][key] ?? fallback;
+}
+
+/** Run-time messages are built in English; this renders them in the chosen language. */
+export function localizeMessage(language: Language, text: string): string {
+  return language === "si" ? localizeMessageSi(text) : text;
 }
 
 export function loadLanguage(

@@ -11,12 +11,14 @@ import {
 import {
   LANGUAGE_NAMES,
   applyLanguage,
+  localizeMessage,
   translate,
   loadLanguage,
   nextLanguage,
   saveLanguage,
   type Language,
 } from "./i18n.js";
+import { previewSummarySi } from "./messagesSi.js";
 import {
   answerQuestion,
   normalizeInstruction,
@@ -135,8 +137,10 @@ if (diagnostics && diagnostics.textContent !== DIAGNOSTICS_PLACEHOLDER) {
 }
 window.__VYNORAI_DIAG_NOTE__ = (message) => log.record("page", "info", message);
 
+let lastStatus = "";
 function setStatus(message: string) {
-  if (status) status.textContent = message;
+  lastStatus = message;
+  if (status) status.textContent = localizeMessage(language, message);
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;
@@ -568,17 +572,22 @@ function markChangeNote(state: "preview" | "applied" | "partial" | "undone") {
   if (!note) return;
   if (state === "preview") {
     note.dataset.i18n = "nothing_changed";
-    note.textContent = "Nothing has changed in your workbook yet.";
+    note.textContent = localizeMessage(
+      language,
+      "Nothing has changed in your workbook yet.",
+    );
     applyLanguage(note.parentElement ?? document, language);
     return;
   }
   delete note.dataset.i18n;
-  note.textContent =
+  note.textContent = localizeMessage(
+    language,
     state === "applied"
       ? "Applied. Your source data was not changed."
       : state === "undone"
         ? "Undone. What this add-in created was removed."
-        : "Partly applied. See the steps and Diagnostics.";
+        : "Partly applied. See the steps and Diagnostics.",
+  );
 }
 
 apply?.addEventListener("click", async () => {
@@ -830,7 +839,7 @@ function renderAnalysis(result: AnalysisResult) {
     }
     const use = document.createElement("button");
     use.type = "button";
-    use.textContent = "Use this recommendation";
+    use.textContent = localizeMessage(language, "Use this recommendation");
     use.addEventListener("click", () => {
       if (instruction) instruction.value = instructionText;
       pendingSpecs = lastSummary
@@ -1145,11 +1154,19 @@ function setupLayout() {
     );
     if (previewSummary)
       previewSummary.textContent =
-        `${actions.map((action) => label(action.kind)).join(", ")} ` +
-        `on ${sheets.join(", ")}. ${rows} data rows, ` +
-        `${Number(parsed?.profile?.columnCount ?? 0)} columns. ` +
-        `Your source data stays unchanged.` +
-        (warnings.length ? ` ${warnings.join(" ")}` : "");
+        language === "si"
+          ? previewSummarySi({
+              actions: actions.map((action) => String(action.kind)),
+              sheets: sheets.map(String),
+              rows,
+              columns: Number(parsed?.profile?.columnCount ?? 0),
+              warnings: warnings.map(String),
+            })
+          : `${actions.map((action) => label(action.kind)).join(", ")} ` +
+            `on ${sheets.join(", ")}. ${rows} data rows, ` +
+            `${Number(parsed?.profile?.columnCount ?? 0)} columns. ` +
+            `Your source data stays unchanged.` +
+            (warnings.length ? ` ${warnings.join(" ")}` : "");
     resultCard.hidden = false;
   };
   if (preview)
@@ -1194,7 +1211,9 @@ function renderSteps(
     const target = planned.find((action) => action.kind === kind)?.targetSheet;
     row.appendChild(box);
     row.appendChild(
-      document.createTextNode(` ${kind}${target ? ` → ${target}` : ""}`),
+      document.createTextNode(
+        ` ${localizeMessage(language, kind)}${target ? ` → ${target}` : ""}`,
+      ),
     );
     stepsContainer.appendChild(row);
   }
@@ -1205,8 +1224,11 @@ rollbackButton?.addEventListener("click", async () => {
   const items = lastCreated;
   if (
     !(await askInPane(
-      "Remove the result sheets and Table this add-in created? Your original data is not touched.",
-      "Remove",
+      localizeMessage(
+        language,
+        "Remove the result sheets and Table this add-in created? Your original data is not touched.",
+      ),
+      localizeMessage(language, "Remove"),
     ))
   )
     return log.record("rollback:confirm", "skip", "user cancelled");
@@ -1261,6 +1283,7 @@ overviewButton?.addEventListener("click", async () => {
 
 function refreshLanguage() {
   applyLanguage(document, language);
+  if (lastStatus) setStatus(lastStatus);
   if (languageButton)
     languageButton.textContent = `${translateLabel()}: ${LANGUAGE_NAMES[language]}`;
 }

@@ -36,3 +36,54 @@ test("formula inspector request words do not capture ordinary data questions", (
   assert.equal(isFormulaInspectionRequest("Check formula errors"), true);
   assert.equal(isFormulaInspectionRequest("What is total Sales?"), false);
 });
+
+test("formula inspector gives a read-only #DIV/0! repair candidate for a safe formula", () => {
+  const report = inspectFormulas({
+    worksheetName: "Sales",
+    address: "Sales!C2",
+    formulas: [["=A2/B2"]],
+    values: [["#DIV/0!"]],
+  });
+
+  assert.deepEqual(report.items[0].repair, {
+    candidate: '=IFERROR(A2/B2,"")',
+    guidance:
+      "Suggested repair suppresses the division error with a blank result. It is advisory and is not applied to your source cell.",
+  });
+  assert.match(
+    formatFormulaInspection(report),
+    /Suggested repair: =IFERROR\(A2\/B2,""\)/,
+  );
+  assert.match(report.items[0].explanation, /zero or blank divisor/);
+  assert.equal(isFormulaInspectionRequest("Repair this #DIV/0! formula"), true);
+});
+
+test("formula inspector refuses to guess a deleted #REF! reference", () => {
+  const report = inspectFormulas({
+    worksheetName: "Sales",
+    address: "Sales!C2",
+    formulas: [["=#REF!/B2"]],
+    values: [["#REF!"]],
+  });
+
+  assert.equal(report.items[0].repair?.candidate, undefined);
+  assert.match(
+    report.items[0].repair?.guidance ?? "",
+    /cannot be reconstructed safely/,
+  );
+});
+
+test("formula inspector refuses unsupported formula functions in repair advice", () => {
+  const report = inspectFormulas({
+    worksheetName: "Sales",
+    address: "Sales!C2",
+    formulas: [["=WEBSERVICE(A2)/B2"]],
+    values: [["#DIV/0!"]],
+  });
+
+  assert.equal(report.items[0].repair?.candidate, undefined);
+  assert.match(
+    report.items[0].repair?.guidance ?? "",
+    /outside the safe automatic repair subset/,
+  );
+});

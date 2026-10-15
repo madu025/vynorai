@@ -12,6 +12,10 @@ export interface FormulaInspectionItem {
   errors: string[];
   possibleCircularReference: boolean;
   explanation: string;
+  repair?: {
+    candidate?: string;
+    guidance: string;
+  };
 }
 
 export interface FormulaInspection {
@@ -68,10 +72,26 @@ function references(formula: string): string[] {
 
 function explain(formula: string, refs: string[]): string {
   const functionMatch = /^=\s*([A-Z][A-Z0-9.]*)\s*\(/i.exec(formula);
-  if (functionMatch)
-    return `${functionMatch[1].toUpperCase()} uses ${refs.length} cell reference${refs.length === 1 ? "" : "s"}.`;
+  if (functionMatch) {
+    const name = functionMatch[1].toUpperCase();
+    const meanings: Record<string, string> = {
+      SUM: "Adds the selected numbers",
+      AVERAGE: "Calculates the average of the selected numbers",
+      COUNT: "Counts numeric cells",
+      COUNTA: "Counts non-empty cells",
+      MIN: "Returns the smallest value",
+      MAX: "Returns the largest value",
+      IF: "Tests a condition and returns one of two results",
+      IFERROR: "Shows a fallback when the inner calculation errors",
+      XLOOKUP: "Looks up a matching value and returns a related value",
+      VLOOKUP: "Looks up a value in the first table column",
+      INDEX: "Returns a value at a selected position",
+      MATCH: "Finds the position of a matching value",
+    };
+    return `${meanings[name] ?? `${name} runs its Excel calculation`} using ${refs.length} cell reference${refs.length === 1 ? "" : "s"}.`;
+  }
   if (/\//.test(formula))
-    return "Calculates a division; inspect a zero or blank divisor if it errors.";
+    return "Divides one value by another; a zero or blank divisor causes #DIV/0!.";
   if (/\*/.test(formula))
     return "Calculates a multiplication using the listed cell references.";
   if (/[-+]/.test(formula))
@@ -79,17 +99,82 @@ function explain(formula: string, refs: string[]): string {
   return "Uses the listed cell references.";
 }
 
+const SAFE_REPAIR_FUNCTIONS = new Set([
+  "ABS",
+  "AVERAGE",
+  "AVERAGEIF",
+  "AVERAGEIFS",
+  "COUNT",
+  "COUNTA",
+  "COUNTIF",
+  "COUNTIFS",
+  "IF",
+  "IFERROR",
+  "INDEX",
+  "MATCH",
+  "MAX",
+  "MAXIFS",
+  "MIN",
+  "MINIFS",
+  "ROUND",
+  "SUM",
+  "SUMIF",
+  "SUMIFS",
+  "VLOOKUP",
+  "XLOOKUP",
+]);
+
+/** A repair candidate is advice only; it is never written to the selected source cell. */
+function repairSuggestion(
+  formula: string,
+  errors: string[],
+): FormulaInspectionItem["repair"] | undefined {
+  if (errors.includes("#REF!"))
+    return {
+      guidance:
+        "A deleted reference cannot be reconstructed safely. Choose the intended source cell before creating a repaired copy.",
+    };
+  if (!errors.includes("#DIV/0!")) return undefined;
+  if (/^=\s*IFERROR\s*\(/i.test(formula))
+    return {
+      guidance:
+        "This formula already handles calculation errors. Review the zero or blank divisor instead of wrapping it again.",
+    };
+  if (
+    formula.length > 1000 ||
+    /[\r\n\[]/.test(formula) ||
+    /\b(?:WEBSERVICE|HYPERLINK|RTD|DDE)\s*\(/i.test(formula)
+  )
+    return {
+      guidance:
+        "This formula is outside the safe automatic repair subset. Review it manually.",
+    };
+  const functions = [...formula.matchAll(/\b([A-Z][A-Z0-9.]*)\s*\(/gi)].map(
+    (match) => match[1].toUpperCase(),
+  );
+  if (functions.some((name) => !SAFE_REPAIR_FUNCTIONS.has(name)))
+    return {
+      guidance:
+        "This formula uses a function outside the safe automatic repair subset. Review it manually.",
+    };
+  return {
+    candidate: `=IFERROR(${formula.slice(1)},"")`,
+    guidance:
+      "Suggested repair suppresses the division error with a blank result. It is advisory and is not applied to your source cell.",
+  };
+}
+
 /** True only for an explicit formula-inspection request; ordinary questions remain local data questions. */
 export function isFormulaInspectionRequest(instruction: string): boolean {
-  return /\b(?:inspect|explain|check|find)\b.*\bformulas?\b|\bformula\s+(?:errors?|check|inspect|explain)\b/i.test(
+  return /\b(?:inspect|explain|check|find)\b.*\bformulas?\b|\bformula\s+(?:errors?|check|inspect|explain)\b|\b(?:repair|fix)\b.*(?:#REF!|#DIV\/0!|formulas?)/i.test(
     instruction,
   );
 }
 
 /**
- * Produces a local, read-only formula report. It deliberately does not evaluate, repair, or
- * transmit formulas. A direct self reference is a possible circular reference; longer cycles
- * remain Excel's calculation-engine responsibility.
+ * Produces a local, read-only formula report and optional advisory repair candidate. It never
+ * evaluates, writes, repairs, or transmits formulas. A direct self reference is a possible
+ * circular reference; longer cycles remain Excel's calculation-engine responsibility.
  */
 export function inspectFormulas(input: FormulaSelection): FormulaInspection {
   const start = selectionStart(input.address);
@@ -116,6 +201,7 @@ export function inspectFormulas(input: FormulaSelection): FormulaInspection {
         errors,
         possibleCircularReference,
         explanation: explain(formula, refs),
+        repair: repairSuggestion(formula, errors),
       });
     }
   }
@@ -140,7 +226,10 @@ export function formatFormulaInspection(report: FormulaInspection): string {
         ? ["possible direct circular reference"]
         : []),
     ];
-    return `${item.address}: ${item.formula}. ${item.explanation}${warnings.length ? ` Warning: ${warnings.join(", ")}.` : ""}`;
+    const repair = item.repair
+      ? ` ${item.repair.candidate ? `Suggested repair: ${item.repair.candidate}. ` : ""}${item.repair.guidance}`
+      : "";
+    return `${item.address}: ${item.formula}. ${item.explanation}${warnings.length ? ` Warning: ${warnings.join(", ")}.` : ""}${repair}`;
   });
   return [header, ...details].join(" ");
 }

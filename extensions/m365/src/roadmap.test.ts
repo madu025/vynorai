@@ -59,6 +59,24 @@ test("clean converts only unambiguous ISO text dates and records their columns",
   assert.equal(cleaned.changes.converted, 1);
 });
 
+test("clean fills only blank cells with an explicit safe value", () => {
+  const cleaned = cleanRows(
+    [
+      ["North", null],
+      ["", 10],
+      ["South", "  "],
+    ],
+    ["fill-blanks"],
+    "Unknown",
+  );
+  assert.deepEqual(cleaned.rows, [
+    ["North", "Unknown"],
+    ["Unknown", 10],
+    ["South", "Unknown"],
+  ]);
+  assert.equal(cleaned.filledBlanks, 3);
+});
+
 // ---------------------------------------------------------------- R2 computed column
 test("computed column formulas come from validated indexes and a fixed operator list", () => {
   assert.equal(columnLetter(0), "A");
@@ -108,6 +126,14 @@ test("instructions for a computed column and clean-up are read deterministically
     interpretInstruction("Convert text dates to dates", headers).specs.clean
       ?.operations,
     ["text-to-date"],
+  );
+  assert.deepEqual(
+    interpretInstruction("Fill blank cells with Unknown", headers).specs.clean,
+    { operations: ["fill-blanks"], fillBlanks: "Unknown" },
+  );
+  assert.match(
+    interpretInstruction("Fill blank cells", headers).problems[0],
+    /what value should replace/,
   );
   assert.deepEqual(
     interpretInstruction("Create a chart.", headers).actions,
@@ -164,6 +190,13 @@ test("plans for clean and computed column carry validated specs and their own re
   assert.throws(
     () => bad({ clean: { operations: ["trim"] } }, ["chart"]),
     /need the clean action/,
+  );
+  assert.throws(
+    () =>
+      bad({ clean: { operations: ["fill-blanks"], fillBlanks: "=SUM(A1)" } }, [
+        "clean",
+      ]),
+    /safe replacement value/,
   );
 });
 
@@ -293,6 +326,35 @@ test("apply writes converted ISO dates only to a formatted clean result sheet", 
   assert.deepEqual(excel.written["Cleaned Sheet1!1,0,2,1.numberFormat"], [
     ["yyyy-mm-dd"],
     ["yyyy-mm-dd"],
+  ]);
+  assert.ok(
+    Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),
+  );
+});
+
+test("apply fills blanks on a new result sheet and never the source sheet", async () => {
+  const fillInput = {
+    workbookId: "book",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:B3",
+    hasHeaders: true,
+    values: [
+      ["Region", "Sales"],
+      ["North", null],
+      ["South", 1500],
+    ],
+  };
+  const plan = createExcelPreviewPlan(fillInput as any, ["clean"], undefined, {
+    clean: { operations: ["fill-blanks"], fillBlanks: 0 },
+  });
+  const excel = fakeWorkbook(fillInput.values as any[][]);
+  await applyApprovedExcelPlan(excel.runtime, plan, true, "approval", {
+    expectedSourceFingerprint: plan.sourceFingerprint,
+  });
+  assert.deepEqual(excel.written["Cleaned Sheet1!0,0,3,2.values"], [
+    ["Region", "Sales"],
+    ["North", 0],
+    ["South", 1500],
   ]);
   assert.ok(
     Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),

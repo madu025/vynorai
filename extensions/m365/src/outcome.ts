@@ -253,6 +253,11 @@ export function buildOutcomes(
             "unambiguous ISO text dates",
             "à¶±à·’à·€à·à¶»à¶¯à·’ ISO à¶´à·à¶¨ à¶¯à·’à¶±",
           );
+        if (operation === "fill-blanks")
+          return say(
+            `blank cells with ${String(spec.fillBlanks)}`,
+            `à·„à·’à·ƒà·Š à¶­à·“à¶»à·” ${String(spec.fillBlanks)} à·€à¶½à·’à¶±à·Š`,
+          );
         if (operation === "dedupe")
           return say(
             "exact duplicate rows",

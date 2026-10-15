@@ -91,7 +91,7 @@ export interface ExcelColumnSpecs {
       max?: number;
     }>;
   };
-  clean?: { operations: string[] };
+  clean?: { operations: string[]; fillBlanks?: string | number };
   addColumn?: {
     name: string;
     left?: number;
@@ -427,7 +427,13 @@ function resolveColumnSpecs(
     if (!requested.has("clean"))
       fail("EXCEL_SPEC_UNUSED", "Clean options need the clean action.");
     const operations = specs.clean.operations;
-    const allowed = ["trim", "text-to-number", "text-to-date", "dedupe"];
+    const allowed = [
+      "trim",
+      "text-to-number",
+      "text-to-date",
+      "fill-blanks",
+      "dedupe",
+    ];
     if (
       !Array.isArray(operations) ||
       operations.length === 0 ||
@@ -435,8 +441,28 @@ function resolveColumnSpecs(
       operations.some((operation) => !allowed.includes(operation))
     )
       fail("EXCEL_SPEC_INVALID", "Choose valid, unique clean-up steps.");
+    const fillBlanks = specs.clean.fillBlanks;
+    if (operations.includes("fill-blanks")) {
+      if (
+        !(
+          (typeof fillBlanks === "string" &&
+            fillBlanks.length > 0 &&
+            fillBlanks.length <= 100 &&
+            !/[\u0000-\u001f]/.test(fillBlanks) &&
+            !/^[=+\-@]/.test(fillBlanks.trim())) ||
+          (typeof fillBlanks === "number" && Number.isFinite(fillBlanks))
+        )
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Fill blanks needs a safe replacement value.",
+        );
+    } else if (fillBlanks !== undefined) {
+      fail("EXCEL_SPEC_UNUSED", "A fill value needs the fill-blanks step.");
+    }
     resolved.clean = {
       operations: allowed.filter((operation) => operations.includes(operation)),
+      ...(fillBlanks !== undefined ? { fillBlanks } : {}),
     };
   }
   if (specs.addColumn) {

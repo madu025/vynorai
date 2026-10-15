@@ -4,11 +4,13 @@ export type CleanOperation =
   | "trim"
   | "text-to-number"
   | "text-to-date"
+  | "fill-blanks"
   | "dedupe";
 export const CLEAN_OPERATIONS: readonly CleanOperation[] = [
   "trim",
   "text-to-number",
   "text-to-date",
+  "fill-blanks",
   "dedupe",
 ];
 
@@ -25,6 +27,8 @@ export interface CleanChanges {
   converted: number;
   duplicatesRemoved: number;
 }
+
+export type FillBlankValue = string | number;
 
 const NUMBER_TEXT = /^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^-?\d+(?:\.\d+)?$/;
 const ISO_DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -59,13 +63,20 @@ function isoDateSerial(value: string): number | undefined {
 export function cleanRows(
   rows: Cell[][],
   operations: readonly CleanOperation[],
-): { rows: Cell[][]; changes: CleanChanges; dateColumns: number[] } {
+  fillValue?: FillBlankValue,
+): {
+  rows: Cell[][];
+  changes: CleanChanges;
+  dateColumns: number[];
+  filledBlanks: number;
+} {
   const changes: CleanChanges = {
     trimmed: 0,
     converted: 0,
     duplicatesRemoved: 0,
   };
   const dateColumns = new Set<number>();
+  let filledBlanks = 0;
   let next = rows.map((row) =>
     row.map((cell, column) => {
       let value: Cell = cell;
@@ -91,6 +102,14 @@ export function cleanRows(
           value = serial;
         }
       }
+      if (
+        operations.includes("fill-blanks") &&
+        fillValue !== undefined &&
+        (value === null || (typeof value === "string" && value.trim() === ""))
+      ) {
+        value = fillValue;
+        filledBlanks += 1;
+      }
       return value;
     }),
   );
@@ -112,6 +131,7 @@ export function cleanRows(
     rows: next,
     changes,
     dateColumns: [...dateColumns].sort((a, b) => a - b),
+    filledBlanks,
   };
 }
 

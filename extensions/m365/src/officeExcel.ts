@@ -1048,6 +1048,7 @@ export async function applyApprovedExcelPlan(
               const cleaned = cleanRows(
                 rows,
                 (action.spec?.operations ?? ["trim"]) as CleanOperation[],
+                action.spec?.fillBlanks as string | number | undefined,
               );
               const out = [headers, ...cleaned.rows].map((row) =>
                 row.map(literal),

@@ -115,9 +115,20 @@ const excelPlanSchema = z.object({
       clean: z
         .object({
           operations: z
-            .array(z.enum(["trim", "text-to-number", "text-to-date", "dedupe"]))
+            .array(
+              z.enum([
+                "trim",
+                "text-to-number",
+                "text-to-date",
+                "fill-blanks",
+                "dedupe",
+              ]),
+            )
             .min(1)
-            .max(4),
+            .max(5),
+          fillBlanks: z
+            .union([z.string().min(1).max(100), z.number().finite()])
+            .optional(),
         })
         .strict()
         .optional(),

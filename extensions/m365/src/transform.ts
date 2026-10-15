@@ -236,3 +236,131 @@ export function applyView(
   }
   return { rows: result, highlighted };
 }
+
+export type SummaryAggregation = "sum" | "count" | "average" | "min" | "max";
+
+export interface SummaryBuildInput {
+  sheetName: string;
+  /** Local A1 range of the selection, e.g. "A1:D6" (one header row). */
+  localAddress: string;
+  groupIndex: number;
+  groups: string[];
+  values: Array<{
+    column: string;
+    index: number;
+    aggregation: SummaryAggregation;
+  }>;
+  groupHeader: string;
+  includeTotal: boolean;
+}
+
+export function parseLocalRange(address: string): {
+  startColumn: number;
+  startRow: number;
+  endColumn: number;
+  endRow: number;
+} {
+  const match = /^\$?([A-Z]{1,3})\$?(\d+):\$?([A-Z]{1,3})\$?(\d+)$/.exec(
+    address.trim().toUpperCase(),
+  );
+  if (!match)
+    throw new Error("The selection must be a single rectangular range.");
+  const toIndex = (letters: string) =>
+    letters
+      .split("")
+      .reduce((sum, char) => sum * 26 + (char.charCodeAt(0) - 64), 0) - 1;
+  return {
+    startColumn: toIndex(match[1]),
+    startRow: Number(match[2]),
+    endColumn: toIndex(match[3]),
+    endRow: Number(match[4]),
+  };
+}
+
+const AGGREGATION_LABEL: Record<SummaryAggregation, string> = {
+  sum: "Sum",
+  count: "Count",
+  average: "Average",
+  min: "Min",
+  max: "Max",
+};
+
+/**
+ * Header row, one row per group, optional total row. Every number is a live formula over the
+ * source range, so the table follows later edits of the source data. Group labels are written as
+ * text, never as formulas.
+ */
+export function buildSummaryTable(input: SummaryBuildInput): {
+  values: string[][];
+  rowCount: number;
+  columnCount: number;
+  formulaRows: number;
+} {
+  const range = parseLocalRange(input.localAddress);
+  const quoted = "'" + input.sheetName.replace(/'/g, "''") + "'!";
+  const first = range.startRow + 1;
+  const last = range.endRow;
+  const col = (index: number) => {
+    const letter = columnLetter(range.startColumn + index);
+    return quoted + "$" + letter + "$" + first + ":$" + letter + "$" + last;
+  };
+  const header = [
+    input.groupHeader,
+    ...input.values.map(
+      (value) => AGGREGATION_LABEL[value.aggregation] + " of " + value.column,
+    ),
+  ];
+  const formulaFor = (
+    value: SummaryBuildInput["values"][number],
+    rowNumber: number,
+  ) => {
+    const criteria = col(input.groupIndex) + ",$A" + rowNumber;
+    switch (value.aggregation) {
+      case "sum":
+        return "=SUMIFS(" + col(value.index) + "," + criteria + ")";
+      case "count":
+        return "=COUNTIFS(" + criteria + ")";
+      case "average":
+        return (
+          "=IFERROR(AVERAGEIFS(" + col(value.index) + "," + criteria + '),"")'
+        );
+      case "min":
+        return "=MINIFS(" + col(value.index) + "," + criteria + ")";
+      case "max":
+        return "=MAXIFS(" + col(value.index) + "," + criteria + ")";
+    }
+  };
+  const rows = input.groups.map((group, offset) => [
+    group,
+    ...input.values.map((value) => formulaFor(value, offset + 2)),
+  ]);
+  const out: string[][] = [header, ...rows];
+  if (input.includeTotal) {
+    const firstGroupRow = 2;
+    const lastGroupRow = rows.length + 1;
+    out.push([
+      "Total",
+      ...input.values.map((value, position) => {
+        const letter = columnLetter(position + 1);
+        const own = letter + firstGroupRow + ":" + letter + lastGroupRow;
+        switch (value.aggregation) {
+          case "sum":
+          case "count":
+            return "=SUM(" + own + ")";
+          case "average":
+            return "=IFERROR(AVERAGE(" + col(value.index) + '),"")';
+          case "min":
+            return "=MIN(" + own + ")";
+          case "max":
+            return "=MAX(" + own + ")";
+        }
+      }),
+    ]);
+  }
+  return {
+    values: out,
+    rowCount: out.length,
+    columnCount: header.length,
+    formulaRows: rows.length + (input.includeTotal ? 1 : 0),
+  };
+}

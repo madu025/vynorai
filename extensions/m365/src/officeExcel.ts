@@ -1,10 +1,18 @@
 import {
+  canonicalExpression,
+  expressionColumnLetter,
+  expressionToFormula,
+  parseExpression,
+  type ExprNode,
+} from "./expression.js";
+import {
   assertValidExcelTabularRange,
   fingerprintExcelRange,
 } from "./excel.js";
 
 import {
   applyView,
+  buildSummaryTable,
   cleanRows,
   computedColumnFormula,
   type CleanOperation,
@@ -454,6 +462,63 @@ export async function applyApprovedExcelPlan(
                 ).format.fill.color = "#FFF2CC";
               if (view.highlighted.length > 0) await context.sync();
             }
+          } else if (action.kind === "summary") {
+            const spec = action.spec;
+            if (
+              !spec?.groups ||
+              !spec.summaryValues ||
+              spec.groupIndex === undefined
+            )
+              throw new Error("summary needs explicit group and value columns");
+            if (plan.normalization)
+              throw new Error("A summary needs a range with one header row");
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const source = sourceRange();
+              source.load("address");
+              await context.sync();
+              const table = buildSummaryTable({
+                sheetName: plan.worksheetName,
+                localAddress: localExcelAddress(plan.sourceAddress),
+                groupIndex: spec.groupIndex,
+                groups: spec.groups,
+                values: spec.summaryValues.map((entry: any) => ({
+                  column: entry.column,
+                  index: entry.index,
+                  aggregation: entry.aggregation,
+                })),
+                groupHeader: spec.groupColumn ?? "Group",
+                includeTotal: spec.includeTotal !== false,
+              });
+              const grid = sheet.getRangeByIndexes(
+                0,
+                0,
+                table.rowCount,
+                table.columnCount,
+              );
+              // Labels are literal text; numbers are formulas over the source range.
+              grid.formulas = table.values.map((row, rowIndex) =>
+                row.map((cell, columnIndex) =>
+                  rowIndex === 0 || columnIndex === 0 ? literal(cell) : cell,
+                ),
+              );
+              await context.sync();
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                1,
+                table.columnCount,
+              ).format.font.bold = true;
+              if (spec.includeTotal !== false)
+                sheet.getRangeByIndexes(
+                  table.rowCount - 1,
+                  0,
+                  1,
+                  table.columnCount,
+                ).format.font.bold = true;
+              await context.sync();
+            }
           } else if (action.kind === "add-column") {
             const spec = action.spec;
             if (!spec?.columnName)
@@ -462,6 +527,18 @@ export async function applyApprovedExcelPlan(
               result.status = "exists";
             } else {
               const { headers, rows } = splitHeader(await readSourceValues());
+              let expressionAst: ExprNode | undefined;
+              if (spec.expression !== undefined) {
+                const parsed = parseExpression(
+                  spec.expression,
+                  headers.map(String),
+                );
+                if (canonicalExpression(parsed.ast) !== spec.canonical)
+                  throw new Error(
+                    "The expression no longer matches the approved plan",
+                  );
+                expressionAst = parsed.ast;
+              }
               const out = [
                 [...headers, spec.columnName],
                 ...rows.map((row) => [...row, ""]),
@@ -480,13 +557,26 @@ export async function applyApprovedExcelPlan(
                   rows.length,
                   1,
                 ).formulas = rows.map((_row, index) => [
-                  computedColumnFormula(
-                    index + 2,
-                    spec.leftIndex,
-                    spec.operator,
-                    spec.rightIndex,
-                  ),
+                  expressionAst
+                    ? expressionToFormula(
+                        expressionAst,
+                        (column) =>
+                          `${expressionColumnLetter(column)}${index + 2}`,
+                      )
+                    : computedColumnFormula(
+                        index + 2,
+                        spec.leftIndex as number,
+                        spec.operator as "+",
+                        spec.rightIndex as number,
+                      ),
                 ]);
+                if (spec.percentFormat)
+                  sheet.getRangeByIndexes(
+                    1,
+                    headers.length,
+                    rows.length,
+                    1,
+                  ).numberFormat = rows.map(() => ["0.0%"]);
                 await context.sync();
               }
             }
@@ -555,7 +645,8 @@ export async function inspectWorkbookOverview(
   });
 }
 
-const CREATED_SHEET = /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|View)$/;
+const CREATED_SHEET =
+  /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|View)$/;
 const CREATED_TABLE = /^[A-Za-z0-9_]{1,18}_Vynor_table$/;
 
 export interface RollbackReport {

@@ -58,11 +58,12 @@ const excelPlanSchema = z.object({
         "pivot-table",
         "clean",
         "add-column",
+        "summary",
         "view",
       ]),
     )
     .min(1)
-    .max(7),
+    .max(8),
   chunkRows: z.number().int().min(1).max(5000).optional(),
   specs: z
     .object({
@@ -140,12 +141,37 @@ const excelPlanSchema = z.object({
         })
         .strict()
         .optional(),
+      summary: z
+        .object({
+          group: z.number().int().min(0).max(99),
+          values: z
+            .array(
+              z
+                .object({
+                  column: z.number().int().min(0).max(99),
+                  aggregation: z.enum([
+                    "sum",
+                    "count",
+                    "average",
+                    "min",
+                    "max",
+                  ]),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(4),
+          total: z.boolean().optional(),
+        })
+        .strict()
+        .optional(),
       addColumn: z
         .object({
           name: z.string().min(1).max(40),
-          left: z.number().int().min(0).max(99),
-          operator: z.enum(["+", "-", "*", "/"]),
-          right: z.number().int().min(0).max(99),
+          left: z.number().int().min(0).max(99).optional(),
+          operator: z.enum(["+", "-", "*", "/"]).optional(),
+          right: z.number().int().min(0).max(99).optional(),
+          expression: z.string().min(1).max(200).optional(),
         })
         .strict()
         .optional(),
@@ -182,6 +208,7 @@ const applyResultSchema = z.object({
           "pivot-table",
           "clean",
           "add-column",
+          "summary",
           "view",
         ]),
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),

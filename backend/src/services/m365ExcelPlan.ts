@@ -1,4 +1,9 @@
 import crypto from "node:crypto";
+import {
+  canonicalExpression,
+  parseExpression,
+  wantsPercentFormat,
+} from "./m365Expression.js";
 
 export class InvalidExcelRangeError extends Error {
   constructor(
@@ -50,9 +55,16 @@ export interface ExcelColumnSpecs {
   clean?: { operations: string[] };
   addColumn?: {
     name: string;
-    left: number;
-    operator: "+" | "-" | "*" | "/";
-    right: number;
+    left?: number;
+    operator?: "+" | "-" | "*" | "/";
+    right?: number;
+    /** A safe column expression; used instead of left/operator/right. */
+    expression?: string;
+  };
+  summary?: {
+    group: number;
+    values: Array<{ column: number; aggregation: ExcelAggregation }>;
+    total?: boolean;
   };
   view?: {
     sort?: { column: number; direction: "asc" | "desc" };
@@ -87,6 +99,19 @@ export interface ExcelActionSpec {
   operator?: "+" | "-" | "*" | "/";
   rightColumn?: string;
   rightIndex?: number;
+  groupColumn?: string;
+  groupIndex?: number;
+  groups?: string[];
+  summaryValues?: Array<{
+    column: string;
+    index: number;
+    aggregation: ExcelAggregation;
+  }>;
+  includeTotal?: boolean;
+  expression?: string;
+  canonical?: string;
+  refs?: number[];
+  percentFormat?: boolean;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
@@ -116,6 +141,7 @@ function resolveColumnSpecs(
   pivot?: ExcelActionSpec;
   clean?: ExcelActionSpec;
   addColumn?: ExcelActionSpec;
+  summary?: ExcelActionSpec;
   view?: ExcelActionSpec;
 } {
   if (!specs) return {};
@@ -137,6 +163,7 @@ function resolveColumnSpecs(
     pivot?: ExcelActionSpec;
     clean?: ExcelActionSpec;
     addColumn?: ExcelActionSpec;
+    summary?: ExcelActionSpec;
     view?: ExcelActionSpec;
   } = {};
   const chartTypes = [
@@ -252,7 +279,7 @@ function resolveColumnSpecs(
         "EXCEL_SPEC_UNUSED",
         "A computed column needs the add-column action.",
       );
-    const { name, left, operator, right } = specs.addColumn;
+    const { name, left, operator, right, expression } = specs.addColumn;
     if (
       typeof name !== "string" ||
       name.trim().length === 0 ||
@@ -261,22 +288,114 @@ function resolveColumnSpecs(
       /[\r\n]/.test(name)
     )
       fail("EXCEL_SPEC_INVALID", "The new column name is not allowed.");
-    if (!["+", "-", "*", "/"].includes(operator))
-      fail("EXCEL_SPEC_INVALID", "Unsupported operator.");
-    if (!inRange(left) || !inRange(right) || left === right)
-      fail("EXCEL_SPEC_INVALID", "Choose two different columns to combine.");
-    if (!numeric(left) || !numeric(right))
-      fail(
-        "EXCEL_SPEC_VALUE_NOT_NUMERIC",
-        "Both columns of a computed column must contain numbers.",
-      );
-    resolved.addColumn = {
-      columnName: name.trim(),
-      leftColumn: headers[left],
-      leftIndex: left,
-      operator,
-      rightColumn: headers[right],
-      rightIndex: right,
+    if (expression !== undefined) {
+      if (left !== undefined || right !== undefined || operator !== undefined)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Use either an expression or two columns, not both.",
+        );
+      let parsed: ReturnType<typeof parseExpression>;
+      try {
+        parsed = parseExpression(String(expression), headers);
+      } catch (error) {
+        return fail("EXCEL_SPEC_INVALID", (error as Error).message);
+      }
+      if (!parsed.refs.every((column) => numeric(column)))
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          "Every column used in an expression must contain numbers.",
+        );
+      resolved.addColumn = {
+        columnName: name.trim(),
+        expression: String(expression).trim(),
+        canonical: canonicalExpression(parsed.ast),
+        refs: parsed.refs,
+        percentFormat: wantsPercentFormat(name),
+      };
+    } else {
+      if (!["+", "-", "*", "/"].includes(operator as string))
+        fail("EXCEL_SPEC_INVALID", "Unsupported operator.");
+      if (!inRange(left) || !inRange(right) || left === right)
+        fail("EXCEL_SPEC_INVALID", "Choose two different columns to combine.");
+      if (!numeric(left as number) || !numeric(right as number))
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          "Both columns of a computed column must contain numbers.",
+        );
+      resolved.addColumn = {
+        columnName: name.trim(),
+        leftColumn: headers[left as number],
+        leftIndex: left as number,
+        operator,
+        rightColumn: headers[right as number],
+        rightIndex: right as number,
+      };
+    }
+  }
+  if (specs.summary) {
+    if (!requested.has("summary"))
+      fail("EXCEL_SPEC_UNUSED", "Summary options need the summary action.");
+    const { group, values, total } = specs.summary;
+    if (!inRange(group))
+      fail("EXCEL_SPEC_INVALID", "Choose a column to group by.");
+    if (!Array.isArray(values) || values.length < 1 || values.length > 4)
+      fail("EXCEL_SPEC_INVALID", "Choose between one and four value columns.");
+    const aggregations = ["sum", "count", "average", "min", "max"];
+    const picked: Array<{
+      column: string;
+      index: number;
+      aggregation: ExcelAggregation;
+    }> = [];
+    for (const entry of values) {
+      if (!inRange(entry.column) || entry.column === group)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "A value column must differ from the group column.",
+        );
+      if (!aggregations.includes(entry.aggregation))
+        fail("EXCEL_SPEC_INVALID", "Unsupported aggregation.");
+      if (!numeric(entry.column))
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          "A summary value column must contain numbers.",
+        );
+      if (
+        picked.some(
+          (item) =>
+            item.index === entry.column &&
+            item.aggregation === entry.aggregation,
+        )
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Each value and aggregation can be chosen once.",
+        );
+      picked.push({
+        column: headers[entry.column],
+        index: entry.column,
+        aggregation: entry.aggregation,
+      });
+    }
+    const seen: string[] = [];
+    for (const row of dataRows) {
+      const cell = row[group];
+      if (cell === null || cell === undefined || cell === "") continue;
+      const text = String(cell);
+      if (!seen.includes(text)) seen.push(text);
+      if (seen.length > 200)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Too many groups for a summary (limit 200).",
+        );
+    }
+    if (seen.length === 0)
+      fail("EXCEL_SPEC_INVALID", "The group column has no values.");
+    resolved.summary = {
+      groupColumn: headers[group],
+      groupIndex: group,
+      groups: seen,
+      summaryValues: picked,
+      includeTotal: total !== false,
     };
   }
   if (specs.view) {
@@ -502,6 +621,11 @@ export function createServerExcelPreviewPlan(
   const baseName = excelSafeBaseName(input.worksheetName);
   const requested = new Set(requestedActions);
   if (layout.normalization) requested.add("new-sheet");
+  if (requested.has("summary") && layout.normalization)
+    throw new InvalidExcelRangeError(
+      "EXCEL_SPEC_INVALID",
+      "A summary needs a range with one header row.",
+    );
   const resolved = resolveColumnSpecs(
     headers,
     values.slice(layout.headerRowCount),
@@ -515,6 +639,7 @@ export function createServerExcelPreviewPlan(
     "pivot-table",
     "clean",
     "add-column",
+    "summary",
     "view",
   ]
     .filter((kind) => requested.has(kind))
@@ -526,11 +651,13 @@ export function createServerExcelPreviewPlan(
           ? `${baseName}_Vynor_Clean`
           : kind === "add-column"
             ? `${baseName}_Vynor_Calc`
-            : kind === "view"
-              ? `${baseName}_Vynor_View`
-              : kind === "table" && !layout.normalization
-                ? input.worksheetName
-                : `${baseName}_Vynor_Result`,
+            : kind === "summary"
+              ? `${baseName}_Vynor_Totals`
+              : kind === "view"
+                ? `${baseName}_Vynor_View`
+                : kind === "table" && !layout.normalization
+                  ? input.worksheetName
+                  : `${baseName}_Vynor_Result`,
       preservesSource: true,
       description: layout.normalization
         ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
@@ -542,6 +669,9 @@ export function createServerExcelPreviewPlan(
       ...(kind === "clean" && resolved.clean ? { spec: resolved.clean } : {}),
       ...(kind === "add-column" && resolved.addColumn
         ? { spec: resolved.addColumn }
+        : {}),
+      ...(kind === "summary" && resolved.summary
+        ? { spec: resolved.summary }
         : {}),
       ...(kind === "view" && resolved.view ? { spec: resolved.view } : {}),
     }));

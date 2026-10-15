@@ -1,3 +1,4 @@
+import { parseExpression } from "./expression.js";
 import {
   CLEAN_OPERATIONS,
   isSafeColumnName,
@@ -46,16 +47,27 @@ export interface InstructionSpecs {
     };
   };
   clean?: { operations: CleanOperation[] };
+  summary?: {
+    group: number;
+    values: Array<{
+      column: number;
+      aggregation: "sum" | "count" | "average" | "min" | "max";
+    }>;
+    total?: boolean;
+  };
   addColumn?: {
     name: string;
-    left: number;
-    operator: ComputeOperator;
-    right: number;
+    left?: number;
+    operator?: ComputeOperator;
+    right?: number;
+    expression?: string;
   };
 }
 
 export interface InterpretedInstruction {
-  actions: Array<"clean" | "add-column" | "chart" | "pivot-table" | "view">;
+  actions: Array<
+    "clean" | "add-column" | "chart" | "pivot-table" | "view" | "summary"
+  >;
   specs: InstructionSpecs;
   problems: string[];
 }
@@ -120,6 +132,28 @@ export function interpretInstruction(
   if (column) {
     const name = column[1].trim();
     const expression = column[2].trim();
+    // Anything beyond `ColumnA op ColumnB` (parentheses, numbers, functions, three columns)
+    // becomes a validated expression column; the plain two-column form keeps its own spec.
+    let handled = false;
+    try {
+      const parsed = parseExpression(expression, headers);
+      const simple =
+        parsed.ast.t === "bin" &&
+        parsed.ast.a.t === "col" &&
+        parsed.ast.b.t === "col" &&
+        parsed.ast.a.i !== parsed.ast.b.i;
+      if (!simple) {
+        handled = true;
+        if (!isSafeColumnName(name))
+          result.problems.push("That column name is not allowed.");
+        else {
+          result.actions.push("add-column");
+          result.specs.addColumn = { name, expression };
+        }
+      }
+    } catch {
+      // Not a valid expression: the two-column reader below reports what is wrong.
+    }
     let operator: ComputeOperator | undefined;
     let parts: string[] = [];
     const symbol = /^(.+?)\s*([-+*/×÷−])\s*(.+)$/.exec(expression);
@@ -145,7 +179,7 @@ export function interpretInstruction(
         }
       }
     }
-    if (operator && parts.length === 2) {
+    if (!handled && operator && parts.length === 2) {
       const left = findHeader(headers, parts[0]);
       const right = findHeader(headers, parts[1]);
       if (!isSafeColumnName(name))
@@ -161,6 +195,7 @@ export function interpretInstruction(
     }
   }
   interpretChartAndPivot(text, headers, rows, result);
+  interpretSummary(text, headers, rows, result);
   interpretView(text, headers, rows, result);
   return result;
 }
@@ -535,4 +570,51 @@ export function answerQuestion(
   if (/\b(total|sum)\b/.test(lower))
     return { question, answer: `Total ${headers[target]}: ${fmt(sum)}.` };
   return undefined;
+}
+
+/**
+ * "Summary of Sales and Cost by Region" or "Totals table of Sales by Region": a live summary sheet
+ * of SUMIFS/COUNTIFS/AVERAGEIFS formulas. Plain "total Sales by Region" questions stay local answers.
+ */
+function interpretSummary(
+  text: string,
+  headers: string[],
+  rows: Cell[][],
+  result: InterpretedInstruction,
+) {
+  if (
+    !/\bsummary\b|\bsummari[sz]e\b|\btotals?\s+(?:table|sheet)\b|\bsubtotals?\b/i.test(
+      text,
+    )
+  )
+    return;
+  if (/\bpivot\b|\bchart\b|\bgraph\b/i.test(text)) return;
+  const positions = headerPositions(headers, text);
+  const byMatch = /\b(?:by|per|for each|each)\s+/i.exec(text);
+  if (!byMatch) return;
+  const isNumeric = (index: number) => isNumericColumn(rows, index);
+  const labelEntry = positions.find(
+    (entry) => entry.at >= byMatch.index && !isNumeric(entry.index),
+  );
+  const measures = positions.filter(
+    (entry) => entry.at < byMatch.index && isNumeric(entry.index),
+  );
+  if (!labelEntry || measures.length === 0) return;
+  const aggregation = /\b(count|how many)\b/i.test(text)
+    ? "count"
+    : /\b(average|avg|mean)\b/i.test(text)
+      ? "average"
+      : /\b(minimum|min|lowest)\b/i.test(text)
+        ? "min"
+        : /\b(maximum|max|highest)\b/i.test(text)
+          ? "max"
+          : "sum";
+  result.actions.push("summary");
+  result.specs.summary = {
+    group: labelEntry.index,
+    values: measures.slice(0, 4).map((entry) => ({
+      column: entry.index,
+      aggregation,
+    })),
+  };
 }

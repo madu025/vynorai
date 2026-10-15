@@ -33,6 +33,7 @@ export interface M365ApiClient {
         | "pivot-table"
         | "clean"
         | "add-column"
+        | "summary"
         | "view";
       status: "created" | "exists" | "failed" | "skipped_unsupported";
     }>;

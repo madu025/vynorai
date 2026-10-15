@@ -198,6 +198,26 @@ test("percent change resolves one numeric source column without guessing", () =>
   assert.match(unknown.problems[0], /not a column/);
 });
 
+test("moving average resolves a bounded numeric window and source", () => {
+  const asked = interpretInstruction(
+    "Add a 3-month moving average for Sales",
+    headers,
+  );
+  assert.deepEqual(asked.actions, ["add-column"]);
+  assert.deepEqual(asked.specs.addColumn, {
+    name: "3-Period Moving Average of Sales",
+    derived: "moving-average",
+    source: 2,
+    window: 3,
+  });
+  const tooWide = interpretInstruction(
+    "Add a 13-month moving average for Sales",
+    headers,
+  );
+  assert.deepEqual(tooWide.actions, []);
+  assert.match(tooWide.problems[0], /window from 2 to 12/);
+});
+
 test("plans for clean and computed column carry validated specs and their own result sheets", () => {
   const plan = createExcelPreviewPlan(
     input as any,
@@ -450,6 +470,32 @@ test("apply writes percent-change formulas and formatting to a new result sheet"
     ["0.0%"],
     ["0.0%"],
     ["0.0%"],
+  ]);
+  assert.equal(report.sourceUnchangedAfterApply, true);
+});
+
+test("apply writes moving-average formulas to a new result sheet", async () => {
+  const plan = createExcelPreviewPlan(input as any, ["add-column"], undefined, {
+    addColumn: {
+      name: "3-Period Moving Average of Sales",
+      derived: "moving-average",
+      source: 2,
+      window: 3,
+    },
+  });
+  const excel = fakeWorkbook();
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(excel.written["Calc of Sheet1!1,4,4,1.formulas"], [
+    ['=""'],
+    ['=""'],
+    ["=AVERAGE(C2:C4)"],
+    ["=AVERAGE(C3:C5)"],
   ]);
   assert.equal(report.sourceUnchangedAfterApply, true);
 });

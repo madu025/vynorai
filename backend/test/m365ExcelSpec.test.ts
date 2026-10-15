@@ -123,6 +123,40 @@ test("server and add-in build the same safe percent-change plan", () => {
   );
 });
 
+test("server and add-in build the same safe moving-average plan", () => {
+  const actions = ["add-column"] as const;
+  const specs = {
+    addColumn: {
+      name: "3-Period Moving Average of Sales",
+      derived: "moving-average" as const,
+      source: 2,
+      window: 3,
+    },
+  };
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec, {
+    columnName: "3-Period Moving Average of Sales",
+    derived: "moving-average",
+    sourceColumn: "Sales",
+    sourceIndex: 2,
+    window: 3,
+  });
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        addColumn: {
+          name: "Moving Average",
+          derived: "moving-average",
+          source: 2,
+          window: 1,
+        },
+      } as any),
+    /window from 2 to 12/,
+  );
+});
+
 test("server and add-in agree on a deterministic insight report", () => {
   const actions = ["statistics"] as const;
   const specs = {

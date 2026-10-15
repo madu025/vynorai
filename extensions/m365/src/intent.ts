@@ -100,8 +100,9 @@ export interface InstructionSpecs {
     operator?: ComputeOperator;
     right?: number;
     expression?: string;
-    derived?: "running-total" | "rank" | "percent-change";
+    derived?: "running-total" | "rank" | "percent-change" | "moving-average";
     source?: number;
+    window?: number;
   };
 }
 
@@ -154,6 +155,36 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+
+  const movingAverageMatch =
+    /\b(?:(\d+)[-\s]?(?:period|month|week|day)?\s+)?(?:moving|rolling)\s+average(?:\s+column)?\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (movingAverageMatch) {
+    const window = Number(movingAverageMatch[1] ?? 3);
+    const requestedSource = movingAverageMatch[2].trim();
+    const source = findHeader(headers, requestedSource);
+    if (!Number.isInteger(window) || window < 2 || window > 12) {
+      result.problems.push("Choose a moving-average window from 2 to 12.");
+    } else if (source < 0) {
+      result.problems.push(
+        `"${requestedSource}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    } else {
+      return {
+        actions: ["add-column"],
+        specs: {
+          addColumn: {
+            name: `${window}-Period Moving Average of ${headers[source]}`,
+            derived: "moving-average",
+            source,
+            window,
+          },
+        },
+        problems: [],
+      };
+    }
+  }
 
   const percentChangeMatch =
     /(?:\b(?:percent(?:age)?|pct)|%)\s*change(?:\s+column)?\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(

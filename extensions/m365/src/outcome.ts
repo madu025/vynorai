@@ -398,9 +398,11 @@ export function buildOutcomes(
             ? `Rank of ${spec.sourceColumn} (highest first)`
             : spec.derived === "percent-change"
               ? `Percent change of ${spec.sourceColumn} (row over row)`
-              : spec.expression
-                ? spec.expression
-                : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+              : spec.derived === "moving-average"
+                ? `${spec.window}-period moving average of ${spec.sourceColumn}`
+                : spec.expression
+                  ? spec.expression
+                  : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
       // Show the new column with its real values so the person sees the answer, not only a rule.
       try {
         if (spec.expression) {
@@ -482,6 +484,33 @@ export function buildOutcomes(
             return [
               ...table.rows[at].slice(0, kept),
               `${Math.round(((current - previous) / previous) * 1000) / 10}%`,
+            ];
+          });
+        } else if (
+          spec.derived === "moving-average" &&
+          spec.sourceColumn &&
+          Number.isInteger(spec.sourceIndex) &&
+          Number.isInteger(spec.window)
+        ) {
+          const source = spec.sourceIndex as number;
+          const window = spec.window as number;
+          const kept = MAX_TABLE_COLUMNS - 1;
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows.slice(0, MAX_TABLE_ROWS).map((row, at) => {
+            if (at < window - 1) return [...table.rows[at].slice(0, kept), "—"];
+            const values = rows
+              .slice(at - window + 1, at + 1)
+              .map((entry) => Number(entry[source]));
+            if (values.some((value) => !Number.isFinite(value)))
+              return [...table.rows[at].slice(0, kept), "…"];
+            const average =
+              values.reduce((sum, value) => sum + value, 0) / window;
+            return [
+              ...table.rows[at].slice(0, kept),
+              String(Math.round(average * 100) / 100),
             ];
           });
         } else if (spec.leftColumn && spec.rightColumn && spec.operator) {

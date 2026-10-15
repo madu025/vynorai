@@ -107,6 +107,38 @@ test("a percent-change outcome previews row-over-row percentages", () => {
   assert.match(item.details.join("\n"), /Percent change of Sales/);
 });
 
+test("a moving-average outcome previews only complete windows", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "add-column",
+        targetSheet: "Sheet1_Vynor_Calc",
+        spec: {
+          columnName: "3-Period Moving Average of Sales",
+          derived: "moving-average",
+          sourceColumn: "Sales",
+          sourceIndex: 2,
+          window: 3,
+        },
+      },
+    ],
+    headers,
+    [
+      ["Jan", "North", 100, 80],
+      ["Feb", "South", 125, 90],
+      ["Mar", "North", 100, 70],
+      ["Apr", "East", 175, 100],
+    ],
+  );
+  assert.deepEqual(item.table?.rows, [
+    ["Jan", "North", "100", "80", "—"],
+    ["Feb", "South", "125", "90", "—"],
+    ["Mar", "North", "100", "70", "108.33"],
+    ["Apr", "East", "175", "100", "133.33"],
+  ]);
+  assert.match(item.details.join("\n"), /moving average of Sales/);
+});
+
 test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
   const [item] = buildOutcomes(
     [

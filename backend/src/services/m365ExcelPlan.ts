@@ -99,8 +99,9 @@ export interface ExcelColumnSpecs {
     right?: number;
     /** A safe column expression; used instead of left/operator/right. */
     expression?: string;
-    derived?: "running-total" | "rank" | "percent-change";
+    derived?: "running-total" | "rank" | "percent-change" | "moving-average";
     source?: number;
+    window?: number;
   };
   summary?: {
     group: number;
@@ -193,9 +194,10 @@ export interface ExcelActionSpec {
   canonical?: string;
   refs?: number[];
   percentFormat?: boolean;
-  derived?: "running-total" | "rank" | "percent-change";
+  derived?: "running-total" | "rank" | "percent-change" | "moving-average";
   sourceColumn?: string;
   sourceIndex?: number;
+  window?: number;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
@@ -476,7 +478,7 @@ function resolveColumnSpecs(
         "EXCEL_SPEC_UNUSED",
         "A computed column needs the add-column action.",
       );
-    const { name, left, operator, right, expression, derived, source } =
+    const { name, left, operator, right, expression, derived, source, window } =
       specs.addColumn;
     if (
       typeof name !== "string" ||
@@ -499,7 +501,9 @@ function resolveColumnSpecs(
       | undefined;
     if (derived !== undefined) {
       if (
-        !["running-total", "rank", "percent-change"].includes(derived) ||
+        !["running-total", "rank", "percent-change", "moving-average"].includes(
+          derived,
+        ) ||
         expression !== undefined ||
         left !== undefined ||
         right !== undefined ||
@@ -513,6 +517,16 @@ function resolveColumnSpecs(
           "Choose a source column for the running total.",
         );
       const sourceIndex = source as number;
+      if (
+        derived === "moving-average" &&
+        (!Number.isInteger(window) ||
+          (window as number) < 2 ||
+          (window as number) > 12)
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose a moving-average window from 2 to 12.",
+        );
       if (!numeric(sourceIndex))
         fail(
           "EXCEL_SPEC_VALUE_NOT_NUMERIC",
@@ -523,6 +537,7 @@ function resolveColumnSpecs(
         derived,
         sourceColumn: headers[sourceIndex],
         sourceIndex,
+        ...(derived === "moving-average" ? { window: window as number } : {}),
         ...(derived === "percent-change" ? { percentFormat: true } : {}),
       };
     } else if (lookup !== undefined) {

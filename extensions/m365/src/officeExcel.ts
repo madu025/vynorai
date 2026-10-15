@@ -1555,6 +1555,25 @@ export async function applyApprovedExcelPlan(
                       return `=IFERROR((${sourceLetter}${rowNumber}-${sourceLetter}${rowNumber - 1})/${sourceLetter}${rowNumber - 1},"")`;
                     }
                   : undefined;
+              const movingAverageFormula =
+                spec.derived === "moving-average"
+                  ? (rowNumber: number) => {
+                      if (
+                        !Number.isInteger(spec.sourceIndex) ||
+                        !Number.isInteger(spec.window)
+                      )
+                        throw new Error(
+                          "The moving-average source or window is missing from the approved plan",
+                        );
+                      const sourceLetter = expressionColumnLetter(
+                        spec.sourceIndex,
+                      );
+                      const firstRow = rowNumber - spec.window + 1;
+                      return rowNumber < spec.window + 1
+                        ? '=""'
+                        : `=AVERAGE(${sourceLetter}${firstRow}:${sourceLetter}${rowNumber})`;
+                    }
+                  : undefined;
               const out = [
                 [...headers, spec.columnName],
                 ...rows.map((row) => [...row, ""]),
@@ -1587,12 +1606,14 @@ export async function applyApprovedExcelPlan(
                           ? rankFormula(index + 2)
                           : percentChangeFormula
                             ? percentChangeFormula(index + 2)
-                            : computedColumnFormula(
-                                index + 2,
-                                spec.leftIndex as number,
-                                spec.operator as "+",
-                                spec.rightIndex as number,
-                              ),
+                            : movingAverageFormula
+                              ? movingAverageFormula(index + 2)
+                              : computedColumnFormula(
+                                  index + 2,
+                                  spec.leftIndex as number,
+                                  spec.operator as "+",
+                                  spec.rightIndex as number,
+                                ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

@@ -529,7 +529,7 @@ inspect?.addEventListener("click", async () => {
 });
 
 /** The preview card says "nothing has changed"; after an apply that sentence must not stay. */
-function markChangeNote(state: "preview" | "applied" | "partial") {
+function markChangeNote(state: "preview" | "applied" | "partial" | "undone") {
   const note = document.querySelector<HTMLElement>("#change-note");
   if (!note) return;
   if (state === "preview") {
@@ -542,7 +542,9 @@ function markChangeNote(state: "preview" | "applied" | "partial") {
   note.textContent =
     state === "applied"
       ? "Applied. Your source data was not changed."
-      : "Partly applied. See the steps and Diagnostics.";
+      : state === "undone"
+        ? "Undone. What this add-in created was removed."
+        : "Partly applied. See the steps and Diagnostics.";
 }
 
 apply?.addEventListener("click", async () => {
@@ -1196,6 +1198,7 @@ rollbackButton?.addEventListener("click", async () => {
       );
     lastCreated = undefined;
     if (rollbackButton) rollbackButton.hidden = true;
+    markChangeNote("undone");
     setStatus(
       `Removed ${report.removedSheets.length} sheet(s) and converted ${report.convertedTables.length} table(s) back to a range.`,
     );

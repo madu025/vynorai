@@ -5,6 +5,9 @@
  * the person's own selected data. Nothing is simulated or invented.
  */
 
+import { parseExpression } from "./expression.js";
+import { previewExpressionValue } from "./previewValue.js";
+
 export type OutcomeLanguage = "en" | "si" | "ta";
 
 export interface OutcomeChart {
@@ -289,6 +292,25 @@ export function buildOutcomes(
       const how = spec.expression
         ? spec.expression
         : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+      // Show the new column with its real values so the person sees the answer, not only a rule.
+      try {
+        if (spec.expression) {
+          const parsed = parseExpression(String(spec.expression), headers);
+          const kept = MAX_TABLE_COLUMNS - 1;
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows
+            .slice(0, MAX_TABLE_ROWS)
+            .map((row, at) => [
+              ...table.rows[at].slice(0, kept),
+              previewExpressionValue(parsed.ast, row as unknown[]) ?? "…",
+            ]);
+        }
+      } catch {
+        // The picture is optional; the rule line above still tells the story.
+      }
       item.details.push(
         say(
           `New column "${spec.columnName}" = ${how}`,

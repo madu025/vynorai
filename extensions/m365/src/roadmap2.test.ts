@@ -412,6 +412,11 @@ test("sort, filter, top-N and highlight requests are read from plain words", () 
   const read = (text: string) => interpretInstruction(text, headers, rows);
   const sorted = read("Sort by Sales descending");
   assert.deepEqual(sorted.specs.view?.sort, { column: 2, direction: "desc" });
+  const plainSorted = read("Sort Sales descending");
+  assert.deepEqual(plainSorted.specs.view?.sort, {
+    column: 2,
+    direction: "desc",
+  });
   const top = read("Top 3 by Sales");
   assert.deepEqual(top.specs.view?.highlight, {
     column: 2,
@@ -430,6 +435,17 @@ test("sort, filter, top-N and highlight requests are read from plain words", () 
     column: 2,
     operator: ">",
     value: 1500,
+  });
+  const equals = read("Filter Region equals North");
+  assert.deepEqual(equals.specs.view?.filter, {
+    column: 1,
+    operator: "=",
+    value: "North",
+  });
+  const duplicateValues = read("Show duplicate Region values");
+  assert.deepEqual(duplicateValues.specs.view?.highlight, {
+    column: 1,
+    rule: "duplicates",
   });
   const highlight = read("Highlight above average Sales");
   assert.equal(highlight.specs.view?.highlight?.rule, "above-average");

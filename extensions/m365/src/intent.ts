@@ -1092,7 +1092,7 @@ function interpretView(
     }
   }
   const sort =
-    /\bsort(?:ed)?\s+(?:by|on)\s+(.+?)(?:\s+(descending|desc|ascending|asc|highest first|lowest first))?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
+    /\bsort(?:ed)?\s+(?:(?:by|on)\s+)?(.+?)(?:\s+(descending|desc|ascending|asc|highest first|lowest first))?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
       text,
     );
   if (sort && !view.sort) {
@@ -1120,17 +1120,26 @@ function interpretView(
   const dup = /\bhighlight\s+duplicates?(?:\s+in\s+(.+?))?(?:[.,]|$)/i.exec(
     text,
   );
-  if (dup) {
-    const column = dup[1] ? header(dup[1]) : 0;
+  const shownDup =
+    /\b(?:show|display)\s+duplicates?\s+(.+?)(?:\s+values?)?(?:[.,]|$)/i.exec(
+      text,
+    );
+  if (dup || shownDup) {
+    const column = header(dup?.[1] ?? shownDup?.[1] ?? "");
     if (column >= 0) view.highlight = { column, rule: "duplicates" };
   }
   const filter =
-    /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
+    /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bequals?\b|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
       text,
     );
   if (filter) {
     const column = header(filter[1]);
-    const operator = filter[2].toLowerCase() as NonNullable<
+    const operator = (
+      filter[2].toLowerCase() === "equals" ||
+      filter[2].toLowerCase() === "equal"
+        ? "="
+        : filter[2].toLowerCase()
+    ) as NonNullable<
       NonNullable<InstructionSpecs["view"]>["filter"]
     >["operator"];
     const raw = filter[3].trim();

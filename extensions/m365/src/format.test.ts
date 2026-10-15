@@ -64,6 +64,26 @@ test("format instructions become explicit options, and 'format as a table' stays
   assert.equal(table.specs.format, undefined);
   assert.deepEqual(table.actions, ["table"]);
   assert.ok(!table.actions.includes("format"));
+
+  const dependent = interpretInstruction(
+    "Create a dependent drop-down for Status based on Region",
+    ["Region", "Status"],
+    [
+      ["North", "Open"],
+      ["North", "Closed"],
+      ["South", "Open"],
+    ],
+  );
+  assert.deepEqual(dependent, {
+    actions: ["format"],
+    specs: {
+      format: {
+        freezeHeader: true,
+        dependentDropdown: { child: 1, parent: 0 },
+      },
+    },
+    problems: [],
+  });
 });
 
 test("quality requests are recognised", () => {
@@ -133,6 +153,31 @@ test("the plan decides number formats, highlights and drop-down values", () => {
     title: "Status guidance",
     message: "Choose a valid status.",
   });
+  const dependentPlan = createExcelPreviewPlan(
+    {
+      ...input,
+      values: [
+        ["Region", "Status"],
+        ["North", "Open"],
+        ["North", "Closed"],
+        ["South", "Open"],
+      ],
+      address: "Sheet1!A1:B4",
+    } as any,
+    ["format"],
+    500,
+    { format: { dependentDropdown: { child: 1, parent: 0 } } },
+  );
+  assert.deepEqual(dependentPlan.actions[0].spec?.dependentDropdown, {
+    childColumn: "Status",
+    childIndex: 1,
+    parentColumn: "Region",
+    parentIndex: 0,
+    groups: [
+      { key: "North", name: "VynorAI_DD_North", values: ["Open", "Closed"] },
+      { key: "South", name: "VynorAI_DD_South", values: ["Open"] },
+    ],
+  });
   const bad = (format: unknown) =>
     createExcelPreviewPlan(input as any, ["format"], 500, { format } as any);
   assert.throws(
@@ -163,6 +208,40 @@ test("the plan decides number formats, highlights and drop-down values", () => {
         { format: { validation: [{ column: 0, rule: "list" }] } },
       ),
     /cannot become a drop-down list/,
+  );
+  assert.throws(
+    () =>
+      createExcelPreviewPlan(
+        {
+          ...input,
+          values: [
+            ["Parent", "Child"],
+            ["North/West", "Open"],
+          ],
+          address: "Sheet1!A1:B2",
+        } as any,
+        ["format"],
+        500,
+        { format: { dependentDropdown: { child: 1, parent: 0 } } },
+      ),
+    /parent values must use/,
+  );
+  assert.throws(
+    () =>
+      createExcelPreviewPlan(
+        {
+          ...input,
+          values: [
+            ["Parent", "Child"],
+            ["North", "Open, Closed"],
+          ],
+          address: "Sheet1!A1:B2",
+        } as any,
+        ["format"],
+        500,
+        { format: { dependentDropdown: { child: 1, parent: 0 } } },
+      ),
+    /child values must be/,
   );
 });
 

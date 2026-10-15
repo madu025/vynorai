@@ -61,6 +61,8 @@ export interface ExcelActionResult {
   status: ExcelActionStatus;
   /** True only when this apply call created the target worksheet itself. */
   createdSheet?: boolean;
+  /** Workbook names created as helper lists for one result. */
+  createdNames?: string[];
   error?: string;
 }
 
@@ -94,12 +96,12 @@ export function rollbackItemsFromApplyReport(
     ],
     names: [
       ...new Set(
-        results
-          .filter(
-            (result) =>
-              result.kind === "named-range" && result.status === "created",
-          )
-          .map((result) => result.name),
+        results.flatMap((result) => [
+          ...(result.kind === "named-range" && result.status === "created"
+            ? [result.name]
+            : []),
+          ...(result.status === "created" ? (result.createdNames ?? []) : []),
+        ]),
       ),
     ],
   };
@@ -1522,6 +1524,66 @@ export async function applyApprovedExcelPlan(
                     message: spec.inputMessage.message,
                   };
                 }
+                if (spec.dependentDropdown) {
+                  const dependent = spec.dependentDropdown;
+                  const groups = dependent.groups ?? [];
+                  if (!groups.length)
+                    throw new Error("dependent drop-down has no helper groups");
+                  if (groups.some((group: any) => takenObjects.has(group.name)))
+                    throw new Error(
+                      "dependent drop-down helper names already exist; undo the older result first",
+                    );
+                  const helperStart = columns + 1;
+                  const helperRows =
+                    1 +
+                    Math.max(
+                      ...groups.map((group: any) => group.values.length),
+                    );
+                  const helper = sheet.getRangeByIndexes(
+                    0,
+                    helperStart,
+                    helperRows,
+                    groups.length,
+                  );
+                  helper.values = Array.from({ length: helperRows }, (_, row) =>
+                    groups.map((group: any) =>
+                      row === 0
+                        ? group.name
+                        : literal(group.values[row - 1] ?? ""),
+                    ),
+                  );
+                  helper.format.columnHidden = true;
+                  const escapedSheet = String(action.targetSheet).replace(
+                    /'/g,
+                    "''",
+                  );
+                  groups.forEach((group: any, index: number) => {
+                    const helperColumn = expressionColumnLetter(
+                      helperStart + index,
+                    );
+                    context.workbook.names.add(
+                      group.name,
+                      `='${escapedSheet}'!$${helperColumn}$2:$${helperColumn}$${helperRows}`,
+                    );
+                    takenObjects.add(group.name);
+                  });
+                  const parentColumn = expressionColumnLetter(
+                    dependent.parentIndex,
+                  );
+                  const childRange = sheet.getRangeByIndexes(
+                    1,
+                    dependent.childIndex,
+                    rows.length,
+                    1,
+                  );
+                  childRange.dataValidation.rule = {
+                    list: {
+                      inCellDropDown: true,
+                      source: `=INDIRECT("VynorAI_DD_"&SUBSTITUTE(SUBSTITUTE($${parentColumn}2," ","_"),"-","_"))`,
+                    },
+                  };
+                  result.createdNames = groups.map((group: any) => group.name);
+                }
                 await context.sync();
                 if (spec.totalRow) {
                   const totalRowIndex = rows.length + 1;
@@ -2203,7 +2265,8 @@ export async function inspectWorkbookOverview(
 const CREATED_SHEET =
   /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|Format|Report|View)(?: (d{1,2}))?$/;
 const CREATED_TABLE = /^[A-Za-z0-9_]{1,18}_Vynor_table(?:_\d{1,2})?$/;
-const CREATED_NAME = /^VynorAI_[A-Za-z0-9_]+_\d+(?:_\d+)?$/;
+const CREATED_NAME =
+  /^(?:VynorAI_[A-Za-z0-9_]+_\d+(?:_\d+)?|VynorAI_DD_[A-Za-z0-9_]+)$/;
 
 export interface RollbackReport {
   removedSheets: string[];

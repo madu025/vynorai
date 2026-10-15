@@ -609,6 +609,78 @@ test("server and add-in agree on a validated input-message format plan", () => {
   });
 });
 
+test("server and add-in agree on a dependent dropdown plan", () => {
+  const dependentInput = {
+    ...input,
+    values: [
+      ["Region", "Status"],
+      ["North", "Open"],
+      ["North", "Closed"],
+      ["South", "Open"],
+    ],
+    address: "Sheet1!A1:B4",
+  };
+  const specs = {
+    format: { dependentDropdown: { child: 1, parent: 0 } },
+  };
+  const actions = ["format"] as const;
+  const server = createServerExcelPreviewPlan(
+    dependentInput,
+    [...actions],
+    500,
+    specs,
+  );
+  const local = createExcelPreviewPlan(
+    dependentInput as any,
+    [...actions],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.dependentDropdown?.groups.length, 2);
+  assert.equal(
+    server.actions[0].spec?.dependentDropdown?.groups[0].name,
+    "VynorAI_DD_North",
+  );
+});
+
+test("server refuses unsafe dependent dropdown parent values", () => {
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(
+        {
+          ...input,
+          values: [
+            ["Parent", "Child"],
+            ["North/West", "Open"],
+          ],
+          address: "Sheet1!A1:B2",
+        },
+        ["format"],
+        500,
+        { format: { dependentDropdown: { child: 1, parent: 0 } } },
+      ),
+    /parent values must use/,
+  );
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(
+        {
+          ...input,
+          values: [
+            ["Parent", "Child"],
+            ["North", "Open, Closed"],
+          ],
+          address: "Sheet1!A1:B2",
+        },
+        ["format"],
+        500,
+        { format: { dependentDropdown: { child: 1, parent: 0 } } },
+      ),
+    /child values must be/,
+  );
+});
+
 test("server and add-in agree on an unambiguous text-date conversion", () => {
   const specs = { clean: { operations: ["text-to-date"] } };
   const actions = ["clean"] as const;

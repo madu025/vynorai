@@ -105,6 +105,7 @@ export interface InstructionSpecs {
       min?: number;
       max?: number;
     }>;
+    dependentDropdown?: { child: number; parent: number };
     inputMessage?: {
       column: number;
       title?: string;
@@ -208,6 +209,40 @@ export function interpretInstruction(
     )
   )
     result.actions.push("table");
+
+  const dependentDropdownMatch =
+    /\b(?:create|add|make)\s+(?:a\s+)?dependent\s+drop-?down\s+for\s+["']?([^"'\n]+?)["']?\s+based\s+on\s+["']?([^"'\n.]+?)["']?\s*\.?$/i.exec(
+      text,
+    );
+  if (dependentDropdownMatch) {
+    const child = findHeader(headers, dependentDropdownMatch[1].trim());
+    const parent = findHeader(headers, dependentDropdownMatch[2].trim());
+    if (child < 0)
+      result.problems.push(
+        `"${dependentDropdownMatch[1].trim()}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    if (parent < 0)
+      result.problems.push(
+        `"${dependentDropdownMatch[2].trim()}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    if (child >= 0 && parent >= 0) {
+      if (child === parent)
+        result.problems.push(
+          "The dependent drop-down needs two different columns.",
+        );
+      else
+        return {
+          actions: ["format"],
+          specs: {
+            format: {
+              freezeHeader: true,
+              dependentDropdown: { child, parent },
+            },
+          },
+          problems: [],
+        };
+    }
+  }
 
   const namedRangeMatch =
     /\b(?:create|define|add)\s+(?:a\s+)?named\s+range\s+for\s+["']?([^"'.,]+?)["']?\s*\.?$/i.exec(

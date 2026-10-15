@@ -25,6 +25,7 @@ function fakeWorkbook(
   const sheets = new Map<string, any>();
   const tables = new Set<string>();
   const pivots = new Set<string>();
+  const names = new Set<string>();
   const nullable = (exists: boolean, value: any = {}) =>
     Object.assign(value, { isNullObject: !exists, load() {} });
   const range = (sheet: string, address: string, values?: unknown[][]) => {
@@ -192,6 +193,14 @@ function fakeWorkbook(
     },
     pivotTables: {
       getItemOrNullObject: (name: string) => nullable(pivots.has(name)),
+    },
+    names: {
+      items: [],
+      load() {},
+      add(name: string, formula: string) {
+        names.add(name);
+        calls.push(`name.add ${name} ${formula}`);
+      },
     },
     worksheets: {
       getItem: (name: string) => sheets.get(name),
@@ -368,6 +377,46 @@ test("apply adds an input message to validation on a copied result sheet", async
     ),
     excel.calls.join("\n"),
   );
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
+test("apply creates dependent validation from helper names on a copied result sheet", async () => {
+  const excel = fakeWorkbook([
+    ["Region", "Status"],
+    ["North", "Open"],
+    ["North", "Closed"],
+    ["South", "Open"],
+  ]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["format"], 500, {
+    format: { dependentDropdown: { child: 1, parent: 0 } },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created", JSON.stringify(report));
+  assert.ok(
+    excel.calls.some((call) => call.includes("name.add VynorAI_DD_North")),
+  );
+  assert.ok(
+    excel.calls.some((call) => call.includes("name.add VynorAI_DD_South")),
+  );
+  assert.ok(
+    excel.calls.some((call) =>
+      call.includes(
+        'validation.rule {"list":{"inCellDropDown":true,"source":"=INDIRECT',
+      ),
+    ),
+    excel.calls.join("\n"),
+  );
+  assert.deepEqual(report.results[0].createdNames, [
+    "VynorAI_DD_North",
+    "VynorAI_DD_South",
+  ]);
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 

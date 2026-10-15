@@ -187,6 +187,7 @@ export interface ExcelColumnSpecs {
       max?: number;
     }>;
     inputMessage?: { column: number; title?: string; message?: string };
+    dependentDropdown?: { child: number; parent: number };
   };
   clean?: { operations: string[]; fillBlanks?: string | number };
   addColumn?: {
@@ -327,6 +328,13 @@ export interface ExcelActionSpec {
     index: number;
     title: string;
     message: string;
+  };
+  dependentDropdown?: {
+    childColumn: string;
+    childIndex: number;
+    parentColumn: string;
+    parentIndex: number;
+    groups: Array<{ key: string; name: string; values: string[] }>;
   };
   groupColumn?: string;
   groupIndex?: number;
@@ -1314,6 +1322,88 @@ function resolveColumnSpecs(
         message,
       };
     }
+    let dependentDropdown:
+      | {
+          childColumn: string;
+          childIndex: number;
+          parentColumn: string;
+          parentIndex: number;
+          groups: Array<{ key: string; name: string; values: string[] }>;
+        }
+      | undefined;
+    if (options.dependentDropdown) {
+      const { child, parent } = options.dependentDropdown;
+      if (!inRange(child) || !inRange(parent) || child === parent)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose two different valid columns for the dependent drop-down.",
+        );
+      const groups = new Map<string, { name: string; values: string[] }>();
+      const names = new Map<string, string>();
+      const safeToken = (value: string) => {
+        const token = value
+          .replace(/[ -]+/g, "_")
+          .replace(/[^A-Za-z0-9_]/g, "_")
+          .replace(/^(\d)/, "_$1")
+          .slice(0, 40);
+        return token || "Blank";
+      };
+      for (const row of dataRows) {
+        const key = String(row[parent] ?? "").trim();
+        if (!key) continue;
+        if (!/^[A-Za-z0-9 _-]{1,40}$/.test(key))
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Dependent drop-down parent values must use letters, numbers, spaces, hyphens or underscores.",
+          );
+        const token = safeToken(key);
+        const previous = names.get(token);
+        if (previous && previous !== key)
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Two parent values become the same safe drop-down name.",
+          );
+        names.set(token, key);
+        const group = groups.get(key) ?? {
+          name: `VynorAI_DD_${token}`,
+          values: [],
+        };
+        const childValue = String(row[child] ?? "").trim();
+        if (childValue && (childValue.length > 80 || /[,;\"]/.test(childValue)))
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Dependent drop-down child values must be 80 characters or fewer and cannot contain commas, semicolons or quotes.",
+          );
+        if (childValue && !group.values.includes(childValue))
+          group.values.push(childValue);
+        if (group.values.length > 50)
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "A dependent drop-down can have at most 50 values per parent.",
+          );
+        groups.set(key, group);
+      }
+      const resolvedGroups = [...groups.entries()].map(([key, group]) => {
+        if (group.values.length === 0)
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Each dependent drop-down parent needs at least one child value.",
+          );
+        return { key, name: group.name, values: group.values };
+      });
+      if (resolvedGroups.length === 0)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "The dependent drop-down parent column has no usable values.",
+        );
+      dependentDropdown = {
+        childColumn: headers[child],
+        childIndex: child,
+        parentColumn: headers[parent],
+        parentIndex: parent,
+        groups: resolvedGroups,
+      };
+    }
     const columnFormats: Array<{
       index: number;
       column: string;
@@ -1342,6 +1432,7 @@ function resolveColumnSpecs(
       conditional,
       validation,
       ...(inputMessage ? { inputMessage } : {}),
+      ...(dependentDropdown ? { dependentDropdown } : {}),
     };
   }
   if (specs.statistics) {

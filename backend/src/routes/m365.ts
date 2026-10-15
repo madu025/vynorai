@@ -260,6 +260,13 @@ const excelPlanSchema = z.object({
             })
             .strict()
             .optional(),
+          dependentDropdown: z
+            .object({
+              child: z.number().int().min(0).max(99),
+              parent: z.number().int().min(0).max(99),
+            })
+            .strict()
+            .optional(),
         })
         .strict()
         .optional(),

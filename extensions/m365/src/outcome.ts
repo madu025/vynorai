@@ -310,6 +310,23 @@ export function buildOutcomes(
           ),
         );
       }
+      if (spec.dependentDropdown) {
+        const dependent = spec.dependentDropdown;
+        const groups = (dependent.groups ?? [])
+          .map(
+            (group: any) =>
+              `${group.key}: ${group.values.slice(0, 5).join(", ")}`,
+          )
+          .join("; ");
+        item.details.push(
+          say(
+            `${dependent.childColumn} depends on ${dependent.parentColumn} (${groups})`,
+            `${dependent.parentColumn} අනුව ${dependent.childColumn} ලැයිස්තුව වෙනස් වේ (${groups})`,
+          ),
+        );
+        if (!table.dropdownColumns.includes(dependent.childIndex))
+          table.dropdownColumns.push(dependent.childIndex);
+      }
       if (spec.totalRow)
         item.details.push(
           say(

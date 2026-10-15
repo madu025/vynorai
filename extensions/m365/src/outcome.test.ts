@@ -354,6 +354,32 @@ test("a format outcome lists the exact rules, including drop-downs and data bars
   assert.equal(item.table?.barColumns[0].index, 2);
 });
 
+test("a format outcome explains dependent dropdown groups", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "format",
+        targetSheet: "Sheet1_Vynor_Format",
+        spec: {
+          dependentDropdown: {
+            childColumn: "Status",
+            childIndex: 1,
+            parentColumn: "Region",
+            parentIndex: 0,
+            groups: [
+              { key: "North", name: "VynorAI_DD_North", values: ["Open"] },
+            ],
+          },
+        },
+      },
+    ],
+    ["Region", "Status"],
+    [["North", "Open"]],
+  );
+  assert.match(item.details.join("\n"), /Status depends on Region/);
+  assert.deepEqual(item.table?.dropdownColumns, [1]);
+});
+
 test("a repeat run gets a numbered sheet name that still fits Excel's limit", () => {
   const taken = new Set(["Sheet1_Vynor_Result", "Sheet1_Vynor_Result (2)"]);
   assert.equal(

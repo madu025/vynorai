@@ -672,12 +672,19 @@ inspect?.addEventListener("click", async () => {
       // Insights are optional; the preview above is already valid.
     }
     markChangeNote("preview");
+    renderTrace([
+      `Read ${Math.max(0, input.values.length - 1)} rows and ${input.values[0]?.length ?? 0} columns from ${input.address}`,
+      `Understood the request: ${actions.join(", ")}`,
+      "Planned it on the server and checked that both plans match. Nothing has changed yet",
+    ]);
     setStatus(
       (autoDetectedAddress
         ? `Found your table at ${autoDetectedAddress}. `
         : "") +
         "Preview ready. Nothing has changed yet. Review it before applying.",
     );
+    // "Review as you go" off: apply straight away, like Copilot's edit mode.
+    if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
   } catch (error) {
     handleApiError("inspect", error);
   }
@@ -814,6 +821,12 @@ apply?.addEventListener("click", async () => {
       ? ""
       : doneSentence(report.results, report.sourceUnchangedAfterApply);
     markChangeNote(failed.length ? "partial" : "applied");
+    renderChanged(
+      report.results.map(
+        (result) =>
+          `${result.kind} - ${result.targetSheet}${result.status === "exists" ? " (already existed)" : ""}`,
+      ),
+    );
     if (!failed.length) lastAppliedSpecs = previewSpecs;
     document.querySelector<HTMLElement>("#cleanup")?.removeAttribute("hidden");
     document
@@ -1658,6 +1671,48 @@ document.querySelector("#more-pills")?.addEventListener("click", (event) => {
     .forEach((pill) => pill.removeAttribute("hidden"));
   (event.currentTarget as HTMLElement).setAttribute("hidden", "");
 });
+
+const reviewToggle = document.querySelector<HTMLInputElement>("#review-toggle");
+try {
+  if (reviewToggle && localStorage.getItem("vynor.review") === "off")
+    reviewToggle.checked = false;
+} catch {
+  // Storage can be blocked; the default stays on.
+}
+reviewToggle?.addEventListener("change", () => {
+  try {
+    localStorage.setItem("vynor.review", reviewToggle.checked ? "on" : "off");
+  } catch {
+    // Not persisted.
+  }
+});
+
+function renderTrace(lines: string[]) {
+  const box = document.querySelector<HTMLElement>("#plan-trace");
+  const list = document.querySelector<HTMLElement>("#trace-list");
+  const count = document.querySelector<HTMLElement>("#trace-n");
+  if (!box || !list || !count) return;
+  list.textContent = "";
+  for (const line of lines) {
+    const item = document.createElement("li");
+    item.textContent = line;
+    list.appendChild(item);
+  }
+  count.textContent = String(lines.length);
+  box.hidden = false;
+}
+
+function renderChanged(lines: string[]) {
+  const list = document.querySelector<HTMLElement>("#changed-list");
+  if (!list) return;
+  list.textContent = "";
+  for (const line of lines) {
+    const item = document.createElement("li");
+    item.textContent = line;
+    list.appendChild(item);
+  }
+  list.hidden = lines.length === 0;
+}
 
 const cleanupButton = document.querySelector<HTMLButtonElement>("#cleanup");
 cleanupButton?.addEventListener("click", async () => {

@@ -100,7 +100,12 @@ export async function revealExcelResult(
       await context.sync();
       if (sheet.isNullObject) return false;
       sheet.activate();
-      sheet.getRange("A1").select();
+      // Select what was just built, so the new range is highlighted like Copilot does.
+      const used = sheet.getUsedRangeOrNullObject(true);
+      used.load("isNullObject");
+      await context.sync();
+      if (used.isNullObject) sheet.getRange("A1").select();
+      else used.select();
       await context.sync();
       return true;
     });

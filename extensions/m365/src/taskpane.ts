@@ -296,7 +296,12 @@ const API_MESSAGES: Record<string, string> = {
 function handleApiError(step: string, error: unknown) {
   log.record(step, "fail", describeError(error));
   if (!(error instanceof M365ApiError)) {
-    setStatus((error as Error).message);
+    const text = (error as Error).message ?? "";
+    setStatus(
+      /requested resource doesn't exist|ItemNotFound/i.test(text)
+        ? "Excel could not find that sheet or range. Click a cell inside your table and try again."
+        : text,
+    );
     return;
   }
   if (

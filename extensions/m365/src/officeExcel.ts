@@ -192,13 +192,17 @@ export async function inspectSelectedExcelRange(
       Number(selected.rowCount) * Number(selected.columnCount) === 1 &&
       typeof selected.getSurroundingRegion === "function"
     ) {
-      const region = selected.getSurroundingRegion();
-      region.load(["address", "rowCount", "columnCount"]);
-      region.worksheet.load("name");
-      await context.sync();
-      if (Number(region.rowCount) >= 2 && Number(region.columnCount) >= 1) {
-        selected = region;
-        onAutoDetect?.(String(region.address));
+      try {
+        const region = selected.getSurroundingRegion();
+        region.load(["address", "rowCount", "columnCount"]);
+        region.worksheet.load("name");
+        await context.sync();
+        if (Number(region.rowCount) >= 2 && Number(region.columnCount) >= 1) {
+          selected = region;
+          onAutoDetect?.(String(region.address));
+        }
+      } catch {
+        // An empty cell has no table around it; the message below tells the person what to do.
       }
     }
     const rows = Number(selected.rowCount);

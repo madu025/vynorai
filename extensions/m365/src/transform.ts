@@ -1,9 +1,14 @@
 type Cell = string | number | boolean | null;
 
-export type CleanOperation = "trim" | "text-to-number" | "dedupe";
+export type CleanOperation =
+  | "trim"
+  | "text-to-number"
+  | "text-to-date"
+  | "dedupe";
 export const CLEAN_OPERATIONS: readonly CleanOperation[] = [
   "trim",
   "text-to-number",
+  "text-to-date",
   "dedupe",
 ];
 
@@ -22,6 +27,30 @@ export interface CleanChanges {
 }
 
 const NUMBER_TEXT = /^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^-?\d+(?:\.\d+)?$/;
+const ISO_DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Converts only an unambiguous ISO calendar date into Excel's serial-date number. Locale dates
+ * such as 03/04/2026 remain text because the intended day and month cannot be known safely.
+ */
+function isoDateSerial(value: string): number | undefined {
+  const match = ISO_DATE_TEXT.exec(value.trim());
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31)
+    return undefined;
+  const utc = Date.UTC(year, month - 1, day);
+  const date = new Date(utc);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
+    return undefined;
+  return Math.round((utc - Date.UTC(1899, 11, 30)) / 86_400_000);
+}
 
 /**
  * Deterministic clean-up of the data rows. Headers are never touched here; the result is written
@@ -30,14 +59,15 @@ const NUMBER_TEXT = /^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^-?\d+(?:\.\d+)?$/;
 export function cleanRows(
   rows: Cell[][],
   operations: readonly CleanOperation[],
-): { rows: Cell[][]; changes: CleanChanges } {
+): { rows: Cell[][]; changes: CleanChanges; dateColumns: number[] } {
   const changes: CleanChanges = {
     trimmed: 0,
     converted: 0,
     duplicatesRemoved: 0,
   };
+  const dateColumns = new Set<number>();
   let next = rows.map((row) =>
-    row.map((cell) => {
+    row.map((cell, column) => {
       let value: Cell = cell;
       if (operations.includes("trim") && typeof value === "string") {
         const trimmed = value.replace(/\s+/g, " ").trim();
@@ -51,6 +81,14 @@ export function cleanRows(
         if (NUMBER_TEXT.test(candidate)) {
           changes.converted += 1;
           value = Number(candidate.replace(/,/g, ""));
+        }
+      }
+      if (operations.includes("text-to-date") && typeof value === "string") {
+        const serial = isoDateSerial(value);
+        if (serial !== undefined) {
+          changes.converted += 1;
+          dateColumns.add(column);
+          value = serial;
         }
       }
       return value;
@@ -70,7 +108,11 @@ export function cleanRows(
     }
     next = kept;
   }
-  return { rows: next, changes };
+  return {
+    rows: next,
+    changes,
+    dateColumns: [...dateColumns].sort((a, b) => a - b),
+  };
 }
 
 /** Column index to A1 letters (0 -> A, 26 -> AA). */

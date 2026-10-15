@@ -164,6 +164,12 @@ export function interpretInstruction(
   )
     operations.add("text-to-number");
   if (
+    /text\s+to\s+dates?|dates?\s+stored\s+as\s+text|convert\s+(?:text\s+)?dates?/i.test(
+      text,
+    )
+  )
+    operations.add("text-to-date");
+  if (
     /\bdedup(?:e|licate)s?\b|remove\s+duplicates?|duplicate\s+rows?/i.test(text)
   )
     operations.add("dedupe");

@@ -240,6 +240,40 @@ export function buildOutcomes(
             "දත්ත යටින් එකතු පේළියක් එක් කෙරේ.",
           ),
         );
+    } else if (action.kind === "clean") {
+      const operations = (spec.operations ?? []) as string[];
+      const labels = operations.map((operation) => {
+        if (operation === "text-to-number")
+          return say(
+            "numbers stored as text",
+            "à¶´à·à¶¨ à¶½à·™à·ƒ à¶­à·’à¶¶à·– à·ƒà¶‚à¶›à·Šâ€à¶ºà·",
+          );
+        if (operation === "text-to-date")
+          return say(
+            "unambiguous ISO text dates",
+            "à¶±à·’à·€à·à¶»à¶¯à·’ ISO à¶´à·à¶¨ à¶¯à·’à¶±",
+          );
+        if (operation === "dedupe")
+          return say(
+            "exact duplicate rows",
+            "à·ƒà¶¸à·à¶± à¶´à·”à¶±à¶»à·à·€à¶»à·Šà¶­à¶± à¶´à·šà·…à·’",
+          );
+        return say("extra spaces", "අමතර හිස් ඉඩ");
+      });
+      if (labels.length)
+        item.details.push(
+          say(
+            `Creates a cleaned copy: ${labels.join(", ")}.`,
+            `පිරිසිදු පිටපතක් සාදයි: ${labels.join(", ")}.`,
+          ),
+        );
+      if (operations.includes("text-to-date"))
+        item.details.push(
+          say(
+            "Only YYYY-MM-DD dates convert; ambiguous dates remain text.",
+            "YYYY-MM-DD දින පමණක් පරිවර්තනය වේ; සැක සහිත දින පාඨ ලෙස පවතී.",
+          ),
+        );
     } else if (action.kind === "pivot-table") {
       if (
         Number.isInteger(spec.rowsIndex) &&

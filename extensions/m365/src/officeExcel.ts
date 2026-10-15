@@ -1055,6 +1055,19 @@ export async function applyApprovedExcelPlan(
               sheet.getRangeByIndexes(0, 0, out.length, headers.length).values =
                 out;
               await context.sync();
+              for (const column of cleaned.dateColumns) {
+                sheet.getRangeByIndexes(
+                  1,
+                  column,
+                  cleaned.rows.length,
+                  1,
+                ).numberFormat = Array.from(
+                  { length: cleaned.rows.length },
+                  () => ["yyyy-mm-dd"],
+                );
+              }
+              if (cleaned.dateColumns.length > 0 && cleaned.rows.length > 0)
+                await context.sync();
             }
           } else if (action.kind === "view") {
             if (sheetExists) {

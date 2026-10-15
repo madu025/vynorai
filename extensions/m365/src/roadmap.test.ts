@@ -49,6 +49,16 @@ test("clean trims, converts numbers stored as text and removes exact duplicates"
   assert.deepEqual(cleanRows([[" a "]], []).rows, [[" a "]]);
 });
 
+test("clean converts only unambiguous ISO text dates and records their columns", () => {
+  const cleaned = cleanRows(
+    [["2026-09-02"], ["03/04/2026"], ["2026-02-29"]],
+    ["text-to-date"],
+  );
+  assert.deepEqual(cleaned.rows, [[46267], ["03/04/2026"], ["2026-02-29"]]);
+  assert.deepEqual(cleaned.dateColumns, [0]);
+  assert.equal(cleaned.changes.converted, 1);
+});
+
 // ---------------------------------------------------------------- R2 computed column
 test("computed column formulas come from validated indexes and a fixed operator list", () => {
   assert.equal(columnLetter(0), "A");
@@ -94,6 +104,11 @@ test("instructions for a computed column and clean-up are read deterministically
     "text-to-number",
     "dedupe",
   ]);
+  assert.deepEqual(
+    interpretInstruction("Convert text dates to dates", headers).specs.clean
+      ?.operations,
+    ["text-to-date"],
+  );
   assert.deepEqual(
     interpretInstruction("Create a chart.", headers).actions,
     [],
@@ -153,7 +168,7 @@ test("plans for clean and computed column carry validated specs and their own re
 });
 
 // ---------------------------------------------------------------- apply (fake Office.js)
-function fakeWorkbook() {
+function fakeWorkbook(sourceValues: any[][] = input.values as any[][]) {
   const written: Record<string, any> = {};
   const sheets = new Map<string, any>();
   const nullable = (exists: boolean) => ({ isNullObject: !exists, load() {} });
@@ -170,7 +185,7 @@ function fakeWorkbook() {
   });
   const makeSheet = (name: string) => {
     const sheet: any = {
-      getRange: () => source(input.values as any),
+      getRange: () => source(sourceValues),
       getRangeByIndexes: (
         row: number,
         column: number,
@@ -248,6 +263,40 @@ test("apply writes the cleaned copy and the computed column to separate sheets o
   assert.deepEqual(calcValues[0], [...headers, "Profit"]);
   const formulas = excel.written["Calc of Sheet1!1,4,4,1.formulas"];
   assert.deepEqual(formulas, [["=C2-D2"], ["=C3-D3"], ["=C4-D4"], ["=C5-D5"]]);
+});
+
+test("apply writes converted ISO dates only to a formatted clean result sheet", async () => {
+  const dateInput = {
+    workbookId: "book",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:B3",
+    hasHeaders: true,
+    values: [
+      ["Date", "Sales"],
+      ["2026-09-02", 1200],
+      ["03/04/2026", 1500],
+    ],
+  };
+  const plan = createExcelPreviewPlan(dateInput as any, ["clean"], undefined, {
+    clean: { operations: ["text-to-date"] },
+  });
+  const excel = fakeWorkbook(dateInput.values as any[][]);
+  await applyApprovedExcelPlan(excel.runtime, plan, true, "approval", {
+    expectedSourceFingerprint: plan.sourceFingerprint,
+  });
+
+  assert.deepEqual(excel.written["Cleaned Sheet1!0,0,3,2.values"], [
+    ["Date", "Sales"],
+    [46267, 1200],
+    ["03/04/2026", 1500],
+  ]);
+  assert.deepEqual(excel.written["Cleaned Sheet1!1,0,2,1.numberFormat"], [
+    ["yyyy-mm-dd"],
+    ["yyyy-mm-dd"],
+  ]);
+  assert.ok(
+    Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),
+  );
 });
 
 // ---------------------------------------------------------------- R3 local questions

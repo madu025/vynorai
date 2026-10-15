@@ -144,6 +144,14 @@ test("server and add-in agree on clean and computed-column plans", () => {
   assert.equal(server.actions[1].spec.rightColumn, "Cost");
 });
 
+test("server and add-in agree on an unambiguous text-date conversion", () => {
+  const specs = { clean: { operations: ["text-to-date"] } };
+  const actions = ["clean"] as const;
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const client = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(client as any, server as any), true);
+});
+
 test("the server refuses unsafe computed columns and unknown clean steps", () => {
   const call = (specs: unknown, actions: string[]) =>
     createServerExcelPreviewPlan(input, actions, 500, specs as any);

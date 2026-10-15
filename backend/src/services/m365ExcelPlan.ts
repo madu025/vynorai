@@ -427,7 +427,7 @@ function resolveColumnSpecs(
     if (!requested.has("clean"))
       fail("EXCEL_SPEC_UNUSED", "Clean options need the clean action.");
     const operations = specs.clean.operations;
-    const allowed = ["trim", "text-to-number", "dedupe"];
+    const allowed = ["trim", "text-to-number", "text-to-date", "dedupe"];
     if (
       !Array.isArray(operations) ||
       operations.length === 0 ||

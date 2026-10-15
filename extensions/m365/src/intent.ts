@@ -22,6 +22,8 @@ export interface InstructionSpecs {
       | "area";
     extraValues?: number[];
   };
+  /** Bring a column from another sheet; the pane resolves the sheet's headers. */
+  lookup?: { sheet: string; returnHeader: string; keyHeader: string };
   pivot?: {
     filter?: number;
     rows: number;
@@ -105,6 +107,10 @@ const findHeader = (headers: string[], text: string): number => {
  * Deterministic reading of the clean and computed-column requests. Anything it cannot match to
  * real headers is reported as a problem instead of being guessed.
  */
+/** "Add column Manager from Staff by Name": bring a column from another sheet by a key. */
+export const LOOKUP_PHRASE =
+  /^(?:please\s+)?(?:add|get|bring|fetch|lookup|vlookup|xlookup|pull)\s+(?:in\s+)?(?:the\s+)?(?:column\s+)?["']?([A-Za-z][\w ]{0,39}?)["']?\s+from\s+(?:the\s+)?(?:sheet\s+)?["']?([^"'\n]{1,31}?)["']?\s+(?:by|using|matching|on|with|where)\s+["']?([^"'\n]+?)["']?\s*\.?$/i;
+
 export function interpretInstruction(
   rawInstruction: string,
   headers: string[],
@@ -142,8 +148,34 @@ export function interpretInstruction(
     };
   }
 
+  const lookupMatch = LOOKUP_PHRASE.exec(rawInstruction.trim());
+  if (lookupMatch) {
+    const keyHeader = lookupMatch[3].trim();
+    const keyAt = headers.findIndex(
+      (header) =>
+        header.trim().toLocaleLowerCase() === keyHeader.toLocaleLowerCase(),
+    );
+    if (keyAt < 0) {
+      result.problems.push(
+        `"${keyHeader}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    } else {
+      return {
+        actions: ["add-column"],
+        specs: {
+          lookup: {
+            sheet: lookupMatch[2].trim(),
+            returnHeader: lookupMatch[1].trim(),
+            keyHeader: headers[keyAt],
+          },
+        },
+        problems: [],
+      } as InterpretedInstruction;
+    }
+  }
+
   const column =
-    /\b(?:add|create|insert)\s+(?:a\s+|an\s+|new\s+)*(?:computed\s+|calculated\s+)?column\s+(?:called\s+|named\s+)?["']?([^"'=:]+?)["']?\s*(?:=|:|as)\s*(.+?)\s*\.?$/i.exec(
+    /\b(?:add|create|insert)\s+(?:a\s+|an\s+|new\s+)*(?:computed\s+|calculated\s+)?column\s+(?:called\s+|named\s+)?["']?([^"'=:]+?)["']?\s*(?:=|:|\bas\b)\s*(.+?)\s*\.?$/i.exec(
       text,
     ) || /^\s*["']?([A-Za-z][\w ]{0,39}?)["']?\s*=\s*(.+?)\s*\.?$/i.exec(text);
   if (column) {
@@ -164,8 +196,13 @@ export function interpretInstruction(
         if (!isSafeColumnName(name))
           result.problems.push("That column name is not allowed.");
         else {
-          result.actions.push("add-column");
-          result.specs.addColumn = { name, expression };
+          // An expression column is the whole request: words inside it (TRIM, SORT...) must not
+          // trigger other actions.
+          return {
+            actions: ["add-column"],
+            specs: { addColumn: { name, expression } },
+            problems: [],
+          } as InterpretedInstruction;
         }
       }
     } catch {

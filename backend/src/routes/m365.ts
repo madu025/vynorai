@@ -214,7 +214,19 @@ const excelPlanSchema = z.object({
           left: z.number().int().min(0).max(99).optional(),
           operator: z.enum(["+", "-", "*", "/"]).optional(),
           right: z.number().int().min(0).max(99).optional(),
-          expression: z.string().min(1).max(200).optional(),
+          expression: z.string().min(1).max(240).optional(),
+          lookup: z
+            .object({
+              sheet: z.string().min(1).max(31),
+              sourceKey: z.number().int().min(0).max(99),
+              keyIndex: z.number().int().min(0).max(99),
+              keyHeader: z.string().min(1).max(60),
+              returnIndex: z.number().int().min(0).max(99),
+              returnHeader: z.string().min(1).max(60),
+              rows: z.number().int().min(1).max(100000),
+            })
+            .strict()
+            .optional(),
         })
         .strict()
         .optional(),

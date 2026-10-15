@@ -126,6 +126,45 @@ export async function listWorksheetNames(
   }
 }
 
+export interface LookupSheetInfo {
+  sheet: string;
+  headers: string[];
+  rows: number;
+}
+
+/** Reads only the header row and the row count of another sheet, for a lookup column. */
+export async function readLookupSheetInfo(
+  runtime: ExcelRuntimeLike,
+  sheetName: string,
+): Promise<LookupSheetInfo> {
+  return runtime.run(async (context: any) => {
+    const sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
+    sheet.load(["isNullObject", "name"]);
+    await context.sync();
+    if (sheet.isNullObject)
+      throw new Error(`There is no sheet called "${sheetName}".`);
+    const used = sheet.getUsedRangeOrNullObject(true);
+    used.load(["isNullObject", "address", "rowCount", "columnCount"]);
+    await context.sync();
+    if (used.isNullObject || Number(used.rowCount) < 2)
+      throw new Error(`The sheet "${sheet.name}" has no data to look up in.`);
+    if (!/^A1(?::|$)/i.test(localExcelAddress(String(used.address))))
+      throw new Error(
+        `The data on "${sheet.name}" must start at cell A1 with a header row.`,
+      );
+    const headerRow = used.getRow(0);
+    headerRow.load("values");
+    await context.sync();
+    return {
+      sheet: String(sheet.name),
+      headers: (headerRow.values?.[0] ?? []).map((cell: any) =>
+        String(cell ?? "").trim(),
+      ),
+      rows: Number(used.rowCount) - 1,
+    };
+  });
+}
+
 export const MAX_EXCEL_SELECTION_CELLS = 100_000;
 export const MAX_EXCEL_SELECTION_COLUMNS = 100;
 export const MAX_EXCEL_SELECTION_TEXT_CHARS = 2_000_000;
@@ -947,6 +986,47 @@ export async function applyApprovedExcelPlan(
               result.status = "exists";
             } else {
               const { headers, rows } = splitHeader(await readSourceValues());
+              let lookupFormula: ((rowNumber: number) => string) | undefined;
+              if (spec.lookupSheet !== undefined) {
+                const other = context.workbook.worksheets.getItemOrNullObject(
+                  spec.lookupSheet,
+                );
+                other.load("isNullObject");
+                await context.sync();
+                if (other.isNullObject)
+                  throw new Error(
+                    `The sheet "${spec.lookupSheet}" was not found any more.`,
+                  );
+                const used = other.getUsedRangeOrNullObject(true);
+                used.load(["isNullObject", "values", "rowCount"]);
+                await context.sync();
+                const header = (used.values?.[0] ?? []).map((cell: any) =>
+                  String(cell ?? ""),
+                );
+                if (
+                  used.isNullObject ||
+                  header[spec.lookupKeyIndex as number] !==
+                    spec.lookupKeyHeader ||
+                  header[spec.lookupReturnIndex as number] !==
+                    spec.lookupReturnHeader
+                )
+                  throw new Error(
+                    "The lookup sheet changed after the preview. Preview again.",
+                  );
+                const quoted = `'${String(spec.lookupSheet).replace(/'/g, "''")}'`;
+                const last = Number(spec.lookupRows) + 1;
+                const keyLetter = expressionColumnLetter(
+                  spec.lookupKeyIndex as number,
+                );
+                const returnLetter = expressionColumnLetter(
+                  spec.lookupReturnIndex as number,
+                );
+                const sourceLetter = expressionColumnLetter(
+                  spec.sourceKeyIndex as number,
+                );
+                lookupFormula = (rowNumber) =>
+                  `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(${sourceLetter}${rowNumber},${quoted}!${keyLetter}$2:${keyLetter}${last},0)),"")`;
+              }
               let expressionAst: ExprNode | undefined;
               if (spec.expression !== undefined) {
                 const parsed = parseExpression(
@@ -977,18 +1057,20 @@ export async function applyApprovedExcelPlan(
                   rows.length,
                   1,
                 ).formulas = rows.map((_row, index) => [
-                  expressionAst
-                    ? expressionToFormula(
-                        expressionAst,
-                        (column) =>
-                          `${expressionColumnLetter(column)}${index + 2}`,
-                      )
-                    : computedColumnFormula(
-                        index + 2,
-                        spec.leftIndex as number,
-                        spec.operator as "+",
-                        spec.rightIndex as number,
-                      ),
+                  lookupFormula
+                    ? lookupFormula(index + 2)
+                    : expressionAst
+                      ? expressionToFormula(
+                          expressionAst,
+                          (column) =>
+                            `${expressionColumnLetter(column)}${index + 2}`,
+                        )
+                      : computedColumnFormula(
+                          index + 2,
+                          spec.leftIndex as number,
+                          spec.operator as "+",
+                          spec.rightIndex as number,
+                        ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

@@ -1,23 +1,34 @@
 /**
- * Safe column expressions for computed columns, e.g. `(Sales - Cost) / Sales` or `ROUND(Cost * 1.15, 2)`.
+ * Safe column expressions for computed columns, e.g. `(Sales - Cost) / Sales`,
+ * `IF(Sales > 1500, "High", "Low")` or `DATEDIF([Start], TODAY(), "m")`.
  *
- * The grammar is small and closed: numbers, column names, + - * /, parentheses, unary minus, a
- * trailing % on a number, and the functions ROUND, ABS, MIN, MAX. A column name that contains
- * spaces is written in square brackets. Nothing else is accepted, so an expression can never
- * become an arbitrary Excel formula. The backend carries an identical copy (`m365Expression.ts`);
- * a parity test keeps them equal.
+ * The grammar is small and closed: numbers, "text", TRUE/FALSE, column names (a name with spaces
+ * goes in square brackets), + - * / & and the comparisons = <> < > <= >=, parentheses, and a fixed
+ * list of functions (math, logic, text, date). A function outside the list, a cell address or
+ * another sheet is rejected, so an expression can never become an arbitrary Excel formula. The
+ * backend carries an identical copy (`m365Expression.ts`); a parity test keeps them equal.
  */
 
-export const MAX_EXPRESSION_CHARS = 200;
+export const MAX_EXPRESSION_CHARS = 240;
 export const MAX_EXPRESSION_REFS = 12;
 export const MAX_EXPRESSION_DEPTH = 8;
+export const MAX_STRING_LITERAL = 80;
 
 export type ExprNode =
   | { t: "num"; v: number }
+  | { t: "str"; v: string }
+  | { t: "bool"; v: boolean }
   | { t: "col"; i: number }
   | { t: "neg"; a: ExprNode }
   | { t: "bin"; op: "+" | "-" | "*" | "/"; a: ExprNode; b: ExprNode }
-  | { t: "fn"; name: "ROUND" | "ABS" | "MIN" | "MAX"; args: ExprNode[] };
+  | { t: "cat"; a: ExprNode; b: ExprNode }
+  | {
+      t: "cmp";
+      op: "=" | "<>" | "<" | ">" | "<=" | ">=";
+      a: ExprNode;
+      b: ExprNode;
+    }
+  | { t: "fn"; name: string; args: ExprNode[] };
 
 export class ExpressionError extends Error {
   constructor(message: string) {
@@ -28,8 +39,9 @@ export class ExpressionError extends Error {
 
 type Token =
   | { k: "num"; v: number }
+  | { k: "str"; v: string }
   | { k: "id"; v: string }
-  | { k: "op"; v: "+" | "-" | "*" | "/" | "(" | ")" | "," };
+  | { k: "op"; v: string };
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
@@ -46,8 +58,33 @@ function tokenize(source: string): Token[] {
       if (!Number.isFinite(value)) throw new ExpressionError("Invalid number.");
       tokens.push({ k: "num", v: value });
       index += match[0].length;
-    } else if ("+-*/(),".includes(char)) {
-      tokens.push({ k: "op", v: char as "+" });
+    } else if (char === '"' || char === "“" || char === "”") {
+      let close = -1;
+      for (let at = index + 1; at < source.length; at += 1) {
+        if (source[at] === '"' || source[at] === "”" || source[at] === "“") {
+          close = at;
+          break;
+        }
+      }
+      if (close < 0) throw new ExpressionError("A text value is not closed.");
+      const value = source.slice(index + 1, close);
+      if (value.length > MAX_STRING_LITERAL)
+        throw new ExpressionError(
+          `Text values are limited to ${MAX_STRING_LITERAL} characters.`,
+        );
+      if (/[\u0000-\u001F\u007F]/.test(value))
+        throw new ExpressionError("A text value contains a control character.");
+      tokens.push({ k: "str", v: value });
+      index = close + 1;
+    } else if (
+      source.startsWith("<>", index) ||
+      source.startsWith("<=", index) ||
+      source.startsWith(">=", index)
+    ) {
+      tokens.push({ k: "op", v: source.slice(index, index + 2) });
+      index += 2;
+    } else if ("+-*/(),&=<>".includes(char)) {
+      tokens.push({ k: "op", v: char });
       index += 1;
     } else if (char === "[") {
       const end = source.indexOf("]", index);
@@ -57,7 +94,7 @@ function tokenize(source: string): Token[] {
       tokens.push({ k: "id", v: name });
       index = end + 1;
     } else if (/[\p{L}_]/u.test(char)) {
-      const match = /^[\p{L}\p{N}_]+/u.exec(source.slice(index));
+      const match = /^[\p{L}\p{N}_.]+/u.exec(source.slice(index));
       tokens.push({ k: "id", v: match![0] });
       index += match![0].length;
     } else {
@@ -67,12 +104,88 @@ function tokenize(source: string): Token[] {
   return tokens;
 }
 
-const FUNCTIONS: Record<string, { min: number; max: number }> = {
-  ROUND: { min: 1, max: 2 },
-  ABS: { min: 1, max: 1 },
-  MIN: { min: 2, max: 4 },
-  MAX: { min: 2, max: 4 },
+interface FunctionRule {
+  min: number;
+  max: number;
+  /** "math": every column argument must hold numbers. */
+  kind: "math" | "logic" | "text" | "date";
+}
+
+const FN = (
+  min: number,
+  max: number,
+  kind: FunctionRule["kind"],
+): FunctionRule => ({
+  min,
+  max,
+  kind,
+});
+
+export const EXPRESSION_FUNCTIONS: Record<string, FunctionRule> = {
+  // math
+  ROUND: FN(1, 2, "math"),
+  ROUNDUP: FN(1, 2, "math"),
+  ROUNDDOWN: FN(1, 2, "math"),
+  ABS: FN(1, 1, "math"),
+  INT: FN(1, 1, "math"),
+  MOD: FN(2, 2, "math"),
+  POWER: FN(2, 2, "math"),
+  SQRT: FN(1, 1, "math"),
+  SIGN: FN(1, 1, "math"),
+  MIN: FN(2, 8, "math"),
+  MAX: FN(2, 8, "math"),
+  SUM: FN(1, 8, "math"),
+  AVERAGE: FN(1, 8, "math"),
+  // logic
+  IF: FN(2, 3, "logic"),
+  IFS: FN(2, 12, "logic"),
+  AND: FN(2, 6, "logic"),
+  OR: FN(2, 6, "logic"),
+  NOT: FN(1, 1, "logic"),
+  IFERROR: FN(2, 2, "logic"),
+  IFNA: FN(2, 2, "logic"),
+  ISBLANK: FN(1, 1, "logic"),
+  ISNUMBER: FN(1, 1, "logic"),
+  ISTEXT: FN(1, 1, "logic"),
+  // text
+  LEFT: FN(1, 2, "text"),
+  RIGHT: FN(1, 2, "text"),
+  MID: FN(3, 3, "text"),
+  LEN: FN(1, 1, "text"),
+  TRIM: FN(1, 1, "text"),
+  CLEAN: FN(1, 1, "text"),
+  UPPER: FN(1, 1, "text"),
+  LOWER: FN(1, 1, "text"),
+  PROPER: FN(1, 1, "text"),
+  SUBSTITUTE: FN(3, 4, "text"),
+  REPLACE: FN(4, 4, "text"),
+  FIND: FN(2, 3, "text"),
+  SEARCH: FN(2, 3, "text"),
+  CONCAT: FN(2, 8, "text"),
+  TEXTJOIN: FN(3, 10, "text"),
+  VALUE: FN(1, 1, "text"),
+  TEXT: FN(2, 2, "text"),
+  EXACT: FN(2, 2, "text"),
+  // date
+  DATE: FN(3, 3, "date"),
+  YEAR: FN(1, 1, "date"),
+  MONTH: FN(1, 1, "date"),
+  DAY: FN(1, 1, "date"),
+  WEEKDAY: FN(1, 2, "date"),
+  WEEKNUM: FN(1, 2, "date"),
+  EOMONTH: FN(2, 2, "date"),
+  EDATE: FN(2, 2, "date"),
+  DATEDIF: FN(3, 3, "date"),
+  DAYS: FN(2, 2, "date"),
+  NETWORKDAYS: FN(2, 2, "date"),
+  WORKDAY: FN(2, 2, "date"),
+  TODAY: FN(0, 0, "date"),
+  DATEVALUE: FN(1, 1, "date"),
 };
+
+/** The units DATEDIF accepts, and the characters a TEXT format may contain. */
+const DATEDIF_UNITS = ["d", "m", "y", "ym", "md", "yd"];
+const TEXT_FORMAT = /^[0#,.%\-/: dDmMyYhHsSaApP]{1,24}$/;
 
 /** Parses an expression against the sheet's headers; unknown or ambiguous names are rejected. */
 export function parseExpression(
@@ -110,7 +223,36 @@ export function parseExpression(
     );
   }
 
-  function factor(): ExprNode {
+  function checkCall(name: string, args: ExprNode[]) {
+    const rule = EXPRESSION_FUNCTIONS[name];
+    if (args.length < rule.min || args.length > rule.max)
+      throw new ExpressionError(`${name} has the wrong number of values.`);
+    const literal = (index: number) => args[index];
+    if (/^ROUND(UP|DOWN)?$/.test(name) && args[1] && args[1].t !== "num")
+      throw new ExpressionError(`${name} needs a fixed number of decimals.`);
+    if (name === "IFS" && args.length % 2 !== 0)
+      throw new ExpressionError("IFS needs pairs of a test and a result.");
+    if (name === "TEXT") {
+      const format = literal(1);
+      if (format.t !== "str" || !TEXT_FORMAT.test(format.v))
+        throw new ExpressionError(
+          'TEXT needs a simple format in quotes such as "0.0", "#,##0" or "yyyy-mm-dd".',
+        );
+    }
+    if (name === "DATEDIF") {
+      const unit = literal(2);
+      if (unit.t !== "str" || !DATEDIF_UNITS.includes(unit.v.toLowerCase()))
+        throw new ExpressionError(
+          'DATEDIF needs a unit in quotes: "d", "m", "y", "ym", "md" or "yd".',
+        );
+    }
+    if (name === "TEXTJOIN" && literal(0).t !== "str")
+      throw new ExpressionError(
+        "TEXTJOIN needs its separator written in quotes.",
+      );
+  }
+
+  function atom(): ExprNode {
     depth += 1;
     if (depth > MAX_EXPRESSION_DEPTH)
       throw new ExpressionError("The expression is nested too deeply.");
@@ -118,9 +260,10 @@ export function parseExpression(
       const token = take();
       if (!token) throw new ExpressionError("The expression ends too early.");
       if (token.k === "num") return { t: "num", v: token.v };
-      if (isOp(token, "-")) return { t: "neg", a: factor() };
+      if (token.k === "str") return { t: "str", v: token.v };
+      if (isOp(token, "-")) return { t: "neg", a: atom() };
       if (isOp(token, "(")) {
-        const inner = sum();
+        const inner = comparison();
         if (!isOp(take(), ")"))
           throw new ExpressionError("A parenthesis is not closed.");
         return inner;
@@ -128,32 +271,27 @@ export function parseExpression(
       if (token.k === "id") {
         if (isOp(peek(), "(")) {
           const name = token.v.toUpperCase();
-          const rule = FUNCTIONS[name];
-          if (!rule)
+          if (!EXPRESSION_FUNCTIONS[name])
             throw new ExpressionError(
-              `Function ${token.v} is not supported. Use ROUND, ABS, MIN or MAX.`,
+              `Function ${token.v} is not supported here.`,
             );
           take();
           const args: ExprNode[] = [];
           if (!isOp(peek(), ")")) {
-            args.push(sum());
+            args.push(comparison());
             while (isOp(peek(), ",")) {
               take();
-              args.push(sum());
+              args.push(comparison());
             }
           }
           if (!isOp(take(), ")"))
             throw new ExpressionError("A parenthesis is not closed.");
-          if (args.length < rule.min || args.length > rule.max)
-            throw new ExpressionError(
-              `${name} has the wrong number of values.`,
-            );
-          if (name === "ROUND" && args[1] && args[1].t !== "num")
-            throw new ExpressionError(
-              "ROUND needs a fixed number of decimals.",
-            );
-          return { t: "fn", name: name as "ROUND", args };
+          checkCall(name, args);
+          return { t: "fn", name, args };
         }
+        const upper = token.v.toUpperCase();
+        if (upper === "TRUE" || upper === "FALSE")
+          return { t: "bool", v: upper === "TRUE" };
         const column = lookup(token.v);
         refs.add(column);
         if (refs.size > MAX_EXPRESSION_REFS)
@@ -167,10 +305,10 @@ export function parseExpression(
   }
 
   function product(): ExprNode {
-    let left = factor();
+    let left = atom();
     while (isOp(peek(), "*") || isOp(peek(), "/")) {
       const op = (take() as { v: "*" | "/" }).v;
-      left = { t: "bin", op, a: left, b: factor() };
+      left = { t: "bin", op, a: left, b: atom() };
     }
     return left;
   }
@@ -184,12 +322,72 @@ export function parseExpression(
     return left;
   }
 
-  const ast = sum();
+  function concat(): ExprNode {
+    let left = sum();
+    while (isOp(peek(), "&")) {
+      take();
+      left = { t: "cat", a: left, b: sum() };
+    }
+    return left;
+  }
+
+  function comparison(): ExprNode {
+    const left = concat();
+    const next = peek();
+    if (
+      next?.k === "op" &&
+      ["=", "<>", "<", ">", "<=", ">="].includes(next.v)
+    ) {
+      take();
+      return {
+        t: "cmp",
+        op: next.v as "=",
+        a: left,
+        b: concat(),
+      };
+    }
+    return left;
+  }
+
+  const ast = comparison();
   if (position !== tokens.length)
     throw new ExpressionError("Unexpected text after the expression.");
-  if (refs.size === 0)
+  if (refs.size === 0 && !/\bTODAY\s*\(/i.test(text))
     throw new ExpressionError("Use at least one column in the expression.");
   return { ast, refs: [...refs].sort((a, b) => a - b) };
+}
+
+/** Columns that must hold numbers: operands of + - * / and arguments of the math functions. */
+export function numericColumnRefs(node: ExprNode): number[] {
+  const found = new Set<number>();
+  const visit = (current: ExprNode, needsNumber: boolean): void => {
+    switch (current.t) {
+      case "col":
+        if (needsNumber) found.add(current.i);
+        return;
+      case "neg":
+        visit(current.a, true);
+        return;
+      case "bin":
+        visit(current.a, true);
+        visit(current.b, true);
+        return;
+      case "cat":
+      case "cmp":
+        visit(current.a, false);
+        visit(current.b, false);
+        return;
+      case "fn": {
+        const math = EXPRESSION_FUNCTIONS[current.name]?.kind === "math";
+        for (const arg of current.args) visit(arg, math);
+        return;
+      }
+      default:
+        return;
+    }
+  };
+  visit(node, false);
+  return [...found].sort((a, b) => a - b);
 }
 
 /** Canonical text with column positions, so two parsers can be compared and a plan can be hashed. */
@@ -197,11 +395,19 @@ export function canonicalExpression(node: ExprNode): string {
   switch (node.t) {
     case "num":
       return String(node.v);
+    case "str":
+      return JSON.stringify(node.v);
+    case "bool":
+      return node.v ? "TRUE" : "FALSE";
     case "col":
       return `#${node.i}`;
     case "neg":
       return `(-${canonicalExpression(node.a)})`;
     case "bin":
+      return `(${canonicalExpression(node.a)}${node.op}${canonicalExpression(node.b)})`;
+    case "cat":
+      return `(${canonicalExpression(node.a)}&${canonicalExpression(node.b)})`;
+    case "cmp":
       return `(${canonicalExpression(node.a)}${node.op}${canonicalExpression(node.b)})`;
     case "fn":
       return `${node.name}(${node.args.map(canonicalExpression).join(",")})`;
@@ -228,6 +434,10 @@ export function expressionToFormula(
     switch (current.t) {
       case "num":
         return String(current.v);
+      case "str":
+        return `"${current.v.replace(/"/g, '""')}"`;
+      case "bool":
+        return current.v ? "TRUE" : "FALSE";
       case "col":
         return cell(current.i);
       case "neg":
@@ -235,13 +445,19 @@ export function expressionToFormula(
       case "bin":
         if (current.op === "/") divides = true;
         return `(${emit(current.a)}${current.op}${emit(current.b)})`;
+      case "cat":
+        return `(${emit(current.a)}&${emit(current.b)})`;
+      case "cmp":
+        return `(${emit(current.a)}${current.op}${emit(current.b)})`;
       case "fn":
         return `${current.name}(${current.args.map(emit).join(",")})`;
     }
   };
   const body = emit(node);
   // A division by zero or an empty cell leaves the cell blank instead of #DIV/0!.
-  return divides ? `=IFERROR(${body},"")` : `=${body}`;
+  const guarded =
+    node.t === "fn" && (node.name === "IFERROR" || node.name === "IFNA");
+  return divides && !guarded ? `=IFERROR(${body},"")` : `=${body}`;
 }
 
 /** Name hints that mean the result is a ratio the person wants to see as a percentage. */

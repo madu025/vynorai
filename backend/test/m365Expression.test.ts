@@ -80,7 +80,7 @@ test("the server refuses unsafe or unusable expressions", () => {
   );
   assert.throws(
     () => bad({ name: "X", expression: "Region + Sales" }),
-    /must contain numbers/,
+    /holds text, not numbers/,
   );
   assert.throws(
     () => bad({ name: "=X", expression: "Sales + Cost" }),
@@ -193,5 +193,75 @@ test("server and add-in agree on format, quality and pivot filter plans", () => 
         pivot: { rows: 1, values: 2, filter: 1 },
       } as any),
     /filter field/,
+  );
+});
+
+test("server and add-in agree on a lookup column and on a wider expression", () => {
+  const lookupSpecs = {
+    addColumn: {
+      name: "Manager",
+      lookup: {
+        sheet: "Staff",
+        sourceKey: 1,
+        keyIndex: 0,
+        keyHeader: "Region",
+        returnIndex: 2,
+        returnHeader: "Manager",
+        rows: 25,
+      },
+    },
+  };
+  const server = createServerExcelPreviewPlan(
+    input,
+    ["add-column"],
+    500,
+    lookupSpecs as any,
+  );
+  const local = createExcelPreviewPlan(
+    input as any,
+    ["add-column"],
+    500,
+    lookupSpecs as any,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  const spec = server.actions.find((a: any) => a.kind === "add-column")!.spec;
+  assert.equal(spec.lookupSheet, "Staff");
+  assert.equal(spec.sourceKeyColumn, "Region");
+
+  const wide = {
+    addColumn: {
+      name: "Tier",
+      expression: 'IF(AND(Sales > 1000, Cost < 1000), "Good", "Check")',
+    },
+  };
+  const wideServer = createServerExcelPreviewPlan(
+    input,
+    ["add-column"],
+    500,
+    wide,
+  );
+  const wideLocal = createExcelPreviewPlan(
+    input as any,
+    ["add-column"],
+    500,
+    wide,
+  );
+  assert.equal(excelPlansMatch(wideLocal, wideServer), true);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["add-column"], 500, {
+        addColumn: { name: "X", expression: 'INDIRECT("A1")' },
+      }),
+    /not supported/,
+  );
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["add-column"], 500, {
+        addColumn: {
+          name: "X",
+          lookup: { ...lookupSpecs.addColumn.lookup, sheet: "A:B" },
+        },
+      } as any),
+    /not valid/,
   );
 });

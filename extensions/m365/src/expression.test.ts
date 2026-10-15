@@ -58,9 +58,9 @@ test("anything outside the grammar is rejected", () => {
   bad("Sales Cost", /Unexpected text/);
   bad("5 + 2", /at least one column/);
   bad("ROUND(Sales, Cost)", /fixed number/);
-  bad("x".repeat(201), /limited/);
+  bad("x".repeat(241), /limited/);
   bad("[Sales", /not closed/);
-  bad("=Sales", /Unsupported character/);
+  bad("=Sales", /Unexpected symbol/);
   bad(`${"(".repeat(12)}Sales${")".repeat(12)}`, /nested too deeply/);
   assert.throws(
     () => parseExpression("Sales", ["Sales", "sales"]),

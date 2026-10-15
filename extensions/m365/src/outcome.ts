@@ -275,6 +275,16 @@ export function buildOutcomes(
           "සජීවී සූත්‍ර භාවිතා කරයි; දත්ත වෙනස් වන විට යාවත්කාලීන වේ.",
         ),
       );
+    } else if (action.kind === "add-column" && spec.lookupSheet) {
+      item.details.push(
+        say(
+          `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${spec.sourceKeyColumn} with ${spec.lookupKeyHeader}.`,
+          `"${spec.lookupSheet}" පත්‍රිකාවෙන් "${spec.lookupReturnHeader}" ගෙන එයි — ${spec.sourceKeyColumn} සහ ${spec.lookupKeyHeader} ගැළපීමෙන්.`,
+        ),
+      );
+      item.details.push(
+        say("Rows with no match stay blank.", "ගැළපීමක් නැති පේළි හිස්ව පවතී."),
+      );
     } else if (action.kind === "add-column") {
       const how = spec.expression
         ? spec.expression

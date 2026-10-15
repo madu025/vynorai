@@ -1,5 +1,6 @@
 import {
   canonicalExpression,
+  numericColumnRefs,
   parseExpression,
   wantsPercentFormat,
 } from "./expression.js";
@@ -147,6 +148,16 @@ export interface ExcelColumnSpecs {
     right?: number;
     /** A safe column expression; used instead of left/operator/right. */
     expression?: string;
+    /** Bring a column in from another sheet by matching a key column. */
+    lookup?: {
+      sheet: string;
+      sourceKey: number;
+      keyIndex: number;
+      keyHeader: string;
+      returnIndex: number;
+      returnHeader: string;
+      rows: number;
+    };
   };
   summary?: {
     group: number;
@@ -208,6 +219,14 @@ export interface ExcelActionSpec {
     aggregation: ExcelAggregation;
   }>;
   includeTotal?: boolean;
+  lookupSheet?: string;
+  sourceKeyColumn?: string;
+  sourceKeyIndex?: number;
+  lookupKeyHeader?: string;
+  lookupKeyIndex?: number;
+  lookupReturnHeader?: string;
+  lookupReturnIndex?: number;
+  lookupRows?: number;
   expression?: string;
   canonical?: string;
   refs?: number[];
@@ -405,7 +424,63 @@ function resolveColumnSpecs(
       /[\r\n]/.test(name)
     )
       fail("EXCEL_SPEC_INVALID", "The new column name is not allowed.");
-    if (expression !== undefined) {
+    const lookup = (specs.addColumn as any).lookup as
+      | {
+          sheet: string;
+          sourceKey: number;
+          keyIndex: number;
+          keyHeader: string;
+          returnIndex: number;
+          returnHeader: string;
+          rows: number;
+        }
+      | undefined;
+    if (lookup !== undefined) {
+      if (
+        expression !== undefined ||
+        left !== undefined ||
+        right !== undefined ||
+        operator !== undefined
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "A lookup column cannot also have an expression.",
+        );
+      const text = (value: unknown, max: number) =>
+        typeof value === "string" &&
+        value.trim().length > 0 &&
+        value.length <= max &&
+        !/[\u0000-\u001F]/.test(value);
+      if (
+        !text(lookup.sheet, 31) ||
+        /[\[\]:*?/\\]/.test(lookup.sheet) ||
+        !text(lookup.keyHeader, 60) ||
+        !text(lookup.returnHeader, 60) ||
+        !inRange(lookup.sourceKey) ||
+        !Number.isInteger(lookup.keyIndex) ||
+        lookup.keyIndex < 0 ||
+        lookup.keyIndex > 99 ||
+        !Number.isInteger(lookup.returnIndex) ||
+        lookup.returnIndex < 0 ||
+        lookup.returnIndex > 99 ||
+        lookup.keyIndex === lookup.returnIndex ||
+        !Number.isInteger(lookup.rows) ||
+        lookup.rows < 1 ||
+        lookup.rows > 100000
+      )
+        fail("EXCEL_SPEC_INVALID", "The lookup choice is not valid.");
+      resolved.addColumn = {
+        columnName: uniqueColumnName(name.trim(), headers),
+        lookupSheet: lookup.sheet,
+        sourceKeyColumn: headers[lookup.sourceKey],
+        sourceKeyIndex: lookup.sourceKey,
+        lookupKeyHeader: lookup.keyHeader,
+        lookupKeyIndex: lookup.keyIndex,
+        lookupReturnHeader: lookup.returnHeader,
+        lookupReturnIndex: lookup.returnIndex,
+        lookupRows: lookup.rows,
+      };
+    } else if (expression !== undefined) {
       if (left !== undefined || right !== undefined || operator !== undefined)
         fail(
           "EXCEL_SPEC_INVALID",
@@ -417,13 +492,16 @@ function resolveColumnSpecs(
       } catch (error) {
         return fail("EXCEL_SPEC_INVALID", (error as Error).message);
       }
-      if (!parsed.refs.every((column) => numeric(column)))
+      const notNumbers = numericColumnRefs(parsed.ast).filter(
+        (column) => !numeric(column),
+      );
+      if (notNumbers.length)
         fail(
           "EXCEL_SPEC_VALUE_NOT_NUMERIC",
-          "Every column used in an expression must contain numbers.",
+          `Column ${notNumbers.map((column) => `"${headers[column]}"`).join(", ")} holds text, not numbers. Use VALUE() or DATEVALUE() on it, or pick a numeric column.`,
         );
       resolved.addColumn = {
-        columnName: name.trim(),
+        columnName: uniqueColumnName(name.trim(), headers),
         expression: String(expression).trim(),
         canonical: canonicalExpression(parsed.ast),
         refs: parsed.refs,
@@ -440,7 +518,7 @@ function resolveColumnSpecs(
           "Both columns of a computed column must contain numbers.",
         );
       resolved.addColumn = {
-        columnName: name.trim(),
+        columnName: uniqueColumnName(name.trim(), headers),
         leftColumn: headers[left as number],
         leftIndex: left as number,
         operator,
@@ -732,6 +810,19 @@ const noHeaderLayout: ExcelHeaderLayout = {
   headerRowCount: 0,
   headers: [],
 };
+
+/** A new column never repeats an existing header: "Region" becomes "Region (2)". */
+function uniqueColumnName(name: string, headers: string[]): string {
+  const taken = new Set(
+    headers.map((header) => header.trim().toLocaleLowerCase()),
+  );
+  if (!taken.has(name.toLocaleLowerCase())) return name;
+  for (let attempt = 2; attempt < 100; attempt += 1) {
+    const candidate = `${name} (${attempt})`.slice(0, 40);
+    if (!taken.has(candidate.toLocaleLowerCase())) return candidate;
+  }
+  return name;
+}
 
 function assertUniqueHeaders(headers: string[]): void {
   const normalizedHeaders = headers.map((header) => header.toLocaleLowerCase());

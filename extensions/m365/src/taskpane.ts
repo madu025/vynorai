@@ -72,6 +72,7 @@ import {
   rollbackItemsFromApplyReport,
   rollbackCreatedItems,
   revealExcelResult,
+  readLookupSheetInfo,
   listWorksheetNames,
 } from "./officeExcel.js";
 import {
@@ -522,10 +523,52 @@ inspect?.addEventListener("click", async () => {
     ];
     const filtered = wanted.filter((kind) => !excludedKinds.has(kind));
     const actions = filtered.length > 0 ? filtered : wanted;
+    const { lookup: lookupWish, ...plannedSpecs } = interpreted.specs;
     const specs: ExcelColumnSpecs = {
       ...(pendingSpecs ?? {}),
-      ...interpreted.specs,
+      ...plannedSpecs,
     };
+    if (lookupWish) {
+      try {
+        const other = await log.step("excel:read-lookup-sheet", () =>
+          readLookupSheetInfo(officeRuntime(), lookupWish.sheet),
+        );
+        if (other.sheet === input.worksheetName)
+          throw new Error(
+            "Look the value up in a different sheet than your data.",
+          );
+        const find = (headers: string[], name: string) =>
+          headers.findIndex(
+            (header) =>
+              header.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+          );
+        const keyAt = find(other.headers, lookupWish.keyHeader);
+        const returnAt = find(other.headers, lookupWish.returnHeader);
+        if (keyAt < 0)
+          throw new Error(
+            `The sheet "${other.sheet}" has no "${lookupWish.keyHeader}" column to match on. It has: ${other.headers.join(", ")}.`,
+          );
+        if (returnAt < 0)
+          throw new Error(
+            `The sheet "${other.sheet}" has no "${lookupWish.returnHeader}" column. It has: ${other.headers.join(", ")}.`,
+          );
+        specs.addColumn = {
+          name: other.headers[returnAt],
+          lookup: {
+            sheet: other.sheet,
+            sourceKey: find(layout.headers, lookupWish.keyHeader),
+            keyIndex: keyAt,
+            keyHeader: other.headers[keyAt],
+            returnIndex: returnAt,
+            returnHeader: other.headers[returnAt],
+            rows: other.rows,
+          },
+        };
+      } catch (error) {
+        log.record("lookup:resolve", "fail", describeError(error));
+        return setStatus((error as Error).message);
+      }
+    }
     if (actions.length === 0) {
       if (looksLikeQuestion(instructionText)) {
         const answer = answerQuestion(

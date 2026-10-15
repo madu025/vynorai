@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Publish the M365 add-in static files. The manifest is never touched: users already have it,
-# and everything else is fetched fresh each time the task pane opens (Caddy sends no-store).
+# Publish the M365 add-in. The VPS already has the tracked files (taskpane.html, manifest, ...)
+# through `git pull`; this uploads only the build output that git ignores. The manifest is never
+# touched: users already have it, and everything else is fetched fresh each time the task pane
+# opens (Caddy sends no-store).
 #
-#   VYNOR_M365_DIR=/path/on/vps/extensions/m365 ./deploy/publish-m365.sh
+#   VYNOR_M365_DIR=/opt/vynor/extensions/m365 ./deploy/publish-m365.sh
 #
 # VYNOR_HOST / VYNOR_KEY follow deploy/release-extension.sh. Run it only after approval.
 set -euo pipefail
@@ -14,19 +16,15 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SRC="$ROOT/extensions/m365"
 
 (cd "$SRC" && npm run build)
+[ -f "$SRC/dist/taskpane.bundle.js" ] || { echo "dist/taskpane.bundle.js missing" >&2; exit 1; }
 [ -f "$SRC/runtime-config.production.js" ] || { echo "runtime-config.production.js missing" >&2; exit 1; }
 
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/dist"
-cp "$SRC/taskpane.html" "$SRC/auth-dialog.html" "$SRC/auth-callback.html" "$TMP/"
-cp "$SRC/dist/taskpane.bundle.js" "$TMP/dist/"
-cp "$SRC/runtime-config.production.js" "$TMP/runtime-config.js"
-[ -f "$SRC/logo.png" ] && cp "$SRC/logo.png" "$TMP/"
+SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST")
+SCP=(scp -i "$KEY" -o BatchMode=yes)
 
-# Upload everything first, then move into place, so a half-copied pane is never served.
-STAGE="$REMOTE_DIR/.staging-$$"
-ssh -i "$KEY" -o BatchMode=yes "$HOST" "rm -rf '$STAGE' && mkdir -p '$STAGE'"
-scp -i "$KEY" -o BatchMode=yes -r "$TMP"/. "$HOST:$STAGE/"
-ssh -i "$KEY" -o BatchMode=yes "$HOST" "cd '$STAGE' && mkdir -p '$REMOTE_DIR/dist' && cp -f dist/taskpane.bundle.js '$REMOTE_DIR/dist/' && for f in *.html *.js *.png; do [ -f \"\$f\" ] && cp -f \"\$f\" '$REMOTE_DIR/'; done; rm -rf '$STAGE'"
-echo "Published add-in files. The manifest was not changed."
+# Upload next to the target first, then rename, so a half-copied bundle is never served.
+"${SSH[@]}" "git -C '$REMOTE_DIR' pull -q && mkdir -p '$REMOTE_DIR/dist'"
+"${SCP[@]}" "$SRC/dist/taskpane.bundle.js" "$HOST:$REMOTE_DIR/dist/taskpane.bundle.js.new"
+"${SCP[@]}" "$SRC/runtime-config.production.js" "$HOST:$REMOTE_DIR/runtime-config.js.new"
+"${SSH[@]}" "cd '$REMOTE_DIR' && mv -f dist/taskpane.bundle.js.new dist/taskpane.bundle.js && mv -f runtime-config.js.new runtime-config.js"
+echo "Published add-in build output. The manifest was not changed."

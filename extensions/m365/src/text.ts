@@ -1,5 +1,6 @@
 import { createM365ApiClient, M365ApiError } from "./api.js";
 import { askInPane } from "./confirmDialog.js";
+import { initWordPanels } from "./wordPanels.js";
 import {
   beginM365OAuth,
   completeM365OAuth,
@@ -318,6 +319,16 @@ async function initialize() {
   if (copy) copy.disabled = true;
   restoreSession();
   updateUi();
+  if (host === "word" && config) {
+    initWordPanels({
+      client: () =>
+        accessToken
+          ? createM365ApiClient(config.apiBaseUrl, accessToken)
+          : undefined,
+      setStatus,
+      readSelection: () => readSelection("word"),
+    });
+  }
   setStatus(
     accessToken
       ? "Signed in. Select text and click Read selection."

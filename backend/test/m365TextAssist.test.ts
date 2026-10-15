@@ -237,3 +237,57 @@ test("text assistance is rate limited per user", async () => {
   assert.equal(limited.status, 429);
   assert.equal(limited.json.error.code, "AI_ANALYSIS_RATE_LIMITED");
 });
+
+test("document drafting is consent gated, strict and audited", async () => {
+  const drafting = await import("../src/services/m365DocDraft.js");
+  const draft = {
+    title: "Review",
+    blocks: [{ type: "heading", level: 1, text: "Summary" }],
+  };
+  drafting.setDraftRunnerForTests(async () => JSON.stringify(draft));
+  const call = async (body: unknown, bearer = token()) => {
+    const response = await fetch(`${baseUrl}/v1/m365/text/draft`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${bearer}`,
+        "x-correlation-id": "corr-draft-0001",
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, json: (await response.json()) as any };
+  };
+  const body = {
+    kind: "report",
+    title: "Review",
+    brief: "Sales grew.",
+    consent: true,
+  };
+  try {
+    const ok = await call(body);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.advisoryOnly, true);
+    assert.equal(ok.json.draft.blocks[0].text, "Summary");
+    assert.equal(
+      (await call({ ...body, consent: false })).json.error.code,
+      "AI_CONSENT_REQUIRED",
+    );
+    assert.equal((await call({ ...body, extra: 1 })).status, 422);
+    assert.equal(
+      (await call(body, token("m365.excel.read"))).json.error.code,
+      "insufficient_scope",
+    );
+    drafting.setDraftRunnerForTests(async () => "not json");
+    analysis.resetAnalysisRateLimitForTests();
+    const bad = await call(body);
+    assert.equal(bad.status, 502);
+    assert.equal(bad.json.error.code, "AI_DRAFT_INVALID");
+    const events = await dbm.dbAll<{ details: string }>(
+      "SELECT details FROM security_audit_logs WHERE event_type = 'M365_DOC_DRAFT_COMPLETED'",
+    );
+    assert.equal(events.length, 1);
+    assert.doesNotMatch(events[0].details, /Sales grew/);
+  } finally {
+    drafting.setDraftRunnerForTests();
+  }
+});

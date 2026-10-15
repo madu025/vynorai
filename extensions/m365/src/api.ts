@@ -45,6 +45,7 @@ export interface M365ApiClient {
     text: string;
     consent: true;
   }): Promise<any>;
+  draftDocument(input: unknown): Promise<any>;
   reportRollback(input: {
     planId: string;
     removedSheets: number;
@@ -142,6 +143,7 @@ export function createM365ApiClient(
       request("POST", "/v1/m365/excel/apply-result", input),
     diagnose: () => request("GET", "/v1/m365/diagnostics"),
     assistText: (input) => request("POST", "/v1/m365/text/assist", input),
+    draftDocument: (input) => request("POST", "/v1/m365/text/draft", input),
     reportRollback: (input) =>
       request("POST", "/v1/m365/excel/rollback", input),
     analyzeExcel: (input) => request("POST", "/v1/m365/excel/analyze", input),

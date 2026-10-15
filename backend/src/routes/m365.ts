@@ -16,6 +16,11 @@ import {
   TEXT_ASSIST_CONTRACT_VERSION,
 } from "../services/m365TextAssist.js";
 import {
+  DOC_DRAFT_CONTRACT_VERSION,
+  draftDocument,
+  draftRequestSchema,
+} from "../services/m365DocDraft.js";
+import {
   createServerExcelPreviewPlan,
   InvalidExcelRangeError,
 } from "../services/m365ExcelPlan.js";
@@ -590,6 +595,62 @@ m365Router.post(
       const code = known ? error.code : "AI_ASSIST_FAILED";
       await logSecurityEvent({
         eventType: "M365_TEXT_ASSIST_FAILED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ code, correlationId }),
+      });
+      return res.status(known ? error.status : 500).json({ error: { code } });
+    }
+  },
+);
+
+/**
+ * Structured document drafting for Word. Same boundary as text assist: consent per request, tenant
+ * AI switch, strict JSON contract, nothing is stored and the add-in inserts only after confirmation.
+ */
+m365Router.post(
+  "/text/draft",
+  requireM365TextAuth,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const tenant = identity(req);
+    const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
+    res.setHeader("x-correlation-id", correlationId);
+    const tenantRecord = await getM365Tenant(tenant.tenantId);
+    if (tenantRecord && !tenantRecord.aiEnabled) {
+      return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
+    }
+    if (req.body?.consent !== true)
+      return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
+    const parsed = draftRequestSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res.status(422).json({ error: { code: "DRAFT_REQUEST_INVALID" } });
+    try {
+      assertAnalysisRateLimit(`draft:${user.id}`);
+      const draft = await draftDocument(user, parsed.data);
+      await logSecurityEvent({
+        eventType: "M365_DOC_DRAFT_COMPLETED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          kind: parsed.data.kind,
+          length: parsed.data.length,
+          language: parsed.data.language,
+          briefChars: parsed.data.brief.length,
+          blocks: draft.blocks.length,
+          correlationId,
+        }),
+      });
+      return res.json({
+        contractVersion: DOC_DRAFT_CONTRACT_VERSION,
+        advisoryOnly: true,
+        draft,
+      });
+    } catch (error) {
+      const known = error instanceof M365AnalysisError;
+      const code = known ? error.code : "AI_DRAFT_FAILED";
+      await logSecurityEvent({
+        eventType: "M365_DOC_DRAFT_FAILED",
         actor: user.id,
         target: tenant.tenantId,
         details: JSON.stringify({ code, correlationId }),

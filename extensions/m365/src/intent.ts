@@ -29,6 +29,7 @@ export interface InstructionSpecs {
     keyHeader: string;
     keyHeaders?: string[];
     matchMode?: "exact" | "approximate";
+    method?: "index-match" | "xlookup";
   };
   lookupColumns?: {
     sheet: string;
@@ -36,6 +37,7 @@ export interface InstructionSpecs {
     keyHeader: string;
     keyHeaders?: string[];
     matchMode?: "exact" | "approximate";
+    method?: "index-match" | "xlookup";
   };
   pivot?: {
     filter?: number;
@@ -518,8 +520,25 @@ export function interpretInstruction(
   const approximateLookup = /\b(?:approximate|closest|nearest)\b/i.test(
     rawInstruction,
   );
+  const lookupMethod =
+    /^\s*xlookup\b/i.test(rawInstruction) ||
+    /\b(?:using|with|use)\s+xlookup\b/i.test(rawInstruction)
+      ? ("xlookup" as const)
+      : /\b(?:using|with|use)\s+(?:index\s*[-/]\s*match|index\s+and\s+match)\b/i.test(
+            rawInstruction,
+          )
+        ? ("index-match" as const)
+        : undefined;
   const lookupText = rawInstruction
     .replace(/\b(?:approximate|closest|nearest)\b/gi, "")
+    .replace(
+      /\s+(?:using|with)\s+(?:xlookup|index\s*[-/]\s*match|index\s+and\s+match)\b/gi,
+      "",
+    )
+    .replace(
+      /\buse\s+(?:xlookup|index\s*[-/]\s*match|index\s+and\s+match)\b/gi,
+      "",
+    )
     .replace(/\s{2,}/g, " ")
     .trim();
   const lookupColumnsMatch = LOOKUP_COLUMNS_PHRASE.exec(lookupText);
@@ -560,6 +579,7 @@ export function interpretInstruction(
               ? { keyHeaders: sourceKeyAt.map((index) => headers[index]) }
               : {}),
             ...(approximateLookup ? { matchMode: "approximate" as const } : {}),
+            ...(lookupMethod ? { method: lookupMethod } : {}),
           },
         },
         problems: [],
@@ -597,6 +617,7 @@ export function interpretInstruction(
                 }
               : {}),
             ...(approximateLookup ? { matchMode: "approximate" as const } : {}),
+            ...(lookupMethod ? { method: lookupMethod } : {}),
           },
         },
         problems: [],

@@ -314,6 +314,7 @@ const excelPlanSchema = z.object({
                 .max(5)
                 .optional(),
               matchMode: z.enum(["exact", "approximate"]).optional(),
+              method: z.enum(["index-match", "xlookup"]).optional(),
             })
             .strict()
             .optional(),
@@ -351,6 +352,7 @@ const excelPlanSchema = z.object({
                 .max(5)
                 .optional(),
               matchMode: z.enum(["exact", "approximate"]).optional(),
+              method: z.enum(["index-match", "xlookup"]).optional(),
             })
             .strict(),
         })

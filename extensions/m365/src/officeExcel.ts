@@ -238,7 +238,7 @@ export function localExcelAddress(address: string): string {
   return separator === -1 ? address : address.slice(separator + 1);
 }
 
-/** Builds a deterministic INDEX/MATCH formula for one or more lookup keys. */
+/** Builds a deterministic lookup formula for one or more lookup keys. */
 export function buildLookupFormula(
   sheetName: string,
   sourceRow: number,
@@ -247,6 +247,7 @@ export function buildLookupFormula(
   returnIndex: number,
   lookupRows: number,
   matchMode: "exact" | "approximate" = "exact",
+  method: "index-match" | "xlookup" = "index-match",
 ): string {
   if (
     sourceKeyIndexes.length < 1 ||
@@ -257,7 +258,9 @@ export function buildLookupFormula(
     !Number.isInteger(lookupRows) ||
     lookupRows < 1 ||
     !["exact", "approximate"].includes(matchMode) ||
-    (matchMode === "approximate" && sourceKeyIndexes.length !== 1)
+    (matchMode === "approximate" && sourceKeyIndexes.length !== 1) ||
+    !["index-match", "xlookup"].includes(method) ||
+    (method === "xlookup" && matchMode === "approximate")
   )
     throw new Error("Invalid lookup formula choices");
   const quoted = `'${String(sheetName).replace(/'/g, "''")}'`;
@@ -268,6 +271,21 @@ export function buildLookupFormula(
     const letter = expressionColumnLetter(index);
     return `${quoted}!${letter}$2:${letter}${last}`;
   });
+  if (method === "xlookup") {
+    const lookupValue =
+      sourceLetters.length === 1 ? `${sourceLetters[0]}${sourceRow}` : "1";
+    const lookupArray =
+      sourceLetters.length === 1
+        ? lookupRanges[0]
+        : lookupRanges
+            .map(
+              (range, index) =>
+                `(${range}=${sourceLetters[index]}${sourceRow})`,
+            )
+            .join("*");
+    const returnRange = `${quoted}!${returnLetter}$2:${returnLetter}${last}`;
+    return `=IFERROR(XLOOKUP(${lookupValue},${lookupArray},${returnRange},""),"")`;
+  }
   const matchType = matchMode === "approximate" ? 1 : 0;
   if (sourceLetters.length === 1)
     return `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(${sourceLetters[0]}${sourceRow},${lookupRanges[0]},${matchType})),"")`;
@@ -1721,6 +1739,7 @@ export async function applyApprovedExcelPlan(
                       returnIndex,
                       spec.lookupRows as number,
                       spec.lookupMatchMode ?? "exact",
+                      spec.lookupMethod ?? "index-match",
                     ),
                   ),
                 );
@@ -1813,6 +1832,7 @@ export async function applyApprovedExcelPlan(
                     spec.lookupReturnIndex as number,
                     spec.lookupRows as number,
                     spec.lookupMatchMode ?? "exact",
+                    spec.lookupMethod ?? "index-match",
                   );
                 };
               }

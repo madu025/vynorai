@@ -662,6 +662,7 @@ inspect?.addEventListener("click", async () => {
             ...(lookupWish.matchMode
               ? { matchMode: lookupWish.matchMode }
               : {}),
+            ...(lookupWish.method ? { method: lookupWish.method } : {}),
           },
         };
       } catch (error) {
@@ -724,6 +725,9 @@ inspect?.addEventListener("click", async () => {
               : {}),
             ...(lookupColumnsWish.matchMode
               ? { matchMode: lookupColumnsWish.matchMode }
+              : {}),
+            ...(lookupColumnsWish.method
+              ? { method: lookupColumnsWish.method }
               : {}),
           },
         };

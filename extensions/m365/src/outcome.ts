@@ -459,6 +459,10 @@ export function buildOutcomes(
       const lookupKeys = Array.isArray(spec.lookupKeyHeaders)
         ? spec.lookupKeyHeaders.join(" + ")
         : String(spec.lookupKeyHeader ?? "");
+      const methodDescription =
+        spec.lookupMethod === "xlookup"
+          ? " using XLOOKUP"
+          : " using INDEX/MATCH";
       const returnHeaders = Array.isArray(spec.lookupReturnHeaders)
         ? spec.lookupReturnHeaders
         : [];
@@ -472,7 +476,7 @@ export function buildOutcomes(
         ]);
       item.details.push(
         say(
-          `Brings ${returnHeaders.join(", ")} from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}.`,
+          `Brings ${returnHeaders.join(", ")} from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}${methodDescription}.`,
           `"${spec.lookupSheet}" පත්‍රිකාවෙන් ${returnHeaders.join(", ")} ගෙන එයි — ${sourceKeys} සහ ${lookupKeys} ගැළපීමෙන්.`,
         ),
       );
@@ -493,9 +497,13 @@ export function buildOutcomes(
         spec.lookupMatchMode === "approximate"
           ? " using approximate matching (lookup values must be sorted ascending)"
           : "";
+      const methodDescription =
+        spec.lookupMethod === "xlookup"
+          ? " using XLOOKUP"
+          : " using INDEX/MATCH";
       item.details.push(
         say(
-          `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}${matchDescription}.`,
+          `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}${matchDescription}${methodDescription}.`,
           `"${spec.lookupSheet}" පත්‍රිකාවෙන් "${spec.lookupReturnHeader}" ගෙන එයි — ${spec.sourceKeyColumn} සහ ${spec.lookupKeyHeader} ගැළපීමෙන්.`,
         ),
       );

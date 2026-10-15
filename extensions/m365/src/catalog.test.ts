@@ -265,6 +265,95 @@ test("group A: a lookup can return multiple columns on one result sheet", () => 
   ]);
 });
 
+test("group A: lookup method choice is explicit and deterministic", () => {
+  const xlookup = interpretInstruction(
+    "Add column Manager from Staff by Name using XLOOKUP",
+    ["Name", "Sales"],
+    [["Amal", 10]],
+  );
+  assert.equal(xlookup.specs.lookup?.method, "xlookup");
+  const leadingXlookup = interpretInstruction(
+    "XLOOKUP Manager from Staff by Name",
+    ["Name", "Sales"],
+    [["Amal", 10]],
+  );
+  assert.equal(leadingXlookup.specs.lookup?.method, "xlookup");
+  const indexMatch = interpretInstruction(
+    "Add column Manager from Staff by Name using INDEX/MATCH",
+    ["Name", "Sales"],
+    [["Amal", 10]],
+  );
+  assert.equal(indexMatch.specs.lookup?.method, "index-match");
+  const plan = createExcelPreviewPlan(
+    {
+      workbookId: "w",
+      worksheetName: "Sheet1",
+      address: "Sheet1!A1:B2",
+      hasHeaders: true,
+      values: [
+        ["Name", "Sales"],
+        ["Amal", 10],
+      ],
+    } as any,
+    ["add-column"],
+    500,
+    {
+      addColumn: {
+        name: "Manager",
+        lookup: {
+          sheet: "Staff",
+          sourceKey: 0,
+          keyIndex: 0,
+          keyHeader: "Name",
+          returnIndex: 1,
+          returnHeader: "Manager",
+          rows: 20,
+          method: "xlookup",
+        },
+      },
+    },
+  );
+  assert.equal(plan.actions[0].spec?.lookupMethod, "xlookup");
+  assert.equal(
+    buildLookupFormula("Staff", 2, [0], [0], 1, 20, "exact", "xlookup"),
+    `=IFERROR(XLOOKUP(A2,'Staff'!A$2:A21,'Staff'!B$2:B21,""),"")`,
+  );
+  assert.throws(
+    () =>
+      createExcelPreviewPlan(
+        {
+          workbookId: "w",
+          worksheetName: "Sheet1",
+          address: "Sheet1!A1:B2",
+          hasHeaders: true,
+          values: [
+            ["Sales", "Rate"],
+            [100, 0.1],
+          ],
+        } as any,
+        ["add-column"],
+        500,
+        {
+          addColumn: {
+            name: "Rate",
+            lookup: {
+              sheet: "Rates",
+              sourceKey: 0,
+              keyIndex: 0,
+              keyHeader: "Sales",
+              returnIndex: 1,
+              returnHeader: "Rate",
+              rows: 20,
+              method: "xlookup",
+              matchMode: "approximate",
+            },
+          },
+        } as any,
+      ),
+    /not valid/,
+  );
+});
+
 test("group A: approximate lookup is explicit and remains single-key", () => {
   const found = interpretInstruction(
     "Add column Tax Rate from Rates by Sales approximate",

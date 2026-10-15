@@ -163,6 +163,42 @@ test("server and add-in build the same multiple-return lookup plan", () => {
   );
 });
 
+test("server and add-in build the same XLOOKUP plan and refuse approximate XLOOKUP", () => {
+  const specs = {
+    addColumn: {
+      name: "Manager",
+      lookup: {
+        sheet: "Staff",
+        sourceKey: 0,
+        keyIndex: 0,
+        keyHeader: "Name",
+        returnIndex: 1,
+        returnHeader: "Manager",
+        rows: 40,
+        method: "xlookup" as const,
+      },
+    },
+  };
+  const actions = ["add-column"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.lookupMethod, "xlookup");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        addColumn: {
+          ...specs.addColumn,
+          lookup: {
+            ...specs.addColumn.lookup,
+            matchMode: "approximate",
+          },
+        },
+      } as any),
+    /not valid/,
+  );
+});
+
 test("server and add-in build the same safe split plan", () => {
   const specs = {
     split: {

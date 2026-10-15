@@ -212,6 +212,7 @@ export interface ExcelColumnSpecs {
       keyIndexes?: number[];
       keyHeaders?: string[];
       matchMode?: "exact" | "approximate";
+      method?: "index-match" | "xlookup";
     };
   };
   lookupColumns?: {
@@ -228,6 +229,7 @@ export interface ExcelColumnSpecs {
       keyIndexes?: number[];
       keyHeaders?: string[];
       matchMode?: "exact" | "approximate";
+      method?: "index-match" | "xlookup";
     };
   };
   split?: { source: number; firstName: string; lastName: string };
@@ -323,6 +325,7 @@ export interface ExcelActionSpec {
   lookupKeyHeaders?: string[];
   lookupKeyIndexes?: number[];
   lookupMatchMode?: "exact" | "approximate";
+  lookupMethod?: "index-match" | "xlookup";
   lookupReturnHeader?: string;
   lookupReturnIndex?: number;
   lookupReturnHeaders?: string[];
@@ -682,6 +685,7 @@ function resolveColumnSpecs(
           keyIndexes?: number[];
           keyHeaders?: string[];
           matchMode?: "exact" | "approximate";
+          method?: "index-match" | "xlookup";
         }
       | undefined;
     if (derived !== undefined) {
@@ -794,6 +798,9 @@ function resolveColumnSpecs(
         (lookup.matchMode !== undefined &&
           !["exact", "approximate"].includes(lookup.matchMode)) ||
         (lookup.matchMode === "approximate" && sourceKeys.length !== 1) ||
+        (lookup.method !== undefined &&
+          !["index-match", "xlookup"].includes(lookup.method)) ||
+        (lookup.method === "xlookup" && lookup.matchMode === "approximate") ||
         keyHeaders.some((header) => !text(header, 60)) ||
         !text(lookup.returnHeader, 60) ||
         !Number.isInteger(lookup.returnIndex) ||
@@ -817,6 +824,7 @@ function resolveColumnSpecs(
         lookupKeyHeaders: keyHeaders,
         lookupKeyIndexes: keyIndexes,
         ...(lookup.matchMode ? { lookupMatchMode: lookup.matchMode } : {}),
+        ...(lookup.method ? { lookupMethod: lookup.method } : {}),
         lookupReturnHeader: lookup.returnHeader,
         lookupReturnIndex: lookup.returnIndex,
         lookupRows: lookup.rows,
@@ -908,6 +916,9 @@ function resolveColumnSpecs(
       (lookup.matchMode !== undefined &&
         !["exact", "approximate"].includes(lookup.matchMode)) ||
       (lookup.matchMode === "approximate" && sourceKeys.length !== 1) ||
+      (lookup.method !== undefined &&
+        !["index-match", "xlookup"].includes(lookup.method)) ||
+      (lookup.method === "xlookup" && lookup.matchMode === "approximate") ||
       keyHeaders.some((header) => !text(header, 60)) ||
       returnHeaders.some((header) => !text(header, 60)) ||
       names.some((name) => !text(name, 40)) ||
@@ -943,6 +954,7 @@ function resolveColumnSpecs(
       lookupKeyHeaders: keyHeaders,
       lookupKeyIndexes: keyIndexes,
       ...(lookup.matchMode ? { lookupMatchMode: lookup.matchMode } : {}),
+      ...(lookup.method ? { lookupMethod: lookup.method } : {}),
       lookupReturnHeaders: returnHeaders,
       lookupReturnIndexes: returnIndexes,
       lookupRows: lookup.rows,

@@ -539,12 +539,13 @@ inspect?.addEventListener("click", async () => {
     );
     if (
       earlier &&
-      specs.chart &&
+      actions.includes("chart") &&
       !namesAColumn &&
       /(that|it|same|those|these|ඒකටම|eka|ekata)/i.test(instructionText)
     ) {
       specs.chart = {
-        ...specs.chart,
+        chartType: "column",
+        ...(specs.chart ?? {}),
         category: earlier.rows,
         value: earlier.values,
         ...(earlier.extraValues?.length

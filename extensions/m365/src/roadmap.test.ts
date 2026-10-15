@@ -232,6 +232,26 @@ test("YoY change resolves a numeric source with a fixed 12-period lag", () => {
   assert.match(unknown.problems[0], /not a column/);
 });
 
+test("date grouping resolves month, quarter and year choices", () => {
+  const dateHeaders = ["Date", "Sales"];
+  for (const group of ["month", "quarter", "year"] as const) {
+    const asked = interpretInstruction(`Group Date by ${group}`, dateHeaders);
+    assert.deepEqual(asked.actions, ["add-column"]);
+    assert.deepEqual(asked.specs.addColumn, {
+      name: `${group[0].toUpperCase()}${group.slice(1)} of Date`,
+      derived: "date-group",
+      source: 0,
+      group,
+    });
+  }
+  const unknown = interpretInstruction(
+    "Group Posted Date by month",
+    dateHeaders,
+  );
+  assert.deepEqual(unknown.actions, []);
+  assert.match(unknown.problems[0], /not a column/);
+});
+
 test("plans for clean and computed column carry validated specs and their own result sheets", () => {
   const plan = createExcelPreviewPlan(
     input as any,
@@ -561,6 +581,47 @@ test("apply writes YoY formulas and percent formatting to a new result sheet", a
     excel.written["Calc of Sheet1!1,4,13,1.numberFormat"],
     Array.from({ length: 13 }, () => ["0.0%"]),
   );
+  assert.equal(report.sourceUnchangedAfterApply, true);
+});
+
+test("apply writes date-group formulas to a new result sheet", async () => {
+  const dateValues = [
+    ["Date", "Sales"],
+    [44927, 100],
+    [44958, 110],
+    [45017, 120],
+  ];
+  const dateInput = {
+    ...input,
+    address: "Sheet1!A1:B4",
+    values: dateValues,
+  };
+  const plan = createExcelPreviewPlan(
+    dateInput as any,
+    ["add-column"],
+    undefined,
+    {
+      addColumn: {
+        name: "Month of Date",
+        derived: "date-group",
+        source: 0,
+        group: "month",
+      },
+    },
+  );
+  const excel = fakeWorkbook(dateValues);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(excel.written["Calc of Sheet1!1,2,3,1.formulas"], [
+    ['=TEXT(A2,"yyyy-mm")'],
+    ['=TEXT(A3,"yyyy-mm")'],
+    ['=TEXT(A4,"yyyy-mm")'],
+  ]);
   assert.equal(report.sourceUnchangedAfterApply, true);
 });
 

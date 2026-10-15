@@ -192,6 +192,59 @@ test("server and add-in build the same safe YoY plan", () => {
   );
 });
 
+test("server and add-in build the same safe date-group plan", () => {
+  const dateInput = {
+    ...input,
+    values: [
+      ["Date", "Sales"],
+      [44927, 100],
+      [44958, 110],
+      [45017, 120],
+    ],
+  };
+  const actions = ["add-column"] as const;
+  const specs = {
+    addColumn: {
+      name: "Month of Date",
+      derived: "date-group" as const,
+      source: 0,
+      group: "month" as const,
+    },
+  };
+  const server = createServerExcelPreviewPlan(
+    dateInput,
+    [...actions],
+    500,
+    specs,
+  );
+  const local = createExcelPreviewPlan(
+    dateInput as any,
+    [...actions],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec, {
+    columnName: "Month of Date",
+    derived: "date-group",
+    sourceColumn: "Date",
+    sourceIndex: 0,
+    group: "month",
+  });
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(dateInput, [...actions], 500, {
+        addColumn: {
+          name: "Date Group",
+          derived: "date-group",
+          source: 0,
+          group: "week",
+        },
+      } as any),
+    /month, quarter or year/,
+  );
+});
+
 test("server and add-in agree on a deterministic insight report", () => {
   const actions = ["statistics"] as const;
   const specs = {

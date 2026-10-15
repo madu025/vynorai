@@ -184,10 +184,12 @@ export interface ExcelColumnSpecs {
       | "rank"
       | "percent-change"
       | "moving-average"
-      | "yoy";
+      | "yoy"
+      | "date-group";
     source?: number;
     window?: number;
     lag?: number;
+    group?: "month" | "quarter" | "year";
     /** Bring a column in from another sheet by matching a key column. */
     lookup?: {
       sheet: string;
@@ -297,11 +299,13 @@ export interface ExcelActionSpec {
     | "rank"
     | "percent-change"
     | "moving-average"
-    | "yoy";
+    | "yoy"
+    | "date-group";
   sourceColumn?: string;
   sourceIndex?: number;
   window?: number;
   lag?: number;
+  group?: "month" | "quarter" | "year";
   sort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
@@ -592,6 +596,7 @@ function resolveColumnSpecs(
       source,
       window,
       lag,
+      group,
     } = specs.addColumn;
     if (
       typeof name !== "string" ||
@@ -620,6 +625,7 @@ function resolveColumnSpecs(
           "percent-change",
           "moving-average",
           "yoy",
+          "date-group",
         ].includes(derived) ||
         expression !== undefined ||
         left !== undefined ||
@@ -646,6 +652,11 @@ function resolveColumnSpecs(
         );
       if (derived === "yoy" && (!Number.isInteger(lag) || lag !== 12))
         fail("EXCEL_SPEC_INVALID", "YoY change requires a 12-period lag.");
+      if (
+        derived === "date-group" &&
+        !["month", "quarter", "year"].includes(group as string)
+      )
+        fail("EXCEL_SPEC_INVALID", "Choose month, quarter or year grouping.");
       if (!numeric(sourceIndex))
         fail(
           "EXCEL_SPEC_VALUE_NOT_NUMERIC",
@@ -658,6 +669,7 @@ function resolveColumnSpecs(
         sourceIndex,
         ...(derived === "moving-average" ? { window: window as number } : {}),
         ...(derived === "yoy" ? { lag: lag as number } : {}),
+        ...(derived === "date-group" ? { group } : {}),
         ...(derived === "percent-change" || derived === "yoy"
           ? { percentFormat: true }
           : {}),

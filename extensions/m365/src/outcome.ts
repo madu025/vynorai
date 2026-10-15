@@ -402,9 +402,11 @@ export function buildOutcomes(
                 ? `${spec.window}-period moving average of ${spec.sourceColumn}`
                 : spec.derived === "yoy"
                   ? `YoY change of ${spec.sourceColumn}`
-                  : spec.expression
-                    ? spec.expression
-                    : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+                  : spec.derived === "date-group"
+                    ? `${spec.group} grouping of ${spec.sourceColumn}`
+                    : spec.expression
+                      ? spec.expression
+                      : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
       // Show the new column with its real values so the person sees the answer, not only a rule.
       try {
         if (spec.expression) {
@@ -543,6 +545,36 @@ export function buildOutcomes(
               `${Math.round(((current - previous) / previous) * 1000) / 10}%`,
             ];
           });
+        } else if (
+          spec.derived === "date-group" &&
+          spec.sourceColumn &&
+          Number.isInteger(spec.sourceIndex) &&
+          ["month", "quarter", "year"].includes(String(spec.group))
+        ) {
+          const source = spec.sourceIndex as number;
+          const group = spec.group as "month" | "quarter" | "year";
+          const kept = MAX_TABLE_COLUMNS - 1;
+          const groupDate = (value: unknown) => {
+            const numericValue = Number(value);
+            const date = Number.isFinite(numericValue)
+              ? new Date(Date.UTC(1899, 11, 30) + numericValue * 86400000)
+              : new Date(String(value));
+            if (Number.isNaN(date.getTime())) return "…";
+            if (group === "year") return String(date.getUTCFullYear());
+            if (group === "quarter")
+              return `Q${Math.floor(date.getUTCMonth() / 3) + 1} ${date.getUTCFullYear()}`;
+            return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+          };
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows
+            .slice(0, MAX_TABLE_ROWS)
+            .map((row, at) => [
+              ...table.rows[at].slice(0, kept),
+              groupDate(row[source]),
+            ]);
         } else if (spec.leftColumn && spec.rightColumn && spec.operator) {
           const left = headers.indexOf(String(spec.leftColumn));
           const right = headers.indexOf(String(spec.rightColumn));

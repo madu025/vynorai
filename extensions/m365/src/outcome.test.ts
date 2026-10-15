@@ -168,6 +168,35 @@ test("a YoY outcome keeps incomplete 12-period history blank", () => {
   assert.match(item.details.join("\n"), /YoY change of Sales/);
 });
 
+test("a date-group outcome previews month labels from Excel dates", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "add-column",
+        targetSheet: "Sheet1_Vynor_Calc",
+        spec: {
+          columnName: "Month of Date",
+          derived: "date-group",
+          sourceColumn: "Date",
+          sourceIndex: 0,
+          group: "month",
+        },
+      },
+    ],
+    ["Date", "Sales"],
+    [
+      [44927, 100],
+      [44958, 110],
+      [45017, 120],
+    ],
+  );
+  assert.deepEqual(
+    item.table?.rows.map((row) => row.at(-1)),
+    ["2023-01", "2023-02", "2023-04"],
+  );
+  assert.match(item.details.join("\n"), /month grouping of Date/);
+});
+
 test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
   const [item] = buildOutcomes(
     [

@@ -105,10 +105,12 @@ export interface InstructionSpecs {
       | "rank"
       | "percent-change"
       | "moving-average"
-      | "yoy";
+      | "yoy"
+      | "date-group";
     source?: number;
     window?: number;
     lag?: number;
+    group?: "month" | "quarter" | "year";
   };
 }
 
@@ -161,6 +163,38 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+
+  const dateGroupMatch =
+    /\b(?:group|bucket)\s+["']?([^"'\n,.]+?)["']?\s+(?:by|into)\s+(month|quarter|year)(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (dateGroupMatch) {
+    const requestedSource = dateGroupMatch[1].trim();
+    const group = dateGroupMatch[2].toLowerCase() as
+      | "month"
+      | "quarter"
+      | "year";
+    const source = findHeader(headers, requestedSource);
+    if (source < 0) {
+      result.problems.push(
+        `"${requestedSource}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    } else {
+      const label = group[0].toUpperCase() + group.slice(1);
+      return {
+        actions: ["add-column"],
+        specs: {
+          addColumn: {
+            name: `${label} of ${headers[source]}`,
+            derived: "date-group",
+            source,
+            group,
+          },
+        },
+        problems: [],
+      };
+    }
+  }
 
   const yoyMatch =
     /\b(?:yoy|year[-\s]?over[-\s]?year)\s+(?:change(?:\s+column)?)?\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(

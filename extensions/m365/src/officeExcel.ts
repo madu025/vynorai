@@ -1592,6 +1592,28 @@ export async function applyApprovedExcelPlan(
                         : `=AVERAGE(${sourceLetter}${firstRow}:${sourceLetter}${rowNumber})`;
                     }
                   : undefined;
+              const dateGroupFormula =
+                spec.derived === "date-group"
+                  ? (rowNumber: number) => {
+                      if (
+                        !Number.isInteger(spec.sourceIndex) ||
+                        !["month", "quarter", "year"].includes(
+                          String(spec.group),
+                        )
+                      )
+                        throw new Error(
+                          "The date-group source or group is missing from the approved plan",
+                        );
+                      const sourceLetter = expressionColumnLetter(
+                        spec.sourceIndex,
+                      );
+                      if (spec.group === "month")
+                        return `=TEXT(${sourceLetter}${rowNumber},"yyyy-mm")`;
+                      if (spec.group === "year")
+                        return `=YEAR(${sourceLetter}${rowNumber})`;
+                      return `="Q"&ROUNDUP(MONTH(${sourceLetter}${rowNumber})/3,0)&" "&YEAR(${sourceLetter}${rowNumber})`;
+                    }
+                  : undefined;
               const out = [
                 [...headers, spec.columnName],
                 ...rows.map((row) => [...row, ""]),
@@ -1628,12 +1650,14 @@ export async function applyApprovedExcelPlan(
                               ? yoyFormula(index + 2)
                               : movingAverageFormula
                                 ? movingAverageFormula(index + 2)
-                                : computedColumnFormula(
-                                    index + 2,
-                                    spec.leftIndex as number,
-                                    spec.operator as "+",
-                                    spec.rightIndex as number,
-                                  ),
+                                : dateGroupFormula
+                                  ? dateGroupFormula(index + 2)
+                                  : computedColumnFormula(
+                                      index + 2,
+                                      spec.leftIndex as number,
+                                      spec.operator as "+",
+                                      spec.rightIndex as number,
+                                    ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

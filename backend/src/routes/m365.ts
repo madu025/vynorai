@@ -276,11 +276,13 @@ const excelPlanSchema = z.object({
               "percent-change",
               "moving-average",
               "yoy",
+              "date-group",
             ])
             .optional(),
           source: z.number().int().min(0).max(99).optional(),
           window: z.number().int().min(2).max(12).optional(),
           lag: z.number().int().min(12).max(12).optional(),
+          group: z.enum(["month", "quarter", "year"]).optional(),
           lookup: z
             .object({
               sheet: z.string().min(1).max(31),

@@ -399,6 +399,7 @@ inspect?.addEventListener("click", async () => {
       preview.textContent = JSON.stringify(
         {
           profile: { ...plan.profile, sourceFingerprint: undefined },
+          normalization: plan.normalization,
           actions: localPreview.actions,
           warnings: plan.warnings,
         },

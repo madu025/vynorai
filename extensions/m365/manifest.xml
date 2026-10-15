@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>9f17a1c0-46f8-4f2c-a5b3-4a3d04e0d365</Id>
-  <Version>0.1.9.0</Version>
+  <Version>0.1.10.0</Version>
   <ProviderName>VynorAI</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="VynorAI Excel" />
@@ -11,6 +11,6 @@
   <SupportUrl DefaultValue="https://vynor.lk/support" />
   <AppDomains><AppDomain>https://vynor.lk</AppDomain></AppDomains>
   <Hosts><Host Name="Workbook" /></Hosts>
-  <DefaultSettings><SourceLocation DefaultValue="https://vynor.lk/m365/taskpane.html?v=20261015.11" /></DefaultSettings>
+  <DefaultSettings><SourceLocation DefaultValue="https://vynor.lk/m365/taskpane.html?v=20261015.12" /></DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 </OfficeApp>

@@ -179,6 +179,8 @@ export interface ExcelColumnSpecs {
     right?: number;
     /** A safe column expression; used instead of left/operator/right. */
     expression?: string;
+    derived?: "running-total";
+    source?: number;
     /** Bring a column in from another sheet by matching a key column. */
     lookup?: {
       sheet: string;
@@ -283,6 +285,9 @@ export interface ExcelActionSpec {
   canonical?: string;
   refs?: number[];
   percentFormat?: boolean;
+  derived?: "running-total";
+  sourceColumn?: string;
+  sourceIndex?: number;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
@@ -563,7 +568,8 @@ function resolveColumnSpecs(
         "EXCEL_SPEC_UNUSED",
         "A computed column needs the add-column action.",
       );
-    const { name, left, operator, right, expression } = specs.addColumn;
+    const { name, left, operator, right, expression, derived, source } =
+      specs.addColumn;
     if (
       typeof name !== "string" ||
       name.trim().length === 0 ||
@@ -583,7 +589,34 @@ function resolveColumnSpecs(
           rows: number;
         }
       | undefined;
-    if (lookup !== undefined) {
+    if (derived !== undefined) {
+      if (
+        derived !== "running-total" ||
+        expression !== undefined ||
+        left !== undefined ||
+        right !== undefined ||
+        operator !== undefined ||
+        lookup !== undefined
+      )
+        fail("EXCEL_SPEC_INVALID", "The running total choice is not valid.");
+      if (!inRange(source))
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose a source column for the running total.",
+        );
+      const sourceIndex = source as number;
+      if (!numeric(sourceIndex))
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          `Column "${headers[sourceIndex]}" holds text, not numbers. Choose a numeric column.`,
+        );
+      resolved.addColumn = {
+        columnName: uniqueColumnName(name.trim(), headers),
+        derived,
+        sourceColumn: headers[sourceIndex],
+        sourceIndex,
+      };
+    } else if (lookup !== undefined) {
       if (
         expression !== undefined ||
         left !== undefined ||

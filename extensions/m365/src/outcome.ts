@@ -391,9 +391,12 @@ export function buildOutcomes(
         say("Rows with no match stay blank.", "ගැළපීමක් නැති පේළි හිස්ව පවතී."),
       );
     } else if (action.kind === "add-column") {
-      const how = spec.expression
-        ? spec.expression
-        : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+      const how =
+        spec.derived === "running-total"
+          ? `Running total of ${spec.sourceColumn}`
+          : spec.expression
+            ? spec.expression
+            : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
       // Show the new column with its real values so the person sees the answer, not only a rule.
       try {
         if (spec.expression) {
@@ -409,6 +412,28 @@ export function buildOutcomes(
               ...table.rows[at].slice(0, kept),
               previewExpressionValue(parsed.ast, row as unknown[]) ?? "…",
             ]);
+        } else if (
+          spec.derived === "running-total" &&
+          spec.sourceColumn &&
+          Number.isInteger(spec.sourceIndex)
+        ) {
+          const source = spec.sourceIndex as number;
+          const kept = MAX_TABLE_COLUMNS - 1;
+          let total = 0;
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows.slice(0, MAX_TABLE_ROWS).map((row, at) => {
+            const value = Number(row[source]);
+            if (!Number.isFinite(value))
+              return [...table.rows[at].slice(0, kept), "…"];
+            total += value;
+            return [
+              ...table.rows[at].slice(0, kept),
+              String(Math.round(total * 100) / 100),
+            ];
+          });
         } else if (spec.leftColumn && spec.rightColumn && spec.operator) {
           const left = headers.indexOf(String(spec.leftColumn));
           const right = headers.indexOf(String(spec.rightColumn));

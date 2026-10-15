@@ -100,6 +100,8 @@ export interface InstructionSpecs {
     operator?: ComputeOperator;
     right?: number;
     expression?: string;
+    derived?: "running-total";
+    source?: number;
   };
 }
 
@@ -152,6 +154,34 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+
+  const runningTotal =
+    /\b(?:running|cumulative)\s+total\b(?:\s+column)?(?:\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?)?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (runningTotal) {
+    const requestedSource = runningTotal[1]?.trim();
+    const source = requestedSource ? findHeader(headers, requestedSource) : -1;
+    if (source < 0) {
+      result.problems.push(
+        requestedSource
+          ? `"${requestedSource}" is not a column of your data. Available: ${headers.join(", ")}.`
+          : "Name one numeric source column for the running total.",
+      );
+    } else {
+      return {
+        actions: ["add-column"],
+        specs: {
+          addColumn: {
+            name: `Running Total of ${headers[source]}`,
+            derived: "running-total",
+            source,
+          },
+        },
+        problems: [],
+      };
+    }
+  }
 
   const operations = new Set<CleanOperation>();
   if (/\b(clean|tidy|fix)\b|\btrim\b|\bwhitespace\b/i.test(text))

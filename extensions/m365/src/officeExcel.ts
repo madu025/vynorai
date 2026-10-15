@@ -1514,6 +1514,19 @@ export async function applyApprovedExcelPlan(
                   );
                 expressionAst = parsed.ast;
               }
+              const runningTotalFormula =
+                spec.derived === "running-total"
+                  ? (rowNumber: number) => {
+                      if (!Number.isInteger(spec.sourceIndex))
+                        throw new Error(
+                          "The running total source is missing from the approved plan",
+                        );
+                      const sourceLetter = expressionColumnLetter(
+                        spec.sourceIndex,
+                      );
+                      return `=SUM($${sourceLetter}$2:${sourceLetter}${rowNumber})`;
+                    }
+                  : undefined;
               const out = [
                 [...headers, spec.columnName],
                 ...rows.map((row) => [...row, ""]),
@@ -1540,12 +1553,14 @@ export async function applyApprovedExcelPlan(
                           (column) =>
                             `${expressionColumnLetter(column)}${index + 2}`,
                         )
-                      : computedColumnFormula(
-                          index + 2,
-                          spec.leftIndex as number,
-                          spec.operator as "+",
-                          spec.rightIndex as number,
-                        ),
+                      : runningTotalFormula
+                        ? runningTotalFormula(index + 2)
+                        : computedColumnFormula(
+                            index + 2,
+                            spec.leftIndex as number,
+                            spec.operator as "+",
+                            spec.rightIndex as number,
+                          ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

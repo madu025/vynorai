@@ -269,6 +269,8 @@ const excelPlanSchema = z.object({
           operator: z.enum(["+", "-", "*", "/"]).optional(),
           right: z.number().int().min(0).max(99).optional(),
           expression: z.string().min(1).max(240).optional(),
+          derived: z.enum(["running-total"]).optional(),
+          source: z.number().int().min(0).max(99).optional(),
           lookup: z
             .object({
               sheet: z.string().min(1).max(31),

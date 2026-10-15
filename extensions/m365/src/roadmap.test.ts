@@ -141,6 +141,28 @@ test("instructions for a computed column and clean-up are read deterministically
   );
 });
 
+test("running total resolves one numeric source column without guessing", () => {
+  const asked = interpretInstruction(
+    "Add a running total column for Sales",
+    headers,
+  );
+  assert.deepEqual(asked.actions, ["add-column"]);
+  assert.deepEqual(asked.specs.addColumn, {
+    name: "Running Total of Sales",
+    derived: "running-total",
+    source: 2,
+  });
+  const unknown = interpretInstruction(
+    "Add a running total for Revenue",
+    headers,
+  );
+  assert.deepEqual(unknown.actions, []);
+  assert.match(unknown.problems[0], /not a column/);
+  const noSource = interpretInstruction("Add a running total", headers);
+  assert.deepEqual(noSource.actions, []);
+  assert.match(noSource.problems[0], /numeric source column/);
+});
+
 test("plans for clean and computed column carry validated specs and their own result sheets", () => {
   const plan = createExcelPreviewPlan(
     input as any,
@@ -296,6 +318,42 @@ test("apply writes the cleaned copy and the computed column to separate sheets o
   assert.deepEqual(calcValues[0], [...headers, "Profit"]);
   const formulas = excel.written["Calc of Sheet1!1,4,4,1.formulas"];
   assert.deepEqual(formulas, [["=C2-D2"], ["=C3-D3"], ["=C4-D4"], ["=C5-D5"]]);
+});
+
+test("apply writes running-total formulas to a new result sheet only", async () => {
+  const plan = createExcelPreviewPlan(input as any, ["add-column"], undefined, {
+    addColumn: {
+      name: "Running Total of Sales",
+      derived: "running-total",
+      source: 2,
+    },
+  });
+  const excel = fakeWorkbook();
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(
+    report.results.map((result) => result.status),
+    ["created"],
+  );
+  assert.equal(report.sourceUnchangedAfterApply, true);
+  assert.deepEqual(excel.written["Calc of Sheet1!0,0,5,5.values"][0], [
+    ...headers,
+    "Running Total of Sales",
+  ]);
+  assert.deepEqual(excel.written["Calc of Sheet1!1,4,4,1.formulas"], [
+    ["=SUM($C$2:C2)"],
+    ["=SUM($C$2:C3)"],
+    ["=SUM($C$2:C4)"],
+    ["=SUM($C$2:C5)"],
+  ]);
+  assert.ok(
+    Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),
+  );
 });
 
 test("apply writes converted ISO dates only to a formatted clean result sheet", async () => {

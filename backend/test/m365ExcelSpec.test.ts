@@ -33,6 +33,37 @@ test("server and add-in build the same plan for explicit column choices", () => 
   assert.equal(server.actions[1].spec.rowsColumn, "Region");
 });
 
+test("server and add-in build the same safe running-total plan", () => {
+  const actions = ["add-column"] as const;
+  const specs = {
+    addColumn: {
+      name: "Running Total of Sales",
+      derived: "running-total" as const,
+      source: 2,
+    },
+  };
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec, {
+    columnName: "Running Total of Sales",
+    derived: "running-total",
+    sourceColumn: "Sales",
+    sourceIndex: 2,
+  });
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        addColumn: {
+          name: "Running Total",
+          derived: "running-total",
+          source: 1,
+        },
+      } as any),
+    /holds text, not numbers/,
+  );
+});
+
 test("server and add-in agree on a deterministic insight report", () => {
   const actions = ["statistics"] as const;
   const specs = {

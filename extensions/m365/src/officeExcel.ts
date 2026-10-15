@@ -521,9 +521,23 @@ export async function applyApprovedExcelPlan(
       typeof cell === "string" && cell.startsWith("=") ? `'${cell}` : cell;
 
     for (const planned of plan.actions) {
+      const resolvedSheet = resolveTarget(planned.targetSheet, planned.kind);
+      // PivotTable and table names are workbook-wide: a re-run on "(2)"/"(3)" must not collide
+      // with the earlier object and silently report "already existed".
+      const suffix = resolvedSheet.startsWith(planned.targetSheet)
+        ? resolvedSheet.slice(planned.targetSheet.length)
+        : "";
       const action = {
         ...planned,
-        targetSheet: resolveTarget(planned.targetSheet, planned.kind),
+        targetSheet: resolvedSheet,
+        name:
+          suffix &&
+          /^ \(\d+\)$/.test(suffix) &&
+          (planned.kind === "pivot-table" || planned.kind === "table")
+            ? planned.kind === "table"
+              ? `${planned.name}_${suffix.replace(/\D/g, "")}`
+              : `${planned.name}${suffix}`
+            : planned.name,
       };
       const result: ExcelActionResult = {
         kind: action.kind,

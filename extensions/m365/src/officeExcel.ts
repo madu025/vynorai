@@ -186,23 +186,69 @@ export async function inspectSelectedExcelRange(
     selected.load(["address", "rowCount", "columnCount"]);
     selected.worksheet.load("name");
     await context.sync();
-    // A single clicked cell means "this table": use the block of data around it, the way Excel's
-    // own Ctrl+A does, so nobody has to drag-select a range first.
-    if (
-      Number(selected.rowCount) * Number(selected.columnCount) === 1 &&
-      typeof selected.getSurroundingRegion === "function"
-    ) {
-      try {
-        const region = selected.getSurroundingRegion();
-        region.load(["address", "rowCount", "columnCount"]);
-        region.worksheet.load("name");
-        await context.sync();
-        if (Number(region.rowCount) >= 2 && Number(region.columnCount) >= 1) {
-          selected = region;
-          onAutoDetect?.(String(region.address));
+    // Nobody should have to drag-select first. A single clicked cell means "this table"; an empty
+    // cell, a whole column or the whole sheet means "the data on this sheet".
+    const cellCount = Number(selected.rowCount) * Number(selected.columnCount);
+    const needsDetection =
+      cellCount === 1 ||
+      cellCount > MAX_EXCEL_SELECTION_CELLS ||
+      Number(selected.columnCount) > MAX_EXCEL_SELECTION_COLUMNS;
+    if (needsDetection) {
+      const candidates: Array<() => any> = [];
+      if (
+        cellCount === 1 &&
+        typeof selected.getSurroundingRegion === "function"
+      )
+        candidates.push(() => selected.getSurroundingRegion());
+      if (typeof selected.getUsedRangeOrNullObject === "function")
+        candidates.push(() => {
+          const used = selected.getUsedRangeOrNullObject(true);
+          return used;
+        });
+      const sheetUsed = (selected.worksheet as any)?.getUsedRangeOrNullObject;
+      if (typeof sheetUsed === "function")
+        candidates.push(() => {
+          const used = (selected.worksheet as any).getUsedRangeOrNullObject(
+            true,
+          );
+          return used;
+        });
+      for (const make of candidates) {
+        try {
+          let found = make();
+          found.load(["address", "rowCount", "columnCount", "isNullObject"]);
+          await context.sync();
+          if (found.isNullObject) continue;
+          // From the top-left of the data, take the block of connected cells: the first table.
+          if (
+            Number(found.rowCount) * Number(found.columnCount) > 1 &&
+            typeof found.getCell === "function" &&
+            Number(found.rowCount) > 2
+          ) {
+            try {
+              const block = found.getCell(0, 0).getSurroundingRegion();
+              block.load(["address", "rowCount", "columnCount"]);
+              await context.sync();
+              if (Number(block.rowCount) >= 2) found = block;
+            } catch {
+              // keep the whole used range
+            }
+          }
+          if (
+            Number(found.rowCount) >= 2 &&
+            Number(found.columnCount) >= 1 &&
+            Number(found.rowCount) * Number(found.columnCount) <=
+              MAX_EXCEL_SELECTION_CELLS
+          ) {
+            found.worksheet?.load?.("name");
+            await context.sync();
+            selected = found;
+            onAutoDetect?.(String(found.address));
+            break;
+          }
+        } catch {
+          // try the next way of finding the data
         }
-      } catch {
-        // An empty cell has no table around it; the message below tells the person what to do.
       }
     }
     const rows = Number(selected.rowCount);

@@ -1790,6 +1790,7 @@ function configurePreviewTweaks(actions: any[]) {
     ["pie", "Pie"],
     ["area", "Area"],
     ["combo", "Combo"],
+    ["histogram", "Histogram"],
     ["stacked-column", "Stacked column"],
   ].map(([value, label]) => ({ value, label }));
   setTweakOptions(tweakChartType, chartTypes, chart?.chartType ?? "column");

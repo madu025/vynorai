@@ -20,7 +20,8 @@ export interface InstructionSpecs {
       | "stacked-column"
       | "stacked-bar"
       | "area"
-      | "combo";
+      | "combo"
+      | "histogram";
     extraValues?: number[];
   };
   /** Bring a column from another sheet; the pane resolves the sheet's headers. */
@@ -754,6 +755,7 @@ const CHART_TYPE_WORDS: Array<
   [RegExp, NonNullable<InstructionSpecs["chart"]>["chartType"]]
 > = [
   [/\bcombo\b/i, "combo"],
+  [/\bhistogram\b/i, "histogram"],
   [/stacked\s+(column|columns)/i, "stacked-column"],
   [/stacked\s+bar/i, "stacked-bar"],
   [/\barea\b/i, "area"],
@@ -875,24 +877,39 @@ function interpretChartAndPivot(
   const numericEntries = numeric.length
     ? numeric
     : fallbackNumeric.map((index) => ({ index, at: 0 }));
+  const requestedChartType =
+    CHART_TYPE_WORDS.find(([pattern]) => pattern.test(text))?.[1] ?? "column";
+  const chartCategoryEntry =
+    requestedChartType === "histogram"
+      ? (numeric[0] ?? categoryEntry)
+      : categoryEntry;
   if (
-    /\b(chart|graph|plot)\b/i.test(text) &&
-    categoryEntry &&
+    /\b(chart|graph|plot|histogram)\b/i.test(text) &&
+    chartCategoryEntry &&
     numericEntries.length
   ) {
     const temporal = /\b(date|day|week|month|quarter|year|period|time)\b/i.test(
-      headers[categoryEntry.index] ?? "",
+      headers[chartCategoryEntry.index] ?? "",
     );
     const chartType =
-      CHART_TYPE_WORDS.find(([pattern]) => pattern.test(text))?.[1] ??
-      (bare && temporal ? "line" : "column");
+      requestedChartType === "column"
+        ? bare && temporal
+          ? "line"
+          : "column"
+        : requestedChartType;
     const [first, ...rest] = numericEntries.map((entry) => entry.index);
+    const isHistogram = chartType === "histogram";
+    const histogramValue = numeric[0]?.index ?? first;
     result.actions.push("chart");
     result.specs.chart = {
-      category: categoryEntry.index,
-      value: first,
+      category: isHistogram ? histogramValue : categoryEntry.index,
+      value: isHistogram ? histogramValue : first,
       chartType,
-      ...(rest.length ? { extraValues: rest.slice(0, 4) } : {}),
+      ...(isHistogram
+        ? {}
+        : rest.length
+          ? { extraValues: rest.slice(0, 4) }
+          : {}),
     };
   }
   if (/\bpivot\b/i.test(text) && categoryEntry && numericEntries.length) {

@@ -24,7 +24,8 @@ export type ExcelChartType =
   | "stacked-column"
   | "stacked-bar"
   | "area"
-  | "combo";
+  | "combo"
+  | "histogram";
 export type ExcelAggregation = "sum" | "count" | "average" | "min" | "max";
 export type ExcelFilterOperator =
   | ">"
@@ -341,13 +342,18 @@ function resolveColumnSpecs(
     "stacked-bar",
     "area",
     "combo",
+    "histogram",
   ];
   if (specs.chart) {
     if (!requested.has("chart"))
       fail("EXCEL_SPEC_UNUSED", "A chart column choice needs a chart action.");
     const { category, value, chartType } = specs.chart;
     const extra = specs.chart.extraValues ?? [];
-    if (!inRange(category) || !inRange(value) || category === value)
+    if (
+      !inRange(category) ||
+      !inRange(value) ||
+      (category === value && chartType !== "histogram")
+    )
       fail("EXCEL_SPEC_INVALID", "Choose two different columns for the chart.");
     if (!chartTypes.includes(chartType))
       fail("EXCEL_SPEC_INVALID", "Unsupported chart type.");
@@ -359,6 +365,7 @@ function resolveColumnSpecs(
     if (
       !Array.isArray(extra) ||
       extra.length > 4 ||
+      (chartType === "histogram" && extra.length > 0) ||
       new Set(extra).size !== extra.length ||
       extra.some(
         (index) => !inRange(index) || index === category || index === value,

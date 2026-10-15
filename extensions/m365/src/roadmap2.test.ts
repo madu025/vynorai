@@ -475,6 +475,19 @@ test("a combo chart keeps the first series as columns and adds the others", () =
   });
 });
 
+test("a histogram uses the requested numeric column without a category", () => {
+  const chart = interpretInstruction(
+    "Create a histogram of Sales",
+    headers,
+    rows,
+  );
+  assert.deepEqual(chart.specs.chart, {
+    category: 2,
+    value: 2,
+    chartType: "histogram",
+  });
+});
+
 test("Sinhala and Singlish keywords map to the same actions", () => {
   assert.match(normalizeInstruction("Sales by Region ප්‍රස්තාරයක්"), /chart/);
   assert.match(normalizeInstruction("data pirisidu karanna"), /clean/);

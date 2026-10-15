@@ -91,6 +91,7 @@ const excelPlanSchema = z.object({
             "stacked-bar",
             "area",
             "combo",
+            "histogram",
           ]),
           extraValues: z
             .array(z.number().int().min(0).max(99))

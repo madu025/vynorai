@@ -920,7 +920,10 @@ export async function applyApprovedExcelPlan(
                   !/date|day|week|month|quarter|year|period|time/i.test(
                     String(spec.categoryColumn),
                   );
-                if (options.aggregateCharts || repeats) {
+                if (
+                  spec.chartType !== "histogram" &&
+                  (options.aggregateCharts || repeats)
+                ) {
                   // One summed row per category, written next to the chart, so a chart shows the
                   // same totals a pivot would instead of one bar per raw row.
                   try {
@@ -971,6 +974,7 @@ export async function applyApprovedExcelPlan(
                   "stacked-bar": "BarStacked",
                   area: "Area",
                   combo: "ColumnClustered",
+                  histogram: "Histogram",
                 };
                 const chart = sheet.charts.add(
                   chartTypes[spec.chartType] ?? "ColumnClustered",
@@ -979,14 +983,20 @@ export async function applyApprovedExcelPlan(
                 );
                 chart.name = action.name;
                 chart.setPosition("H3");
-                chart.title.text = `${[spec.valueColumn, ...(spec.extraValueColumns ?? [])].join(", ")} by ${spec.categoryColumn}`;
+                chart.title.text =
+                  spec.chartType === "histogram"
+                    ? `${spec.valueColumn} distribution`
+                    : `${[spec.valueColumn, ...(spec.extraValueColumns ?? [])].join(", ")} by ${spec.categoryColumn}`;
                 // Axis titles and the legend are presentation only: a host that refuses them must
                 // not fail the chart itself.
                 try {
                   const extras = spec.extraValueIndexes ?? [];
                   chart.legend.visible =
                     extras.length > 0 || spec.chartType === "pie";
-                  if (spec.chartType !== "pie") {
+                  if (
+                    spec.chartType !== "pie" &&
+                    spec.chartType !== "histogram"
+                  ) {
                     chart.axes.categoryAxis.title.text = String(
                       spec.categoryColumn,
                     );
@@ -1003,7 +1013,10 @@ export async function applyApprovedExcelPlan(
                     .getColumn(index)
                     .getOffsetRange(1, 0)
                     .getResizedRange(-1, 0);
-                chart.series.getItemAt(0).setXAxisValues(dataOf(categoryIndex));
+                if (spec.chartType !== "histogram")
+                  chart.series
+                    .getItemAt(0)
+                    .setXAxisValues(dataOf(categoryIndex));
                 extraIndexes.forEach((index, position) => {
                   const extra = chart.series.add(
                     String(

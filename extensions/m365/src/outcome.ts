@@ -167,9 +167,12 @@ export function buildOutcomes(
         ? spec.categoryIndex
         : 0;
       const slice = rows.slice(0, MAX_POINTS);
+      const isHistogram = spec.chartType === "histogram";
       item.chart = {
         type: String(spec.chartType ?? "column"),
-        categories: slice.map((row) => cell(row[categoryIndex])),
+        categories: isHistogram
+          ? slice.map((_, index) => String(index + 1))
+          : slice.map((row) => cell(row[categoryIndex])),
         series: valueIndexes.map((index: number) => ({
           name: String(headers[index] ?? `Column ${index + 1}`),
           values: slice.map((row) => numeric(row[index])),
@@ -179,13 +182,19 @@ export function buildOutcomes(
       const by = headers[categoryIndex] ?? "";
       item.title = si
         ? `${kindTitle("chart", language)}: ${names} — ${by} අනුව`
-        : `${item.chart.type[0].toUpperCase()}${item.chart.type.slice(1)} chart: ${names} by ${by}`;
+        : isHistogram
+          ? `Histogram preview: ${names}`
+          : `${item.chart.type[0].toUpperCase()}${item.chart.type.slice(1)} chart: ${names} by ${by}`;
       item.details.push(
         say(
           `Compares ${names} for each ${by}.`,
           `${by} එක් එකක් සඳහා ${names} සසඳයි.`,
         ),
       );
+      if (isHistogram)
+        item.details.push(
+          "Shows the selected numeric values; Excel will group them into histogram bins when applied.",
+        );
       if (spec.chartType === "combo")
         item.details.push(
           say(

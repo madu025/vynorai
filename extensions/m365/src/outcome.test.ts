@@ -42,6 +42,42 @@ test("other outcomes show a small table of the data they use", () => {
   assert.equal(item.table?.rows.length, 2);
 });
 
+test("a rank outcome previews real descending ranks", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "add-column",
+        targetSheet: "Sheet1_Vynor_Calc",
+        spec: {
+          columnName: "Rank of Sales",
+          derived: "rank",
+          sourceColumn: "Sales",
+          sourceIndex: 2,
+        },
+      },
+    ],
+    headers,
+    [
+      ["Jan", "North", 1200, 800],
+      ["Feb", "South", 1500, 950],
+      ["Mar", "North", 900, 600],
+    ],
+  );
+  assert.deepEqual(item.table?.headers, [
+    "Month",
+    "Region",
+    "Sales",
+    "Cost",
+    "Rank of Sales",
+  ]);
+  assert.deepEqual(item.table?.rows, [
+    ["Jan", "North", "1200", "800", "2"],
+    ["Feb", "South", "1500", "950", "1"],
+    ["Mar", "North", "900", "600", "3"],
+  ]);
+  assert.match(item.details.join("\n"), /Rank of Sales/);
+});
+
 test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
   const [item] = buildOutcomes(
     [

@@ -100,7 +100,7 @@ export interface InstructionSpecs {
     operator?: ComputeOperator;
     right?: number;
     expression?: string;
-    derived?: "running-total";
+    derived?: "running-total" | "rank";
     source?: number;
   };
 }
@@ -154,6 +154,35 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+
+  const rankMatch =
+    /\b(?:rank|ranking)\s+column\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(
+      text,
+    ) ||
+    /\b(?:rank|ranking)\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (rankMatch) {
+    const requestedSource = rankMatch[1].trim();
+    const source = findHeader(headers, requestedSource);
+    if (source < 0) {
+      result.problems.push(
+        `"${requestedSource}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    } else {
+      return {
+        actions: ["add-column"],
+        specs: {
+          addColumn: {
+            name: `Rank of ${headers[source]}`,
+            derived: "rank",
+            source,
+          },
+        },
+        problems: [],
+      };
+    }
+  }
 
   const runningTotal =
     /\b(?:running|cumulative)\s+total\b(?:\s+column)?(?:\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?)?(?:\s*\.|$)/i.exec(

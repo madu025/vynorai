@@ -1527,6 +1527,20 @@ export async function applyApprovedExcelPlan(
                       return `=SUM($${sourceLetter}$2:${sourceLetter}${rowNumber})`;
                     }
                   : undefined;
+              const rankFormula =
+                spec.derived === "rank"
+                  ? (rowNumber: number) => {
+                      if (!Number.isInteger(spec.sourceIndex))
+                        throw new Error(
+                          "The rank source is missing from the approved plan",
+                        );
+                      const sourceLetter = expressionColumnLetter(
+                        spec.sourceIndex,
+                      );
+                      const lastRow = rows.length + 1;
+                      return `=RANK.EQ(${sourceLetter}${rowNumber},$${sourceLetter}$2:$${sourceLetter}$${lastRow},0)`;
+                    }
+                  : undefined;
               const out = [
                 [...headers, spec.columnName],
                 ...rows.map((row) => [...row, ""]),
@@ -1555,12 +1569,14 @@ export async function applyApprovedExcelPlan(
                         )
                       : runningTotalFormula
                         ? runningTotalFormula(index + 2)
-                        : computedColumnFormula(
-                            index + 2,
-                            spec.leftIndex as number,
-                            spec.operator as "+",
-                            spec.rightIndex as number,
-                          ),
+                        : rankFormula
+                          ? rankFormula(index + 2)
+                          : computedColumnFormula(
+                              index + 2,
+                              spec.leftIndex as number,
+                              spec.operator as "+",
+                              spec.rightIndex as number,
+                            ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

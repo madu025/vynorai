@@ -99,7 +99,7 @@ export interface ExcelColumnSpecs {
     right?: number;
     /** A safe column expression; used instead of left/operator/right. */
     expression?: string;
-    derived?: "running-total";
+    derived?: "running-total" | "rank";
     source?: number;
   };
   summary?: {
@@ -193,7 +193,7 @@ export interface ExcelActionSpec {
   canonical?: string;
   refs?: number[];
   percentFormat?: boolean;
-  derived?: "running-total";
+  derived?: "running-total" | "rank";
   sourceColumn?: string;
   sourceIndex?: number;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
@@ -499,14 +499,14 @@ function resolveColumnSpecs(
       | undefined;
     if (derived !== undefined) {
       if (
-        derived !== "running-total" ||
+        !["running-total", "rank"].includes(derived) ||
         expression !== undefined ||
         left !== undefined ||
         right !== undefined ||
         operator !== undefined ||
         lookup !== undefined
       )
-        fail("EXCEL_SPEC_INVALID", "The running total choice is not valid.");
+        fail("EXCEL_SPEC_INVALID", "The derived column choice is not valid.");
       if (!inRange(source))
         fail(
           "EXCEL_SPEC_INVALID",

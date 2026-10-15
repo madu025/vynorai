@@ -394,9 +394,11 @@ export function buildOutcomes(
       const how =
         spec.derived === "running-total"
           ? `Running total of ${spec.sourceColumn}`
-          : spec.expression
-            ? spec.expression
-            : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+          : spec.derived === "rank"
+            ? `Rank of ${spec.sourceColumn} (highest first)`
+            : spec.expression
+              ? spec.expression
+              : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
       // Show the new column with its real values so the person sees the answer, not only a rule.
       try {
         if (spec.expression) {
@@ -433,6 +435,26 @@ export function buildOutcomes(
               ...table.rows[at].slice(0, kept),
               String(Math.round(total * 100) / 100),
             ];
+          });
+        } else if (
+          spec.derived === "rank" &&
+          spec.sourceColumn &&
+          Number.isInteger(spec.sourceIndex)
+        ) {
+          const source = spec.sourceIndex as number;
+          const values = rows.map((row) => Number(row[source]));
+          const kept = MAX_TABLE_COLUMNS - 1;
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows.slice(0, MAX_TABLE_ROWS).map((row, at) => {
+            const value = Number(row[source]);
+            if (!Number.isFinite(value))
+              return [...table.rows[at].slice(0, kept), "…"];
+            const rank =
+              1 + values.filter((candidate) => candidate > value).length;
+            return [...table.rows[at].slice(0, kept), String(rank)];
           });
         } else if (spec.leftColumn && spec.rightColumn && spec.operator) {
           const left = headers.indexOf(String(spec.leftColumn));

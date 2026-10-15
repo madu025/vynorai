@@ -639,7 +639,8 @@ apply?.addEventListener("click", async () => {
         (result) => result.status === "created" || result.status === "exists",
       )
       .map(
-        (result) => `${result.kind}: ${result.name} (${result.targetSheet})`,
+        (result) =>
+          `${result.kind}: ${result.name} (${result.targetSheet})${result.status === "exists" ? " - already existed, left unchanged (undo it first to rebuild)" : ""}`,
       );
     const created = report.results.filter(
       (result) => result.status === "created",

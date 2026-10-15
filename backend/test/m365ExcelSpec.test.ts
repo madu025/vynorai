@@ -714,6 +714,27 @@ test("server and add-in agree on a safe custom conditional formula", () => {
   );
 });
 
+test("server and add-in agree on bounded top and bottom conditional formats", () => {
+  for (const rule of ["top-n", "bottom-n"] as const) {
+    const specs = {
+      format: { conditional: [{ column: 2, rule, n: 2 }] },
+    } as any;
+    const client = createExcelPreviewPlan(input, ["format"], 500, specs);
+    const server = createServerExcelPreviewPlan(input, ["format"], 500, specs);
+    assert.equal(excelPlansMatch(client as any, server as any), true);
+    assert.deepEqual(server.actions[0].spec?.conditional, [
+      { column: "Sales", index: 2, rule, n: 2 },
+    ]);
+  }
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["format"], 500, {
+        format: { conditional: [{ column: 2, rule: "top-n", n: 101 }] },
+      } as any),
+    /rank from 1 to 100/,
+  );
+});
+
 test("server and add-in agree on an unambiguous text-date conversion", () => {
   const specs = { clean: { operations: ["text-to-date"] } };
   const actions = ["clean"] as const;

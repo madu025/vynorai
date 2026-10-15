@@ -59,6 +59,21 @@ test("format instructions become explicit options, and 'format as a table' stays
       value: 1000,
     },
   ]);
+  const ranked = interpretInstruction(
+    "Highlight the top 2 values in Sales with conditional formatting",
+    headers,
+    rows,
+  );
+  assert.deepEqual(ranked.actions, ["format"]);
+  assert.deepEqual(ranked.specs.format?.conditional, [
+    { column: 2, rule: "top-n", n: 2 },
+  ]);
+  const rankedPlan = createExcelPreviewPlan(input as any, ["format"], 500, {
+    format: ranked.specs.format,
+  });
+  assert.deepEqual(rankedPlan.actions[0].spec?.conditional, [
+    { column: "Sales", index: 2, rule: "top-n", n: 2 },
+  ]);
   const dropdown = interpretInstruction(
     "Add a drop-down for Region",
     headers,

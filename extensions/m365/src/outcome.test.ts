@@ -408,6 +408,23 @@ test("a format outcome explains a custom conditional formula", () => {
   );
 });
 
+test("a format outcome explains a top conditional format", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "format",
+        targetSheet: "Sheet1_Vynor_Format",
+        spec: {
+          conditional: [{ column: "Sales", index: 1, rule: "top-n", n: 3 }],
+        },
+      },
+    ],
+    ["Region", "Sales"],
+    [["North", 1200]],
+  );
+  assert.match(item.details.join("\n"), /Sales: highlight top values \(3\)/);
+});
+
 test("a repeat run gets a numbered sheet name that still fits Excel's limit", () => {
   const taken = new Set(["Sheet1_Vynor_Result", "Sheet1_Vynor_Result (2)"]);
   assert.equal(

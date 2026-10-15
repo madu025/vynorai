@@ -1460,6 +1460,16 @@ export async function applyApprovedExcelPlan(
                     const letter = expressionColumnLetter(rule.index);
                     custom.custom.rule.formula = `=${letter}2${rule.operator}${String(rule.value)}`;
                     custom.custom.format.fill.color = "#FFF2CC";
+                  } else if (
+                    rule.rule === "top-n" ||
+                    rule.rule === "bottom-n"
+                  ) {
+                    const topBottom = range.conditionalFormats.add("TopBottom");
+                    topBottom.topBottom.rule = {
+                      rank: rule.n,
+                      type: rule.rule === "top-n" ? "TopItems" : "BottomItems",
+                    };
+                    topBottom.topBottom.format.fill.color = "#C6EFCE";
                   } else if (rule.rule === "duplicates") {
                     const dupes = range.conditionalFormats.add("Custom");
                     const letter = expressionColumnLetter(rule.index);

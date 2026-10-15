@@ -89,6 +89,8 @@ const AGGREGATIONS: Record<string, [string, string]> = {
 
 const CONDITIONAL: Record<string, [string, string]> = {
   "custom-formula": ["custom numeric formula", "අභිරුචි සංඛ්‍යාත්මක සූත්‍රය"],
+  "top-n": ["highlight top values", "ඉහළම අගයන් උද්දීපනය"],
+  "bottom-n": ["highlight bottom values", "පහළම අගයන් උද්දීපනය"],
   "data-bars": ["data bars", "දත්ත තීරු (data bars)"],
   "color-scale": ["colour scale", "වර්ණ පරිමාණය"],
   negative: ["highlight negative values", "සෘණ අගයන් උද්දීපනය"],
@@ -264,7 +266,9 @@ export function buildOutcomes(
         item.details.push(
           entry.rule === "custom-formula"
             ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.operator}${entry.value})`
-            : `${entry.column}: ${si ? pair[1] : pair[0]}`,
+            : entry.rule === "top-n" || entry.rule === "bottom-n"
+              ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.n})`
+              : `${entry.column}: ${si ? pair[1] : pair[0]}`,
         );
         if (entry.rule === "data-bars" && entry.index < columns) {
           const max = Math.max(

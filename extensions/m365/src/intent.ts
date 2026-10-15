@@ -98,9 +98,12 @@ export interface InstructionSpecs {
         | "negative"
         | "duplicates"
         | "icon-set"
-        | "custom-formula";
+        | "custom-formula"
+        | "top-n"
+        | "bottom-n";
       operator?: ">" | ">=" | "<" | "<=" | "=" | "<>";
       value?: number;
+      n?: number;
     }>;
     validation?: Array<{
       column: number;
@@ -1067,7 +1070,11 @@ function interpretView(
   );
   if (top) {
     const column = header(top[3]);
-    if (column >= 0 && isNumericColumn(rows, column)) {
+    if (
+      column >= 0 &&
+      isNumericColumn(rows, column) &&
+      !/\bconditional\s+format(?:ting)?\b|\bformat(?:ting)?\b/i.test(text)
+    ) {
       const rule = top[1].toLowerCase() === "top" ? "top-n" : "bottom-n";
       view.highlight = { column, rule, n: Number(top[2]) };
       view.sort = { column, direction: rule === "top-n" ? "desc" : "asc" };
@@ -1442,7 +1449,7 @@ function interpretFormatAndQuality(
     result.actions.push("quality");
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -1491,6 +1498,26 @@ function interpretFormatAndQuality(
   if (negativeKeyword.test(text))
     for (const column of clauseColumns(negativeKeyword).slice(0, 3))
       conditional.push({ column, rule: "negative" });
+  const rankFormat = /\b(top|bottom)\s+(\d{1,3})\b/i.exec(text);
+  if (
+    rankFormat &&
+    /\bconditional\s+format(?:ting)?\b|\bformat(?:ting)?\b/i.test(text)
+  ) {
+    const rank = Number(rankFormat[2]);
+    const target =
+      positions
+        .filter(
+          (entry) =>
+            entry.at > rankFormat.index && isNumericColumn(rows, entry.index),
+        )
+        .map((entry) => entry.index)[0] ?? pickNumeric[0];
+    if (target !== undefined && rank >= 1 && rank <= 100)
+      conditional.push({
+        column: target,
+        rule: rankFormat[1].toLowerCase() === "top" ? "top-n" : "bottom-n",
+        n: rank,
+      });
+  }
   if (/\bhighlight\s+(?:the\s+)?duplicates?/i.test(text)) {
     const targets = mentionedLabel.length ? mentionedLabel : mentionedNumeric;
     for (const column of targets.slice(0, 2))

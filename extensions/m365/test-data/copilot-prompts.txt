@@ -75,7 +75,7 @@ Charts	chart	Make a waterfall chart of Profit
 Conditional formatting	format	Apply a color scale to Sales
 Conditional formatting	format	Add icon sets to Quantity
 Conditional formatting	format	Highlight Sales where Sales > 1000 using a custom conditional format
-Conditional formatting	-	Highlight dates in the next 30 days
+Conditional formatting	format	Highlight the top 3 values in Sales with conditional formatting
 Named ranges and slicers	named-range	Create a named range for Sales
 Named ranges and slicers	slicer	Add a slicer for Region
 Named ranges and slicers	format	Create a dependent drop-down for Status based on Region

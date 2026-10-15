@@ -224,12 +224,16 @@ after(async () => {
   if (dbm?.db)
     await new Promise<void>((resolve) => dbm.db!.close(() => resolve()));
   process.chdir(originalCwd);
-  await fs.promises.rm(tempDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 10,
-    retryDelay: 250,
-  });
+  try {
+    await fs.promises.rm(tempDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 250,
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EBUSY") throw error;
+  }
 });
 
 test("analysis requires explicit consent and never reaches the model without it", async () => {

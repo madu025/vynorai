@@ -88,9 +88,12 @@ export interface ExcelColumnSpecs {
         | "negative"
         | "duplicates"
         | "icon-set"
-        | "custom-formula";
+        | "custom-formula"
+        | "top-n"
+        | "bottom-n";
       operator?: ">" | ">=" | "<" | "<=" | "=" | "<>";
       value?: number;
+      n?: number;
     }>;
     validation?: Array<{
       column: number;
@@ -217,6 +220,7 @@ export interface ExcelActionSpec {
     rule: string;
     operator?: string;
     value?: number;
+    n?: number;
   }>;
   validation?: Array<{
     column: string;
@@ -1079,6 +1083,8 @@ function resolveColumnSpecs(
       "duplicates",
       "icon-set",
       "custom-formula",
+      "top-n",
+      "bottom-n",
     ];
     const conditional: Array<{
       column: string;
@@ -1086,6 +1092,7 @@ function resolveColumnSpecs(
       rule: string;
       operator?: string;
       value?: number;
+      n?: number;
     }> = [];
     for (const entry of options.conditional ?? []) {
       if (!inRange(entry.column) || !conditionalRules.includes(entry.rule))
@@ -1109,6 +1116,17 @@ function resolveColumnSpecs(
             "Custom conditional formats need a safe numeric comparison.",
           );
       }
+      if (entry.rule === "top-n" || entry.rule === "bottom-n") {
+        if (
+          !Number.isInteger(entry.n) ||
+          (entry.n ?? 0) < 1 ||
+          (entry.n ?? 0) > 100
+        )
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Top or bottom highlights need a rank from 1 to 100.",
+          );
+      }
       if (
         conditional.some(
           (item) => item.index === entry.column && item.rule === entry.rule,
@@ -1124,7 +1142,9 @@ function resolveColumnSpecs(
         rule: entry.rule,
         ...(entry.rule === "custom-formula"
           ? { operator: entry.operator, value: entry.value }
-          : {}),
+          : entry.rule === "top-n" || entry.rule === "bottom-n"
+            ? { n: entry.n }
+            : {}),
       });
     }
     const validation: Array<{

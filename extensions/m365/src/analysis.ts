@@ -323,9 +323,21 @@ export function createAnalysisRequest(
   summary: SchemaSummary,
   consent: boolean,
   language: "en" | "si" | "ta" = "en",
-): { summary: SchemaSummary; language: "en" | "si" | "ta"; consent: true } {
+  request = "",
+): {
+  summary: SchemaSummary;
+  language: "en" | "si" | "ta";
+  request?: string;
+  consent: true;
+} {
   if (consent !== true) throw new AnalysisConsentError();
-  return { summary, language, consent: true };
+  const wanted = request.replace(/\s+/g, " ").trim().slice(0, 300);
+  return {
+    summary,
+    language,
+    ...(wanted ? { request: wanted } : {}),
+    consent: true,
+  };
 }
 
 const ROLES: RoleHint[] = [

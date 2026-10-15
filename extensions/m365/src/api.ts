@@ -57,6 +57,7 @@ export interface M365ApiClient {
   analyzeExcel(input: {
     summary: unknown;
     language?: "en" | "si" | "ta";
+    request?: string;
     consent: true;
   }): Promise<any>;
 }

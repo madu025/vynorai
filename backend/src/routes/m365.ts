@@ -584,6 +584,7 @@ m365Router.post(
         req.body.language === "si" || req.body.language === "ta"
           ? req.body.language
           : "en",
+        typeof req.body.request === "string" ? req.body.request : "",
       );
       const analysisId = `m365a_${analysis.summaryHash.slice(0, 24)}`;
       await logSecurityEvent({

@@ -781,6 +781,64 @@ function renderInsights(result: LocalInsights) {
     insightsActions.appendChild(button);
   }
   insightsCard.hidden = result.insights.length === 0;
+  if (result.suggestions.length) hideGenericPills();
+}
+
+/** The fixed starter chips are only a fallback; real suggestions come from the data and the request. */
+function hideGenericPills() {
+  const generic = document.querySelector<HTMLElement>(
+    ".pills[aria-label='Suggestions']",
+  );
+  if (generic) generic.hidden = true;
+}
+
+/** Puts the AI recommendations in the suggestion row, worded in the person's language. */
+function renderAiSuggestions(result: AnalysisResult) {
+  if (!insightsCard || !insightsActions) return;
+  const usable = result.recommendations
+    .map((recommendation) => ({
+      recommendation,
+      text: recommendationToInstruction(recommendation),
+    }))
+    .filter((entry) => entry.text);
+  if (!usable.length) return;
+  insightsActions.textContent = "";
+  for (const { recommendation, text } of usable) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pill";
+    button.textContent = recommendation.title;
+    button.title = recommendation.reason;
+    button.addEventListener("click", () =>
+      useRecommendation(recommendation, text as string),
+    );
+    insightsActions.appendChild(button);
+  }
+  insightsCard.hidden = false;
+  hideGenericPills();
+}
+
+function useRecommendation(
+  recommendation: AnalysisResult["recommendations"][number],
+  instructionText: string,
+) {
+  if (instruction) {
+    instruction.value = instructionText;
+    instruction.dispatchEvent(new Event("input"));
+  }
+  pendingSpecs = lastSummary
+    ? recommendationToSpecs(recommendation, lastSummary)
+    : undefined;
+  currentPlan = undefined;
+  previewFingerprint = "";
+  if (apply) apply.disabled = true;
+  if (preview) preview.textContent = "No preview yet.";
+  log.record("analysis:use-recommendation", "pass", {
+    kind: recommendation.kind,
+  });
+  setStatus(
+    "Instruction set. Click Inspect and preview; nothing changes until you confirm.",
+  );
 }
 
 /** AI analysis: advisory only. Nothing here reads more than the selection or writes to Excel. */
@@ -841,22 +899,9 @@ function renderAnalysis(result: AnalysisResult) {
     const use = document.createElement("button");
     use.type = "button";
     use.textContent = localizeMessage(language, "Use this recommendation");
-    use.addEventListener("click", () => {
-      if (instruction) instruction.value = instructionText;
-      pendingSpecs = lastSummary
-        ? recommendationToSpecs(recommendation, lastSummary)
-        : undefined;
-      currentPlan = undefined;
-      previewFingerprint = "";
-      if (apply) apply.disabled = true;
-      if (preview) preview.textContent = "No preview yet.";
-      log.record("analysis:use-recommendation", "pass", {
-        kind: recommendation.kind,
-      });
-      setStatus(
-        "Instruction set. Click Inspect and preview; nothing changes until you confirm.",
-      );
-    });
+    use.addEventListener("click", () =>
+      useRecommendation(recommendation, instructionText),
+    );
     item.appendChild(use);
   }
 }
@@ -910,6 +955,7 @@ consentSend?.addEventListener("click", async () => {
       pendingSummary,
       consentCheck?.checked === true,
       responseLanguage(instruction?.value || "", language),
+      instruction?.value || "",
     );
   } catch (error) {
     if (error instanceof AnalysisConsentError)
@@ -928,6 +974,7 @@ consentSend?.addEventListener("click", async () => {
     });
     resetAnalysisConsent();
     renderAnalysis(result);
+    renderAiSuggestions(result);
     setStatus("Analysis ready. It is advice only; nothing has changed.");
   } catch (error) {
     resetAnalysisConsent();

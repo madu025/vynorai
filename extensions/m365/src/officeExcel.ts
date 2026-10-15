@@ -312,6 +312,37 @@ export async function applyApprovedExcelPlan(
     const results: ExcelActionResult[] = [];
     let normalizedSource: any | undefined;
 
+    // A second run must produce a visible new result, not silently reuse last time's sheet.
+    const existingSheets = context.workbook.worksheets;
+    existingSheets.load?.("items/name");
+    await context.sync();
+    const takenNames = new Set<string>(
+      (existingSheets.items ?? []).map((sheet: any) => String(sheet.name)),
+    );
+    const resolvedTargets = new Map<string, string>();
+    const resolveTarget = (name: string, kind: string): string => {
+      if (kind === "table" || name === plan.worksheetName) return name;
+      const known = resolvedTargets.get(name);
+      if (known) return known;
+      let chosen = name;
+      if (takenNames.has(name)) {
+        const tag = name.match(/_Vynor_[A-Za-z]+$/)?.[0] ?? "";
+        const stem = name.slice(0, name.length - tag.length);
+        for (let attempt = 2; attempt < 100; attempt += 1) {
+          const suffix = ` (${attempt})`;
+          const room = MAX_SHEET_NAME - tag.length - suffix.length;
+          const candidate = `${stem.slice(0, Math.max(1, room))}${tag}${suffix}`;
+          if (!takenNames.has(candidate)) {
+            chosen = candidate;
+            break;
+          }
+        }
+      }
+      takenNames.add(chosen);
+      resolvedTargets.set(name, chosen);
+      return chosen;
+    };
+
     const actionSourceRange = () => {
       if (!plan.normalization) return sourceRange();
       if (!normalizedSource)
@@ -373,7 +404,11 @@ export async function applyApprovedExcelPlan(
     const literal = (cell: any) =>
       typeof cell === "string" && cell.startsWith("=") ? `'${cell}` : cell;
 
-    for (const action of plan.actions) {
+    for (const planned of plan.actions) {
+      const action = {
+        ...planned,
+        targetSheet: resolveTarget(planned.targetSheet, planned.kind),
+      };
       const result: ExcelActionResult = {
         kind: action.kind,
         name: action.name,
@@ -954,7 +989,7 @@ export async function inspectWorkbookOverview(
 }
 
 const CREATED_SHEET =
-  /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|Format|Report|View)$/;
+  /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|Format|Report|View)(?: (d{1,2}))?$/;
 const CREATED_TABLE = /^[A-Za-z0-9_]{1,18}_Vynor_table$/;
 
 export interface RollbackReport {

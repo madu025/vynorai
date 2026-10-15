@@ -4,6 +4,7 @@ import {
   formatFormulaInspection,
   inspectFormulas,
   isFormulaInspectionRequest,
+  isFormulaRepairRequest,
 } from "./formulaInspector.js";
 
 test("formula inspector reports references, calculation errors and a direct self reference", () => {
@@ -55,7 +56,11 @@ test("formula inspector gives a read-only #DIV/0! repair candidate for a safe fo
     /Suggested repair: =IFERROR\(A2\/B2,""\)/,
   );
   assert.match(report.items[0].explanation, /zero or blank divisor/);
-  assert.equal(isFormulaInspectionRequest("Repair this #DIV/0! formula"), true);
+  assert.equal(isFormulaRepairRequest("Repair this #DIV/0! formula"), true);
+  assert.equal(
+    isFormulaInspectionRequest("Repair this #DIV/0! formula"),
+    false,
+  );
 });
 
 test("formula inspector refuses to guess a deleted #REF! reference", () => {

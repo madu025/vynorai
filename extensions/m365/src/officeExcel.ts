@@ -1363,7 +1363,8 @@ export async function applyApprovedExcelPlan(
             }
           } else if (
             action.kind === "quality" &&
-            action.spec?.qualityMode === "formula"
+            (action.spec?.qualityMode === "formula" ||
+              action.spec?.qualityMode === "repair")
           ) {
             if (sheetExists) {
               result.status = "exists";
@@ -1377,57 +1378,83 @@ export async function applyApprovedExcelPlan(
                 formulas: formulaRange.formulas,
                 values: formulaRange.values,
               });
-              const rows: any[][] = [
-                ["Formula audit", "Value"],
-                ["Formula cells", report.formulaCellCount],
-                ["Error cells", report.errorCellCount],
-                [
-                  "Possible direct circular references",
-                  report.possibleCircularReferenceCount,
-                ],
-                [],
-                [
-                  "Address",
-                  "Formula",
-                  "References",
-                  "Errors",
-                  "Possible circular reference",
-                  "Explanation",
-                  "Repair guidance",
-                ],
-                ...report.items
-                  .slice(0, 500)
-                  .map((item) => [
-                    item.address,
-                    literal(item.formula),
-                    item.references.join(", "),
-                    item.errors.join(", "),
-                    item.possibleCircularReference ? "Yes" : "No",
-                    item.explanation,
-                    item.repair
-                      ? `${item.repair.candidate ? `Suggested repair: ${item.repair.candidate}. ` : ""}${item.repair.guidance}`
-                      : "",
-                  ]),
-              ];
-              if (report.items.length > 500)
-                rows.push([
-                  "Note",
-                  `Only the first 500 of ${report.items.length} formula cells are listed.`,
-                ]);
-              const width = Math.max(...rows.map((row) => row.length), 1);
-              const padded = rows.map((row) => {
-                const cells = row.map((cell) => literal(cell));
-                while (cells.length < width) cells.push("");
-                return cells;
-              });
-              sheet.getRangeByIndexes(0, 0, padded.length, width).values =
-                padded;
-              sheet.getRangeByIndexes(0, 0, 1, width).format.font.bold = true;
-              sheet.getRangeByIndexes(5, 0, 1, width).format.font.bold = true;
-              sheet
-                .getRangeByIndexes(0, 0, padded.length, width)
-                .format.autofitColumns();
-              await context.sync();
+              if (action.spec?.qualityMode === "repair") {
+                const formulas = formulaRange.formulas as any[][];
+                const values = formulaRange.values as any[][];
+                let itemIndex = 0;
+                const repaired = formulas.map((row, rowIndex) =>
+                  row.map((formula, columnIndex) => {
+                    if (
+                      typeof formula === "string" &&
+                      formula.startsWith("=")
+                    ) {
+                      const item = report.items[itemIndex++];
+                      return item?.repair?.candidate ?? formula;
+                    }
+                    return literal(values[rowIndex]?.[columnIndex]);
+                  }),
+                );
+                const repairedRange = sheet.getRangeByIndexes(
+                  0,
+                  0,
+                  repaired.length,
+                  repaired[0]?.length ?? 0,
+                );
+                repairedRange.formulas = repaired;
+                await context.sync();
+              } else {
+                const rows: any[][] = [
+                  ["Formula audit", "Value"],
+                  ["Formula cells", report.formulaCellCount],
+                  ["Error cells", report.errorCellCount],
+                  [
+                    "Possible direct circular references",
+                    report.possibleCircularReferenceCount,
+                  ],
+                  [],
+                  [
+                    "Address",
+                    "Formula",
+                    "References",
+                    "Errors",
+                    "Possible circular reference",
+                    "Explanation",
+                    "Repair guidance",
+                  ],
+                  ...report.items
+                    .slice(0, 500)
+                    .map((item) => [
+                      item.address,
+                      literal(item.formula),
+                      item.references.join(", "),
+                      item.errors.join(", "),
+                      item.possibleCircularReference ? "Yes" : "No",
+                      item.explanation,
+                      item.repair
+                        ? `${item.repair.candidate ? `Suggested repair: ${item.repair.candidate}. ` : ""}${item.repair.guidance}`
+                        : "",
+                    ]),
+                ];
+                if (report.items.length > 500)
+                  rows.push([
+                    "Note",
+                    `Only the first 500 of ${report.items.length} formula cells are listed.`,
+                  ]);
+                const width = Math.max(...rows.map((row) => row.length), 1);
+                const padded = rows.map((row) => {
+                  const cells = row.map((cell) => literal(cell));
+                  while (cells.length < width) cells.push("");
+                  return cells;
+                });
+                sheet.getRangeByIndexes(0, 0, padded.length, width).values =
+                  padded;
+                sheet.getRangeByIndexes(0, 0, 1, width).format.font.bold = true;
+                sheet.getRangeByIndexes(5, 0, 1, width).format.font.bold = true;
+                sheet
+                  .getRangeByIndexes(0, 0, padded.length, width)
+                  .format.autofitColumns();
+                await context.sync();
+              }
             }
           } else if (action.kind === "quality") {
             if (plan.normalization)

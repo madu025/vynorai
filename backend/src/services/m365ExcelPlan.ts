@@ -58,7 +58,7 @@ export interface ExcelColumnSpecs {
     values: number[];
     aggregation?: ExcelAggregation;
   };
-  quality?: { mode?: "data" | "formula" };
+  quality?: { mode?: "data" | "formula" | "repair" };
   namedRange?: { source: number };
   slicer?: { source: number };
   chart?: {
@@ -187,7 +187,7 @@ export interface ExcelActionSpec {
     values: Array<{ column: string; index: number }>;
     aggregation: ExcelAggregation;
   };
-  qualityMode?: "data" | "formula";
+  qualityMode?: "data" | "formula" | "repair";
   categoryColumn?: string;
   categoryIndex?: number;
   valueColumn?: string;
@@ -395,7 +395,7 @@ function resolveColumnSpecs(
     if (!requested.has("quality"))
       fail("EXCEL_SPEC_UNUSED", "Quality options need the quality action.");
     const mode = specs.quality.mode ?? "data";
-    if (mode !== "data" && mode !== "formula")
+    if (mode !== "data" && mode !== "formula" && mode !== "repair")
       fail("EXCEL_SPEC_INVALID", "Choose a valid quality report mode.");
     resolved.quality = { qualityMode: mode };
   }

@@ -81,6 +81,7 @@ import {
   formatFormulaInspection,
   inspectFormulas,
   isFormulaInspectionRequest,
+  isFormulaRepairRequest,
 } from "./formulaInspector.js";
 
 declare global {
@@ -526,7 +527,10 @@ inspect?.addEventListener("click", async () => {
     lastConversationRequest = instructionText;
   }
   try {
-    if (isFormulaInspectionRequest(instructionText)) {
+    if (
+      isFormulaInspectionRequest(instructionText) &&
+      !isFormulaRepairRequest(instructionText)
+    ) {
       setStatus("Inspecting selected formulas locally...");
       const report = await log.step(
         "excel:inspect-formulas",

@@ -815,3 +815,26 @@ test("formula quality audit writes a report sheet and never changes source formu
   assert.ok(excel.calls.some((call) => call.includes("mark ")));
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
+
+test("formula repair writes safe candidates to a new copy and leaves source unchanged", async () => {
+  const excel = fakeWorkbook([["Value"], ["=A2/#DIV/0!"]]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["quality"], 500, {
+    quality: { mode: "repair" },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created", JSON.stringify(report));
+  assert.ok(
+    excel.formulaWrites.some((entry) =>
+      JSON.stringify(entry.values).includes("=IFERROR(A2/#DIV/0!,"),
+    ),
+    JSON.stringify(excel.formulaWrites),
+  );
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});

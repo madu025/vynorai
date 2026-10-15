@@ -86,7 +86,7 @@ export interface InstructionSpecs {
     values: number[];
     aggregation?: "sum" | "count" | "average" | "min" | "max";
   };
-  quality?: { mode?: "data" | "formula" };
+  quality?: { mode?: "data" | "formula" | "repair" };
   clean?: {
     operations: CleanOperation[];
     fillBlanks?: string | number;
@@ -557,7 +557,14 @@ export function interpretInstruction(
   }
 
   const operations = new Set<CleanOperation>();
-  if (/\b(clean|tidy|fix)\b|\btrim\b|\bwhitespace\b/i.test(text))
+  const formulaRepairIntent =
+    /\b(?:repair|fix|correct|replace)\b[^.\n]{0,80}(?:formulas?|#REF!|#DIV\/0!)/i.test(
+      text,
+    );
+  if (
+    /\b(clean|tidy)\b|\btrim\b|\bwhitespace\b/i.test(text) ||
+    (/\bfix\b/i.test(text) && !formulaRepairIntent)
+  )
     operations.add("trim");
   if (/\bclean\b|\btidy\b/i.test(text)) operations.add("text-to-number");
   if (
@@ -1484,17 +1491,24 @@ function interpretFormatAndQuality(
   rows: Cell[][],
   result: InterpretedInstruction,
 ) {
+  const formulaRepair =
+    /\b(?:repair|fix|correct|replace)\b[^.\n]{0,80}(?:formulas?|#REF!|#DIV\/0!)/i.test(
+      text,
+    );
   const formulaAudit =
+    formulaRepair ||
     /\b(?:audit|inspect|check|find|identify)\b[^.\n]{0,80}\bformulas?\b|\bformulas?\b[^.\n]{0,80}\b(?:errors?|circular|references?)\b/i.test(
       text,
     );
   if (
+    formulaAudit ||
     /\b(?:data\s+)?quality\b|\bhealth\s*check\b|\bfind\s+(?:problems|issues|errors)\b|\bcheck\s+(?:the\s+)?data\b|\baudit\b/i.test(
       text,
     )
   ) {
     result.actions.push("quality");
-    if (formulaAudit) result.specs.quality = { mode: "formula" };
+    if (formulaAudit)
+      result.specs.quality = { mode: formulaRepair ? "repair" : "formula" };
   }
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =

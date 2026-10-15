@@ -1005,6 +1005,15 @@ test("server and add-in agree on a formula quality audit and reject bad modes", 
   );
 });
 
+test("server and add-in agree on a safe formula repair copy mode", () => {
+  const specs = { quality: { mode: "repair" as const } };
+  const actions = ["quality"] as const;
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const client = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(client as any, server as any), true);
+  assert.deepEqual(server.actions[0].spec, { qualityMode: "repair" });
+});
+
 test("the server refuses unsafe computed columns and unknown clean steps", () => {
   const call = (specs: unknown, actions: string[]) =>
     createServerExcelPreviewPlan(input, actions, 500, specs as any);

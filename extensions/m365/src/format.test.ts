@@ -211,6 +211,16 @@ test("formula audit requests use the formula quality mode", () => {
   assert.deepEqual(parsed.specs.quality, { mode: "formula" });
 });
 
+test("formula repair requests use the reviewed repair quality mode", () => {
+  const parsed = interpretInstruction(
+    "Fix divide by zero errors in the selected formulas",
+    ["Customer", "Sales"],
+    [["Asha", 10]],
+  );
+  assert.deepEqual(parsed.actions, ["quality"]);
+  assert.deepEqual(parsed.specs.quality, { mode: "repair" });
+});
+
 test("quality requests are recognised", () => {
   for (const text of [
     "Check the data quality",

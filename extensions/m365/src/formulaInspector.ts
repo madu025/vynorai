@@ -164,10 +164,21 @@ function repairSuggestion(
   };
 }
 
-/** True only for an explicit formula-inspection request; ordinary questions remain local data questions. */
-export function isFormulaInspectionRequest(instruction: string): boolean {
-  return /\b(?:inspect|explain|check|find)\b.*\bformulas?\b|\bformula\s+(?:errors?|check|inspect|explain)\b|\b(?:repair|fix)\b.*(?:#REF!|#DIV\/0!|formulas?)/i.test(
+/** True for an explicit repair request that should produce a reviewed copy. */
+export function isFormulaRepairRequest(instruction: string): boolean {
+  return /\b(?:repair|fix|correct|replace)\b[^.\n]{0,80}(?:formulas?|#REF!|#DIV\/0!)/i.test(
     instruction,
+  );
+}
+
+/** True only for an explicit read-only formula-inspection request. */
+export function isFormulaInspectionRequest(instruction: string): boolean {
+  return (
+    !isFormulaRepairRequest(instruction) &&
+    (/\b(?:inspect|explain|check|find)\b.*\bformulas?\b|\bformula\s+(?:errors?|check|inspect|explain)\b/i.test(
+      instruction,
+    ) ||
+      /\b(?:#REF!|#DIV\/0!)\b.*\bformula\b/i.test(instruction))
   );
 }
 

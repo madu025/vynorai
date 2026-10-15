@@ -1051,6 +1051,13 @@ export function buildOutcomes(
             "නව වාර්තා පත්‍රිකාවක සූත්‍ර කොටු, දෝෂ, යොමු සහ සෘජු වටකුරු යොමු පරීක්ෂා කරයි.",
           ),
         );
+      if (spec.qualityMode === "repair")
+        item.details.push(
+          say(
+            "Creates a repaired copy for safe formula errors such as #DIV/0!; unresolved #REF! formulas remain unchanged for manual review.",
+            "#DIV/0! වැනි ආරක්ෂිත සූත්‍ර දෝෂ සඳහා පිටපතක් සකසයි; විසඳිය නොහැකි #REF! සූත්‍ර අතින් පරීක්ෂා කිරීමට එසේම තබයි.",
+          ),
+        );
       item.details.push(
         say(
           "Checks blanks, duplicates, mixed text and numbers, extra spaces and outliers.",

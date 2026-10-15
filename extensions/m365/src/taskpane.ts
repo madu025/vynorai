@@ -122,6 +122,7 @@ let currentSourceSheet = "";
 let currentRangeAddress = "";
 let lastDoneSentence = "";
 let previewSpecs: ExcelColumnSpecs | undefined;
+let followUpAggregate = false;
 let lastAppliedSpecs: ExcelColumnSpecs | undefined;
 /** Set when the table was found around a single clicked cell instead of a dragged selection. */
 let autoDetectedAddress = "";
@@ -544,6 +545,7 @@ inspect?.addEventListener("click", async () => {
       hadEarlier: Boolean(lastAppliedSpecs?.pivot),
     });
     specs = followed.specs;
+    followUpAggregate = followed.applied;
     previewSpecs = specs;
     if (lookupWish) {
       try {
@@ -743,6 +745,7 @@ apply?.addEventListener("click", async () => {
             expectedSourceFingerprint: expectedFingerprint,
             supportsExcelApi,
             requirements: ACTION_REQUIREMENTS,
+            aggregateCharts: followUpAggregate,
             onAction: (result) =>
               log.record(
                 `excel:action:${result.kind}`,

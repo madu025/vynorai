@@ -407,6 +407,8 @@ export async function applyApprovedExcelPlan(
   options: {
     expectedSourceFingerprint: string;
     supportsExcelApi?: (version: string) => boolean;
+    /** Chart one bar per category (summed) instead of one per source row, e.g. after a pivot. */
+    aggregateCharts?: boolean;
     requirements?: Record<string, string>;
     onAction?: (result: ExcelActionResult) => void;
   },
@@ -610,7 +612,46 @@ export async function applyApprovedExcelPlan(
                   throw new Error(
                     "skipped_unsupported: column-aware charts need ExcelApi 1.7",
                   );
-                const source = actionSourceRange();
+                let source = actionSourceRange();
+                let categoryIndex = spec.categoryIndex as number;
+                let valueIndex = spec.valueIndex as number;
+                let extraIndexes: number[] = spec.extraValueIndexes ?? [];
+                let secondary: number[] = spec.secondaryIndexes ?? [];
+                if (options.aggregateCharts) {
+                  // One summed row per category, written next to the chart, so a chart "for the
+                  // pivot" shows the same totals as the pivot instead of the raw rows.
+                  const { headers, rows } = splitHeader(
+                    await readSourceValues(),
+                  );
+                  const wanted = [valueIndex, ...extraIndexes];
+                  const totals = new Map<string, number[]>();
+                  for (const row of rows) {
+                    const key = String(row[categoryIndex] ?? "");
+                    const sums = totals.get(key) ?? wanted.map(() => 0);
+                    wanted.forEach((index, at) => {
+                      const n = Number(row[index]);
+                      if (Number.isFinite(n)) sums[at] += n;
+                    });
+                    totals.set(key, sums);
+                  }
+                  const out: (string | number)[][] = [
+                    [headers[categoryIndex], ...wanted.map((i) => headers[i])],
+                    ...[...totals].map(([key, sums]) => [key, ...sums]),
+                  ];
+                  const block = sheet.getRangeByIndexes(
+                    19,
+                    0,
+                    out.length,
+                    out[0].length,
+                  );
+                  block.values = out;
+                  await context.sync();
+                  source = block;
+                  secondary = secondary.map((i) => wanted.indexOf(i) + 1);
+                  categoryIndex = 0;
+                  valueIndex = 1;
+                  extraIndexes = extraIndexes.map((_, at) => at + 2);
+                }
                 const chartTypes: Record<string, string> = {
                   column: "ColumnClustered",
                   line: "Line",
@@ -622,7 +663,7 @@ export async function applyApprovedExcelPlan(
                 };
                 const chart = sheet.charts.add(
                   chartTypes[spec.chartType] ?? "ColumnClustered",
-                  source.getColumn(spec.valueIndex),
+                  source.getColumn(valueIndex),
                   "Columns",
                 );
                 chart.name = action.name;
@@ -651,10 +692,7 @@ export async function applyApprovedExcelPlan(
                     .getColumn(index)
                     .getOffsetRange(1, 0)
                     .getResizedRange(-1, 0);
-                chart.series
-                  .getItemAt(0)
-                  .setXAxisValues(dataOf(spec.categoryIndex));
-                const extraIndexes: number[] = spec.extraValueIndexes ?? [];
+                chart.series.getItemAt(0).setXAxisValues(dataOf(categoryIndex));
                 extraIndexes.forEach((index, position) => {
                   const extra = chart.series.add(
                     String(
@@ -663,9 +701,9 @@ export async function applyApprovedExcelPlan(
                     ),
                   );
                   extra.setValues(dataOf(index));
-                  extra.setXAxisValues(dataOf(spec.categoryIndex));
+                  extra.setXAxisValues(dataOf(categoryIndex));
                   // A series on a very different scale gets its own axis so it stays readable.
-                  if ((spec.secondaryIndexes ?? []).includes(index)) {
+                  if (secondary.includes(index)) {
                     try {
                       extra.axisGroup = "Secondary";
                     } catch {

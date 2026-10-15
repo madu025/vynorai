@@ -179,9 +179,15 @@ export interface ExcelColumnSpecs {
     right?: number;
     /** A safe column expression; used instead of left/operator/right. */
     expression?: string;
-    derived?: "running-total" | "rank" | "percent-change" | "moving-average";
+    derived?:
+      | "running-total"
+      | "rank"
+      | "percent-change"
+      | "moving-average"
+      | "yoy";
     source?: number;
     window?: number;
+    lag?: number;
     /** Bring a column in from another sheet by matching a key column. */
     lookup?: {
       sheet: string;
@@ -286,10 +292,16 @@ export interface ExcelActionSpec {
   canonical?: string;
   refs?: number[];
   percentFormat?: boolean;
-  derived?: "running-total" | "rank" | "percent-change" | "moving-average";
+  derived?:
+    | "running-total"
+    | "rank"
+    | "percent-change"
+    | "moving-average"
+    | "yoy";
   sourceColumn?: string;
   sourceIndex?: number;
   window?: number;
+  lag?: number;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
@@ -570,8 +582,17 @@ function resolveColumnSpecs(
         "EXCEL_SPEC_UNUSED",
         "A computed column needs the add-column action.",
       );
-    const { name, left, operator, right, expression, derived, source, window } =
-      specs.addColumn;
+    const {
+      name,
+      left,
+      operator,
+      right,
+      expression,
+      derived,
+      source,
+      window,
+      lag,
+    } = specs.addColumn;
     if (
       typeof name !== "string" ||
       name.trim().length === 0 ||
@@ -593,9 +614,13 @@ function resolveColumnSpecs(
       | undefined;
     if (derived !== undefined) {
       if (
-        !["running-total", "rank", "percent-change", "moving-average"].includes(
-          derived,
-        ) ||
+        ![
+          "running-total",
+          "rank",
+          "percent-change",
+          "moving-average",
+          "yoy",
+        ].includes(derived) ||
         expression !== undefined ||
         left !== undefined ||
         right !== undefined ||
@@ -619,6 +644,8 @@ function resolveColumnSpecs(
           "EXCEL_SPEC_INVALID",
           "Choose a moving-average window from 2 to 12.",
         );
+      if (derived === "yoy" && (!Number.isInteger(lag) || lag !== 12))
+        fail("EXCEL_SPEC_INVALID", "YoY change requires a 12-period lag.");
       if (!numeric(sourceIndex))
         fail(
           "EXCEL_SPEC_VALUE_NOT_NUMERIC",
@@ -630,7 +657,10 @@ function resolveColumnSpecs(
         sourceColumn: headers[sourceIndex],
         sourceIndex,
         ...(derived === "moving-average" ? { window: window as number } : {}),
-        ...(derived === "percent-change" ? { percentFormat: true } : {}),
+        ...(derived === "yoy" ? { lag: lag as number } : {}),
+        ...(derived === "percent-change" || derived === "yoy"
+          ? { percentFormat: true }
+          : {}),
       };
     } else if (lookup !== undefined) {
       if (

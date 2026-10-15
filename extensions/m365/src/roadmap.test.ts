@@ -218,6 +218,20 @@ test("moving average resolves a bounded numeric window and source", () => {
   assert.match(tooWide.problems[0], /window from 2 to 12/);
 });
 
+test("YoY change resolves a numeric source with a fixed 12-period lag", () => {
+  const asked = interpretInstruction("Add YoY change for Sales", headers);
+  assert.deepEqual(asked.actions, ["add-column"]);
+  assert.deepEqual(asked.specs.addColumn, {
+    name: "YoY Change of Sales",
+    derived: "yoy",
+    source: 2,
+    lag: 12,
+  });
+  const unknown = interpretInstruction("Add YoY change for Revenue", headers);
+  assert.deepEqual(unknown.actions, []);
+  assert.match(unknown.problems[0], /not a column/);
+});
+
 test("plans for clean and computed column carry validated specs and their own result sheets", () => {
   const plan = createExcelPreviewPlan(
     input as any,
@@ -497,6 +511,56 @@ test("apply writes moving-average formulas to a new result sheet", async () => {
     ["=AVERAGE(C2:C4)"],
     ["=AVERAGE(C3:C5)"],
   ]);
+  assert.equal(report.sourceUnchangedAfterApply, true);
+});
+
+test("apply writes YoY formulas and percent formatting to a new result sheet", async () => {
+  const values = [
+    headers,
+    ...Array.from({ length: 13 }, (_, index) => [
+      `M${index + 1}`,
+      "North",
+      100 + index * 10,
+      50,
+    ]),
+  ];
+  const yoyInput = {
+    ...input,
+    address: "Sheet1!A1:D14",
+    values,
+  };
+  const plan = createExcelPreviewPlan(
+    yoyInput as any,
+    ["add-column"],
+    undefined,
+    {
+      addColumn: {
+        name: "YoY Change of Sales",
+        derived: "yoy",
+        source: 2,
+        lag: 12,
+      },
+    },
+  );
+  const excel = fakeWorkbook(values);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(
+    excel.written["Calc of Sheet1!1,4,13,1.formulas"].slice(0, 12),
+    Array.from({ length: 12 }, () => ['=""']),
+  );
+  assert.deepEqual(excel.written["Calc of Sheet1!1,4,13,1.formulas"][12], [
+    '=IFERROR((C14-C2)/C2,"")',
+  ]);
+  assert.deepEqual(
+    excel.written["Calc of Sheet1!1,4,13,1.numberFormat"],
+    Array.from({ length: 13 }, () => ["0.0%"]),
+  );
   assert.equal(report.sourceUnchangedAfterApply, true);
 });
 

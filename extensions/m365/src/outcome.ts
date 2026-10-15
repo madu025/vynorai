@@ -400,9 +400,11 @@ export function buildOutcomes(
               ? `Percent change of ${spec.sourceColumn} (row over row)`
               : spec.derived === "moving-average"
                 ? `${spec.window}-period moving average of ${spec.sourceColumn}`
-                : spec.expression
-                  ? spec.expression
-                  : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+                : spec.derived === "yoy"
+                  ? `YoY change of ${spec.sourceColumn}`
+                  : spec.expression
+                    ? spec.expression
+                    : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
       // Show the new column with its real values so the person sees the answer, not only a rule.
       try {
         if (spec.expression) {
@@ -511,6 +513,34 @@ export function buildOutcomes(
             return [
               ...table.rows[at].slice(0, kept),
               String(Math.round(average * 100) / 100),
+            ];
+          });
+        } else if (
+          spec.derived === "yoy" &&
+          spec.sourceColumn &&
+          Number.isInteger(spec.sourceIndex) &&
+          Number.isInteger(spec.lag)
+        ) {
+          const source = spec.sourceIndex as number;
+          const lag = spec.lag as number;
+          const kept = MAX_TABLE_COLUMNS - 1;
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows.slice(0, MAX_TABLE_ROWS).map((row, at) => {
+            if (at < lag) return [...table.rows[at].slice(0, kept), "—"];
+            const current = Number(row[source]);
+            const previous = Number(rows[at - lag][source]);
+            if (
+              !Number.isFinite(current) ||
+              !Number.isFinite(previous) ||
+              previous === 0
+            )
+              return [...table.rows[at].slice(0, kept), "…"];
+            return [
+              ...table.rows[at].slice(0, kept),
+              `${Math.round(((current - previous) / previous) * 1000) / 10}%`,
             ];
           });
         } else if (spec.leftColumn && spec.rightColumn && spec.operator) {

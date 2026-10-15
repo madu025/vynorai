@@ -139,6 +139,35 @@ test("a moving-average outcome previews only complete windows", () => {
   assert.match(item.details.join("\n"), /moving average of Sales/);
 });
 
+test("a YoY outcome keeps incomplete 12-period history blank", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "add-column",
+        targetSheet: "Sheet1_Vynor_Calc",
+        spec: {
+          columnName: "YoY Change of Sales",
+          derived: "yoy",
+          sourceColumn: "Sales",
+          sourceIndex: 2,
+          lag: 12,
+        },
+      },
+    ],
+    headers,
+    [
+      ["Jan", "North", 100, 80],
+      ["Feb", "South", 125, 90],
+      ["Mar", "North", 100, 70],
+    ],
+  );
+  assert.deepEqual(
+    item.table?.rows.map((row) => row.at(-1)),
+    ["—", "—", "—"],
+  );
+  assert.match(item.details.join("\n"), /YoY change of Sales/);
+});
+
 test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
   const [item] = buildOutcomes(
     [

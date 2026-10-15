@@ -1555,6 +1555,24 @@ export async function applyApprovedExcelPlan(
                       return `=IFERROR((${sourceLetter}${rowNumber}-${sourceLetter}${rowNumber - 1})/${sourceLetter}${rowNumber - 1},"")`;
                     }
                   : undefined;
+              const yoyFormula =
+                spec.derived === "yoy"
+                  ? (rowNumber: number) => {
+                      if (
+                        !Number.isInteger(spec.sourceIndex) ||
+                        !Number.isInteger(spec.lag)
+                      )
+                        throw new Error(
+                          "The YoY source or lag is missing from the approved plan",
+                        );
+                      if (rowNumber < spec.lag + 2) return '=""';
+                      const sourceLetter = expressionColumnLetter(
+                        spec.sourceIndex,
+                      );
+                      const previousRow = rowNumber - spec.lag;
+                      return `=IFERROR((${sourceLetter}${rowNumber}-${sourceLetter}${previousRow})/${sourceLetter}${previousRow},"")`;
+                    }
+                  : undefined;
               const movingAverageFormula =
                 spec.derived === "moving-average"
                   ? (rowNumber: number) => {
@@ -1606,14 +1624,16 @@ export async function applyApprovedExcelPlan(
                           ? rankFormula(index + 2)
                           : percentChangeFormula
                             ? percentChangeFormula(index + 2)
-                            : movingAverageFormula
-                              ? movingAverageFormula(index + 2)
-                              : computedColumnFormula(
-                                  index + 2,
-                                  spec.leftIndex as number,
-                                  spec.operator as "+",
-                                  spec.rightIndex as number,
-                                ),
+                            : yoyFormula
+                              ? yoyFormula(index + 2)
+                              : movingAverageFormula
+                                ? movingAverageFormula(index + 2)
+                                : computedColumnFormula(
+                                    index + 2,
+                                    spec.leftIndex as number,
+                                    spec.operator as "+",
+                                    spec.rightIndex as number,
+                                  ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

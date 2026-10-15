@@ -270,10 +270,17 @@ const excelPlanSchema = z.object({
           right: z.number().int().min(0).max(99).optional(),
           expression: z.string().min(1).max(240).optional(),
           derived: z
-            .enum(["running-total", "rank", "percent-change", "moving-average"])
+            .enum([
+              "running-total",
+              "rank",
+              "percent-change",
+              "moving-average",
+              "yoy",
+            ])
             .optional(),
           source: z.number().int().min(0).max(99).optional(),
           window: z.number().int().min(2).max(12).optional(),
+          lag: z.number().int().min(12).max(12).optional(),
           lookup: z
             .object({
               sheet: z.string().min(1).max(31),

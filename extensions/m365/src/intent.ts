@@ -100,9 +100,15 @@ export interface InstructionSpecs {
     operator?: ComputeOperator;
     right?: number;
     expression?: string;
-    derived?: "running-total" | "rank" | "percent-change" | "moving-average";
+    derived?:
+      | "running-total"
+      | "rank"
+      | "percent-change"
+      | "moving-average"
+      | "yoy";
     source?: number;
     window?: number;
+    lag?: number;
   };
 }
 
@@ -155,6 +161,33 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+
+  const yoyMatch =
+    /\b(?:yoy|year[-\s]?over[-\s]?year)\s+(?:change(?:\s+column)?)?\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (yoyMatch) {
+    const requestedSource = yoyMatch[1].trim();
+    const source = findHeader(headers, requestedSource);
+    if (source < 0) {
+      result.problems.push(
+        `"${requestedSource}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    } else {
+      return {
+        actions: ["add-column"],
+        specs: {
+          addColumn: {
+            name: `YoY Change of ${headers[source]}`,
+            derived: "yoy",
+            source,
+            lag: 12,
+          },
+        },
+        problems: [],
+      };
+    }
+  }
 
   const movingAverageMatch =
     /\b(?:(\d+)[-\s]?(?:period|month|week|day)?\s+)?(?:moving|rolling)\s+average(?:\s+column)?\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(

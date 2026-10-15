@@ -103,8 +103,13 @@ export async function revealExcelResult(
       // Select what was just built, so the new range is highlighted like Copilot does.
       const used = sheet.getUsedRangeOrNullObject(true);
       used.load("isNullObject");
+      const pivots = sheet.pivotTables;
+      pivots.load("count");
       await context.sync();
-      if (used.isNullObject) sheet.getRange("A1").select();
+      // Selecting a PivotTable makes Excel swap our task pane for its field list, so a pivot
+      // sheet only gets A1 selected.
+      if (used.isNullObject || Number(pivots.count) > 0)
+        sheet.getRange("A1").select();
       else used.select();
       await context.sync();
       return true;

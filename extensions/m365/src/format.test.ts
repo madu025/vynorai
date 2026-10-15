@@ -39,6 +39,26 @@ test("format instructions become explicit options, and 'format as a table' stays
   assert.deepEqual(negative.specs.format?.conditional, [
     { column: 3, rule: "negative" },
   ]);
+  const custom = interpretInstruction(
+    "Highlight Sales where Sales > 1000",
+    headers,
+    rows,
+  );
+  assert.deepEqual(custom.specs.format?.conditional, [
+    { column: 2, rule: "custom-formula", operator: ">", value: 1000 },
+  ]);
+  const customPlan = createExcelPreviewPlan(input as any, ["format"], 500, {
+    format: custom.specs.format,
+  });
+  assert.deepEqual(customPlan.actions[0].spec?.conditional, [
+    {
+      column: "Sales",
+      index: 2,
+      rule: "custom-formula",
+      operator: ">",
+      value: 1000,
+    },
+  ]);
   const dropdown = interpretInstruction(
     "Add a drop-down for Region",
     headers,

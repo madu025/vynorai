@@ -1455,6 +1455,11 @@ export async function applyApprovedExcelPlan(
                     };
                     negative.cellValue.format.font.color = "#C00000";
                     negative.cellValue.format.fill.color = "#FFC7CE";
+                  } else if (rule.rule === "custom-formula") {
+                    const custom = range.conditionalFormats.add("Custom");
+                    const letter = expressionColumnLetter(rule.index);
+                    custom.custom.rule.formula = `=${letter}2${rule.operator}${String(rule.value)}`;
+                    custom.custom.format.fill.color = "#FFF2CC";
                   } else if (rule.rule === "duplicates") {
                     const dupes = range.conditionalFormats.add("Custom");
                     const letter = expressionColumnLetter(rule.index);

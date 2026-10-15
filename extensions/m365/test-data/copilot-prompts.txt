@@ -74,7 +74,7 @@ Charts	chart	Create a histogram of Sales
 Charts	chart	Make a waterfall chart of Profit
 Conditional formatting	format	Apply a color scale to Sales
 Conditional formatting	format	Add icon sets to Quantity
-Conditional formatting	-	Highlight Sales above average with a formula rule
+Conditional formatting	format	Highlight Sales where Sales > 1000 using a custom conditional format
 Conditional formatting	-	Highlight dates in the next 30 days
 Named ranges and slicers	named-range	Create a named range for Sales
 Named ranges and slicers	slicer	Add a slicer for Region

@@ -681,6 +681,39 @@ test("server refuses unsafe dependent dropdown parent values", () => {
   );
 });
 
+test("server and add-in agree on a safe custom conditional formula", () => {
+  const specs = {
+    format: {
+      conditional: [
+        { column: 2, rule: "custom-formula", operator: ">", value: 1000 },
+      ],
+    },
+  } as any;
+  const client = createExcelPreviewPlan(input, ["format"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["format"], 500, specs);
+  assert.equal(excelPlansMatch(client as any, server as any), true);
+  assert.deepEqual(server.actions[0].spec?.conditional, [
+    {
+      column: "Sales",
+      index: 2,
+      rule: "custom-formula",
+      operator: ">",
+      value: 1000,
+    },
+  ]);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["format"], 500, {
+        format: {
+          conditional: [
+            { column: 2, rule: "custom-formula", operator: "|", value: 1 },
+          ],
+        },
+      } as any),
+    /safe numeric comparison/,
+  );
+});
+
 test("server and add-in agree on an unambiguous text-date conversion", () => {
   const specs = { clean: { operations: ["text-to-date"] } };
   const actions = ["clean"] as const;

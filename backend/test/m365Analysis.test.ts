@@ -224,7 +224,12 @@ after(async () => {
   if (dbm?.db)
     await new Promise<void>((resolve) => dbm.db!.close(() => resolve()));
   process.chdir(originalCwd);
-  fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3 });
+  await fs.promises.rm(tempDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 250,
+  });
 });
 
 test("analysis requires explicit consent and never reaches the model without it", async () => {

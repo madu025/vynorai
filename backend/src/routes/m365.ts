@@ -228,7 +228,12 @@ const excelPlanSchema = z.object({
                     "negative",
                     "duplicates",
                     "icon-set",
+                    "custom-formula",
                   ]),
+                  operator: z
+                    .enum([">", ">=", "<", "<=", "=", "<>"])
+                    .optional(),
+                  value: z.number().finite().optional(),
                 })
                 .strict(),
             )

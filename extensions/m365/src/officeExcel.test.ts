@@ -38,6 +38,30 @@ function fakeWorkbook(
       columnCount: data[0]?.length ?? 0,
       values: data,
       format: { font: {}, fill: {}, autofitColumns() {} },
+      conditionalFormats: {
+        add(type: string) {
+          calls.push(`conditional.add ${type}`);
+          const customRule = new Proxy(
+            {},
+            {
+              set(object, key, value) {
+                calls.push(`custom.${String(key)} = ${String(value)}`);
+                object[key] = value;
+                return true;
+              },
+            },
+          );
+          return {
+            custom: {
+              rule: customRule,
+              format: { fill: {} },
+            },
+            cellValue: { rule: {}, format: { font: {}, fill: {} } },
+            colorScale: { criteria: {} },
+            iconSet: { style: "" },
+          };
+        },
+      },
       dataValidation: new Proxy(
         {},
         {
@@ -417,6 +441,43 @@ test("apply creates dependent validation from helper names on a copied result sh
     "VynorAI_DD_North",
     "VynorAI_DD_South",
   ]);
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
+test("apply creates a custom conditional formula on a copied result sheet", async () => {
+  const excel = fakeWorkbook([
+    ["Region", "Sales"],
+    ["North", 1200],
+    ["South", 800],
+  ]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["format"], 500, {
+    format: {
+      conditional: [
+        { column: 1, rule: "custom-formula", operator: ">", value: 1000 },
+      ],
+    },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created", JSON.stringify(report));
+  assert.ok(
+    excel.calls.some(
+      (call) =>
+        call.includes("conditional.add Custom") ||
+        call.includes("custom.formula ="),
+    ),
+    excel.calls.join("\n"),
+  );
+  assert.ok(
+    excel.calls.some((call) => call.includes("custom.formula = =B2>1000")),
+    excel.calls.join("\n"),
+  );
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 

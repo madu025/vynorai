@@ -87,7 +87,10 @@ export interface ExcelColumnSpecs {
         | "color-scale"
         | "negative"
         | "duplicates"
-        | "icon-set";
+        | "icon-set"
+        | "custom-formula";
+      operator?: ">" | ">=" | "<" | "<=" | "=" | "<>";
+      value?: number;
     }>;
     validation?: Array<{
       column: number;
@@ -208,7 +211,13 @@ export interface ExcelActionSpec {
   autofit?: boolean;
   totalRow?: boolean;
   columnFormats?: Array<{ index: number; column: string; format: string }>;
-  conditional?: Array<{ column: string; index: number; rule: string }>;
+  conditional?: Array<{
+    column: string;
+    index: number;
+    rule: string;
+    operator?: string;
+    value?: number;
+  }>;
   validation?: Array<{
     column: string;
     index: number;
@@ -1069,9 +1078,15 @@ function resolveColumnSpecs(
       "negative",
       "duplicates",
       "icon-set",
+      "custom-formula",
     ];
-    const conditional: Array<{ column: string; index: number; rule: string }> =
-      [];
+    const conditional: Array<{
+      column: string;
+      index: number;
+      rule: string;
+      operator?: string;
+      value?: number;
+    }> = [];
     for (const entry of options.conditional ?? []) {
       if (!inRange(entry.column) || !conditionalRules.includes(entry.rule))
         fail("EXCEL_SPEC_INVALID", "Choose a valid column and highlight rule.");
@@ -1082,6 +1097,18 @@ function resolveColumnSpecs(
         );
       if (conditional.length >= 6)
         fail("EXCEL_SPEC_INVALID", "At most six highlight rules.");
+      if (entry.rule === "custom-formula") {
+        if (
+          ![">", ">=", "<", "<=", "=", "<>"].includes(entry.operator ?? "") ||
+          typeof entry.value !== "number" ||
+          !Number.isFinite(entry.value) ||
+          Math.abs(entry.value) > 1e12
+        )
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "Custom conditional formats need a safe numeric comparison.",
+          );
+      }
       if (
         conditional.some(
           (item) => item.index === entry.column && item.rule === entry.rule,
@@ -1095,6 +1122,9 @@ function resolveColumnSpecs(
         column: headers[entry.column],
         index: entry.column,
         rule: entry.rule,
+        ...(entry.rule === "custom-formula"
+          ? { operator: entry.operator, value: entry.value }
+          : {}),
       });
     }
     const validation: Array<{

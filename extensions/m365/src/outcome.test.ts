@@ -380,6 +380,34 @@ test("a format outcome explains dependent dropdown groups", () => {
   assert.deepEqual(item.table?.dropdownColumns, [1]);
 });
 
+test("a format outcome explains a custom conditional formula", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "format",
+        targetSheet: "Sheet1_Vynor_Format",
+        spec: {
+          conditional: [
+            {
+              column: "Sales",
+              index: 1,
+              rule: "custom-formula",
+              operator: ">",
+              value: 1000,
+            },
+          ],
+        },
+      },
+    ],
+    ["Region", "Sales"],
+    [["North", 1200]],
+  );
+  assert.match(
+    item.details.join("\n"),
+    /Sales: custom numeric formula \(>1000\)/,
+  );
+});
+
 test("a repeat run gets a numbered sheet name that still fits Excel's limit", () => {
   const taken = new Set(["Sheet1_Vynor_Result", "Sheet1_Vynor_Result (2)"]);
   assert.equal(

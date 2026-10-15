@@ -97,7 +97,10 @@ export interface InstructionSpecs {
         | "color-scale"
         | "negative"
         | "duplicates"
-        | "icon-set";
+        | "icon-set"
+        | "custom-formula";
+      operator?: ">" | ">=" | "<" | "<=" | "=" | "<>";
+      value?: number;
     }>;
     validation?: Array<{
       column: number;
@@ -1439,7 +1442,7 @@ function interpretFormatAndQuality(
     result.actions.push("quality");
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -1492,6 +1495,44 @@ function interpretFormatAndQuality(
     const targets = mentionedLabel.length ? mentionedLabel : mentionedNumeric;
     for (const column of targets.slice(0, 2))
       conditional.push({ column, rule: "duplicates" });
+  }
+  const comparisonWords: Array<{
+    pattern: string;
+    operator: ">" | ">=" | "<" | "<=" | "=" | "<>";
+  }> = [
+    { pattern: "greater\\s+than\\s+or\\s+equal\\s+to", operator: ">=" },
+    { pattern: "less\\s+than\\s+or\\s+equal\\s+to", operator: "<=" },
+    { pattern: "not\\s+equal\\s+to", operator: "<>" },
+    { pattern: "greater\\s+than", operator: ">" },
+    { pattern: "less\\s+than", operator: "<" },
+    { pattern: "equal\\s+to", operator: "=" },
+    { pattern: ">=", operator: ">=" },
+    { pattern: "<=", operator: "<=" },
+    { pattern: "<>", operator: "<>" },
+    { pattern: ">", operator: ">" },
+    { pattern: "<", operator: "<" },
+    { pattern: "=", operator: "=" },
+  ];
+  const escapeRegExp = (value: string) =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const [column, header] of headers.entries()) {
+    if (!isNumericColumn(rows, column)) continue;
+    for (const comparison of comparisonWords) {
+      const match = new RegExp(
+        `${escapeRegExp(String(header))}\\s*(?:is\\s+)?${comparison.pattern}\\s*(-?\\d+(?:,\\d{3})*(?:\\.\\d+)?)`,
+        "i",
+      ).exec(text);
+      if (!match) continue;
+      const value = Number(match[1].replace(/,/g, ""));
+      if (Number.isFinite(value))
+        conditional.push({
+          column,
+          rule: "custom-formula",
+          operator: comparison.operator,
+          value,
+        });
+      break;
+    }
   }
   const validation: NonNullable<InstructionSpecs["format"]>["validation"] = [];
   const inputMessageRequested = /\binput\s+message\b/i.test(text);

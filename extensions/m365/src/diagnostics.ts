@@ -196,6 +196,7 @@ export const ACTION_REQUIREMENTS: Record<string, string> = {
   format: "1.6",
   quality: "1.4",
   statistics: "1.4",
+  dashboard: "1.8",
   view: "1.4",
 };
 

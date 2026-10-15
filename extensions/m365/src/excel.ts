@@ -59,6 +59,7 @@ type ExcelActionPlan = {
       | "format"
       | "quality"
       | "statistics"
+      | "dashboard"
       | "view";
     name: string;
     targetSheet: string;
@@ -83,6 +84,7 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "format",
   "quality",
   "statistics",
+  "dashboard",
   "view",
 ];
 
@@ -126,6 +128,11 @@ export interface ExcelColumnSpecs {
     periods?: number;
     category?: number;
     date?: number;
+  };
+  dashboard?: {
+    category: number;
+    values: number[];
+    aggregation?: ExcelAggregation;
   };
   chart?: {
     category: number;
@@ -209,6 +216,11 @@ export interface ExcelActionSpec {
     periods?: number;
     category?: { column: string; index: number };
     date?: { column: string; index: number };
+  };
+  dashboard?: {
+    category: { column: string; index: number };
+    values: Array<{ column: string; index: number }>;
+    aggregation: ExcelAggregation;
   };
   categoryColumn?: string;
   categoryIndex?: number;
@@ -305,8 +317,16 @@ function resolveColumnSpecs(
   format?: ExcelActionSpec;
   view?: ExcelActionSpec;
   statistics?: ExcelActionSpec;
+  dashboard?: ExcelActionSpec;
 } {
-  if (!specs) return {};
+  if (!specs) {
+    if (requested.has("dashboard"))
+      throw new InvalidExcelRangeError(
+        "EXCEL_SPEC_INVALID",
+        "A dashboard needs explicit column choices.",
+      );
+    return {};
+  }
   const fail = (code: string, message: string): never => {
     throw new InvalidExcelRangeError(code, message);
   };
@@ -329,7 +349,10 @@ function resolveColumnSpecs(
     format?: ExcelActionSpec;
     view?: ExcelActionSpec;
     statistics?: ExcelActionSpec;
+    dashboard?: ExcelActionSpec;
   } = {};
+  if (requested.has("dashboard") && !specs.dashboard)
+    fail("EXCEL_SPEC_INVALID", "A dashboard needs explicit column choices.");
   const chartTypes = [
     "column",
     "line",
@@ -931,6 +954,41 @@ function resolveColumnSpecs(
     }
     resolved.statistics = out;
   }
+  if (specs.dashboard) {
+    if (!requested.has("dashboard"))
+      fail("EXCEL_SPEC_UNUSED", "Dashboard options need the dashboard action.");
+    const { category, values, aggregation = "sum" } = specs.dashboard;
+    if (!inRange(category))
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "Choose an existing dashboard category column.",
+      );
+    if (
+      !Array.isArray(values) ||
+      values.length < 1 ||
+      values.length > 3 ||
+      new Set(values).size !== values.length ||
+      values.some((index) => !inRange(index) || index === category)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "Choose one to three different dashboard value columns.",
+      );
+    if (values.some((index) => !numeric(index)))
+      fail(
+        "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+        "Dashboard value columns must contain numbers.",
+      );
+    if (!["sum", "count", "average", "min", "max"].includes(aggregation))
+      fail("EXCEL_SPEC_INVALID", "Choose a supported dashboard aggregation.");
+    resolved.dashboard = {
+      dashboard: {
+        category: { column: headers[category], index: category },
+        values: values.map((index) => ({ column: headers[index], index })),
+        aggregation,
+      },
+    };
+  }
   if (specs.view) {
     if (!requested.has("view"))
       fail("EXCEL_SPEC_UNUSED", "View options need the view action.");
@@ -1145,6 +1203,7 @@ export function assertValidExcelTabularRange(input: ExcelRangeInput): void {
  */
 export function selectExcelActions(instruction: string): ExcelActionKind[] {
   const normalized = instruction.toLocaleLowerCase().replace(/[_-]+/g, " ");
+  if (/\b(?:kpi\s+)?dashboard\b/.test(normalized)) return ["dashboard"];
   const withoutPivot = normalized.replace(/pivot\s*table/g, " ");
   const requested = new Set<ExcelActionKind>();
   if (/\btable\b|\bformat\s+(?:it\s+)?as\s+(?:a\s+)?table\b/.test(withoutPivot))
@@ -1322,17 +1381,20 @@ export function createExcelPreviewPlan(
                 ? `${baseName}_Vynor_View`
                 : kind === "statistics"
                   ? `${baseName}_Vynor_Stats`
-                  : resultSheet;
+                  : kind === "dashboard"
+                    ? `${baseName}_Vynor_Dashboard`
+                    : resultSheet;
   if (
     (requested.has("summary") ||
       requested.has("format") ||
       requested.has("quality") ||
-      requested.has("statistics")) &&
+      requested.has("statistics") ||
+      requested.has("dashboard")) &&
     layout.normalization
   )
     throw new InvalidExcelRangeError(
       "EXCEL_SPEC_INVALID",
-      "A summary needs a range with one header row.",
+      "This result needs a range with one header row.",
     );
   const resolved = resolveColumnSpecs(
     layout.headers,
@@ -1363,6 +1425,9 @@ export function createExcelPreviewPlan(
     ...(kind === "view" && resolved.view ? { spec: resolved.view } : {}),
     ...(kind === "statistics" && resolved.statistics
       ? { spec: resolved.statistics }
+      : {}),
+    ...(kind === "dashboard" && resolved.dashboard
+      ? { spec: resolved.dashboard }
       : {}),
   }));
   const chunks = Array.from({ length: profile.chunkCount }, (_, index) => ({

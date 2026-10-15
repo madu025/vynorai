@@ -55,6 +55,39 @@ test("server and add-in agree on a deterministic insight report", () => {
   );
 });
 
+test("server and add-in agree on one validated dashboard sheet", () => {
+  const actions = ["dashboard"];
+  const specs = {
+    dashboard: { category: 1, values: [2, 3], aggregation: "sum" as const },
+  };
+  const server = createServerExcelPreviewPlan(input, actions, 500, specs);
+  const local = createExcelPreviewPlan(
+    input as any,
+    actions as any,
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions.length, 1);
+  assert.equal(server.actions[0].targetSheet, "Sheet1_Vynor_Dashboard");
+  assert.equal(server.actions[0].spec.dashboard.category.column, "Region");
+  assert.deepEqual(
+    server.actions[0].spec.dashboard.values.map((entry: any) => entry.column),
+    ["Sales", "Cost"],
+  );
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, actions, 500, {
+        dashboard: { category: 1, values: [1] },
+      } as any),
+    /different dashboard value columns/,
+  );
+  assert.throws(
+    () => createServerExcelPreviewPlan(input, actions, 500),
+    /explicit column choices/,
+  );
+});
+
 test("a plan with different column choices is not accepted as the same plan", () => {
   const actions = ["chart"] as const;
   const server = createServerExcelPreviewPlan(input, [...actions], 500, {

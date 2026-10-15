@@ -100,24 +100,31 @@ test("instructions are understood and planned like any other action", () => {
   );
 });
 
-test("a dashboard request becomes a chart, a pivot and statistics", () => {
+test("a dashboard request becomes one dashboard action and one result sheet", () => {
   const asked = interpretInstruction(
-    "Build a dashboard of Sales by Region",
+    "Build a dashboard of Sales and Cost by Region",
     headers,
     rows as any,
   );
-  assert.deepEqual([...asked.actions].sort(), [
-    "chart",
-    "pivot-table",
-    "statistics",
-  ]);
+  assert.deepEqual(asked.actions, ["dashboard"]);
+  assert.deepEqual(asked.specs.dashboard, {
+    category: 1,
+    values: [2, 3],
+    aggregation: "sum",
+  });
   const plan = createExcelPreviewPlan(
     input,
     asked.actions as any,
     500,
     asked.specs as any,
   );
-  assert.equal(plan.actions.length, 3);
+  assert.equal(plan.actions.length, 1);
+  assert.equal(plan.actions[0].targetSheet, "Sheet1_Vynor_Dashboard");
+  assert.equal(plan.actions[0].spec?.dashboard?.category.column, "Region");
+  assert.deepEqual(
+    plan.actions[0].spec?.dashboard?.values.map((entry) => entry.column),
+    ["Sales", "Cost"],
+  );
 });
 
 test("an insight request previews deterministic trend, IQR and contributor evidence", () => {

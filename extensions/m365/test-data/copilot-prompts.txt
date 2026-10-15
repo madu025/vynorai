@@ -42,10 +42,10 @@ Statistics	statistics	Describe Sales and Cost
 Statistics	statistics	Correlation between Sales and Cost
 Statistics	statistics	Forecast Sales for the next 4 periods
 Statistics	statistics	Show median and quartiles for Quantity
-Dashboards	chart,pivot-table,statistics	Build a dashboard of Sales by Region
-Dashboards	chart,pivot-table,statistics	Create a KPI dashboard for Sales
-Dashboards	chart,pivot-table,statistics	Make a sales dashboard by Status
-Dashboards	chart,pivot-table,statistics	Build a dashboard showing Cost by Region
+Dashboards	dashboard	Build a dashboard of Sales by Region
+Dashboards	dashboard	Create a KPI dashboard for Sales
+Dashboards	dashboard	Make a sales dashboard by Status
+Dashboards	dashboard	Build a dashboard showing Cost by Region
 Formula explanation	-	Explain this formula in plain language
 Formula explanation	-	What does the formula in the selected cell do?
 Formula explanation	-	Describe the selected formula and its references

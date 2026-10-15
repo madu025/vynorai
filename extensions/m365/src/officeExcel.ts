@@ -15,6 +15,7 @@ import {
   buildQualityReport,
   buildSummaryTable,
   cleanRows,
+  columnLetter,
   computedColumnFormula,
   parseLocalRange,
   type CleanOperation,
@@ -606,7 +607,9 @@ export async function applyApprovedExcelPlan(
     for (const planned of plan.actions) {
       const resolvedSheet = resolveTarget(planned);
       const objectName =
-        planned.kind === "pivot-table" || planned.kind === "table"
+        planned.kind === "pivot-table" ||
+        planned.kind === "table" ||
+        planned.kind === "dashboard"
           ? uniqueObject(planned.name)
           : planned.name;
       takenObjects.add(objectName);
@@ -694,6 +697,141 @@ export async function applyApprovedExcelPlan(
               sheet.getRange("A1:C1").values = [
                 ["VynorAI result", "Source preserved", plan.sourceAddress],
               ];
+              await context.sync();
+            }
+          } else if (action.kind === "dashboard") {
+            const dashboard = action.spec?.dashboard;
+            if (!dashboard)
+              throw new Error("dashboard needs explicit column choices");
+            if (plan.normalization)
+              throw new Error("A dashboard needs a range with one header row");
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { rows } = splitHeader(await readSourceValues());
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const quotedSheet = `'${String(plan.worksheetName).replace(/'/g, "''")}'!`;
+              const sourceColumn = (index: number) => {
+                const letter = columnLetter(parsed.startColumn + index);
+                return `${quotedSheet}$${letter}$${parsed.startRow + 1}:$${letter}$${parsed.endRow}`;
+              };
+              const category = dashboard.category as {
+                column: string;
+                index: number;
+              };
+              const values = dashboard.values as Array<{
+                column: string;
+                index: number;
+              }>;
+              const aggregation = String(dashboard.aggregation ?? "sum");
+              const aggregateFormula = (
+                value: string,
+                categoryCell: string,
+              ) => {
+                const categoryRange = sourceColumn(category.index);
+                if (aggregation === "count")
+                  return `=COUNTIFS(${categoryRange},${categoryCell})`;
+                if (aggregation === "average")
+                  return `=IFERROR(AVERAGEIFS(${value},${categoryRange},${categoryCell}),"")`;
+                if (aggregation === "min")
+                  return `=MINIFS(${value},${categoryRange},${categoryCell})`;
+                if (aggregation === "max")
+                  return `=MAXIFS(${value},${categoryRange},${categoryCell})`;
+                return `=SUMIFS(${value},${categoryRange},${categoryCell})`;
+              };
+              const title = `VynorAI dashboard: ${values.map((entry) => entry.column).join(", ")} by ${category.column}`;
+              sheet.getRange("A1").values = [[title]];
+              sheet.getRange("A1").format.font.bold = true;
+              const kpis: string[][] = [
+                ["KPI", "Value"],
+                ["Data rows", `=ROWS(${sourceColumn(category.index)})`],
+                ...values.flatMap((entry) => [
+                  [
+                    `Total ${entry.column}`,
+                    `=SUM(${sourceColumn(entry.index)})`,
+                  ],
+                  [
+                    `Average ${entry.column}`,
+                    `=IFERROR(AVERAGE(${sourceColumn(entry.index)}),"")`,
+                  ],
+                ]),
+              ];
+              const kpiRange = sheet.getRangeByIndexes(2, 0, kpis.length, 2);
+              kpiRange.formulas = kpis.map((row, rowIndex) =>
+                row.map((cell, columnIndex) =>
+                  rowIndex === 0 || columnIndex === 0 ? literal(cell) : cell,
+                ),
+              );
+              kpiRange.format.autofitColumns();
+              sheet.getRangeByIndexes(2, 0, 1, 2).format.font.bold = true;
+
+              const categories = [
+                ...new Set(
+                  rows
+                    .map((row: any[]) =>
+                      String(row[category.index] ?? "").trim(),
+                    )
+                    .filter(Boolean),
+                ),
+              ].slice(0, 50);
+              for (const [index, value] of values.entries()) {
+                const summaryColumn = 14 + index * 2;
+                const summary = [
+                  [category.column, value.column],
+                  ...categories.map((name, rowIndex) => [
+                    literal(name),
+                    aggregateFormula(
+                      sourceColumn(value.index),
+                      `${columnLetter(summaryColumn)}${rowIndex + 2}`,
+                    ),
+                  ]),
+                ];
+                const summaryRange = sheet.getRangeByIndexes(
+                  0,
+                  summaryColumn,
+                  summary.length,
+                  2,
+                );
+                summaryRange.formulas = summary.map((row, rowIndex) =>
+                  row.map((cell, columnIndex) =>
+                    rowIndex === 0 || columnIndex === 0 ? literal(cell) : cell,
+                  ),
+                );
+                if (categories.length > 0) {
+                  const chart = sheet.charts.add(
+                    "ColumnClustered",
+                    summaryRange,
+                    "Columns",
+                  );
+                  chart.name = `${action.name}_chart_${index + 1}`;
+                  chart.title.text = `${value.column} by ${category.column}`;
+                  chart.setPosition(`F${3 + index * 18}`);
+                }
+              }
+              const pivot = sheet.pivotTables.add(
+                action.name,
+                sourceRange(),
+                sheet.getRange(`A${kpis.length + 5}`),
+              );
+              await context.sync();
+              pivot.rowHierarchies.add(
+                pivot.hierarchies.getItem(category.column),
+              );
+              for (const value of values) {
+                const field = pivot.dataHierarchies.add(
+                  pivot.hierarchies.getItem(value.column),
+                );
+                field.summarizeBy =
+                  {
+                    sum: "Sum",
+                    count: "Count",
+                    average: "Average",
+                    min: "Min",
+                    max: "Max",
+                  }[aggregation] ?? "Sum";
+              }
               await context.sync();
             }
           } else if (action.kind === "chart") {

@@ -453,6 +453,74 @@ export function buildOutcomes(
           `පිටපතක් පිරිසිදු කරයි: ${(spec.operations ?? []).join(", ")}`,
         ),
       );
+    } else if (action.kind === "dashboard" && spec.dashboard) {
+      const dashboard = spec.dashboard as {
+        category: { column: string; index: number };
+        values: Array<{ column: string; index: number }>;
+        aggregation: string;
+      };
+      const groups = new Map<string, number[][]>();
+      for (const row of rows) {
+        const key = cell(row[dashboard.category.index]);
+        if (!key) continue;
+        const values =
+          groups.get(key) ?? dashboard.values.map(() => [] as number[]);
+        dashboard.values.forEach((entry, index) =>
+          values[index].push(numeric(row[entry.index])),
+        );
+        groups.set(key, values);
+      }
+      const aggregate = (values: number[]) => {
+        if (!values.length) return 0;
+        if (dashboard.aggregation === "count") return values.length;
+        if (dashboard.aggregation === "average")
+          return values.reduce((sum, value) => sum + value, 0) / values.length;
+        if (dashboard.aggregation === "min") return Math.min(...values);
+        if (dashboard.aggregation === "max") return Math.max(...values);
+        return values.reduce((sum, value) => sum + value, 0);
+      };
+      const categories = [...groups.keys()].slice(0, MAX_POINTS);
+      item.title = say(
+        `Dashboard: ${dashboard.values.map((entry) => entry.column).join(", ")} by ${dashboard.category.column}`,
+        `දත්ත පුවරුව: ${dashboard.category.column} අනුව`,
+      );
+      item.chart = {
+        type: "column",
+        categories,
+        series: dashboard.values.map((entry, index) => ({
+          name: entry.column,
+          values: categories.map((key) => aggregate(groups.get(key)![index])),
+        })),
+      };
+      item.table = {
+        headers: [say("KPI", "දර්ශකය"), say("Value", "අගය")],
+        rows: [
+          [say("Data rows", "දත්ත පේළි"), String(rows.length)],
+          ...dashboard.values.flatMap((entry) => {
+            const numbers = rows.map((row) => numeric(row[entry.index]));
+            const total = numbers.reduce((sum, value) => sum + value, 0);
+            return [
+              [`${say("Total", "එකතුව")} ${entry.column}`, String(total)],
+              [
+                `${say("Average", "සාමාන්‍යය")} ${entry.column}`,
+                String(
+                  numbers.length
+                    ? Math.round((total / numbers.length) * 100) / 100
+                    : 0,
+                ),
+              ],
+            ];
+          }),
+        ].slice(0, MAX_TABLE_ROWS),
+        barColumns: [],
+        dropdownColumns: [],
+      };
+      item.details.push(
+        say(
+          "One new result sheet with live KPI formulas, one chart per value column, and a PivotTable. Your original data is not changed.",
+          "සජීවී KPI සූත්‍ර, අගය තීරුවකට ප්‍රස්ථාරයක් සහ PivotTable එකක් ඇති අලුත් ප්‍රතිඵල පත්‍රිකාවක්.",
+        ),
+      );
     } else if (action.kind === "statistics" && spec.statistics) {
       const stats = spec.statistics;
       if (stats.mode === "describe") {
@@ -613,6 +681,7 @@ const KIND_PREFIX: Record<string, string> = {
   quality: "Quality of",
   statistics: "Statistics of",
   summary: "Summary of",
+  dashboard: "Dashboard of",
   "add-column": "Calc of",
   "new-sheet": "Result of",
   table: "Table of",
@@ -643,6 +712,8 @@ export function friendlySheetName(
     label = `Forecast of ${spec.statistics.value?.column ?? sourceSheet}`;
   else if (action.kind === "statistics" && spec.statistics?.mode === "insights")
     label = `Insights of ${spec.statistics.value?.column ?? sourceSheet}`;
+  else if (action.kind === "dashboard" && spec.dashboard)
+    label = `Dashboard ${spec.dashboard.values?.map((entry: any) => entry.column).join("-") ?? sourceSheet} ${spec.dashboard.category?.column ?? sourceSheet}`;
   else if (
     action.kind === "statistics" &&
     spec.statistics?.mode === "correlation"

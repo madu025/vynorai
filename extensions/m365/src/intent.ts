@@ -61,6 +61,11 @@ export interface InstructionSpecs {
     category?: number;
     date?: number;
   };
+  dashboard?: {
+    category: number;
+    values: number[];
+    aggregation?: "sum" | "count" | "average" | "min" | "max";
+  };
   clean?: { operations: CleanOperation[] };
   format?: {
     freezeHeader?: boolean;
@@ -109,6 +114,7 @@ export interface InterpretedInstruction {
     | "format"
     | "quality"
     | "statistics"
+    | "dashboard"
   >;
   specs: InstructionSpecs;
   problems: string[];
@@ -273,6 +279,7 @@ export function interpretInstruction(
       }
     }
   }
+  if (interpretDashboard(text, headers, rows, result)) return result;
   interpretChartAndPivot(text, headers, rows, result);
   interpretSummary(text, headers, rows, result);
   interpretStatistics(text, headers, rows, result);
@@ -292,8 +299,8 @@ export function normalizeInstruction(text: string): string {
       /\b(\w+)\s+(?:walata|walin)\s+(\w+)\s+(?:anuwa|walin|walata)\s+(total|sum|average|count)(?:\s+ekak)?\b/gi,
       "summary $3 of $1 by $2",
     ],
-    // A dashboard is the three views people ask for together: a chart, a pivot and key statistics.
-    [/\b(?:kpi\s+)?dashboard\b/gi, "chart and pivot and statistics"],
+    // Kept as one action so the result, approval and undo are one marked worksheet.
+    [/\b(?:kpi\s+)?dashboard\b/gi, "dashboard"],
     [/pivot\s*tables?\b/gi, "pivot"],
     [/\b(\w+)\s+(?:walata|walin|anuwa)\b/gi, "by $1"],
     [/\beka\b/gi, ""],
@@ -354,6 +361,59 @@ function isNumericColumn(rows: Cell[][], index: number): boolean {
     .map((row) => row[index])
     .filter((cell) => cell !== null && cell !== undefined && cell !== "");
   return cells.length > 0 && cells.every((cell) => typeof cell === "number");
+}
+
+/** A dashboard is deliberately one action: it creates one reviewable, removable result sheet. */
+function interpretDashboard(
+  text: string,
+  headers: string[],
+  rows: Cell[][],
+  result: InterpretedInstruction,
+): boolean {
+  if (!/\bdashboard\b/i.test(text)) return false;
+  const positions = headerPositions(headers, text);
+  const numeric = positions.filter((entry) =>
+    isNumericColumn(rows, entry.index),
+  );
+  const labels = positions.filter(
+    (entry) => !isNumericColumn(rows, entry.index),
+  );
+  const allNumeric = headers
+    .map((_, index) => index)
+    .filter((index) => isNumericColumn(rows, index));
+  const allLabels = headers
+    .map((_, index) => index)
+    .filter((index) => !isNumericColumn(rows, index));
+  const byMatch = /\b(?:by|per|for each|each)\s+/i.exec(text);
+  const category =
+    (byMatch
+      ? labels.find((entry) => entry.at >= (byMatch.index ?? 0))?.index
+      : undefined) ??
+    labels[0]?.index ??
+    allLabels[0];
+  const values = (
+    numeric.length ? numeric.map((entry) => entry.index) : allNumeric
+  )
+    .filter((index) => index !== category)
+    .slice(0, 3);
+  if (category === undefined || values.length === 0) {
+    result.problems.push(
+      "A dashboard needs a category column and at least one numeric column.",
+    );
+    return true;
+  }
+  const aggregation = /\b(count|how many)\b/i.test(text)
+    ? "count"
+    : /\b(average|avg|mean)\b/i.test(text)
+      ? "average"
+      : /\b(minimum|min|lowest)\b/i.test(text)
+        ? "min"
+        : /\b(maximum|max|highest)\b/i.test(text)
+          ? "max"
+          : "sum";
+  result.actions.push("dashboard");
+  result.specs.dashboard = { category, values, aggregation };
+  return true;
 }
 
 function interpretChartAndPivot(

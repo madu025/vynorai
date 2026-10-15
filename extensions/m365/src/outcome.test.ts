@@ -42,6 +42,33 @@ test("other outcomes show a small table of the data they use", () => {
   assert.equal(item.table?.rows.length, 2);
 });
 
+test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "dashboard",
+        targetSheet: "Sheet1_Vynor_Dashboard",
+        spec: {
+          dashboard: {
+            category: { column: "Region", index: 1 },
+            values: [
+              { column: "Sales", index: 2 },
+              { column: "Cost", index: 3 },
+            ],
+            aggregation: "sum",
+          },
+        },
+      },
+    ],
+    headers,
+    rows,
+  );
+  assert.match(item.title, /Dashboard: Sales, Cost by Region/);
+  assert.deepEqual(item.chart?.categories, ["North", "South"]);
+  assert.deepEqual(item.chart?.series[0].values, [1200, 1500]);
+  assert.deepEqual(item.table?.rows[0], ["Data rows", "2"]);
+});
+
 import { resolveSheetName } from "./outcome.js";
 
 test("a format outcome lists the exact rules, including drop-downs and data bars", () => {

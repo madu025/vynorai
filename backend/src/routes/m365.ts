@@ -66,6 +66,7 @@ const excelPlanSchema = z.object({
         "format",
         "quality",
         "statistics",
+        "dashboard",
         "view",
       ]),
     )
@@ -134,6 +135,16 @@ const excelPlanSchema = z.object({
           periods: z.number().int().min(1).max(24).optional(),
           category: z.number().int().min(0).max(99).optional(),
           date: z.number().int().min(0).max(99).optional(),
+        })
+        .strict()
+        .optional(),
+      dashboard: z
+        .object({
+          category: z.number().int().min(0).max(99),
+          values: z.array(z.number().int().min(0).max(99)).min(1).max(3),
+          aggregation: z
+            .enum(["sum", "count", "average", "min", "max"])
+            .optional(),
         })
         .strict()
         .optional(),
@@ -299,6 +310,7 @@ const applyResultSchema = z.object({
           "format",
           "quality",
           "statistics",
+          "dashboard",
           "view",
         ]),
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),

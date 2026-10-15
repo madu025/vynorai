@@ -17,6 +17,11 @@ function fakeWorkbook(
   options: { failChart?: boolean } = {},
 ) {
   const calls: string[] = [];
+  const formulaWrites: Array<{
+    sheet: string;
+    address: string;
+    values: unknown;
+  }> = [];
   const sheets = new Map<string, any>();
   const tables = new Set<string>();
   const pivots = new Set<string>();
@@ -47,6 +52,10 @@ function fakeWorkbook(
     const sheet: any = {
       name,
       load() {},
+      customProperties: {
+        add: (key: string, value: string) =>
+          calls.push(`mark ${name} ${key}=${value}`),
+      },
       getRange: (address: string) => {
         const target = range(name, address);
         return new Proxy(target, {
@@ -58,6 +67,7 @@ function fakeWorkbook(
             }
             if (key === "formulas") {
               calls.push(`formula ${name}!${address}`);
+              formulaWrites.push({ sheet: name, address, values: value });
               return true;
             }
             object[key] = value;
@@ -87,6 +97,7 @@ function fakeWorkbook(
             }
             if (key === "formulas") {
               calls.push(`formula ${name}!A1 normalized`);
+              formulaWrites.push({ sheet: name, address: "A1", values: value });
               object.formulas = value;
               return true;
             }
@@ -120,6 +131,7 @@ function fakeWorkbook(
             });
           const chart: any = {
             setPosition: (cell: string) => calls.push(`chart.position ${cell}`),
+            title: {},
           };
           return new Proxy(chart, {
             set(object, key, value) {
@@ -136,6 +148,18 @@ function fakeWorkbook(
             `pivot.add ${typeof pivotName} ${source.kind}:${source.address} ${destination.kind}:${destination.address}`,
           );
           pivots.add(String(pivotName));
+          return {
+            hierarchies: { getItem: (name: string) => name },
+            rowHierarchies: {
+              add: (name: string) => calls.push(`pivot.row ${name}`),
+            },
+            dataHierarchies: {
+              add: (name: string) => {
+                calls.push(`pivot.value ${name}`);
+                return {};
+              },
+            },
+          };
         },
       },
     };
@@ -170,6 +194,7 @@ function fakeWorkbook(
   };
   return {
     calls,
+    formulaWrites,
     setCells: (next: unknown[][]) => (cells = next),
     addSheet: makeSheet,
     runtime: {
@@ -329,6 +354,75 @@ test("an insight report writes only live formulas to a new marked result sheet",
   assert.ok(excel.calls.includes("formula Insights of Sales!A1 normalized"));
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
   assert.ok(!excel.calls.some((call) => call.startsWith("formula Sales!")));
+});
+
+test("a dashboard creates one result sheet with live KPIs, charts and a PivotTable", async () => {
+  const source = [
+    ["Region", "Sales", "Cost"],
+    ["North", 100, 60],
+    ["South", 200, 120],
+    ["North", 300, 180],
+  ];
+  const excel = fakeWorkbook(source.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["dashboard"], 500, {
+    dashboard: { category: 0, values: [1, 2] },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(
+    report.results.map((result) => `${result.kind}:${result.status}`),
+    ["dashboard:created"],
+  );
+  assert.equal(report.results[0].targetSheet, "Dashboard Sales-Cost Region");
+  assert.equal(report.results[0].createdSheet, true);
+  assert.ok(excel.calls.includes("pivot.row Region"));
+  assert.ok(excel.calls.includes("pivot.value Sales"));
+  assert.ok(excel.calls.includes("pivot.value Cost"));
+  assert.ok(
+    excel.calls.includes("mark Dashboard Sales-Cost Region vynorai=result"),
+  );
+  assert.equal(
+    excel.calls.filter((call) => call.startsWith("chart.add ColumnClustered"))
+      .length,
+    2,
+  );
+  assert.ok(
+    excel.calls.some((call) =>
+      call.startsWith("formula Dashboard Sales-Cost Region!"),
+    ),
+  );
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+  assert.ok(!excel.calls.some((call) => call.startsWith("formula Sales!")));
+  assert.deepEqual(
+    rollbackItemsFromApplyReport("dashboard", report.results).sheets,
+    ["Dashboard Sales-Cost Region"],
+  );
+});
+
+test("dashboard helper labels from cells are escaped instead of evaluated as formulas", async () => {
+  const excel = fakeWorkbook([
+    ["Region", "Sales"],
+    ['=HYPERLINK("https://example.test")', 100],
+    ["South", 200],
+  ]);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["dashboard"], 500, {
+    dashboard: { category: 0, values: [1] },
+  });
+  await applyApprovedExcelPlan(excel.runtime, plan, true, "approval", {
+    expectedSourceFingerprint: plan.sourceFingerprint,
+  });
+  const written = excel.formulaWrites
+    .filter((entry) => entry.sheet.startsWith("Dashboard"))
+    .flatMap((entry) => (entry.values as unknown[][]).flat());
+  assert.ok(written.includes(`'=HYPERLINK("https://example.test")`));
+  assert.ok(!written.includes(`=HYPERLINK("https://example.test")`));
 });
 
 test("apply refuses to write when the source changed after the preview", async () => {

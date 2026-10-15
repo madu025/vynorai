@@ -1,4 +1,7 @@
-import { fingerprintExcelRange } from "./excel.js";
+import {
+  assertValidExcelTabularRange,
+  fingerprintExcelRange,
+} from "./excel.js";
 
 type ExcelRangeInput = {
   workbookId: string;
@@ -85,7 +88,7 @@ export async function inspectSelectedExcelRange(
       throw new Error(
         "Select a table with a header row and at least one data row.",
       );
-    return {
+    const input = {
       workbookId,
       worksheetName: selected.worksheet.name,
       address: selected.address,
@@ -98,6 +101,8 @@ export async function inspectSelectedExcelRange(
       ),
       hasHeaders: true,
     };
+    assertValidExcelTabularRange(input);
+    return input;
   });
 }
 

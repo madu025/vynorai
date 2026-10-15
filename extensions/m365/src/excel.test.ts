@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   assertConfirmedApproval,
+  assertValidExcelTabularRange,
   createExcelPreviewPlan,
   excelPlansMatch,
   excelSafeBaseName,
@@ -88,4 +89,41 @@ test("instruction planner selects only explicit allowlisted Excel actions", () =
   ]);
   assert.deepEqual(selectExcelActions("Format it as a table"), ["table"]);
   assert.deepEqual(selectExcelActions("Please improve this data"), []);
+});
+
+test("rejects merged, duplicate, and header-only table selections", () => {
+  assert.throws(
+    () =>
+      assertValidExcelTabularRange({
+        ...input,
+        values: [
+          ["Date", "Time", ""],
+          ["", "Start", "End"],
+          ["2026-09-02", "08:00", "09:00"],
+        ],
+      }),
+    /blank or merged header cells/,
+  );
+  assert.throws(
+    () =>
+      assertValidExcelTabularRange({
+        ...input,
+        values: [
+          ["Date", "End", "end"],
+          ["2026-09-02", 1, 2],
+        ],
+      }),
+    /unique header/,
+  );
+  assert.throws(
+    () =>
+      assertValidExcelTabularRange({
+        ...input,
+        values: [
+          ["Date", "Amount"],
+          ["", ""],
+        ],
+      }),
+    /no data rows/,
+  );
 });

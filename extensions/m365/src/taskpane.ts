@@ -176,6 +176,13 @@ const API_MESSAGES: Record<string, string> = {
     "The approval no longer matches this preview. Inspect again.",
   approval_replayed:
     "This approval was already used. Inspect the selection again for a new preview.",
+  EXCEL_DATA_ROWS_REQUIRED:
+    "Select one complete header row and at least one data row.",
+  EXCEL_HEADERS_REQUIRED:
+    "The first selected row has blank or merged headers. Select a flat table with one complete header row.",
+  EXCEL_HEADERS_MUST_BE_UNIQUE:
+    "Every selected column needs a unique header before creating a Table or PivotTable.",
+  EXCEL_RANGE_NOT_RECTANGULAR: "Select one rectangular Excel range.",
 };
 
 function handleApiError(step: string, error: unknown) {

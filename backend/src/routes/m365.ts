@@ -8,7 +8,10 @@ import {
   validateEntraAccessToken,
   validateM365Identity,
 } from "../services/m365Policy.js";
-import { createServerExcelPreviewPlan } from "../services/m365ExcelPlan.js";
+import {
+  createServerExcelPreviewPlan,
+  InvalidExcelRangeError,
+} from "../services/m365ExcelPlan.js";
 import { requireM365TenantScope } from "../services/m365TenantRegistry.js";
 import {
   diagnoseM365Identity,
@@ -161,11 +164,20 @@ m365Router.post(
     );
     if (usage.used_tokens >= usage.max_tokens)
       return res.status(403).json({ error: { code: "CREDITS_EXHAUSTED" } });
-    const plan = createServerExcelPreviewPlan(
-      req.body,
-      req.body.actions,
-      req.body.chunkRows,
-    );
+    let plan;
+    try {
+      plan = createServerExcelPreviewPlan(
+        req.body,
+        req.body.actions,
+        req.body.chunkRows,
+      );
+    } catch (error) {
+      if (error instanceof InvalidExcelRangeError)
+        return res.status(422).json({
+          error: { code: error.code, message: error.message },
+        });
+      throw error;
+    }
     const planId = cryptoId(plan.sourceFingerprint);
     const approvalToken = createM365ApprovalToken({
       planId,

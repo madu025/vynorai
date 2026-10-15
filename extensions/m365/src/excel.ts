@@ -7,6 +7,16 @@ type ExcelRangeInput = {
   values: ExcelRow[];
   hasHeaders?: boolean;
 };
+
+export class InvalidExcelRangeError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "InvalidExcelRangeError";
+  }
+}
 type ExcelRangeProfile = {
   rowCount: number;
   columnCount: number;
@@ -51,6 +61,51 @@ type ComparableExcelPlan = Omit<
 >;
 
 const DEFAULT_CHUNK_ROWS = 500;
+
+const normalizedCell = (value: ExcelCell): string => String(value ?? "").trim();
+
+/**
+ * Table and PivotTable mutations need one flat, complete header row. Reject ambiguous
+ * merged/multi-row headers instead of letting Excel infer or rewrite the workbook shape.
+ */
+export function assertValidExcelTabularRange(input: ExcelRangeInput): void {
+  if (input.values.length < 2)
+    throw new InvalidExcelRangeError(
+      "EXCEL_DATA_ROWS_REQUIRED",
+      "Select one header row and at least one data row.",
+    );
+  const columnCount = input.values[0]?.length ?? 0;
+  if (columnCount < 1 || input.values.some((row) => row.length !== columnCount))
+    throw new InvalidExcelRangeError(
+      "EXCEL_RANGE_NOT_RECTANGULAR",
+      "Select one rectangular Excel range.",
+    );
+  if (input.hasHeaders !== false) {
+    const headers = input.values[0].map(normalizedCell);
+    if (headers.some((header) => !header))
+      throw new InvalidExcelRangeError(
+        "EXCEL_HEADERS_REQUIRED",
+        "The first selected row has blank or merged header cells. Select a flat range with one complete header row.",
+      );
+    const normalizedHeaders = headers.map((header) =>
+      header.toLocaleLowerCase(),
+    );
+    if (new Set(normalizedHeaders).size !== normalizedHeaders.length)
+      throw new InvalidExcelRangeError(
+        "EXCEL_HEADERS_MUST_BE_UNIQUE",
+        "Every selected column needs a unique header before creating a Table or PivotTable.",
+      );
+  }
+  const dataOffset = input.hasHeaders === false ? 0 : 1;
+  const hasData = input.values
+    .slice(dataOffset)
+    .some((row) => row.some((value) => normalizedCell(value) !== ""));
+  if (!hasData)
+    throw new InvalidExcelRangeError(
+      "EXCEL_DATA_ROWS_REQUIRED",
+      "The selection has no data rows. Include the rows below the header before inspecting.",
+    );
+}
 
 /**
  * Maps an explicit user instruction to the mutation allowlist. Ambiguous text returns no
@@ -97,6 +152,7 @@ export function profileExcelRange(
   if (!Number.isInteger(chunkRows) || chunkRows < 1 || chunkRows > 5000) {
     throw new Error("chunkRows must be an integer between 1 and 5000");
   }
+  assertValidExcelTabularRange(input);
   const headers = input.hasHeaders === false ? [] : (input.values[0] ?? []);
   const seen = new Set<string>();
   const duplicateHeaderNames = new Set<string>();
@@ -122,7 +178,7 @@ export function profileExcelRange(
   return {
     rowCount: input.values.length,
     columnCount,
-    headerCount: headers.length,
+    headerCount: headers.filter((value) => normalizedCell(value) !== "").length,
     blankCells,
     duplicateHeaderNames: [...duplicateHeaderNames].sort(),
     chunkCount: Math.max(1, Math.ceil(dataRows / chunkRows)),

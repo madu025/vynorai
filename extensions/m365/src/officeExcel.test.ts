@@ -173,6 +173,18 @@ test("inspect rejects a selection without a data row", async () => {
   );
 });
 
+test("inspect rejects a merged multi-row header before requesting a plan", async () => {
+  const excel = fakeWorkbook([
+    ["Date", "Time", ""],
+    ["", "Start", "End"],
+    ["2026-09-02", "08:00", "09:00"],
+  ]);
+  await assert.rejects(
+    inspectSelectedExcelRange(excel.runtime, "book-1"),
+    /blank or merged header cells/,
+  );
+});
+
 test("apply creates each object with Office.js argument order and keeps source unchanged", async () => {
   const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
   const { plan } = await previewFor(excel);

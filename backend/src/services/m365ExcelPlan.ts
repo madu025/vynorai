@@ -1,5 +1,59 @@
 import crypto from "node:crypto";
 
+export class InvalidExcelRangeError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "InvalidExcelRangeError";
+  }
+}
+
+function normalizedCell(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+export function assertValidServerExcelRange(input: any): void {
+  const values = input.values as any[][];
+  if (values.length < 2)
+    throw new InvalidExcelRangeError(
+      "EXCEL_DATA_ROWS_REQUIRED",
+      "Select one header row and at least one data row.",
+    );
+  const columnCount = values[0]?.length ?? 0;
+  if (columnCount < 1 || values.some((row) => row.length !== columnCount))
+    throw new InvalidExcelRangeError(
+      "EXCEL_RANGE_NOT_RECTANGULAR",
+      "Select one rectangular Excel range.",
+    );
+  if (input.hasHeaders !== false) {
+    const headers = values[0].map(normalizedCell);
+    if (headers.some((header) => !header))
+      throw new InvalidExcelRangeError(
+        "EXCEL_HEADERS_REQUIRED",
+        "The first selected row has blank or merged header cells.",
+      );
+    const normalizedHeaders = headers.map((header) =>
+      header.toLocaleLowerCase(),
+    );
+    if (new Set(normalizedHeaders).size !== normalizedHeaders.length)
+      throw new InvalidExcelRangeError(
+        "EXCEL_HEADERS_MUST_BE_UNIQUE",
+        "Every selected column needs a unique header.",
+      );
+  }
+  const dataOffset = input.hasHeaders === false ? 0 : 1;
+  const hasData = values
+    .slice(dataOffset)
+    .some((row) => row.some((value) => normalizedCell(value) !== ""));
+  if (!hasData)
+    throw new InvalidExcelRangeError(
+      "EXCEL_DATA_ROWS_REQUIRED",
+      "The selection has no data rows.",
+    );
+}
+
 export function createServerExcelPreviewPlan(
   input: any,
   requestedActions: string[],
@@ -7,6 +61,7 @@ export function createServerExcelPreviewPlan(
 ): any {
   if (!Number.isInteger(chunkRows) || chunkRows < 1 || chunkRows > 5000)
     throw new Error("chunkRows must be an integer between 1 and 5000");
+  assertValidServerExcelRange(input);
   const values = input.values as any[][];
   const headers = input.hasHeaders === false ? [] : values[0] || [];
   const seen = new Set<string>();
@@ -23,7 +78,7 @@ export function createServerExcelPreviewPlan(
   const profile = {
     rowCount: values.length,
     columnCount: values.reduce((max, row) => Math.max(max, row.length), 0),
-    headerCount: headers.length,
+    headerCount: headers.filter((value) => normalizedCell(value) !== "").length,
     blankCells: values.reduce(
       (count, row) =>
         count + row.filter((value) => value === null || value === "").length,

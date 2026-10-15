@@ -115,3 +115,26 @@ test("M365 server plan keeps generated sheet and object names valid for Excel", 
   assert.match(excelSafeBaseName("2026"), /^S_2026$/);
   assert.match(excelSafeBaseName("Sales"), /^Sales$/);
 });
+
+test("M365 server rejects ambiguous Excel table selections", async () => {
+  const { createServerExcelPreviewPlan } = await import(
+    "../src/services/m365ExcelPlan.js"
+  );
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(
+        {
+          workbookId: "book",
+          worksheetName: "Mileage",
+          address: "A9:C12",
+          values: [
+            ["Date", "Time", ""],
+            ["", "Start", "End"],
+            ["2026-09-02", "08:00", "09:00"],
+          ],
+        },
+        ["table", "pivot-table"],
+      ),
+    /blank or merged header cells/,
+  );
+});

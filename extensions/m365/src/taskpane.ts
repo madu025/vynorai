@@ -60,6 +60,7 @@ import {
   inspectSelectedExcelFormulas,
   inspectSelectedExcelRange,
   inspectWorkbookOverview,
+  rollbackItemsFromApplyReport,
   rollbackCreatedItems,
 } from "./officeExcel.js";
 import {
@@ -253,6 +254,8 @@ const API_MESSAGES: Record<string, string> = {
   EXCEL_HEADERS_MUST_BE_UNIQUE:
     "Every selected column needs a unique header before creating a Table or PivotTable.",
   EXCEL_RANGE_NOT_RECTANGULAR: "Select one rectangular Excel range.",
+  EXCEL_SELECTION_TOO_LARGE:
+    "The selected range is too large. Select at most 100,000 cells and 100 columns.",
 };
 
 function handleApiError(step: string, error: unknown) {
@@ -435,7 +438,14 @@ inspect?.addEventListener("click", async () => {
     setStatus("Inspecting the selected range...");
     const input = await log.step(
       "excel:read-selection",
-      () => inspectSelectedExcelRange(officeRuntime(), crypto.randomUUID()),
+      () =>
+        inspectSelectedExcelRange(
+          officeRuntime(),
+          crypto.randomUUID(),
+          500,
+          (completed, total) =>
+            setStatus(`Reading selected rows: ${completed}/${total}...`),
+        ),
       (value) => ({
         sheet: value.worksheetName,
         address: value.address,
@@ -666,20 +676,10 @@ apply?.addEventListener("click", async () => {
         (result) =>
           `${result.kind}: ${result.name} (${result.targetSheet})${result.status === "exists" ? " - already existed, left unchanged (undo it first to rebuild)" : ""}`,
       );
-    const created = report.results.filter(
-      (result) => result.status === "created",
+    lastCreated = rollbackItemsFromApplyReport(
+      approvedPlan.planId,
+      report.results,
     );
-    lastCreated = {
-      planId: approvedPlan.planId,
-      sheets: created
-        .filter(
-          (result) => result.kind !== "table" || approvedPlan.normalization,
-        )
-        .map((result) => result.targetSheet),
-      tables: created
-        .filter((result) => result.kind === "table")
-        .map((result) => result.name),
-    };
     if (rollbackButton)
       rollbackButton.hidden =
         lastCreated.sheets.length + lastCreated.tables.length === 0;

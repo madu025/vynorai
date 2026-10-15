@@ -725,6 +725,22 @@ export function assertValidServerExcelRange(input: any): void {
       "EXCEL_RANGE_NOT_RECTANGULAR",
       "Select one rectangular Excel range.",
     );
+  const cellCount = values.length * columnCount;
+  const textChars = values.reduce(
+    (total, row) =>
+      total +
+      row.reduce(
+        (rowTotal, cell) =>
+          rowTotal + (typeof cell === "string" ? cell.length : 0),
+        0,
+      ),
+    0,
+  );
+  if (columnCount > 100 || cellCount > 100_000 || textChars > 2_000_000)
+    throw new InvalidExcelRangeError(
+      "EXCEL_SELECTION_TOO_LARGE",
+      "Select at most 100,000 cells, 100 columns and 2,000,000 text characters.",
+    );
   const layout =
     input.hasHeaders === false
       ? noHeaderLayout

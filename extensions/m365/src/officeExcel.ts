@@ -49,6 +49,8 @@ export interface ExcelActionResult {
   name: string;
   targetSheet: string;
   status: ExcelActionStatus;
+  /** True only when this apply call created the target worksheet itself. */
+  createdSheet?: boolean;
   error?: string;
 }
 
@@ -58,7 +60,35 @@ export interface ExcelApplyReport {
   results: ExcelActionResult[];
 }
 
+export function rollbackItemsFromApplyReport(
+  planId: string,
+  results: ExcelActionResult[],
+): { planId: string; sheets: string[]; tables: string[] } {
+  return {
+    planId,
+    sheets: [
+      ...new Set(
+        results
+          .filter((result) => result.createdSheet === true)
+          .map((result) => result.targetSheet),
+      ),
+    ],
+    tables: [
+      ...new Set(
+        results
+          .filter(
+            (result) => result.kind === "table" && result.status === "created",
+          )
+          .map((result) => result.name),
+      ),
+    ],
+  };
+}
+
 const MAX_SHEET_NAME = 31;
+export const MAX_EXCEL_SELECTION_CELLS = 100_000;
+export const MAX_EXCEL_SELECTION_COLUMNS = 100;
+export const MAX_EXCEL_SELECTION_TEXT_CHARS = 2_000_000;
 
 /** Sheet-local part of an Excel address ("'My Sheet'!A1:C4" -> "A1:C4"). */
 export function localExcelAddress(address: string): string {
@@ -72,8 +102,13 @@ async function readValuesInChunks(
   rows: number,
   columns: number,
   chunkRows: number,
+  options?: {
+    maxTextChars?: number;
+    onProgress?: (completedRows: number, totalRows: number) => void;
+  },
 ): Promise<any[][]> {
   const values: any[][] = [];
+  let textChars = 0;
   for (let start = 0; start < rows; start += chunkRows) {
     const count = Math.min(chunkRows, rows - start);
     const chunk = range
@@ -81,7 +116,17 @@ async function readValuesInChunks(
       .getResizedRange(count - 1, columns - 1);
     chunk.load("values");
     await context.sync();
+    if (options?.maxTextChars !== undefined) {
+      for (const row of chunk.values)
+        for (const cell of row)
+          if (typeof cell === "string") textChars += cell.length;
+      if (textChars > options.maxTextChars)
+        throw new Error(
+          `The selection contains more than ${options.maxTextChars.toLocaleString()} text characters. Select a smaller range.`,
+        );
+    }
     values.push(...chunk.values);
+    options?.onProgress?.(start + count, rows);
   }
   return values;
 }
@@ -90,6 +135,7 @@ export async function inspectSelectedExcelRange(
   runtime: ExcelRuntimeLike,
   workbookId: string,
   chunkRows = 500,
+  onProgress?: (completedRows: number, totalRows: number) => void,
 ): Promise<ExcelRangeInput> {
   if (!Number.isInteger(chunkRows) || chunkRows < 1 || chunkRows > 5000)
     throw new Error("chunkRows must be an integer between 1 and 5000");
@@ -105,6 +151,16 @@ export async function inspectSelectedExcelRange(
       throw new Error(
         "Select a table with a header row and at least one data row.",
       );
+    if (
+      !Number.isSafeInteger(rows) ||
+      !Number.isSafeInteger(columns) ||
+      columns < 1 ||
+      columns > MAX_EXCEL_SELECTION_COLUMNS ||
+      rows * columns > MAX_EXCEL_SELECTION_CELLS
+    )
+      throw new Error(
+        `The selection is too large. Select at most ${MAX_EXCEL_SELECTION_CELLS.toLocaleString()} cells and ${MAX_EXCEL_SELECTION_COLUMNS} columns.`,
+      );
     const input = {
       workbookId,
       worksheetName: selected.worksheet.name,
@@ -115,6 +171,10 @@ export async function inspectSelectedExcelRange(
         rows,
         columns,
         chunkRows,
+        {
+          maxTextChars: MAX_EXCEL_SELECTION_TEXT_CHARS,
+          onProgress,
+        },
       ),
       hasHeaders: true,
     };
@@ -336,6 +396,7 @@ export async function applyApprovedExcelPlan(
           const sheet = sheetExists
             ? found
             : context.workbook.worksheets.add(action.targetSheet);
+          result.createdSheet = !sheetExists;
           if (action.kind === "new-sheet") {
             if (sheetExists) {
               result.status = "exists";
@@ -881,9 +942,9 @@ export interface RollbackReport {
 }
 
 /**
- * Removes only the result sheets and the Table this add-in created in the session. Names must
- * match the generated patterns, so source or unrelated sheets can never be deleted. A Table is
- * converted back to a plain range; the cell values are kept.
+ * Removes only result sheets that the current apply report marked as newly created and the Table
+ * this add-in created in the session. Names are a second fail-closed check, not ownership proof.
+ * A Table is converted back to a plain range; the cell values are kept.
  */
 export async function rollbackCreatedItems(
   runtime: ExcelRuntimeLike,

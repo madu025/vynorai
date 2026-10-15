@@ -5,6 +5,7 @@ import {
   applyApprovedExcelPlan,
   inspectSelectedExcelRange,
   localExcelAddress,
+  rollbackItemsFromApplyReport,
 } from "./officeExcel.js";
 
 /**
@@ -160,6 +161,7 @@ function fakeWorkbook(
   return {
     calls,
     setCells: (next: unknown[][]) => (cells = next),
+    addSheet: makeSheet,
     runtime: {
       run: <T>(callback: (context: any) => Promise<T>) =>
         callback({ workbook, sync: async () => {} }),
@@ -195,6 +197,17 @@ test("inspect rejects a selection without a data row", async () => {
   await assert.rejects(
     inspectSelectedExcelRange(excel.runtime, "book-1"),
     /header row and at least one data row/,
+  );
+});
+
+test("inspect refuses an oversized selection before reading cell values", async () => {
+  const rows = Array.from({ length: 1001 }, () =>
+    Array.from({ length: 100 }, () => 1),
+  );
+  const excel = fakeWorkbook(rows);
+  await assert.rejects(
+    inspectSelectedExcelRange(excel.runtime, "book-1"),
+    /at most 100,000 cells and 100 columns/,
   );
 });
 
@@ -318,6 +331,48 @@ test("one failing action is reported without stopping the others", async () => {
   assert.match(byKind.chart.error!, /InvalidArgument: chart failed/);
   assert.equal(byKind["new-sheet"].status, "created");
   assert.equal(byKind["pivot-table"].status, "skipped_unsupported");
+});
+
+test("an object created on a pre-existing result sheet never grants rollback ownership", async () => {
+  const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
+  excel.addSheet("Sales_Vynor_Result");
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["chart"]);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.equal(report.results[0].createdSheet, false);
+  assert.deepEqual(
+    rollbackItemsFromApplyReport("test-plan", report.results).sheets,
+    [],
+  );
+});
+
+test("a failed action still tracks a worksheet that this apply call created", async () => {
+  const excel = fakeWorkbook(
+    sourceCells.map((row) => [...row]),
+    { failChart: true },
+  );
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["chart"]);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "failed");
+  assert.equal(report.results[0].createdSheet, true);
+  assert.deepEqual(
+    rollbackItemsFromApplyReport("test-plan", report.results).sheets,
+    ["Sales_Vynor_Result"],
+  );
 });
 
 test("apply requires confirmation, approval and the previewed fingerprint", async () => {

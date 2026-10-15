@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { test } from "node:test";
 import {
   assertConfirmedApproval,
@@ -6,6 +7,7 @@ import {
   createExcelPreviewPlan,
   excelPlansMatch,
   excelSafeBaseName,
+  fingerprintExcelRange,
   profileExcelRange,
   selectExcelActions,
 } from "./excel.js";
@@ -20,6 +22,19 @@ const input = {
     ...Array.from({ length: 1200 }, (_, i) => [i + 1, i * 2, "LK"]),
   ],
 };
+
+test("source fingerprints are canonical SHA-256 values", () => {
+  const canonical = JSON.stringify({
+    workbookId: input.workbookId,
+    worksheetName: input.worksheetName,
+    address: input.address,
+    values: input.values,
+  });
+  assert.equal(
+    fingerprintExcelRange(input),
+    crypto.createHash("sha256").update(canonical).digest("hex"),
+  );
+});
 
 test("profiles selected Excel data and creates bounded chunks", () => {
   const profile = profileExcelRange(input, 500);

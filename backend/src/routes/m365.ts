@@ -45,7 +45,11 @@ const excelPlanSchema = z.object({
   worksheetName: z.string().min(1).max(128),
   address: z.string().min(1).max(128),
   values: z
-    .array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])))
+    .array(
+      z
+        .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+        .max(100),
+    )
     .min(1)
     .max(100_000),
   hasHeaders: z.boolean().optional(),
@@ -255,7 +259,7 @@ const applyResultSchema = z.object({
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),
       }),
     )
-    .max(4),
+    .max(10),
 });
 
 const rollbackSchema = z
@@ -362,6 +366,28 @@ m365Router.post(
   async (req: Request, res: Response) => {
     const user = (req as any).user;
     const tenant = identity(req);
+    const cellCount = req.body.values.reduce(
+      (total: number, row: unknown[]) => total + row.length,
+      0,
+    );
+    const textChars = req.body.values.reduce(
+      (total: number, row: unknown[]) =>
+        total +
+        row.reduce(
+          (rowTotal: number, cell: unknown) =>
+            rowTotal + (typeof cell === "string" ? cell.length : 0),
+          0,
+        ),
+      0,
+    );
+    if (cellCount > 100_000 || textChars > 2_000_000)
+      return res.status(422).json({
+        error: {
+          code: "EXCEL_SELECTION_TOO_LARGE",
+          message:
+            "Select at most 100,000 cells and 2,000,000 text characters.",
+        },
+      });
     const usage = await getOrInitMonthlyUsage(
       user.id,
       user.subscriptionPlan || "free",

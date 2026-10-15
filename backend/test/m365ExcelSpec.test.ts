@@ -177,6 +177,31 @@ test("the server refuses unusable chart v2, pivot v2 and view choices", () => {
   );
 });
 
+test("the server refuses selections that exceed the bounded client contract", () => {
+  const values = Array.from({ length: 1001 }, () =>
+    Array.from({ length: 100 }, () => 1),
+  );
+  values[0] = Array.from({ length: 100 }, (_, index) => `Column ${index}`);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan({ ...input, address: "A1:CV1001", values }, [
+        "table",
+      ]),
+    /100,000 cells/,
+  );
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(
+        {
+          ...input,
+          values: [["Name"], ["x".repeat(2_000_001)]],
+        },
+        ["table"],
+      ),
+    /2,000,000 text characters/,
+  );
+});
+
 test("the apply-result schema accepts every action kind a plan can contain", async () => {
   const { readFileSync } = await import("node:fs");
   const route = readFileSync(
@@ -196,4 +221,9 @@ test("the apply-result schema accepts every action kind a plan can contain", asy
     "view",
   ])
     assert.ok(schema.includes(`"${kind}"`), `apply-result misses ${kind}`);
+  assert.match(
+    schema,
+    /results:[\s\S]*?\.max\(10\)/,
+    "apply-result must accept every result from a ten-action plan",
+  );
 });

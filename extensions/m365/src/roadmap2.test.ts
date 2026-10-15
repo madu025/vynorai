@@ -568,3 +568,17 @@ test("a text answer is shown only when it matches the strict contract", () => {
   ])
     assert.throws(() => validateAssistResult(bad), /AI_ASSIST_INVALID/);
 });
+
+test("Singlish suffix words are consumed with the keyword they follow", () => {
+  assert.equal(
+    normalizeInstruction("Sales by Region pivot ekak hadanna"),
+    "Sales by Region pivot",
+  );
+  assert.equal(normalizeInstruction("chart ekak"), "chart");
+  const parsed = interpretInstruction(
+    "Sales by Region pivot ekak hadanna",
+    headers,
+    rows,
+  );
+  assert.deepEqual(parsed.actions, ["pivot-table"]);
+});

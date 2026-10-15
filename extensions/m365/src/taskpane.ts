@@ -120,6 +120,8 @@ let lastRevealSheet = "";
 let currentSourceSheet = "";
 let currentRangeAddress = "";
 let lastDoneSentence = "";
+let previewSpecs: ExcelColumnSpecs | undefined;
+let lastAppliedSpecs: ExcelColumnSpecs | undefined;
 /** Set when the table was found around a single clicked cell instead of a dragged selection. */
 let autoDetectedAddress = "";
 let previewFingerprint = "";
@@ -528,6 +530,29 @@ inspect?.addEventListener("click", async () => {
       ...(pendingSpecs ?? {}),
       ...plannedSpecs,
     };
+    // Follow-up: "add a chart for that" reuses the columns of the last applied pivot.
+    const earlier = lastAppliedSpecs?.pivot;
+    const namesAColumn = layout.headers.some(
+      (header) =>
+        String(header).length > 1 &&
+        instructionText.toLowerCase().includes(String(header).toLowerCase()),
+    );
+    if (
+      earlier &&
+      specs.chart &&
+      !namesAColumn &&
+      /(that|it|same|those|these|ඒකටම|eka|ekata)/i.test(instructionText)
+    ) {
+      specs.chart = {
+        ...specs.chart,
+        category: earlier.rows,
+        value: earlier.values,
+        ...(earlier.extraValues?.length
+          ? { extraValues: earlier.extraValues }
+          : {}),
+      };
+    }
+    previewSpecs = specs;
     if (lookupWish) {
       try {
         const other = await log.step("excel:read-lookup-sheet", () =>
@@ -646,6 +671,7 @@ inspect?.addEventListener("click", async () => {
     if (apply) apply.disabled = false;
     renderSteps(wanted, plan.actions);
     if (rollbackButton) rollbackButton.hidden = true;
+    document.querySelector<HTMLElement>("#cleanup")?.setAttribute("hidden", "");
     try {
       renderInsights(buildLocalInsights(input));
     } catch {
@@ -793,6 +819,15 @@ apply?.addEventListener("click", async () => {
       ? ""
       : doneSentence(report.results, report.sourceUnchangedAfterApply);
     markChangeNote(failed.length ? "partial" : "applied");
+    if (!failed.length) lastAppliedSpecs = previewSpecs;
+    document.querySelector<HTMLElement>("#cleanup")?.removeAttribute("hidden");
+    document
+      .querySelectorAll<HTMLElement>("#outcomes .where")
+      .forEach((node) => {
+        node.textContent = (node.textContent ?? "")
+          .replace("Will be created on sheet", "Created on sheet")
+          .replace("සාදනු ඇත", "සාදන ලදී");
+      });
     document
       .querySelector("#change-note")
       ?.scrollIntoView?.({ block: "center" });

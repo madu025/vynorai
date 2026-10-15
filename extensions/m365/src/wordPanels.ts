@@ -145,8 +145,9 @@ export function initWordPanels(deps: WordPanelDeps): void {
       "Add this document to the end of your file? Your existing text is not changed. You can remove it afterwards.",
       "Add",
     );
-    if (!ok) return;
+    if (!ok) return deps.setStatus("Cancelled. Nothing was added.");
     try {
+      deps.setStatus("Adding to your document...");
       const ops = draftToOps(current, new Date());
       await insertOps(wordRuntime, ops, {
         tag: newDraftTag(),
@@ -166,7 +167,7 @@ export function initWordPanels(deps: WordPanelDeps): void {
       "Remove the last block this add-in added? Nothing else in your document is touched.",
       "Remove",
     );
-    if (!ok) return;
+    if (!ok) return deps.setStatus("Cancelled. Nothing was removed.");
     try {
       const report = await removeLastInserted(wordRuntime, true);
       deps.setStatus(
@@ -246,8 +247,9 @@ export function initWordPanels(deps: WordPanelDeps): void {
       `Add ${letters.length} letter(s) to the end of your file, one per page? Your existing text is not changed.`,
       "Add",
     );
-    if (!ok) return;
+    if (!ok) return deps.setStatus("Cancelled. Nothing was added.");
     try {
+      deps.setStatus("Adding the letters to your document...");
       await insertOps(wordRuntime, lettersToOps(letters), {
         tag: newDraftTag(),
         title: `Mail merge (${letters.length})`,

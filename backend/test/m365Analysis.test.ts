@@ -217,8 +217,10 @@ beforeEach(async () => {
 
 after(async () => {
   analysis?.setM365AnalysisRunnerForTests();
-  appServer?.close();
-  jwksServer?.close();
+  if (appServer)
+    await new Promise<void>((resolve) => appServer.close(() => resolve()));
+  if (jwksServer)
+    await new Promise<void>((resolve) => jwksServer.close(() => resolve()));
   if (dbm?.db)
     await new Promise<void>((resolve) => dbm.db!.close(() => resolve()));
   process.chdir(originalCwd);

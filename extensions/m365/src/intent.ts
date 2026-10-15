@@ -105,6 +105,11 @@ export interface InstructionSpecs {
       min?: number;
       max?: number;
     }>;
+    inputMessage?: {
+      column: number;
+      title?: string;
+      message?: string;
+    };
   };
   summary?: {
     group: number;
@@ -1454,7 +1459,20 @@ function interpretFormatAndQuality(
       conditional.push({ column, rule: "duplicates" });
   }
   const validation: NonNullable<InstructionSpecs["format"]>["validation"] = [];
-  if (/\bdrop-?\s?down\b|\bvalidation\b/i.test(text))
+  const inputMessageRequested = /\binput\s+message\b/i.test(text);
+  const inputMessageColumn = mentionedLabel[0];
+  const inputMessage =
+    inputMessageRequested && inputMessageColumn !== undefined
+      ? {
+          column: inputMessageColumn,
+          title: "VynorAI guidance",
+          message: `Choose a valid ${headers[inputMessageColumn]} value.`,
+        }
+      : undefined;
+  if (
+    /\bdrop-?\s?down\b/i.test(text) ||
+    (/\bvalidation\b/i.test(text) && inputMessageRequested)
+  )
     for (const column of mentionedLabel.slice(0, 2))
       validation.push({ column, rule: "list" });
   const range =
@@ -1506,6 +1524,7 @@ function interpretFormatAndQuality(
     ...(/\btotals?\s+row\b/i.test(text) ? { totalRow: true } : {}),
     ...(conditional.length ? { conditional } : {}),
     ...(validation.length ? { validation } : {}),
+    ...(inputMessage ? { inputMessage } : {}),
   };
   result.actions.push("format");
   result.specs.format = format;

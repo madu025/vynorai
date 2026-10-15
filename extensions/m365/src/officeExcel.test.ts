@@ -36,7 +36,17 @@ function fakeWorkbook(
       rowCount: data.length,
       columnCount: data[0]?.length ?? 0,
       values: data,
-      format: { font: {}, autofitColumns() {} },
+      format: { font: {}, fill: {}, autofitColumns() {} },
+      dataValidation: new Proxy(
+        {},
+        {
+          set(object, key, value) {
+            calls.push(`validation.${String(key)} ${JSON.stringify(value)}`);
+            object[key] = value;
+            return true;
+          },
+        },
+      ),
       load() {},
       getCell(row: number) {
         return {
@@ -55,6 +65,9 @@ function fakeWorkbook(
       customProperties: {
         add: (key: string, value: string) =>
           calls.push(`mark ${name} ${key}=${value}`),
+      },
+      freezePanes: {
+        freezeRows: (count: number) => calls.push(`freeze ${count}`),
       },
       getRange: (address: string) => {
         const target = range(name, address);
@@ -323,6 +336,38 @@ test("apply writes a normalized copy to the result sheet for two-row headers", a
     ["new-sheet:created", "table:created", "pivot-table:created"],
   );
   assert.ok(excel.calls.includes("write Result of Sales!A1 normalized"));
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
+test("apply adds an input message to validation on a copied result sheet", async () => {
+  const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["format"], 500, {
+    format: {
+      validation: [{ column: 0, rule: "list" }],
+      inputMessage: {
+        column: 0,
+        title: "Status guidance",
+        message: "Choose a valid region.",
+      },
+    },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.ok(
+    excel.calls.some((call) =>
+      call.includes(
+        'validation.prompt {"showPrompt":true,"title":"Status guidance"',
+      ),
+    ),
+    excel.calls.join("\n"),
+  );
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 

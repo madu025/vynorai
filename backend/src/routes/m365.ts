@@ -252,6 +252,14 @@ const excelPlanSchema = z.object({
             )
             .max(4)
             .optional(),
+          inputMessage: z
+            .object({
+              column: z.number().int().min(0).max(99),
+              title: z.string().min(1).max(32).optional(),
+              message: z.string().min(1).max(255).optional(),
+            })
+            .strict()
+            .optional(),
         })
         .strict()
         .optional(),

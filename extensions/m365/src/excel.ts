@@ -186,6 +186,7 @@ export interface ExcelColumnSpecs {
       min?: number;
       max?: number;
     }>;
+    inputMessage?: { column: number; title?: string; message?: string };
   };
   clean?: { operations: string[]; fillBlanks?: string | number };
   addColumn?: {
@@ -321,6 +322,12 @@ export interface ExcelActionSpec {
     min?: number;
     max?: number;
   }>;
+  inputMessage?: {
+    column: string;
+    index: number;
+    title: string;
+    message: string;
+  };
   groupColumn?: string;
   groupIndex?: number;
   groups?: string[];
@@ -1279,6 +1286,34 @@ function resolveColumnSpecs(
         });
       }
     }
+    let inputMessage:
+      | { column: string; index: number; title: string; message: string }
+      | undefined;
+    if (options.inputMessage) {
+      if (!inRange(options.inputMessage.column))
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose a valid column for the input message.",
+        );
+      const column = headers[options.inputMessage.column];
+      const title = String(
+        options.inputMessage.title ?? "VynorAI guidance",
+      ).trim();
+      const message = String(
+        options.inputMessage.message ?? `Choose a valid ${column} value.`,
+      ).trim();
+      if (!title || title.length > 32 || !message || message.length > 255)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Input message title or message is too long.",
+        );
+      inputMessage = {
+        column,
+        index: options.inputMessage.column,
+        title,
+        message,
+      };
+    }
     const columnFormats: Array<{
       index: number;
       column: string;
@@ -1306,6 +1341,7 @@ function resolveColumnSpecs(
       columnFormats,
       conditional,
       validation,
+      ...(inputMessage ? { inputMessage } : {}),
     };
   }
   if (specs.statistics) {

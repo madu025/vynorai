@@ -1509,6 +1509,19 @@ export async function applyApprovedExcelPlan(
                     };
                   }
                 }
+                if (spec.inputMessage) {
+                  const promptRange = sheet.getRangeByIndexes(
+                    1,
+                    spec.inputMessage.index,
+                    rows.length,
+                    1,
+                  );
+                  promptRange.dataValidation.prompt = {
+                    showPrompt: true,
+                    title: spec.inputMessage.title,
+                    message: spec.inputMessage.message,
+                  };
+                }
                 await context.sync();
                 if (spec.totalRow) {
                   const totalRowIndex = rows.length + 1;

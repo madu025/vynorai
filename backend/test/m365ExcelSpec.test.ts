@@ -586,6 +586,29 @@ test("server and add-in agree on clean and computed-column plans", () => {
   assert.equal(server.actions[1].spec.rightColumn, "Cost");
 });
 
+test("server and add-in agree on a validated input-message format plan", () => {
+  const specs = {
+    format: {
+      validation: [{ column: 1, rule: "list" as const }],
+      inputMessage: {
+        column: 1,
+        title: "Status guidance",
+        message: "Choose a valid status.",
+      },
+    },
+  };
+  const actions = ["format"] as const;
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec?.inputMessage, {
+    column: "Region",
+    index: 1,
+    title: "Status guidance",
+    message: "Choose a valid status.",
+  });
+});
+
 test("server and add-in agree on an unambiguous text-date conversion", () => {
   const specs = { clean: { operations: ["text-to-date"] } };
   const actions = ["clean"] as const;

@@ -302,6 +302,14 @@ export function buildOutcomes(
           );
         }
       }
+      if (spec.inputMessage) {
+        item.details.push(
+          say(
+            `${spec.inputMessage.column}: input message “${spec.inputMessage.message}”`,
+            `${spec.inputMessage.column}: input message “${spec.inputMessage.message}”`,
+          ),
+        );
+      }
       if (spec.totalRow)
         item.details.push(
           say(

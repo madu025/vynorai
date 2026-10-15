@@ -79,7 +79,7 @@ Conditional formatting	-	Highlight dates in the next 30 days
 Named ranges and slicers	named-range	Create a named range for Sales
 Named ranges and slicers	slicer	Add a slicer for Region
 Named ranges and slicers	-	Create a dependent drop-down for Status
-Named ranges and slicers	-	Add an input message to the Status validation
+Named ranges and slicers	format	Add an input message to the Status validation
 Conversation	clean,pivot-table,chart	Clean it, then create a PivotTable of Sales by Region, then add a chart
 Conversation	chart	Now add a chart for that
 Conversation	pivot-table,chart	Create a pivot of Sales by Region and chart it

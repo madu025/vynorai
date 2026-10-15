@@ -47,6 +47,19 @@ test("format instructions become explicit options, and 'format as a table' stays
   assert.deepEqual(dropdown.specs.format?.validation, [
     { column: 1, rule: "list" },
   ]);
+  const inputMessage = interpretInstruction(
+    "Add an input message to the Region validation",
+    headers,
+    rows,
+  );
+  assert.deepEqual(inputMessage.specs.format?.inputMessage, {
+    column: 1,
+    title: "VynorAI guidance",
+    message: "Choose a valid Region value.",
+  });
+  assert.deepEqual(inputMessage.specs.format?.validation, [
+    { column: 1, rule: "list" },
+  ]);
   const table = interpretInstruction("Format as a table", headers, rows);
   assert.equal(table.specs.format, undefined);
   assert.deepEqual(table.actions, ["table"]);
@@ -98,6 +111,11 @@ test("the plan decides number formats, highlights and drop-down values", () => {
         { column: 1, rule: "list" },
         { column: 3, rule: "non-negative" },
       ],
+      inputMessage: {
+        column: 1,
+        title: "Status guidance",
+        message: "Choose a valid status.",
+      },
     },
   });
   const action = plan.actions.find((entry) => entry.kind === "format")!;
@@ -109,6 +127,12 @@ test("the plan decides number formats, highlights and drop-down values", () => {
     ["#,##0", "#,##0", "0.0%"],
   );
   assert.deepEqual(spec.validation?.[0].values, ["North", "South", "East"]);
+  assert.deepEqual(spec.inputMessage, {
+    column: "Region",
+    index: 1,
+    title: "Status guidance",
+    message: "Choose a valid status.",
+  });
   const bad = (format: unknown) =>
     createExcelPreviewPlan(input as any, ["format"], 500, { format } as any);
   assert.throws(

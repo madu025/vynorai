@@ -194,6 +194,7 @@ readButton?.addEventListener("click", async () => {
     return setStatus("Open this add-in in Word, PowerPoint or Outlook.");
   try {
     const text = await readSelection(host);
+    if (consent) consent.checked = false;
     if (sourceBox) sourceBox.value = text;
     if (sizeNote)
       sizeNote.textContent = `${text.length} characters will be sent.`;
@@ -225,6 +226,8 @@ run?.addEventListener("click", async () => {
       accessToken,
     ).assistText(request);
     const result = validateAssistResult(response?.result);
+    // Consent covers exactly one send; the next text needs its own agreement.
+    if (consent) consent.checked = false;
     if (output) output.value = result.text;
     if (notes) notes.textContent = (result.notes ?? []).join(" ");
     if (insert) insert.disabled = false;

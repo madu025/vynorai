@@ -109,7 +109,8 @@ export type ExcelChartType =
   | "pie"
   | "stacked-column"
   | "stacked-bar"
-  | "area";
+  | "area"
+  | "combo";
 export type ExcelAggregation = "sum" | "count" | "average" | "min" | "max";
 export type ExcelFilterOperator =
   | ">"
@@ -443,6 +444,7 @@ function resolveColumnSpecs(
     "stacked-column",
     "stacked-bar",
     "area",
+    "combo",
   ];
   if (specs.chart) {
     if (!requested.has("chart"))

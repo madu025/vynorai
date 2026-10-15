@@ -186,6 +186,13 @@ export function buildOutcomes(
           `${by} එක් එකක් සඳහා ${names} සසඳයි.`,
         ),
       );
+      if (spec.chartType === "combo")
+        item.details.push(
+          say(
+            "The first series uses columns; additional series use line overlays.",
+            "මුල් series එක columns ලෙසත්, අමතර series line overlays ලෙසත් පෙන්වයි.",
+          ),
+        );
       const secondary = (spec.secondaryIndexes ?? []) as number[];
       if (secondary.length) {
         const slowNames = secondary

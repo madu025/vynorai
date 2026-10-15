@@ -970,6 +970,7 @@ export async function applyApprovedExcelPlan(
                   "stacked-column": "ColumnStacked",
                   "stacked-bar": "BarStacked",
                   area: "Area",
+                  combo: "ColumnClustered",
                 };
                 const chart = sheet.charts.add(
                   chartTypes[spec.chartType] ?? "ColumnClustered",
@@ -1018,6 +1019,13 @@ export async function applyApprovedExcelPlan(
                       extra.axisGroup = "Secondary";
                     } catch {
                       // The host keeps it on the primary axis.
+                    }
+                  }
+                  if (spec.chartType === "combo") {
+                    try {
+                      extra.chartType = "Line";
+                    } catch {
+                      // Older hosts keep the additional series as columns.
                     }
                   }
                 });

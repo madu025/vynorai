@@ -461,6 +461,20 @@ test("chart and PivotTable column choices are read from plain words", () => {
   assert.ok(plain.specs.chart?.value !== undefined);
 });
 
+test("a combo chart keeps the first series as columns and adds the others", () => {
+  const chart = interpretInstruction(
+    "Create a combo chart of Sales and Cost by Region",
+    headers,
+    rows,
+  );
+  assert.deepEqual(chart.specs.chart, {
+    category: 1,
+    value: 2,
+    chartType: "combo",
+    extraValues: [3],
+  });
+});
+
 test("Sinhala and Singlish keywords map to the same actions", () => {
   assert.match(normalizeInstruction("Sales by Region ප්‍රස්තාරයක්"), /chart/);
   assert.match(normalizeInstruction("data pirisidu karanna"), /clean/);

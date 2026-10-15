@@ -56,6 +56,23 @@ function fakeWorkbook() {
                 setXAxisValues: (range: any) =>
                   calls.push(`series.x ${range.label}`),
               }),
+              add: (name: string) =>
+                new Proxy(
+                  {
+                    setValues: (range: any) =>
+                      calls.push(`series.values ${range.label}`),
+                    setXAxisValues: (range: any) =>
+                      calls.push(`series.x ${range.label}`),
+                  } as any,
+                  {
+                    set(object, key, value) {
+                      object[key] = value;
+                      if (key === "chartType")
+                        calls.push(`series.type ${value}`);
+                      return true;
+                    },
+                  },
+                ),
             },
           };
           return new Proxy(chart, {
@@ -183,6 +200,33 @@ test("a pivot with column choices uses the named row and value fields", async ()
   assert.ok(excel.calls.includes("pivot.rows Region"));
   assert.ok(excel.calls.includes("pivot.values Cost"));
   assert.ok(excel.calls.includes("pivot.summarizeBy Sum"));
+});
+
+test("apply creates a combo chart with line overlays on a new result sheet", async () => {
+  const plan = createExcelPreviewPlan(input as any, ["chart"], undefined, {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "combo",
+      extraValues: [3],
+    },
+  });
+  const excel = fakeWorkbook();
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.ok(
+    excel.calls.some((call) =>
+      /^chart\.add ColumnClustered col2 Columns$/.test(call),
+    ),
+    excel.calls.join("\n"),
+  );
+  assert.ok(excel.calls.includes("series.type Line"), excel.calls.join("\n"));
 });
 
 test("without column choices the existing whole-range behaviour is unchanged", () => {

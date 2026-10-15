@@ -19,7 +19,8 @@ export interface InstructionSpecs {
       | "pie"
       | "stacked-column"
       | "stacked-bar"
-      | "area";
+      | "area"
+      | "combo";
     extraValues?: number[];
   };
   /** Bring a column from another sheet; the pane resolves the sheet's headers. */
@@ -752,6 +753,7 @@ export function normalizeInstruction(text: string): string {
 const CHART_TYPE_WORDS: Array<
   [RegExp, NonNullable<InstructionSpecs["chart"]>["chartType"]]
 > = [
+  [/\bcombo\b/i, "combo"],
   [/stacked\s+(column|columns)/i, "stacked-column"],
   [/stacked\s+bar/i, "stacked-bar"],
   [/\barea\b/i, "area"],

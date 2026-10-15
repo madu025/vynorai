@@ -34,6 +34,8 @@ export interface M365ApiClient {
         | "clean"
         | "add-column"
         | "summary"
+        | "format"
+        | "quality"
         | "view";
       status: "created" | "exists" | "failed" | "skipped_unsupported";
     }>;

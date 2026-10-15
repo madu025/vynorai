@@ -59,11 +59,13 @@ const excelPlanSchema = z.object({
         "clean",
         "add-column",
         "summary",
+        "format",
+        "quality",
         "view",
       ]),
     )
     .min(1)
-    .max(8),
+    .max(10),
   chunkRows: z.number().int().min(1).max(5000).optional(),
   specs: z
     .object({
@@ -95,6 +97,7 @@ const excelPlanSchema = z.object({
             .enum(["sum", "count", "average", "min", "max"])
             .optional(),
           columns: z.number().int().min(0).max(99).optional(),
+          filter: z.number().int().min(0).max(99).optional(),
         })
         .strict()
         .optional(),
@@ -137,6 +140,42 @@ const excelPlanSchema = z.object({
               n: z.number().int().min(1).max(100).optional(),
             })
             .strict()
+            .optional(),
+        })
+        .strict()
+        .optional(),
+      format: z
+        .object({
+          freezeHeader: z.boolean().optional(),
+          autofit: z.boolean().optional(),
+          numberFormats: z.boolean().optional(),
+          totalRow: z.boolean().optional(),
+          conditional: z
+            .array(
+              z
+                .object({
+                  column: z.number().int().min(0).max(99),
+                  rule: z.enum([
+                    "data-bars",
+                    "color-scale",
+                    "negative",
+                    "duplicates",
+                  ]),
+                })
+                .strict(),
+            )
+            .max(6)
+            .optional(),
+          validation: z
+            .array(
+              z
+                .object({
+                  column: z.number().int().min(0).max(99),
+                  rule: z.enum(["list", "non-negative"]),
+                })
+                .strict(),
+            )
+            .max(4)
             .optional(),
         })
         .strict()
@@ -209,6 +248,8 @@ const applyResultSchema = z.object({
           "clean",
           "add-column",
           "summary",
+          "format",
+          "quality",
           "view",
         ]),
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),

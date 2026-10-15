@@ -23,6 +23,7 @@ export interface InstructionSpecs {
     extraValues?: number[];
   };
   pivot?: {
+    filter?: number;
     rows: number;
     values: number;
     aggregation?: "sum" | "count" | "average" | "min" | "max";
@@ -47,6 +48,15 @@ export interface InstructionSpecs {
     };
   };
   clean?: { operations: CleanOperation[] };
+  format?: {
+    freezeHeader?: boolean;
+    totalRow?: boolean;
+    conditional?: Array<{
+      column: number;
+      rule: "data-bars" | "color-scale" | "negative" | "duplicates";
+    }>;
+    validation?: Array<{ column: number; rule: "list" | "non-negative" }>;
+  };
   summary?: {
     group: number;
     values: Array<{
@@ -66,7 +76,14 @@ export interface InstructionSpecs {
 
 export interface InterpretedInstruction {
   actions: Array<
-    "clean" | "add-column" | "chart" | "pivot-table" | "view" | "summary"
+    | "clean"
+    | "add-column"
+    | "chart"
+    | "pivot-table"
+    | "view"
+    | "summary"
+    | "format"
+    | "quality"
   >;
   specs: InstructionSpecs;
   problems: string[];
@@ -196,6 +213,7 @@ export function interpretInstruction(
   }
   interpretChartAndPivot(text, headers, rows, result);
   interpretSummary(text, headers, rows, result);
+  interpretFormatAndQuality(text, headers, rows, result);
   interpretView(text, headers, rows, result);
   return result;
 }
@@ -338,6 +356,16 @@ function interpretChartAndPivot(
       aggregation,
       ...(columns ? { columns: columns.index } : {}),
     };
+    const filterMatch = /\bfilter(?:ed)?\s+(?:by|on|using)\s+/i.exec(text);
+    if (filterMatch && result.specs.pivot) {
+      const filterEntry = labels.find(
+        (entry) =>
+          entry.at >= filterMatch.index &&
+          entry.index !== categoryEntry.index &&
+          entry.index !== (columns?.index ?? -1),
+      );
+      if (filterEntry) result.specs.pivot.filter = filterEntry.index;
+    }
   }
 }
 
@@ -617,4 +645,68 @@ function interpretSummary(
       aggregation,
     })),
   };
+}
+
+/**
+ * Presentation and checking requests. "Format as a table" stays the table action; this reads
+ * "make it presentable", "freeze the header", "data bars on Sales", "highlight negative values",
+ * "highlight duplicates in Region", "drop-down for Region", "add a total row" and data quality checks.
+ */
+function interpretFormatAndQuality(
+  text: string,
+  headers: string[],
+  rows: Cell[][],
+  result: InterpretedInstruction,
+) {
+  if (
+    /\b(?:data\s+)?quality\b|\bhealth\s*check\b|\bfind\s+(?:problems|issues|errors)\b|\bcheck\s+(?:the\s+)?data\b|\baudit\b/i.test(
+      text,
+    )
+  )
+    result.actions.push("quality");
+  if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
+  const wants =
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+      text,
+    );
+  if (!wants) return;
+  const positions = headerPositions(headers, text);
+  const numericAll = headers
+    .map((_, index) => index)
+    .filter((index) => isNumericColumn(rows, index));
+  const mentionedNumeric = positions
+    .filter((entry) => isNumericColumn(rows, entry.index))
+    .map((entry) => entry.index);
+  const mentionedLabel = positions
+    .filter((entry) => !isNumericColumn(rows, entry.index))
+    .map((entry) => entry.index);
+  const conditional: NonNullable<InstructionSpecs["format"]>["conditional"] =
+    [];
+  const pickNumeric = mentionedNumeric.length ? mentionedNumeric : numericAll;
+  if (/\bdata\s*bars?\b/i.test(text))
+    for (const column of pickNumeric.slice(0, 3))
+      conditional.push({ column, rule: "data-bars" });
+  if (/\bcolou?r\s*scale\b/i.test(text))
+    for (const column of pickNumeric.slice(0, 3))
+      conditional.push({ column, rule: "color-scale" });
+  if (/\bhighlight\s+(?:the\s+)?negative/i.test(text))
+    for (const column of pickNumeric.slice(0, 3))
+      conditional.push({ column, rule: "negative" });
+  if (/\bhighlight\s+(?:the\s+)?duplicates?/i.test(text)) {
+    const targets = mentionedLabel.length ? mentionedLabel : mentionedNumeric;
+    for (const column of targets.slice(0, 2))
+      conditional.push({ column, rule: "duplicates" });
+  }
+  const validation: NonNullable<InstructionSpecs["format"]>["validation"] = [];
+  if (/\bdrop-?\s?down\b|\bvalidation\b/i.test(text))
+    for (const column of mentionedLabel.slice(0, 2))
+      validation.push({ column, rule: "list" });
+  const format: NonNullable<InstructionSpecs["format"]> = {
+    freezeHeader: true,
+    ...(/\btotals?\s+row\b/i.test(text) ? { totalRow: true } : {}),
+    ...(conditional.length ? { conditional } : {}),
+    ...(validation.length ? { validation } : {}),
+  };
+  result.actions.push("format");
+  result.specs.format = format;
 }

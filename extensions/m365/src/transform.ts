@@ -364,3 +364,154 @@ export function buildSummaryTable(input: SummaryBuildInput): {
     formulaRows: rows.length + (input.includeTotal ? 1 : 0),
   };
 }
+
+export interface QualityReport {
+  values: Array<Array<string | number>>;
+  findings: string[];
+  headerRow: number;
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const position = (sorted.length - 1) * q;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+}
+
+/**
+ * A deterministic data quality report (blanks, duplicates, outliers, numbers stored as text,
+ * stray spaces, mixed types). It reads values only, never writes to the source, and everything
+ * in it is plain text or numbers.
+ */
+export function buildQualityReport(
+  headers: string[],
+  rows: Array<Array<string | number | boolean | null>>,
+): QualityReport {
+  const isBlank = (cell: unknown) =>
+    cell === null || cell === undefined || String(cell).trim() === "";
+  const seenRows = new Map<string, number>();
+  let duplicateRows = 0;
+  let blankCells = 0;
+  for (const row of rows) {
+    const key = JSON.stringify(
+      headers.map((_, column) =>
+        String(row[column] ?? "")
+          .trim()
+          .toLowerCase(),
+      ),
+    );
+    const count = (seenRows.get(key) ?? 0) + 1;
+    seenRows.set(key, count);
+    if (count > 1) duplicateRows += 1;
+  }
+  const findings: string[] = [];
+  const perColumn = headers.map((header, column) => {
+    const cells = rows.map((row) => row[column]);
+    const filled = cells.filter((cell) => !isBlank(cell));
+    const blanks = cells.length - filled.length;
+    blankCells += blanks;
+    const numbers = filled.filter(
+      (cell) => typeof cell === "number",
+    ) as number[];
+    const texts = filled.filter((cell) => typeof cell !== "number");
+    const textNumbers = texts.filter((cell) =>
+      /^-?[\d,]+(\.\d+)?$/.test(String(cell).trim()),
+    ).length;
+    const extraSpaces = texts.filter(
+      (cell) =>
+        String(cell) !== String(cell).trim() || /\s{2,}/.test(String(cell)),
+    ).length;
+    const type =
+      filled.length === 0
+        ? "empty"
+        : numbers.length === filled.length
+          ? "number"
+          : numbers.length === 0
+            ? "text"
+            : "mixed";
+    const sorted = [...numbers].sort((a, b) => a - b);
+    let outliers = 0;
+    if (sorted.length >= 4) {
+      const q1 = quantile(sorted, 0.25);
+      const q3 = quantile(sorted, 0.75);
+      const spread = q3 - q1;
+      outliers = sorted.filter(
+        (value) => value < q1 - 1.5 * spread || value > q3 + 1.5 * spread,
+      ).length;
+    }
+    const distinct = new Set(filled.map((cell) => String(cell).trim())).size;
+    const average =
+      numbers.length > 0
+        ? Math.round(
+            (numbers.reduce((sum, value) => sum + value, 0) / numbers.length) *
+              100,
+          ) / 100
+        : "";
+    if (blanks > 0)
+      findings.push(
+        header + ": " + blanks + " blank cell(s) of " + cells.length + ".",
+      );
+    if (type === "mixed")
+      findings.push(header + ": numbers and text are mixed in one column.");
+    if (type === "text" && textNumbers > 0)
+      findings.push(
+        header + ": " + textNumbers + " number(s) are stored as text.",
+      );
+    if (extraSpaces > 0)
+      findings.push(
+        header + ": " + extraSpaces + " value(s) have extra spaces.",
+      );
+    if (outliers > 0)
+      findings.push(
+        header +
+          ": " +
+          outliers +
+          " unusual value(s) outside the normal range.",
+      );
+    return [
+      header,
+      type,
+      filled.length,
+      blanks,
+      distinct,
+      sorted.length ? sorted[0] : "",
+      sorted.length ? sorted[sorted.length - 1] : "",
+      average,
+      outliers,
+      textNumbers,
+      extraSpaces,
+    ] as Array<string | number>;
+  });
+  if (duplicateRows > 0)
+    findings.unshift(duplicateRows + " duplicate row(s) found.");
+  if (findings.length === 0)
+    findings.push("No problems found in the selected data.");
+  const values: Array<Array<string | number>> = [
+    ["Data quality report"],
+    [],
+    ["Rows", rows.length],
+    ["Columns", headers.length],
+    ["Blank cells", blankCells],
+    ["Duplicate rows", duplicateRows],
+    [],
+    [
+      "Column",
+      "Type",
+      "Filled",
+      "Blank",
+      "Distinct",
+      "Min",
+      "Max",
+      "Average",
+      "Outliers",
+      "Numbers as text",
+      "Extra spaces",
+    ],
+    ...perColumn,
+    [],
+    ["Findings"],
+    ...findings.map((text) => [text]),
+  ];
+  return { values, findings, headerRow: 7 };
+}

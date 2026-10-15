@@ -12,6 +12,7 @@ import {
 
 import {
   applyView,
+  buildQualityReport,
   buildSummaryTable,
   cleanRows,
   computedColumnFormula,
@@ -350,6 +351,17 @@ export async function applyApprovedExcelPlan(
                 chart.name = action.name;
                 chart.setPosition("H3");
                 chart.title.text = `${spec.valueColumn} by ${spec.categoryColumn}`;
+                const extras = spec.extraValueIndexes ?? [];
+                chart.legend.visible =
+                  extras.length > 0 || spec.chartType === "pie";
+                if (spec.chartType !== "pie") {
+                  chart.axes.categoryAxis.title.text = String(
+                    spec.categoryColumn,
+                  );
+                  chart.axes.valueAxis.title.text =
+                    extras.length > 0 ? "Value" : String(spec.valueColumn);
+                  chart.axes.valueAxis.numberFormat = "#,##0";
+                }
                 await context.sync();
                 const dataOf = (index: number) =>
                   source
@@ -417,6 +429,10 @@ export async function applyApprovedExcelPlan(
                   pivot.columnHierarchies.add(
                     pivot.hierarchies.getItem(action.spec.columnsColumn),
                   );
+                if (action.spec.filterColumn)
+                  pivot.filterHierarchies.add(
+                    pivot.hierarchies.getItem(action.spec.filterColumn),
+                  );
                 await context.sync();
               }
             }
@@ -461,6 +477,179 @@ export async function applyApprovedExcelPlan(
                   headers.length,
                 ).format.fill.color = "#FFF2CC";
               if (view.highlighted.length > 0) await context.sync();
+            }
+          } else if (action.kind === "quality") {
+            if (plan.normalization)
+              throw new Error(
+                "A quality report needs a range with one header row",
+              );
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers, rows } = splitHeader(await readSourceValues());
+              const report = buildQualityReport(
+                headers.map(String),
+                rows as any,
+              );
+              const width = Math.max(
+                ...report.values.map((row) => row.length),
+                1,
+              );
+              const padded = report.values.map((row) => {
+                const cells = row.map((cell) => literal(cell));
+                while (cells.length < width) cells.push("");
+                return cells;
+              });
+              sheet.getRangeByIndexes(0, 0, padded.length, width).values =
+                padded;
+              await context.sync();
+              sheet.getRangeByIndexes(0, 0, 1, 1).format.font.bold = true;
+              sheet.getRangeByIndexes(
+                report.headerRow,
+                0,
+                1,
+                width,
+              ).format.font.bold = true;
+              sheet
+                .getRangeByIndexes(0, 0, padded.length, width)
+                .format.autofitColumns();
+              await context.sync();
+            }
+          } else if (action.kind === "format") {
+            const spec = action.spec;
+            if (!spec) throw new Error("format needs explicit options");
+            if (plan.normalization)
+              throw new Error("Formatting needs a range with one header row");
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              const { headers, rows } = splitHeader(await readSourceValues());
+              const out = [headers, ...rows].map((row) => row.map(literal));
+              const columns = headers.length;
+              sheet.getRangeByIndexes(0, 0, out.length, columns).values = out;
+              await context.sync();
+              const headerRange = sheet.getRangeByIndexes(0, 0, 1, columns);
+              headerRange.format.font.bold = true;
+              headerRange.format.font.color = "#FFFFFF";
+              headerRange.format.fill.color = "#123A6B";
+              if (spec.freezeHeader !== false) sheet.freezePanes.freezeRows(1);
+              if (rows.length > 0) {
+                for (const entry of spec.columnFormats ?? [])
+                  sheet.getRangeByIndexes(
+                    1,
+                    entry.index,
+                    rows.length,
+                    1,
+                  ).numberFormat = rows.map(() => [entry.format]);
+                await context.sync();
+                for (const rule of spec.conditional ?? []) {
+                  const range = sheet.getRangeByIndexes(
+                    1,
+                    rule.index,
+                    rows.length,
+                    1,
+                  );
+                  if (rule.rule === "data-bars") {
+                    range.conditionalFormats.add("DataBar");
+                  } else if (rule.rule === "color-scale") {
+                    const scale = range.conditionalFormats.add("ColorScale");
+                    scale.colorScale.criteria = {
+                      minimum: { type: "LowestValue", color: "#F8696B" },
+                      midpoint: {
+                        type: "Percentile",
+                        formula: "50",
+                        color: "#FFEB84",
+                      },
+                      maximum: { type: "HighestValue", color: "#63BE7B" },
+                    };
+                  } else if (rule.rule === "negative") {
+                    const negative = range.conditionalFormats.add("CellValue");
+                    negative.cellValue.rule = {
+                      formula1: "0",
+                      operator: "LessThan",
+                    };
+                    negative.cellValue.format.font.color = "#C00000";
+                    negative.cellValue.format.fill.color = "#FFC7CE";
+                  } else if (rule.rule === "duplicates") {
+                    const dupes = range.conditionalFormats.add("Custom");
+                    const letter = expressionColumnLetter(rule.index);
+                    const last = rows.length + 1;
+                    dupes.custom.rule.formula =
+                      "=COUNTIF($" +
+                      letter +
+                      "$2:$" +
+                      letter +
+                      "$" +
+                      last +
+                      "," +
+                      letter +
+                      "2)>1";
+                    dupes.custom.format.fill.color = "#FFC7CE";
+                  }
+                }
+                await context.sync();
+                for (const check of spec.validation ?? []) {
+                  const range = sheet.getRangeByIndexes(
+                    1,
+                    check.index,
+                    rows.length,
+                    1,
+                  );
+                  if (check.rule === "list" && check.values) {
+                    range.dataValidation.rule = {
+                      list: {
+                        inCellDropDown: true,
+                        source: check.values.join(","),
+                      },
+                    };
+                  } else {
+                    range.dataValidation.rule = {
+                      decimal: {
+                        formula1: 0,
+                        operator: "GreaterThanOrEqualTo",
+                      },
+                    };
+                  }
+                }
+                await context.sync();
+                if (spec.totalRow) {
+                  const totalRowIndex = rows.length + 1;
+                  const label = sheet.getRangeByIndexes(totalRowIndex, 0, 1, 1);
+                  label.values = [["Total"]];
+                  for (const entry of spec.columnFormats ?? []) {
+                    const letter = expressionColumnLetter(entry.index);
+                    const cell = sheet.getRangeByIndexes(
+                      totalRowIndex,
+                      entry.index,
+                      1,
+                      1,
+                    );
+                    cell.formulas = [
+                      [
+                        "=SUBTOTAL(109," +
+                          letter +
+                          "2:" +
+                          letter +
+                          String(rows.length + 1) +
+                          ")",
+                      ],
+                    ];
+                    cell.numberFormat = [[entry.format]];
+                  }
+                  sheet.getRangeByIndexes(
+                    totalRowIndex,
+                    0,
+                    1,
+                    columns,
+                  ).format.font.bold = true;
+                  await context.sync();
+                }
+              }
+              if (spec.autofit !== false)
+                sheet
+                  .getRangeByIndexes(0, 0, out.length + 1, columns)
+                  .format.autofitColumns();
+              await context.sync();
             }
           } else if (action.kind === "summary") {
             const spec = action.spec;
@@ -647,7 +836,7 @@ export async function inspectWorkbookOverview(
 }
 
 const CREATED_SHEET =
-  /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|View)$/;
+  /^[A-Za-z0-9_]{1,18}_Vynor_(Result|Clean|Calc|Totals|Format|Report|View)$/;
 const CREATED_TABLE = /^[A-Za-z0-9_]{1,18}_Vynor_table$/;
 
 export interface RollbackReport {

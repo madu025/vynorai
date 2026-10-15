@@ -131,3 +131,67 @@ test("server and add-in build the same summary plan and the server checks it", (
     /summary action/,
   );
 });
+
+test("server and add-in agree on format, quality and pivot filter plans", () => {
+  const formatSpecs = {
+    format: {
+      totalRow: true,
+      conditional: [
+        { column: 2, rule: "data-bars" as const },
+        { column: 3, rule: "negative" as const },
+      ],
+      validation: [{ column: 1, rule: "list" as const }],
+    },
+  };
+  const actions = ["format", "quality"] as const;
+  const server = createServerExcelPreviewPlan(
+    input,
+    [...actions],
+    500,
+    formatSpecs,
+  );
+  const local = createExcelPreviewPlan(
+    input as any,
+    [...actions],
+    500,
+    formatSpecs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  const targets = server.actions.map((a: any) => a.targetSheet);
+  assert.deepEqual(targets, ["Sheet1_Vynor_Format", "Sheet1_Vynor_Report"]);
+  const format = server.actions.find((a: any) => a.kind === "format")!;
+  assert.deepEqual(format.spec.validation[0].values, [
+    "North",
+    "South",
+    "East",
+  ]);
+  const pivotSpecs = { pivot: { rows: 1, values: 2, filter: 0 } };
+  const pivotServer = createServerExcelPreviewPlan(
+    input,
+    ["pivot-table"],
+    500,
+    pivotSpecs,
+  );
+  const pivotLocal = createExcelPreviewPlan(
+    input as any,
+    ["pivot-table"],
+    500,
+    pivotSpecs,
+  );
+  assert.equal(excelPlansMatch(pivotLocal, pivotServer), true);
+  assert.equal(pivotServer.actions[0].spec.filterColumn, "Month");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["format"], 500, {
+        format: { conditional: [{ column: 1, rule: "data-bars" }] },
+      } as any),
+    /column of numbers/,
+  );
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["pivot-table"], 500, {
+        pivot: { rows: 1, values: 2, filter: 1 },
+      } as any),
+    /filter field/,
+  );
+});

@@ -55,6 +55,8 @@ type ExcelActionPlan = {
       | "clean"
       | "add-column"
       | "summary"
+      | "format"
+      | "quality"
       | "view";
     name: string;
     targetSheet: string;
@@ -76,6 +78,8 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "clean",
   "add-column",
   "summary",
+  "format",
+  "quality",
   "view",
 ];
 
@@ -122,6 +126,18 @@ export interface ExcelColumnSpecs {
     values: number;
     aggregation?: ExcelAggregation;
     columns?: number;
+    filter?: number;
+  };
+  format?: {
+    freezeHeader?: boolean;
+    autofit?: boolean;
+    numberFormats?: boolean;
+    totalRow?: boolean;
+    conditional?: Array<{
+      column: number;
+      rule: "data-bars" | "color-scale" | "negative" | "duplicates";
+    }>;
+    validation?: Array<{ column: number; rule: "list" | "non-negative" }>;
   };
   clean?: { operations: string[] };
   addColumn?: {
@@ -170,6 +186,19 @@ export interface ExcelActionSpec {
   operator?: "+" | "-" | "*" | "/";
   rightColumn?: string;
   rightIndex?: number;
+  filterColumn?: string;
+  filterIndex?: number;
+  freezeHeader?: boolean;
+  autofit?: boolean;
+  totalRow?: boolean;
+  columnFormats?: Array<{ index: number; column: string; format: string }>;
+  conditional?: Array<{ column: string; index: number; rule: string }>;
+  validation?: Array<{
+    column: string;
+    index: number;
+    rule: string;
+    values?: string[];
+  }>;
   groupColumn?: string;
   groupIndex?: number;
   groups?: string[];
@@ -213,6 +242,7 @@ function resolveColumnSpecs(
   clean?: ExcelActionSpec;
   addColumn?: ExcelActionSpec;
   summary?: ExcelActionSpec;
+  format?: ExcelActionSpec;
   view?: ExcelActionSpec;
 } {
   if (!specs) return {};
@@ -235,6 +265,7 @@ function resolveColumnSpecs(
     clean?: ExcelActionSpec;
     addColumn?: ExcelActionSpec;
     summary?: ExcelActionSpec;
+    format?: ExcelActionSpec;
     view?: ExcelActionSpec;
   } = {};
   const chartTypes = [
@@ -317,12 +348,27 @@ function resolveColumnSpecs(
         "EXCEL_SPEC_INVALID",
         "The PivotTable column field must be a different column.",
       );
+    const filter = specs.pivot.filter;
+    if (
+      filter !== undefined &&
+      (!inRange(filter) ||
+        filter === rows ||
+        filter === values ||
+        filter === columns)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "The PivotTable filter field must be a different column.",
+      );
     resolved.pivot = {
       rowsColumn: headers[rows],
       rowsIndex: rows,
       valuesColumn: headers[values],
       valuesIndex: values,
       aggregation,
+      ...(filter !== undefined
+        ? { filterColumn: headers[filter], filterIndex: filter }
+        : {}),
       ...(columns !== undefined
         ? { columnsColumn: headers[columns], columnsIndex: columns }
         : {}),
@@ -467,6 +513,129 @@ function resolveColumnSpecs(
       groups: seen,
       summaryValues: picked,
       includeTotal: total !== false,
+    };
+  }
+  if (specs.format) {
+    if (!requested.has("format"))
+      fail("EXCEL_SPEC_UNUSED", "Format options need the format action.");
+    const options = specs.format;
+    const conditionalRules = [
+      "data-bars",
+      "color-scale",
+      "negative",
+      "duplicates",
+    ];
+    const conditional: Array<{ column: string; index: number; rule: string }> =
+      [];
+    for (const entry of options.conditional ?? []) {
+      if (!inRange(entry.column) || !conditionalRules.includes(entry.rule))
+        fail("EXCEL_SPEC_INVALID", "Choose a valid column and highlight rule.");
+      if (entry.rule !== "duplicates" && !numeric(entry.column))
+        fail(
+          "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+          "That highlight rule needs a column of numbers.",
+        );
+      if (conditional.length >= 6)
+        fail("EXCEL_SPEC_INVALID", "At most six highlight rules.");
+      if (
+        conditional.some(
+          (item) => item.index === entry.column && item.rule === entry.rule,
+        )
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Each highlight rule can be chosen once per column.",
+        );
+      conditional.push({
+        column: headers[entry.column],
+        index: entry.column,
+        rule: entry.rule,
+      });
+    }
+    const validation: Array<{
+      column: string;
+      index: number;
+      rule: string;
+      values?: string[];
+    }> = [];
+    for (const entry of options.validation ?? []) {
+      if (
+        !inRange(entry.column) ||
+        !["list", "non-negative"].includes(entry.rule)
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose a valid column and validation rule.",
+        );
+      if (validation.length >= 4)
+        fail("EXCEL_SPEC_INVALID", "At most four validation rules.");
+      if (entry.rule === "non-negative") {
+        if (!numeric(entry.column))
+          fail(
+            "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+            "Validation needs a column of numbers.",
+          );
+        validation.push({
+          column: headers[entry.column],
+          index: entry.column,
+          rule: entry.rule,
+        });
+      } else {
+        const distinct: string[] = [];
+        for (const row of dataRows) {
+          const cell = row[entry.column];
+          if (cell === null || cell === undefined || cell === "") continue;
+          const text = String(cell);
+          if (!distinct.includes(text)) distinct.push(text);
+          if (distinct.length > 50)
+            fail(
+              "EXCEL_SPEC_INVALID",
+              "A drop-down list can have at most 50 values.",
+            );
+        }
+        if (
+          distinct.length === 0 ||
+          distinct.some((value) => /[,;"]/.test(value) || value.length > 80)
+        )
+          fail(
+            "EXCEL_SPEC_INVALID",
+            "That column cannot become a drop-down list (empty, too long, or values with commas).",
+          );
+        validation.push({
+          column: headers[entry.column],
+          index: entry.column,
+          rule: "list",
+          values: distinct,
+        });
+      }
+    }
+    const columnFormats: Array<{
+      index: number;
+      column: string;
+      format: string;
+    }> = [];
+    if (options.numberFormats !== false) {
+      headers.forEach((header, index) => {
+        if (!numeric(index)) return;
+        const cells = dataRows
+          .map((row) => row[index])
+          .filter((cell) => cell !== null && cell !== undefined && cell !== "");
+        const whole = cells.every((cell) => Number.isInteger(cell));
+        const percent = /%|percent|\bpct\b/i.test(header);
+        columnFormats.push({
+          index,
+          column: header,
+          format: percent ? "0.0%" : whole ? "#,##0" : "#,##0.00",
+        });
+      });
+    }
+    resolved.format = {
+      freezeHeader: options.freezeHeader !== false,
+      autofit: options.autofit !== false,
+      totalRow: options.totalRow === true,
+      columnFormats,
+      conditional,
+      validation,
     };
   }
   if (specs.view) {
@@ -747,14 +916,23 @@ export function createExcelPreviewPlan(
       ? `${baseName}_Vynor_Clean`
       : kind === "add-column"
         ? `${baseName}_Vynor_Calc`
-        : kind === "summary"
-          ? `${baseName}_Vynor_Totals`
-          : kind === "view"
-            ? `${baseName}_Vynor_View`
-            : kind === "table" && !layout.normalization
-              ? input.worksheetName
-              : resultSheet;
-  if (requested.has("summary") && layout.normalization)
+        : kind === "format"
+          ? `${baseName}_Vynor_Format`
+          : kind === "quality"
+            ? `${baseName}_Vynor_Report`
+            : kind === "summary"
+              ? `${baseName}_Vynor_Totals`
+              : kind === "view"
+                ? `${baseName}_Vynor_View`
+                : kind === "table" && !layout.normalization
+                  ? input.worksheetName
+                  : resultSheet;
+  if (
+    (requested.has("summary") ||
+      requested.has("format") ||
+      requested.has("quality")) &&
+    layout.normalization
+  )
     throw new InvalidExcelRangeError(
       "EXCEL_SPEC_INVALID",
       "A summary needs a range with one header row.",
@@ -781,6 +959,7 @@ export function createExcelPreviewPlan(
     ...(kind === "add-column" && resolved.addColumn
       ? { spec: resolved.addColumn }
       : {}),
+    ...(kind === "format" && resolved.format ? { spec: resolved.format } : {}),
     ...(kind === "summary" && resolved.summary
       ? { spec: resolved.summary }
       : {}),

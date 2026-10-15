@@ -100,7 +100,7 @@ export interface InstructionSpecs {
     operator?: ComputeOperator;
     right?: number;
     expression?: string;
-    derived?: "running-total" | "rank";
+    derived?: "running-total" | "rank" | "percent-change";
     source?: number;
   };
 }
@@ -154,6 +154,32 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+
+  const percentChangeMatch =
+    /(?:\b(?:percent(?:age)?|pct)|%)\s*change(?:\s+column)?\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(
+      text,
+    );
+  if (percentChangeMatch) {
+    const requestedSource = percentChangeMatch[1].trim();
+    const source = findHeader(headers, requestedSource);
+    if (source < 0) {
+      result.problems.push(
+        `"${requestedSource}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    } else {
+      return {
+        actions: ["add-column"],
+        specs: {
+          addColumn: {
+            name: `% Change of ${headers[source]}`,
+            derived: "percent-change",
+            source,
+          },
+        },
+        problems: [],
+      };
+    }
+  }
 
   const rankMatch =
     /\b(?:rank|ranking)\s+column\s+(?:for|of|on|using)\s+["']?([^"'\n,.]+?)["']?(?:\s*\.|$)/i.exec(

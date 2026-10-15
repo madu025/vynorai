@@ -396,9 +396,11 @@ export function buildOutcomes(
           ? `Running total of ${spec.sourceColumn}`
           : spec.derived === "rank"
             ? `Rank of ${spec.sourceColumn} (highest first)`
-            : spec.expression
-              ? spec.expression
-              : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
+            : spec.derived === "percent-change"
+              ? `Percent change of ${spec.sourceColumn} (row over row)`
+              : spec.expression
+                ? spec.expression
+                : `${spec.leftColumn} ${spec.operator} ${spec.rightColumn}`;
       // Show the new column with its real values so the person sees the answer, not only a rule.
       try {
         if (spec.expression) {
@@ -455,6 +457,32 @@ export function buildOutcomes(
             const rank =
               1 + values.filter((candidate) => candidate > value).length;
             return [...table.rows[at].slice(0, kept), String(rank)];
+          });
+        } else if (
+          spec.derived === "percent-change" &&
+          spec.sourceColumn &&
+          Number.isInteger(spec.sourceIndex)
+        ) {
+          const source = spec.sourceIndex as number;
+          const kept = MAX_TABLE_COLUMNS - 1;
+          table.headers = [
+            ...table.headers.slice(0, kept),
+            String(spec.columnName),
+          ];
+          table.rows = rows.slice(0, MAX_TABLE_ROWS).map((row, at) => {
+            if (at === 0) return [...table.rows[at].slice(0, kept), "—"];
+            const current = Number(row[source]);
+            const previous = Number(rows[at - 1][source]);
+            if (
+              !Number.isFinite(current) ||
+              !Number.isFinite(previous) ||
+              previous === 0
+            )
+              return [...table.rows[at].slice(0, kept), "…"];
+            return [
+              ...table.rows[at].slice(0, kept),
+              `${Math.round(((current - previous) / previous) * 1000) / 10}%`,
+            ];
           });
         } else if (spec.leftColumn && spec.rightColumn && spec.operator) {
           const left = headers.indexOf(String(spec.leftColumn));

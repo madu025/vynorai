@@ -91,6 +91,38 @@ test("server and add-in build the same safe rank plan", () => {
   );
 });
 
+test("server and add-in build the same safe percent-change plan", () => {
+  const actions = ["add-column"] as const;
+  const specs = {
+    addColumn: {
+      name: "% Change of Sales",
+      derived: "percent-change" as const,
+      source: 2,
+    },
+  };
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(server.actions[0].spec, {
+    columnName: "% Change of Sales",
+    derived: "percent-change",
+    sourceColumn: "Sales",
+    sourceIndex: 2,
+    percentFormat: true,
+  });
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, [...actions], 500, {
+        addColumn: {
+          name: "% Change",
+          derived: "percent-change",
+          source: 1,
+        },
+      } as any),
+    /holds text, not numbers/,
+  );
+});
+
 test("server and add-in agree on a deterministic insight report", () => {
   const actions = ["statistics"] as const;
   const specs = {

@@ -1541,6 +1541,20 @@ export async function applyApprovedExcelPlan(
                       return `=RANK.EQ(${sourceLetter}${rowNumber},$${sourceLetter}$2:$${sourceLetter}$${lastRow},0)`;
                     }
                   : undefined;
+              const percentChangeFormula =
+                spec.derived === "percent-change"
+                  ? (rowNumber: number) => {
+                      if (!Number.isInteger(spec.sourceIndex))
+                        throw new Error(
+                          "The percent-change source is missing from the approved plan",
+                        );
+                      if (rowNumber === 2) return '=""';
+                      const sourceLetter = expressionColumnLetter(
+                        spec.sourceIndex,
+                      );
+                      return `=IFERROR((${sourceLetter}${rowNumber}-${sourceLetter}${rowNumber - 1})/${sourceLetter}${rowNumber - 1},"")`;
+                    }
+                  : undefined;
               const out = [
                 [...headers, spec.columnName],
                 ...rows.map((row) => [...row, ""]),
@@ -1571,12 +1585,14 @@ export async function applyApprovedExcelPlan(
                         ? runningTotalFormula(index + 2)
                         : rankFormula
                           ? rankFormula(index + 2)
-                          : computedColumnFormula(
-                              index + 2,
-                              spec.leftIndex as number,
-                              spec.operator as "+",
-                              spec.rightIndex as number,
-                            ),
+                          : percentChangeFormula
+                            ? percentChangeFormula(index + 2)
+                            : computedColumnFormula(
+                                index + 2,
+                                spec.leftIndex as number,
+                                spec.operator as "+",
+                                spec.rightIndex as number,
+                              ),
                 ]);
                 if (spec.percentFormat)
                   sheet.getRangeByIndexes(

@@ -78,6 +78,35 @@ test("a rank outcome previews real descending ranks", () => {
   assert.match(item.details.join("\n"), /Rank of Sales/);
 });
 
+test("a percent-change outcome previews row-over-row percentages", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "add-column",
+        targetSheet: "Sheet1_Vynor_Calc",
+        spec: {
+          columnName: "% Change of Sales",
+          derived: "percent-change",
+          sourceColumn: "Sales",
+          sourceIndex: 2,
+        },
+      },
+    ],
+    headers,
+    [
+      ["Jan", "North", 100, 80],
+      ["Feb", "South", 125, 90],
+      ["Mar", "North", 100, 70],
+    ],
+  );
+  assert.deepEqual(item.table?.rows, [
+    ["Jan", "North", "100", "80", "—"],
+    ["Feb", "South", "125", "90", "25%"],
+    ["Mar", "North", "100", "70", "-20%"],
+  ]);
+  assert.match(item.details.join("\n"), /Percent change of Sales/);
+});
+
 test("a dashboard preview shows real grouped chart values and KPI tiles", () => {
   const [item] = buildOutcomes(
     [

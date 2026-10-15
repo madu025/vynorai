@@ -179,6 +179,25 @@ test("rank resolves one numeric source column without guessing", () => {
   assert.match(unknown.problems[0], /not a column/);
 });
 
+test("percent change resolves one numeric source column without guessing", () => {
+  const asked = interpretInstruction(
+    "Add a percent change column for Sales",
+    headers,
+  );
+  assert.deepEqual(asked.actions, ["add-column"]);
+  assert.deepEqual(asked.specs.addColumn, {
+    name: "% Change of Sales",
+    derived: "percent-change",
+    source: 2,
+  });
+  const unknown = interpretInstruction(
+    "Add a percent change column for Revenue",
+    headers,
+  );
+  assert.deepEqual(unknown.actions, []);
+  assert.match(unknown.problems[0], /not a column/);
+});
+
 test("plans for clean and computed column carry validated specs and their own result sheets", () => {
   const plan = createExcelPreviewPlan(
     input as any,
@@ -398,6 +417,41 @@ test("apply writes rank formulas to a new result sheet only", async () => {
   assert.ok(
     Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),
   );
+});
+
+test("apply writes percent-change formulas and formatting to a new result sheet", async () => {
+  const plan = createExcelPreviewPlan(input as any, ["add-column"], undefined, {
+    addColumn: {
+      name: "% Change of Sales",
+      derived: "percent-change",
+      source: 2,
+    },
+  });
+  const excel = fakeWorkbook();
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(
+    report.results.map((result) => result.status),
+    ["created"],
+  );
+  assert.deepEqual(excel.written["Calc of Sheet1!1,4,4,1.formulas"], [
+    ['=""'],
+    ['=IFERROR((C3-C2)/C2,"")'],
+    ['=IFERROR((C4-C3)/C3,"")'],
+    ['=IFERROR((C5-C4)/C4,"")'],
+  ]);
+  assert.deepEqual(excel.written["Calc of Sheet1!1,4,4,1.numberFormat"], [
+    ["0.0%"],
+    ["0.0%"],
+    ["0.0%"],
+    ["0.0%"],
+  ]);
+  assert.equal(report.sourceUnchangedAfterApply, true);
 });
 
 test("apply writes converted ISO dates only to a formatted clean result sheet", async () => {

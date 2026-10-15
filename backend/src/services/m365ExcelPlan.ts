@@ -99,7 +99,7 @@ export interface ExcelColumnSpecs {
     right?: number;
     /** A safe column expression; used instead of left/operator/right. */
     expression?: string;
-    derived?: "running-total" | "rank";
+    derived?: "running-total" | "rank" | "percent-change";
     source?: number;
   };
   summary?: {
@@ -193,7 +193,7 @@ export interface ExcelActionSpec {
   canonical?: string;
   refs?: number[];
   percentFormat?: boolean;
-  derived?: "running-total" | "rank";
+  derived?: "running-total" | "rank" | "percent-change";
   sourceColumn?: string;
   sourceIndex?: number;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
@@ -499,7 +499,7 @@ function resolveColumnSpecs(
       | undefined;
     if (derived !== undefined) {
       if (
-        !["running-total", "rank"].includes(derived) ||
+        !["running-total", "rank", "percent-change"].includes(derived) ||
         expression !== undefined ||
         left !== undefined ||
         right !== undefined ||
@@ -523,6 +523,7 @@ function resolveColumnSpecs(
         derived,
         sourceColumn: headers[sourceIndex],
         sourceIndex,
+        ...(derived === "percent-change" ? { percentFormat: true } : {}),
       };
     } else if (lookup !== undefined) {
       if (

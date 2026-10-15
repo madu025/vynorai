@@ -650,6 +650,14 @@ export async function applyApprovedExcelPlan(
                   );
                   extra.setValues(dataOf(index));
                   extra.setXAxisValues(dataOf(spec.categoryIndex));
+                  // A series on a very different scale gets its own axis so it stays readable.
+                  if ((spec.secondaryIndexes ?? []).includes(index)) {
+                    try {
+                      extra.axisGroup = "Secondary";
+                    } catch {
+                      // The host keeps it on the primary axis.
+                    }
+                  }
                 });
                 await context.sync();
               } else {
@@ -694,6 +702,28 @@ export async function applyApprovedExcelPlan(
                 };
                 total.summarizeBy =
                   summarize[action.spec.aggregation ?? "sum"] ?? "Sum";
+                const dataFields: any[] = [total];
+                for (const extraName of action.spec.extraValuesColumns ?? []) {
+                  const more = pivot.dataHierarchies.add(
+                    pivot.hierarchies.getItem(extraName),
+                  );
+                  more.summarizeBy =
+                    summarize[action.spec.aggregation ?? "sum"] ?? "Sum";
+                  dataFields.push(more);
+                }
+                if (action.spec.showAs) {
+                  const calculation =
+                    action.spec.showAs === "percent-of-column"
+                      ? "PercentOfColumnTotal"
+                      : "PercentOfGrandTotal";
+                  for (const field of dataFields) {
+                    try {
+                      field.showAs = { calculation };
+                    } catch {
+                      // Older hosts keep the plain totals.
+                    }
+                  }
+                }
                 if (action.spec.columnsColumn)
                   pivot.columnHierarchies.add(
                     pivot.hierarchies.getItem(action.spec.columnsColumn),
@@ -831,6 +861,9 @@ export async function applyApprovedExcelPlan(
                       },
                       maximum: { type: "HighestValue", color: "#63BE7B" },
                     };
+                  } else if (rule.rule === "icon-set") {
+                    const icons = range.conditionalFormats.add("IconSet");
+                    icons.iconSet.style = "ThreeArrows";
                   } else if (rule.rule === "negative") {
                     const negative = range.conditionalFormats.add("CellValue");
                     negative.cellValue.rule = {
@@ -869,6 +902,21 @@ export async function applyApprovedExcelPlan(
                       list: {
                         inCellDropDown: true,
                         source: check.values.join(","),
+                      },
+                    };
+                  } else if (check.rule === "between") {
+                    range.dataValidation.rule = {
+                      decimal: {
+                        formula1: check.min,
+                        formula2: check.max,
+                        operator: "Between",
+                      },
+                    };
+                  } else if (check.rule === "max-length") {
+                    range.dataValidation.rule = {
+                      textLength: {
+                        formula1: check.max,
+                        operator: "LessThanOrEqualTo",
                       },
                     };
                   } else {

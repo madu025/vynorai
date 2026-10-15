@@ -79,6 +79,7 @@ const CONDITIONAL: Record<string, [string, string]> = {
   "data-bars": ["data bars", "දත්ත තීරු (data bars)"],
   "color-scale": ["colour scale", "වර්ණ පරිමාණය"],
   negative: ["highlight negative values", "සෘණ අගයන් උද්දීපනය"],
+  "icon-set": ["arrow icons (up, flat, down)", "ඊතල අයිකන (ඉහළ, සමාන, පහළ)"],
   duplicates: ["highlight duplicates", "පුනරාවර්තන උද්දීපනය"],
 };
 
@@ -136,6 +137,18 @@ export function buildOutcomes(
           `${by} එක් එකක් සඳහා ${names} සසඳයි.`,
         ),
       );
+      const secondary = (spec.secondaryIndexes ?? []) as number[];
+      if (secondary.length) {
+        const slowNames = secondary
+          .map((index) => String(headers[index] ?? index))
+          .join(", ");
+        item.details.push(
+          say(
+            `${slowNames} is on a second axis on the right, because its numbers are on a very different scale.`,
+            `${slowNames} දකුණු දෙවන අක්ෂයේ පෙන්වයි; එහි සංඛ්‍යා ඉතා වෙනස් පරිමාණයක ඇත.`,
+          ),
+        );
+      }
       return item;
     }
 
@@ -189,6 +202,20 @@ export function buildOutcomes(
             ),
           );
           if (entry.index < columns) table.dropdownColumns.push(entry.index);
+        } else if (entry.rule === "between") {
+          item.details.push(
+            say(
+              `${entry.column}: only numbers from ${entry.min} to ${entry.max} are accepted`,
+              `${entry.column}: ${entry.min} සිට ${entry.max} දක්වා සංඛ්‍යා පමණක් පිළිගනී`,
+            ),
+          );
+        } else if (entry.rule === "max-length") {
+          item.details.push(
+            say(
+              `${entry.column}: at most ${entry.max} characters`,
+              `${entry.column}: උපරිම අකුරු ${entry.max}`,
+            ),
+          );
         } else {
           item.details.push(
             say(
@@ -210,39 +237,67 @@ export function buildOutcomes(
         Number.isInteger(spec.rowsIndex) &&
         Number.isInteger(spec.valuesIndex)
       ) {
-        // Show the answer itself: the grouped totals the PivotTable will contain.
+        // Show the answer itself: the grouped numbers the PivotTable will contain.
         const aggregation = String(spec.aggregation ?? "sum");
-        const groups = new Map<string, number[]>();
+        const valueIndexes: number[] = [
+          spec.valuesIndex,
+          ...((spec.extraValuesIndexes ?? []) as number[]),
+        ];
+        const groups = new Map<string, number[][]>();
         for (const row of rows) {
           const key = cell(row[spec.rowsIndex]);
-          const list = groups.get(key) ?? [];
-          list.push(numeric(row[spec.valuesIndex]));
+          const list =
+            groups.get(key) ?? valueIndexes.map(() => [] as number[]);
+          valueIndexes.forEach((index, at) =>
+            list[at].push(numeric(row[index])),
+          );
           groups.set(key, list);
         }
         const reduce = (values: number[]) => {
+          if (!values.length) return 0;
           if (aggregation === "count") return values.length;
           if (aggregation === "min") return Math.min(...values);
           if (aggregation === "max") return Math.max(...values);
           const total = values.reduce((sum, value) => sum + value, 0);
           return aggregation === "average" ? total / values.length : total;
         };
+        const share = spec.showAs === "percent-of-total";
         const format = (value: number) => String(Math.round(value * 100) / 100);
-        const label = `${agg(aggregation)} — ${spec.valuesColumn}`;
-        const body = [...groups.entries()]
-          .slice(0, 6)
-          .map(([key, values]) => [key, format(reduce(values))]);
-        const everything = [...groups.values()].flat();
-        if (everything.length && aggregation !== "average")
+        const keys = [...groups.keys()].slice(0, 6);
+        const totals = valueIndexes.map((_, at) =>
+          reduce([...groups.values()].flatMap((list) => list[at])),
+        );
+        const body = keys.map((key) => [
+          key,
+          ...valueIndexes.map((_, at) => {
+            const value = reduce(groups.get(key)![at]);
+            return share && totals[at]
+              ? `${Math.round((value / totals[at]) * 1000) / 10}%`
+              : format(value);
+          }),
+        ]);
+        if (aggregation !== "average")
           body.push([
             say("Grand total", "මුළු එකතුව"),
-            format(reduce(everything)),
+            ...totals.map((value) => (share ? "100%" : format(value))),
           ]);
+        const names = [spec.valuesColumn, ...(spec.extraValuesColumns ?? [])];
         item.table = {
-          headers: [String(spec.rowsColumn), label],
+          headers: [
+            String(spec.rowsColumn),
+            ...names.map((name: string) => `${agg(aggregation)} — ${name}`),
+          ],
           rows: body,
           barColumns: [],
           dropdownColumns: [],
         };
+        if (share)
+          item.details.push(
+            say(
+              "Values are shown as a share of the grand total.",
+              "අගයන් මුළු එකතුවේ කොටසක් ලෙස පෙන්වයි.",
+            ),
+          );
       }
       if (!spec.rowsColumn || !spec.valuesColumn)
         item.details.push(

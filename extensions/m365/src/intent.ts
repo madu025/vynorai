@@ -30,6 +30,8 @@ export interface InstructionSpecs {
     values: number;
     aggregation?: "sum" | "count" | "average" | "min" | "max";
     columns?: number;
+    extraValues?: number[];
+    showAs?: "percent-of-total" | "percent-of-column";
   };
   view?: {
     sort?: { column: number; direction: "asc" | "desc" };
@@ -55,9 +57,19 @@ export interface InstructionSpecs {
     totalRow?: boolean;
     conditional?: Array<{
       column: number;
-      rule: "data-bars" | "color-scale" | "negative" | "duplicates";
+      rule:
+        | "data-bars"
+        | "color-scale"
+        | "negative"
+        | "duplicates"
+        | "icon-set";
     }>;
-    validation?: Array<{ column: number; rule: "list" | "non-negative" }>;
+    validation?: Array<{
+      column: number;
+      rule: "list" | "non-negative" | "between" | "max-length";
+      min?: number;
+      max?: number;
+    }>;
   };
   summary?: {
     group: number;
@@ -390,11 +402,26 @@ function interpretChartAndPivot(
             : "sum";
     const columns = afterBy[1];
     result.actions.push("pivot-table");
+    const wantsShare =
+      /\b(?:percent(?:age)?|%|share)\s+of\s+(?:the\s+)?(?:grand\s+)?total\b|\bshare\b/i.test(
+        text,
+      );
+    const wantsColumnShare =
+      /\bpercent(?:age)?\s+of\s+(?:the\s+)?column\b/i.test(text);
+    const moreValues = bare
+      ? []
+      : numericEntries.slice(1, 4).map((entry) => entry.index);
     result.specs.pivot = {
       rows: categoryEntry.index,
       values: numericEntries[0].index,
       aggregation,
       ...(columns ? { columns: columns.index } : {}),
+      ...(moreValues.length ? { extraValues: moreValues } : {}),
+      ...(wantsColumnShare
+        ? { showAs: "percent-of-column" as const }
+        : wantsShare
+          ? { showAs: "percent-of-total" as const }
+          : {}),
     };
     const filterMatch = /\bfilter(?:ed)?\s+(?:by|on|using)\s+/i.exec(text);
     if (filterMatch && result.specs.pivot) {
@@ -706,7 +733,7 @@ function interpretFormatAndQuality(
     result.actions.push("quality");
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -729,6 +756,9 @@ function interpretFormatAndQuality(
   if (/\bcolou?r\s*scale\b/i.test(text))
     for (const column of pickNumeric.slice(0, 3))
       conditional.push({ column, rule: "color-scale" });
+  if (/\bicon\s*sets?\b|\barrows?\b|\btraffic\s*lights?\b/i.test(text))
+    for (const column of pickNumeric.slice(0, 3))
+      conditional.push({ column, rule: "icon-set" });
   if (/\bhighlight\s+(?:the\s+)?negative/i.test(text))
     for (const column of pickNumeric.slice(0, 3))
       conditional.push({ column, rule: "negative" });
@@ -741,6 +771,39 @@ function interpretFormatAndQuality(
   if (/\bdrop-?\s?down\b|\bvalidation\b/i.test(text))
     for (const column of mentionedLabel.slice(0, 2))
       validation.push({ column, rule: "list" });
+  const range =
+    /\bbetween\s+(-?\d[\d,]*(?:\.\d+)?)\s+(?:and|to)\s+(-?\d[\d,]*(?:\.\d+)?)/i.exec(
+      text,
+    );
+  if (range && pickNumeric.length) {
+    const low = Number(range[1].replace(/,/g, ""));
+    const high = Number(range[2].replace(/,/g, ""));
+    if (Number.isFinite(low) && Number.isFinite(high) && low < high)
+      validation.push({
+        column: pickNumeric[0],
+        rule: "between",
+        min: low,
+        max: high,
+      });
+  }
+  const length =
+    /\b(?:at\s+most|maximum|up\s+to)\s+(\d{1,3})\s+characters\b/i.exec(text);
+  if (length && mentionedLabel.length) {
+    const max = Number(length[1]);
+    if (max >= 1 && max <= 255)
+      validation.push({ column: mentionedLabel[0], rule: "max-length", max });
+  }
+  // "validation: Region at most 12 characters" is a length rule, not also a drop-down.
+  if (!/\bdrop-?\s?down\b/i.test(text)) {
+    const ruled = new Set(
+      validation
+        .filter((rule) => rule.rule !== "list")
+        .map((rule) => rule.column),
+    );
+    for (let at = validation.length - 1; at >= 0; at -= 1)
+      if (validation[at].rule === "list" && ruled.has(validation[at].column))
+        validation.splice(at, 1);
+  }
   const format: NonNullable<InstructionSpecs["format"]> = {
     freezeHeader: true,
     ...(/\btotals?\s+row\b/i.test(text) ? { totalRow: true } : {}),

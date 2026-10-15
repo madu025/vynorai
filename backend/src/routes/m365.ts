@@ -102,6 +102,11 @@ const excelPlanSchema = z.object({
             .optional(),
           columns: z.number().int().min(0).max(99).optional(),
           filter: z.number().int().min(0).max(99).optional(),
+          extraValues: z
+            .array(z.number().int().min(0).max(99))
+            .max(3)
+            .optional(),
+          showAs: z.enum(["percent-of-total", "percent-of-column"]).optional(),
         })
         .strict()
         .optional(),
@@ -164,6 +169,7 @@ const excelPlanSchema = z.object({
                     "color-scale",
                     "negative",
                     "duplicates",
+                    "icon-set",
                   ]),
                 })
                 .strict(),
@@ -175,7 +181,14 @@ const excelPlanSchema = z.object({
               z
                 .object({
                   column: z.number().int().min(0).max(99),
-                  rule: z.enum(["list", "non-negative"]),
+                  rule: z.enum([
+                    "list",
+                    "non-negative",
+                    "between",
+                    "max-length",
+                  ]),
+                  min: z.number().finite().optional(),
+                  max: z.number().finite().optional(),
                 })
                 .strict(),
             )

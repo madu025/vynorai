@@ -128,6 +128,9 @@ export interface ExcelColumnSpecs {
     aggregation?: ExcelAggregation;
     columns?: number;
     filter?: number;
+    /** More value fields (at most three) next to the first. */
+    extraValues?: number[];
+    showAs?: "percent-of-total" | "percent-of-column";
   };
   format?: {
     freezeHeader?: boolean;
@@ -136,9 +139,19 @@ export interface ExcelColumnSpecs {
     totalRow?: boolean;
     conditional?: Array<{
       column: number;
-      rule: "data-bars" | "color-scale" | "negative" | "duplicates";
+      rule:
+        | "data-bars"
+        | "color-scale"
+        | "negative"
+        | "duplicates"
+        | "icon-set";
     }>;
-    validation?: Array<{ column: number; rule: "list" | "non-negative" }>;
+    validation?: Array<{
+      column: number;
+      rule: "list" | "non-negative" | "between" | "max-length";
+      min?: number;
+      max?: number;
+    }>;
   };
   clean?: { operations: string[] };
   addColumn?: {
@@ -183,6 +196,10 @@ export interface ExcelActionSpec {
   chartType?: ExcelChartType;
   extraValueColumns?: string[];
   extraValueIndexes?: number[];
+  secondaryIndexes?: number[];
+  extraValuesColumns?: string[];
+  extraValuesIndexes?: number[];
+  showAs?: "percent-of-total" | "percent-of-column";
   rowsColumn?: string;
   rowsIndex?: number;
   valuesColumn?: string;
@@ -209,6 +226,8 @@ export interface ExcelActionSpec {
     index: number;
     rule: string;
     values?: string[];
+    min?: number;
+    max?: number;
   }>;
   groupColumn?: string;
   groupIndex?: number;
@@ -324,6 +343,25 @@ function resolveColumnSpecs(
         "EXCEL_SPEC_VALUE_NOT_NUMERIC",
         "Every chart series column must contain numbers.",
       );
+    const meanAbs = (index: number): number => {
+      const values = dataRows
+        .map((row) => row[index])
+        .filter((cell): cell is number => typeof cell === "number")
+        .map((cell) => Math.abs(cell));
+      return values.length
+        ? values.reduce((sum, cell) => sum + cell, 0) / values.length
+        : 0;
+    };
+    const baseScale = meanAbs(value);
+    const secondary =
+      baseScale > 0
+        ? extra.filter((index) => {
+            const scale = meanAbs(index);
+            return (
+              scale > 0 && (scale / baseScale >= 20 || baseScale / scale >= 20)
+            );
+          })
+        : [];
     resolved.chart = {
       categoryColumn: headers[category],
       categoryIndex: category,
@@ -334,6 +372,7 @@ function resolveColumnSpecs(
         ? {
             extraValueColumns: extra.map((index) => headers[index]),
             extraValueIndexes: extra,
+            ...(secondary.length ? { secondaryIndexes: secondary } : {}),
           }
         : {}),
     };
@@ -345,6 +384,8 @@ function resolveColumnSpecs(
         "A PivotTable column choice needs a PivotTable action.",
       );
     const { rows, values } = specs.pivot;
+    const extraValues = specs.pivot.extraValues ?? [];
+    const showAs = specs.pivot.showAs;
     const aggregation = specs.pivot.aggregation ?? "sum";
     const columns = specs.pivot.columns;
     if (!inRange(rows) || !inRange(values) || rows === values)
@@ -379,12 +420,46 @@ function resolveColumnSpecs(
         "EXCEL_SPEC_INVALID",
         "The PivotTable filter field must be a different column.",
       );
+    if (
+      !Array.isArray(extraValues) ||
+      extraValues.length > 3 ||
+      new Set(extraValues).size !== extraValues.length ||
+      extraValues.some(
+        (index) =>
+          !inRange(index) ||
+          index === rows ||
+          index === values ||
+          index === columns ||
+          index === filter,
+      )
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "Extra PivotTable values must be other columns (at most three).",
+      );
+    if (aggregation !== "count" && extraValues.some((index) => !numeric(index)))
+      fail(
+        "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+        "Every PivotTable value column must contain numbers.",
+      );
+    if (
+      showAs !== undefined &&
+      !["percent-of-total", "percent-of-column"].includes(showAs)
+    )
+      fail("EXCEL_SPEC_INVALID", "Unsupported PivotTable display option.");
     resolved.pivot = {
       rowsColumn: headers[rows],
       rowsIndex: rows,
       valuesColumn: headers[values],
       valuesIndex: values,
       aggregation,
+      ...(extraValues.length
+        ? {
+            extraValuesColumns: extraValues.map((index) => headers[index]),
+            extraValuesIndexes: extraValues,
+          }
+        : {}),
+      ...(showAs ? { showAs } : {}),
       ...(filter !== undefined
         ? { filterColumn: headers[filter], filterIndex: filter }
         : {}),
@@ -602,6 +677,7 @@ function resolveColumnSpecs(
       "color-scale",
       "negative",
       "duplicates",
+      "icon-set",
     ];
     const conditional: Array<{ column: string; index: number; rule: string }> =
       [];
@@ -635,11 +711,13 @@ function resolveColumnSpecs(
       index: number;
       rule: string;
       values?: string[];
+      min?: number;
+      max?: number;
     }> = [];
     for (const entry of options.validation ?? []) {
       if (
         !inRange(entry.column) ||
-        !["list", "non-negative"].includes(entry.rule)
+        !["list", "non-negative", "between", "max-length"].includes(entry.rule)
       )
         fail(
           "EXCEL_SPEC_INVALID",
@@ -647,6 +725,38 @@ function resolveColumnSpecs(
         );
       if (validation.length >= 4)
         fail("EXCEL_SPEC_INVALID", "At most four validation rules.");
+      if (entry.rule === "between" || entry.rule === "max-length") {
+        const low = (entry as any).min;
+        const high = (entry as any).max;
+        if (entry.rule === "between") {
+          if (!numeric(entry.column))
+            fail(
+              "EXCEL_SPEC_VALUE_NOT_NUMERIC",
+              "Validation needs a column of numbers.",
+            );
+          if (
+            !Number.isFinite(low) ||
+            !Number.isFinite(high) ||
+            low >= high ||
+            Math.abs(low) > 1e12 ||
+            Math.abs(high) > 1e12
+          )
+            fail(
+              "EXCEL_SPEC_INVALID",
+              "Give a smaller and a larger number for the allowed range.",
+            );
+        } else if (!Number.isInteger(high) || high < 1 || high > 255) {
+          fail("EXCEL_SPEC_INVALID", "Choose a maximum length from 1 to 255.");
+        }
+        validation.push({
+          column: headers[entry.column],
+          index: entry.column,
+          rule: entry.rule,
+          ...(entry.rule === "between" ? { min: low } : {}),
+          max: high,
+        });
+        continue;
+      }
       if (entry.rule === "non-negative") {
         if (!numeric(entry.column))
           fail(

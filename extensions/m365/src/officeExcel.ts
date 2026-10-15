@@ -176,20 +176,36 @@ export async function inspectSelectedExcelRange(
   workbookId: string,
   chunkRows = 500,
   onProgress?: (completedRows: number, totalRows: number) => void,
+  onAutoDetect?: (address: string) => void,
 ): Promise<ExcelRangeInput> {
   if (!Number.isInteger(chunkRows) || chunkRows < 1 || chunkRows > 5000)
     throw new Error("chunkRows must be an integer between 1 and 5000");
   return runtime.run(async (context) => {
-    const selected = context.workbook.getSelectedRange();
+    let selected = context.workbook.getSelectedRange();
     // Values are read in bounded chunks below, not in one large payload here.
     selected.load(["address", "rowCount", "columnCount"]);
     selected.worksheet.load("name");
     await context.sync();
+    // A single clicked cell means "this table": use the block of data around it, the way Excel's
+    // own Ctrl+A does, so nobody has to drag-select a range first.
+    if (
+      Number(selected.rowCount) * Number(selected.columnCount) === 1 &&
+      typeof selected.getSurroundingRegion === "function"
+    ) {
+      const region = selected.getSurroundingRegion();
+      region.load(["address", "rowCount", "columnCount"]);
+      region.worksheet.load("name");
+      await context.sync();
+      if (Number(region.rowCount) >= 2 && Number(region.columnCount) >= 1) {
+        selected = region;
+        onAutoDetect?.(String(region.address));
+      }
+    }
     const rows = Number(selected.rowCount);
     const columns = Number(selected.columnCount);
     if (rows < 2)
       throw new Error(
-        "Select a table with a header row and at least one data row.",
+        "Click a cell inside your table (or select it) so it has a header row and at least one data row.",
       );
     if (
       !Number.isSafeInteger(rows) ||

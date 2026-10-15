@@ -117,6 +117,8 @@ let currentPlan: any;
 let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
 let lastRevealSheet = "";
 let currentSourceSheet = "";
+/** Set when the table was found around a single clicked cell instead of a dragged selection. */
+let autoDetectedAddress = "";
 let previewFingerprint = "";
 let pendingSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
@@ -452,6 +454,7 @@ inspect?.addEventListener("click", async () => {
         "Formula inspection is ready. Nothing was sent or changed.",
       );
     }
+    autoDetectedAddress = "";
     setStatus("Inspecting the selected range...");
     const input = await log.step(
       "excel:read-selection",
@@ -462,6 +465,9 @@ inspect?.addEventListener("click", async () => {
           500,
           (completed, total) =>
             setStatus(`Reading selected rows: ${completed}/${total}...`),
+          (address) => {
+            autoDetectedAddress = address;
+          },
         ),
       (value) => ({
         sheet: value.worksheetName,
@@ -577,7 +583,10 @@ inspect?.addEventListener("click", async () => {
     }
     markChangeNote("preview");
     setStatus(
-      "Preview ready. Nothing has changed yet. Review it before applying.",
+      (autoDetectedAddress
+        ? `Found your table at ${autoDetectedAddress}. `
+        : "") +
+        "Preview ready. Nothing has changed yet. Review it before applying.",
     );
   } catch (error) {
     handleApiError("inspect", error);

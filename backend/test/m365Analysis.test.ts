@@ -437,3 +437,16 @@ test("the production runner refuses before any provider call when credits are ex
   );
   assert.ok(usage);
 });
+
+test("a Sinhala request and language reach the model as data and the call succeeds", async () => {
+  const { status, json } = await post({
+    summary: summary(),
+    language: "si",
+    request: "කලාප අනුව විකුණුම් වල සාරාංශයක් සාදන්න",
+    consent: true,
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+  const system = String(runnerCalls[0][0].content);
+  assert.match(system, /Sinhala/);
+  assert.match(system, /කලාප අනුව/);
+});

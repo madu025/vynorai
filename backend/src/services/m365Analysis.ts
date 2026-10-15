@@ -375,6 +375,7 @@ export interface AnalysisRunner {
     user: AuthenticatedUser,
     messages: Array<{ role: string; content: string }>,
     estimatedCredits: number,
+    maxTokens?: number,
   ): Promise<string>;
 }
 
@@ -383,6 +384,7 @@ export const proxyAnalysisRunner: AnalysisRunner = async (
   user,
   messages,
   estimatedCredits,
+  maxTokens = 2000,
 ) => {
   const reservation = await reserveQuotaAtomic(
     user.id,
@@ -404,7 +406,7 @@ export const proxyAnalysisRunner: AnalysisRunner = async (
         messages,
         stream: false,
         temperature: 0,
-        max_tokens: 2000,
+        max_tokens: maxTokens,
         cache_policy: "bypass",
       },
       proxied as unknown as Response,
@@ -473,7 +475,14 @@ export async function analyzeSchemaSummary(
   assertAnalysisRateLimit(user.id);
   const messages = buildAnalysisMessages(summary, language, request);
   const chars = messages.reduce((sum, m) => sum + m.content.length, 0);
-  const text = await runner(user, messages, Math.ceil(chars / 4) + 2000);
+  // Sinhala and Tamil need several times more tokens for the same answer.
+  const maxTokens = language === "en" ? 2000 : 6000;
+  const text = await runner(
+    user,
+    messages,
+    Math.ceil(chars / 4) + maxTokens,
+    maxTokens,
+  );
   const { result, droppedRecommendations } = parseAnalysisResponse(
     text,
     summary,

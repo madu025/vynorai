@@ -610,6 +610,16 @@ m365Router.post(
     } catch (error) {
       const known = error instanceof M365AnalysisError;
       const code = known ? error.code : "AI_ANALYSIS_FAILED";
+      console.error(
+        "[m365] excel analysis failed",
+        JSON.stringify({
+          code,
+          detail: known
+            ? error.detail
+            : (error as Error)?.message?.slice(0, 120),
+          correlationId,
+        }),
+      );
       await logSecurityEvent({
         eventType: "M365_EXCEL_ANALYSIS_FAILED",
         actor: user.id,

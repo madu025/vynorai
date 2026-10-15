@@ -351,16 +351,22 @@ export async function applyApprovedExcelPlan(
                 chart.name = action.name;
                 chart.setPosition("H3");
                 chart.title.text = `${spec.valueColumn} by ${spec.categoryColumn}`;
-                const extras = spec.extraValueIndexes ?? [];
-                chart.legend.visible =
-                  extras.length > 0 || spec.chartType === "pie";
-                if (spec.chartType !== "pie") {
-                  chart.axes.categoryAxis.title.text = String(
-                    spec.categoryColumn,
-                  );
-                  chart.axes.valueAxis.title.text =
-                    extras.length > 0 ? "Value" : String(spec.valueColumn);
-                  chart.axes.valueAxis.numberFormat = "#,##0";
+                // Axis titles and the legend are presentation only: a host that refuses them must
+                // not fail the chart itself.
+                try {
+                  const extras = spec.extraValueIndexes ?? [];
+                  chart.legend.visible =
+                    extras.length > 0 || spec.chartType === "pie";
+                  if (spec.chartType !== "pie") {
+                    chart.axes.categoryAxis.title.text = String(
+                      spec.categoryColumn,
+                    );
+                    chart.axes.valueAxis.title.text =
+                      extras.length > 0 ? "Value" : String(spec.valueColumn);
+                    chart.axes.valueAxis.numberFormat = "#,##0";
+                  }
+                } catch {
+                  // Left as the host default.
                 }
                 await context.sync();
                 const dataOf = (index: number) =>

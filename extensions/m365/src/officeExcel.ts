@@ -996,6 +996,26 @@ export async function applyApprovedExcelPlan(
               );
               await context.sync();
               sheet.getRangeByIndexes(0, 0, 1, width).format.font.bold = true;
+              try {
+                // Readable numbers: two decimals everywhere except the Count row.
+                const body = sheet.getRangeByIndexes(
+                  spec.mode === "forecast" ? 1 : 1,
+                  spec.mode === "forecast" ? 1 : 1,
+                  Math.max(1, cells.length - 1),
+                  Math.max(1, width - 1),
+                );
+                body.numberFormat = Array.from(
+                  { length: Math.max(1, cells.length - 1) },
+                  (_, rowIndex) =>
+                    Array.from({ length: Math.max(1, width - 1) }, () =>
+                      spec.mode === "describe" && rowIndex === 0
+                        ? "0"
+                        : "#,##0.00",
+                    ),
+                );
+              } catch {
+                // Formatting is presentation only.
+              }
               grid.format.autofitColumns();
               if (spec.mode === "forecast" && cells.length > 3) {
                 try {

@@ -517,6 +517,7 @@ export async function applyApprovedExcelPlan(
                   1,
                   table.columnCount,
                 ).format.font.bold = true;
+              grid.format.autofitColumns();
               await context.sync();
             }
           } else if (action.kind === "add-column") {

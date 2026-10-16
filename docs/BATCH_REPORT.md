@@ -94,10 +94,4 @@ proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
 | g-script         | en      | small | skip   | known gap: not implemented                                                               |
 | g-vba            | en      | small | skip   | known gap: not implemented                                                               |
 
-## Phase 5 (script planner + open items)
-
-Live on the 520k workbook, build 20261016.34: step planner (5 steps, preview ok), highlight above N, date validation (rule rejects text), custom range name, "Year from" column (520,126 rows).
-Bugs found and fixed in 20261016.35: chart + pivot together refused as "too large" (chart now draws the pivot); "copy this data to a new sheet" refused (bounded view of the first 50,000 rows, no extra new-sheet action); date columns in the preview picture showed day numbers (now 04-Mar-25); "if A then x otherwise y" was split into two steps and not understood; "is more than" in IF conditions.
-Harness: the offline run now mirrors the task pane (selectExcelActions union): 79/79.
-Lesson: never type an unknown name into the Excel Name Box (it defines a new named range).
-Still open: v-filter live retest, date pivot grouping by day, formula audit on very large data, lookup-columns and unpivot-apply live.
+Found on the live copy test (build .35): every large-range formula (view, add-column, clean, split, unpivot, quality, named range) skipped the first data row and read one empty row after the last, because `parseLocalRange` rows are 1-based and `LargeRef` is 0-based. Fixed in 20261016.36 with a contract test in largeRange.test.ts. All earlier "verified on 520k" results for these actions need the first row re-checked.

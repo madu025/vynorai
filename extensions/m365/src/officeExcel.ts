@@ -1136,7 +1136,7 @@ export async function applyApprovedExcelPlan(
               );
               context.workbook.names.add(
                 action.name,
-                `='${escapedSource}'!$${column}$${parsed.startRow + 2}:$${column}$${parsed.endRow + 1}`,
+                `='${escapedSource}'!$${column}$${parsed.startRow + 1}:$${column}$${parsed.endRow}`,
               );
               await context.sync();
               if (result.createdSheet) {
@@ -1401,8 +1401,8 @@ export async function applyApprovedExcelPlan(
               {
                 sheetName: plan.worksheetName,
                 startColumn: parsed.startColumn,
-                startRow: parsed.startRow,
-                endRow: parsed.endRow,
+                startRow: parsed.startRow - 1,
+                endRow: parsed.endRow - 1,
                 columns: headers.length,
               },
               spec.valueIndex as number,
@@ -1742,8 +1742,8 @@ export async function applyApprovedExcelPlan(
                 {
                   sheetName: plan.worksheetName,
                   startColumn: parsed.startColumn,
-                  startRow: parsed.startRow,
-                  endRow: parsed.endRow,
+                  startRow: parsed.startRow - 1,
+                  endRow: parsed.endRow - 1,
                   columns: headers.length,
                 },
                 {
@@ -1818,8 +1818,8 @@ export async function applyApprovedExcelPlan(
                 {
                   sheetName: plan.worksheetName,
                   startColumn: parsed.startColumn,
-                  startRow: parsed.startRow,
-                  endRow: parsed.endRow,
+                  startRow: parsed.startRow - 1,
+                  endRow: parsed.endRow - 1,
                   columns: headers.length,
                 },
                 {
@@ -1914,8 +1914,8 @@ export async function applyApprovedExcelPlan(
               const range = {
                 sheetName: plan.worksheetName,
                 startColumn: parsed.startColumn,
-                startRow: parsed.startRow,
-                endRow: parsed.endRow,
+                startRow: parsed.startRow - 1,
+                endRow: parsed.endRow - 1,
               };
               let cells: string[][];
               if (spec.mode === "describe")
@@ -2124,8 +2124,8 @@ export async function applyApprovedExcelPlan(
                 {
                   sheetName: plan.worksheetName,
                   startColumn: parsed.startColumn,
-                  startRow: parsed.startRow,
-                  endRow: parsed.endRow,
+                  startRow: parsed.startRow - 1,
+                  endRow: parsed.endRow - 1,
                   columns: headers.length,
                 },
                 headers,
@@ -2601,8 +2601,8 @@ export async function applyApprovedExcelPlan(
                     {
                       sheetName: plan.worksheetName,
                       startColumn: parsed.startColumn,
-                      startRow: parsed.startRow,
-                      endRow: parsed.endRow,
+                      startRow: parsed.startRow - 1,
+                      endRow: parsed.endRow - 1,
                       columns: headers.length,
                     },
                     {
@@ -2650,7 +2650,7 @@ export async function applyApprovedExcelPlan(
               const quotedSheet = `'${String(plan.worksheetName).replace(/'/g, "''")}'!`;
               const formulas = rows.flatMap((_row, rowIndex) =>
                 values.map((valueIndex) => {
-                  const sourceRow = parsed.startRow + rowIndex + 2;
+                  const sourceRow = parsed.startRow + rowIndex + 1;
                   const reference = (index: number) =>
                     `=${quotedSheet}${columnLetter(parsed.startColumn + index)}${sourceRow}`;
                   return [
@@ -2696,8 +2696,8 @@ export async function applyApprovedExcelPlan(
                 {
                   sheetName: plan.worksheetName,
                   startColumn: parsed.startColumn,
-                  startRow: parsed.startRow,
-                  endRow: parsed.endRow,
+                  startRow: parsed.startRow - 1,
+                  endRow: parsed.endRow - 1,
                   columns: headers.length,
                 },
                 spec.splitSourceIndex,
@@ -2853,8 +2853,8 @@ export async function applyApprovedExcelPlan(
                 const range = {
                   sheetName: plan.worksheetName,
                   startColumn: parsed.startColumn,
-                  startRow: parsed.startRow,
-                  endRow: parsed.endRow,
+                  startRow: parsed.startRow - 1,
+                  endRow: parsed.endRow - 1,
                   columns: headers.length,
                 };
                 sheet.getRangeByIndexes(
@@ -3194,8 +3194,8 @@ export async function applyApprovedExcelPlan(
                 const range = {
                   sheetName: plan.worksheetName,
                   startColumn: parsed.startColumn,
-                  startRow: parsed.startRow,
-                  endRow: parsed.endRow,
+                  startRow: parsed.startRow - 1,
+                  endRow: parsed.endRow - 1,
                   columns: headers.length,
                 };
                 const formula = addColumnFormula(

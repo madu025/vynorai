@@ -277,3 +277,18 @@ test("LET names in generated formulas are never cell references or the reserved 
     assert.deepEqual(hits, [], `${file} has an invalid LET name`);
   }
 });
+
+test("an A1 address from the sheet gives the data rows right below the header", async () => {
+  const { parseLocalRange } = await import("./transform.js");
+  const parsed = parseLocalRange("A1:J520126");
+  // parseLocalRange is 1-based, LargeRef is 0-based: the callers subtract one.
+  const ref = {
+    sheetName: "detail-report",
+    startColumn: parsed.startColumn,
+    startRow: parsed.startRow - 1,
+    endRow: parsed.endRow - 1,
+    columns: 10,
+  };
+  assert.equal(dataRef(ref), "'detail-report'!$A$2:$J$520126");
+  assert.equal(headerRef(ref), "'detail-report'!$A$1:$J$1");
+});

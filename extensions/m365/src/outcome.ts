@@ -76,6 +76,46 @@ function cell(value: unknown): string {
   return String(value).slice(0, 24);
 }
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/** Excel keeps dates as day numbers; a date column in a picture shows 04-Mar-25, not 45720.96. */
+function dateColumns(headers: string[], rows: unknown[][]): Set<number> {
+  const found = new Set<number>();
+  headers.forEach((header, index) => {
+    if (!/date|time|\bday\b/i.test(String(header))) return;
+    const values = rows
+      .map((row) => row[index])
+      .filter((value) => value !== null && value !== undefined && value !== "");
+    if (
+      values.length &&
+      values.every(
+        (value) => typeof value === "number" && value > 20000 && value < 80000,
+      )
+    )
+      found.add(index);
+  });
+  return found;
+}
+
+function dateCell(value: unknown): string {
+  if (typeof value !== "number") return cell(value);
+  const date = new Date(Math.round((Math.floor(value) - 25569) * 86400000));
+  return `${String(date.getUTCDate()).padStart(2, "0")}-${MONTHS[date.getUTCMonth()]}-${String(date.getUTCFullYear()).slice(2)}`;
+}
+
 function numeric(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -270,9 +310,19 @@ export function buildOutcomes(
 
     const columns = Math.min(headers.length, MAX_TABLE_COLUMNS);
     const shownRows = rows.slice(0, MAX_TABLE_ROWS);
+    const dateAt = dateColumns(
+      headers.slice(0, columns).map(String),
+      shownRows,
+    );
     const table: OutcomeTable = {
       headers: headers.slice(0, columns).map(cell),
-      rows: shownRows.map((row) => row.slice(0, columns).map(cell)),
+      rows: shownRows.map((row) =>
+        row
+          .slice(0, columns)
+          .map((value, index) =>
+            dateAt.has(index) ? dateCell(value) : cell(value),
+          ),
+      ),
       barColumns: [],
       dropdownColumns: [],
     };

@@ -10,6 +10,7 @@ import {
   adaptForSampledRange,
   createExcelPreviewPlan,
   excelPlansMatch,
+  selectExcelActions,
 } from "../../src/excel.js";
 import {
   answerQuestion,
@@ -93,7 +94,16 @@ function runOne(item: BatchCase, text: string, variant: "en" | "si"): Outcome {
     }
     if (item.id === "q-large") return done("skip", "live only");
     const interpreted: any = interpretInstruction(text, HEADERS, rows as any);
-    let actions = interpreted.actions as any[];
+    // The task pane also adds the actions a phrase names (selectExcelActions); mirror it.
+    let actions = [
+      ...new Set([
+        ...selectExcelActions(text),
+        ...(interpreted.actions as any[]),
+      ]),
+    ].filter(
+      (kind) => !(kind === "new-sheet" && interpreted.actions.includes("view")),
+    ) as any[];
+    if (!actions.length) actions = interpreted.actions as any[];
     let specs = interpreted.specs ?? {};
     if (!actions.length)
       return done(

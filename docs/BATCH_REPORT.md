@@ -2,7 +2,7 @@
 
 ## Phase 2 - offline batch
 
-proven and skipped: 3; ran: 84; pass 71, fail 8, skipped 5
+proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
 
 | id               | variant | size  | status | detail                                                                                   |
 | ---------------- | ------- | ----- | ------ | ---------------------------------------------------------------------------------------- |
@@ -17,7 +17,7 @@ proven and skipped: 3; ran: 84; pass 71, fail 8, skipped 5
 | f-ratio          | en      | 50k   | pass   | add-column plan ok                                                                       |
 | f-if             | en      | small | pass   | add-column plan ok                                                                       |
 | f-text           | en      | small | pass   | add-column plan ok                                                                       |
-| f-year           | en      | small | fail   | not understood: no action                                                                |
+| f-year           | en      | small | pass   | add-column plan ok                                                                       |
 | f-explain        | en      | small | skip   | live only                                                                                |
 | p-one            | en      | 520k  | pass   | pivot-table plan ok                                                                      |
 | p-one            | si      | 520k  | pass   | pivot-table plan ok                                                                      |
@@ -37,7 +37,7 @@ proven and skipped: 3; ran: 84; pass 71, fail 8, skipped 5
 | c-hist           | en      | 520k  | pass   | chart plan ok                                                                            |
 | c-stacked        | en      | small | pass   | chart plan ok                                                                            |
 | c-combo          | en      | small | pass   | chart plan ok                                                                            |
-| s-summary        | en      | 520k  | fail   | expected summary, got pivot-table                                                        |
+| s-summary        | en      | 520k  | pass   | pivot-table plan ok                                                                      |
 | st-describe      | en      | 520k  | pass   | statistics plan ok                                                                       |
 | st-corr          | en      | small | pass   | statistics plan ok                                                                       |
 | st-forecast      | en      | 520k  | pass   | statistics plan ok                                                                       |
@@ -58,25 +58,25 @@ proven and skipped: 3; ran: 84; pass 71, fail 8, skipped 5
 | cf-topn          | en      | small | pass   | view plan ok                                                                             |
 | cf-contains      | en      | small | pass   | format plan ok                                                                           |
 | cf-dupes         | en      | small | pass   | format+view plan ok                                                                      |
-| cf-above         | en      | small | fail   | not understood: no action                                                                |
+| cf-above         | en      | small | pass   | format plan ok                                                                           |
 | cf-dates         | en      | small | pass   | format plan ok                                                                           |
 | val-list         | en      | 50k   | pass   | format plan ok                                                                           |
 | val-range        | en      | small | pass   | format plan ok                                                                           |
-| val-date         | en      | small | fail   | not understood: no action                                                                |
+| val-date         | en      | small | pass   | format plan ok                                                                           |
 | val-dependent    | en      | small | pass   | format plan ok                                                                           |
 | ql-data          | en      | 520k  | pass   | quality plan ok                                                                          |
 | ql-formula       | en      | small | pass   | quality plan ok                                                                          |
-| ql-repair        | en      | small | fail   | not understood: no action                                                                |
+| ql-repair        | en      | small | pass   | quality plan ok                                                                          |
 | d-dash           | en      | 520k  | pass   | dashboard plan ok                                                                        |
-| nr-name          | en      | small | fail   | not understood: no action                                                                |
+| nr-name          | en      | small | pass   | named-range plan ok                                                                      |
 | ex-csv           | en      | small | pass   | export-csv plan ok                                                                       |
 | ex-pdf           | en      | small | pass   | dashboard+export-pdf plan ok                                                             |
-| lk-lookup        | en      | small | fail   | expected lookup-columns, got add-column                                                  |
+| lk-lookup        | en      | small | pass   | add-column plan ok                                                                       |
 | sp-name          | en      | 520k  | pass   | split-column plan ok                                                                     |
 | un-unpivot       | en      | small | pass   | unpivot plan ok                                                                          |
 | r-table          | en      | 520k  | pass   | refused: This data is too large to read in full. A PivotTable works on every row; select |
 | r-slicer         | en      | small | pass   | slicer plan ok                                                                           |
-| r-newsheet       | en      | 520k  | fail   | not understood: no action                                                                |
+| r-newsheet       | en      | 520k  | pass   | view plan ok                                                                             |
 | si-clean         | en      | small | pass   | clean plan ok                                                                            |
 | si-clean         | si      | small | pass   | clean plan ok                                                                            |
 | si-chart         | en      | small | pass   | chart plan ok                                                                            |
@@ -88,5 +88,16 @@ proven and skipped: 3; ran: 84; pass 71, fail 8, skipped 5
 | e-spaced         | en      | 520k  | pass   | pivot-table plan ok                                                                      |
 | e-blank          | en      | small | pass   | statistics plan ok                                                                       |
 | ui-undo          | en      | small | skip   | live only                                                                                |
+| ui-newchat       | en      | small | skip   | live only                                                                                |
+| ui-session       | en      | small | skip   | live only                                                                                |
+| ui-ai            | en      | small | skip   | live only                                                                                |
 | g-script         | en      | small | skip   | known gap: not implemented                                                               |
 | g-vba            | en      | small | skip   | known gap: not implemented                                                               |
+
+## Phase 5 (script planner + open items)
+
+Live on the 520k workbook, build 20261016.34: step planner (5 steps, preview ok), highlight above N, date validation (rule rejects text), custom range name, "Year from" column (520,126 rows).
+Bugs found and fixed in 20261016.35: chart + pivot together refused as "too large" (chart now draws the pivot); "copy this data to a new sheet" refused (bounded view of the first 50,000 rows, no extra new-sheet action); date columns in the preview picture showed day numbers (now 04-Mar-25); "if A then x otherwise y" was split into two steps and not understood; "is more than" in IF conditions.
+Harness: the offline run now mirrors the task pane (selectExcelActions union): 79/79.
+Lesson: never type an unknown name into the Excel Name Box (it defines a new named range).
+Still open: v-filter live retest, date pivot grouping by day, formula audit on very large data, lookup-columns and unpivot-apply live.

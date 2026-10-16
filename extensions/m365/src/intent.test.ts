@@ -138,3 +138,24 @@ test("everyday wording: above N, only dates, name a column, date part, copy to a
 
   assert.deepEqual(run("repair the data problems").actions, ["quality"]);
 });
+
+test("an if-then-otherwise column is one step, not two", () => {
+  const headers = ["Service ID", "Issued Quantity"];
+  const rows = [["a", 2]];
+  const result: any = interpretInstruction(
+    'add a column Flag that is if Issued Quantity is more than 1 then "many" otherwise "one"',
+    headers,
+    rows,
+  );
+  assert.equal(result.problems.length, 0);
+  assert.deepEqual(result.actions, ["add-column"]);
+  const both: any = interpretInstruction(
+    'add a column Flag that is if Issued Quantity > 1 then "many" otherwise "one" then format the data nicely',
+    headers,
+    rows,
+  );
+  assert.equal(both.problems.length, 0);
+  assert.ok(
+    both.actions.includes("add-column") && both.actions.includes("format"),
+  );
+});

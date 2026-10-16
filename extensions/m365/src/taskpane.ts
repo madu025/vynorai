@@ -1148,7 +1148,12 @@ inspect?.addEventListener("click", async () => {
         ...interpreted.actions,
       ]),
     ];
-    const filtered = wanted.filter((kind) => !excludedKinds.has(kind));
+    // A view already writes its own result sheet; "copy this to a new sheet" must not also ask for a copy.
+    const filtered = wanted.filter(
+      (kind) =>
+        !excludedKinds.has(kind) &&
+        !(kind === "new-sheet" && interpreted.actions.includes("view")),
+    );
     let actions = filtered.length > 0 ? filtered : wanted;
     const {
       lookup: lookupWish,

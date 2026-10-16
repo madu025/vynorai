@@ -541,3 +541,17 @@ test("a PivotTable outcome shows the grouped totals it will contain", () => {
     ["Grand total", "4500"],
   ]);
 });
+
+test("a date column in a picture shows a date, not the day number", () => {
+  const [item] = buildOutcomes(
+    [{ kind: "format", targetSheet: "S_Vynor_Format", spec: {} }],
+    ["Service ID", "PAT Complete Date", "Quantity"],
+    [
+      ["a", 45720.9647106481, 2],
+      ["b", 45721, 5],
+    ],
+  );
+  assert.equal(item.table?.rows[0][1], "04-Mar-25");
+  assert.equal(item.table?.rows[1][1], "05-Mar-25");
+  assert.equal(item.table?.rows[0][2], "2");
+});

@@ -257,9 +257,19 @@ export function interpretInstruction(
     return result;
   }
   if (sequenceDepth === 0) {
-    const clauses = text
+    // "if A > 1 then x otherwise y" is one expression, not two steps: keep its own "then".
+    const guarded = text.replace(
+      /\b(if\s+[^;]*?)\s+then\s+/gi,
+      "$1 IFTHENKEEP ",
+    );
+    const clauses = guarded
       .split(/\s+(?:and\s+)?then\s+|\s*;\s*/i)
-      .map((clause) => clause.replace(/^[,\s]+|[,.\s]+$/g, "").trim())
+      .map((clause) =>
+        clause
+          .replace(/IFTHENKEEP/g, "then")
+          .replace(/^[,\s]+|[,.\s]+$/g, "")
+          .trim(),
+      )
       .filter(Boolean);
     if (clauses.length > 1) {
       const parts = clauses.map((clause) =>
@@ -1016,10 +1026,25 @@ function plainExpressionRaw(text: string, headers: string[]): string {
       ? clean
       : `"${clean.replace(/"/g, '""')}"`;
   };
+  // "is more than 1" -> "> 1" inside a condition.
+  const comparison = (condition: string) =>
+    condition
+      .replace(/\b(?:is\s+)?(?:at\s+least|not\s+less\s+than)\b/gi, ">=")
+      .replace(/\b(?:is\s+)?(?:at\s+most|not\s+more\s+than)\b/gi, "<=")
+      .replace(/\b(?:is\s+)?(?:more|greater|bigger|higher)\s+than\b/gi, ">")
+      .replace(/\b(?:is\s+)?(?:less|fewer|smaller|lower)\s+than\b/gi, "<")
+      .replace(/\b(?:is\s+)?equals?(?:\s+to)?\b/gi, "=")
+      .trim();
+  const ifThen =
+    /^if\s+(.+?)\s+then\s+(.+?)\s+(?:otherwise|else|or\s+else)\s+(.+)$/i.exec(
+      text,
+    );
+  if (ifThen)
+    return `IF(${comparison(ifThen[1])},${literal(ifThen[2])},${literal(ifThen[3])})`;
   const choice =
     /^(.+?)\s+if\s+(.+?)\s+(?:otherwise|else|or\s+else)\s+(.+)$/i.exec(text);
   if (choice)
-    return `IF(${choice[2].trim()},${literal(choice[1])},${literal(choice[3])})`;
+    return `IF(${comparison(choice[2])},${literal(choice[1])},${literal(choice[3])})`;
   const yesNo = /^(yes|true)\s+if\s+(.+)$/i.exec(text);
   if (yesNo) return `IF(${yesNo[2].trim()},"Yes","No")`;
   const part =

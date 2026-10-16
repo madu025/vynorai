@@ -1299,7 +1299,7 @@ inspect?.addEventListener("click", async () => {
     if (actions.length === 0) {
       if (looksLikeQuestion(instructionText) && input.sample) {
         // An answer computed from a sample of a very large range would be wrong: say so and offer the exact request.
-        const text = `This data has ${input.sample.totalRows.toLocaleString("en-US")} rows, too many to answer a question from a sample. Ask for a PivotTable instead, for example: "pivot table of total <value column> by <category column>, top 5".`;
+        const text = `This data has ${Math.max(0, input.sample.totalRows - 1).toLocaleString("en-US")} rows, too many to answer a question from a sample. Ask for a PivotTable instead, for example: "pivot table of total <value column> by <category column>, top 5".`;
         showAnswer(text);
         return setStatus("Nothing was changed.");
       }

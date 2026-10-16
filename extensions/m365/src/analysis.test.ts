@@ -257,5 +257,5 @@ test("the AI summary of a sampled range reports the real number of rows", () => 
     hasHeaders: true,
     sample: { totalRows: 520125, sampledRows: 2 },
   } as any);
-  assert.equal(summary.rowCount, 520125);
+  assert.equal(summary.rowCount, 520124);
 });

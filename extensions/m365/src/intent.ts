@@ -979,6 +979,11 @@ export function normalizeInstruction(text: string): string {
       /\b(\w+)\s+(?:walata|walin)\s+(\w+)\s+(?:anuwa|walin|walata)\s+(total|sum|average|count)(?:\s+ekak)?\b/gi,
       "summary $3 of $1 by $2",
     ],
+    // "RTOM අනුව Requested Quantity එකතුව" means "total Requested Quantity by RTOM".
+    [/(\S+(?:\s\S+)?)\s+අනුව\s+(.+?)\s+(?:මුළු\s+)?එකතුව/gu, "total $2 by $1"],
+    [/(\S+)\s+අනුව/gu, "by $1"],
+    [/එකතුව|එකතු/gu, "total"],
+    [/එකක්/gu, ""],
     // Kept as one action so the result, approval and undo are one marked worksheet.
     [/\b(?:kpi\s+)?dashboard\b/gi, "dashboard"],
     [/pivot\s*tables?\b/gi, "pivot"],

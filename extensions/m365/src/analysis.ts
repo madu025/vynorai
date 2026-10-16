@@ -314,7 +314,8 @@ export function buildSchemaSummary(input: RangeInput): SchemaSummary {
       rows.length,
       Math.min(
         1_000_000,
-        (input as { sample?: { totalRows: number } }).sample?.totalRows ?? 0,
+        ((input as { sample?: { totalRows: number } }).sample?.totalRows ?? 0) -
+          layout.headerRowCount,
       ),
     ),
     columnCount,

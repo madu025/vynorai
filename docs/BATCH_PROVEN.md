@@ -33,3 +33,8 @@ cl-dupe | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/
 cl-fill | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts, extensions/m365/src/transform.ts
 cf-icons | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
 p-count | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+cf-above | 2026-10-16 | 377383c | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+val-date | 2026-10-16 | 377383c | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+nr-name | 2026-10-16 | 377383c | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+f-year | 2026-10-16 | 377383c | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+r-newsheet | 2026-10-16 | 08a0440 | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts

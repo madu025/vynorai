@@ -150,6 +150,16 @@ let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
 const SESSION_KEY = "vynorai.m365.excel.session.v2";
+const CONVERSATION_KEY_PREFIX = "vynorai.m365.excel.conversation.v1";
+const MAX_CONVERSATION_MESSAGES = 12;
+const MAX_CONVERSATION_CHARS = 300;
+
+type ConversationMessage = {
+  kind: "user" | "assistant" | "error";
+  text: string;
+};
+
+let conversationMessages: ConversationMessage[] = [];
 
 function cancelPreview() {
   previewGeneration += 1;
@@ -176,6 +186,72 @@ function getCachedHeaderLayout(
   cachedHeaderLayout = { key, layout };
   log.record("excel:header-layout-cache", "pass", "refreshed");
   return layout;
+}
+
+function conversationStorageKey(): string | undefined {
+  const claims = describeAccessToken(accessToken);
+  if (!claims?.tenantId || !claims.objectId) return undefined;
+  return `${CONVERSATION_KEY_PREFIX}.${claims.tenantId}.${claims.objectId}`;
+}
+
+function persistConversation() {
+  const key = conversationStorageKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(conversationMessages));
+  } catch {
+    // Conversation history is a convenience; storage failures must not affect Excel work.
+  }
+}
+
+function renderConversationHistory() {
+  const history = document.querySelector<HTMLElement>("#conversation-history");
+  if (!history) return;
+  history.replaceChildren();
+  for (const message of conversationMessages) {
+    const item = document.createElement("article");
+    item.className = `message ${message.kind}`;
+    const label = document.createElement("span");
+    label.className = "message-label";
+    label.textContent =
+      message.kind === "user"
+        ? translate(language, "conversation_you", "You")
+        : message.kind === "error"
+          ? translate(language, "conversation_attention", "Needs attention")
+          : "VynorAI";
+    const body = document.createElement("span");
+    body.textContent = localizeMessage(language, message.text);
+    item.append(label, body);
+    history.appendChild(item);
+  }
+}
+
+function restoreConversationHistory() {
+  const key = conversationStorageKey();
+  conversationMessages = [];
+  if (!key) return;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "null");
+    if (!Array.isArray(parsed)) return;
+    conversationMessages = parsed
+      .filter(
+        (entry): entry is ConversationMessage =>
+          entry &&
+          (entry.kind === "user" ||
+            entry.kind === "assistant" ||
+            entry.kind === "error") &&
+          typeof entry.text === "string",
+      )
+      .slice(-MAX_CONVERSATION_MESSAGES)
+      .map((entry) => ({
+        kind: entry.kind,
+        text: entry.text.slice(0, MAX_CONVERSATION_CHARS),
+      }));
+    renderConversationHistory();
+  } catch {
+    // A malformed local history is discarded, never allowed to affect the add-in.
+    localStorage.removeItem(key);
+  }
 }
 
 interface StoredSession {
@@ -236,28 +312,19 @@ function setStatus(message: string) {
   }
 }
 
-/** In-memory only: requests are visible for this pane session but never persisted with workbook data. */
+/** Bounded, identity-scoped conversation history; workbook values are never added here. */
 function renderConversation(
   kind: "user" | "assistant" | "error",
   text: string,
 ) {
-  const history = document.querySelector<HTMLElement>("#conversation-history");
-  if (!history || !text) return;
-  const item = document.createElement("article");
-  item.className = `message ${kind}`;
-  const label = document.createElement("span");
-  label.className = "message-label";
-  label.textContent =
-    kind === "user"
-      ? translate(language, "conversation_you", "You")
-      : kind === "error"
-        ? translate(language, "conversation_attention", "Needs attention")
-        : "VynorAI";
-  const body = document.createElement("span");
-  body.textContent = localizeMessage(language, text);
-  item.append(label, body);
-  history.appendChild(item);
-  while (history.childElementCount > 12) history.firstElementChild?.remove();
+  if (!text) return;
+  conversationMessages.push({
+    kind,
+    text: text.slice(0, MAX_CONVERSATION_CHARS),
+  });
+  conversationMessages = conversationMessages.slice(-MAX_CONVERSATION_MESSAGES);
+  renderConversationHistory();
+  persistConversation();
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;
@@ -365,9 +432,8 @@ function signOutOfMicrosoft() {
   localStorage.removeItem(LEGACY_SESSION_KEY);
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
-  document
-    .querySelector<HTMLElement>("#conversation-history")
-    ?.replaceChildren();
+  conversationMessages = [];
+  renderConversationHistory();
   lastConversationRequest = "";
   updateAuthenticationUi(false);
   log.record("session:sign-out", "pass", "local session removed");
@@ -559,6 +625,7 @@ signIn?.addEventListener("click", async () => {
     );
     accessToken = tokens.accessToken;
     saveSession(tokens);
+    restoreConversationHistory();
     updateAuthenticationUi(true);
     recordTokenSummary("oauth:token-claims");
     void refreshCapabilities("oauth");
@@ -2232,6 +2299,7 @@ overviewButton?.addEventListener("click", async () => {
 
 function refreshLanguage() {
   applyLanguage(document, language);
+  renderConversationHistory();
   const previewNode = document.querySelector<HTMLElement>("#preview");
   if (previewNode && previewNode.textContent?.startsWith("{"))
     previewNode.textContent = previewNode.textContent;
@@ -2281,6 +2349,7 @@ async function initialize() {
     return setStatus("M365 OAuth configuration is missing.");
   }
   if (restoreSession()) {
+    restoreConversationHistory();
     updateAuthenticationUi(true);
     recordTokenSummary("session:restore");
     void refreshCapabilities("restore");

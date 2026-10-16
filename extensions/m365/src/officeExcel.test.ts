@@ -1250,10 +1250,14 @@ test("a sampled range turns a chart or a summary into a PivotTable and allows de
     view: { sort: { column: 1, direction: "desc" }, limit: 10 },
   });
   assert.equal(view.actions[0].kind, "view");
+  const forecast: any = createExcelPreviewPlan(base, ["statistics"], 500, {
+    statistics: { mode: "forecast", value: 1, periods: 3 },
+  });
+  assert.equal(forecast.actions[0].kind, "statistics");
   assert.throws(
     () =>
       createExcelPreviewPlan(base, ["statistics"], 500, {
-        statistics: { mode: "forecast", value: 1, periods: 3 },
+        statistics: { mode: "insights", value: 1 },
       }),
     /too large to read in full/,
   );

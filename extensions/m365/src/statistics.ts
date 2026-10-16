@@ -313,7 +313,7 @@ export function buildInsightReportCells(
     ],
     [
       "IQR anomalies",
-      `=LET(x,${value},q1,QUARTILE.INC(x,1),q3,QUARTILE.INC(x,3),iqr,q3-q1,COUNTIF(x,"<"&(q1-1.5*iqr))+COUNTIF(x,">"&(q3+1.5*iqr)))`,
+      `=LET(vals,${value},lowerQ,QUARTILE.INC(vals,1),upperQ,QUARTILE.INC(vals,3),spread,upperQ-lowerQ,COUNTIF(vals,"<"&(lowerQ-1.5*spread))+COUNTIF(vals,">"&(upperQ+1.5*spread)))`,
     ],
     [
       "Trend",
@@ -337,12 +337,12 @@ export function buildInsightReportCells(
   }
   if (categoryIndex !== undefined) {
     const category = columnRange(range, categoryIndex);
-    const totals = `LET(c,UNIQUE(${category}),s,SUMIF(${category},c,${value})`;
+    const totals = `LET(cats,UNIQUE(${category}),sums,SUMIF(${category},cats,${value})`;
     cells.push(
-      ["Top contributor", `=${totals},INDEX(c,MATCH(MAX(s),s,0)))`],
-      ["Top contribution", `=${totals},MAX(s))`],
-      ["Bottom contributor", `=${totals},INDEX(c,MATCH(MIN(s),s,0)))`],
-      ["Bottom contribution", `=${totals},MIN(s))`],
+      ["Top contributor", `=${totals},INDEX(cats,MATCH(MAX(sums),sums,0)))`],
+      ["Top contribution", `=${totals},MAX(sums))`],
+      ["Bottom contributor", `=${totals},INDEX(cats,MATCH(MIN(sums),sums,0)))`],
+      ["Bottom contribution", `=${totals},MIN(sums))`],
     );
   }
   return cells;

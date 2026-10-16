@@ -185,9 +185,9 @@ test("an insight request previews deterministic trend, IQR and contributor evide
     1,
     0,
   );
-  assert.match(cells[4][1], /^=LET\(x,'Sheet1'!\$C\$2:\$C\$5/);
-  assert.match(cells[4][1], /"<"&\(q1-1\.5\*iqr\)/);
-  assert.match(cells.at(-1)![1], /^=LET\(c,UNIQUE\('Sheet1'!\$B\$2/);
+  assert.match(cells[4][1], /^=LET\(vals,'Sheet1'!\$C\$2:\$C\$5/);
+  assert.match(cells[4][1], /"<"&\(lowerQ-1\.5\*spread\)/);
+  assert.match(cells.at(-1)![1], /^=LET\(cats,UNIQUE\('Sheet1'!\$B\$2/);
   assert.equal(
     interpretInstruction(
       "Forecast and recommend next actions for Sales by Month",

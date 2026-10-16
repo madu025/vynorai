@@ -217,14 +217,14 @@ export function addColumnFormula(
       case "rank":
         return `=XMATCH(${column},SORT(${column},,-1))`;
       case "percent-change":
-        return `=LET(c,${column},p,VSTACK(NA(),DROP(c,-1)),IFERROR((c-p)/p,""))`;
+        return `=LET(cur,${column},prev,VSTACK(NA(),DROP(cur,-1)),IFERROR((cur-prev)/prev,""))`;
       case "yoy": {
         const lag = positive(spec.lag, "The YoY lag");
-        return `=LET(c,${column},p,VSTACK(SEQUENCE(${lag},1,NA(),0),DROP(c,-${lag})),IFERROR((c-p)/p,""))`;
+        return `=LET(cur,${column},prev,VSTACK(SEQUENCE(${lag},1,NA(),0),DROP(cur,-${lag})),IFERROR((cur-prev)/prev,""))`;
       }
       case "moving-average": {
         const window = positive(spec.window, "The moving-average window");
-        return `=LET(c,${column},s,SCAN(0,c,LAMBDA(a,b,IF(ISNUMBER(b),a+b,a))),sh,VSTACK(SEQUENCE(${window},1,0,0),DROP(s,-${window})),IF(SEQUENCE(ROWS(c))<${window},"",(s-sh)/${window}))`;
+        return `=LET(cur,${column},run,SCAN(0,cur,LAMBDA(a,b,IF(ISNUMBER(b),a+b,a))),behind,VSTACK(SEQUENCE(${window},1,0,0),DROP(run,-${window})),IF(SEQUENCE(ROWS(cur))<${window},"",(run-behind)/${window}))`;
       }
       case "date-group": {
         if (!["month", "quarter", "year"].includes(String(spec.group)))

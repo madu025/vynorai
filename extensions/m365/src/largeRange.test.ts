@@ -100,15 +100,15 @@ test("derived columns and lookups become spilled formulas over the whole range",
   );
   assert.match(
     addColumnFormula(range, { ...base, derived: "percent-change" }),
-    /VSTACK\(NA\(\),DROP\(c,-1\)\)/,
+    /VSTACK\(NA\(\),DROP\(cur,-1\)\)/,
   );
   assert.match(
     addColumnFormula(range, { ...base, derived: "yoy", lag: 12 }),
-    /DROP\(c,-12\)/,
+    /DROP\(cur,-12\)/,
   );
   assert.match(
     addColumnFormula(range, { ...base, derived: "moving-average", window: 3 }),
-    /SEQUENCE\(ROWS\(c\)\)<3/,
+    /SEQUENCE\(ROWS\(cur\)\)<3/,
   );
   assert.equal(
     addColumnFormula(range, { ...base, derived: "date-group", group: "month" }),
@@ -264,4 +264,16 @@ test("a histogram of a very large column is ten COUNTIFS bins over every row", (
   );
   assert.ok(cells[10][1].includes('"<="&D11'));
   assert.ok(cells[1][1].includes('"<"&D2'));
+});
+
+import { readFileSync } from "node:fs";
+
+test("LET names in generated formulas are never cell references or the reserved c and r", () => {
+  // Excel rejects LET(c,...) and LET(q1,...): the add-in would fail only inside a real workbook.
+  for (const file of ["largeRange.ts", "statistics.ts", "transform.ts"]) {
+    const source = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+    const bad = /(?:LET\(|[,)]\s*)(?:c|r|[A-Za-z]{1,3}\d{1,7}),(?=[A-Za-z(])/g;
+    const hits = source.match(bad) ?? [];
+    assert.deepEqual(hits, [], `${file} has an invalid LET name`);
+  }
 });

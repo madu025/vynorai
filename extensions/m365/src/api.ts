@@ -21,7 +21,7 @@ export interface M365Capabilities {
 }
 
 export interface M365ApiClient {
-  planExcel(input: unknown): Promise<any>;
+  planExcel(input: unknown, signal?: AbortSignal): Promise<any>;
   approveExcel(input: {
     planId: string;
     sourceFingerprint: string;
@@ -114,6 +114,7 @@ export function createM365ApiClient(
     method: "GET" | "POST",
     path: string,
     body?: unknown,
+    signal?: AbortSignal,
   ) => {
     const correlationId = crypto.randomUUID();
     const started = Date.now();
@@ -127,17 +128,24 @@ export function createM365ApiClient(
           "x-correlation-id": correlationId,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
+        ...(signal ? { signal } : {}),
       });
-    } catch {
+    } catch (error) {
+      const aborted =
+        signal?.aborted || (error as Error)?.name === "AbortError";
       onTrace({
         method,
         path,
         status: 0,
         durationMs: Date.now() - started,
         correlationId,
-        code: "NETWORK_ERROR",
+        code: aborted ? "REQUEST_ABORTED" : "NETWORK_ERROR",
       });
-      throw new M365ApiError("NETWORK_ERROR", 0, correlationId);
+      throw new M365ApiError(
+        aborted ? "REQUEST_ABORTED" : "NETWORK_ERROR",
+        0,
+        correlationId,
+      );
     }
     // A proxy or gateway error page is HTML, not the JSON error contract.
     const payload = await response.json().catch(() => undefined);
@@ -165,7 +173,8 @@ export function createM365ApiClient(
     return payload;
   };
   return {
-    planExcel: (input) => request("POST", "/v1/m365/excel/plan", input),
+    planExcel: (input, signal) =>
+      request("POST", "/v1/m365/excel/plan", input, signal),
     approveExcel: (input) =>
       request("POST", "/v1/m365/excel/apply", { ...input, confirmed: true }),
     reportExcelResult: (input) =>

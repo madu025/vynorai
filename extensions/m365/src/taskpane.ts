@@ -120,6 +120,8 @@ const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
 let capabilities: M365Capabilities | undefined;
 let currentPlan: any;
+let previewGeneration = 0;
+let previewAbortController: AbortController | undefined;
 /** Headers and rows of the last inspected selection; used only to draw the preview picture. */
 let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
 let lastRevealSheet = "";
@@ -142,6 +144,12 @@ let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
 const SESSION_KEY = "vynorai.m365.excel.session.v2";
+
+function cancelPreview() {
+  previewGeneration += 1;
+  previewAbortController?.abort();
+  previewAbortController = undefined;
+}
 
 interface StoredSession {
   accessToken: string;
@@ -318,6 +326,7 @@ function restoreSession(): boolean {
 }
 
 function signOutOfMicrosoft() {
+  cancelPreview();
   accessToken = "";
   capabilities = undefined;
   currentPlan = undefined;
@@ -535,6 +544,7 @@ signIn?.addEventListener("click", async () => {
 signOut?.addEventListener("click", signOutOfMicrosoft);
 
 instruction?.addEventListener("input", () => {
+  cancelPreview();
   pendingSpecs = undefined;
   excludedKinds = new Set<string>();
   currentPlan = undefined;
@@ -547,6 +557,17 @@ instruction?.addEventListener("input", () => {
 inspect?.addEventListener("click", async () => {
   if (!config || !accessToken)
     return setStatus("Sign in before inspecting Excel data.");
+  cancelPreview();
+  const generation = previewGeneration;
+  const abortController = new AbortController();
+  previewAbortController = abortController;
+  const isStale = () =>
+    generation !== previewGeneration || abortController.signal.aborted;
+  const stopIfStale = () => {
+    if (!isStale()) return false;
+    log.record("preview:stale", "skip", "superseded by a newer instruction");
+    return true;
+  };
   if (apply) apply.disabled = true;
   currentPlan = undefined;
   const instructionText = normalizeInstruction(instruction?.value || "");
@@ -570,6 +591,7 @@ inspect?.addEventListener("click", async () => {
           possibleCircularReferences: value.possibleCircularReferenceCount,
         }),
       );
+      if (stopIfStale()) return;
       showAnswer(formatFormulaInspection(report));
       return setStatus(
         "Formula inspection is ready. Nothing was sent or changed.",
@@ -597,6 +619,7 @@ inspect?.addEventListener("click", async () => {
         columns: value.values[0]?.length ?? 0,
       }),
     );
+    if (stopIfStale()) return;
     const layout = getExcelHeaderLayout(input);
     currentSourceSheet = String(input.worksheetName ?? "");
     currentRangeAddress = String(input.address ?? "");
@@ -697,6 +720,7 @@ inspect?.addEventListener("click", async () => {
             ...(lookupWish.method ? { method: lookupWish.method } : {}),
           },
         };
+        if (stopIfStale()) return;
       } catch (error) {
         log.record("lookup:resolve", "fail", describeError(error));
         return setStatus((error as Error).message);
@@ -763,6 +787,7 @@ inspect?.addEventListener("click", async () => {
               : {}),
           },
         };
+        if (stopIfStale()) return;
       } catch (error) {
         log.record("lookup-columns:resolve", "fail", describeError(error));
         return setStatus((error as Error).message);
@@ -806,11 +831,16 @@ inspect?.addEventListener("click", async () => {
         warnings: value.warnings.length,
       }),
     );
-    const plan = await apiClient().planExcel({
-      ...input,
-      actions,
-      ...(Object.keys(specs).length ? { specs } : {}),
-    });
+    if (stopIfStale()) return;
+    const plan = await apiClient().planExcel(
+      {
+        ...input,
+        actions,
+        ...(Object.keys(specs).length ? { specs } : {}),
+      },
+      abortController.signal,
+    );
+    if (stopIfStale()) return;
     log.record("api:plan", "pass", {
       planId: plan.planId,
       actions: plan.actions?.map((action: any) => action.kind),
@@ -831,6 +861,8 @@ inspect?.addEventListener("click", async () => {
       return;
     }
     currentPlan = plan;
+    if (previewAbortController === abortController)
+      previewAbortController = undefined;
     previewFingerprint = localPreview.sourceFingerprint;
     if (preview)
       preview.textContent = JSON.stringify(
@@ -872,6 +904,7 @@ inspect?.addEventListener("click", async () => {
     // "Review as you go" off: apply straight away, like Copilot's edit mode.
     if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
   } catch (error) {
+    if (isStale()) return;
     handleApiError("inspect", error);
   }
 });

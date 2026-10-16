@@ -76,6 +76,30 @@ test("M365 API reports network failures and calls diagnostics with GET", async (
   });
 });
 
+test("M365 API aborts an in-flight Excel preview request", async () => {
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | undefined;
+  const traces: any[] = [];
+  const client = createM365ApiClient(
+    "https://api.example",
+    "t",
+    async (_url, init) => {
+      receivedSignal = init?.signal as AbortSignal | undefined;
+      controller.abort();
+      throw new Error("request was aborted");
+    },
+    (trace) => traces.push(trace),
+  );
+
+  await assert.rejects(
+    () => client.planExcel({ actions: ["chart"] }, controller.signal),
+    (error: unknown) =>
+      error instanceof M365ApiError && error.code === "REQUEST_ABORTED",
+  );
+  assert.equal(receivedSignal, controller.signal);
+  assert.equal(traces[0].code, "REQUEST_ABORTED");
+});
+
 test("M365 API reads tenant capabilities without sending workbook data", async () => {
   let seen: { url: string; method?: string; body?: unknown } | undefined;
   const client = createM365ApiClient(

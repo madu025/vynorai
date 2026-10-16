@@ -1785,6 +1785,21 @@ function getServerExcelHeaderLayout(input: any): ExcelHeaderLayout {
       "Select the two header rows and at least one data row below them.",
     );
   const secondRow = ((input.values as any[][])[1] || []).map(normalizedCell);
+  // A selected block can include a title/merged band above an otherwise flat header row.
+  // If the second row is complete, use it as the header rather than rejecting a safe read.
+  if (
+    !firstRow[0] &&
+    secondRow.length === firstRow.length &&
+    secondRow.length > 0 &&
+    secondRow.every(Boolean)
+  ) {
+    assertUniqueHeaders(secondRow);
+    return {
+      headerRowCount: 2,
+      headers: secondRow,
+      normalization: { headerRowCount: 2, headers: secondRow },
+    };
+  }
   const inheritedHeaders: string[] = [];
   let activeHeader = "";
   for (let index = 0; index < firstRow.length; index += 1) {

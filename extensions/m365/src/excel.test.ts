@@ -8,6 +8,7 @@ import {
   excelPlansMatch,
   excelSafeBaseName,
   fingerprintExcelRange,
+  getExcelHeaderLayout,
   profileExcelRange,
   selectExcelActions,
 } from "./excel.js";
@@ -163,18 +164,20 @@ test("normalizes merged headers and rejects ambiguous or header-only selections"
     normalized.actions.map((action) => action.kind),
     ["new-sheet", "table", "pivot-table"],
   );
-  assert.throws(
-    () =>
-      assertValidExcelTabularRange({
-        ...input,
-        values: [
-          ["", "Time", ""],
-          ["Date", "Start", "End"],
-          ["2026-09-02", "08:00", "09:00"],
-        ],
-      }),
-    /leading blank header cell/,
-  );
+  const titled = {
+    ...input,
+    values: [
+      ["", "Time", ""],
+      ["Date", "Start", "End"],
+      ["2026-09-02", "08:00", "09:00"],
+    ],
+  };
+  assert.doesNotThrow(() => assertValidExcelTabularRange(titled));
+  assert.deepEqual(getExcelHeaderLayout(titled), {
+    headerRowCount: 2,
+    headers: ["Date", "Start", "End"],
+    normalization: { headerRowCount: 2, headers: ["Date", "Start", "End"] },
+  });
   assert.throws(
     () =>
       assertValidExcelTabularRange({

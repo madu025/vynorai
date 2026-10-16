@@ -20,6 +20,25 @@ const input = {
   ],
 };
 
+test("server and add-in agree when a complete header row follows a merged title band", () => {
+  const titledInput = {
+    ...input,
+    address: "Sheet1!A1:D3",
+    values: [
+      ["", "Mileage", "", ""],
+      ["Date", "Start", "End", "Purpose"],
+      ["2026-09-02", 14952, 14980, "Visit Homagama"],
+    ],
+  };
+  const server = createServerExcelPreviewPlan(titledInput, ["table"], 500);
+  const local = createExcelPreviewPlan(titledInput as any, ["table"], 500);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(local.normalization, {
+    headerRowCount: 2,
+    headers: ["Date", "Start", "End", "Purpose"],
+  });
+});
+
 test("server and add-in build the same plan for explicit column choices", () => {
   const specs = {
     chart: { category: 1, value: 2, chartType: "pie" as const },

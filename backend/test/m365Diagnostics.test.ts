@@ -164,3 +164,26 @@ test("M365 server normalizes a two-row merged header into a safe result-sheet pl
     ["new-sheet", "table", "pivot-table"],
   );
 });
+
+test("M365 server accepts a complete header row below a leading merged title band", async () => {
+  const { createServerExcelPreviewPlan } = await import(
+    "../src/services/m365ExcelPlan.js"
+  );
+  const plan = createServerExcelPreviewPlan(
+    {
+      workbookId: "book",
+      worksheetName: "Mileage",
+      address: "A1:C3",
+      values: [
+        ["", "Time", ""],
+        ["Date", "Start", "End"],
+        ["2026-09-02", "08:00", "09:00"],
+      ],
+    },
+    ["table"],
+  );
+  assert.deepEqual(plan.normalization, {
+    headerRowCount: 2,
+    headers: ["Date", "Start", "End"],
+  });
+});

@@ -61,6 +61,7 @@ const KIND_TITLES: Record<string, [string, string]> = {
   quality: ["Data quality report", "දත්ත ගුණාත්මක වාර්තාව"],
   statistics: ["Statistics", "සංඛ්‍යාලේඛන"],
   "lookup-columns": ["Lookup columns", "Lookup columns"],
+  "export-csv": ["CSV export", "CSV අපනයනය"],
 };
 
 export function kindTitle(kind: string, language: OutcomeLanguage): string {
@@ -169,6 +170,15 @@ export function buildOutcomes(
         say(
           `Turns ${valueIndexes.length} value columns into long-format rows; source data stays unchanged.`,
           `Unpivot ${valueIndexes.length} value columns into long-format rows; source data stays unchanged.`,
+        ),
+      );
+      return item;
+    }
+    if (action.kind === "export-csv") {
+      item.details.push(
+        say(
+          "Copies the selected data to a new VynorAI result sheet and downloads a sanitized CSV after confirmation. Source data stays unchanged.",
+          "තෝරාගත් දත්ත නව VynorAI ප්‍රතිඵල පත්‍රයකට පිටපත් කර, තහවුරු කළ පසු ආරක්ෂිත CSV ගොනුවක් බාගත කරයි. මුල් දත්ත වෙනස් නොවේ.",
         ),
       );
       return item;
@@ -1127,6 +1137,7 @@ const KIND_PREFIX: Record<string, string> = {
   statistics: "Statistics of",
   summary: "Summary of",
   dashboard: "Dashboard of",
+  "export-csv": "CSV export of",
   "add-column": "Calc of",
   "lookup-columns": "Lookup of",
   "new-sheet": "Result of",

@@ -109,6 +109,16 @@ test("instruction planner selects only explicit allowlisted Excel actions", () =
   ]);
   assert.deepEqual(selectExcelActions("Format it as a table"), ["table"]);
   assert.deepEqual(selectExcelActions("Please improve this data"), []);
+  assert.deepEqual(selectExcelActions("Export this result to CSV"), [
+    "export-csv",
+  ]);
+});
+
+test("CSV export plans a separate source-preserving result sheet", () => {
+  const plan = createExcelPreviewPlan(input, ["export-csv"]);
+  assert.equal(plan.actions[0].targetSheet, "Sales_Vynor_CSV");
+  assert.equal(plan.actions[0].preservesSource, true);
+  assert.equal(plan.requiresConfirmation, true);
 });
 
 test("normalizes merged headers and rejects ambiguous or header-only selections", () => {

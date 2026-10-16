@@ -229,7 +229,7 @@ test("capabilities endpoint exposes only effective allowlisted Excel features", 
   assert.equal(response.json.excel.canInspect, true);
   assert.equal(response.json.excel.canPreview, true);
   assert.equal(response.json.excel.canApply, true);
-  assert.equal(response.json.excel.actionKinds.length, 17);
+  assert.equal(response.json.excel.actionKinds.length, 18);
   assert.deepEqual(
     response.json.excel.writableActionKinds,
     response.json.excel.actionKinds,

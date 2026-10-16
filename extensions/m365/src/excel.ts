@@ -66,7 +66,8 @@ type ExcelActionPlan = {
       | "quality"
       | "statistics"
       | "dashboard"
-      | "view";
+      | "view"
+      | "export-csv";
     name: string;
     targetSheet: string;
     preservesSource: true;
@@ -97,6 +98,7 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "statistics",
   "dashboard",
   "view",
+  "export-csv",
 ];
 
 function orderExcelActions(
@@ -1932,6 +1934,12 @@ export function assertValidExcelTabularRange(input: ExcelRangeInput): void {
  */
 export function selectExcelActions(instruction: string): ExcelActionKind[] {
   const normalized = instruction.toLocaleLowerCase().replace(/[_-]+/g, " ");
+  if (
+    /\b(?:export|download)\b.*\bcsv\b|\bcsv\b.*\b(?:export|download|file)\b/.test(
+      normalized,
+    )
+  )
+    return ["export-csv"];
   if (/\b(?:kpi\s+)?dashboard\b/.test(normalized)) return ["dashboard"];
   const withoutPivot = normalized.replace(/pivot\s*table/g, " ");
   const requested = new Set<ExcelActionKind>();
@@ -2125,7 +2133,9 @@ export function createExcelPreviewPlan(
                             ? `${baseName}_Vynor_Slicer`
                             : kind === "dashboard"
                               ? `${baseName}_Vynor_Dashboard`
-                              : resultSheet;
+                              : kind === "export-csv"
+                                ? `${baseName}_Vynor_CSV`
+                                : resultSheet;
   if (
     (requested.has("summary") ||
       requested.has("format") ||

@@ -34,6 +34,7 @@ const EXCEL_ACTION_ORDER = [
   "statistics",
   "dashboard",
   "view",
+  "export-csv",
 ] as const;
 
 function orderExcelActions(
@@ -1956,7 +1957,9 @@ export function createServerExcelPreviewPlan(
                               ? `${baseName}_Vynor_Slicer`
                               : kind === "dashboard"
                                 ? `${baseName}_Vynor_Dashboard`
-                                : `${baseName}_Vynor_Result`,
+                                : kind === "export-csv"
+                                  ? `${baseName}_Vynor_CSV`
+                                  : `${baseName}_Vynor_Result`,
     preservesSource: true,
     description: layout.normalization
       ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`

@@ -74,6 +74,7 @@ const excelPlanSchema = z.object({
         "statistics",
         "dashboard",
         "view",
+        "export-csv",
       ]),
     )
     .min(1)
@@ -473,6 +474,7 @@ const applyResultSchema = z.object({
           "statistics",
           "dashboard",
           "view",
+          "export-csv",
         ]),
         status: z.enum(["created", "exists", "failed", "skipped_unsupported"]),
       }),

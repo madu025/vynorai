@@ -180,6 +180,7 @@ export interface InterpretedInstruction {
     | "quality"
     | "statistics"
     | "dashboard"
+    | "export-csv"
   >;
   specs: InstructionSpecs;
   problems: string[];
@@ -302,6 +303,12 @@ export function interpretInstruction(
       return { actions, specs, problems: [] };
     }
   }
+  if (
+    /\b(?:export|download)\b.*\bcsv\b|\bcsv\b.*\b(?:export|download|file)\b/i.test(
+      text,
+    )
+  )
+    return { actions: ["export-csv"], specs: {}, problems: [] };
   if (
     /\b(?:format|create|turn|make)\b.*\b(?:as\s+(?:an?\s+)?|into\s+(?:an?\s+)?)?(?:excel\s+)?table\b/i.test(
       text,

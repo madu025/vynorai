@@ -202,6 +202,7 @@ export const ACTION_REQUIREMENTS: Record<string, string> = {
   dashboard: "1.8",
   slicer: "1.10",
   view: "1.4",
+  "export-csv": "1.4",
 };
 
 function stringClaim(value: unknown): string | undefined {

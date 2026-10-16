@@ -22,6 +22,7 @@ export const M365_EXCEL_ACTION_KINDS = [
   "statistics",
   "dashboard",
   "view",
+  "export-csv",
 ] as const;
 
 export interface M365IdentityLink {

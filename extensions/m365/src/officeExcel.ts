@@ -307,6 +307,37 @@ export function buildLookupFormula(
   return `=IFERROR(INDEX(${quoted}!${returnLetter}$2:${returnLetter}${last},MATCH(1,INDEX(${matches},0),0)),"")`;
 }
 
+/** CSV cells are quoted consistently and text that Excel could execute is neutralized. */
+export function excelValuesToCsv(values: any[][]): string {
+  const cell = (value: any): string => {
+    let text = value === null || value === undefined ? "" : String(value);
+    if (typeof value === "string" && /^[=+\-@]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  return values.map((row) => row.map(cell).join(",")).join("\r\n") + "\r\n";
+}
+
+/** Starts a local browser download; no workbook or server state is changed by this helper. */
+export function downloadExcelCsv(values: any[][], filename: string): void {
+  if (
+    typeof document === "undefined" ||
+    typeof Blob === "undefined" ||
+    typeof URL === "undefined" ||
+    typeof URL.createObjectURL !== "function"
+  )
+    throw new Error("CSV_DOWNLOAD_UNAVAILABLE");
+  const blob = new Blob([excelValuesToCsv(values)], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 async function readValuesInChunks(
   context: ExcelContextLike,
   range: any,
@@ -655,6 +686,8 @@ export async function applyApprovedExcelPlan(
       return normalizedSource;
     };
 
+    let lastCopiedValues: any[][] | undefined;
+
     const writeSourceCopy = async (sheet: any) => {
       const range = sourceRange();
       range.load(["rowCount", "columnCount"]);
@@ -672,6 +705,7 @@ export async function applyApprovedExcelPlan(
             ...values.slice(plan.normalization.headerRowCount),
           ]
         : values;
+      lastCopiedValues = copiedValues;
       normalizedSource = await writeValuesInChunks(
         context,
         sheet,
@@ -854,6 +888,15 @@ export async function applyApprovedExcelPlan(
                 ["VynorAI result", "Source preserved", plan.sourceAddress],
               ];
               await context.sync();
+            }
+          } else if (action.kind === "export-csv") {
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              await writeSourceCopy(sheet);
+              if (!lastCopiedValues)
+                throw new Error("CSV source copy was not created");
+              downloadExcelCsv(lastCopiedValues, `${action.targetSheet}.csv`);
             }
           } else if (action.kind === "dashboard") {
             const dashboard = action.spec?.dashboard;

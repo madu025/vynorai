@@ -3,10 +3,22 @@ import { test } from "node:test";
 import { createExcelPreviewPlan } from "./excel.js";
 import {
   applyApprovedExcelPlan,
+  excelValuesToCsv,
   inspectSelectedExcelRange,
   localExcelAddress,
   rollbackItemsFromApplyReport,
 } from "./officeExcel.js";
+
+test("CSV export quotes cells and neutralizes formula injection", () => {
+  assert.equal(
+    excelValuesToCsv([
+      ["Name", "Note"],
+      ["Asha, Ltd", '=HYPERLINK("https://evil.example")'],
+      ["Bimal", -4],
+    ]),
+    '"Name","Note"\r\n"Asha, Ltd","\'=HYPERLINK(""https://evil.example"")"\r\n"Bimal","-4"\r\n',
+  );
+});
 
 /**
  * Small in-memory stand-in for the Office.js objects the add-in touches. It records every
@@ -316,6 +328,36 @@ async function previewFor(excel: ReturnType<typeof fakeWorkbook>) {
   ]);
   return { input, plan };
 }
+
+test("CSV export copies the source, marks the result and starts a download", async () => {
+  const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["export-csv"]);
+  const downloads: string[] = [];
+  (globalThis as any).document = {
+    createElement: () => ({
+      click() {
+        downloads.push(this.download);
+      },
+    }),
+  };
+  try {
+    const report = await applyApprovedExcelPlan(
+      excel.runtime,
+      plan,
+      true,
+      "approval",
+      { expectedSourceFingerprint: plan.sourceFingerprint },
+    );
+    assert.equal(report.results[0].kind, "export-csv");
+    assert.equal(report.results[0].status, "created");
+    assert.equal(report.sourceUnchangedAfterApply, true);
+    assert.deepEqual(downloads, ["CSV export of Sales.csv"]);
+    assert.ok(excel.calls.includes("mark CSV export of Sales vynorai=result"));
+  } finally {
+    delete (globalThis as any).document;
+  }
+});
 
 test("local address strips the sheet prefix, including quoted names", () => {
   assert.equal(localExcelAddress("Sales!A1:B3"), "A1:B3");

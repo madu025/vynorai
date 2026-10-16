@@ -4,6 +4,16 @@ import path from "node:path";
 import { test } from "node:test";
 import { interpretInstruction } from "./intent.js";
 
+test("CSV export is an explicit, fully served action", () => {
+  const interpreted = interpretInstruction(
+    "Export this result to CSV",
+    HEADERS,
+    ROWS,
+  );
+  assert.deepEqual(interpreted.actions, ["export-csv"]);
+  assert.deepEqual(interpreted.problems, []);
+});
+
 type CataloguePrompt = {
   category: string;
   expectedActions: string[];

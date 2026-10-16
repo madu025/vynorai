@@ -2095,6 +2095,40 @@ export async function applyApprovedExcelPlan(
                 : splitHeader(await readSourceValues());
               const out = [headers, ...rows].map((row) => row.map(literal));
               const columns = headers.length;
+              // Keep each source column's own format: dates stay dates, codes such as 0112559962 stay text.
+              let sourceFormats: any = null;
+              try {
+                sourceFormats = sourceRange().getAbsoluteResizedRange(
+                  out.length,
+                  columns,
+                );
+                sourceFormats.load("numberFormat");
+                await context.sync();
+              } catch {
+                sourceFormats = null; // formats are presentation only
+              }
+              const keptFormat = new Set<number>();
+              for (let column = 0; column < columns; column += 1) {
+                const format = String(
+                  sourceFormats?.numberFormat?.[1]?.[column] ?? "General",
+                );
+                const code = rows.some(
+                  (row) =>
+                    typeof row[column] === "string" &&
+                    /^0\d/.test(String(row[column])),
+                );
+                const own = code ? "@" : format;
+                if (own !== "General") {
+                  keptFormat.add(column);
+                  sheet.getRangeByIndexes(
+                    1,
+                    column,
+                    out.length,
+                    1,
+                  ).numberFormat = out.map(() => [own]) as any;
+                }
+              }
+              await context.sync();
               sheet.getRangeByIndexes(0, 0, out.length, columns).values = out;
               await context.sync();
               const headerRange = sheet.getRangeByIndexes(0, 0, 1, columns);
@@ -2104,12 +2138,13 @@ export async function applyApprovedExcelPlan(
               if (spec.freezeHeader !== false) sheet.freezePanes.freezeRows(1);
               if (rows.length > 0) {
                 for (const entry of spec.columnFormats ?? [])
-                  sheet.getRangeByIndexes(
-                    1,
-                    entry.index,
-                    rows.length,
-                    1,
-                  ).numberFormat = rows.map(() => [entry.format]);
+                  if (!keptFormat.has(entry.index))
+                    sheet.getRangeByIndexes(
+                      1,
+                      entry.index,
+                      rows.length,
+                      1,
+                    ).numberFormat = rows.map(() => [entry.format]);
                 await context.sync();
                 for (const rule of spec.conditional ?? []) {
                   const range = sheet.getRangeByIndexes(

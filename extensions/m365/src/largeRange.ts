@@ -311,7 +311,7 @@ export function cleanFormula(range: LargeRef, spec: LargeCleanSpec): string {
   if (has("text-to-number"))
     step(
       "n",
-      `IF(ISTEXT(${current})*ISERROR(DATEVALUE(${current})),IFERROR(VALUE(SUBSTITUTE(TRIM(${current}),",","")),${current}),${current})`,
+      `IF(ISTEXT(${current})*ISERROR(DATEVALUE(${current}))*NOT(AND(LEN(TRIM(${current}))>1,LEFT(TRIM(${current}),1)="0",MID(TRIM(${current}),2,1)<>"."))*(LEN(TRIM(${current}))<16),IFERROR(VALUE(SUBSTITUTE(TRIM(${current}),",","")),${current}),${current})`,
     );
   if (has("text-to-date"))
     step(

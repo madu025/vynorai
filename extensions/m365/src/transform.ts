@@ -32,6 +32,9 @@ export interface CleanChanges {
 
 export type FillBlankValue = string | number;
 
+/** Codes such as 0112559962 or very long digit strings are identifiers: turning them into numbers loses data. */
+const looksLikeIdentifier = (text: string) =>
+  /^[+-]?0\d/.test(text) || text.replace(/\D/g, "").length > 15;
 const NUMBER_TEXT = /^-?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^-?\d+(?:\.\d+)?$/;
 const ISO_DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -92,7 +95,7 @@ export function cleanRows(
       }
       if (operations.includes("text-to-number") && typeof value === "string") {
         const candidate = value.trim();
-        if (NUMBER_TEXT.test(candidate)) {
+        if (NUMBER_TEXT.test(candidate) && !looksLikeIdentifier(candidate)) {
           changes.converted += 1;
           value = Number(candidate.replace(/,/g, ""));
         }

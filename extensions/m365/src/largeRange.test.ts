@@ -151,7 +151,7 @@ test("clean-up is one spilled formula and never turns a blank into zero", () => 
       fillBlanks: 'n/"a',
       fillBlanksColumnIndex: 2,
     }),
-    `=LET(d,TAKE('detail-report'!$A$2:$J$520126,100000),t,IF(ISTEXT(d),TRIM(d),d),n,IF(ISTEXT(t)*ISERROR(DATEVALUE(t)),IFERROR(VALUE(SUBSTITUTE(TRIM(t),",","")),t),t),b,IF(SEQUENCE(1,COLUMNS(n))=3,IF(n="","n/""a",n),n),u,UNIQUE(b),u)`,
+    `=LET(d,TAKE('detail-report'!$A$2:$J$520126,100000),t,IF(ISTEXT(d),TRIM(d),d),n,IF(ISTEXT(t)*ISERROR(DATEVALUE(t))*NOT(AND(LEN(TRIM(t))>1,LEFT(TRIM(t),1)="0",MID(TRIM(t),2,1)<>"."))*(LEN(TRIM(t))<16),IFERROR(VALUE(SUBSTITUTE(TRIM(t),",","")),t),t),b,IF(SEQUENCE(1,COLUMNS(n))=3,IF(n="","n/""a",n),n),u,UNIQUE(b),u)`,
   );
   assert.throws(
     () => cleanFormula(range, { operations: ["fuzzy-dedupe"] }),

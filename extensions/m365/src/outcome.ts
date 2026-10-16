@@ -226,6 +226,13 @@ export function buildOutcomes(
             "සෑම chart data point එකකම අගය පෙන්වයි.",
           ),
         );
+      if (spec.pivotSourceName)
+        item.details.push(
+          say(
+            "Uses the created PivotTable result as the chart source; the original data stays unchanged.",
+            "සාදන ලද PivotTable result එක chart source ලෙස භාවිතා කරයි; මුල් data එක වෙනස් නොවේ.",
+          ),
+        );
       const secondary = (spec.secondaryIndexes ?? []) as number[];
       if (secondary.length) {
         const slowNames = secondary

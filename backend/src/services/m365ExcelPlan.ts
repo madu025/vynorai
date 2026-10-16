@@ -16,6 +16,42 @@ export class InvalidExcelRangeError extends Error {
   }
 }
 
+const EXCEL_ACTION_ORDER = [
+  "new-sheet",
+  "named-range",
+  "slicer",
+  "table",
+  "chart",
+  "pivot-table",
+  "clean",
+  "add-column",
+  "lookup-columns",
+  "split-column",
+  "unpivot",
+  "summary",
+  "format",
+  "quality",
+  "statistics",
+  "dashboard",
+  "view",
+] as const;
+
+function orderExcelActions(
+  requested: Set<string>,
+  pivotResult: boolean,
+): string[] {
+  const ordered = EXCEL_ACTION_ORDER.filter((action) => requested.has(action));
+  if (pivotResult && requested.has("pivot-table") && requested.has("chart")) {
+    const pivot = ordered.indexOf("pivot-table");
+    const chart = ordered.indexOf("chart");
+    if (pivot > chart) {
+      ordered.splice(pivot, 1);
+      ordered.splice(chart, 0, "pivot-table");
+    }
+  }
+  return ordered;
+}
+
 export type ExcelChartType =
   | "column"
   | "line"
@@ -67,6 +103,7 @@ export interface ExcelColumnSpecs {
     chartType: ExcelChartType;
     extraValues?: number[];
     showDataLabels?: boolean;
+    pivotResult?: boolean;
   };
   pivot?: {
     rows: number;
@@ -201,6 +238,7 @@ export interface ExcelActionSpec {
   slicerName?: string;
   chartType?: ExcelChartType;
   showDataLabels?: boolean;
+  pivotSourceName?: string;
   extraValueColumns?: string[];
   extraValueIndexes?: number[];
   secondaryIndexes?: number[];
@@ -1879,107 +1917,95 @@ export function createServerExcelPreviewPlan(
     specs,
     requested,
   );
-  const actions = [
-    "new-sheet",
-    "named-range",
-    "slicer",
-    "table",
-    "chart",
-    "pivot-table",
-    "clean",
-    "add-column",
-    "lookup-columns",
-    "split-column",
-    "unpivot",
-    "summary",
-    "format",
-    "quality",
-    "statistics",
-    "dashboard",
-    "view",
-  ]
-    .filter((kind) => requested.has(kind))
-    .map((kind) => ({
-      kind,
-      name:
-        kind === "named-range" && resolved.namedRange
-          ? (resolved.namedRange.namedRangeName ??
-            `${baseName}_Vynor_named_range`)
-          : kind === "slicer" && resolved.slicer
-            ? (resolved.slicer.slicerName ?? `${baseName}_Vynor_slicer`)
-            : `${baseName}_Vynor_${kind.replace("-", "_")}`,
-      targetSheet:
-        kind === "clean"
-          ? `${baseName}_Vynor_Clean`
-          : kind === "add-column"
-            ? `${baseName}_Vynor_Calc`
-            : kind === "lookup-columns"
-              ? `${baseName}_Vynor_Lookup`
-              : kind === "split-column"
-                ? `${baseName}_Vynor_Split`
-                : kind === "unpivot"
-                  ? `${baseName}_Vynor_Unpivot`
-                  : kind === "format"
-                    ? `${baseName}_Vynor_Format`
-                    : kind === "quality"
-                      ? `${baseName}_Vynor_Report`
-                      : kind === "summary"
-                        ? `${baseName}_Vynor_Totals`
-                        : kind === "view"
-                          ? `${baseName}_Vynor_View`
-                          : kind === "statistics"
-                            ? `${baseName}_Vynor_Stats`
-                            : kind === "named-range"
-                              ? `${baseName}_Vynor_Names`
-                              : kind === "slicer"
-                                ? `${baseName}_Vynor_Slicer`
-                                : kind === "dashboard"
-                                  ? `${baseName}_Vynor_Dashboard`
-                                  : `${baseName}_Vynor_Result`,
-      preservesSource: true,
-      description: layout.normalization
-        ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
-        : `Preview ${kind} using ${input.address}; source data remains unchanged.`,
-      ...(kind === "chart" && resolved.chart ? { spec: resolved.chart } : {}),
-      ...(kind === "pivot-table" && resolved.pivot
-        ? { spec: resolved.pivot }
-        : {}),
-      ...(kind === "clean" && resolved.clean ? { spec: resolved.clean } : {}),
-      ...(kind === "add-column" && resolved.addColumn
-        ? { spec: resolved.addColumn }
-        : {}),
-      ...(kind === "lookup-columns" && resolved.lookupColumns
-        ? { spec: resolved.lookupColumns }
-        : {}),
-      ...(kind === "unpivot" && resolved.unpivot
-        ? { spec: resolved.unpivot }
-        : {}),
-      ...(kind === "split-column" && resolved.split
-        ? { spec: resolved.split }
-        : {}),
-      ...(kind === "format" && resolved.format
-        ? { spec: resolved.format }
-        : {}),
-      ...(kind === "summary" && resolved.summary
-        ? { spec: resolved.summary }
-        : {}),
-      ...(kind === "view" && resolved.view ? { spec: resolved.view } : {}),
-      ...(kind === "statistics" && resolved.statistics
-        ? { spec: resolved.statistics }
-        : {}),
-      ...(kind === "quality" && resolved.quality
-        ? { spec: resolved.quality }
-        : {}),
-      ...(kind === "dashboard" && resolved.dashboard
-        ? { spec: resolved.dashboard }
-        : {}),
-      ...(kind === "named-range" && resolved.namedRange
-        ? { spec: resolved.namedRange }
-        : {}),
-      ...(kind === "slicer" && resolved.slicer
-        ? { spec: resolved.slicer }
-        : {}),
-    }));
+  const actions = orderExcelActions(
+    requested,
+    specs?.chart?.pivotResult === true,
+  ).map((kind) => ({
+    kind,
+    name:
+      kind === "named-range" && resolved.namedRange
+        ? (resolved.namedRange.namedRangeName ??
+          `${baseName}_Vynor_named_range`)
+        : kind === "slicer" && resolved.slicer
+          ? (resolved.slicer.slicerName ?? `${baseName}_Vynor_slicer`)
+          : `${baseName}_Vynor_${kind.replace("-", "_")}`,
+    targetSheet:
+      kind === "clean"
+        ? `${baseName}_Vynor_Clean`
+        : kind === "add-column"
+          ? `${baseName}_Vynor_Calc`
+          : kind === "lookup-columns"
+            ? `${baseName}_Vynor_Lookup`
+            : kind === "split-column"
+              ? `${baseName}_Vynor_Split`
+              : kind === "unpivot"
+                ? `${baseName}_Vynor_Unpivot`
+                : kind === "format"
+                  ? `${baseName}_Vynor_Format`
+                  : kind === "quality"
+                    ? `${baseName}_Vynor_Report`
+                    : kind === "summary"
+                      ? `${baseName}_Vynor_Totals`
+                      : kind === "view"
+                        ? `${baseName}_Vynor_View`
+                        : kind === "statistics"
+                          ? `${baseName}_Vynor_Stats`
+                          : kind === "named-range"
+                            ? `${baseName}_Vynor_Names`
+                            : kind === "slicer"
+                              ? `${baseName}_Vynor_Slicer`
+                              : kind === "dashboard"
+                                ? `${baseName}_Vynor_Dashboard`
+                                : `${baseName}_Vynor_Result`,
+    preservesSource: true,
+    description: layout.normalization
+      ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
+      : `Preview ${kind} using ${input.address}; source data remains unchanged.`,
+    ...(kind === "chart" && resolved.chart
+      ? {
+          spec: {
+            ...resolved.chart,
+            ...(requested.has("pivot-table") && specs?.chart?.pivotResult
+              ? { pivotSourceName: `${baseName}_Vynor_pivot_table` }
+              : {}),
+          },
+        }
+      : {}),
+    ...(kind === "pivot-table" && resolved.pivot
+      ? { spec: resolved.pivot }
+      : {}),
+    ...(kind === "clean" && resolved.clean ? { spec: resolved.clean } : {}),
+    ...(kind === "add-column" && resolved.addColumn
+      ? { spec: resolved.addColumn }
+      : {}),
+    ...(kind === "lookup-columns" && resolved.lookupColumns
+      ? { spec: resolved.lookupColumns }
+      : {}),
+    ...(kind === "unpivot" && resolved.unpivot
+      ? { spec: resolved.unpivot }
+      : {}),
+    ...(kind === "split-column" && resolved.split
+      ? { spec: resolved.split }
+      : {}),
+    ...(kind === "format" && resolved.format ? { spec: resolved.format } : {}),
+    ...(kind === "summary" && resolved.summary
+      ? { spec: resolved.summary }
+      : {}),
+    ...(kind === "view" && resolved.view ? { spec: resolved.view } : {}),
+    ...(kind === "statistics" && resolved.statistics
+      ? { spec: resolved.statistics }
+      : {}),
+    ...(kind === "quality" && resolved.quality
+      ? { spec: resolved.quality }
+      : {}),
+    ...(kind === "dashboard" && resolved.dashboard
+      ? { spec: resolved.dashboard }
+      : {}),
+    ...(kind === "named-range" && resolved.namedRange
+      ? { spec: resolved.namedRange }
+      : {}),
+    ...(kind === "slicer" && resolved.slicer ? { spec: resolved.slicer } : {}),
+  }));
   const warnings = [
     ...profile.duplicateHeaderNames.map((name) => `Duplicate header: ${name}`),
   ];

@@ -109,6 +109,7 @@ const excelPlanSchema = z.object({
             .max(4)
             .optional(),
           showDataLabels: z.boolean().optional(),
+          pivotResult: z.boolean().optional(),
         })
         .strict()
         .optional(),

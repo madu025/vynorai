@@ -975,7 +975,55 @@ export async function applyApprovedExcelPlan(
             if (!existing.isNullObject) result.status = "exists";
             else {
               const spec = action.spec;
-              if (spec?.categoryColumn) {
+              if (spec?.pivotSourceName) {
+                if (
+                  options.supportsExcelApi &&
+                  !options.supportsExcelApi("1.8")
+                )
+                  throw new Error(
+                    "skipped_unsupported: pivot-result charts need ExcelApi 1.8",
+                  );
+                const pivot = context.workbook.pivotTables.getItemOrNullObject(
+                  spec.pivotSourceName,
+                );
+                pivot.load("isNullObject");
+                await context.sync();
+                if (pivot.isNullObject)
+                  throw new Error(
+                    "pivot_result_unavailable: the PivotTable was not created before its chart",
+                  );
+                const pivotRange = pivot.layout?.getRange?.();
+                if (!pivotRange)
+                  throw new Error(
+                    "pivot_result_unavailable: this Excel host cannot expose the PivotTable layout range",
+                  );
+                const pivotChartTypes: Record<string, string> = {
+                  column: "ColumnClustered",
+                  line: "Line",
+                  bar: "BarClustered",
+                  pie: "Pie",
+                  "stacked-column": "ColumnStacked",
+                  "stacked-bar": "BarStacked",
+                  area: "Area",
+                  combo: "ColumnClustered",
+                };
+                const chart = sheet.charts.add(
+                  pivotChartTypes[spec.chartType] ?? "ColumnClustered",
+                  pivotRange,
+                  "Columns",
+                );
+                chart.name = action.name;
+                chart.setPosition("H3");
+                chart.title.text = `PivotTable result: ${spec.valueColumn} by ${spec.categoryColumn}`;
+                if (spec.showDataLabels) {
+                  try {
+                    chart.dataLabels.showValue = true;
+                  } catch {
+                    // Older hosts may not expose chart data labels; keep the chart itself.
+                  }
+                }
+                await context.sync();
+              } else if (spec?.categoryColumn) {
                 if (
                   options.supportsExcelApi &&
                   !options.supportsExcelApi("1.7")

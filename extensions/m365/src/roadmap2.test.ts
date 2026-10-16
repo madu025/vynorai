@@ -152,6 +152,7 @@ function fakeWorkbook() {
   const calls: string[] = [];
   const written: Record<string, any> = {};
   const sheets = new Map<string, any>();
+  const pivotNames = new Set<string>();
   const nullable = (exists: boolean) => ({ isNullObject: !exists, load() {} });
   const source = () => ({
     rowCount: input.values.length,
@@ -228,8 +229,10 @@ function fakeWorkbook() {
         },
       },
       pivotTables: {
-        add() {
+        add(name: string) {
+          pivotNames.add(name);
           return {
+            layout: { getRange: () => source() },
             hierarchies: { getItem: (h: string) => ({ h }) },
             rowHierarchies: { add: (x: any) => calls.push(`rows ${x.h}`) },
             columnHierarchies: {
@@ -278,7 +281,13 @@ function fakeWorkbook() {
         convertToRange: () => calls.push(`convert ${n}`),
       }),
     },
-    pivotTables: { getItemOrNullObject: () => nullable(false) },
+    pivotTables: {
+      getItemOrNullObject: (name: string) => {
+        const item = nullable(pivotNames.has(name));
+        if (!item.isNullObject) item.layout = { getRange: () => source() };
+        return item;
+      },
+    },
   };
   return {
     calls,

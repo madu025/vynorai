@@ -99,6 +99,22 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "view",
 ];
 
+function orderExcelActions(
+  requested: Set<ExcelActionKind>,
+  pivotResult: boolean,
+): ExcelActionKind[] {
+  const ordered = EXCEL_ACTION_ORDER.filter((action) => requested.has(action));
+  if (pivotResult && requested.has("pivot-table") && requested.has("chart")) {
+    const pivot = ordered.indexOf("pivot-table");
+    const chart = ordered.indexOf("chart");
+    if (pivot > chart) {
+      ordered.splice(pivot, 1);
+      ordered.splice(chart, 0, "pivot-table");
+    }
+  }
+  return ordered;
+}
+
 type ComparableExcelPlan = Omit<
   ExcelActionPlan,
   "planId" | "approvalToken" | "expiresAt"
@@ -157,6 +173,7 @@ export interface ExcelColumnSpecs {
     chartType: ExcelChartType;
     extraValues?: number[];
     showDataLabels?: boolean;
+    pivotResult?: boolean;
   };
   pivot?: {
     rows: number;
@@ -307,6 +324,7 @@ export interface ExcelActionSpec {
   slicerName?: string;
   chartType?: ExcelChartType;
   showDataLabels?: boolean;
+  pivotSourceName?: string;
   extraValueColumns?: string[];
   extraValueIndexes?: number[];
   secondaryIndexes?: number[];
@@ -2074,8 +2092,9 @@ export function createExcelPreviewPlan(
     input.hasHeaders === false ? noHeaderLayout : getExcelHeaderLayout(input);
   const requested = new Set(requestedActions);
   if (layout.normalization) requested.add("new-sheet");
-  const safeActions = EXCEL_ACTION_ORDER.filter((action) =>
-    requested.has(action),
+  const safeActions = orderExcelActions(
+    requested,
+    specs?.chart?.pivotResult === true,
   );
   const baseName = excelSafeBaseName(input.worksheetName);
   const resultSheet = `${baseName}_Vynor_Result`;
@@ -2139,7 +2158,16 @@ export function createExcelPreviewPlan(
     description: layout.normalization
       ? `Preview ${kind} using a normalized copy of ${input.address} on ${resultSheet}; source data remains unchanged.`
       : `Preview ${kind} using ${input.address}; source data remains unchanged.`,
-    ...(kind === "chart" && resolved.chart ? { spec: resolved.chart } : {}),
+    ...(kind === "chart" && resolved.chart
+      ? {
+          spec: {
+            ...resolved.chart,
+            ...(requested.has("pivot-table") && specs?.chart?.pivotResult
+              ? { pivotSourceName: `${baseName}_Vynor_pivot_table` }
+              : {}),
+          },
+        }
+      : {}),
     ...(kind === "pivot-table" && resolved.pivot
       ? { spec: resolved.pivot }
       : {}),

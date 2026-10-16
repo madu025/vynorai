@@ -231,6 +231,7 @@ function fakeWorkbook(
           );
           pivots.add(String(pivotName));
           return {
+            layout: { getRange: () => range("Result", "A3:B6") },
             hierarchies: { getItem: (name: string) => name },
             rowHierarchies: {
               add: (name: string) => calls.push(`pivot.row ${name}`),
@@ -260,7 +261,12 @@ function fakeWorkbook(
       getItemOrNullObject: (name: string) => nullable(tables.has(name)),
     },
     pivotTables: {
-      getItemOrNullObject: (name: string) => nullable(pivots.has(name)),
+      getItemOrNullObject: (name: string) => {
+        const item = nullable(pivots.has(name));
+        if (!item.isNullObject)
+          item.layout = { getRange: () => range("Result", "A3:B6") };
+        return item;
+      },
     },
     names: {
       items: [],
@@ -408,6 +414,36 @@ test("apply enables chart data labels only on the copied result", async () => {
   );
   assert.equal(report.results[0].status, "created");
   assert.ok(excel.calls.includes("chart.dataLabels.showValue = true"));
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
+test("apply charts the actual PivotTable layout when both actions are requested", async () => {
+  const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["chart", "pivot-table"], 500, {
+    chart: { category: 0, value: 1, chartType: "column", pivotResult: true },
+    pivot: { rows: 0, values: 1 },
+  });
+  assert.deepEqual(
+    plan.actions.map((action) => action.kind),
+    ["pivot-table", "chart"],
+  );
+  assert.equal(
+    plan.actions[1].spec?.pivotSourceName,
+    "Sales_Vynor_pivot_table",
+  );
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.deepEqual(
+    report.results.map((result) => `${result.kind}:${result.status}`),
+    ["pivot-table:created", "chart:created"],
+  );
+  assert.ok(excel.calls.includes("chart.add ColumnClustered range:A3:B6"));
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 

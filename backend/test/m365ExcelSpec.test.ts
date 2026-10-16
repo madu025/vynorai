@@ -29,6 +29,10 @@ test("server and add-in build the same plan for explicit column choices", () => 
   const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
   const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
   assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(
+    server.actions.map((action) => action.kind),
+    ["chart", "pivot-table"],
+  );
   assert.equal(server.actions[0].spec.valueColumn, "Sales");
   assert.equal(server.actions[1].spec.rowsColumn, "Region");
 });
@@ -46,6 +50,30 @@ test("server and add-in preserve explicit chart data-label intent", () => {
   const server = createServerExcelPreviewPlan(input, ["chart"], 500, specs);
   assert.equal(excelPlansMatch(local, server), true);
   assert.equal(server.actions[0].spec.showDataLabels, true);
+});
+
+test("server and add-in preserve explicit PivotTable-result chart intent", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "line" as const,
+      pivotResult: true,
+    },
+    pivot: { rows: 1, values: 2 },
+  };
+  const actions = ["chart", "pivot-table"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.deepEqual(
+    server.actions.map((action) => action.kind),
+    ["pivot-table", "chart"],
+  );
+  assert.equal(
+    server.actions[1].spec.pivotSourceName,
+    "Sheet1_Vynor_pivot_table",
+  );
 });
 
 test("server and add-in build the same safe combine plan", () => {

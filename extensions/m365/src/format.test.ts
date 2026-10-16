@@ -198,6 +198,29 @@ test("chart data-label requests are explicit and planner-safe", () => {
   assert.equal(plan.actions[0].spec?.showDataLabels, true);
 });
 
+test("pivot-result chart requests compose pivot before chart", () => {
+  const interpreted = interpretInstruction(
+    "Create a PivotTable of Sales by Region and chart the pivot result",
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.actions, ["chart", "pivot-table"]);
+  const plan = createExcelPreviewPlan(
+    input as any,
+    interpreted.actions as any,
+    500,
+    { ...interpreted.specs },
+  );
+  assert.deepEqual(
+    plan.actions.map((action) => action.kind),
+    ["pivot-table", "chart"],
+  );
+  assert.equal(
+    plan.actions[1].spec?.pivotSourceName,
+    "Sheet1_Vynor_pivot_table",
+  );
+});
+
 test("a fill-blanks instruction can target a named column", () => {
   const parsed = interpretInstruction(
     "Fill blank Status values with Unknown",

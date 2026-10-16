@@ -442,17 +442,20 @@ async function readValuesInChunks(
   options?: {
     maxTextChars?: number;
     onProgress?: (completedRows: number, totalRows: number) => void;
+    isCancelled?: () => boolean;
   },
 ): Promise<any[][]> {
   const values: any[][] = [];
   let textChars = 0;
   for (let start = 0; start < rows; start += chunkRows) {
+    if (options?.isCancelled?.()) throw new Error("EXCEL_READ_CANCELLED");
     const count = Math.min(chunkRows, rows - start);
     const chunk = range
       .getCell(start, 0)
       .getResizedRange(count - 1, columns - 1);
     chunk.load("values");
     await context.sync();
+    if (options?.isCancelled?.()) throw new Error("EXCEL_READ_CANCELLED");
     if (options?.maxTextChars !== undefined) {
       for (const row of chunk.values)
         for (const cell of row)
@@ -496,6 +499,7 @@ export async function inspectSelectedExcelRange(
   chunkRows = 500,
   onProgress?: (completedRows: number, totalRows: number) => void,
   onAutoDetect?: (address: string) => void,
+  isCancelled?: () => boolean,
 ): Promise<ExcelRangeInput> {
   if (!Number.isInteger(chunkRows) || chunkRows < 1 || chunkRows > 5000)
     throw new Error("chunkRows must be an integer between 1 and 5000");
@@ -599,6 +603,7 @@ export async function inspectSelectedExcelRange(
         {
           maxTextChars: MAX_EXCEL_SELECTION_TEXT_CHARS,
           onProgress,
+          isCancelled,
         },
       ),
       hasHeaders: true,

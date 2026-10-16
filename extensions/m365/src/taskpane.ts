@@ -103,6 +103,8 @@ const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
+const cancelPreviewButton =
+  document.querySelector<HTMLButtonElement>("#cancel-preview");
 const analyze = document.querySelector<HTMLButtonElement>("#analyze");
 const consentPanel = document.querySelector<HTMLElement>("#ai-consent");
 const consentSummary = document.querySelector<HTMLElement>("#ai-summary");
@@ -168,10 +170,17 @@ type ConversationMessage = {
 
 let conversationMessages: ConversationMessage[] = [];
 
+function setPreviewCancelVisible(visible: boolean) {
+  if (!cancelPreviewButton) return;
+  cancelPreviewButton.hidden = !visible;
+  cancelPreviewButton.disabled = !visible;
+}
+
 function cancelPreview() {
   previewGeneration += 1;
   previewAbortController?.abort();
   previewAbortController = undefined;
+  setPreviewCancelVisible(false);
 }
 
 function getCachedHeaderLayout(
@@ -816,6 +825,14 @@ signIn?.addEventListener("click", async () => {
 
 signOut?.addEventListener("click", signOutOfMicrosoft);
 
+cancelPreviewButton?.addEventListener("click", () => {
+  if (!previewAbortController) return;
+  cancelPreview();
+  log.record("preview:cancel", "pass", "cancelled by user");
+  setStatus("Preview cancelled. Nothing has changed in your workbook.");
+  updateAuthenticationUi(Boolean(accessToken));
+});
+
 instruction?.addEventListener("input", () => {
   cancelPreview();
   pendingSpecs = undefined;
@@ -834,6 +851,7 @@ inspect?.addEventListener("click", async () => {
   const generation = previewGeneration;
   const abortController = new AbortController();
   previewAbortController = abortController;
+  setPreviewCancelVisible(true);
   const isStale = () =>
     generation !== previewGeneration || abortController.signal.aborted;
   const stopIfStale = () => {
@@ -885,6 +903,7 @@ inspect?.addEventListener("click", async () => {
           (address) => {
             autoDetectedAddress = address;
           },
+          () => abortController.signal.aborted,
         ),
       (value) => ({
         sheet: value.worksheetName,
@@ -1135,8 +1154,10 @@ inspect?.addEventListener("click", async () => {
       return;
     }
     currentPlan = plan;
-    if (previewAbortController === abortController)
+    if (previewAbortController === abortController) {
       previewAbortController = undefined;
+      setPreviewCancelVisible(false);
+    }
     previewFingerprint = localPreview.sourceFingerprint;
     if (preview)
       preview.textContent = JSON.stringify(
@@ -1178,8 +1199,17 @@ inspect?.addEventListener("click", async () => {
     // "Review as you go" off: apply straight away, like Copilot's edit mode.
     if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
   } catch (error) {
+    if (previewAbortController === abortController) {
+      previewAbortController = undefined;
+      setPreviewCancelVisible(false);
+    }
     if (isStale()) return;
     handleApiError("inspect", error);
+  } finally {
+    if (previewAbortController === abortController) {
+      previewAbortController = undefined;
+      setPreviewCancelVisible(false);
+    }
   }
 });
 

@@ -440,6 +440,30 @@ test("inspect refuses an oversized selection before reading cell values", async 
   );
 });
 
+test("inspect stops between read chunks when cancelled", async () => {
+  const rows = [
+    ["Value"],
+    ...Array.from({ length: 1200 }, (_, index) => [index]),
+  ];
+  const excel = fakeWorkbook(rows);
+  let completedRows = 0;
+
+  await assert.rejects(
+    inspectSelectedExcelRange(
+      excel.runtime,
+      "book-1",
+      500,
+      (completed) => {
+        completedRows = completed;
+      },
+      undefined,
+      () => completedRows >= 500,
+    ),
+    /EXCEL_READ_CANCELLED/,
+  );
+  assert.equal(completedRows, 500);
+});
+
 test("inspect reads a merged multi-row header for normalized planning", async () => {
   const excel = fakeWorkbook([
     ["Date", "Time", ""],

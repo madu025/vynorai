@@ -51,6 +51,8 @@ const SYSTEM_PROMPT = [
   "- <column type> chart of <measure> by <category> (column, line, bar, pie, stacked column, histogram)",
   "- clean the data: trim extra spaces / convert text to numbers / convert text to dates / remove duplicate rows / fill blank cells with 0",
   "- add a column <Name> that is <A> + <B> (also - * /, if <cond> then <x> otherwise <y>, first N letters of, year of <date column>)",
+  "  An expression may use [Column Name] in brackets, + - * / & = <> < > <= >=, IF/IFS/AND/OR, ROUND, ABS, MIN, MAX, text functions (LEFT, RIGHT, MID, LEN, TRIM, UPPER, CONCAT), date functions (YEAR, MONTH, DAY, DATEDIF, TODAY) and whole-column figures COLSUM, COLAVG, COLMAX, COLMIN, COLCOUNT, COLSTDEV of ONE column.",
+  '  Use them for odd calculations, for example: share of the total -> add a column Share that is [Issued Quantity] / COLSUM([Issued Quantity]); above or below average -> add a column Level that is IF([Issued Quantity] > COLAVG([Issued Quantity]), "Above", "Below"); distance from average -> add a column Gap that is [Issued Quantity] - COLAVG([Issued Quantity]).',
   "- format the data nicely with a bold header and banded rows",
   "- highlight <measure> with a color scale / add data bars to <measure> / add icon sets to <measure> / highlight duplicates in <column>",
   "- add a dropdown list to <column> / allow only dates in <column> / highlight <measure> above <number>",
@@ -101,8 +103,9 @@ export function buildScriptMessages(
   ];
 }
 
-/** A step is a short printable sentence: no markup, code fences, links or control characters. */
-const SAFE_STEP = /^[^\u0000-\u001f<>`{}\\]+$/;
+/** A step is a short printable sentence: no markup, code fences, links or control characters. Comparison signs (< >) are fine in an expression. */
+const SAFE_STEP = /^[^\u0000-\u001f`{}\\]+$/;
+const MARKUP = /<\s*[a-zA-Z!/?]/;
 const LINK = /\b(?:https?:\/\/|www\.)|javascript:/i;
 
 export function parseScriptResponse(text: string): ScriptResult {
@@ -123,7 +126,11 @@ export function parseScriptResponse(text: string): ScriptResult {
         .join(", ")}`,
     );
   for (const step of parsed.data.steps)
-    if (!SAFE_STEP.test(step.instruction) || LINK.test(step.instruction))
+    if (
+      !SAFE_STEP.test(step.instruction) ||
+      MARKUP.test(step.instruction) ||
+      LINK.test(step.instruction)
+    )
       throw new M365AnalysisError("AI_SCRIPT_INVALID", 422, "unsafe step");
   return parsed.data;
 }

@@ -305,3 +305,24 @@ test("an equals filter compares as text so an ID with a leading zero matches", (
     /INDEX\(d,,7\)&""<>"5"/,
   );
 });
+
+test("a whole-column figure inside a computed column reads the full source column", () => {
+  const { ast } = parseExpression(
+    "[Issued Quantity] / COLSUM([Issued Quantity])",
+    [
+      "Service ID",
+      "RTOM",
+      "LEA",
+      "PAT Complete Date",
+      "Status",
+      "Item Code",
+      "Requested Quantity",
+      "Issued Quantity",
+      "UoM",
+      "Circuit ID",
+    ],
+  );
+  const formula = addColumnFormula(range, {}, ast);
+  assert.match(formula, /SUM\('detail-report'!\$H\$2:\$H\$520126\)/);
+  assert.match(formula, /^=MAP\(/);
+});

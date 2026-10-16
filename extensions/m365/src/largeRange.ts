@@ -185,7 +185,9 @@ export function addColumnFormula(
   if (ast) {
     const columns = astColumns(ast);
     return mapRows(range, columns, (name) =>
-      expressionToFormula(ast, name).replace(/^=/, ""),
+      expressionToFormula(ast, name, (index) =>
+        columnRef(range, index),
+      ).replace(/^=/, ""),
     );
   }
   if (spec.lookup) {

@@ -94,9 +94,4 @@ proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
 | g-script         | en      | small | skip   | known gap: not implemented                                                               |
 | g-vba            | en      | small | skip   | known gap: not implemented                                                               |
 
-Phase 6 (user prompt: items and quantities per Circuit ID): "pivot table of total Issued Quantity by Circuit ID and Item Code as rows" works on 520k (78 s). Found: a leading-zero ID in a filter became a number and matched nothing (v-filter), fixed in 20261016.38 (text compare for = and <>; leading-zero values stay text).
-
-Phase 7 (AI interpreter, hybrid): `extensions/m365/test/batch/ai-interpret.ts` sends free-form requests (Singlish, Sinhala, vague English) to the real gateway model with the add-in's own prompt (column names and types only), parses the answer with the strict parser, and checks every step through the add-in reader and the client/server plan on a 520k range. No Excel and no screenshots: about 1,500 tokens per case.
-Run: `cd extensions/m365 && npx tsx --env-file=../../.env.e2e test/batch/ai-interpret.ts [--verbose]`.
-First run 3/10: the model ignored the request and returned a generic report (several pivots). Fixed in the prompt (request in the user message, "do only what is asked", one pivot at most, worked examples): 10/10.
-The add-in now remembers what the AI understood (request text + column names -> plain steps, localStorage, 50 entries) so the same request needs no AI call next time.
+Phase 8 (odd calculations): computed-column expressions now accept whole-column figures COLSUM, COLAVG, COLMAX, COLMIN, COLCOUNT, COLSTDEV of one column (share of total, above or below average, distance from average, z-score), on small data and on very large data (a full-column reference inside the MAP). The AI planner prompt teaches them; planner steps may contain < and > (markup is still refused). ai-interpret: 13/13 with the real model. Live check on the 520k workbook still to do.

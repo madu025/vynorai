@@ -3166,6 +3166,8 @@ export async function applyApprovedExcelPlan(
                         expressionAst,
                         (column) =>
                           `${expressionColumnLetter(column)}${rowNumber}`,
+                        (column) =>
+                          `${expressionColumnLetter(column)}$2:${expressionColumnLetter(column)}${rows.length + 1}`,
                       )
                     : runningTotalFormula
                       ? runningTotalFormula(rowNumber)

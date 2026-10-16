@@ -127,3 +127,27 @@ test("two bad answers in a row fail with a clear code", async () => {
     (error: any) => error.code === "AI_SCRIPT_INVALID",
   );
 });
+
+test("a step may use comparison signs but not markup", () => {
+  const ok = {
+    title: "t",
+    steps: [
+      {
+        instruction:
+          'add a column Level that is IF([Issued Quantity] > COLAVG([Issued Quantity]), "Above", "Below")',
+        reason: "r",
+      },
+    ],
+  };
+  assert.equal(parseScriptResponse(JSON.stringify(ok)).steps.length, 1);
+  assert.throws(
+    () =>
+      parseScriptResponse(
+        JSON.stringify({
+          title: "t",
+          steps: [{ instruction: "add <b>bold</b>", reason: "r" }],
+        }),
+      ),
+    (error: any) => error.code === "AI_SCRIPT_INVALID",
+  );
+});

@@ -136,6 +136,13 @@ export const EXPRESSION_FUNCTIONS: Record<string, FunctionRule> = {
   MAX: FN(2, 8, "math"),
   SUM: FN(1, 8, "math"),
   AVERAGE: FN(1, 8, "math"),
+  // whole-column figures: the total, average, largest, smallest, count or spread of one column
+  COLSUM: FN(1, 1, "math"),
+  COLAVG: FN(1, 1, "math"),
+  COLMAX: FN(1, 1, "math"),
+  COLMIN: FN(1, 1, "math"),
+  COLCOUNT: FN(1, 1, "math"),
+  COLSTDEV: FN(1, 1, "math"),
   // logic
   IF: FN(2, 3, "logic"),
   IFS: FN(2, 12, "logic"),
@@ -230,6 +237,10 @@ export function parseExpression(
     const literal = (index: number) => args[index];
     if (/^ROUND(UP|DOWN)?$/.test(name) && args[1] && args[1].t !== "num")
       throw new ExpressionError(`${name} needs a fixed number of decimals.`);
+    if (/^COL(SUM|AVG|MAX|MIN|COUNT|STDEV)$/.test(name) && args[0].t !== "col")
+      throw new ExpressionError(
+        `${name} needs one column, for example ${name}([Sales]).`,
+      );
     if (name === "IFS" && args.length % 2 !== 0)
       throw new ExpressionError("IFS needs pairs of a test and a result.");
     if (name === "TEXT") {
@@ -428,6 +439,7 @@ function columnLetter(index: number): string {
 export function expressionToFormula(
   node: ExprNode,
   cell: (columnIndex: number) => string,
+  whole?: (columnIndex: number) => string,
 ): string {
   let divides = false;
   const emit = (current: ExprNode): string => {
@@ -449,8 +461,24 @@ export function expressionToFormula(
         return `(${emit(current.a)}&${emit(current.b)})`;
       case "cmp":
         return `(${emit(current.a)}${current.op}${emit(current.b)})`;
-      case "fn":
+      case "fn": {
+        const column = /^COL(SUM|AVG|MAX|MIN|COUNT|STDEV)$/.exec(current.name);
+        if (column) {
+          const target = current.args[0];
+          if (!whole || target.t !== "col")
+            throw new Error("A whole-column figure needs the column range");
+          const excel = {
+            SUM: "SUM",
+            AVG: "AVERAGE",
+            MAX: "MAX",
+            MIN: "MIN",
+            COUNT: "COUNT",
+            STDEV: "STDEV.S",
+          }[column[1] as "SUM"];
+          return `${excel}(${whole(target.i)})`;
+        }
         return `${current.name}(${current.args.map(emit).join(",")})`;
+      }
     }
   };
   const body = emit(node);

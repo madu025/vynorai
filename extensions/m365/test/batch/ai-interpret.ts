@@ -138,6 +138,21 @@ const CASES: Array<{ id: string; text: string; expect: string }> = [
     expect: "chart",
   },
   {
+    id: "share-of-total",
+    text: "show each row issued quantity as a percentage of the total issued quantity",
+    expect: "add-column",
+  },
+  {
+    id: "above-average-flag",
+    text: "add a column that says Above or Below depending on whether issued quantity is over the average",
+    expect: "add-column",
+  },
+  {
+    id: "gap-from-average",
+    text: "Issued Quantity eka average ekata wada kiyak wenas da kiyala column ekak danna",
+    expect: "add-column",
+  },
+  {
     id: "dashboard",
     text: "make me a dashboard of issued quantity by status",
     expect: "dashboard",

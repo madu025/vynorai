@@ -107,3 +107,36 @@ test("instructions with more than two columns or functions become an expression 
   );
   assert.deepEqual(unknown.actions, []);
 });
+
+test("whole-column figures: share of the total, above the average, spread", () => {
+  const share = parseExpression("Sales / COLSUM(Sales)", headers);
+  assert.equal(
+    expressionToFormula(share.ast, cell, (index) => `$C$2:$C$201`),
+    '=IFERROR((C2/SUM($C$2:$C$201)),"")',
+  );
+  const above = parseExpression(
+    'IF(Sales > COLAVG(Sales), "Above", "Below")',
+    headers,
+  );
+  assert.equal(
+    expressionToFormula(above.ast, cell, () => "$C$2:$C$9"),
+    '=IF((C2>AVERAGE($C$2:$C$9)),"Above","Below")',
+  );
+  const z = parseExpression(
+    "(Sales - COLAVG(Sales)) / COLSTDEV(Sales)",
+    headers,
+  );
+  assert.match(
+    expressionToFormula(z.ast, cell, () => "$C$2:$C$9"),
+    /STDEV\.S\(\$C\$2:\$C\$9\)/,
+  );
+  assert.throws(
+    () => parseExpression("COLSUM(Sales + Cost)", headers),
+    ExpressionError,
+  );
+  assert.throws(
+    () =>
+      parseExpression("COLSUM(Region)", headers).ast &&
+      expressionToFormula(parseExpression("COLSUM(Sales)", headers).ast, cell),
+  );
+});

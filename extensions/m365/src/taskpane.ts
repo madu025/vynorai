@@ -146,6 +146,8 @@ let lastAppliedSpecs: ExcelColumnSpecs | undefined;
 /** Set when the table was found around a single clicked cell instead of a dragged selection. */
 let autoDetectedAddress = "";
 let previewFingerprint = "";
+/** When the current request started, to report how long a big workbook took. */
+let requestStartedAt = 0;
 let pendingSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
 let lastCreated:
@@ -891,6 +893,7 @@ inspect?.addEventListener("click", async () => {
       );
     }
     autoDetectedAddress = "";
+    requestStartedAt = Date.now();
     setStatus("Inspecting the selected range...");
     const input = await log.step(
       "excel:read-selection",
@@ -1440,12 +1443,21 @@ apply?.addEventListener("click", async () => {
       }
     }
     document.querySelector<HTMLElement>("#change-note")?.focus();
+    // A slow result says where the time went, so a big workbook never looks like a hang.
+    const slow = report.results.filter((entry) => (entry.ms ?? 0) >= 4000);
+    const totalSeconds = requestStartedAt
+      ? Math.round((Date.now() - requestStartedAt) / 1000)
+      : 0;
+    const timing = slow.length
+      ? ` (${totalSeconds}s: ${slow.map((entry) => `${entry.kind} ${((entry.ms ?? 0) / 1000).toFixed(0)}s`).join(", ")})`
+      : "";
     renderConversation(
       failed.length ? "error" : "assistant",
       failed.length
         ? `Applied ${done.length} of ${report.results.length} planned changes.`
         : doneSentence(report.results, report.sourceUnchangedAfterApply) +
-            (replaced ? ` Removed ${replaced} older result sheet(s).` : ""),
+            (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
+            timing,
     );
     setStatus(
       failed.length

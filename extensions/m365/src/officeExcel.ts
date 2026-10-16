@@ -66,6 +66,8 @@ export interface ExcelActionResult {
   /** Workbook names created as helper lists for one result. */
   createdNames?: string[];
   error?: string;
+  /** Milliseconds this action took in Excel, shown when a result is slow. */
+  ms?: number;
 }
 
 export interface ExcelApplyReport {
@@ -956,6 +958,7 @@ export async function applyApprovedExcelPlan(
         targetSheet: action.targetSheet,
         status: "created",
       };
+      const actionStarted = Date.now();
       try {
         const required = options.requirements?.[action.kind];
         if (
@@ -2706,6 +2709,7 @@ export async function applyApprovedExcelPlan(
         result.status = "failed";
         result.error = errorText(error);
       }
+      result.ms = Date.now() - actionStarted;
       results.push(result);
       options.onAction?.(result);
     }

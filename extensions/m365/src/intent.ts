@@ -26,6 +26,7 @@ export interface InstructionSpecs {
       | "histogram"
       | "waterfall";
     extraValues?: number[];
+    showDataLabels?: boolean;
   };
   /** Bring a column from another sheet; the pane resolves the sheet's headers. */
   lookup?: {
@@ -1036,6 +1037,9 @@ function interpretChartAndPivot(
       category: isHistogram ? histogramValue : chartCategoryEntry.index,
       value: isHistogram ? histogramValue : first,
       chartType,
+      ...(/\b(?:data\s*labels?|show\s+(?:the\s+)?values?)\b/i.test(text)
+        ? { showDataLabels: true }
+        : {}),
       ...(isHistogram
         ? {}
         : rest.length

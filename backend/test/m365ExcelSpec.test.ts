@@ -33,6 +33,21 @@ test("server and add-in build the same plan for explicit column choices", () => 
   assert.equal(server.actions[1].spec.rowsColumn, "Region");
 });
 
+test("server and add-in preserve explicit chart data-label intent", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "column" as const,
+      showDataLabels: true,
+    },
+  };
+  const local = createExcelPreviewPlan(input as any, ["chart"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["chart"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec.showDataLabels, true);
+});
+
 test("server and add-in build the same safe combine plan", () => {
   const specs = {
     addColumn: {

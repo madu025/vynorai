@@ -156,6 +156,7 @@ export interface ExcelColumnSpecs {
     value: number;
     chartType: ExcelChartType;
     extraValues?: number[];
+    showDataLabels?: boolean;
   };
   pivot?: {
     rows: number;
@@ -305,6 +306,7 @@ export interface ExcelActionSpec {
   slicerIndex?: number;
   slicerName?: string;
   chartType?: ExcelChartType;
+  showDataLabels?: boolean;
   extraValueColumns?: string[];
   extraValueIndexes?: number[];
   secondaryIndexes?: number[];
@@ -620,6 +622,7 @@ function resolveColumnSpecs(
       valueColumn: headers[value],
       valueIndex: value,
       chartType,
+      ...(specs.chart.showDataLabels ? { showDataLabels: true } : {}),
       ...(extra.length
         ? {
             extraValueColumns: extra.map((index) => headers[index]),

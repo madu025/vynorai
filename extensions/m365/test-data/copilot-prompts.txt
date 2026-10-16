@@ -73,6 +73,8 @@ Charts	chart	Create a combo chart of Sales and Cost by Region
 Charts	-	Add sparklines for monthly Sales
 Charts	chart	Create a histogram of Sales
 Charts	chart	Make a waterfall chart of Profit
+Charts	chart	Create a Sales chart with data labels by Region
+Charts	chart	Show values on a Cost chart by Region
 Conditional formatting	format	Apply a color scale to Sales
 Conditional formatting	format	Add icon sets to Quantity
 Conditional formatting	format	Highlight Sales where Sales > 1000 using a custom conditional format

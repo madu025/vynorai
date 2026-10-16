@@ -219,6 +219,13 @@ export function buildOutcomes(
             "මුල් series එක columns ලෙසත්, අමතර series line overlays ලෙසත් පෙන්වයි.",
           ),
         );
+      if (spec.showDataLabels)
+        item.details.push(
+          say(
+            "Shows the value on each chart data point.",
+            "සෑම chart data point එකකම අගය පෙන්වයි.",
+          ),
+        );
       const secondary = (spec.secondaryIndexes ?? []) as number[];
       if (secondary.length) {
         const slowNames = secondary

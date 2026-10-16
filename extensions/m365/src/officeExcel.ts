@@ -1065,6 +1065,13 @@ export async function applyApprovedExcelPlan(
                   spec.chartType === "histogram"
                     ? `${spec.valueColumn} distribution`
                     : `${[spec.valueColumn, ...(spec.extraValueColumns ?? [])].join(", ")} by ${spec.categoryColumn}`;
+                if (spec.showDataLabels) {
+                  try {
+                    chart.dataLabels.showValue = true;
+                  } catch {
+                    // Older hosts may not expose chart data labels; keep the chart itself.
+                  }
+                }
                 // Axis titles and the legend are presentation only: a host that refuses them must
                 // not fail the chart itself.
                 try {

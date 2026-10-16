@@ -184,6 +184,20 @@ test("format instructions become explicit options, and 'format as a table' stays
   });
 });
 
+test("chart data-label requests are explicit and planner-safe", () => {
+  const interpreted = interpretInstruction(
+    "Create a Sales chart with data labels by Region",
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.actions, ["chart"]);
+  assert.equal(interpreted.specs.chart?.showDataLabels, true);
+  const plan = createExcelPreviewPlan(input as any, ["chart"], 500, {
+    chart: interpreted.specs.chart,
+  });
+  assert.equal(plan.actions[0].spec?.showDataLabels, true);
+});
+
 test("a fill-blanks instruction can target a named column", () => {
   const parsed = interpretInstruction(
     "Fill blank Status values with Unknown",

@@ -87,6 +87,17 @@ function fakeWorkbook(
           },
         };
       },
+      getColumn() {
+        return {
+          getOffsetRange() {
+            return {
+              getResizedRange() {
+                return {};
+              },
+            };
+          },
+        };
+      },
     };
   };
   const makeSheet = (name: string) => {
@@ -177,6 +188,32 @@ function fakeWorkbook(
           const chart: any = {
             setPosition: (cell: string) => calls.push(`chart.position ${cell}`),
             title: {},
+            series: {
+              getItemAt: () => ({
+                setXAxisValues() {},
+              }),
+              add: () => ({
+                setValues() {},
+                setXAxisValues() {},
+              }),
+            },
+            axes: {
+              categoryAxis: { title: {} },
+              valueAxis: { title: {} },
+            },
+            legend: {},
+            dataLabels: new Proxy(
+              {},
+              {
+                set(object, key, value) {
+                  calls.push(
+                    `chart.dataLabels.${String(key)} = ${String(value)}`,
+                  );
+                  object[key] = value;
+                  return true;
+                },
+              },
+            ),
           };
           return new Proxy(chart, {
             set(object, key, value) {
@@ -354,6 +391,24 @@ test("apply creates each object with Office.js argument order and keeps source u
     again.results.map((result) => result.status),
     ["exists", "exists", "exists", "exists"],
   );
+});
+
+test("apply enables chart data labels only on the copied result", async () => {
+  const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["chart"], 500, {
+    chart: { category: 0, value: 1, chartType: "column", showDataLabels: true },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.ok(excel.calls.includes("chart.dataLabels.showValue = true"));
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
 });
 
 test("apply writes a normalized copy to the result sheet for two-row headers", async () => {

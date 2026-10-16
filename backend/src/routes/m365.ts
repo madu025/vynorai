@@ -108,6 +108,7 @@ const excelPlanSchema = z.object({
             .array(z.number().int().min(0).max(99))
             .max(4)
             .optional(),
+          showDataLabels: z.boolean().optional(),
         })
         .strict()
         .optional(),

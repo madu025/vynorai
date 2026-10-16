@@ -118,6 +118,7 @@ export interface ExcelColumnSpecs {
     filter?: number;
     extraValues?: number[];
     showAs?: "percent-of-total" | "percent-of-column";
+    topN?: number;
   };
   format?: {
     freezeHeader?: boolean;
@@ -250,6 +251,7 @@ export interface ExcelActionSpec {
   extraValuesColumns?: string[];
   extraValuesIndexes?: number[];
   showAs?: "percent-of-total" | "percent-of-column";
+  topN?: number;
   rowsColumn?: string;
   rowsIndex?: number;
   valuesColumn?: string;
@@ -578,6 +580,7 @@ function resolveColumnSpecs(
     const { rows, values } = specs.pivot;
     const extraValues = specs.pivot.extraValues ?? [];
     const showAs = specs.pivot.showAs;
+    const topN = specs.pivot.topN;
     const aggregation = specs.pivot.aggregation ?? "sum";
     const columns = specs.pivot.columns;
     if (!inRange(rows) || !inRange(values) || rows === values)
@@ -639,6 +642,14 @@ function resolveColumnSpecs(
       !["percent-of-total", "percent-of-column"].includes(showAs)
     )
       fail("EXCEL_SPEC_INVALID", "Unsupported PivotTable display option.");
+    if (
+      topN !== undefined &&
+      (!Number.isInteger(topN) || topN < 1 || topN > 100)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "A PivotTable top N must be between 1 and 100.",
+      );
     resolved.pivot = {
       rowsColumn: headers[rows],
       rowsIndex: rows,
@@ -652,6 +663,7 @@ function resolveColumnSpecs(
           }
         : {}),
       ...(showAs ? { showAs } : {}),
+      ...(topN !== undefined ? { topN } : {}),
       ...(filter !== undefined
         ? { filterColumn: headers[filter], filterIndex: filter }
         : {}),

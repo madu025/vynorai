@@ -1510,6 +1510,33 @@ export async function applyApprovedExcelPlan(
                     }
                   }
                 }
+                if (action.spec.topN) {
+                  // Biggest first, then only the top N rows. Older hosts keep every row.
+                  try {
+                    total.load("name");
+                    await context.sync();
+                    const rowField = pivot.hierarchies
+                      .getItem(action.spec.rowsColumn)
+                      .fields.getItem(action.spec.rowsColumn);
+                    rowField.applyFilter({
+                      valueFilter: {
+                        condition: "TopN",
+                        selectionType: "Items",
+                        threshold: action.spec.topN,
+                        value: total.name,
+                      },
+                    });
+                    await context.sync();
+                    try {
+                      rowField.sortByValues("Descending", total);
+                      await context.sync();
+                    } catch {
+                      // The filter alone still limits the rows.
+                    }
+                  } catch {
+                    // The host has no PivotTable filters: every row stays.
+                  }
+                }
                 if (action.spec.columnsColumn)
                   pivot.columnHierarchies.add(
                     pivot.hierarchies.getItem(action.spec.columnsColumn),

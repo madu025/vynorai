@@ -194,3 +194,32 @@ test("a Singlish total request becomes a summary by group", () => {
   assert.deepEqual(asked.actions, ["summary"]);
   assert.equal(asked.specs.summary?.group, 1);
 });
+
+test("a pivot top N keeps the largest rows and the preview shows them first", () => {
+  const asked = interpretInstruction(
+    "Pivot of Sales by Region, top 2",
+    headers,
+    rows,
+  );
+  assert.deepEqual(asked.actions, ["pivot-table"]);
+  assert.equal(asked.specs.pivot?.topN, 2);
+  const plan = createExcelPreviewPlan(
+    input,
+    ["pivot-table"],
+    500,
+    asked.specs as any,
+  );
+  assert.equal(plan.actions[0].spec!.topN, 2);
+  const [outcome] = buildOutcomes(plan.actions as any, headers, rows);
+  const labels = outcome
+    .table!.rows.map((row) => row[0])
+    .filter((label) => label !== "Grand total");
+  assert.deepEqual(labels, ["North", "South"]);
+  assert.throws(
+    () =>
+      createExcelPreviewPlan(input, ["pivot-table"], 500, {
+        pivot: { rows: 1, values: 2, topN: 0 },
+      } as any),
+    /top N must be between 1 and 100/,
+  );
+});

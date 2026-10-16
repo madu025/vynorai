@@ -54,6 +54,8 @@ export interface InstructionSpecs {
     columns?: number;
     extraValues?: number[];
     showAs?: "percent-of-total" | "percent-of-column";
+    /** Keep only the N rows with the largest values. */
+    topN?: number;
   };
   view?: {
     sort?: { column: number; direction: "asc" | "desc" };
@@ -1204,6 +1206,8 @@ function interpretChartAndPivot(
     const moreValues = bare
       ? []
       : numericEntries.slice(1, 4).map((entry) => entry.index);
+    const topMatch =
+      /\b(?:top|highest|best|largest|biggest)\s+(\d{1,3})\b/i.exec(text);
     result.specs.pivot = {
       rows: categoryEntry.index,
       values: numericEntries[0].index,
@@ -1215,6 +1219,9 @@ function interpretChartAndPivot(
         : wantsShare
           ? { showAs: "percent-of-total" as const }
           : {}),
+      ...(topMatch && Number(topMatch[1]) >= 1
+        ? { topN: Number(topMatch[1]) }
+        : {}),
     };
     const filterMatch = /\bfilter(?:ed)?\s+(?:by|on|using)\s+/i.exec(text);
     if (filterMatch && result.specs.pivot) {

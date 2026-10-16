@@ -1391,3 +1391,40 @@ test("server and add-in agree on a sampled very large range and refuse other res
       /too large to read in full/,
     );
 });
+
+test("server and add-in agree on a PivotTable top N and the server refuses a bad one", () => {
+  const input = {
+    workbookId: "w",
+    worksheetName: "Sales",
+    address: "A1:C4",
+    hasHeaders: true,
+    values: [
+      ["Item", "Qty", "Region"],
+      ["a", 1, "N"],
+      ["b", 2, "S"],
+      ["c", 3, "N"],
+    ],
+  };
+  const specs = { pivot: { rows: 2, values: 1, topN: 2 } } as any;
+  const server = createServerExcelPreviewPlan(
+    input,
+    ["pivot-table"],
+    500,
+    specs,
+  );
+  const local = createExcelPreviewPlan(
+    input as any,
+    ["pivot-table"],
+    500,
+    specs,
+  );
+  assert.equal(server.actions[0].spec.topN, 2);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["pivot-table"], 500, {
+        pivot: { rows: 2, values: 1, topN: 101 },
+      } as any),
+    /top N must be between 1 and 100/,
+  );
+});

@@ -137,6 +137,7 @@ const excelPlanSchema = z.object({
             .max(3)
             .optional(),
           showAs: z.enum(["percent-of-total", "percent-of-column"]).optional(),
+          topN: z.number().int().min(1).max(100).optional(),
         })
         .strict()
         .optional(),

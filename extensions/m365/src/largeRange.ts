@@ -271,8 +271,8 @@ export function keyColumnFormula(range: LargeRef): string {
 // --- clean-up --------------------------------------------------------------------------------
 
 /** A cleaned copy is bounded (about a million cells) so Excel on the web can hold it. */
-export const LARGE_CLEAN_MAX_CELLS = 1_000_000;
-export const LARGE_CLEAN_MAX_ROWS = 100_000;
+export const LARGE_CLEAN_MAX_CELLS = 500_000;
+export const LARGE_CLEAN_MAX_ROWS = 50_000;
 export const LARGE_FORMAT_ROWS = 5000;
 
 export function largeCleanRows(columns: number): number {
@@ -311,7 +311,7 @@ export function cleanFormula(range: LargeRef, spec: LargeCleanSpec): string {
   if (has("text-to-number"))
     step(
       "n",
-      `IF(ISTEXT(${current})*ISERROR(DATEVALUE(${current}))*NOT(AND(LEN(TRIM(${current}))>1,LEFT(TRIM(${current}),1)="0",MID(TRIM(${current}),2,1)<>"."))*(LEN(TRIM(${current}))<16),IFERROR(VALUE(SUBSTITUTE(TRIM(${current}),",","")),${current}),${current})`,
+      `IF(ISTEXT(${current})*ISERROR(DATEVALUE(${current}))*(((LEFT(${current},1)<>"0")+(MID(${current},2,1)=".")>0)*(LEN(${current})<16)),IFERROR(VALUE(SUBSTITUTE(TRIM(${current}),",","")),${current}),${current})`,
     );
   if (has("text-to-date"))
     step(

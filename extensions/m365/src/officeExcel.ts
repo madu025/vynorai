@@ -10,6 +10,7 @@ import {
   fingerprintExcelRange,
   SAMPLED_FINGERPRINT_ROWS,
 } from "./excel.js";
+import { viewFormula } from "./largeRange.js";
 
 import {
   applyView,
@@ -922,6 +923,13 @@ export async function applyApprovedExcelPlan(
         500,
       );
     };
+    // Very large data: the header row is all that is read; the formulas cover every row.
+    const readHeaderCells = async (): Promise<string[]> => {
+      const headerRow = sourceRange().getRow(0);
+      headerRow.load("values");
+      await context.sync();
+      return (headerRow.values[0] ?? []).map((cell: any) => String(cell ?? ""));
+    };
     const splitHeader = (values: any[][]) =>
       plan.normalization
         ? {
@@ -1581,6 +1589,58 @@ export async function applyApprovedExcelPlan(
               }
               if (cleaned.dateColumns.length > 0 && cleaned.rows.length > 0)
                 await context.sync();
+            }
+          } else if (action.kind === "view" && plan.profile?.sample) {
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              // Very large data: one spilled formula, Excel filters and sorts every row itself.
+              const headers = await readHeaderCells();
+              const spec = action.spec ?? {};
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const formula = viewFormula(
+                {
+                  sheetName: plan.worksheetName,
+                  startColumn: parsed.startColumn,
+                  startRow: parsed.startRow,
+                  endRow: parsed.endRow,
+                  columns: headers.length,
+                },
+                {
+                  sort: spec.sort
+                    ? { index: spec.sort.index, direction: spec.sort.direction }
+                    : undefined,
+                  filter: spec.filter
+                    ? {
+                        index: spec.filter.index,
+                        operator: spec.filter.operator,
+                        value: spec.filter.value,
+                      }
+                    : undefined,
+                  limit: spec.limit,
+                },
+              );
+              sheet.getRangeByIndexes(0, 0, 1, headers.length).values = [
+                headers.map(literal),
+              ];
+              sheet.getRange("A2").formulas = [[formula]];
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                1,
+                headers.length,
+              ).format.font.bold = true;
+              await context.sync();
+              try {
+                sheet
+                  .getRangeByIndexes(0, 0, 1, headers.length)
+                  .format.autofitColumns();
+                await context.sync();
+              } catch {
+                // Presentation only.
+              }
             }
           } else if (action.kind === "view") {
             if (sheetExists) {

@@ -33,6 +33,8 @@ function sampledKindAllowed(
   },
 ): boolean {
   if (SAMPLED_RANGE_ACTIONS.has(kind)) return true;
+  // A view is one spilled FILTER/SORTBY/TAKE formula that Excel computes over every row.
+  if (kind === "view") return true;
   // Describe and correlation are live formulas over whole columns; Excel computes them.
   if (kind === "statistics")
     return (

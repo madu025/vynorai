@@ -161,3 +161,37 @@ test("M365 API reports only bounded workbook result metadata", async () => {
     results: [{ kind: "chart", status: "created" }],
   });
 });
+
+test("M365 API exchanges the current token for a 30 day session", async () => {
+  const calls: Array<{ url: string; method?: string; auth?: string }> = [];
+  const client = createM365ApiClient(
+    "https://api.example",
+    "entra-token",
+    async (url, init) => {
+      calls.push({
+        url: String(url),
+        method: init?.method,
+        auth: (init?.headers as Record<string, string>)?.authorization,
+      });
+      return new Response(
+        JSON.stringify({
+          sessionToken: "session-token",
+          expiresInSeconds: 2592000,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  );
+  const created = await client.createSession();
+  assert.deepEqual(created, {
+    sessionToken: "session-token",
+    expiresInSeconds: 2592000,
+  });
+  assert.deepEqual(calls, [
+    {
+      url: "https://api.example/v1/m365/session",
+      method: "POST",
+      auth: "Bearer entra-token",
+    },
+  ]);
+});

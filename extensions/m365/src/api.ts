@@ -63,6 +63,8 @@ export interface M365ApiClient {
   }): Promise<any>;
   diagnose(): Promise<M365AccessDiagnostics>;
   capabilities(): Promise<M365Capabilities>;
+  /** Exchange the current token for a 30 day VynorAI session (also renews one). */
+  createSession(): Promise<{ sessionToken: string; expiresInSeconds: number }>;
   assistText(input: {
     host: "word" | "powerpoint" | "outlook";
     task: string;
@@ -183,6 +185,7 @@ export function createM365ApiClient(
       request("POST", "/v1/m365/excel/apply-result", input),
     diagnose: () => request("GET", "/v1/m365/diagnostics"),
     capabilities: () => request("GET", "/v1/m365/excel/capabilities"),
+    createSession: () => request("POST", "/v1/m365/session", {}),
     assistText: (input) => request("POST", "/v1/m365/text/assist", input),
     draftDocument: (input) => request("POST", "/v1/m365/text/draft", input),
     reportRollback: (input) =>

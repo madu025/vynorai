@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import jwt from "jsonwebtoken";
+import { config } from "../src/config.js";
 import {
+  createM365ApprovalToken,
+  createM365SessionToken,
   entraConfiguration,
+  M365_SESSION_TTL_SECONDS,
+  validateM365BearerToken,
   validateM365Identity,
+  verifyM365SessionToken,
 } from "../src/services/m365Policy.js";
 
 test("M365 Entra v2 audience defaults to the API client ID", () => {
@@ -122,4 +129,65 @@ test("M365 multitenant mode accepts a tenant unless an allowlist rejects it", ()
   );
   delete process.env.M365_ALLOWED_TENANT_ID;
   delete process.env.M365_ENTRA_MULTI_TENANT;
+});
+
+test("a signed-in person gets a 30 day session that carries the same identity and scopes", async () => {
+  const identity = {
+    tenantId: "tenant-a",
+    objectId: "person-1",
+    scopes: ["m365.excel.read", "m365.excel.write"],
+  };
+  const { token, expiresInSeconds } = createM365SessionToken(identity);
+  assert.equal(expiresInSeconds, 30 * 24 * 60 * 60);
+  assert.equal(M365_SESSION_TTL_SECONDS, expiresInSeconds);
+  assert.deepEqual(verifyM365SessionToken(token), identity);
+  // The same entry point the routes use accepts it without calling Microsoft.
+  assert.deepEqual(await validateM365BearerToken(token), identity);
+  const claims = jwt.decode(token) as { exp: number; iat: number };
+  assert.equal(claims.exp - claims.iat, 30 * 24 * 60 * 60);
+});
+
+test("a session is refused when tampered with, expired, signed otherwise or of another kind", async () => {
+  const identity = {
+    tenantId: "t",
+    objectId: "o",
+    scopes: ["m365.excel.read"],
+  };
+  const { token } = createM365SessionToken(identity);
+  const parts = token.split(".");
+  const forgedPayload = Buffer.from(
+    JSON.stringify({
+      kind: "m365_session",
+      tid: "other",
+      oid: "o",
+      scp: "m365.excel.write",
+    }),
+  ).toString("base64url");
+  assert.throws(() =>
+    verifyM365SessionToken([parts[0], forgedPayload, parts[2]].join(".")),
+  );
+  const expired = jwt.sign(
+    { kind: "m365_session", tid: "t", oid: "o", scp: "m365.excel.read" },
+    config.jwtSecret,
+    { algorithm: "HS256", expiresIn: -10 },
+  );
+  assert.throws(() => verifyM365SessionToken(expired), /expired/);
+  const wrongSecret = jwt.sign(
+    { kind: "m365_session", tid: "t", oid: "o", scp: "m365.excel.read" },
+    "another-secret-another-secret-123456",
+    { algorithm: "HS256", expiresIn: 60 },
+  );
+  assert.throws(() => verifyM365SessionToken(wrongSecret));
+  // An approval token is signed with the same secret but must never pass as a session.
+  const approval = createM365ApprovalToken({
+    planId: "p",
+    tenantId: "t",
+    objectId: "o",
+    sourceFingerprint: "f",
+  });
+  assert.throws(() => verifyM365SessionToken(approval), /invalid_m365_session/);
+  await assert.rejects(
+    validateM365BearerToken(approval),
+    /invalid_m365_session/,
+  );
 });

@@ -398,7 +398,13 @@ function restoreConversationHistory() {
 interface StoredSession {
   accessToken: string;
   expiresAt: number;
+  /** When this token was issued; a long session is renewed once it is a day old. */
+  issuedAt?: number;
+  /** True for the 30 day VynorAI session, false for the short Microsoft token. */
+  long?: boolean;
 }
+
+const SESSION_RENEW_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const log = new DiagnosticsLog((entries) => {
   if (!diagnostics) return;
@@ -531,12 +537,45 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
   }
 }
 
-function saveSession(tokens: { accessToken: string; expiresIn: number }) {
+function saveSession(
+  tokens: { accessToken: string; expiresIn: number },
+  long = false,
+) {
   const expiresAt = Date.now() + Math.max(0, tokens.expiresIn - 60) * 1000;
   localStorage.setItem(
     SESSION_KEY,
-    JSON.stringify({ accessToken: tokens.accessToken, expiresAt }),
+    JSON.stringify({
+      accessToken: tokens.accessToken,
+      expiresAt,
+      issuedAt: Date.now(),
+      long,
+    } satisfies StoredSession),
   );
+}
+
+/**
+ * Signing in once is enough: the short Microsoft token is exchanged for a 30 day session, and the
+ * session is renewed whenever the add-in is opened a day or more after it was issued. A failure
+ * keeps the token we already have, so this can never make signing in worse.
+ */
+async function extendSession(reason: "sign-in" | "renew") {
+  try {
+    const created = await apiClient().createSession();
+    accessToken = created.sessionToken;
+    saveSession(
+      {
+        accessToken: created.sessionToken,
+        expiresIn: created.expiresInSeconds,
+      },
+      true,
+    );
+    log.record("session:extend", "pass", {
+      reason,
+      days: Math.round(created.expiresInSeconds / 86400),
+    });
+  } catch (error) {
+    log.record("session:extend", "fail", describeError(error));
+  }
 }
 
 function restoreSession(): boolean {
@@ -553,6 +592,11 @@ function restoreSession(): boolean {
       return false;
     }
     accessToken = saved.accessToken;
+    if (
+      saved.long &&
+      Date.now() - (saved.issuedAt ?? 0) >= SESSION_RENEW_AFTER_MS
+    )
+      void extendSession("renew");
     return true;
   } catch {
     localStorage.removeItem(SESSION_KEY);
@@ -818,6 +862,7 @@ signIn?.addEventListener("click", async () => {
     );
     accessToken = tokens.accessToken;
     saveSession(tokens);
+    void extendSession("sign-in");
     restoreConversationHistory();
     void restoreResultGallery();
     updateAuthenticationUi(true);

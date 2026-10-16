@@ -6,7 +6,9 @@ import {
   createM365ApprovalToken,
   consumeM365ApprovalToken,
   reportM365ApprovalResult,
-  validateEntraAccessToken,
+  validateM365BearerToken,
+  createM365SessionToken,
+  M365_SCOPES,
   validateM365Identity,
   type M365Scope,
 } from "../services/m365Policy.js";
@@ -516,7 +518,7 @@ function requireM365Scope(requiredScope: M365Scope) {
         },
       });
     try {
-      const m365Identity = await validateEntraAccessToken(
+      const m365Identity = await validateM365BearerToken(
         authorization.slice("Bearer ".length).trim(),
       );
       try {
@@ -573,7 +575,7 @@ m365Router.get("/diagnostics", async (req: Request, res: Response) => {
     });
   let m365Identity;
   try {
-    m365Identity = await validateEntraAccessToken(
+    m365Identity = await validateM365BearerToken(
       authorization.slice("Bearer ".length).trim(),
     );
   } catch (error) {
@@ -590,6 +592,45 @@ m365Router.get("/diagnostics", async (req: Request, res: Response) => {
   }
   res.json(await diagnoseM365Identity(m365Identity));
 });
+/**
+ * Exchanges a valid token (Entra at sign-in, or the current session to renew it) for a 30 day
+ * session, so a person signs in once and is not asked again while they keep using the add-in.
+ */
+m365Router.post(
+  "/session",
+  async (req: Request, res: Response, next: NextFunction) => {
+    const authorization = req.headers.authorization;
+    if (!authorization?.startsWith("Bearer "))
+      return res.status(401).json({ error: { code: "OAUTH_REQUIRED" } });
+    try {
+      const probe = await validateM365BearerToken(
+        authorization.slice("Bearer ".length).trim(),
+      );
+      const scope =
+        M365_SCOPES.find((candidate) => probe.scopes.includes(candidate)) ??
+        "m365.excel.read";
+      return requireM365Scope(scope)(req, res, next);
+    } catch (error) {
+      return res.status(401).json({
+        error: { code: (error as Error).message || "INVALID_OAUTH_TOKEN" },
+      });
+    }
+  },
+  async (req: Request, res: Response) => {
+    const session = createM365SessionToken(identity(req));
+    await logSecurityEvent({
+      eventType: "M365_SESSION_ISSUED",
+      actor: identity(req).objectId,
+      target: identity(req).tenantId,
+      details: JSON.stringify({ days: 30 }),
+      ipAddress: req.ip,
+    });
+    res.json({
+      sessionToken: session.token,
+      expiresInSeconds: session.expiresInSeconds,
+    });
+  },
+);
 m365Router.get(
   "/excel/capabilities",
   requireM365Auth,

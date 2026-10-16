@@ -112,6 +112,70 @@ export async function validateEntraAccessToken(
   };
 }
 
+/** A signed-in person stays signed in for this long after they last used the add-in. */
+export const M365_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * VynorAI's own long session. It is issued only after an Entra token was fully validated, carries
+ * the same tenant, object and scopes, and is re-checked against the tenant policy and the identity
+ * link on every request, so disabling a tenant or unlinking a person ends it at once.
+ */
+export function createM365SessionToken(identity: M365Identity): {
+  token: string;
+  expiresInSeconds: number;
+} {
+  const token = jwt.sign(
+    {
+      kind: "m365_session",
+      tid: identity.tenantId,
+      oid: identity.objectId,
+      scp: identity.scopes.join(" "),
+      ver: "vynorai-session",
+    },
+    config.jwtSecret,
+    {
+      algorithm: "HS256",
+      expiresIn: M365_SESSION_TTL_SECONDS,
+      jwtid: crypto.randomUUID(),
+    },
+  );
+  return { token, expiresInSeconds: M365_SESSION_TTL_SECONDS };
+}
+
+export function verifyM365SessionToken(token: string): M365Identity {
+  const claims = jwt.verify(token, config.jwtSecret, {
+    algorithms: ["HS256"],
+  }) as Record<string, unknown>;
+  if (
+    claims.kind !== "m365_session" ||
+    typeof claims.tid !== "string" ||
+    typeof claims.oid !== "string" ||
+    !claims.tid ||
+    !claims.oid
+  )
+    throw new Error("invalid_m365_session");
+  return {
+    tenantId: claims.tid,
+    objectId: claims.oid,
+    scopes: String(claims.scp ?? "")
+      .split(" ")
+      .filter(Boolean),
+  };
+}
+
+/** Accepts either a VynorAI session (HS256) or a Microsoft Entra access token (RS256). */
+export async function validateM365BearerToken(
+  token: string,
+): Promise<M365Identity> {
+  const decoded = jwt.decode(token, { complete: true });
+  const algorithm =
+    decoded && typeof decoded === "object" && "header" in decoded
+      ? (decoded.header as { alg?: string }).alg
+      : undefined;
+  if (algorithm === "HS256") return verifyM365SessionToken(token);
+  return validateEntraAccessToken(token);
+}
+
 async function getJwks(url: string): Promise<JwksResponse["keys"]> {
   if (jwksCache && jwksCache.expiresAt > Date.now()) return jwksCache.keys;
   const response = await fetch(url, {

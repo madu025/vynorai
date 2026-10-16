@@ -440,6 +440,41 @@ test("inspect refuses an oversized selection before reading cell values", async 
   );
 });
 
+test("inspect says too large when a clicked cell's table is over the limit", async () => {
+  const nothing = { isNullObject: true, load() {} };
+  const hugeRegion = {
+    isNullObject: false,
+    address: "A1:T6000",
+    rowCount: 6000,
+    columnCount: 20,
+    load() {},
+  };
+  const selected: any = {
+    address: "A2",
+    rowCount: 1,
+    columnCount: 1,
+    load() {},
+    getSurroundingRegion: () => hugeRegion,
+    getUsedRangeOrNullObject: () => nothing,
+    worksheet: {
+      name: "Big",
+      load() {},
+      getUsedRangeOrNullObject: () => nothing,
+    },
+  };
+  const runtime: any = {
+    run: (callback: (context: any) => Promise<unknown>) =>
+      callback({
+        workbook: { getSelectedRange: () => selected },
+        sync: async () => {},
+      }),
+  };
+  await assert.rejects(
+    inspectSelectedExcelRange(runtime, "book-1"),
+    /at most 100,000 cells and 100 columns/,
+  );
+});
+
 test("inspect stops between read chunks when cancelled", async () => {
   const rows = [
     ["Value"],

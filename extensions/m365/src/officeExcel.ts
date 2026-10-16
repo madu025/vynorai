@@ -536,6 +536,7 @@ export async function inspectSelectedExcelRange(
           );
           return used;
         });
+      let oversizedBlock = false;
       for (const make of candidates) {
         try {
           let found = make();
@@ -569,10 +570,19 @@ export async function inspectSelectedExcelRange(
             onAutoDetect?.(String(found.address));
             break;
           }
+          if (Number(found.rowCount) >= 2) oversizedBlock = true;
         } catch {
           // try the next way of finding the data
         }
       }
+      // Say "too large" when the table was found but is over the limit, not "click a table".
+      if (
+        oversizedBlock &&
+        Number(selected.rowCount) * Number(selected.columnCount) <= 1
+      )
+        throw new Error(
+          "The selected range is too large. Select at most 100,000 cells and 100 columns.",
+        );
     }
     const rows = Number(selected.rowCount);
     const columns = Number(selected.columnCount);

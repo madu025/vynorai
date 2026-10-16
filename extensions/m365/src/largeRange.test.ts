@@ -137,3 +137,33 @@ test("derived columns and lookups become spilled formulas over the whole range",
     /outside the source range/,
   );
 });
+
+import { cleanFormula } from "./largeRange.js";
+
+test("clean-up is one spilled formula and never turns a blank into zero", () => {
+  assert.equal(
+    cleanFormula(range, { operations: ["trim"] }),
+    `=LET(d,'detail-report'!$A$2:$J$520126,t,IF(ISTEXT(d),TRIM(d),d),k,IF(t="","",t),k)`,
+  );
+  assert.equal(
+    cleanFormula(range, {
+      operations: ["trim", "text-to-number", "fill-blanks", "dedupe"],
+      fillBlanks: 'n/"a',
+      fillBlanksColumnIndex: 2,
+    }),
+    `=LET(d,'detail-report'!$A$2:$J$520126,t,IF(ISTEXT(d),TRIM(d),d),n,IF(ISTEXT(t)*ISERROR(DATEVALUE(t)),IFERROR(VALUE(SUBSTITUTE(TRIM(t),",","")),t),t),b,IF(SEQUENCE(1,COLUMNS(n))=3,IF(n="","n/""a",n),n),u,UNIQUE(b),u)`,
+  );
+  assert.throws(
+    () => cleanFormula(range, { operations: ["fuzzy-dedupe"] }),
+    /Fuzzy duplicate/,
+  );
+  assert.throws(
+    () =>
+      cleanFormula(range, {
+        operations: ["fill-blanks"],
+        fillBlanks: 1,
+        fillBlanksColumnIndex: 40,
+      }),
+    /outside the source range/,
+  );
+});

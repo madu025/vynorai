@@ -267,3 +267,59 @@ export function addColumnFormula(
 export function keyColumnFormula(range: LargeRef): string {
   return `=LET(a,${columnRef(range, 0)},IF(a="","",a))`;
 }
+
+// --- clean-up --------------------------------------------------------------------------------
+
+export type LargeCleanSpec = {
+  operations: readonly string[];
+  fillBlanks?: string | number;
+  fillBlanksColumnIndex?: number;
+};
+
+/** One spilled formula that trims, converts, fills and de-duplicates every row Excel-side. */
+export function cleanFormula(range: LargeRef, spec: LargeCleanSpec): string {
+  const has = (operation: string) => spec.operations.includes(operation);
+  if (has("fuzzy-dedupe"))
+    throw new Error(
+      "Fuzzy duplicate removal needs the rows in the add-in, so it is limited to 100,000 cells.",
+    );
+  const steps: string[] = [`d,${dataRef(range)}`];
+  let current = "d";
+  const step = (name: string, body: string) => {
+    steps.push(`${name},${body}`);
+    current = name;
+  };
+  if (has("trim"))
+    step("t", `IF(ISTEXT(${current}),TRIM(${current}),${current})`);
+  if (has("text-to-number"))
+    step(
+      "n",
+      `IF(ISTEXT(${current})*ISERROR(DATEVALUE(${current})),IFERROR(VALUE(SUBSTITUTE(TRIM(${current}),",","")),${current}),${current})`,
+    );
+  if (has("text-to-date"))
+    step(
+      "y",
+      `IF(ISTEXT(${current}),IFERROR(DATEVALUE(${current}),${current}),${current})`,
+    );
+  if (has("fill-blanks") && spec.fillBlanks !== undefined) {
+    const fill =
+      typeof spec.fillBlanks === "number"
+        ? (() => {
+            if (!Number.isFinite(spec.fillBlanks))
+              throw new Error("The fill value is not a finite number");
+            return String(spec.fillBlanks);
+          })()
+        : excelText(spec.fillBlanks);
+    const filled = `IF(${current}="",${fill},${current})`;
+    if (spec.fillBlanksColumnIndex === undefined) step("b", filled);
+    else {
+      assertIndex(spec.fillBlanksColumnIndex, range.columns);
+      step(
+        "b",
+        `IF(SEQUENCE(1,COLUMNS(${current}))=${spec.fillBlanksColumnIndex + 1},${filled},${current})`,
+      );
+    }
+  } else step("k", `IF(${current}="","",${current})`);
+  if (has("dedupe")) step("u", `UNIQUE(${current})`);
+  return `=LET(${steps.join(",")},${current})`;
+}

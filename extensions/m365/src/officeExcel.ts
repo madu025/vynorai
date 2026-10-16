@@ -12,6 +12,7 @@ import {
 } from "./excel.js";
 import {
   addColumnFormula,
+  cleanFormula,
   keyColumnFormula,
   viewFormula,
 } from "./largeRange.js";
@@ -938,6 +939,29 @@ export async function applyApprovedExcelPlan(
       await context.sync();
       return (headerRow.values[0] ?? []).map((cell: any) => String(cell ?? ""));
     };
+    // Spilled results keep no formats: copy each column's number format from the first data row.
+    const copyColumnFormats = async (sheet: any, columns: number[]) => {
+      try {
+        const sample = sourceRange().getRow(1);
+        sample.load("numberFormat");
+        await context.sync();
+        const formats: string[] = (sample.numberFormat?.[0] ?? []).map(
+          (format: any) => String(format ?? "General"),
+        );
+        let any = false;
+        columns.forEach((source, target) => {
+          const format = formats[source];
+          if (format && format !== "General") {
+            sheet.getRangeByIndexes(1, target, 1048575, 1).numberFormat =
+              format as any;
+            any = true;
+          }
+        });
+        if (any) await context.sync();
+      } catch {
+        // Formats are presentation only.
+      }
+    };
     const splitHeader = (values: any[][]) =>
       plan.normalization
         ? {
@@ -1589,6 +1613,53 @@ export async function applyApprovedExcelPlan(
                 await context.sync();
               }
             }
+          } else if (action.kind === "clean" && plan.profile?.sample) {
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              // Very large data: one spilled formula cleans every row inside Excel.
+              const headers = await readHeaderCells();
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const operations = (action.spec?.operations ?? [
+                "trim",
+              ]) as string[];
+              const formula = cleanFormula(
+                {
+                  sheetName: plan.worksheetName,
+                  startColumn: parsed.startColumn,
+                  startRow: parsed.startRow,
+                  endRow: parsed.endRow,
+                  columns: headers.length,
+                },
+                {
+                  operations,
+                  fillBlanks: action.spec?.fillBlanks as
+                    | string
+                    | number
+                    | undefined,
+                  fillBlanksColumnIndex: action.spec?.fillBlanksColumnIndex as
+                    | number
+                    | undefined,
+                },
+              );
+              sheet.getRangeByIndexes(0, 0, 1, headers.length).values = [
+                headers.map(literal),
+              ];
+              sheet.getRange("A2").formulas = [[formula]];
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                1,
+                headers.length,
+              ).format.font.bold = true;
+              await context.sync();
+              await copyColumnFormats(
+                sheet,
+                headers.map((_header, index) => index),
+              );
+            }
           } else if (action.kind === "clean") {
             if (sheetExists) {
               result.status = "exists";
@@ -1663,6 +1734,10 @@ export async function applyApprovedExcelPlan(
                 headers.length,
               ).format.font.bold = true;
               await context.sync();
+              await copyColumnFormats(
+                sheet,
+                headers.map((_header, index) => index),
+              );
               try {
                 sheet
                   .getRangeByIndexes(0, 0, 1, headers.length)

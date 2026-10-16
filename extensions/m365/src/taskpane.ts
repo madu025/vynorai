@@ -2364,6 +2364,27 @@ function renderResultGallery() {
       void revealExcelResult(officeRuntime(), result.targetSheet);
     });
     actions.appendChild(show);
+    const refresh = document.createElement("button");
+    refresh.type = "button";
+    refresh.textContent = translate(language, "refresh_result", "Refresh");
+    refresh.disabled = !instruction?.value.trim();
+    refresh.title = refresh.disabled
+      ? "Enter the original request again to refresh this result."
+      : "Create a fresh preview from the current request.";
+    refresh.addEventListener("click", () => {
+      if (!instruction?.value.trim()) {
+        setStatus("Enter the request again before refreshing this result.");
+        return;
+      }
+      currentPlan = undefined;
+      previewFingerprint = "";
+      pendingSpecs = undefined;
+      excludedKinds = new Set<string>();
+      setStatus("Refreshing the preview. Nothing changes until you confirm.");
+      instruction.focus();
+      void inspect?.click();
+    });
+    actions.appendChild(refresh);
     if (result.status === "created") {
       const undo = document.createElement("button");
       undo.type = "button";

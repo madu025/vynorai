@@ -95,3 +95,5 @@ proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
 | g-vba            | en      | small | skip   | known gap: not implemented                                                               |
 
 Phase 8 (odd calculations): computed-column expressions now accept whole-column figures COLSUM, COLAVG, COLMAX, COLMIN, COLCOUNT, COLSTDEV of one column (share of total, above or below average, distance from average, z-score), on small data and on very large data (a full-column reference inside the MAP). The AI planner prompt teaches them; planner steps may contain < and > (markup is still refused). ai-interpret: 13/13 with the real model. Live check on the 520k workbook still to do.
+
+Found live (20261016.41): a whole-column figure inside a per-row MAP (SUM of 520k cells for each of 520k rows) never finished. Fixed in 20261016.42: the figure is bound once in a LET outside the MAP (`=LET(_k0,SUM(col),MAP(...))`), with a unit test that the SUM appears once. Lesson: any new formula over a very large range needs a performance look, not only a correctness test.

@@ -184,11 +184,29 @@ export function addColumnFormula(
 ): string {
   if (ast) {
     const columns = astColumns(ast);
-    return mapRows(range, columns, (name) =>
-      expressionToFormula(ast, name, (index) =>
-        columnRef(range, index),
+    // A whole-column figure (COLSUM...) is computed once in a LET, not again for every row.
+    const hoisted = new Map<string, string>();
+    const hoist = (call: string) => {
+      let variable = hoisted.get(call);
+      if (!variable) {
+        variable = `_k${hoisted.size}`;
+        hoisted.set(call, variable);
+      }
+      return variable;
+    };
+    const mapped = mapRows(range, columns, (name) =>
+      expressionToFormula(
+        ast,
+        name,
+        (index) => columnRef(range, index),
+        hoist,
       ).replace(/^=/, ""),
     );
+    if (!hoisted.size) return mapped;
+    const bindings = [...hoisted].map(
+      ([call, variable]) => `${variable},${call}`,
+    );
+    return `=LET(${bindings.join(",")},${mapped.replace(/^=/, "")})`;
   }
   if (spec.lookup) {
     const { lookup } = spec;

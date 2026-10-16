@@ -323,6 +323,11 @@ test("a whole-column figure inside a computed column reads the full source colum
     ],
   );
   const formula = addColumnFormula(range, {}, ast);
-  assert.match(formula, /SUM\('detail-report'!\$H\$2:\$H\$520126\)/);
-  assert.match(formula, /^=MAP\(/);
+  // The total is worked out once, in a LET, not again inside the per-row function.
+  assert.match(
+    formula,
+    /^=LET\(_k0,SUM\('detail-report'!\$H\$2:\$H\$520126\),MAP\(/,
+  );
+  assert.equal(formula.match(/SUM\(/g)?.length, 1);
+  assert.match(formula, /_v7\/_k0\)/);
 });

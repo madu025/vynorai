@@ -440,6 +440,8 @@ export function expressionToFormula(
   node: ExprNode,
   cell: (columnIndex: number) => string,
   whole?: (columnIndex: number) => string,
+  /** Very large data: a whole-column figure is worked out once, outside the per-row formula. */
+  hoist?: (call: string) => string,
 ): string {
   let divides = false;
   const emit = (current: ExprNode): string => {
@@ -475,7 +477,8 @@ export function expressionToFormula(
             COUNT: "COUNT",
             STDEV: "STDEV.S",
           }[column[1] as "SUM"];
-          return `${excel}(${whole(target.i)})`;
+          const call = `${excel}(${whole(target.i)})`;
+          return hoist ? hoist(call) : call;
         }
         return `${current.name}(${current.args.map(emit).join(",")})`;
       }

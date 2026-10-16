@@ -42,6 +42,8 @@ function sampledKindAllowed(
   if (kind === "split-column") return true;
   // An unpivot is one spilled formula over the first rows.
   if (kind === "unpivot") return true;
+  // A dashboard is totals, a category table and a PivotTable, all calculated by Excel over every row.
+  if (kind === "dashboard") return true;
   // Describe and correlation are live formulas over whole columns; Excel computes them.
   if (kind === "statistics")
     return (

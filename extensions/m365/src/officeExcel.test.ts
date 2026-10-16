@@ -1298,3 +1298,23 @@ test("a sampled range allows clean-up and formatting, with a warning that says h
   assert.equal(format.actions[0].kind, "format");
   assert.ok(format.warnings.some((w: string) => /first 5,000 rows/.test(w)));
 });
+
+test("a sampled range allows a dashboard, because Excel calculates it over every row", () => {
+  const base: any = {
+    workbookId: "w",
+    worksheetName: "Big",
+    address: "A1:C600000",
+    values: [
+      ["Item", "Qty", "Region"],
+      ["a", 1, "N"],
+      ["b", 2, "S"],
+      ["a", 3, "N"],
+    ],
+    hasHeaders: true,
+    sample: { totalRows: 600000, sampledRows: 4 },
+  };
+  const plan: any = createExcelPreviewPlan(base, ["dashboard"], 500, {
+    dashboard: { category: 2, values: [1], aggregation: "sum" },
+  } as any);
+  assert.equal(plan.actions[0].kind, "dashboard");
+});

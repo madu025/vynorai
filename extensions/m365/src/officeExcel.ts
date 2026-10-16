@@ -1194,7 +1194,11 @@ export async function applyApprovedExcelPlan(
             if (sheetExists) {
               result.status = "exists";
             } else {
-              const { rows } = splitHeader(await readSourceValues());
+              const dashboardSampled = Boolean(plan.profile?.sample);
+              // Very large data: the totals and the category table are formulas over every row.
+              const { rows } = dashboardSampled
+                ? splitHeader(await readSourceHead(LARGE_FORMAT_ROWS + 1))
+                : splitHeader(await readSourceValues());
               const parsed = parseLocalRange(
                 localExcelAddress(plan.sourceAddress),
               );
@@ -1264,6 +1268,42 @@ export async function applyApprovedExcelPlan(
               ].slice(0, 50);
               for (const [index, value] of values.entries()) {
                 const summaryColumn = 14 + index * 2;
+                if (dashboardSampled) {
+                  const categoryRange = sourceColumn(category.index);
+                  const letter = columnLetter(summaryColumn);
+                  const shown = Math.max(1, categories.length);
+                  sheet.getRangeByIndexes(0, summaryColumn, 1, 2).values = [
+                    [literal(category.column), literal(value.column)],
+                  ];
+                  sheet.getRange(`${letter}2`).formulas = [
+                    [
+                      `=TAKE(SORT(UNIQUE(FILTER(${categoryRange},${categoryRange}<>""))),50)`,
+                    ],
+                  ];
+                  const measure = aggregateFormula(
+                    sourceColumn(value.index),
+                    "c",
+                  ).slice(1);
+                  sheet.getRange(
+                    `${columnLetter(summaryColumn + 1)}2`,
+                  ).formulas = [[`=BYROW(${letter}2#,LAMBDA(c,${measure}))`]];
+                  await context.sync();
+                  const chartRange = sheet.getRangeByIndexes(
+                    0,
+                    summaryColumn,
+                    shown + 1,
+                    2,
+                  );
+                  const chart = sheet.charts.add(
+                    "ColumnClustered",
+                    chartRange,
+                    "Columns",
+                  );
+                  chart.name = `${action.name}_chart_${index + 1}`;
+                  chart.title.text = `${value.column} by ${category.column}`;
+                  chart.setPosition(`F${3 + index * 18}`);
+                  continue;
+                }
                 const summary = [
                   [category.column, value.column],
                   ...categories.map((name, rowIndex) => [

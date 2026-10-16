@@ -1947,7 +1947,9 @@ export function selectExcelActions(instruction: string): ExcelActionKind[] {
       normalized,
     )
   )
-    return ["export-pdf"];
+    return /\bdashboard\b/.test(normalized)
+      ? ["dashboard", "export-pdf"]
+      : ["export-pdf"];
   if (/\b(?:kpi\s+)?dashboard\b/.test(normalized)) return ["dashboard"];
   const withoutPivot = normalized.replace(/pivot\s*table/g, " ");
   const requested = new Set<ExcelActionKind>();
@@ -2144,7 +2146,9 @@ export function createExcelPreviewPlan(
                               : kind === "export-csv"
                                 ? `${baseName}_Vynor_CSV`
                                 : kind === "export-pdf"
-                                  ? `${baseName}_Vynor_PDF`
+                                  ? requested.has("dashboard")
+                                    ? `${baseName}_Vynor_Dashboard`
+                                    : `${baseName}_Vynor_PDF`
                                   : resultSheet;
   if (
     (requested.has("summary") ||

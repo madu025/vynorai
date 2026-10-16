@@ -113,6 +113,7 @@ test("instruction planner selects only explicit allowlisted Excel actions", () =
     "export-csv",
   ]);
   assert.deepEqual(selectExcelActions("Export the dashboard to PDF"), [
+    "dashboard",
     "export-pdf",
   ]);
 });
@@ -129,6 +130,17 @@ test("PDF export plans a separate source-preserving result sheet", () => {
   assert.equal(plan.actions[0].targetSheet, "Sales_Vynor_PDF");
   assert.equal(plan.actions[0].preservesSource, true);
   assert.equal(plan.requiresConfirmation, true);
+});
+
+test("dashboard PDF export reuses the one dashboard result sheet", () => {
+  const plan = createExcelPreviewPlan(input, ["dashboard", "export-pdf"], 500, {
+    dashboard: { category: 2, values: [1] },
+  });
+  assert.deepEqual(
+    plan.actions.map((action) => action.kind),
+    ["dashboard", "export-pdf"],
+  );
+  assert.equal(plan.actions[0].targetSheet, plan.actions[1].targetSheet);
 });
 
 test("normalizes merged headers and rejects ambiguous or header-only selections", () => {

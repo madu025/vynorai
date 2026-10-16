@@ -1961,7 +1961,9 @@ export function createServerExcelPreviewPlan(
                                 : kind === "export-csv"
                                   ? `${baseName}_Vynor_CSV`
                                   : kind === "export-pdf"
-                                    ? `${baseName}_Vynor_PDF`
+                                    ? requested.has("dashboard")
+                                      ? `${baseName}_Vynor_Dashboard`
+                                      : `${baseName}_Vynor_PDF`
                                     : `${baseName}_Vynor_Result`,
     preservesSource: true,
     description: layout.normalization

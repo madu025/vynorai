@@ -1294,6 +1294,24 @@ test("server and add-in agree on the source-preserving PDF export plan", () => {
   assert.equal(server.actions[0].preservesSource, true);
 });
 
+test("server and add-in reuse one dashboard sheet for dashboard PDF export", () => {
+  const specs = { dashboard: { category: 2, values: [1] } };
+  const server = createServerExcelPreviewPlan(
+    input,
+    ["dashboard", "export-pdf"],
+    500,
+    specs,
+  );
+  const local = createExcelPreviewPlan(
+    input as any,
+    ["dashboard", "export-pdf"],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].targetSheet, server.actions[1].targetSheet);
+});
+
 test("server and add-in agree on statistics plans and the server refuses bad ones", () => {
   for (const specs of [
     { statistics: { mode: "describe" as const, columns: [2, 3] } },

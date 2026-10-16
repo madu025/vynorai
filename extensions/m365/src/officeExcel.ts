@@ -995,7 +995,14 @@ export async function applyApprovedExcelPlan(
             }
           } else if (action.kind === "export-pdf") {
             if (sheetExists) {
-              result.status = "exists";
+              const priorResultCreated = results.some(
+                (prior) =>
+                  prior.targetSheet === action.targetSheet &&
+                  prior.createdSheet === true,
+              );
+              if (priorResultCreated)
+                await downloadExcelPdf(`${action.targetSheet}.pdf`);
+              else result.status = "exists";
             } else {
               await writeSourceCopy(sheet);
               await downloadExcelPdf(`${action.targetSheet}.pdf`);

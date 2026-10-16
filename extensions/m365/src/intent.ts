@@ -315,7 +315,12 @@ export function interpretInstruction(
       text,
     )
   )
-    return { actions: ["export-pdf"], specs: {}, problems: [] };
+    if (/\bdashboard\b/i.test(text)) {
+      if (interpretDashboard(text, headers, rows, result)) {
+        if (result.problems.length === 0) result.actions.push("export-pdf");
+        return result;
+      }
+    } else return { actions: ["export-pdf"], specs: {}, problems: [] };
   if (
     /\b(?:format|create|turn|make)\b.*\b(?:as\s+(?:an?\s+)?|into\s+(?:an?\s+)?)?(?:excel\s+)?table\b/i.test(
       text,

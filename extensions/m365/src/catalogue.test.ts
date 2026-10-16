@@ -20,7 +20,7 @@ test("PDF export is an explicit, fully served action", () => {
     HEADERS,
     ROWS,
   );
-  assert.deepEqual(interpreted.actions, ["export-pdf"]);
+  assert.deepEqual(interpreted.actions, ["dashboard", "export-pdf"]);
   assert.deepEqual(interpreted.problems, []);
 });
 

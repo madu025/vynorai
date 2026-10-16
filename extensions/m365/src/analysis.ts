@@ -310,7 +310,13 @@ export function buildSchemaSummary(input: RangeInput): SchemaSummary {
 
   return {
     contractVersion: ANALYSIS_CONTRACT_VERSION,
-    rowCount: rows.length,
+    rowCount: Math.max(
+      rows.length,
+      Math.min(
+        1_000_000,
+        (input as { sample?: { totalRows: number } }).sample?.totalRows ?? 0,
+      ),
+    ),
     columnCount,
     headerRowCount: layout.headerRowCount as 1 | 2,
     blankCells,

@@ -949,6 +949,30 @@ export async function applyApprovedExcelPlan(
         500,
       );
     };
+    // A PivotTable field is found by the name Excel gives it, which can differ from the header text
+    // in spacing or case; the exact name is tried first.
+    const pivotFieldResolver = async (pivot: any) => {
+      let names: string[] = [];
+      try {
+        pivot.hierarchies.load("items/name");
+        await context.sync();
+        names = (pivot.hierarchies.items ?? []).map((item: any) =>
+          String(item.name),
+        );
+      } catch {
+        names = [];
+      }
+      const normal = (text: string) =>
+        text.replace(/s+/g, " ").trim().toLowerCase();
+      const nameOf = (name: string) =>
+        names.find((entry) => entry === name) ??
+        names.find((entry) => normal(entry) === normal(name)) ??
+        name;
+      return Object.assign(
+        (name: string) => pivot.hierarchies.getItem(nameOf(name)),
+        { nameOf },
+      );
+    };
     // Very large data: the header row is all that is read; the formulas cover every row.
     const readHeaderCells = async (): Promise<string[]> => {
       const headerRow = sourceRange().getRow(0);
@@ -1595,11 +1619,10 @@ export async function applyApprovedExcelPlan(
               );
               await context.sync();
               if (action.spec?.rowsColumn) {
-                pivot.rowHierarchies.add(
-                  pivot.hierarchies.getItem(action.spec.rowsColumn),
-                );
+                const field = await pivotFieldResolver(pivot);
+                pivot.rowHierarchies.add(field(action.spec.rowsColumn));
                 const total = pivot.dataHierarchies.add(
-                  pivot.hierarchies.getItem(action.spec.valuesColumn),
+                  field(action.spec.valuesColumn),
                 );
                 const summarize: Record<string, string> = {
                   sum: "Sum",
@@ -1612,9 +1635,7 @@ export async function applyApprovedExcelPlan(
                   summarize[action.spec.aggregation ?? "sum"] ?? "Sum";
                 const dataFields: any[] = [total];
                 for (const extraName of action.spec.extraValuesColumns ?? []) {
-                  const more = pivot.dataHierarchies.add(
-                    pivot.hierarchies.getItem(extraName),
-                  );
+                  const more = pivot.dataHierarchies.add(field(extraName));
                   more.summarizeBy =
                     summarize[action.spec.aggregation ?? "sum"] ?? "Sum";
                   dataFields.push(more);
@@ -1637,9 +1658,9 @@ export async function applyApprovedExcelPlan(
                   try {
                     total.load("name");
                     await context.sync();
-                    const rowField = pivot.hierarchies
-                      .getItem(action.spec.rowsColumn)
-                      .fields.getItem(action.spec.rowsColumn);
+                    const rowField = field(
+                      action.spec.rowsColumn,
+                    ).fields.getItem(field.nameOf(action.spec.rowsColumn));
                     rowField.applyFilter({
                       valueFilter: {
                         condition: "TopN",
@@ -1660,13 +1681,9 @@ export async function applyApprovedExcelPlan(
                   }
                 }
                 if (action.spec.columnsColumn)
-                  pivot.columnHierarchies.add(
-                    pivot.hierarchies.getItem(action.spec.columnsColumn),
-                  );
+                  pivot.columnHierarchies.add(field(action.spec.columnsColumn));
                 if (action.spec.filterColumn)
-                  pivot.filterHierarchies.add(
-                    pivot.hierarchies.getItem(action.spec.filterColumn),
-                  );
+                  pivot.filterHierarchies.add(field(action.spec.filterColumn));
                 await context.sync();
               }
             }

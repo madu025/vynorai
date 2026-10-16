@@ -243,3 +243,19 @@ test("building a summary only reads the selection and writes nothing", async () 
   assert.ok(touched.every((entry) => !/(^|\.)add\b|write|values=/.test(entry)));
   assert.equal(touched.includes("getSelectedRange"), true);
 });
+
+test("the AI summary of a sampled range reports the real number of rows", () => {
+  const summary = buildSchemaSummary({
+    workbookId: "w",
+    worksheetName: "Big",
+    address: "A1:B600000",
+    values: [
+      ["Item", "Qty"],
+      ["a", 1],
+      ["b", 2],
+    ],
+    hasHeaders: true,
+    sample: { totalRows: 520125, sampledRows: 2 },
+  } as any);
+  assert.equal(summary.rowCount, 520125);
+});

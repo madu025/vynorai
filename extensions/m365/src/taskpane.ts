@@ -2127,6 +2127,16 @@ async function replaceOlderResultSheets(keepSheet: string) {
       { sheets: older, tables: [] },
       true,
     );
+    await apiClient()
+      .reportRollback({
+        planId: galleryPlanId,
+        removedSheets: Math.min(10, removed.removedSheets.length),
+        convertedTables: 0,
+        removedNames: 0,
+      })
+      .catch((error) =>
+        log.record("api:gallery-replace", "fail", describeError(error)),
+      );
     renderChanged([
       ...galleryResults.map(
         (result) => `${result.kind} - ${result.targetSheet}`,
@@ -2196,6 +2206,16 @@ function renderResultGallery() {
             rollbackItemsFromApplyReport(galleryPlanId, sameSheet),
             true,
           );
+          await apiClient()
+            .reportRollback({
+              planId: galleryPlanId,
+              removedSheets: Math.min(10, removed.removedSheets.length),
+              convertedTables: Math.min(1, removed.convertedTables.length),
+              removedNames: Math.min(10, removed.removedNames.length),
+            })
+            .catch((error) =>
+              log.record("api:gallery-undo", "fail", describeError(error)),
+            );
           galleryResults = galleryResults.filter(
             (candidate) => candidate.targetSheet !== result.targetSheet,
           );

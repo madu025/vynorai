@@ -61,7 +61,7 @@ const ROWS = [
 ] as any;
 
 /** Stored floor, not an aspirational target: this test only fails on coverage regressions. */
-const BASELINE = { parsedPercent: 58.3, fullyServedPercent: 48.8 };
+const BASELINE = { parsedPercent: 93.9, fullyServedPercent: 92.9 };
 
 function loadCatalogue(): CataloguePrompt[] {
   const filename = path.resolve(

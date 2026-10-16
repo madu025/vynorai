@@ -315,6 +315,10 @@ source fingerprint check, an audit event, and no workbook values sent to a model
   Centralized Deployment). Excel keeps its single stable `manifest.xml`.
 - Have a native Sinhala and Tamil speaker review `extensions/m365/src/i18n.ts`.
 
+### M365 increment changelog
+
+- 2026-10-16: Added cancellable bounded Excel inspection, safe recovery for a leading title/merged band before a complete flat header row, and expanded formula-audit preview details for inconsistent copied formulas and hard-coded numeric cells. Source ranges remain read-only and all mutations remain behind the existing preview, approval, fingerprint, tenant, scope, credit, and audit gates. Excel Copilot catalogue KPI: 58.3% parsed / 48.8% fully served -> 93.9% parsed / 92.9% fully served.
+
 Model quality work follows evidence, not intuition: improve the eval set first, then prompts and few-shot
 examples, then routing between cheap and strong models. Provider fine-tuning is considered only if the eval shows a
 gap that prompting and routing cannot close, and only on synthetic data (no customer workbook content is stored).

@@ -472,6 +472,12 @@ function renderConversation(
   conversationMessages = conversationMessages.slice(-MAX_CONVERSATION_MESSAGES);
   renderConversationHistory();
   persistConversation();
+  // Keep the newest message in view above the composer, like a chat.
+  window.requestAnimationFrame(() => {
+    document
+      .querySelector<HTMLElement>("#conversation-history")
+      ?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
+  });
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;

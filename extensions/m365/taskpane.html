@@ -90,6 +90,8 @@
       .welcome { padding: 4px 2px 0; }
       .welcome h1 { margin: 0 0 3px; font-size: 18px; line-height: 1.25; }
       .welcome p { margin: 0; color: var(--muted); }
+      .chat-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .chat-bar select { flex: 1 1 120px; min-width: 0; max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
       #conversation-history { display: grid; gap: 7px; }
       #conversation-history > article { scroll-margin-bottom: calc(var(--composer-h, 96px) + 14px); }
       .message { max-width: 94%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
@@ -176,7 +178,7 @@
             <button data-dev id="copy-diagnostics" type="button" role="menuitem" data-i18n="menu_copy">Copy diagnostics</button>
             <button data-dev id="clear-diagnostics" type="button" role="menuitem" data-i18n="menu_clear">Clear diagnostics</button>
             <button id="sign-out" type="button" role="menuitem" disabled data-i18n="menu_signout">Sign out</button>
-            <p class="menu-version" id="build-id">Build 20261016.16</p>
+            <p class="menu-version" id="build-id">Build 20261016.17</p>
           </div>
         </div>
       </header>
@@ -190,6 +192,11 @@
 
       <div class="workspace">
         <section class="conversation" aria-label="VynorAI conversation" data-i18n-aria-label="conversation_label">
+          <div class="chat-bar" id="chat-bar">
+            <button id="new-chat" class="pill" type="button" data-i18n="new_chat">+ New chat</button>
+            <select id="chat-history-select" aria-label="Chat history" data-i18n-aria-label="chat_history" hidden></select>
+            <button id="delete-chat" class="pill" type="button" data-i18n="delete_chat" hidden>Delete</button>
+          </div>
           <div class="welcome" id="welcome-state">
             <h1 data-i18n="hero">What would you like to do with your data?</h1>
             <p data-i18n="hero_hint">VynorAI finds your table automatically and previews a new result sheet before changes are made.</p>
@@ -288,7 +295,7 @@
       })();
     </script>
     <script nomodule>document.getElementById("status-text").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";</script>
-    <script src="./runtime-config.js?v=20261016.16"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261016.16"></script>
+    <script src="./runtime-config.js?v=20261016.17"></script>
+    <script src="./dist/taskpane.bundle.js?v=20261016.17"></script>
   </body>
 </html>

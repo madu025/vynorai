@@ -44,6 +44,17 @@ import {
   type M365RequestTrace,
 } from "./api.js";
 import { askInPane } from "./confirmDialog.js";
+import {
+  activeMessages,
+  deleteChat,
+  emptyChatStore,
+  historyList,
+  openChat,
+  parseChatStore,
+  saveActiveChat,
+  startNewChat,
+  type ChatStore,
+} from "./chatSessions.js";
 import { applyFollowUpChart } from "./followUp.js";
 import {
   ACTION_REQUIREMENTS,
@@ -176,6 +187,12 @@ type ConversationMessage = {
 };
 
 let conversationMessages: ConversationMessage[] = [];
+/** All saved chats of this person; the open chat mirrors `conversationMessages`. */
+let chatStore: ChatStore = emptyChatStore();
+const newChatId = () =>
+  (
+    globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now()}-${Math.random()}`
+  ).slice(0, 36);
 
 function setPreviewCancelVisible(visible: boolean) {
   if (!cancelPreviewButton) return;
@@ -309,14 +326,84 @@ async function restoreResultGallery() {
   }
 }
 
-function persistConversation() {
-  const key = conversationStorageKey();
+function chatsStorageKey(): string | undefined {
+  const claims = describeAccessToken(accessToken);
+  if (!claims?.tenantId || !claims.objectId) return undefined;
+  return `vynorai.m365.excel.chats.v1.${claims.tenantId}.${claims.objectId}`;
+}
+
+function writeChatStore() {
+  const key = chatsStorageKey();
   if (!key) return;
   try {
-    localStorage.setItem(key, JSON.stringify(conversationMessages));
+    localStorage.setItem(key, JSON.stringify(chatStore));
   } catch {
     // Conversation history is a convenience; storage failures must not affect Excel work.
   }
+}
+
+function persistConversation() {
+  chatStore = saveActiveChat(
+    chatStore,
+    conversationMessages,
+    Date.now(),
+    newChatId,
+  );
+  writeChatStore();
+  renderChatList();
+}
+
+/** The chat picker: a new chat, then the saved chats, newest first. */
+function renderChatList() {
+  const select = document.querySelector<HTMLSelectElement>(
+    "#chat-history-select",
+  );
+  const remove = document.querySelector<HTMLButtonElement>("#delete-chat");
+  if (!select) return;
+  const saved = historyList(chatStore);
+  select.replaceChildren();
+  const fresh = document.createElement("option");
+  fresh.value = "";
+  fresh.textContent = translate(language, "new_chat_option", "New chat");
+  select.appendChild(fresh);
+  for (const entry of saved) {
+    const option = document.createElement("option");
+    option.value = entry.id;
+    option.textContent = `${entry.title || "…"} · ${new Date(entry.updatedAt).toLocaleDateString()}`;
+    select.appendChild(option);
+  }
+  select.value = saved.some((entry) => entry.id === chatStore.activeId)
+    ? chatStore.activeId
+    : "";
+  select.hidden = saved.length === 0;
+  if (remove)
+    remove.hidden = !saved.some((entry) => entry.id === chatStore.activeId);
+}
+
+/** A different chat starts clean: no preview, no follow-up memory from the one before. */
+function resetWorkingState() {
+  cancelPreview();
+  currentPlan = undefined;
+  previewFingerprint = "";
+  previewSpecs = undefined;
+  lastAppliedSpecs = undefined;
+  followUpAggregate = false;
+  lastConversationRequest = "";
+  document
+    .querySelector<HTMLElement>("#result-card")
+    ?.setAttribute("hidden", "");
+  const outcomes = document.querySelector<HTMLElement>("#outcomes");
+  if (outcomes) outcomes.textContent = "";
+  if (apply) apply.disabled = true;
+  if (instruction) instruction.value = "";
+}
+
+function showChat(messages: ConversationMessage[]) {
+  conversationMessages = messages.map((entry) => ({ ...entry }));
+  resetWorkingState();
+  renderConversationHistory();
+  renderChatList();
+  window.requestAnimationFrame(() => window.scrollTo?.({ top: 0 }));
 }
 
 function renderConversationHistory() {
@@ -368,8 +455,29 @@ function renderConversationHistory() {
 }
 
 function restoreConversationHistory() {
+  const chatsKey = chatsStorageKey();
   const key = conversationStorageKey();
   conversationMessages = [];
+  chatStore = emptyChatStore();
+  if (chatsKey) {
+    try {
+      chatStore = parseChatStore(
+        localStorage.getItem(chatsKey),
+        key ? localStorage.getItem(key) : null,
+        Date.now(),
+        newChatId,
+        MAX_CONVERSATION_CHARS,
+      );
+      conversationMessages = activeMessages(chatStore).map((entry) => ({
+        ...entry,
+      }));
+      renderConversationHistory();
+      renderChatList();
+      return;
+    } catch {
+      // fall back to nothing: a damaged history must never affect the add-in
+    }
+  }
   if (!key) return;
   try {
     const parsed = JSON.parse(localStorage.getItem(key) || "null");
@@ -624,7 +732,9 @@ function signOutOfMicrosoft() {
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
   conversationMessages = [];
+  chatStore = emptyChatStore();
   renderConversationHistory();
+  renderChatList();
   galleryPlanId = "";
   galleryResults = [];
   renderResultGallery();
@@ -882,6 +992,47 @@ signIn?.addEventListener("click", async () => {
 });
 
 signOut?.addEventListener("click", signOutOfMicrosoft);
+
+function startFreshChat() {
+  persistConversation();
+  chatStore = startNewChat(chatStore);
+  showChat([]);
+  setStatus(
+    translate(
+      language,
+      "new_chat_ready",
+      "New chat. Select your data and describe what you want.",
+    ),
+  );
+  instruction?.focus();
+}
+
+document.querySelector("#new-chat")?.addEventListener("click", startFreshChat);
+document
+  .querySelector<HTMLSelectElement>("#chat-history-select")
+  ?.addEventListener("change", (event) => {
+    const id = (event.target as HTMLSelectElement).value;
+    if (!id) return startFreshChat();
+    persistConversation();
+    chatStore = openChat(chatStore, id);
+    showChat(activeMessages(chatStore));
+  });
+document.querySelector("#delete-chat")?.addEventListener("click", async () => {
+  if (!chatStore.activeId) return;
+  const confirmed = await askInPane(
+    translate(
+      language,
+      "delete_chat_confirm",
+      "Delete this chat from the history? Your workbook is not changed.",
+    ),
+    translate(language, "delete_chat", "Delete"),
+    translate(language, "cancel", "Cancel"),
+  );
+  if (!confirmed) return;
+  chatStore = deleteChat(chatStore, chatStore.activeId);
+  writeChatStore();
+  showChat([]);
+});
 
 cancelPreviewButton?.addEventListener("click", () => {
   if (!previewAbortController) return;

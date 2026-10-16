@@ -89,6 +89,7 @@ Conversation	clean,pivot-table,chart	Clean it, then create a PivotTable of Sales
 Conversation	chart	Now add a chart for that
 Conversation	pivot-table,chart	Create a pivot of Sales by Region and chart it
 Charts	pivot-table,chart	Create a PivotTable of Sales by Region and chart the pivot result
+Charts	clean,pivot-table,chart	Clean and trim the data, then create a PivotTable of Sales by Region, then create a chart of Sales by Region
 Conversation	clean,summary	Tidy this data and total Sales by Status
 Automation and export	-	Export this result to CSV
 Automation and export	-	Export the dashboard to PDF

@@ -213,6 +213,7 @@ export function interpretInstruction(
   rawInstruction: string,
   headers: string[],
   rows: Cell[][] = [],
+  sequenceDepth = 0,
 ): InterpretedInstruction {
   const instruction = normalizeInstruction(rawInstruction);
   const result: InterpretedInstruction = {
@@ -221,6 +222,86 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+  if (sequenceDepth === 0) {
+    const clauses = text
+      .split(/\s+(?:and\s+)?then\s+|\s*;\s*/i)
+      .map((clause) => clause.replace(/^[,\s]+|[,.\s]+$/g, "").trim())
+      .filter(Boolean);
+    if (clauses.length > 1) {
+      const parts = clauses.map((clause) =>
+        interpretInstruction(clause, headers, rows, sequenceDepth + 1),
+      );
+      const actions: InterpretedInstruction["actions"] = [];
+      const specs: InstructionSpecs = {};
+      const problems = parts.flatMap((part, index) =>
+        part.problems.map((problem) => `Step ${index + 1}: ${problem}`),
+      );
+      for (const part of parts) {
+        for (const action of part.actions)
+          if (!actions.includes(action)) actions.push(action);
+        for (const [key, value] of Object.entries(part.specs) as Array<
+          [
+            keyof InstructionSpecs,
+            NonNullable<InstructionSpecs[keyof InstructionSpecs]>,
+          ]
+        >) {
+          const previous = specs[key];
+          if (!previous) {
+            (specs as Record<string, unknown>)[key] = value;
+            continue;
+          }
+          if (key === "format") {
+            const oldFormat = previous as NonNullable<
+              InstructionSpecs["format"]
+            >;
+            const newFormat = value as NonNullable<InstructionSpecs["format"]>;
+            specs.format = {
+              ...oldFormat,
+              ...newFormat,
+              ...(oldFormat.conditional || newFormat.conditional
+                ? {
+                    conditional: [
+                      ...(oldFormat.conditional ?? []),
+                      ...(newFormat.conditional ?? []),
+                    ],
+                  }
+                : {}),
+              ...(oldFormat.validation || newFormat.validation
+                ? {
+                    validation: [
+                      ...(oldFormat.validation ?? []),
+                      ...(newFormat.validation ?? []),
+                    ],
+                  }
+                : {}),
+            };
+          } else if (key === "clean") {
+            const oldClean = previous as NonNullable<InstructionSpecs["clean"]>;
+            const newClean = value as NonNullable<InstructionSpecs["clean"]>;
+            specs.clean = {
+              ...oldClean,
+              ...newClean,
+              operations: [...oldClean.operations, ...newClean.operations],
+            };
+          } else {
+            problems.push(
+              `Multiple ${String(key)} steps are not supported in one plan.`,
+            );
+          }
+        }
+      }
+      if (problems.length || parts.some((part) => part.actions.length === 0)) {
+        return {
+          actions: [],
+          specs: {},
+          problems: problems.length
+            ? problems
+            : ["Every step must describe an explicit supported Excel action."],
+        };
+      }
+      return { actions, specs, problems: [] };
+    }
+  }
   if (
     /\b(?:format|create|turn|make)\b.*\b(?:as\s+(?:an?\s+)?|into\s+(?:an?\s+)?)?(?:excel\s+)?table\b/i.test(
       text,

@@ -184,6 +184,30 @@ test("format instructions become explicit options, and 'format as a table' stays
   });
 });
 
+test("a multi-step instruction becomes one safe reviewable plan", () => {
+  const interpreted = interpretInstruction(
+    "Clean and trim the data, then create a PivotTable of Sales by Region, then create a chart of Sales by Region",
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.actions, ["clean", "pivot-table", "chart"]);
+  assert.deepEqual(interpreted.specs.clean?.operations, [
+    "trim",
+    "text-to-number",
+    "dedupe",
+  ]);
+  assert.deepEqual(interpreted.specs.pivot, {
+    rows: 1,
+    values: 2,
+    aggregation: "sum",
+  });
+  assert.deepEqual(interpreted.specs.chart, {
+    category: 1,
+    value: 2,
+    chartType: "column",
+  });
+});
+
 test("chart data-label requests are explicit and planner-safe", () => {
   const interpreted = interpretInstruction(
     "Create a Sales chart with data labels by Region",

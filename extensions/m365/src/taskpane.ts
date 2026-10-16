@@ -485,13 +485,62 @@ const API_MESSAGES: Record<string, string> = {
     "The selected range is too large. Select at most 100,000 cells and 100 columns.",
 };
 
+function editDistance(left: string, right: string): number {
+  const a = left.toLocaleLowerCase().trim();
+  const b = right.toLocaleLowerCase().trim();
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= a.length; row += 1) {
+    let diagonal = previous[0];
+    previous[0] = row;
+    for (let column = 1; column <= b.length; column += 1) {
+      const above = previous[column];
+      previous[column] = Math.min(
+        previous[column] + 1,
+        previous[column - 1] + 1,
+        diagonal + (a[row - 1] === b[column - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[b.length];
+}
+
+function suggestMissingColumn(message: string): string {
+  if (!lastRange?.headers.length || !/column|columns|key/i.test(message))
+    return message;
+  const requested = [...message.matchAll(/"([^"]+)"/g)].map(
+    (match) => match[1],
+  );
+  if (!requested.length) return message;
+  const suggestions = requested
+    .map((name) => {
+      const match = lastRange!.headers
+        .map((header) => ({
+          header,
+          distance: editDistance(name, header),
+        }))
+        .sort((left, right) => left.distance - right.distance)[0];
+      if (!match) return undefined;
+      const limit = Math.max(2, Math.ceil(name.length * 0.4));
+      return match.distance <= limit ? match.header : undefined;
+    })
+    .filter((header): header is string => Boolean(header));
+  const unique = [...new Set(suggestions)];
+  if (!unique.length) return message;
+  const hint =
+    language === "si"
+      ? ` ඔබ අදහස් කළේ ${unique.map((header) => `“${header}”`).join(", ")} ද?`
+      : ` Did you mean ${unique.map((header) => `"${header}"`).join(", ")} ?`;
+  return `${message}${hint}`;
+}
+
 function handleApiError(step: string, error: unknown) {
   log.record(step, "fail", describeError(error));
   if (!(error instanceof M365ApiError)) {
     const text = (error as Error).message ?? "";
     const message = /requested resource doesn't exist|ItemNotFound/i.test(text)
       ? "Excel could not find that sheet or range. Click a cell inside your table and try again."
-      : text;
+      : suggestMissingColumn(text);
     setStatus(message);
     renderConversation("error", message);
     statusContainer?.focus?.();
@@ -824,7 +873,7 @@ inspect?.addEventListener("click", async () => {
         if (stopIfStale()) return;
       } catch (error) {
         log.record("lookup:resolve", "fail", describeError(error));
-        return setStatus((error as Error).message);
+        return setStatus(suggestMissingColumn((error as Error).message));
       }
     }
     if (lookupColumnsWish) {
@@ -891,7 +940,7 @@ inspect?.addEventListener("click", async () => {
         if (stopIfStale()) return;
       } catch (error) {
         log.record("lookup-columns:resolve", "fail", describeError(error));
-        return setStatus((error as Error).message);
+        return setStatus(suggestMissingColumn((error as Error).message));
       }
     }
     if (actions.length === 0) {

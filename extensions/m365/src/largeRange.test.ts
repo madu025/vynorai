@@ -292,3 +292,16 @@ test("an A1 address from the sheet gives the data rows right below the header", 
   assert.equal(dataRef(ref), "'detail-report'!$A$2:$J$520126");
   assert.equal(headerRef(ref), "'detail-report'!$A$1:$J$1");
 });
+
+test("an equals filter compares as text so an ID with a leading zero matches", () => {
+  assert.equal(
+    viewFormula(range, {
+      filter: { index: 9, operator: "=", value: "0112005016" },
+    }),
+    `=LET(d,'detail-report'!$A$2:$J$520126,f,FILTER(d,INDEX(d,,10)&""="0112005016",""),IFERROR(f,"No rows match"))`,
+  );
+  assert.match(
+    viewFormula(range, { filter: { index: 6, operator: "!=", value: 5 } }),
+    /INDEX\(d,,7\)&""<>"5"/,
+  );
+});

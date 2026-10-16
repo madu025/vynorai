@@ -1462,7 +1462,12 @@ function interpretView(
         column,
         operator,
         value:
-          operator !== "contains" && raw !== "" && Number.isFinite(asNumber)
+          operator !== "contains" &&
+          raw !== "" &&
+          Number.isFinite(asNumber) &&
+          // 0112005016 is an identifier, not the number 112005016.
+          !/^0\d/.test(raw) &&
+          raw.replace(/[,.\-]/g, "").length <= 15
             ? asNumber
             : raw,
       };

@@ -70,7 +70,11 @@ export function viewFormula(range: LargeRef, spec: LargeViewSpec): string {
         throw new Error("filter value is not a finite number");
       const operand =
         typeof value === "number" ? String(value) : excelText(value);
-      test = `${column}${operator === "!=" ? "<>" : operator}${operand}`;
+      // = and <> compare as text, so 0112005016 matches a text ID and 5 matches the number 5.
+      test =
+        operator === "=" || operator === "!="
+          ? `${column}&""${operator === "!=" ? "<>" : "="}${excelText(String(value))}`
+          : `${column}${operator}${operand}`;
     }
     steps.push(`f,FILTER(d,${test},"")`);
     current = "f";

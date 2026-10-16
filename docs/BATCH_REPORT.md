@@ -94,4 +94,4 @@ proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
 | g-script         | en      | small | skip   | known gap: not implemented                                                               |
 | g-vba            | en      | small | skip   | known gap: not implemented                                                               |
 
-Found on the live copy test (build .35): every large-range formula (view, add-column, clean, split, unpivot, quality, named range) skipped the first data row and read one empty row after the last, because `parseLocalRange` rows are 1-based and `LargeRef` is 0-based. Fixed in 20261016.36 with a contract test in largeRange.test.ts. All earlier "verified on 520k" results for these actions need the first row re-checked.
+Phase 6 (user prompt: items and quantities per Circuit ID): "pivot table of total Issued Quantity by Circuit ID and Item Code as rows" works on 520k (78 s). Found: a leading-zero ID in a filter became a number and matched nothing (v-filter), fixed in 20261016.38 (text compare for = and <>; leading-zero values stay text).

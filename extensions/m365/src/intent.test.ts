@@ -180,3 +180,19 @@ test("a pivot can list a second field under each row: by Circuit ID and Item Cod
   assert.equal(wide.specs.pivot.columns, 1);
   assert.equal(wide.specs.pivot.subRows, undefined);
 });
+
+test("an ID with a leading zero stays text in a filter", () => {
+  const headers = ["Service ID", "Circuit ID"];
+  const result: any = interpretInstruction(
+    "show rows where Circuit ID is 0112005016",
+    headers,
+    [["a", "0112005016"]],
+  );
+  assert.equal(result.specs.view.filter.value, "0112005016");
+  const plain: any = interpretInstruction(
+    "show rows where Circuit ID is 15",
+    headers,
+    [["a", "15"]],
+  );
+  assert.equal(plain.specs.view.filter.value, 15);
+});

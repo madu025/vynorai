@@ -272,6 +272,22 @@ test("formula audit requests use the formula quality mode", () => {
   assert.deepEqual(parsed.specs.quality, { mode: "formula" });
 });
 
+test("formula explanation requests use the reviewed formula report", () => {
+  for (const instruction of [
+    "Explain this formula in plain language",
+    "What does the formula in the selected cell do?",
+    "Describe the selected formula and its references",
+  ]) {
+    const parsed = interpretInstruction(
+      instruction,
+      ["Customer", "Sales"],
+      [["Asha", 10]],
+    );
+    assert.deepEqual(parsed.actions, ["quality"], instruction);
+    assert.deepEqual(parsed.specs.quality, { mode: "formula" }, instruction);
+  }
+});
+
 test("formula repair requests use the reviewed repair quality mode", () => {
   const parsed = interpretInstruction(
     "Fix divide by zero errors in the selected formulas",

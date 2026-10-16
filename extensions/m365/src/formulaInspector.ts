@@ -182,6 +182,13 @@ export function isFormulaInspectionRequest(instruction: string): boolean {
   );
 }
 
+/** Explicit explanation requests use the reviewed formula-report result sheet in the pane. */
+export function isFormulaExplanationRequest(instruction: string): boolean {
+  return /\b(?:explain|what\s+does|describe)\b[^.\n]{0,80}\bformulas?\b/i.test(
+    instruction,
+  );
+}
+
 /**
  * Produces a local, read-only formula report and optional advisory repair candidate. It never
  * evaluates, writes, repairs, or transmits formulas. A direct self reference is a possible

@@ -1498,6 +1498,11 @@ function interpretStatistics(
   rows: Cell[][],
   result: InterpretedInstruction,
 ) {
+  if (
+    /\b(?:formula|formulas)\b/i.test(text) &&
+    /\b(?:explain|what\s+does|describe|inspect|audit|check|find)\b/i.test(text)
+  )
+    return;
   const numericAll = headers
     .map((_, index) => index)
     .filter((index) => isNumericColumn(rows, index));
@@ -1588,7 +1593,7 @@ function interpretFormatAndQuality(
     );
   const formulaAudit =
     formulaRepair ||
-    /\b(?:audit|inspect|check|find|identify)\b[^.\n]{0,80}\bformulas?\b|\bformulas?\b[^.\n]{0,80}\b(?:errors?|circular|references?)\b/i.test(
+    /\b(?:audit|inspect|check|find|identify|explain|describe)\b[^.\n]{0,80}\bformulas?\b|\bwhat\s+does\b[^.\n]{0,80}\bformulas?\b|\bformulas?\b[^.\n]{0,80}\b(?:errors?|circular|references?)\b/i.test(
       text,
     );
   if (

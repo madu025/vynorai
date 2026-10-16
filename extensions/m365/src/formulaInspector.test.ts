@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   formatFormulaInspection,
   inspectFormulas,
+  isFormulaExplanationRequest,
   isFormulaInspectionRequest,
   isFormulaRepairRequest,
 } from "./formulaInspector.js";
@@ -35,6 +36,16 @@ test("formula inspector request words do not capture ordinary data questions", (
     true,
   );
   assert.equal(isFormulaInspectionRequest("Check formula errors"), true);
+  assert.equal(
+    isFormulaExplanationRequest("Explain this formula in plain language"),
+    true,
+  );
+  assert.equal(
+    isFormulaExplanationRequest(
+      "What does the formula in the selected cell do?",
+    ),
+    true,
+  );
   assert.equal(isFormulaInspectionRequest("What is total Sales?"), false);
 });
 

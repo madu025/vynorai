@@ -47,10 +47,10 @@ Dashboards	dashboard	Build a dashboard of Sales by Region
 Dashboards	dashboard	Create a KPI dashboard for Sales
 Dashboards	dashboard	Make a sales dashboard by Status
 Dashboards	dashboard	Build a dashboard showing Cost by Region
-Formula explanation	-	Explain this formula in plain language
-Formula explanation	-	What does the formula in the selected cell do?
-Formula explanation	-	Describe the selected formula and its references
-Formula explanation	-	Explain why this formula returns an error
+Formula explanation	quality	Explain this formula in plain language
+Formula explanation	quality	What does the formula in the selected cell do?
+Formula explanation	quality	Describe the selected formula and its references
+Formula explanation	quality	Explain why this formula returns an error
 Formula repair	quality	Repair the #REF! formulas
 Formula repair	quality	Fix divide by zero errors in the selected formulas
 Formula repair	quality	Correct the broken formulas in this column

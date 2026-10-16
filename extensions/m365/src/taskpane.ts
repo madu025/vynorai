@@ -82,6 +82,7 @@ import {
 import {
   formatFormulaInspection,
   inspectFormulas,
+  isFormulaExplanationRequest,
   isFormulaInspectionRequest,
   isFormulaRepairRequest,
 } from "./formulaInspector.js";
@@ -754,6 +755,7 @@ inspect?.addEventListener("click", async () => {
   try {
     if (
       isFormulaInspectionRequest(instructionText) &&
+      !isFormulaExplanationRequest(instructionText) &&
       !isFormulaRepairRequest(instructionText)
     ) {
       setStatus("Inspecting selected formulas locally...");

@@ -361,3 +361,44 @@ test("a row test is calculated for every row first, then the view filters on it"
   });
   assert.match(both, /s,SORTBY\(w,INDEX\(w,,8\),-1\)/);
 });
+
+test("per-group and conditional figures on very large data are worked out once, never per row", () => {
+  const headers = [
+    "Service ID",
+    "RTOM",
+    "LEA",
+    "PAT Complete Date",
+    "Status",
+    "Item Code",
+    "Requested Quantity",
+    "Issued Quantity",
+    "UoM",
+    "Circuit ID",
+  ];
+  const share = addColumnFormula(
+    range,
+    {},
+    parseExpression(
+      "[Issued Quantity] / GROUPSUM([Issued Quantity], [RTOM])",
+      headers,
+    ).ast,
+  );
+  // One GROUPBY over the whole data, then one value per row walked by MAP next to the data.
+  assert.equal(share.match(/GROUPBY\(/g)?.length, 1);
+  assert.doesNotMatch(share, /SUMIFS/);
+  assert.match(
+    share,
+    /^=LET\(_g0,LET\(_t,GROUPBY\('detail-report'!\$B\$2:\$B\$520126,'detail-report'!\$H\$2:\$H\$520126,SUM,0,0\),XLOOKUP\('detail-report'!\$B\$2:\$B\$520126,TAKE\(_t,,1\),TAKE\(_t,,-1\),"",0,2\)\),MAP\(/,
+  );
+  assert.match(share, /,_g0,LAMBDA\(_v1,_v7,_r0,/);
+  assert.match(share, /_v7\/_r0/);
+  // A row test with a whole-column figure is hoisted too (it was once recalculated for every row).
+  const above = viewFormula(range, {
+    where: parseExpression(
+      '[Issued Quantity] > COLAVGIF([Issued Quantity], [Status], "S")',
+      headers,
+    ).ast,
+  });
+  assert.equal(above.match(/AVERAGEIFS\(/g)?.length, 1);
+  assert.match(above, /w,FILTER\(d,LET\(_k0,IFERROR\(AVERAGEIFS\(/);
+});

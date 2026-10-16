@@ -61,11 +61,7 @@ export function viewFormula(range: LargeRef, spec: LargeViewSpec): string {
   let current = "d";
   if (spec.where) {
     // Calculated on the whole data range first, so every row of the test lines up with a row of d.
-    const test = mapRows(range, astColumns(spec.where), (name) =>
-      expressionToFormula(spec.where as ExprNode, name, (index) =>
-        columnRef(range, index),
-      ).replace(/^=/, ""),
-    ).replace(/^=/, "");
+    const test = expressionRows(range, spec.where);
     steps.push(`w,FILTER(d,${test},"")`);
     current = "w";
   }
@@ -142,6 +138,54 @@ function astColumns(node: ExprNode, found: Set<number> = new Set()): number[] {
   return [...found].sort((a, b) => a - b);
 }
 
+/**
+ * An expression for every row of a very large range, without the leading "=". Whole-column figures
+ * (COLSUM, COLCOUNTIF...) are worked out once in a LET, and per-group figures (GROUPSUM...) once as a
+ * whole column that MAP walks next to the data, so nothing is recalculated for each of n rows.
+ */
+export function expressionRows(range: LargeRef, ast: ExprNode): string {
+  const columns = astColumns(ast);
+  const scalars = new Map<string, string>();
+  const vectors = new Map<string, string>();
+  const hoist = (call: string) => {
+    let variable = scalars.get(call);
+    if (!variable) {
+      variable = `_k${scalars.size}`;
+      scalars.set(call, variable);
+    }
+    return variable;
+  };
+  const vector = (call: string) => {
+    let variable = vectors.get(call);
+    if (!variable) {
+      variable = `_g${vectors.size}`;
+      vectors.set(call, variable);
+    }
+    return variable.replace("_g", "_r");
+  };
+  const body = expressionToFormula(
+    ast,
+    (index) => `_v${index}`,
+    (index) => columnRef(range, index),
+    hoist,
+    vector,
+  ).replace(/^=/, "");
+  const arrays = [
+    ...columns.map((index) => columnRef(range, index)),
+    ...vectors.values(),
+  ];
+  const params = [
+    ...columns.map((index) => `_v${index}`),
+    ...[...vectors.values()].map((variable) => variable.replace("_g", "_r")),
+  ];
+  const mapped = `MAP(${arrays.join(",")},LAMBDA(${params.join(",")},${body}))`;
+  const bindings = [
+    ...[...scalars].map(([call, variable]) => `${variable},${call}`),
+    ...[...vectors].map(([call, variable]) => `${variable},${call}`),
+  ];
+  return bindings.length ? `LET(${bindings.join(",")},${mapped})` : mapped;
+}
+
 /** Runs a per-row formula over whole columns: MAP keeps every function working row by row. */
 function mapRows(
   range: LargeRef,
@@ -194,32 +238,7 @@ export function addColumnFormula(
   spec: LargeAddColumnSpec,
   ast?: ExprNode,
 ): string {
-  if (ast) {
-    const columns = astColumns(ast);
-    // A whole-column figure (COLSUM...) is computed once in a LET, not again for every row.
-    const hoisted = new Map<string, string>();
-    const hoist = (call: string) => {
-      let variable = hoisted.get(call);
-      if (!variable) {
-        variable = `_k${hoisted.size}`;
-        hoisted.set(call, variable);
-      }
-      return variable;
-    };
-    const mapped = mapRows(range, columns, (name) =>
-      expressionToFormula(
-        ast,
-        name,
-        (index) => columnRef(range, index),
-        hoist,
-      ).replace(/^=/, ""),
-    );
-    if (!hoisted.size) return mapped;
-    const bindings = [...hoisted].map(
-      ([call, variable]) => `${variable},${call}`,
-    );
-    return `=LET(${bindings.join(",")},${mapped.replace(/^=/, "")})`;
-  }
+  if (ast) return `=${expressionRows(range, ast)}`;
   if (spec.lookup) {
     const { lookup } = spec;
     const sheet = quoteSheet(lookup.sheet);

@@ -143,6 +143,17 @@ export const EXPRESSION_FUNCTIONS: Record<string, FunctionRule> = {
   COLMIN: FN(1, 1, "math"),
   COLCOUNT: FN(1, 1, "math"),
   COLSTDEV: FN(1, 1, "math"),
+  // whole-column figures with a condition (like SUMIFS / COUNTIFS) and the number of distinct values
+  COLSUMIF: FN(3, 3, "math"),
+  COLAVGIF: FN(3, 3, "math"),
+  COLCOUNTIF: FN(2, 2, "logic"),
+  COLDISTINCT: FN(1, 1, "logic"),
+  // per-group figures: the total, average, largest, smallest or row count of each row's own group
+  GROUPSUM: FN(2, 2, "math"),
+  GROUPAVG: FN(2, 2, "math"),
+  GROUPMAX: FN(2, 2, "math"),
+  GROUPMIN: FN(2, 2, "math"),
+  GROUPCOUNT: FN(1, 1, "logic"),
   // logic
   IF: FN(2, 3, "logic"),
   IFS: FN(2, 12, "logic"),
@@ -188,6 +199,21 @@ export const EXPRESSION_FUNCTIONS: Record<string, FunctionRule> = {
   WORKDAY: FN(2, 2, "date"),
   TODAY: FN(0, 0, "date"),
   DATEVALUE: FN(1, 1, "date"),
+};
+
+/** Functions whose first argument is a measure and whose other column arguments may hold text. */
+const MEASURE_FIRST = /^(?:COLSUMIF|COLAVGIF|GROUP(?:SUM|AVG|MAX|MIN))$/;
+/** Functions that take whole columns: [column] names only, and (for the IF forms) a fixed value. */
+const COLUMN_ARGS: Record<string, { columns: number; example: string }> = {
+  COLSUMIF: { columns: 2, example: 'COLSUMIF([Quantity], [Status], "S")' },
+  COLAVGIF: { columns: 2, example: 'COLAVGIF([Quantity], [Status], "S")' },
+  COLCOUNTIF: { columns: 1, example: 'COLCOUNTIF([Status], "S")' },
+  COLDISTINCT: { columns: 1, example: "COLDISTINCT([Item Code])" },
+  GROUPSUM: { columns: 2, example: "GROUPSUM([Quantity], [Region])" },
+  GROUPAVG: { columns: 2, example: "GROUPAVG([Quantity], [Region])" },
+  GROUPMAX: { columns: 2, example: "GROUPMAX([Quantity], [Region])" },
+  GROUPMIN: { columns: 2, example: "GROUPMIN([Quantity], [Region])" },
+  GROUPCOUNT: { columns: 1, example: "GROUPCOUNT([Region])" },
 };
 
 /** The units DATEDIF accepts, and the characters a TEXT format may contain. */
@@ -241,6 +267,19 @@ export function parseExpression(
       throw new ExpressionError(
         `${name} needs one column, for example ${name}([Sales]).`,
       );
+    const columnArgs = COLUMN_ARGS[name];
+    if (columnArgs) {
+      for (let index = 0; index < columnArgs.columns; index += 1)
+        if (args[index].t !== "col")
+          throw new ExpressionError(
+            `${name} needs column names in brackets, for example ${columnArgs.example}.`,
+          );
+      const value = args[columnArgs.columns];
+      if (value && value.t !== "str" && value.t !== "num")
+        throw new ExpressionError(
+          `${name} needs the value to match written as a number or in quotes, for example ${columnArgs.example}.`,
+        );
+    }
     if (name === "IFS" && args.length % 2 !== 0)
       throw new ExpressionError("IFS needs pairs of a test and a result.");
     if (name === "TEXT") {
@@ -389,6 +428,10 @@ export function numericColumnRefs(node: ExprNode): number[] {
         visit(current.b, false);
         return;
       case "fn": {
+        if (MEASURE_FIRST.test(current.name)) {
+          current.args.forEach((arg, index) => visit(arg, index === 0));
+          return;
+        }
         const math = EXPRESSION_FUNCTIONS[current.name]?.kind === "math";
         for (const arg of current.args) visit(arg, math);
         return;
@@ -442,6 +485,11 @@ export function expressionToFormula(
   whole?: (columnIndex: number) => string,
   /** Very large data: a whole-column figure is worked out once, outside the per-row formula. */
   hoist?: (call: string) => string,
+  /**
+   * Very large data: a per-group figure is worked out once as a whole column (one value per row);
+   * the returned name is that row's value. Without it each row runs its own SUMIFS.
+   */
+  vector?: (call: string) => string,
 ): string {
   let divides = false;
   const emit = (current: ExprNode): string => {
@@ -478,6 +526,56 @@ export function expressionToFormula(
             STDEV: "STDEV.S",
           }[column[1] as "SUM"];
           const call = `${excel}(${whole(target.i)})`;
+          return hoist ? hoist(call) : call;
+        }
+        if (COLUMN_ARGS[current.name]) {
+          if (!whole)
+            throw new Error("A whole-column figure needs the column range");
+          const col = (index: number) => {
+            const target = current.args[index];
+            if (target.t !== "col")
+              throw new Error(`${current.name} needs a column`);
+            return target.i;
+          };
+          const group = /^GROUP(SUM|AVG|MAX|MIN|COUNT)$/.exec(current.name);
+          if (group) {
+            const key = col(group[1] === "COUNT" ? 0 : 1);
+            const measure = col(0);
+            if (vector) {
+              // GROUPBY totals every group once (sorted), then each row finds its group by binary search.
+              const fn = {
+                SUM: "SUM",
+                AVG: "AVERAGE",
+                MAX: "MAX",
+                MIN: "MIN",
+                COUNT: "COUNTA",
+              }[group[1] as "SUM"];
+              return vector(
+                `LET(_t,GROUPBY(${whole(key)},${whole(measure)},${fn},0,0),XLOOKUP(${whole(key)},TAKE(_t,,1),TAKE(_t,,-1),"",0,2))`,
+              );
+            }
+            if (group[1] === "COUNT")
+              return `COUNTIFS(${whole(key)},${cell(key)})`;
+            const fn = {
+              SUM: "SUMIFS",
+              AVG: "AVERAGEIFS",
+              MAX: "MAXIFS",
+              MIN: "MINIFS",
+            }[group[1] as "SUM"];
+            return `${fn}(${whole(measure)},${whole(key)},${cell(key)})`;
+          }
+          let call: string;
+          if (current.name === "COLDISTINCT") {
+            const range = whole(col(0));
+            call = `IFERROR(ROWS(UNIQUE(FILTER(${range},${range}<>""))),0)`;
+          } else if (current.name === "COLCOUNTIF") {
+            call = `COUNTIFS(${whole(col(0))},${emit(current.args[1])})`;
+          } else {
+            const fn = current.name === "COLSUMIF" ? "SUMIFS" : "AVERAGEIFS";
+            call = `${fn}(${whole(col(0))},${whole(col(1))},${emit(current.args[2])})`;
+            // No matching row: blank, not #DIV/0!.
+            if (fn === "AVERAGEIFS") call = `IFERROR(${call},"")`;
+          }
           return hoist ? hoist(call) : call;
         }
         return `${current.name}(${current.args.map(emit).join(",")})`;

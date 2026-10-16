@@ -140,3 +140,59 @@ test("whole-column figures: share of the total, above the average, spread", () =
       expressionToFormula(parseExpression("COLSUM(Sales)", headers).ast, cell),
   );
 });
+
+test("conditional, distinct and per-group figures (SUMIFS, COUNTIFS, UNIQUE) stay in the closed grammar", async () => {
+  const { numericColumnRefs } = await import("./expression.js");
+  const whole = (index: number) =>
+    `$${String.fromCharCode(65 + index)}$2:$${String.fromCharCode(65 + index)}$9`;
+  const formula = (source: string) =>
+    expressionToFormula(parseExpression(source, headers).ast, cell, whole);
+  assert.equal(
+    formula('COLSUMIF(Sales, Region, "North")'),
+    '=SUMIFS($C$2:$C$9,$B$2:$B$9,"North")',
+  );
+  assert.equal(
+    formula('COLCOUNTIF(Region, "North")'),
+    '=COUNTIFS($B$2:$B$9,"North")',
+  );
+  assert.equal(
+    formula('COLCOUNTIF(Sales, ">100")'),
+    '=COUNTIFS($C$2:$C$9,">100")',
+  );
+  assert.equal(
+    formula("COLDISTINCT(Region)"),
+    '=IFERROR(ROWS(UNIQUE(FILTER($B$2:$B$9,$B$2:$B$9<>""))),0)',
+  );
+  assert.equal(
+    formula("GROUPSUM(Sales, Region)"),
+    "=SUMIFS($C$2:$C$9,$B$2:$B$9,B2)",
+  );
+  assert.equal(formula("GROUPCOUNT(Region)"), "=COUNTIFS($B$2:$B$9,B2)");
+  assert.equal(
+    formula("Sales / GROUPSUM(Sales, Region)"),
+    '=IFERROR((C2/SUMIFS($C$2:$C$9,$B$2:$B$9,B2)),"")',
+  );
+  // Only the measure must be numeric; the group and condition columns may hold text.
+  assert.deepEqual(
+    numericColumnRefs(parseExpression("GROUPSUM(Sales, Region)", headers).ast),
+    [2],
+  );
+  assert.deepEqual(
+    numericColumnRefs(
+      parseExpression('COLSUMIF(Sales, Region, "N")', headers).ast,
+    ),
+    [2],
+  );
+  assert.throws(
+    () => parseExpression("GROUPSUM(Sales * 2, Region)", headers),
+    ExpressionError,
+  );
+  assert.throws(
+    () => parseExpression("COLCOUNTIF(Region, Month)", headers),
+    ExpressionError,
+  );
+  assert.throws(
+    () => parseExpression("COLDISTINCT(Region, Sales)", headers),
+    ExpressionError,
+  );
+});

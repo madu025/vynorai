@@ -11,8 +11,8 @@
 ### 1.1 Microsoft 365 add-in first Excel slice
 
 The M365 sub-product remains under `extensions/m365/`. Its first safe Excel slice is implemented by
-`extensions/m365/src/excel.ts` (fail-closed instruction-to-action selection, range profiling, bounded chunks, sampled planning for ranges over 100,000 cells (PivotTable only, Excel computes over every row), preview plans, and the confirmation gate),
-`extensions/m365/src/oauth.ts` (Entra Authorization Code + PKCE), `extensions/m365/src/taskpane.ts` (bundled taskpane runtime), and
+`extensions/m365/src/excel.ts` (fail-closed instruction-to-action selection, range profiling, bounded chunks, sampled planning for ranges over 100,000 cells (PivotTable, view, statistics, add-column, named range, quality, lookup, split, dashboard and, bounded to the first rows, clean, format and unpivot; Excel computes over every row), preview plans, and the confirmation gate),
+`extensions/m365/src/largeRange.ts` (spilled dynamic-array formulas for very large ranges: view, add-column, clean-up, quality table, split, unpivot, with row caps for Excel on the web), `extensions/m365/src/chatSessions.ts` (pure saved-chat store behind New chat and history), `extensions/m365/src/oauth.ts` (Entra Authorization Code + PKCE), `extensions/m365/src/taskpane.ts` (bundled taskpane runtime), and
 `extensions/m365/auth-dialog.html` / `extensions/m365/auth-callback.html` (Office Dialog API authentication handoff), `extensions/m365/src/officeExcel.ts`
 (Office.js selected-range inspection and confirmed workbook operations), and `extensions/m365/src/api.ts`
 (correlated OAuth API calls),

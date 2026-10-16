@@ -27,9 +27,9 @@ function sampledKindAllowed(
   if (SAMPLED_RANGE_ACTIONS.has(kind)) return true;
   // A view is one spilled FILTER/SORTBY/TAKE formula that Excel computes over every row.
   if (kind === "view") return true;
-  // Clean-up is one spilled formula too; only fuzzy matching needs the rows in the add-in.
-  if (kind === "clean")
-    return !(specs?.clean?.operations ?? []).includes("fuzzy-dedupe");
+  // A full-width clean of a huge range spills millions of cells, which Excel on the web cannot
+  // hold (it stops responding), so it stays off until it can be limited to chosen columns.
+  if (kind === "clean") return false;
   // Describe and correlation are live formulas over whole columns; Excel computes them.
   if (kind === "statistics")
     return (

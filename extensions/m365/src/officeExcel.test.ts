@@ -399,6 +399,36 @@ test("apply creates each object with Office.js argument order and keeps source u
   );
 });
 
+test("apply writes large result copies in bounded chunks", async () => {
+  const cells = Array.from({ length: 1201 }, (_, index) => [
+    index === 0 ? "Region" : `R${index}`,
+    index,
+  ]);
+  const excel = fakeWorkbook(cells);
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["table"]);
+  const progress: number[] = [];
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    {
+      expectedSourceFingerprint: plan.sourceFingerprint,
+      onProgress: (completed, total) => progress.push(completed / total),
+    },
+  );
+  assert.equal(report.sourceUnchangedAfterApply, true);
+  assert.deepEqual(progress, [500 / 1201, 1000 / 1201, 1]);
+  assert.equal(
+    excel.calls.filter(
+      (call) => call.startsWith("write ") && !call.startsWith("write Sales!"),
+    ).length,
+    3,
+  );
+  assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
 test("apply enables chart data labels only on the copied result", async () => {
   const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
   const input = await inspectSelectedExcelRange(excel.runtime, "book-1");

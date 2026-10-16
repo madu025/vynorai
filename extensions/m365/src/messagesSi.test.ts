@@ -15,6 +15,10 @@ test("known messages are rendered in Sinhala and unknown ones stay English", () 
     localizeMessage("si", "Reading selected rows: 500/2000..."),
     /500\/2000/,
   );
+  assert.match(
+    localizeMessage("si", "Writing result rows: 500/1201..."),
+    /500\/1201/,
+  );
   assert.equal(localizeMessage("si", "Some unknown text"), "Some unknown text");
   assert.equal(localizeMessage("en", "Nothing was sent."), "Nothing was sent.");
 });

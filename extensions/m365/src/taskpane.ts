@@ -190,7 +190,7 @@ function setStatus(message: string) {
             normalized,
           )
         ? "success"
-        : /opening|completing|inspecting|reading|requesting|applying|analyzing/.test(
+        : /opening|completing|inspecting|reading|requesting|applying|analyzing|writing/.test(
               normalized,
             )
           ? "busy"
@@ -939,6 +939,8 @@ apply?.addEventListener("click", async () => {
             supportsExcelApi,
             requirements: ACTION_REQUIREMENTS,
             aggregateCharts: followUpAggregate,
+            onProgress: (completed, total) =>
+              setStatus(`Writing result rows: ${completed}/${total}...`),
             onAction: (result) =>
               log.record(
                 `excel:action:${result.kind}`,

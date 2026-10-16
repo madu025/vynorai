@@ -141,6 +141,10 @@ type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
   [
+    /^Writing result rows: (\d+)\/(\d+)\.\.\.$/,
+    (done, total) => `ප්‍රතිඵල පේළි ලියමින්: ${done}/${total}...`,
+  ],
+  [
     /^Found your table at (.+). Preview ready. Nothing has changed yet. Review it before applying.$/,
     (address) =>
       `ඔබේ වගුව ${address} හි හමු විය. පෙරදසුන සූදානම්. තවමත් කිසිවක් වෙනස් වී නැත. යෙදීමට පෙර එය පරීක්ෂා කරන්න.`,

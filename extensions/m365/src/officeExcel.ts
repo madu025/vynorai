@@ -342,6 +342,28 @@ async function readValuesInChunks(
   return values;
 }
 
+async function writeValuesInChunks(
+  context: ExcelContextLike,
+  sheet: any,
+  values: any[][],
+  chunkRows: number,
+  literal: (cell: any) => any,
+  onProgress?: (completedRows: number, totalRows: number) => void,
+): Promise<any> {
+  const columns = values[0]?.length ?? 0;
+  if (!values.length || !columns) return undefined;
+  for (let start = 0; start < values.length; start += chunkRows) {
+    const chunk = values
+      .slice(start, start + chunkRows)
+      .map((row) => row.map(literal));
+    const target = sheet.getRangeByIndexes(start, 0, chunk.length, columns);
+    target.values = chunk;
+    await context.sync();
+    onProgress?.(Math.min(values.length, start + chunk.length), values.length);
+  }
+  return sheet.getRangeByIndexes(0, 0, values.length, columns);
+}
+
 export async function inspectSelectedExcelRange(
   runtime: ExcelRuntimeLike,
   workbookId: string,
@@ -543,6 +565,7 @@ export async function applyApprovedExcelPlan(
     aggregateCharts?: boolean;
     requirements?: Record<string, string>;
     onAction?: (result: ExcelActionResult) => void;
+    onProgress?: (completedRows: number, totalRows: number) => void;
   },
 ): Promise<ExcelApplyReport> {
   if (!confirmed)
@@ -649,15 +672,14 @@ export async function applyApprovedExcelPlan(
             ...values.slice(plan.normalization.headerRowCount),
           ]
         : values;
-      const target = sheet.getRangeByIndexes(
-        0,
-        0,
-        copiedValues.length,
-        copiedValues[0]?.length ?? 0,
+      normalizedSource = await writeValuesInChunks(
+        context,
+        sheet,
+        copiedValues,
+        500,
+        literal,
+        options.onProgress,
       );
-      target.values = copiedValues.map((row) => row.map(literal));
-      await context.sync();
-      normalizedSource = target;
       return copiedValues.length;
     };
 

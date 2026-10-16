@@ -1957,7 +1957,7 @@ export async function applyApprovedExcelPlan(
                   );
                   chart.name = action.name;
                   chart.title.text = `${spec.value?.column ?? "Value"} forecast`;
-                  chart.setPosition("E2");
+                  chart.setPosition(plan.profile?.sample ? "G2" : "E2");
                   chart.series
                     .getItemAt(0)
                     .setXAxisValues(

@@ -148,6 +148,10 @@ let autoDetectedAddress = "";
 let previewFingerprint = "";
 /** When the current request started, to report how long a big workbook took. */
 let requestStartedAt = 0;
+let previewReadyAt = 0;
+/** Set while the data is a sample of a very large range, so a preview never looks like the whole. */
+let lastSample: { totalRows: number; sampledRows: number } | undefined;
+let applyStartedAt = 0;
 let pendingSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
 let lastCreated:
@@ -1119,6 +1123,7 @@ inspect?.addEventListener("click", async () => {
       renderConversation("error", hint);
       return setStatus(hint);
     }
+    lastSample = input.sample;
     if (input.sample) {
       // Very large data: Excel computes a chart or a summary through a PivotTable.
       const adapted = adaptForSampledRange(actions, specs);
@@ -1192,7 +1197,9 @@ inspect?.addEventListener("click", async () => {
     }
     markChangeNote("preview");
     renderTrace([
-      `Read ${Math.max(0, input.values.length - 1)} rows and ${input.values[0]?.length ?? 0} columns from ${input.address}`,
+      input.sample
+        ? `Read a sample of ${input.sample.sampledRows.toLocaleString("en-US")} of ${input.sample.totalRows.toLocaleString("en-US")} rows and ${input.values[0]?.length ?? 0} columns from ${input.address}`
+        : `Read ${Math.max(0, input.values.length - 1)} rows and ${input.values[0]?.length ?? 0} columns from ${input.address}`,
       `Understood the request: ${actions.join(", ")}`,
       "Planned it on the server and checked that both plans match. Nothing has changed yet",
     ]);
@@ -1206,6 +1213,7 @@ inspect?.addEventListener("click", async () => {
       "assistant",
       `Preview ready for ${actions.join(", ")}. Your original data will stay unchanged.`,
     );
+    previewReadyAt = Date.now();
     document.querySelector<HTMLElement>("#preview-heading")?.focus();
     // "Review as you go" off: apply straight away, like Copilot's edit mode.
     if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
@@ -1266,6 +1274,7 @@ apply?.addEventListener("click", async () => {
   if (signOut) signOut.disabled = true;
   if (instruction) instruction.disabled = true;
   try {
+    applyStartedAt = Date.now();
     setStatus("Requesting approval...");
     await apiClient().approveExcel({
       planId: approvedPlan.planId,
@@ -1445,12 +1454,14 @@ apply?.addEventListener("click", async () => {
     document.querySelector<HTMLElement>("#change-note")?.focus();
     // A slow result says where the time went, so a big workbook never looks like a hang.
     const slow = report.results.filter((entry) => (entry.ms ?? 0) >= 4000);
-    const totalSeconds = requestStartedAt
-      ? Math.round((Date.now() - requestStartedAt) / 1000)
-      : 0;
-    const timing = slow.length
-      ? ` (${totalSeconds}s: ${slow.map((entry) => `${entry.kind} ${((entry.ms ?? 0) / 1000).toFixed(0)}s`).join(", ")})`
-      : "";
+    const seconds = (from: number, to: number) =>
+      from && to ? Math.round((to - from) / 1000) : 0;
+    const prepareSeconds = seconds(requestStartedAt, previewReadyAt);
+    const buildSeconds = seconds(applyStartedAt, Date.now());
+    const timing =
+      prepareSeconds + buildSeconds >= 8 || slow.length
+        ? ` (prepared in ${prepareSeconds}s, built in ${buildSeconds}s${slow.length ? `: ${slow.map((entry) => `${entry.kind} ${((entry.ms ?? 0) / 1000).toFixed(0)}s`).join(", ")}` : ""})`
+        : "";
     renderConversation(
       failed.length ? "error" : "assistant",
       failed.length
@@ -2135,7 +2146,13 @@ function renderOutcomes(actions: any[]) {
           : name;
         head.appendChild(th);
       });
-      for (const row of outcome.table.rows) {
+      // A total over a sample is not the real total: leave it out and say so below.
+      const shownRows = lastSample
+        ? outcome.table.rows.filter(
+            (row) => row[0] !== "Grand total" && row[0] !== "මුළු එකතුව",
+          )
+        : outcome.table.rows;
+      for (const row of shownRows) {
         const tr = table.insertRow();
         row.forEach((value, index) => {
           const td = tr.insertCell();
@@ -2150,6 +2167,15 @@ function renderOutcomes(actions: any[]) {
         });
       }
       box.appendChild(table);
+      if (lastSample) {
+        const note = document.createElement("div");
+        note.className = "legend";
+        note.textContent =
+          language === "si"
+            ? `නියැදි පෙරදසුනකි (පේළි ${lastSample.sampledRows.toLocaleString("en-US")} / ${lastSample.totalRows.toLocaleString("en-US")}). සැබෑ එකතු Excel විසින් සියලු පේළි මත ගණනය කරයි.`
+            : `Sample preview (${lastSample.sampledRows.toLocaleString("en-US")} of ${lastSample.totalRows.toLocaleString("en-US")} rows). Excel calculates the real totals over every row.`;
+        box.appendChild(note);
+      }
     }
     if (outcome.details.length) {
       const list = document.createElement("ul");

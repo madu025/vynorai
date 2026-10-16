@@ -461,6 +461,16 @@ export function setM365AnalysisRunnerForTests(next?: AnalysisRunner): void {
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 6;
 const recent = new Map<string, number[]>();
+/** The same model gateway the analysis uses, for other advisory-only planners. */
+export async function runAdvisoryModel(
+  user: AuthenticatedUser,
+  messages: Array<{ role: string; content: string }>,
+  estimatedCredits: number,
+  maxTokens: number,
+): Promise<string> {
+  return runner(user, messages as any, estimatedCredits, maxTokens);
+}
+
 export function assertAnalysisRateLimit(
   userId: string,
   now = Date.now(),

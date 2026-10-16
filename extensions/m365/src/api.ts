@@ -85,6 +85,12 @@ export interface M365ApiClient {
     request?: string;
     consent: true;
   }): Promise<any>;
+  scriptExcel(input: {
+    summary: unknown;
+    language?: "en" | "si" | "ta";
+    request: string;
+    consent: true;
+  }): Promise<any>;
 }
 
 export interface M365RequestTrace {
@@ -191,5 +197,6 @@ export function createM365ApiClient(
     reportRollback: (input) =>
       request("POST", "/v1/m365/excel/rollback", input),
     analyzeExcel: (input) => request("POST", "/v1/m365/excel/analyze", input),
+    scriptExcel: (input) => request("POST", "/v1/m365/excel/script", input),
   };
 }

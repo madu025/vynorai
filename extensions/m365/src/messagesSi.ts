@@ -61,6 +61,9 @@ const EXACT: Record<string, string> = {
   "Instruction set. Click Inspect and preview; nothing changes until you confirm.":
     "උපදෙස සකසන ලදී. “පරීක්ෂා කර පෙරදසුන බලන්න” ඔබන්න; ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
   "Use this recommendation": "මෙම නිර්දේශය භාවිතා කරන්න",
+  "Use these steps": "මෙම පියවර භාවිතා කරන්න",
+  "Describe what you want first, then plan the steps.":
+    "ඔබට අවශ්‍ය දේ මුලින් ලියන්න, ඉන්පසු පියවර සැලසුම් කරන්න.",
   "Excel could not find that sheet or range. Click a cell inside your table and try again.":
     "Excel හට එම පත්‍රිකාව හෝ පරාසය සොයාගත නොහැකි විය. ඔබේ වගුව ඇතුළත කොටුවක් ක්ලික් කර නැවත උත්සාහ කරන්න.",
   "OAuth state validation failed: that sign-in attempt expired or was replaced. Press Sign in once more":

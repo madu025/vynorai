@@ -118,6 +118,7 @@ const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const cancelPreviewButton =
   document.querySelector<HTMLButtonElement>("#cancel-preview");
 const analyze = document.querySelector<HTMLButtonElement>("#analyze");
+const scriptPlan = document.querySelector<HTMLButtonElement>("#script-plan");
 const consentPanel = document.querySelector<HTMLElement>("#ai-consent");
 const consentSummary = document.querySelector<HTMLElement>("#ai-summary");
 const consentCheck =
@@ -626,6 +627,8 @@ function updateAuthenticationUi(signedIn: boolean) {
     inspect.disabled = !signedIn || capabilities?.excel.canInspect === false;
   if (analyze)
     analyze.disabled = !signedIn || capabilities?.aiAnalysis === false;
+  if (scriptPlan)
+    scriptPlan.disabled = !signedIn || capabilities?.aiAnalysis === false;
   document.body.dataset.auth = signedIn ? "in" : "out";
 }
 
@@ -748,6 +751,10 @@ const API_MESSAGES: Record<string, string> = {
   AI_CONSENT_REQUIRED: "AI analysis needs your explicit consent first.",
   AI_ANALYSIS_INVALID:
     "The AI answer did not match the expected format and was discarded.",
+  AI_SCRIPT_INVALID:
+    "The planned steps were not safe or did not match the expected format and were discarded. Try again.",
+  AI_SCRIPT_REQUEST_REQUIRED:
+    "Describe what you want first, then plan the steps.",
   AI_ANALYSIS_RATE_LIMITED:
     "Too many analysis requests. Wait a minute and try again.",
   AI_PROVIDER_UNAVAILABLE:
@@ -1908,7 +1915,61 @@ function renderAnalysis(result: AnalysisResult) {
   }
 }
 
-analyze?.addEventListener("click", async () => {
+let scriptMode = false;
+
+/** Steps from the AI planner: plain sentences only; running them goes through the normal preview and approval. */
+function renderScript(result: {
+  title: string;
+  steps: { instruction: string; reason: string }[];
+}) {
+  if (!analysisOutput) return;
+  const output = analysisOutput;
+  output.textContent = "";
+  const add = (tag: string, text: string, parent: HTMLElement = output) => {
+    const element = document.createElement(tag);
+    element.textContent = text;
+    parent.appendChild(element);
+    return element;
+  };
+  add("h3", result.title);
+  result.steps.forEach((step, index) =>
+    add("p", `${index + 1}. ${step.instruction} - ${step.reason}`),
+  );
+  const use = document.createElement("button");
+  use.type = "button";
+  use.textContent = localizeMessage(language, "Use these steps");
+  use.addEventListener("click", () => {
+    if (instruction) {
+      instruction.value = result.steps
+        .map((step) => step.instruction.replace(/[.;]+$/, ""))
+        .join(" then ");
+      instruction.dispatchEvent(new Event("input"));
+    }
+    pendingSpecs = undefined;
+    currentPlan = undefined;
+    previewFingerprint = "";
+    if (apply) apply.disabled = true;
+    if (preview) preview.textContent = "No preview yet.";
+    log.record("script:use-steps", "pass", { steps: result.steps.length });
+    setStatus("Preparing the preview. Nothing changes until you confirm.");
+    showInstructionAndPreview();
+  });
+  output.appendChild(use);
+}
+
+scriptPlan?.addEventListener("click", () => {
+  if (!(instruction?.value || "").trim())
+    return setStatus("Describe what you want first, then plan the steps.");
+  scriptMode = true;
+  void startConsent();
+});
+
+analyze?.addEventListener("click", () => {
+  scriptMode = false;
+  void startConsent();
+});
+
+async function startConsent() {
   if (!config || !accessToken)
     return setStatus("Sign in before analyzing Excel data.");
   resetAnalysisConsent();
@@ -1936,7 +1997,7 @@ analyze?.addEventListener("click", async () => {
     pendingSummary = undefined;
     setStatus((error as Error).message);
   }
-});
+}
 
 consentCheck?.addEventListener("change", () => {
   if (consentSend)
@@ -1968,6 +2029,33 @@ consentSend?.addEventListener("click", async () => {
   const columnCount = pendingSummary.columnCount;
   if (consentSend) consentSend.disabled = true;
   try {
+    if (scriptMode) {
+      setStatus("Planning the steps...");
+      const response = await apiClient().scriptExcel({
+        ...request,
+        request: request.request || "",
+      });
+      const planned = response?.result;
+      if (
+        !planned ||
+        typeof planned.title !== "string" ||
+        !Array.isArray(planned.steps) ||
+        !planned.steps.every(
+          (step: any) =>
+            step &&
+            typeof step.instruction === "string" &&
+            typeof step.reason === "string",
+        )
+      )
+        throw new Error("script-invalid");
+      log.record("api:script", "pass", { steps: planned.steps.length });
+      resetAnalysisConsent();
+      renderScript(planned);
+      setStatus(
+        "Steps ready. Nothing has changed; use them to see the preview.",
+      );
+      return;
+    }
     setStatus("Analyzing the summary...");
     const response = await apiClient().analyzeExcel(request);
     const result = validateAnalysisResult(response?.result, columnCount);

@@ -41,6 +41,7 @@ import {
   assertAnalysisRateLimit,
   M365AnalysisError,
 } from "../services/m365Analysis.js";
+import { planScript } from "../services/m365Script.js";
 import { z, validateBody } from "../middleware/validate.js";
 
 const excelPlanSchema = z.object({
@@ -901,6 +902,92 @@ m365Router.post(
       );
       await logSecurityEvent({
         eventType: "M365_EXCEL_ANALYSIS_FAILED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ code, correlationId }),
+      });
+      return res.status(known ? error.status : 500).json({ error: { code } });
+    }
+  },
+);
+
+/**
+ * "Write a script": the model plans steps as plain sentences from the same schema summary as the
+ * analysis (never cell values). Advisory only; the add-in runs the steps through its normal
+ * preview, approval, apply and undo flow, so nothing here can change a workbook.
+ */
+m365Router.post(
+  "/excel/script",
+  requireM365Auth,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const tenant = identity(req);
+    const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
+    res.setHeader("x-correlation-id", correlationId);
+    const tenantRecord = await getM365Tenant(tenant.tenantId);
+    if (tenantRecord && !tenantRecord.aiEnabled) {
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_SCRIPT_DENIED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          reason: "ai_disabled_by_admin",
+          correlationId,
+        }),
+      });
+      return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
+    }
+    if (req.body?.consent !== true) {
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_SCRIPT_DENIED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ reason: "consent_required", correlationId }),
+      });
+      return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
+    }
+    try {
+      const planned = await planScript(
+        user,
+        req.body.summary,
+        req.body.language === "si" || req.body.language === "ta"
+          ? req.body.language
+          : "en",
+        typeof req.body.request === "string" ? req.body.request : "",
+      );
+      const scriptId = `m365s_${planned.summaryHash.slice(0, 24)}`;
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_SCRIPT_COMPLETED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          operationId: scriptId,
+          correlationId,
+          stepCount: planned.result.steps.length,
+          maskedCount: planned.maskedCount,
+        }),
+      });
+      return res.json({
+        contractVersion: ANALYSIS_CONTRACT_VERSION,
+        scriptId,
+        advisoryOnly: true,
+        result: planned.result,
+      });
+    } catch (error) {
+      const known = error instanceof M365AnalysisError;
+      const code = known ? error.code : "AI_SCRIPT_FAILED";
+      console.error(
+        "[m365] excel script failed",
+        JSON.stringify({
+          code,
+          detail: known
+            ? error.detail
+            : (error as Error)?.message?.slice(0, 120),
+          correlationId,
+        }),
+      );
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_SCRIPT_FAILED",
         actor: user.id,
         target: tenant.tenantId,
         details: JSON.stringify({ code, correlationId }),

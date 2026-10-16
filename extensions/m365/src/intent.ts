@@ -884,7 +884,7 @@ export function interpretInstruction(
   }
 
   const column =
-    /\b(?:add|create|insert)\s+(?:a\s+|an\s+|new\s+)*(?:computed\s+|calculated\s+)?column\s+(?:called\s+|named\s+)?["']?([^"'=:]+?)["']?\s*(?:=|:|\bas\b)\s*(.+?)\s*\.?$/i.exec(
+    /\b(?:add|create|insert)\s+(?:a\s+|an\s+|new\s+)*(?:computed\s+|calculated\s+)?column\s+(?:called\s+|named\s+)?["']?([^"'=:]+?)["']?\s*(?:=|:|\bas\b|\bthat\s+(?:is|equals)\b|\bwhich\s+is\b|\bequal\s+to\b|\bequals\b)\s*(.+?)\s*\.?$/i.exec(
       text,
     ) || /^\s*["']?([A-Za-z][\w ]{0,39}?)["']?\s*=\s*(.+?)\s*\.?$/i.exec(text);
   if (column) {

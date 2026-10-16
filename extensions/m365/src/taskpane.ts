@@ -1510,7 +1510,12 @@ apply?.addEventListener("click", async () => {
     renderConversation(
       failed.length ? "error" : "assistant",
       failed.length
-        ? `Applied ${done.length} of ${report.results.length} planned changes.`
+        ? `Applied ${done.length} of ${report.results.length} planned changes. ${failed
+            .map(
+              (entry) =>
+                `${entry.kind} failed: ${String(entry.error ?? "unknown error").slice(0, 240)}`,
+            )
+            .join(" ")}`
         : doneSentence(report.results, report.sourceUnchangedAfterApply) +
             (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
             timing,

@@ -223,3 +223,21 @@ test("a pivot top N keeps the largest rows and the preview shows them first", ()
     /top N must be between 1 and 100/,
   );
 });
+
+test("an added column can be described with 'that is', 'equals' or 'which is'", () => {
+  for (const phrase of [
+    "add a column Margin that is Sales - Cost",
+    "add a column Margin which is Sales - Cost",
+    "add a column Margin equals Sales - Cost",
+    "create a new column Margin equal to Sales - Cost",
+  ]) {
+    const asked = interpretInstruction(phrase, headers, rows);
+    assert.deepEqual(asked.actions, ["add-column"], phrase);
+    assert.deepEqual(asked.specs.addColumn, {
+      name: "Margin",
+      left: 2,
+      operator: "-",
+      right: 3,
+    });
+  }
+});

@@ -10,7 +10,11 @@ import {
   fingerprintExcelRange,
   SAMPLED_FINGERPRINT_ROWS,
 } from "./excel.js";
-import { viewFormula } from "./largeRange.js";
+import {
+  addColumnFormula,
+  keyColumnFormula,
+  viewFormula,
+} from "./largeRange.js";
 
 import {
   applyView,
@@ -476,8 +480,6 @@ async function readValuesInChunks(
   return values;
 }
 
-/** Rows Excel copies per request when a very large range is copied natively. */
-const NATIVE_COPY_ROWS = 50_000;
 const SAMPLE_HEAD_ROWS = 1000;
 const SAMPLE_BLOCK_ROWS = 100;
 const SAMPLE_MAX_ROWS = 4000;
@@ -885,34 +887,10 @@ export async function applyApprovedExcelPlan(
     let lastCopiedValues: any[][] | undefined;
 
     const writeSourceCopy = async (sheet: any) => {
-      if (plan.profile?.sample) {
-        // Very large data: Excel copies the cells itself, nothing passes through the add-in.
-        const whole = sourceRange();
-        whole.load(["rowCount", "columnCount"]);
-        await context.sync();
-        const rowTotal = Number(whole.rowCount);
-        const columnTotal = Number(whole.columnCount);
-        // Excel Online refuses one huge copy, so Excel copies it block by block.
-        for (let start = 0; start < rowTotal; start += NATIVE_COPY_ROWS) {
-          const count = Math.min(NATIVE_COPY_ROWS, rowTotal - start);
-          const from = whole
-            .getCell(start, 0)
-            .getResizedRange(count - 1, columnTotal - 1);
-          const to = sheet.getRangeByIndexes(start, 0, count, columnTotal);
-          to.copyFrom(from, "Values");
-          await context.sync();
-          try {
-            to.copyFrom(from, "Formats");
-            await context.sync();
-          } catch {
-            // The values are the result; formats are presentation.
-          }
-          options.onProgress?.(start + count, rowTotal);
-        }
-        lastCopiedValues = undefined;
-        normalizedSource = sheet.getRangeByIndexes(0, 0, rowTotal, columnTotal);
-        return rowTotal;
-      }
+      if (plan.profile?.sample)
+        throw new Error(
+          "This result would copy every row of a very large range. Ask for a PivotTable, a view of the top rows or a computed column instead.",
+        );
       const range = sourceRange();
       range.load(["rowCount", "columnCount"]);
       await context.sync();
@@ -1077,6 +1055,28 @@ export async function applyApprovedExcelPlan(
                 result.createdSheet = false;
               }
               result.status = "exists";
+            } else if (plan.profile?.sample) {
+              // Very large data: the name points at the source column itself, nothing is copied.
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const column = columnLetter(
+                parsed.startColumn + (spec.namedRangeIndex as number),
+              );
+              const escapedSource = String(plan.worksheetName).replace(
+                /'/g,
+                "''",
+              );
+              context.workbook.names.add(
+                action.name,
+                `='${escapedSource}'!$${column}$${parsed.startRow + 2}:$${column}$${parsed.endRow + 1}`,
+              );
+              await context.sync();
+              if (result.createdSheet) {
+                sheet.delete();
+                await context.sync();
+                result.createdSheet = false;
+              }
             } else {
               const copiedRowCount = await writeSourceCopy(sheet);
               const startRow = plan.normalization ? 3 : 2;
@@ -2770,38 +2770,58 @@ export async function applyApprovedExcelPlan(
                                       spec.rightIndex as number,
                                     );
               if (largeSource) {
-                // Excel copies the source and fills the formula down itself.
-                await writeSourceCopy(sheet);
-                const column = headers.length;
-                sheet.getRangeByIndexes(0, column, 1, 1).values = [
-                  [literal(spec.columnName)],
+                // Very large data: no copy of the data. Two spilled formulas, the first source
+                // column (to match each row) and the computed column, both calculated by Excel.
+                const parsed = parseLocalRange(
+                  localExcelAddress(plan.sourceAddress),
+                );
+                const range = {
+                  sheetName: plan.worksheetName,
+                  startColumn: parsed.startColumn,
+                  startRow: parsed.startRow,
+                  endRow: parsed.endRow,
+                  columns: headers.length,
+                };
+                const formula = addColumnFormula(
+                  range,
+                  {
+                    leftIndex: spec.leftIndex,
+                    operator: spec.operator,
+                    rightIndex: spec.rightIndex,
+                    derived: spec.derived,
+                    sourceIndex: spec.sourceIndex,
+                    sourceIndex2: spec.sourceIndex2,
+                    lag: spec.lag,
+                    window: spec.window,
+                    group: spec.group,
+                    separator: spec.separator,
+                    lookup:
+                      spec.lookupSheet !== undefined
+                        ? {
+                            sheet: spec.lookupSheet,
+                            sourceKeyIndexes: spec.sourceKeyIndexes ?? [
+                              spec.sourceKeyIndex,
+                            ],
+                            lookupKeyIndexes: spec.lookupKeyIndexes ?? [
+                              spec.lookupKeyIndex,
+                            ],
+                            returnIndex: spec.lookupReturnIndex,
+                            rows: spec.lookupRows,
+                            matchMode: spec.lookupMatchMode ?? "exact",
+                          }
+                        : undefined,
+                  },
+                  expressionAst,
+                );
+                sheet.getRangeByIndexes(0, 0, 1, 2).values = [
+                  [literal(headers[0]), literal(spec.columnName)],
                 ];
-                if (rowTotal > 0)
-                  sheet.getRangeByIndexes(1, column, 1, 1).formulas = [
-                    [rowFormula(2)],
-                  ];
-                if (rowTotal > 1)
-                  sheet.getRangeByIndexes(2, column, 1, 1).formulas = [
-                    [rowFormula(3)],
-                  ];
+                sheet.getRange("A2").formulas = [[keyColumnFormula(range)]];
+                sheet.getRange("B2").formulas = [[formula]];
+                sheet.getRangeByIndexes(0, 0, 1, 2).format.font.bold = true;
                 await context.sync();
-                for (
-                  let start = 3;
-                  start < rowTotal + 1;
-                  start += NATIVE_COPY_ROWS
-                ) {
-                  const count = Math.min(
-                    NATIVE_COPY_ROWS,
-                    rowTotal + 1 - start,
-                  );
-                  sheet
-                    .getRangeByIndexes(start, column, count, 1)
-                    .copyFrom(sheet.getRangeByIndexes(2, column, 1, 1), "All");
-                  await context.sync();
-                }
                 if (spec.percentFormat) {
-                  sheet.getRangeByIndexes(1, column, rowTotal, 1).numberFormat =
-                    "0.0%" as any;
+                  sheet.getRange("B2:B1048576").numberFormat = "0.0%" as any;
                   await context.sync();
                 }
               } else {

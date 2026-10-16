@@ -90,3 +90,180 @@ export function viewFormula(range: LargeRef, spec: LargeViewSpec): string {
   }
   return `=LET(${steps.join(",")},IFERROR(${current},"No rows match"))`;
 }
+
+// --- computed columns -----------------------------------------------------------------------
+
+import type { ExprNode } from "./expression.js";
+import { expressionToFormula } from "./expression.js";
+
+/** The data rows of one source column, as a range reference. */
+export function columnRef(range: LargeRef, index: number): string {
+  assertIndex(index, range.columns);
+  const letter = columnLetter(range.startColumn + index);
+  return `${quoteSheet(range.sheetName)}!$${letter}$${range.startRow + 2}:$${letter}$${range.endRow + 1}`;
+}
+
+function astColumns(node: ExprNode, found: Set<number> = new Set()): number[] {
+  switch (node.t) {
+    case "col":
+      found.add(node.i);
+      break;
+    case "neg":
+      astColumns(node.a, found);
+      break;
+    case "bin":
+    case "cat":
+    case "cmp":
+      astColumns(node.a, found);
+      astColumns(node.b, found);
+      break;
+    case "fn":
+      for (const argument of node.args) astColumns(argument, found);
+      break;
+    default:
+      break;
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
+/** Runs a per-row formula over whole columns: MAP keeps every function working row by row. */
+function mapRows(
+  range: LargeRef,
+  columns: number[],
+  body: (name: (index: number) => string) => string,
+): string {
+  const names = new Map(columns.map((index) => [index, `_v${index}`]));
+  const refs = columns.map((index) => columnRef(range, index));
+  const lambda = `LAMBDA(${columns.map((index) => names.get(index)).join(",")},${body((index) => names.get(index) ?? "")})`;
+  return `=MAP(${refs.join(",")},${lambda})`;
+}
+
+export type LargeAddColumnSpec = {
+  leftIndex?: number;
+  operator?: "+" | "-" | "*" | "/";
+  rightIndex?: number;
+  derived?:
+    | "running-total"
+    | "rank"
+    | "percent-change"
+    | "moving-average"
+    | "yoy"
+    | "date-group"
+    | "combine";
+  sourceIndex?: number;
+  sourceIndex2?: number;
+  lag?: number;
+  window?: number;
+  group?: string;
+  separator?: string;
+  lookup?: {
+    sheet: string;
+    sourceKeyIndexes: number[];
+    lookupKeyIndexes: number[];
+    returnIndex: number;
+    rows: number;
+    matchMode: "exact" | "approximate";
+  };
+};
+
+const positive = (value: unknown, what: string): number => {
+  if (!Number.isInteger(value) || (value as number) < 1)
+    throw new Error(`${what} is missing from the approved plan`);
+  return value as number;
+};
+
+/** One spilled formula for a computed column over every row of a very large range. */
+export function addColumnFormula(
+  range: LargeRef,
+  spec: LargeAddColumnSpec,
+  ast?: ExprNode,
+): string {
+  if (ast) {
+    const columns = astColumns(ast);
+    return mapRows(range, columns, (name) =>
+      expressionToFormula(ast, name).replace(/^=/, ""),
+    );
+  }
+  if (spec.lookup) {
+    const { lookup } = spec;
+    const sheet = quoteSheet(lookup.sheet);
+    const last = positive(lookup.rows, "The lookup row count") + 1;
+    const other = (index: number) => {
+      const letter = columnLetter(index);
+      return `${sheet}!$${letter}$2:$${letter}$${last}`;
+    };
+    const keys = lookup.sourceKeyIndexes;
+    if (keys.length !== lookup.lookupKeyIndexes.length || keys.length < 1)
+      throw new Error("The lookup keys are missing from the approved plan");
+    return mapRows(range, keys, (name) => {
+      if (keys.length === 1)
+        return `IFERROR(INDEX(${other(lookup.returnIndex)},MATCH(${name(keys[0])},${other(lookup.lookupKeyIndexes[0])},${lookup.matchMode === "approximate" ? 1 : 0})),"")`;
+      const test = keys
+        .map(
+          (key, at) => `(${other(lookup.lookupKeyIndexes[at])}=${name(key)})`,
+        )
+        .join("*");
+      return `IFERROR(XLOOKUP(1,${test},${other(lookup.returnIndex)},""),"")`;
+    });
+  }
+  if (spec.derived) {
+    const source = spec.sourceIndex;
+    if (!Number.isInteger(source))
+      throw new Error("The source column is missing from the approved plan");
+    const column = columnRef(range, source as number);
+    switch (spec.derived) {
+      case "running-total":
+        return `=SCAN(0,${column},LAMBDA(a,b,IF(ISNUMBER(b),a+b,a)))`;
+      case "rank":
+        return `=XMATCH(${column},SORT(${column},,-1))`;
+      case "percent-change":
+        return `=LET(c,${column},p,VSTACK(NA(),DROP(c,-1)),IFERROR((c-p)/p,""))`;
+      case "yoy": {
+        const lag = positive(spec.lag, "The YoY lag");
+        return `=LET(c,${column},p,VSTACK(SEQUENCE(${lag},1,NA(),0),DROP(c,-${lag})),IFERROR((c-p)/p,""))`;
+      }
+      case "moving-average": {
+        const window = positive(spec.window, "The moving-average window");
+        return `=LET(c,${column},s,SCAN(0,c,LAMBDA(a,b,IF(ISNUMBER(b),a+b,a))),sh,VSTACK(SEQUENCE(${window},1,0,0),DROP(s,-${window})),IF(SEQUENCE(ROWS(c))<${window},"",(s-sh)/${window}))`;
+      }
+      case "date-group": {
+        if (!["month", "quarter", "year"].includes(String(spec.group)))
+          throw new Error("The date group is missing from the approved plan");
+        const body =
+          spec.group === "month"
+            ? `TEXT(${column},"yyyy-mm")`
+            : spec.group === "year"
+              ? `YEAR(${column})`
+              : `"Q"&ROUNDUP(MONTH(${column})/3,0)&" "&YEAR(${column})`;
+        return `=${body}`;
+      }
+      case "combine": {
+        if (!Number.isInteger(spec.sourceIndex2) || spec.separator !== " - ")
+          throw new Error(
+            "The combine sources are missing from the approved plan",
+          );
+        return `=${column}&" - "&${columnRef(range, spec.sourceIndex2 as number)}`;
+      }
+    }
+  }
+  if (
+    !Number.isInteger(spec.leftIndex) ||
+    !Number.isInteger(spec.rightIndex) ||
+    !["+", "-", "*", "/"].includes(String(spec.operator))
+  )
+    throw new Error(
+      "The columns to compute are missing from the approved plan",
+    );
+  const left = spec.leftIndex as number;
+  const right = spec.rightIndex as number;
+  return mapRows(range, [left, right], (name) =>
+    spec.operator === "/"
+      ? `IF(${name(right)}=0,"",${name(left)}/${name(right)})`
+      : `${name(left)}${spec.operator}${name(right)}`,
+  );
+}
+
+/** The first source column as a spilled copy, so every computed row can be matched to its record. */
+export function keyColumnFormula(range: LargeRef): string {
+  return `=LET(a,${columnRef(range, 0)},IF(a="","",a))`;
+}

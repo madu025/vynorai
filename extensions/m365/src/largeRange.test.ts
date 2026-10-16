@@ -62,3 +62,78 @@ test("a view formula refuses an index outside the range or a bad number", () => 
     /positive whole number/,
   );
 });
+
+import { parseExpression } from "./expression.js";
+import { addColumnFormula, columnRef, keyColumnFormula } from "./largeRange.js";
+
+test("a computed column is one MAP over whole columns, so every function stays row by row", () => {
+  assert.equal(columnRef(range, 6), "'detail-report'!$G$2:$G$520126");
+  assert.equal(
+    addColumnFormula(range, { leftIndex: 6, operator: "+", rightIndex: 7 }),
+    `=MAP('detail-report'!$G$2:$G$520126,'detail-report'!$H$2:$H$520126,LAMBDA(_v6,_v7,_v6+_v7))`,
+  );
+  assert.equal(
+    addColumnFormula(range, { leftIndex: 6, operator: "/", rightIndex: 7 }),
+    `=MAP('detail-report'!$G$2:$G$520126,'detail-report'!$H$2:$H$520126,LAMBDA(_v6,_v7,IF(_v7=0,"",_v6/_v7)))`,
+  );
+  const headers = ["a", "b", "c", "d", "e", "f", "Qty", "Issued", "i", "j"];
+  const parsed = parseExpression("MAX(Qty, Issued) - 1", headers);
+  assert.equal(
+    addColumnFormula(range, {}, parsed.ast),
+    `=MAP('detail-report'!$G$2:$G$520126,'detail-report'!$H$2:$H$520126,LAMBDA(_v6,_v7,(MAX(_v6,_v7)-1)))`,
+  );
+  assert.equal(
+    keyColumnFormula(range),
+    `=LET(a,'detail-report'!$A$2:$A$520126,IF(a="","",a))`,
+  );
+});
+
+test("derived columns and lookups become spilled formulas over the whole range", () => {
+  const base = { sourceIndex: 6 };
+  assert.match(
+    addColumnFormula(range, { ...base, derived: "running-total" }),
+    /^=SCAN\(0,'detail-report'!\$G\$2:\$G\$520126,LAMBDA\(a,b,IF\(ISNUMBER\(b\),a\+b,a\)\)\)$/,
+  );
+  assert.match(
+    addColumnFormula(range, { ...base, derived: "rank" }),
+    /^=XMATCH\(.*SORT\(.*,,-1\)\)$/,
+  );
+  assert.match(
+    addColumnFormula(range, { ...base, derived: "percent-change" }),
+    /VSTACK\(NA\(\),DROP\(c,-1\)\)/,
+  );
+  assert.match(
+    addColumnFormula(range, { ...base, derived: "yoy", lag: 12 }),
+    /DROP\(c,-12\)/,
+  );
+  assert.match(
+    addColumnFormula(range, { ...base, derived: "moving-average", window: 3 }),
+    /SEQUENCE\(ROWS\(c\)\)<3/,
+  );
+  assert.equal(
+    addColumnFormula(range, { ...base, derived: "date-group", group: "month" }),
+    `=TEXT('detail-report'!$G$2:$G$520126,"yyyy-mm")`,
+  );
+  assert.equal(
+    addColumnFormula(range, {
+      lookup: {
+        sheet: "Items",
+        sourceKeyIndexes: [5],
+        lookupKeyIndexes: [0],
+        returnIndex: 2,
+        rows: 40,
+        matchMode: "exact",
+      },
+    }),
+    `=MAP('detail-report'!$F$2:$F$520126,LAMBDA(_v5,IFERROR(INDEX('Items'!$C$2:$C$41,MATCH(_v5,'Items'!$A$2:$A$41,0)),"")))`,
+  );
+  assert.throws(
+    () => addColumnFormula(range, { derived: "yoy", sourceIndex: 6 }),
+    /lag/i,
+  );
+  assert.throws(
+    () =>
+      addColumnFormula(range, { leftIndex: 99, operator: "+", rightIndex: 1 }),
+    /outside the source range/,
+  );
+});

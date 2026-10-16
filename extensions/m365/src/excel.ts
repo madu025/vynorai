@@ -20,11 +20,8 @@ export type ExcelSampleInfo = { totalRows: number; sampledRows: number };
 /** With a sampled (very large) range only results that Excel itself computes over every row are safe. */
 export const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set([
   "pivot-table",
-  // Excel copies the cells itself (Range.copyFrom), so these work on any number of rows.
-  "table",
-  "new-sheet",
+  // Computed by Excel from the source itself, nothing is copied.
   "named-range",
-  "slicer",
   "add-column",
 ]);
 export const SAMPLED_FINGERPRINT_ROWS = 3;

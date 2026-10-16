@@ -9,11 +9,8 @@ import {
 /** With a sampled (very large) range only results that Excel computes over every row are safe. */
 const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set([
   "pivot-table",
-  // Excel copies the cells itself (Range.copyFrom), so these work on any number of rows.
-  "table",
-  "new-sheet",
+  // Computed by Excel from the source itself, nothing is copied.
   "named-range",
-  "slicer",
   "add-column",
 ]);
 

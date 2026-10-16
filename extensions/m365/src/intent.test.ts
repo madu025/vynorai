@@ -237,3 +237,41 @@ test("several conditions and a test between two columns become one row test", ()
   assert.equal(plain.specs.view.where, undefined);
   assert.equal(plain.specs.view.filter.column, 3);
 });
+
+test("the smallest N rows of a pivot: bottom, lowest, least", () => {
+  const headers = ["Service ID", "Item Code", "Issued Quantity", "Circuit ID"];
+  const rows = [["a", "OSP1", 2, "0112559962"]];
+  const run = (text: string): any => interpretInstruction(text, headers, rows);
+  const bottom = run(
+    "pivot table of total Issued Quantity by Circuit ID, bottom 5",
+  );
+  assert.equal(bottom.specs.pivot.topN, 5);
+  assert.equal(bottom.specs.pivot.lowest, true);
+  const top = run("pivot table of total Issued Quantity by Circuit ID, top 5");
+  assert.equal(top.specs.pivot.topN, 5);
+  assert.equal(top.specs.pivot.lowest, undefined);
+});
+
+test("delete or remove rows where ... is a copy without them, never only those rows", () => {
+  const headers = ["Service ID", "Status", "UoM", "Issued Quantity"];
+  const rows = [["a", "S", "Ea", 2]];
+  const run = (text: string): any => interpretInstruction(text, headers, rows);
+  assert.equal(
+    run("delete all rows where status is X").specs.view.filter.operator,
+    "!=",
+  );
+  assert.equal(
+    run("remove the rows where UoM is km").specs.view.filter.operator,
+    "!=",
+  );
+  assert.equal(
+    run("show rows where status is X").specs.view.filter.operator,
+    "=",
+  );
+  assert.equal(
+    run("delete rows where Status is X and UoM is km").specs.view.where,
+    'NOT(AND([Status]="X",[UoM]="km"))',
+  );
+  // Removing duplicates is a clean-up, not a row test.
+  assert.deepEqual(run("remove duplicate rows").actions, ["clean"]);
+});

@@ -517,8 +517,10 @@ export function buildOutcomes(
         const format = (value: number) => String(Math.round(value * 100) / 100);
         const allKeys = [...groups.keys()];
         if (spec.topN)
-          allKeys.sort(
-            (a, b) => reduce(groups.get(b)![0]) - reduce(groups.get(a)![0]),
+          allKeys.sort((a, b) =>
+            spec.lowest
+              ? reduce(groups.get(a)![0]) - reduce(groups.get(b)![0])
+              : reduce(groups.get(b)![0]) - reduce(groups.get(a)![0]),
           );
         const keys = allKeys.slice(0, Math.min(6, spec.topN ?? 6));
         const totals = valueIndexes.map((_, at) =>

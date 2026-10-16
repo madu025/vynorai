@@ -93,8 +93,3 @@ proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
 | ui-ai            | en      | small | skip   | live only                                                                                |
 | g-script         | en      | small | skip   | known gap: not implemented                                                               |
 | g-vba            | en      | small | skip   | known gap: not implemented                                                               |
-
-Phase 10 (regression + Copilot-style advanced requests): `extensions/m365/test/batch/advanced-prompts.ts` (38 requests: running total, rank, percent change, moving average, group by month, combine, fill blanks, pivot with two values/columns/percent/top N, charts, histogram, dashboard, insights, describe, correlation, forecast, colour scales, data bars, dropdown, duplicates, quality, top rows, row tests, derived columns, copy, named range, freeze, plus unsupported ones: slicer, sparkline, macro, explain formula).
-Result: 38/38 with the reader first and 38/38 AI-first; custom-prompts 26/26; offline matrix 79/79; unit tests 260/0.
-Found: a 3-period moving average on "Issued Quantity" got a 42-character name and was refused (limit 40); now shortened when needed. The planner prompt now lists the derived-column, group, combine, split, unpivot and fill sentences, so the AI can use them.
-Not verified here: any of this live in Excel on the 520k workbook (the tab froze on a leftover heavy sheet).

@@ -1704,7 +1704,7 @@ export async function applyApprovedExcelPlan(
                     ).fields.getItem(field.nameOf(action.spec.rowsColumn));
                     rowField.applyFilter({
                       valueFilter: {
-                        condition: "TopN",
+                        condition: action.spec.lowest ? "BottomN" : "TopN",
                         selectionType: "Items",
                         threshold: action.spec.topN,
                         value: total.name,
@@ -1712,7 +1712,10 @@ export async function applyApprovedExcelPlan(
                     });
                     await context.sync();
                     try {
-                      rowField.sortByValues("Descending", total);
+                      rowField.sortByValues(
+                        action.spec.lowest ? "Ascending" : "Descending",
+                        total,
+                      );
                       await context.sync();
                     } catch {
                       // The filter alone still limits the rows.

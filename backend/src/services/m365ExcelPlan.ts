@@ -172,6 +172,8 @@ export interface ExcelColumnSpecs {
     extraValues?: number[];
     showAs?: "percent-of-total" | "percent-of-column";
     topN?: number;
+    /** With topN: keep the N smallest instead of the N largest. */
+    lowest?: boolean;
   };
   format?: {
     freezeHeader?: boolean;
@@ -307,6 +309,7 @@ export interface ExcelActionSpec {
   extraValuesIndexes?: number[];
   showAs?: "percent-of-total" | "percent-of-column";
   topN?: number;
+  lowest?: boolean;
   rowsColumn?: string;
   rowsIndex?: number;
   valuesColumn?: string;
@@ -653,6 +656,7 @@ function resolveColumnSpecs(
     const extraValues = specs.pivot.extraValues ?? [];
     const showAs = specs.pivot.showAs;
     const topN = specs.pivot.topN;
+    const lowest = specs.pivot.lowest === true;
     const aggregation = specs.pivot.aggregation ?? "sum";
     const columns = specs.pivot.columns;
     const subRows = specs.pivot.subRows;
@@ -748,6 +752,7 @@ function resolveColumnSpecs(
         : {}),
       ...(showAs ? { showAs } : {}),
       ...(topN !== undefined ? { topN } : {}),
+      ...(topN !== undefined && lowest ? { lowest: true } : {}),
       ...(filter !== undefined
         ? { filterColumn: headers[filter], filterIndex: filter }
         : {}),

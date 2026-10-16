@@ -57,6 +57,7 @@ export interface InstructionSpecs {
     showAs?: "percent-of-total" | "percent-of-column";
     /** Keep only the N rows with the largest values. */
     topN?: number;
+    lowest?: boolean;
   };
   view?: {
     sort?: { column: number; direction: "asc" | "desc" };
@@ -1444,6 +1445,8 @@ function interpretChartAndPivot(
       : numericEntries.slice(1, 4).map((entry) => entry.index);
     const topMatch =
       /\b(?:top|highest|best|largest|biggest)\s+(\d{1,3})\b/i.exec(text);
+    const bottomMatch =
+      /\b(?:bottom|lowest|least|smallest|worst)\s+(\d{1,3})\b/i.exec(text);
     result.specs.pivot = {
       rows: categoryEntry.index,
       values: numericEntries[0]?.index ?? countLabel!.index,
@@ -1461,7 +1464,9 @@ function interpretChartAndPivot(
           : {}),
       ...(topMatch && Number(topMatch[1]) >= 1
         ? { topN: Number(topMatch[1]) }
-        : {}),
+        : bottomMatch && Number(bottomMatch[1]) >= 1
+          ? { topN: Number(bottomMatch[1]), lowest: true }
+          : {}),
     };
     const filterMatch = /\bfilter(?:ed)?\s+(?:by|on|using)\s+/i.exec(text);
     if (filterMatch && result.specs.pivot) {
@@ -1550,8 +1555,13 @@ function interpretView(
     const column = header(dup?.[1] ?? shownDup?.[1] ?? "");
     if (column >= 0) view.highlight = { column, rule: "duplicates" };
   }
+  // "delete / remove the rows where ...": the original is never changed, so the safe reading is a copy WITHOUT them.
+  const removing =
+    /\b(?:delete|remove|drop|erase|discard|exclude|get\s+rid\s+of)\b/i.test(
+      text,
+    ) && !/\b(?:duplicates?|blanks?|empty)\b/i.test(text);
   const where = whereFromText(text, headers);
-  if (where) view.where = where;
+  if (where) view.where = removing ? `NOT(${where})` : where;
   const filter = where
     ? null
     : /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bequals?\b|\bis\b|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
@@ -1573,7 +1583,7 @@ function interpretView(
       const asNumber = Number(raw.replace(/,/g, ""));
       view.filter = {
         column,
-        operator,
+        operator: removing && operator === "=" ? "!=" : operator,
         value:
           operator !== "contains" &&
           raw !== "" &&
@@ -1953,7 +1963,7 @@ function interpretFormatAndQuality(
   }
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\b(?:allow|accept|require|ensure)\b[^.\n]{0,20}\bdates?\s+(?:in|for|on)\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:allow|only|accept|valid)\b[^.\n]{0,40}\bfrom\s+-?\d[\d,]*(?:\.\d+)?\s+to\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\b(?:allow|accept|require|ensure)\b[^.\n]{0,20}\bdates?\s+(?:in|for|on)\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -2122,7 +2132,7 @@ function interpretFormatAndQuality(
     if (column >= 0) validation.push({ column, rule: "date" });
   }
   const range =
-    /\bbetween\s+(-?\d[\d,]*(?:\.\d+)?)\s+(?:and|to)\s+(-?\d[\d,]*(?:\.\d+)?)/i.exec(
+    /\b(?:between|from)\s+(-?\d[\d,]*(?:\.\d+)?)\s+(?:and|to)\s+(-?\d[\d,]*(?:\.\d+)?)/i.exec(
       text,
     );
   if (range && pickNumeric.length) {

@@ -1385,7 +1385,7 @@ test("server and add-in agree on a sampled very large range and refuse other res
   assert.equal(server.profile.rowCount, 600000);
   assert.deepEqual(server.profile.sample, input.sample);
   assert.equal(excelPlansMatch(local, server), true);
-  for (const kind of ["chart", "table", "summary", "clean"])
+  for (const kind of ["chart", "summary", "clean"])
     assert.throws(
       () => createServerExcelPreviewPlan(input, [kind], 500),
       /too large to read in full/,

@@ -883,6 +883,30 @@ export async function applyApprovedExcelPlan(
     let lastCopiedValues: any[][] | undefined;
 
     const writeSourceCopy = async (sheet: any) => {
+      if (plan.profile?.sample) {
+        // Very large data: Excel copies the cells itself, nothing passes through the add-in.
+        const whole = sourceRange();
+        whole.load(["rowCount", "columnCount"]);
+        await context.sync();
+        const rowTotal = Number(whole.rowCount);
+        const target = sheet.getRangeByIndexes(
+          0,
+          0,
+          rowTotal,
+          Number(whole.columnCount),
+        );
+        target.copyFrom(whole, "Values");
+        await context.sync();
+        try {
+          target.copyFrom(whole, "Formats");
+          await context.sync();
+        } catch {
+          // The values are the result; formats are presentation.
+        }
+        lastCopiedValues = undefined;
+        normalizedSource = target;
+        return rowTotal;
+      }
       const range = sourceRange();
       range.load(["rowCount", "columnCount"]);
       await context.sync();
@@ -2489,7 +2513,13 @@ export async function applyApprovedExcelPlan(
             if (sheetExists) {
               result.status = "exists";
             } else {
-              const { headers, rows } = splitHeader(await readSourceValues());
+              const largeSource = Boolean(plan.profile?.sample);
+              const { headers, rows } = largeSource
+                ? { headers: await readHeaderCells(), rows: [] as any[][] }
+                : splitHeader(await readSourceValues());
+              const rowTotal = largeSource
+                ? Number(plan.profile.sample.totalRows) - 1
+                : rows.length;
               let lookupFormula: ((rowNumber: number) => string) | undefined;
               if (spec.lookupSheet !== undefined) {
                 const other = context.workbook.worksheets.getItemOrNullObject(
@@ -2607,7 +2637,7 @@ export async function applyApprovedExcelPlan(
                       const sourceLetter = expressionColumnLetter(
                         spec.sourceIndex,
                       );
-                      const lastRow = rows.length + 1;
+                      const lastRow = rowTotal + 1;
                       return `=RANK.EQ(${sourceLetter}${rowNumber},$${sourceLetter}$2:$${sourceLetter}$${lastRow},0)`;
                     }
                   : undefined;
@@ -2704,61 +2734,92 @@ export async function applyApprovedExcelPlan(
                       return `=${leftLetter}${rowNumber}&" - "&${rightLetter}${rowNumber}`;
                     }
                   : undefined;
-              const out = [
-                [...headers, spec.columnName],
-                ...rows.map((row) => [...row, ""]),
-              ].map((row) => row.map(literal));
-              sheet.getRangeByIndexes(
-                0,
-                0,
-                out.length,
-                headers.length + 1,
-              ).values = out;
-              await context.sync();
-              if (rows.length > 0) {
+              const rowFormula = (rowNumber: number): string =>
+                lookupFormula
+                  ? lookupFormula(rowNumber)
+                  : expressionAst
+                    ? expressionToFormula(
+                        expressionAst,
+                        (column) =>
+                          `${expressionColumnLetter(column)}${rowNumber}`,
+                      )
+                    : runningTotalFormula
+                      ? runningTotalFormula(rowNumber)
+                      : rankFormula
+                        ? rankFormula(rowNumber)
+                        : percentChangeFormula
+                          ? percentChangeFormula(rowNumber)
+                          : yoyFormula
+                            ? yoyFormula(rowNumber)
+                            : movingAverageFormula
+                              ? movingAverageFormula(rowNumber)
+                              : dateGroupFormula
+                                ? dateGroupFormula(rowNumber)
+                                : combineFormula
+                                  ? combineFormula(rowNumber)
+                                  : computedColumnFormula(
+                                      rowNumber,
+                                      spec.leftIndex as number,
+                                      spec.operator as "+",
+                                      spec.rightIndex as number,
+                                    );
+              if (largeSource) {
+                // Excel copies the source and fills the formula down itself.
+                await writeSourceCopy(sheet);
+                const column = headers.length;
+                sheet.getRangeByIndexes(0, column, 1, 1).values = [
+                  [literal(spec.columnName)],
+                ];
+                if (rowTotal > 0)
+                  sheet.getRangeByIndexes(1, column, 1, 1).formulas = [
+                    [rowFormula(2)],
+                  ];
+                if (rowTotal > 1)
+                  sheet.getRangeByIndexes(2, column, 1, 1).formulas = [
+                    [rowFormula(3)],
+                  ];
+                await context.sync();
+                if (rowTotal > 2) {
+                  sheet
+                    .getRangeByIndexes(3, column, rowTotal - 2, 1)
+                    .copyFrom(sheet.getRangeByIndexes(2, column, 1, 1), "All");
+                  await context.sync();
+                }
+                if (spec.percentFormat) {
+                  sheet.getRangeByIndexes(1, column, rowTotal, 1).numberFormat =
+                    "0.0%" as any;
+                  await context.sync();
+                }
+              } else {
+                const out = [
+                  [...headers, spec.columnName],
+                  ...rows.map((row) => [...row, ""]),
+                ].map((row) => row.map(literal));
                 sheet.getRangeByIndexes(
-                  1,
-                  headers.length,
-                  rows.length,
-                  1,
-                ).formulas = rows.map((_row, index) => [
-                  lookupFormula
-                    ? lookupFormula(index + 2)
-                    : expressionAst
-                      ? expressionToFormula(
-                          expressionAst,
-                          (column) =>
-                            `${expressionColumnLetter(column)}${index + 2}`,
-                        )
-                      : runningTotalFormula
-                        ? runningTotalFormula(index + 2)
-                        : rankFormula
-                          ? rankFormula(index + 2)
-                          : percentChangeFormula
-                            ? percentChangeFormula(index + 2)
-                            : yoyFormula
-                              ? yoyFormula(index + 2)
-                              : movingAverageFormula
-                                ? movingAverageFormula(index + 2)
-                                : dateGroupFormula
-                                  ? dateGroupFormula(index + 2)
-                                  : combineFormula
-                                    ? combineFormula(index + 2)
-                                    : computedColumnFormula(
-                                        index + 2,
-                                        spec.leftIndex as number,
-                                        spec.operator as "+",
-                                        spec.rightIndex as number,
-                                      ),
-                ]);
-                if (spec.percentFormat)
+                  0,
+                  0,
+                  out.length,
+                  headers.length + 1,
+                ).values = out;
+                await context.sync();
+                if (rows.length > 0) {
                   sheet.getRangeByIndexes(
                     1,
                     headers.length,
                     rows.length,
                     1,
-                  ).numberFormat = rows.map(() => ["0.0%"]);
-                await context.sync();
+                  ).formulas = rows.map((_row, index) => [
+                    rowFormula(index + 2),
+                  ]);
+                  if (spec.percentFormat)
+                    sheet.getRangeByIndexes(
+                      1,
+                      headers.length,
+                      rows.length,
+                      1,
+                    ).numberFormat = rows.map(() => ["0.0%"]);
+                  await context.sync();
+                }
               }
             }
           } else {

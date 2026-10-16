@@ -7,7 +7,15 @@ import {
 } from "./m365Expression.js";
 
 /** With a sampled (very large) range only results that Excel computes over every row are safe. */
-const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set(["pivot-table"]);
+const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set([
+  "pivot-table",
+  // Excel copies the cells itself (Range.copyFrom), so these work on any number of rows.
+  "table",
+  "new-sheet",
+  "named-range",
+  "slicer",
+  "add-column",
+]);
 
 /** A chart is allowed on a sampled range only when it charts a PivotTable Excel computes. */
 function sampledKindAllowed(

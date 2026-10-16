@@ -626,7 +626,12 @@ export function interpretInstruction(
         actions: ["add-column"],
         specs: {
           addColumn: {
-            name: `${window}-Period Moving Average of ${headers[source]}`,
+            // The full name when it fits in 40 characters, a shorter one otherwise.
+            name:
+              `${window}-Period Moving Average of ${headers[source]}`.length <=
+              40
+                ? `${window}-Period Moving Average of ${headers[source]}`
+                : `${window}-Period Avg of ${headers[source]}`.slice(0, 40),
             derived: "moving-average",
             source,
             window,

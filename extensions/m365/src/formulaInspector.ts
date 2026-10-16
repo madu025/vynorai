@@ -11,6 +11,7 @@ export interface FormulaInspectionItem {
   references: string[];
   errors: string[];
   possibleCircularReference: boolean;
+  inconsistentFormula: boolean;
   explanation: string;
   repair?: {
     candidate?: string;
@@ -24,6 +25,8 @@ export interface FormulaInspection {
   formulaCellCount: number;
   errorCellCount: number;
   possibleCircularReferenceCount: number;
+  hardCodedCellCount: number;
+  inconsistentFormulaCount: number;
   items: FormulaInspectionItem[];
 }
 
@@ -68,6 +71,27 @@ function references(formula: string): string[] {
       found.map((reference) => reference.replace(/\$/g, "").toUpperCase()),
     ),
   ];
+}
+
+function columnNumber(letters: string): number {
+  return (
+    letters
+      .toUpperCase()
+      .split("")
+      .reduce((total, char) => total * 26 + char.charCodeAt(0) - 64, 0) - 1
+  );
+}
+
+/** Converts an A1 formula to a relative pattern so copied formulas can be compared safely. */
+function relativeFormula(formula: string, row: number, column: number): string {
+  return formula.replace(
+    /\$?([A-Z]{1,3})\$?(\d+)/gi,
+    (_match, letters: string, rowText: string) => {
+      const referencedRow = Number(rowText) - 1;
+      const referencedColumn = columnNumber(letters);
+      return `R[${referencedRow - row}]C[${referencedColumn - column}]`;
+    },
+  );
 }
 
 function explain(formula: string, refs: string[]): string {
@@ -199,13 +223,33 @@ export function inspectFormulas(input: FormulaSelection): FormulaInspection {
   const items: FormulaInspectionItem[] = [];
   let errorCellCount = 0;
   let possibleCircularReferenceCount = 0;
+  const hardCodedColumns: number[] = [];
+  const formulaPatterns = new Map<number, Map<string, number>>();
+  const itemPatterns = new Map<string, string>();
   for (let row = 0; row < input.formulas.length; row += 1) {
     for (let column = 0; column < input.formulas[row].length; column += 1) {
       const formula = String(input.formulas[row][column] ?? "");
       const value = String(input.values[row]?.[column] ?? "");
-      if (!formula.startsWith("=")) continue;
       const cell = `${columnLetter(start.column + column)}${start.row + row + 1}`;
+      if (!formula.startsWith("=")) {
+        if (
+          typeof input.values[row]?.[column] === "number" &&
+          Number.isFinite(input.values[row][column] as number)
+        )
+          hardCodedColumns.push(column);
+        continue;
+      }
       const refs = references(formula);
+      const pattern = relativeFormula(
+        formula,
+        start.row + row,
+        start.column + column,
+      );
+      const columnPatterns =
+        formulaPatterns.get(column) ?? new Map<string, number>();
+      columnPatterns.set(pattern, (columnPatterns.get(pattern) ?? 0) + 1);
+      formulaPatterns.set(column, columnPatterns);
+      itemPatterns.set(cell, pattern);
       const errors = ERROR_CODES.filter(
         (code) => formula.includes(code) || value.includes(code),
       );
@@ -218,17 +262,36 @@ export function inspectFormulas(input: FormulaSelection): FormulaInspection {
         references: refs,
         errors,
         possibleCircularReference,
+        inconsistentFormula: false,
         explanation: explain(formula, refs),
         repair: repairSuggestion(formula, errors),
       });
     }
   }
+  let inconsistentFormulaCount = 0;
+  for (const item of items) {
+    const match = /^([A-Z]+)\d+$/.exec(item.address);
+    if (!match) continue;
+    const patterns = formulaPatterns.get(columnNumber(match[1]));
+    if (!patterns || patterns.size < 2) continue;
+    const dominant = Math.max(...patterns.values());
+    const pattern = itemPatterns.get(item.address);
+    if (pattern && patterns.get(pattern) !== dominant) {
+      item.inconsistentFormula = true;
+      inconsistentFormulaCount += 1;
+    }
+  }
+  const hardCodedCellCount = hardCodedColumns.filter((column) =>
+    formulaPatterns.has(column),
+  ).length;
   return {
     worksheetName: input.worksheetName,
     address: input.address,
     formulaCellCount: items.length,
     errorCellCount,
     possibleCircularReferenceCount,
+    hardCodedCellCount,
+    inconsistentFormulaCount,
     items,
   };
 }
@@ -236,13 +299,14 @@ export function inspectFormulas(input: FormulaSelection): FormulaInspection {
 export function formatFormulaInspection(report: FormulaInspection): string {
   if (report.formulaCellCount === 0)
     return "No formulas were found in the selected cells.";
-  const header = `${report.formulaCellCount} formula cell(s), ${report.errorCellCount} error cell(s), ${report.possibleCircularReferenceCount} possible direct circular reference(s).`;
+  const header = `${report.formulaCellCount} formula cell(s), ${report.errorCellCount} error cell(s), ${report.possibleCircularReferenceCount} possible direct circular reference(s), ${report.inconsistentFormulaCount} inconsistent formula(s), ${report.hardCodedCellCount} hard-coded numeric cell(s).`;
   const details = report.items.slice(0, 20).map((item) => {
     const warnings = [
       ...item.errors,
       ...(item.possibleCircularReference
         ? ["possible direct circular reference"]
         : []),
+      ...(item.inconsistentFormula ? ["inconsistent formula pattern"] : []),
     ];
     const repair = item.repair
       ? ` ${item.repair.candidate ? `Suggested repair: ${item.repair.candidate}. ` : ""}${item.repair.guidance}`

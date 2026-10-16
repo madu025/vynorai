@@ -30,6 +30,36 @@ test("formula inspector reports references, calculation errors and a direct self
   assert.match(formatFormulaInspection(report), /B3: =B3\+1/);
 });
 
+test("formula audit reports hard-coded numbers and copied-formula inconsistencies", () => {
+  const report = inspectFormulas({
+    worksheetName: "Sales",
+    address: "Sales!A2:C5",
+    formulas: [
+      ["=B2*C2", "", ""],
+      ["=B3*C3", "", ""],
+      ["=B4+C4", "", ""],
+      ["", "", ""],
+    ],
+    values: [
+      [20, 10, 20],
+      [30, 11, 21],
+      [40, 12, 22],
+      [1, 2, 3],
+    ],
+  });
+
+  assert.equal(report.hardCodedCellCount, 1);
+  assert.equal(report.inconsistentFormulaCount, 1);
+  assert.equal(
+    report.items.find((item) => item.address === "A4")?.inconsistentFormula,
+    true,
+  );
+  assert.match(
+    formatFormulaInspection(report),
+    /1 hard-coded numeric cell\(s\)/,
+  );
+});
+
 test("formula inspector request words do not capture ordinary data questions", () => {
   assert.equal(
     isFormulaInspectionRequest("Explain the selected formulas"),

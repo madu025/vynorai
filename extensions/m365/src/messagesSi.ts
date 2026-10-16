@@ -18,6 +18,7 @@ const EXACT: Record<string, string> = {
     "ඔබේ වැඩපොතේ තවමත් කිසිදු වෙනසක් සිදු කර නැත.",
   "Preview cancelled. Nothing has changed in your workbook.":
     "පෙරදසුන අවලංගු කරන ලදී. ඔබේ වැඩපොතේ කිසිදු වෙනසක් සිදු කර නැත.",
+  "inconsistent formula pattern": "අසමාන formula රටාව",
   "Applied. Your source data was not changed.":
     "යොදන ලදී. ඔබේ මූලාශ්‍ර දත්ත වෙනස් වී නැත.",
   "Undone. What this add-in created was removed.":
@@ -150,6 +151,11 @@ const EXACT: Record<string, string> = {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [
+    /^(\d+) formula cell\(s\), (\d+) error cell\(s\), (\d+) possible direct circular reference\(s\), (\d+) inconsistent formula\(s\), (\d+) hard-coded numeric cell\(s\)\.$/,
+    (formulas, errors, circular, inconsistent, hardCoded) =>
+      `formula cells ${formulas}ක්, දෝෂ cells ${errors}ක්, සෘජු circular references ${circular}ක්, අසමාන formulas ${inconsistent}ක්, formula columns තුළ hard-coded numeric cells ${hardCoded}ක්.`,
+  ],
   [
     /^Writing result rows: (\d+)\/(\d+)\.\.\.$/,
     (done, total) => `ප්‍රතිඵල පේළි ලියමින්: ${done}/${total}...`,

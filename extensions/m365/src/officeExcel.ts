@@ -1645,6 +1645,8 @@ export async function applyApprovedExcelPlan(
                     "Possible direct circular references",
                     report.possibleCircularReferenceCount,
                   ],
+                  ["Inconsistent formulas", report.inconsistentFormulaCount],
+                  ["Hard-coded numeric cells", report.hardCodedCellCount],
                   [],
                   [
                     "Address",
@@ -1652,6 +1654,7 @@ export async function applyApprovedExcelPlan(
                     "References",
                     "Errors",
                     "Possible circular reference",
+                    "Inconsistent formula",
                     "Explanation",
                     "Repair guidance",
                   ],
@@ -1663,6 +1666,7 @@ export async function applyApprovedExcelPlan(
                       item.references.join(", "),
                       item.errors.join(", "),
                       item.possibleCircularReference ? "Yes" : "No",
+                      item.inconsistentFormula ? "Yes" : "No",
                       item.explanation,
                       item.repair
                         ? `${item.repair.candidate ? `Suggested repair: ${item.repair.candidate}. ` : ""}${item.repair.guidance}`

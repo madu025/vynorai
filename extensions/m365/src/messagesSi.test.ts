@@ -26,6 +26,13 @@ test("known messages are rendered in Sinhala and unknown ones stay English", () 
     ),
     /පෙරදසුන අවලංගු/,
   );
+  assert.match(
+    localizeMessage(
+      "si",
+      "3 formula cell(s), 0 error cell(s), 0 possible direct circular reference(s), 1 inconsistent formula(s), 1 hard-coded numeric cell(s).",
+    ),
+    /අසමාන formulas 1ක්/,
+  );
   assert.equal(localizeMessage("si", "Some unknown text"), "Some unknown text");
   assert.equal(localizeMessage("en", "Nothing was sent."), "Nothing was sent.");
 });

@@ -193,3 +193,23 @@ test("the quality report is a small table of live formulas over every row", () =
     `=IF(COUNT('detail-report'!$B$2:$B$520126)>0,MIN('detail-report'!$B$2:$B$520126),"")`,
   );
 });
+
+import { splitColumnFormulas } from "./largeRange.js";
+
+test("splitting a name column is spilled formulas over every row", () => {
+  const out = splitColumnFormulas(
+    {
+      sheetName: "detail-report",
+      startColumn: 0,
+      startRow: 0,
+      endRow: 520124,
+      columns: 10,
+    },
+    4,
+  );
+  assert.ok(
+    out.first.startsWith("=MAP('detail-report'!$E$2:$E$520125,LAMBDA(v,"),
+  );
+  assert.ok(out.last.includes("TRIM(MID(v,"));
+  assert.ok(out.source.startsWith("=LET(a,'detail-report'!$E$2:$E$520125"));
+});

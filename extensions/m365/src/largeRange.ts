@@ -387,3 +387,18 @@ export function qualityReportCells(
     ...rows,
   ];
 }
+
+// --- split a name column -----------------------------------------------------------------------
+
+/** The source column and its two parts (before and after the first space), spilled over every row. */
+export function splitColumnFormulas(
+  range: LargeRef,
+  sourceIndex: number,
+): { source: string; first: string; last: string } {
+  const column = columnRef(range, sourceIndex);
+  return {
+    source: `=LET(a,${column},IF(a="","",a))`,
+    first: `=MAP(${column},LAMBDA(v,IFERROR(LEFT(v,FIND(" ",v&" ")-1),"")))`,
+    last: `=MAP(${column},LAMBDA(v,IFERROR(TRIM(MID(v,FIND(" ",v&" ")+1,999)),"")))`,
+  };
+}

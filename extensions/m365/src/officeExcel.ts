@@ -16,6 +16,7 @@ import {
   keyColumnFormula,
   LARGE_FORMAT_ROWS,
   qualityReportCells,
+  splitColumnFormulas,
   viewFormula,
 } from "./largeRange.js";
 
@@ -2517,6 +2518,39 @@ export async function applyApprovedExcelPlan(
               );
             if (sheetExists) {
               result.status = "exists";
+            } else if (plan.profile?.sample) {
+              // Very large data: the source column and its two parts are spilled formulas over every row.
+              const headers = await readHeaderCells();
+              if (headers[spec.splitSourceIndex] !== spec.splitSourceColumn)
+                throw new Error(
+                  "The split source changed after the preview. Preview again.",
+                );
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const formulas = splitColumnFormulas(
+                {
+                  sheetName: plan.worksheetName,
+                  startColumn: parsed.startColumn,
+                  startRow: parsed.startRow,
+                  endRow: parsed.endRow,
+                  columns: headers.length,
+                },
+                spec.splitSourceIndex,
+              );
+              sheet.getRangeByIndexes(0, 0, 1, 3).values = [
+                [
+                  literal(spec.splitSourceColumn),
+                  literal(spec.splitFirstColumn),
+                  literal(spec.splitLastColumn),
+                ],
+              ];
+              sheet.getRange("A2:C2").formulas = [
+                [formulas.source, formulas.first, formulas.last],
+              ];
+              sheet.getRangeByIndexes(0, 0, 1, 3).format.font.bold = true;
+              await context.sync();
+              await copyColumnFormats(sheet, [spec.splitSourceIndex]);
             } else {
               const { headers, rows } = splitHeader(await readSourceValues());
               if (headers[spec.splitSourceIndex] !== spec.splitSourceColumn)

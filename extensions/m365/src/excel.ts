@@ -50,6 +50,8 @@ function sampledKindAllowed(
     return !specs?.quality?.mode || specs.quality.mode === "data";
   // Lookups are spilled per returned column over the whole range.
   if (kind === "lookup-columns") return true;
+  // A name split is a source column plus two spilled formulas.
+  if (kind === "split-column") return true;
   // Describe and correlation are live formulas over whole columns; Excel computes them.
   if (kind === "statistics")
     return (

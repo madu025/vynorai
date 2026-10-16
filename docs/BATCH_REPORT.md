@@ -70,3 +70,33 @@ proven and skipped: 21; ran: 64; pass 48, fail 12, skipped 4
 | ui-undo          | en      | small | skip   | live only                                                                                |
 | g-script         | en      | small | skip   | known gap: not implemented                                                               |
 | g-vba            | en      | small | skip   | known gap: not implemented                                                               |
+
+## Phase 4 - fixes (build 20261016.30, commits 5e207be, b2f795b)
+
+| root cause                                                                                               | cases                        | fix                                                |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- |
+| a date column was "numeric" so it could not be a pivot or chart category                                 | e-spaced, c-line             | header named like a date is a category (intent.ts) |
+| a pivot could not count a text column                                                                    | p-count                      | count uses a text column as the value              |
+| "where X is Y" was not a filter                                                                          | v-filter                     | `is` is an equality word                           |
+| histogram refused on very large data                                                                     | c-hist                       | ten COUNTIFS bins over every row (largeRange.ts)   |
+| insights refused on very large data                                                                      | st-insights                  | allowed; ran live                                  |
+| LET names `q1`, `q3`, `c` are invalid in Excel (insights and percent-change/YoY/moving-average formulas) | st-insights, derived columns | renamed; unit test now scans for invalid LET names |
+
+## Phase 4 - live re-test
+
+| id          | result                                                                           |
+| ----------- | -------------------------------------------------------------------------------- |
+| c-hist      | pass (10 bins, 520k rows)                                                        |
+| st-insights | pass, but category is Status although "by RTOM" was asked (open bug)             |
+| e-spaced    | partial: groups by exact timestamp, not by day (open bug)                        |
+| p-count     | pass (E/S/X, total 520,125)                                                      |
+| v-filter    | not valid: a leftover pivot sheet made the active sheet wrong; retest next batch |
+
+## Open items for the next batch
+
+- insights ignores the requested category column (uses Status for "by RTOM").
+- date pivots do not group by day/month (timestamps stay distinct).
+- not understood: computed columns with IF / text / year, "highlight above N", date validation, "repair the data", name a column, "copy to a new sheet".
+- formula audit is refused on very large data.
+- Office Script / VBA writing does not exist (gap).
+- Left in the workbook by the test run: sheet "Pivot - Service ID by Status" (the pane keeps the latest result and cannot remove it; delete the tab by hand).

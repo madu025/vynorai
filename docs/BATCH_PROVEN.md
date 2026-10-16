@@ -24,3 +24,12 @@ si-pivot | 2026-10-16 | 8c6315f | extensions/m365/src/intent.ts, extensions/m365
 new-chat | 2026-10-16 | 8c6315f | extensions/m365/src/taskpane.ts, extensions/m365/src/chatSessions.ts
 session | 2026-10-16 | 8c6315f | extensions/m365/src/taskpane.ts, backend/src/services/m365Policy.ts
 ai-analysis | 2026-10-16 | 8c6315f | extensions/m365/src/taskpane.ts, extensions/m365/src/analysis.ts, backend/src/services/m365Analysis.ts
+p-cols | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+c-pie | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+c-hist | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts, extensions/m365/src/largeRange.ts
+st-corr | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts, extensions/m365/src/statistics.ts
+v-sort | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts, extensions/m365/src/largeRange.ts
+cl-dupe | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts, extensions/m365/src/transform.ts
+cl-fill | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts, extensions/m365/src/transform.ts
+cf-icons | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts
+p-count | 2026-10-16 | b2f795b | extensions/m365/src/intent.ts, extensions/m365/src/excel.ts, backend/src/services/m365ExcelPlan.ts, extensions/m365/src/officeExcel.ts

@@ -1081,8 +1081,8 @@ export function buildOutcomes(
       if (spec.qualityMode === "formula")
         item.details.push(
           say(
-            "Audits formula cells, errors, references and possible direct circular references in a new report sheet.",
-            "නව වාර්තා පත්‍රිකාවක සූත්‍ර කොටු, දෝෂ, යොමු සහ සෘජු වටකුරු යොමු පරීක්ෂා කරයි.",
+            "Audits formula cells, errors, references, inconsistent copied formulas, hard-coded numbers and possible direct circular references in a new report sheet.",
+            "නව වාර්තා පත්‍රිකාවක සූත්‍ර කොටු, දෝෂ, යොමු, අසමාන පිටපත් කළ සූත්‍ර, සූත්‍ර තීරුවල hard-coded අංක සහ සෘජු වටකුරු යොමු පරීක්ෂා කරයි.",
           ),
         );
       if (spec.qualityMode === "repair")

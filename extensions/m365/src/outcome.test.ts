@@ -42,6 +42,22 @@ test("other outcomes show a small table of the data they use", () => {
   assert.equal(item.table?.rows.length, 2);
 });
 
+test("a formula audit outcome previews the expanded quality checks", () => {
+  const [item] = buildOutcomes(
+    [
+      {
+        kind: "quality",
+        targetSheet: "Sheet1_Vynor_Formula_Audit",
+        spec: { qualityMode: "formula" },
+      },
+    ],
+    headers,
+    rows,
+  );
+  assert.match(item.details.join(" "), /inconsistent copied formulas/);
+  assert.match(item.details.join(" "), /hard-coded numbers/);
+});
+
 test("an unpivot outcome previews long-format rows from the selected data", () => {
   const [item] = buildOutcomes(
     [

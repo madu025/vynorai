@@ -6,6 +6,7 @@ import {
   describeError,
   describeOfficeHost,
   redactDiagnostic,
+  stableStorageFingerprint,
 } from "./diagnostics.js";
 
 function base64Url(value: object): string {
@@ -30,6 +31,19 @@ test("diagnostics redact tokens, bearer values and OAuth query secrets", () => {
   assert.doesNotMatch(text, /eyJhbGci|abc\.def|SECRET|STATE/);
   assert.match(text, /\[jwt\]/);
   assert.match(text, /ok=1/);
+});
+
+test("workbook storage fingerprints are stable without retaining the URL", () => {
+  const first = stableStorageFingerprint("https://example.test/book.xlsx");
+  assert.equal(
+    first,
+    stableStorageFingerprint("https://example.test/book.xlsx"),
+  );
+  assert.notEqual(
+    first,
+    stableStorageFingerprint("https://example.test/other.xlsx"),
+  );
+  assert.ok(!first.includes("example"));
 });
 
 test("token summary exposes claims and expiry but never the token", () => {

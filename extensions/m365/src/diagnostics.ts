@@ -10,6 +10,16 @@ export interface DiagnosticEntry {
 
 const MAX_ENTRIES = 300;
 
+/** Stable non-reversible fingerprint for local storage partitioning. */
+export function stableStorageFingerprint(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
 /**
  * Removes anything shaped like a credential before it reaches the panel or the clipboard:
  * JWTs, bearer values, OAuth codes and verifier/state query values.

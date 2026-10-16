@@ -52,6 +52,7 @@ import {
   describeError,
   describeOfficeHost,
   formatEntry,
+  stableStorageFingerprint,
 } from "./diagnostics.js";
 import {
   createExcelPreviewPlan,
@@ -155,8 +156,10 @@ let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
 const SESSION_KEY = "vynorai.m365.excel.session.v2";
 const CONVERSATION_KEY_PREFIX = "vynorai.m365.excel.conversation.v1";
+const RESULTS_KEY_PREFIX = "vynorai.m365.excel.results.v1";
 const MAX_CONVERSATION_MESSAGES = 12;
 const MAX_CONVERSATION_CHARS = 300;
+const MAX_STORED_RESULTS = 40;
 
 type ConversationMessage = {
   kind: "user" | "assistant" | "error";
@@ -196,6 +199,98 @@ function conversationStorageKey(): string | undefined {
   const claims = describeAccessToken(accessToken);
   if (!claims?.tenantId || !claims.objectId) return undefined;
   return `${CONVERSATION_KEY_PREFIX}.${claims.tenantId}.${claims.objectId}`;
+}
+
+/** Produces a non-reversible workbook key; the document URL is never stored. */
+function workbookStorageFingerprint(): string | undefined {
+  const url = String(office()?.context?.document?.url ?? "");
+  if (!url) return undefined;
+  return stableStorageFingerprint(url);
+}
+
+function resultsStorageKey(): string | undefined {
+  const claims = describeAccessToken(accessToken);
+  const workbook = workbookStorageFingerprint();
+  if (!claims?.tenantId || !claims.objectId || !workbook) return undefined;
+  return `${RESULTS_KEY_PREFIX}.${claims.tenantId}.${claims.objectId}.${workbook}`;
+}
+
+function persistResultGallery() {
+  const key = resultsStorageKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        planId: galleryPlanId,
+        results: galleryResults.slice(-MAX_STORED_RESULTS).map((result) => ({
+          kind: result.kind,
+          name: result.name,
+          targetSheet: result.targetSheet,
+          status: result.status,
+          ...(result.createdSheet ? { createdSheet: true } : {}),
+          ...(result.createdNames?.length
+            ? { createdNames: result.createdNames.slice(0, 20) }
+            : {}),
+        })),
+      }),
+    );
+  } catch {
+    // Convenience metadata must never affect workbook work.
+  }
+}
+
+async function restoreResultGallery() {
+  const key = resultsStorageKey();
+  if (!key) return;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "null") as {
+      planId?: unknown;
+      results?: unknown;
+    } | null;
+    if (
+      !parsed ||
+      typeof parsed.planId !== "string" ||
+      !Array.isArray(parsed.results)
+    )
+      return;
+    const sheets = new Set(await listVynorSheets(officeRuntime()));
+    const restored = parsed.results
+      .filter((entry): entry is Record<string, unknown> => {
+        if (!entry || typeof entry !== "object") return false;
+        const item = entry as Record<string, unknown>;
+        return (
+          typeof item.kind === "string" &&
+          typeof item.name === "string" &&
+          typeof item.targetSheet === "string" &&
+          (item.status === "created" || item.status === "exists") &&
+          sheets.has(item.targetSheet)
+        );
+      })
+      .slice(-MAX_STORED_RESULTS)
+      .map((item) => ({
+        kind: item.kind as string,
+        name: item.name as string,
+        targetSheet: item.targetSheet as string,
+        status: item.status as ExcelActionResult["status"],
+        ...(item.createdSheet === true ? { createdSheet: true } : {}),
+        ...(Array.isArray(item.createdNames)
+          ? {
+              createdNames: item.createdNames
+                .filter((name): name is string => typeof name === "string")
+                .slice(0, 20),
+            }
+          : {}),
+      }));
+    if (!restored.length) return;
+    galleryPlanId = parsed.planId;
+    galleryResults = restored;
+    renderResultGallery();
+    log.record("gallery:restore", "pass", { results: restored.length });
+  } catch (error) {
+    localStorage.removeItem(key);
+    log.record("gallery:restore", "skip", describeError(error));
+  }
 }
 
 function persistConversation() {
@@ -708,6 +803,7 @@ signIn?.addEventListener("click", async () => {
     accessToken = tokens.accessToken;
     saveSession(tokens);
     restoreConversationHistory();
+    void restoreResultGallery();
     updateAuthenticationUi(true);
     recordTokenSummary("oauth:token-claims");
     void refreshCapabilities("oauth");
@@ -1219,6 +1315,7 @@ apply?.addEventListener("click", async () => {
     );
     galleryPlanId = approvedPlan.planId;
     galleryResults = report.results;
+    persistResultGallery();
     renderResultGallery();
     if (rollbackButton)
       rollbackButton.hidden =
@@ -1288,6 +1385,11 @@ apply?.addEventListener("click", async () => {
             true,
           );
           replaced = removed.removedSheets.length;
+          galleryResults = galleryResults.filter(
+            (result) => result.targetSheet === lastRevealSheet,
+          );
+          persistResultGallery();
+          renderResultGallery();
           renderChanged([
             ...report.results.map(
               (result) => `${result.kind} - ${result.targetSheet}`,
@@ -2214,6 +2316,11 @@ async function replaceOlderResultSheets(keepSheet: string) {
       .catch((error) =>
         log.record("api:gallery-replace", "fail", describeError(error)),
       );
+    galleryResults = galleryResults.filter(
+      (result) => result.targetSheet === keepSheet,
+    );
+    persistResultGallery();
+    renderResultGallery();
     renderChanged([
       ...galleryResults.map(
         (result) => `${result.kind} - ${result.targetSheet}`,
@@ -2296,6 +2403,7 @@ function renderResultGallery() {
           galleryResults = galleryResults.filter(
             (candidate) => candidate.targetSheet !== result.targetSheet,
           );
+          persistResultGallery();
           lastCreated = rollbackItemsFromApplyReport(
             galleryPlanId,
             galleryResults.filter(
@@ -2392,6 +2500,7 @@ rollbackButton?.addEventListener("click", async () => {
     lastCreated = undefined;
     galleryPlanId = "";
     galleryResults = [];
+    persistResultGallery();
     renderResultGallery();
     if (rollbackButton) rollbackButton.hidden = true;
     markChangeNote("undone");
@@ -2582,6 +2691,7 @@ async function initialize() {
   }
   if (restoreSession()) {
     restoreConversationHistory();
+    void restoreResultGallery();
     updateAuthenticationUi(true);
     recordTokenSummary("session:restore");
     void refreshCapabilities("restore");

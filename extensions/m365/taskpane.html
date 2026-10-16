@@ -95,6 +95,9 @@
       .message.user { justify-self: end; border-color: color-mix(in srgb, var(--brand) 36%, var(--line)); background: color-mix(in srgb, var(--brand) 8%, var(--surface)); }
       .message.error { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
       .message-label { display: block; margin-bottom: 2px; color: var(--muted); font-size: 11px; font-weight: 600; }
+      .message-tools { display: flex; justify-content: flex-end; margin-top: 5px; }
+      .edit-request { padding: 2px 0; border: 0; background: transparent; color: var(--brand); font-size: 11px; text-decoration: underline; cursor: pointer; }
+      .edit-request:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 3px; }
       .suggestions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
       .pill { min-height: 46px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: left; font-size: 12px; line-height: 1.25; }
       .pill:hover { background: var(--surface-muted); }

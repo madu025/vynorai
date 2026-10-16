@@ -25,6 +25,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     request_change: "වැඩපොතේ වෙනසක් ඉල්ලන්න",
     conversation_you: "ඔබ",
     conversation_attention: "අවධානය අවශ්‍යයි",
+    edit_request: "අවසන් ඉල්ලීම සංස්කරණය කරන්න",
+    edit_ready: "අවසන් ඉල්ලීම සංස්කරණයට සූදානම්.",
     placeholder: "තෝරාගත් දත්ත භාවිතයෙන් සෑදිය යුතු දේ විස්තර කරන්න",
     analyze: "AI මගින් විශ්ලේෂණය කරන්න",
     inspect: "පරීක්ෂා කර පෙරදසුන බලන්න",
@@ -88,6 +90,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     request_change: "பணிப்புத்தக மாற்றத்தைக் கோரு",
     conversation_you: "நீங்கள்",
     conversation_attention: "கவனம் தேவை",
+    edit_request: "கடைசி கோரிக்கையைத் திருத்து",
+    edit_ready: "கடைசி கோரிக்கையைத் திருத்தத் தயாராக உள்ளது.",
     placeholder:
       "தேர்ந்தெடுத்த தரவிலிருந்து எதை உருவாக்க வேண்டும் என்று விவரிக்கவும்",
     analyze: "AI மூலம் பகுப்பாய்வு",

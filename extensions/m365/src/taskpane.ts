@@ -211,7 +211,7 @@ function renderConversationHistory() {
   const history = document.querySelector<HTMLElement>("#conversation-history");
   if (!history) return;
   history.replaceChildren();
-  for (const message of conversationMessages) {
+  conversationMessages.forEach((message, index) => {
     const item = document.createElement("article");
     item.className = `message ${message.kind}`;
     const label = document.createElement("span");
@@ -225,8 +225,34 @@ function renderConversationHistory() {
     const body = document.createElement("span");
     body.textContent = localizeMessage(language, message.text);
     item.append(label, body);
+    if (message.kind === "user" && index === conversationMessages.length - 1) {
+      const tools = document.createElement("div");
+      tools.className = "message-tools";
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "edit-request";
+      edit.textContent = translate(language, "edit_request", "Edit request");
+      edit.setAttribute(
+        "aria-label",
+        translate(language, "edit_request", "Edit request"),
+      );
+      edit.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = message.text;
+        instruction.focus();
+        instruction.setSelectionRange(
+          instruction.value.length,
+          instruction.value.length,
+        );
+        setStatus(
+          translate(language, "edit_ready", "Ready to edit your last request."),
+        );
+      });
+      tools.append(edit);
+      item.append(tools);
+    }
     history.appendChild(item);
-  }
+  });
 }
 
 function restoreConversationHistory() {

@@ -570,6 +570,8 @@ test("language helpers fall back to English and cycle through the three language
   );
   assert.notEqual(translate("si", "hero", "x"), "x");
   assert.notEqual(translate("ta", "hero", "x"), "x");
+  assert.notEqual(translate("si", "edit_request", "x"), "x");
+  assert.notEqual(translate("ta", "edit_request", "x"), "x");
   assert.equal(translate("si", "no-such-key", "fallback"), "fallback");
   assert.equal(nextLanguage("en"), "si");
   assert.equal(nextLanguage("si"), "ta");

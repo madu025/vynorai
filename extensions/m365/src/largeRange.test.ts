@@ -138,12 +138,12 @@ test("derived columns and lookups become spilled formulas over the whole range",
   );
 });
 
-import { cleanFormula } from "./largeRange.js";
+import { cleanFormula, largeCleanRows } from "./largeRange.js";
 
 test("clean-up is one spilled formula and never turns a blank into zero", () => {
   assert.equal(
     cleanFormula(range, { operations: ["trim"] }),
-    `=LET(d,'detail-report'!$A$2:$J$520126,t,IF(ISTEXT(d),TRIM(d),d),k,IF(t="","",t),k)`,
+    `=LET(d,TAKE('detail-report'!$A$2:$J$520126,100000),t,IF(ISTEXT(d),TRIM(d),d),k,IF(t="","",t),k)`,
   );
   assert.equal(
     cleanFormula(range, {
@@ -151,7 +151,7 @@ test("clean-up is one spilled formula and never turns a blank into zero", () => 
       fillBlanks: 'n/"a',
       fillBlanksColumnIndex: 2,
     }),
-    `=LET(d,'detail-report'!$A$2:$J$520126,t,IF(ISTEXT(d),TRIM(d),d),n,IF(ISTEXT(t)*ISERROR(DATEVALUE(t)),IFERROR(VALUE(SUBSTITUTE(TRIM(t),",","")),t),t),b,IF(SEQUENCE(1,COLUMNS(n))=3,IF(n="","n/""a",n),n),u,UNIQUE(b),u)`,
+    `=LET(d,TAKE('detail-report'!$A$2:$J$520126,100000),t,IF(ISTEXT(d),TRIM(d),d),n,IF(ISTEXT(t)*ISERROR(DATEVALUE(t)),IFERROR(VALUE(SUBSTITUTE(TRIM(t),",","")),t),t),b,IF(SEQUENCE(1,COLUMNS(n))=3,IF(n="","n/""a",n),n),u,UNIQUE(b),u)`,
   );
   assert.throws(
     () => cleanFormula(range, { operations: ["fuzzy-dedupe"] }),
@@ -165,5 +165,31 @@ test("clean-up is one spilled formula and never turns a blank into zero", () => 
         fillBlanksColumnIndex: 40,
       }),
     /outside the source range/,
+  );
+});
+
+test("a cleaned copy covers a bounded number of rows so Excel on the web can hold it", () => {
+  assert.equal(largeCleanRows(10), 100000);
+  assert.equal(largeCleanRows(40), 25000);
+  assert.equal(largeCleanRows(500), 2000);
+  assert.equal(largeCleanRows(5000), 1000);
+});
+
+import { qualityReportCells } from "./largeRange.js";
+
+test("the quality report is a small table of live formulas over every row", () => {
+  const cells = qualityReportCells(range, ["Item", "Qty"]);
+  assert.equal(cells[1][1], `=ROWS('detail-report'!$A$2:$A$520126)`);
+  assert.equal(cells[2][0], "Column");
+  assert.equal(cells.length, 5);
+  assert.equal(cells[3][0], "Item");
+  assert.equal(
+    cells[3][1],
+    `=ROWS('detail-report'!$A$2:$A$520126)-COUNTBLANK('detail-report'!$A$2:$A$520126)`,
+  );
+  assert.equal(cells[4][6], "=MAX(0,B5-F5)");
+  assert.equal(
+    cells[4][9],
+    `=IF(COUNT('detail-report'!$B$2:$B$520126)>0,MIN('detail-report'!$B$2:$B$520126),"")`,
   );
 });

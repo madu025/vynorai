@@ -14,6 +14,8 @@ import {
   addColumnFormula,
   cleanFormula,
   keyColumnFormula,
+  LARGE_FORMAT_ROWS,
+  qualityReportCells,
   viewFormula,
 } from "./largeRange.js";
 
@@ -920,6 +922,19 @@ export async function applyApprovedExcelPlan(
       return copiedValues.length;
     };
 
+    const readSourceHead = async (maxRows: number) => {
+      const range = sourceRange();
+      range.load(["rowCount", "columnCount"]);
+      await context.sync();
+      const count = Math.min(maxRows, Number(range.rowCount));
+      return readValuesInChunks(
+        context,
+        range,
+        count,
+        Number(range.columnCount),
+        500,
+      );
+    };
     const readSourceValues = async () => {
       const range = sourceRange();
       range.load(["rowCount", "columnCount"]);
@@ -1991,6 +2006,44 @@ export async function applyApprovedExcelPlan(
                 await context.sync();
               }
             }
+          } else if (action.kind === "quality" && plan.profile?.sample) {
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              // Very large data: a small table of live formulas, Excel counts every row.
+              const headers = await readHeaderCells();
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const cells = qualityReportCells(
+                {
+                  sheetName: plan.worksheetName,
+                  startColumn: parsed.startColumn,
+                  startRow: parsed.startRow,
+                  endRow: parsed.endRow,
+                  columns: headers.length,
+                },
+                headers,
+              );
+              const width = Math.max(...cells.map((row) => row.length));
+              sheet.getRangeByIndexes(0, 0, cells.length, width).formulas =
+                cells.map((row, rowIndex) => {
+                  const padded = row.map((cell, columnIndex) =>
+                    cell.startsWith("=") && (rowIndex < 3 || columnIndex > 0)
+                      ? cell
+                      : literal(cell),
+                  );
+                  while (padded.length < width) padded.push("");
+                  return padded;
+                });
+              await context.sync();
+              sheet.getRangeByIndexes(0, 0, 1, 1).format.font.bold = true;
+              sheet.getRangeByIndexes(2, 0, 1, width).format.font.bold = true;
+              sheet
+                .getRangeByIndexes(2, 0, cells.length - 2, width)
+                .format.autofitColumns();
+              await context.sync();
+            }
           } else if (action.kind === "quality") {
             if (plan.normalization)
               throw new Error(
@@ -2036,7 +2089,10 @@ export async function applyApprovedExcelPlan(
             if (sheetExists) {
               result.status = "exists";
             } else {
-              const { headers, rows } = splitHeader(await readSourceValues());
+              // Very large data: the formatted sheet shows the first rows only.
+              const { headers, rows } = plan.profile?.sample
+                ? splitHeader(await readSourceHead(LARGE_FORMAT_ROWS + 1))
+                : splitHeader(await readSourceValues());
               const out = [headers, ...rows].map((row) => row.map(literal));
               const columns = headers.length;
               sheet.getRangeByIndexes(0, 0, out.length, columns).values = out;
@@ -2479,7 +2535,10 @@ export async function applyApprovedExcelPlan(
             if (sheetExists) {
               result.status = "exists";
             } else {
-              const { headers, rows } = splitHeader(await readSourceValues());
+              const largeLookup = Boolean(plan.profile?.sample);
+              const { headers, rows } = largeLookup
+                ? { headers: await readHeaderCells(), rows: [] as any[][] }
+                : splitHeader(await readSourceValues());
               const other = context.workbook.worksheets.getItemOrNullObject(
                 spec.lookupSheet,
               );
@@ -2553,38 +2612,87 @@ export async function applyApprovedExcelPlan(
                       "Approximate lookup requires the lookup key column to be sorted ascending.",
                     );
               }
-              const out = [
-                [...headers, ...returnHeaders],
-                ...rows.map((row) => [...row, ...returnHeaders.map(() => "")]),
-              ].map((row) => row.map(literal));
-              sheet.getRangeByIndexes(
-                0,
-                0,
-                out.length,
-                headers.length + returnHeaders.length,
-              ).values = out;
-              await context.sync();
-              if (rows.length > 0) {
-                sheet.getRangeByIndexes(
-                  1,
-                  headers.length,
-                  rows.length,
-                  returnIndexes.length,
-                ).formulas = rows.map((_row, index) =>
-                  returnIndexes.map((returnIndex) =>
-                    buildLookupFormula(
-                      spec.lookupSheet as string,
-                      index + 2,
-                      sourceKeyIndexes,
-                      lookupKeyIndexes,
-                      returnIndex,
-                      spec.lookupRows as number,
-                      spec.lookupMatchMode ?? "exact",
-                      spec.lookupMethod ?? "index-match",
-                    ),
-                  ),
+              if (largeLookup) {
+                // Very large data: the key column plus one spilled lookup per returned column.
+                const parsed = parseLocalRange(
+                  localExcelAddress(plan.sourceAddress),
                 );
+                const range = {
+                  sheetName: plan.worksheetName,
+                  startColumn: parsed.startColumn,
+                  startRow: parsed.startRow,
+                  endRow: parsed.endRow,
+                  columns: headers.length,
+                };
+                sheet.getRangeByIndexes(
+                  0,
+                  0,
+                  1,
+                  1 + returnHeaders.length,
+                ).values = [
+                  [literal(headers[0]), ...returnHeaders.map(literal)],
+                ];
+                sheet.getRange("A2").formulas = [[keyColumnFormula(range)]];
+                returnIndexes.forEach((returnIndex: number, at: number) => {
+                  sheet.getRangeByIndexes(1, 1 + at, 1, 1).formulas = [
+                    [
+                      addColumnFormula(range, {
+                        lookup: {
+                          sheet: spec.lookupSheet as string,
+                          sourceKeyIndexes,
+                          lookupKeyIndexes,
+                          returnIndex,
+                          rows: spec.lookupRows as number,
+                          matchMode: spec.lookupMatchMode ?? "exact",
+                        },
+                      }),
+                    ],
+                  ];
+                });
+                sheet.getRangeByIndexes(
+                  0,
+                  0,
+                  1,
+                  1 + returnHeaders.length,
+                ).format.font.bold = true;
                 await context.sync();
+              } else {
+                const out = [
+                  [...headers, ...returnHeaders],
+                  ...rows.map((row) => [
+                    ...row,
+                    ...returnHeaders.map(() => ""),
+                  ]),
+                ].map((row) => row.map(literal));
+                sheet.getRangeByIndexes(
+                  0,
+                  0,
+                  out.length,
+                  headers.length + returnHeaders.length,
+                ).values = out;
+                await context.sync();
+                if (rows.length > 0) {
+                  sheet.getRangeByIndexes(
+                    1,
+                    headers.length,
+                    rows.length,
+                    returnIndexes.length,
+                  ).formulas = rows.map((_row, index) =>
+                    returnIndexes.map((returnIndex) =>
+                      buildLookupFormula(
+                        spec.lookupSheet as string,
+                        index + 2,
+                        sourceKeyIndexes,
+                        lookupKeyIndexes,
+                        returnIndex,
+                        spec.lookupRows as number,
+                        spec.lookupMatchMode ?? "exact",
+                        spec.lookupMethod ?? "index-match",
+                      ),
+                    ),
+                  );
+                  await context.sync();
+                }
               }
             }
           } else if (action.kind === "add-column") {

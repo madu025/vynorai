@@ -270,6 +270,21 @@ export function keyColumnFormula(range: LargeRef): string {
 
 // --- clean-up --------------------------------------------------------------------------------
 
+/** A cleaned copy is bounded (about a million cells) so Excel on the web can hold it. */
+export const LARGE_CLEAN_MAX_CELLS = 1_000_000;
+export const LARGE_CLEAN_MAX_ROWS = 100_000;
+export const LARGE_FORMAT_ROWS = 5000;
+
+export function largeCleanRows(columns: number): number {
+  return Math.max(
+    1000,
+    Math.min(
+      LARGE_CLEAN_MAX_ROWS,
+      Math.floor(LARGE_CLEAN_MAX_CELLS / Math.max(1, columns)),
+    ),
+  );
+}
+
 export type LargeCleanSpec = {
   operations: readonly string[];
   fillBlanks?: string | number;
@@ -283,7 +298,9 @@ export function cleanFormula(range: LargeRef, spec: LargeCleanSpec): string {
     throw new Error(
       "Fuzzy duplicate removal needs the rows in the add-in, so it is limited to 100,000 cells.",
     );
-  const steps: string[] = [`d,${dataRef(range)}`];
+  const steps: string[] = [
+    `d,TAKE(${dataRef(range)},${largeCleanRows(range.columns)})`,
+  ];
   let current = "d";
   const step = (name: string, body: string) => {
     steps.push(`${name},${body}`);
@@ -322,4 +339,51 @@ export function cleanFormula(range: LargeRef, spec: LargeCleanSpec): string {
   } else step("k", `IF(${current}="","",${current})`);
   if (has("dedupe")) step("u", `UNIQUE(${current})`);
   return `=LET(${steps.join(",")},${current})`;
+}
+
+// --- data quality report ---------------------------------------------------------------------
+
+/** A small table of per-column counts, every cell a live formula over the whole column. */
+export function qualityReportCells(
+  range: LargeRef,
+  headers: string[],
+): string[][] {
+  const head = [
+    "Column",
+    "Filled cells",
+    "Blank cells",
+    "Numbers",
+    "Text cells",
+    "Distinct values",
+    "Repeated values",
+    "Text that looks like a number",
+    "Text with extra spaces",
+    "Smallest number",
+    "Largest number",
+  ];
+  const rows = headers.map((header, index) => {
+    const ref = columnRef(range, index);
+    const at = index + 4;
+    return [
+      header,
+      `=ROWS(${ref})-COUNTBLANK(${ref})`,
+      `=COUNTBLANK(${ref})`,
+      `=COUNT(${ref})`,
+      `=SUMPRODUCT(--ISTEXT(${ref}))`,
+      `=IFERROR(ROWS(UNIQUE(FILTER(${ref},${ref}<>""))),0)`,
+      `=MAX(0,B${at}-F${at})`,
+      `=SUMPRODUCT(ISTEXT(${ref})*ISNUMBER(--SUBSTITUTE(${ref},",","")))`,
+      `=SUMPRODUCT(ISTEXT(${ref})*(LEN(${ref})<>LEN(TRIM(${ref}))))`,
+      `=IF(COUNT(${ref})>0,MIN(${ref}),"")`,
+      `=IF(COUNT(${ref})>0,MAX(${ref}),"")`,
+    ];
+  });
+  return [
+    [
+      "Data quality of every row (calculated by Excel; your data is not changed)",
+    ],
+    [`Rows`, `=ROWS(${columnRef(range, 0)})`],
+    head,
+    ...rows,
+  ];
 }

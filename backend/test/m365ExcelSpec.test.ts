@@ -1385,7 +1385,7 @@ test("server and add-in agree on a sampled very large range and refuse other res
   assert.equal(server.profile.rowCount, 600000);
   assert.deepEqual(server.profile.sample, input.sample);
   assert.equal(excelPlansMatch(local, server), true);
-  for (const kind of ["chart", "summary", "unpivot", "clean"])
+  for (const kind of ["chart", "summary", "unpivot"])
     assert.throws(
       () => createServerExcelPreviewPlan(input, [kind], 500),
       /too large to read in full/,
@@ -1477,4 +1477,41 @@ test("server and add-in agree on a sampled chart over a PivotTable and on descri
       } as any),
     /too large to read in full/,
   );
+});
+
+test("server and add-in agree on a sampled clean-up and format, including their row-limit warnings", () => {
+  const input = {
+    workbookId: "w",
+    worksheetName: "Big",
+    address: "A1:C600000",
+    values: [
+      ["Item", "Qty", "Region"],
+      ["a", 1, "N"],
+      ["b", 2, "S"],
+      ["a", 3, "N"],
+    ],
+    hasHeaders: true,
+    sample: { totalRows: 600000, sampledRows: 4 },
+  };
+  for (const [kind, specs] of [
+    ["clean", { clean: { operations: ["trim", "dedupe"] } }],
+    ["format", { format: { freezeHeader: true } }],
+  ] as const) {
+    const server = createServerExcelPreviewPlan(
+      input,
+      [kind],
+      500,
+      specs as any,
+    );
+    const local = createExcelPreviewPlan(
+      input as any,
+      [kind] as any,
+      500,
+      specs as any,
+    );
+    assert.equal(excelPlansMatch(local, server), true, kind);
+    assert.ok(
+      server.warnings.some((w: string) => /first (100,000|5,000) rows/.test(w)),
+    );
+  }
 });

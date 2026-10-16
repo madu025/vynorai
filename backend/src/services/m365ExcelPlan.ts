@@ -22,14 +22,22 @@ function sampledKindAllowed(
     chart?: { pivotResult?: boolean };
     statistics?: { mode?: string };
     clean?: { operations?: string[] };
+    quality?: { mode?: string };
   },
 ): boolean {
   if (SAMPLED_RANGE_ACTIONS.has(kind)) return true;
   // A view is one spilled FILTER/SORTBY/TAKE formula that Excel computes over every row.
   if (kind === "view") return true;
-  // A full-width clean of a huge range spills millions of cells, which Excel on the web cannot
-  // hold (it stops responding), so it stays off until it can be limited to chosen columns.
-  if (kind === "clean") return false;
+  // A clean-up covers a bounded number of rows (see the warning), so Excel on the web can hold it.
+  if (kind === "clean")
+    return !(specs?.clean?.operations ?? []).includes("fuzzy-dedupe");
+  // Formatting is applied to the first rows only (see the warning).
+  if (kind === "format") return true;
+  // A column-by-column quality table is live formulas; formula audits need the cells themselves.
+  if (kind === "quality")
+    return !specs?.quality?.mode || specs.quality.mode === "data";
+  // Lookups are spilled per returned column over the whole range.
+  if (kind === "lookup-columns") return true;
   // Describe and correlation are live formulas over whole columns; Excel computes them.
   if (kind === "statistics")
     return (
@@ -2102,6 +2110,12 @@ export function createServerExcelPreviewPlan(
     );
   else if (profile.blankCells > 0)
     warnings.push(`${profile.blankCells} blank cells require review.`);
+  if (sample && requested.has("clean"))
+    warnings.push(
+      `The cleaned sheet covers the first ${Math.max(1000, Math.min(100_000, Math.floor(1_000_000 / Math.max(1, profile.columnCount)))).toLocaleString("en-US")} rows; Excel on the web cannot hold more.`,
+    );
+  if (sample && requested.has("format"))
+    warnings.push("The formatted sheet shows the first 5,000 rows.");
   if (!sample && chunkCount > 1)
     warnings.push(`Large range will be processed in ${chunkCount} chunks.`);
   return {

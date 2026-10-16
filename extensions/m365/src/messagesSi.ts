@@ -16,6 +16,8 @@ const EXACT: Record<string, string> = {
   "No preview yet.": "තවමත් පෙරදසුනක් නැත.",
   "Nothing has changed in your workbook yet.":
     "ඔබේ වැඩපොතේ තවමත් කිසිදු වෙනසක් සිදු කර නැත.",
+  "Preview cancelled. Nothing has changed in your workbook.":
+    "පෙරදසුන අවලංගු කරන ලදී. ඔබේ වැඩපොතේ කිසිදු වෙනසක් සිදු කර නැත.",
   "Applied. Your source data was not changed.":
     "යොදන ලදී. ඔබේ මූලාශ්‍ර දත්ත වෙනස් වී නැත.",
   "Undone. What this add-in created was removed.":

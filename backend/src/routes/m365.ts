@@ -137,6 +137,7 @@ const excelPlanSchema = z.object({
             .enum(["sum", "count", "average", "min", "max"])
             .optional(),
           columns: z.number().int().min(0).max(99).optional(),
+          subRows: z.number().int().min(0).max(99).optional(),
           filter: z.number().int().min(0).max(99).optional(),
           extraValues: z
             .array(z.number().int().min(0).max(99))

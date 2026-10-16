@@ -1660,6 +1660,8 @@ export async function applyApprovedExcelPlan(
               if (action.spec?.rowsColumn) {
                 const field = await pivotFieldResolver(pivot);
                 pivot.rowHierarchies.add(field(action.spec.rowsColumn));
+                if (action.spec.subRowsColumn)
+                  pivot.rowHierarchies.add(field(action.spec.subRowsColumn));
                 const total = pivot.dataHierarchies.add(
                   field(action.spec.valuesColumn),
                 );

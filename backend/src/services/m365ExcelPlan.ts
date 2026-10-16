@@ -167,6 +167,7 @@ export interface ExcelColumnSpecs {
     values: number;
     aggregation?: ExcelAggregation;
     columns?: number;
+    subRows?: number;
     filter?: number;
     extraValues?: number[];
     showAs?: "percent-of-total" | "percent-of-column";
@@ -311,6 +312,8 @@ export interface ExcelActionSpec {
   aggregation?: ExcelAggregation;
   columnsColumn?: string;
   columnsIndex?: number;
+  subRowsColumn?: string;
+  subRowsIndex?: number;
   operations?: string[];
   fillBlanks?: string | number;
   fillBlanksColumn?: string;
@@ -648,6 +651,18 @@ function resolveColumnSpecs(
     const topN = specs.pivot.topN;
     const aggregation = specs.pivot.aggregation ?? "sum";
     const columns = specs.pivot.columns;
+    const subRows = specs.pivot.subRows;
+    if (
+      subRows !== undefined &&
+      (!inRange(subRows) ||
+        subRows === rows ||
+        subRows === values ||
+        subRows === columns)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "The second PivotTable row field must be a different column.",
+      );
     if (!inRange(rows) || !inRange(values) || rows === values)
       fail(
         "EXCEL_SPEC_INVALID",
@@ -734,6 +749,9 @@ function resolveColumnSpecs(
         : {}),
       ...(columns !== undefined
         ? { columnsColumn: headers[columns], columnsIndex: columns }
+        : {}),
+      ...(subRows !== undefined
+        ? { subRowsColumn: headers[subRows], subRowsIndex: subRows }
         : {}),
     };
   }

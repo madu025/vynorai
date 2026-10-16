@@ -567,9 +567,15 @@ export function buildOutcomes(
         item.details.push(
           say(
             `${agg(spec.aggregation)} of ${spec.valuesColumn} for each ${spec.rowsColumn}` +
+              (spec.subRowsColumn
+                ? `, then ${spec.subRowsColumn} under each`
+                : "") +
               (spec.columnsColumn ? `, split by ${spec.columnsColumn}` : "") +
               (spec.filterColumn ? `, filter on ${spec.filterColumn}` : ""),
             `${spec.rowsColumn} එක් එකක් සඳහා ${spec.valuesColumn} හි ${agg(spec.aggregation)}` +
+              (spec.subRowsColumn
+                ? `, ඊට පසු එක් එකක් යටතේ ${spec.subRowsColumn}`
+                : "") +
               (spec.columnsColumn ? `, ${spec.columnsColumn} අනුව බෙදා` : "") +
               (spec.filterColumn ? `, ${spec.filterColumn} මත පෙරහන` : ""),
           ),

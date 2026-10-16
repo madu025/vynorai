@@ -159,3 +159,24 @@ test("an if-then-otherwise column is one step, not two", () => {
     both.actions.includes("add-column") && both.actions.includes("format"),
   );
 });
+
+test("a pivot can list a second field under each row: by Circuit ID and Item Code as rows", () => {
+  const headers = ["Service ID", "Item Code", "Issued Quantity", "Circuit ID"];
+  const rows = [["a", "OSP1", 2, "0112559962"]];
+  const nested: any = interpretInstruction(
+    "pivot table of total Issued Quantity by Circuit ID and Item Code as rows",
+    headers,
+    rows,
+  );
+  assert.deepEqual(nested.actions, ["pivot-table"]);
+  assert.equal(nested.specs.pivot.rows, 3);
+  assert.equal(nested.specs.pivot.subRows, 1);
+  assert.equal(nested.specs.pivot.columns, undefined);
+  const wide: any = interpretInstruction(
+    "pivot table of total Issued Quantity by Circuit ID and Item Code",
+    headers,
+    rows,
+  );
+  assert.equal(wide.specs.pivot.columns, 1);
+  assert.equal(wide.specs.pivot.subRows, undefined);
+});

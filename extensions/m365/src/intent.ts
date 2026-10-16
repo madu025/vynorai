@@ -48,6 +48,7 @@ export interface InstructionSpecs {
   };
   pivot?: {
     filter?: number;
+    subRows?: number;
     rows: number;
     values: number;
     aggregation?: "sum" | "count" | "average" | "min" | "max";
@@ -1321,6 +1322,11 @@ function interpretChartAndPivot(
             ? "max"
             : "sum";
     const columns = afterBy[1];
+    // "by Circuit ID and Item Code as rows" lists the second field under each first one.
+    const nestedRows =
+      /\b(?:as|in)\s+(?:nested\s+)?rows\b|\bnested\b|\bunder\s+each\b|\bwithin\s+each\b/i.test(
+        text,
+      );
     result.actions.push("pivot-table");
     const wantsShare =
       /\b(?:percent(?:age)?|%|share)\s+of\s+(?:the\s+)?(?:grand\s+)?total\b|\bshare\b/i.test(
@@ -1337,7 +1343,11 @@ function interpretChartAndPivot(
       rows: categoryEntry.index,
       values: numericEntries[0]?.index ?? countLabel!.index,
       aggregation,
-      ...(columns ? { columns: columns.index } : {}),
+      ...(columns
+        ? nestedRows
+          ? { subRows: columns.index }
+          : { columns: columns.index }
+        : {}),
       ...(moreValues.length ? { extraValues: moreValues } : {}),
       ...(wantsColumnShare
         ? { showAs: "percent-of-column" as const }

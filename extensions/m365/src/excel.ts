@@ -243,6 +243,8 @@ export interface ExcelColumnSpecs {
     values: number;
     aggregation?: ExcelAggregation;
     columns?: number;
+    /** A second row field nested under the first (Circuit ID, then Item Code). */
+    subRows?: number;
     filter?: number;
     /** More value fields (at most three) next to the first. */
     extraValues?: number[];
@@ -403,6 +405,8 @@ export interface ExcelActionSpec {
   aggregation?: ExcelAggregation;
   columnsColumn?: string;
   columnsIndex?: number;
+  subRowsColumn?: string;
+  subRowsIndex?: number;
   operations?: string[];
   fillBlanks?: string | number;
   fillBlanksColumn?: string;
@@ -740,6 +744,18 @@ function resolveColumnSpecs(
     const topN = specs.pivot.topN;
     const aggregation = specs.pivot.aggregation ?? "sum";
     const columns = specs.pivot.columns;
+    const subRows = specs.pivot.subRows;
+    if (
+      subRows !== undefined &&
+      (!inRange(subRows) ||
+        subRows === rows ||
+        subRows === values ||
+        subRows === columns)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "The second PivotTable row field must be a different column.",
+      );
     if (!inRange(rows) || !inRange(values) || rows === values)
       fail(
         "EXCEL_SPEC_INVALID",
@@ -826,6 +842,9 @@ function resolveColumnSpecs(
         : {}),
       ...(columns !== undefined
         ? { columnsColumn: headers[columns], columnsIndex: columns }
+        : {}),
+      ...(subRows !== undefined
+        ? { subRowsColumn: headers[subRows], subRowsIndex: subRows }
         : {}),
     };
   }

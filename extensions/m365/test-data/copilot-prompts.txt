@@ -55,10 +55,10 @@ Formula repair	quality	Repair the #REF! formulas
 Formula repair	quality	Fix divide by zero errors in the selected formulas
 Formula repair	quality	Correct the broken formulas in this column
 Formula repair	quality	Replace invalid formula references safely
-Text transforms	-	Split Customer into first and last name columns
-Text transforms	-	Combine Region and Status into one column
-Text transforms	-	Convert Date text into real dates
-Text transforms	-	Fill blank Status values with Unknown
+Text transforms	split-column	Split Customer into first and last name columns
+Text transforms	add-column	Combine Region and Status into one column
+Text transforms	clean	Convert Date text into real dates
+Text transforms	clean	Fill blank Status values with Unknown
 Text transforms	unpivot	Unpivot Sales, Cost into Measure and Amount
 Lookups	add-column	Add column Manager from Staff by Name
 Lookups	add-column	Lookup Segment from CustomerMap using Customer

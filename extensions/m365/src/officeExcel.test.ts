@@ -1230,6 +1230,15 @@ test("a sampled range turns a chart or a summary into a PivotTable and allows de
     plan.actions.map((action: any) => action.kind),
     ["pivot-table", "chart"],
   );
+  // A chart and a pivot asked in one multi-step request: the chart draws the pivot.
+  const both = adaptForSampledRange(["pivot-table", "chart"], {
+    pivot: { rows: 0, values: 1, aggregation: "sum" },
+    chart: { category: 0, value: 1, chartType: "column" },
+  });
+  assert.equal(both.specs.chart?.pivotResult, true);
+  assert.doesNotThrow(() =>
+    createExcelPreviewPlan(base, both.actions, 500, both.specs),
+  );
   const summary = adaptForSampledRange(["summary"], {
     summary: {
       group: 0,

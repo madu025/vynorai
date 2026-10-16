@@ -2471,6 +2471,28 @@ export function adaptForSampledRange(
         ? { extraValues: specs.chart.extraValues.slice(0, 3) }
         : {}),
     };
+  } else if (
+    next.has("chart") &&
+    next.has("pivot-table") &&
+    specs.chart &&
+    specs.chart.chartType !== "histogram" &&
+    specs.chart.chartType !== "waterfall" &&
+    !specs.chart.pivotResult
+  ) {
+    // A chart and a PivotTable asked together: the chart draws the PivotTable Excel computes.
+    out.chart = { ...specs.chart, pivotResult: true };
+    if (
+      specs.pivot?.rows !== specs.chart.category ||
+      specs.pivot?.values !== specs.chart.value
+    )
+      out.pivot = {
+        rows: specs.chart.category,
+        values: specs.chart.value,
+        aggregation: "sum",
+        ...(specs.chart.extraValues?.length
+          ? { extraValues: specs.chart.extraValues.slice(0, 3) }
+          : {}),
+      };
   }
   if (
     next.has("summary") &&

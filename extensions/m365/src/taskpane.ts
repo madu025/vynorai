@@ -122,6 +122,12 @@ let capabilities: M365Capabilities | undefined;
 let currentPlan: any;
 let previewGeneration = 0;
 let previewAbortController: AbortController | undefined;
+let cachedHeaderLayout:
+  | {
+      key: string;
+      layout: ReturnType<typeof getExcelHeaderLayout>;
+    }
+  | undefined;
 /** Headers and rows of the last inspected selection; used only to draw the preview picture. */
 let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
 let lastRevealSheet = "";
@@ -149,6 +155,27 @@ function cancelPreview() {
   previewGeneration += 1;
   previewAbortController?.abort();
   previewAbortController = undefined;
+}
+
+function getCachedHeaderLayout(
+  input: Parameters<typeof getExcelHeaderLayout>[0],
+) {
+  // Header layout is safe to reuse only when the workbook location and the first
+  // two rows are unchanged. No data rows are retained in this cache.
+  const key = JSON.stringify([
+    input.workbookId,
+    input.worksheetName,
+    input.address,
+    input.values.slice(0, 2),
+  ]);
+  if (cachedHeaderLayout?.key === key) {
+    log.record("excel:header-layout-cache", "pass", "reused");
+    return cachedHeaderLayout.layout;
+  }
+  const layout = getExcelHeaderLayout(input);
+  cachedHeaderLayout = { key, layout };
+  log.record("excel:header-layout-cache", "pass", "refreshed");
+  return layout;
 }
 
 interface StoredSession {
@@ -327,6 +354,7 @@ function restoreSession(): boolean {
 
 function signOutOfMicrosoft() {
   cancelPreview();
+  cachedHeaderLayout = undefined;
   accessToken = "";
   capabilities = undefined;
   currentPlan = undefined;
@@ -620,7 +648,7 @@ inspect?.addEventListener("click", async () => {
       }),
     );
     if (stopIfStale()) return;
-    const layout = getExcelHeaderLayout(input);
+    const layout = getCachedHeaderLayout(input);
     currentSourceSheet = String(input.worksheetName ?? "");
     currentRangeAddress = String(input.address ?? "");
     lastRange = {

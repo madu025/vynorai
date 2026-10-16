@@ -35,6 +35,7 @@ import {
   buildCorrelationCells,
   buildDescribeCells,
   buildForecastCells,
+  buildForecastCellsLarge,
   buildInsightReportCells,
 } from "./statistics.js";
 import { inspectFormulas, type FormulaSelection } from "./formulaInspector.js";
@@ -1891,6 +1892,13 @@ export async function applyApprovedExcelPlan(
                   headers,
                   spec.pair?.[0]?.index ?? 0,
                   spec.pair?.[1]?.index ?? 0,
+                );
+              else if (spec.mode === "forecast" && plan.profile?.sample)
+                cells = buildForecastCellsLarge(
+                  range,
+                  headers,
+                  spec.value?.index ?? 0,
+                  spec.periods ?? 3,
                 );
               else if (spec.mode === "forecast")
                 cells = buildForecastCells(

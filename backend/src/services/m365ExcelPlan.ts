@@ -48,7 +48,8 @@ function sampledKindAllowed(
   if (kind === "statistics")
     return (
       specs?.statistics?.mode === "describe" ||
-      specs?.statistics?.mode === "correlation"
+      specs?.statistics?.mode === "correlation" ||
+      specs?.statistics?.mode === "forecast"
     );
   return (
     kind === "chart" &&

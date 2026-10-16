@@ -197,3 +197,22 @@ test("an insight request previews deterministic trend, IQR and contributor evide
     "insights",
   );
 });
+
+import { buildForecastCellsLarge } from "./statistics.js";
+
+test("a forecast of a very large column keeps the last rows and fits the trend over every row once", () => {
+  const cells = buildForecastCellsLarge(
+    { sheetName: "Big", startColumn: 0, startRow: 0, endRow: 520124 },
+    ["Id", "Qty"],
+    1,
+    3,
+    5,
+  );
+  assert.equal(cells.length, 1 + 5 + 3);
+  assert.equal(cells[1][0], "520120");
+  assert.equal(cells[1][1], "=INDEX('Big'!$B$2:$B$520125,520120)");
+  assert.equal(cells[6][2], "=$E$3+$E$2*A7");
+  assert.ok(cells[1][4].startsWith("=SLOPE('Big'!$B$2:$B$520125,SEQUENCE("));
+  assert.ok(cells[2][4].startsWith("=INTERCEPT("));
+  assert.ok(cells.length < 20);
+});

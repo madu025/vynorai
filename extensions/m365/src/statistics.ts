@@ -347,3 +347,50 @@ export function buildInsightReportCells(
   }
   return cells;
 }
+
+/**
+ * A forecast of a very large column: the last rows as actuals and the next periods as the trend
+ * line, which Excel fits over every row once (SLOPE and INTERCEPT), so nothing is copied row by row.
+ */
+export function buildForecastCellsLarge(
+  range: RangeInfo,
+  headers: string[],
+  index: number,
+  periods: number,
+  shownActuals = 30,
+): string[][] {
+  const count = range.endRow - range.startRow;
+  const letter = columnLetter(range.startColumn + index);
+  const column = `${quoted(range.sheetName)}$${letter}$${range.startRow + 2}:$${letter}$${range.endRow + 1}`;
+  const first = Math.max(1, count - shownActuals + 1);
+  const out: string[][] = [
+    [
+      "Period",
+      `Actual ${headers[index]}`,
+      "Forecast",
+      "Trend over every row",
+      "Value",
+    ],
+  ];
+  for (let period = first; period <= count; period += 1)
+    out.push([String(period), `=INDEX(${column},${period})`, "", "", ""]);
+  const intercept = "$E$3";
+  const slope = "$E$2";
+  for (let step = 1; step <= periods; step += 1) {
+    const row = out.length + 1;
+    out.push([
+      String(count + step),
+      "",
+      `=${intercept}+${slope}*A${row}`,
+      "",
+      "",
+    ]);
+  }
+  out[1][3] = "Slope";
+  out[1][4] = `=SLOPE(${column},SEQUENCE(ROWS(${column})))`;
+  out[2][3] = "Intercept";
+  out[2][4] = `=INTERCEPT(${column},SEQUENCE(ROWS(${column})))`;
+  out[3][3] = "Rows";
+  out[3][4] = `=ROWS(${column})`;
+  return out;
+}

@@ -338,7 +338,7 @@ export function createAnalysisRequest(
   consent: true;
 } {
   if (consent !== true) throw new AnalysisConsentError();
-  const wanted = request.replace(/\s+/g, " ").trim().slice(0, 300);
+  const wanted = request.replace(/\s+/g, " ").trim().slice(0, 600);
   return {
     summary,
     language,

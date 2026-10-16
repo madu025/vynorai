@@ -40,23 +40,28 @@ const scriptResultSchema = z
 export type ScriptResult = z.infer<typeof scriptResultSchema>;
 
 const SYSTEM_PROMPT = [
-  "You plan spreadsheet work as a short list of steps for a spreadsheet assistant.",
+  "You understand what a person wants from a spreadsheet, however they phrase it (English, Sinhala, Singlish, long or vague) and turn it into a short list of steps for a spreadsheet assistant.",
   "You receive ONLY a statistical summary of a worksheet (column names, types, counts). You never see cell values.",
   "Reply with ONE JSON object and nothing else: {title: string, steps: [{instruction: string, reason: string}]}.",
   `Give 1 to ${MAX_SCRIPT_STEPS} steps in the order they should run. Each instruction is ONE plain English sentence that uses column names exactly as given.`,
   "The assistant understands only these kinds of sentences:",
   "- pivot table of total <measure> by <category> (optionally: top 5, average, count, as percent of total)",
+  '- pivot table of total <measure> by <category> and <category2> as rows (lists every <category2> under each <category> with its total; use it for "what was used per X and how much")',
+  "- pivot table of total <measure> by <category> and <category2> (second field becomes columns)",
   "- <column type> chart of <measure> by <category> (column, line, bar, pie, stacked column, histogram)",
   "- clean the data: trim extra spaces / convert text to numbers / convert text to dates / remove duplicate rows / fill blank cells with 0",
-  "- add a column <Name> that is <A> + <B> (also - * /, IF, first N letters of, year of)",
+  "- add a column <Name> that is <A> + <B> (also - * /, if <cond> then <x> otherwise <y>, first N letters of, year of <date column>)",
   "- format the data nicely with a bold header and banded rows",
   "- highlight <measure> with a color scale / add data bars to <measure> / add icon sets to <measure> / highlight duplicates in <column>",
-  "- add a dropdown list to <column>",
+  "- add a dropdown list to <column> / allow only dates in <column> / highlight <measure> above <number>",
+  "- name the <column> column <Name> / copy this data to a new sheet",
   "- show the top 10 rows by <measure> / sort by <measure> descending / show rows where <column> is <value>",
   "- describe <measure> / forecast <measure> for the next 5 periods / correlation between <measure> and <measure> / dashboard with total <measure> by <category>",
   "- check the data quality of this data",
   "Never output code, formulas as code, macros, scripts, links, or any step that deletes or overwrites the original data. Every step must write to a new result sheet.",
-  "Never use identifier or personal-data columns as a category or measure.",
+  "Use only column names that appear in the summary, exactly as written; never invent a column.",
+  'Prefer the fewest steps that fully answer the request. A person asking "for each X, which Y and how much" wants ONE pivot with X and Y as rows.',
+  "A Circuit ID, Service ID or other identifier may be the category when the person names it, but never a measure.",
 ].join("\n");
 
 const LANGUAGE_NAMES: Record<AnalysisLanguage, string> = {
@@ -72,7 +77,7 @@ export function buildScriptMessages(
 ) {
   const wanted = request
     .trim()
-    .slice(0, 300)
+    .slice(0, 600)
     .replace(/["\r\n]+/g, " ");
   return [
     {

@@ -1341,7 +1341,24 @@ inspect?.addEventListener("click", async () => {
         interpreted.problems[0] ??
         "Say what to create: a table, chart, result sheet, PivotTable, clean-up, or a computed column. Or ask a question about the data.";
       renderConversation("error", hint);
-      return setStatus(hint);
+      setStatus(hint);
+      // The built-in reader did not understand it: let the AI interpret the request (the person must still agree to send the summary).
+      if (
+        !excludedKinds.size &&
+        capabilities?.aiAnalysis !== false &&
+        accessToken
+      ) {
+        scriptMode = true;
+        void startConsent();
+        renderConversation(
+          "assistant",
+          localizeMessage(
+            language,
+            "I could not read that directly. Agree below and the AI will interpret it; only column names and types are sent.",
+          ),
+        );
+      }
+      return;
     }
     lastSample = input.sample;
     if (input.sample) {
@@ -1943,23 +1960,26 @@ function renderScript(result: {
   const use = document.createElement("button");
   use.type = "button";
   use.textContent = localizeMessage(language, "Use these steps");
-  use.addEventListener("click", () => {
-    if (instruction) {
-      instruction.value = result.steps
-        .map((step) => step.instruction.replace(/[.;]+$/, ""))
-        .join(" then ");
-      instruction.dispatchEvent(new Event("input"));
-    }
-    pendingSpecs = undefined;
-    currentPlan = undefined;
-    previewFingerprint = "";
-    if (apply) apply.disabled = true;
-    if (preview) preview.textContent = "No preview yet.";
-    log.record("script:use-steps", "pass", { steps: result.steps.length });
-    setStatus("Preparing the preview. Nothing changes until you confirm.");
-    showInstructionAndPreview();
-  });
+  use.addEventListener("click", () => useSteps(result));
   output.appendChild(use);
+}
+
+/** The steps become the instruction and go through the normal preview; nothing changes until Confirm. */
+function useSteps(result: { steps: { instruction: string }[] }) {
+  if (instruction) {
+    instruction.value = result.steps
+      .map((step) => step.instruction.replace(/[.;]+$/, ""))
+      .join(" then ");
+    instruction.dispatchEvent(new Event("input"));
+  }
+  pendingSpecs = undefined;
+  currentPlan = undefined;
+  previewFingerprint = "";
+  if (apply) apply.disabled = true;
+  if (preview) preview.textContent = "No preview yet.";
+  log.record("script:use-steps", "pass", { steps: result.steps.length });
+  setStatus("Preparing the preview. Nothing changes until you confirm.");
+  showInstructionAndPreview();
 }
 
 scriptPlan?.addEventListener("click", () => {
@@ -2056,9 +2076,11 @@ consentSend?.addEventListener("click", async () => {
       log.record("api:script", "pass", { steps: planned.steps.length });
       resetAnalysisConsent();
       renderScript(planned);
+      // The person already agreed to send the summary; the preview is the next safe step.
       setStatus(
-        "Steps ready. Nothing has changed; use them to see the preview.",
+        "The AI understood your request. Preparing the preview; nothing changes until you confirm.",
       );
+      useSteps(planned);
       return;
     }
     setStatus("Analyzing the summary...");

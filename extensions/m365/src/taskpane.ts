@@ -1297,6 +1297,12 @@ inspect?.addEventListener("click", async () => {
       }
     }
     if (actions.length === 0) {
+      if (looksLikeQuestion(instructionText) && input.sample) {
+        // An answer computed from a sample of a very large range would be wrong: say so and offer the exact request.
+        const text = `This data has ${input.sample.totalRows.toLocaleString("en-US")} rows, too many to answer a question from a sample. Ask for a PivotTable instead, for example: "pivot table of total <value column> by <category column>, top 5".`;
+        showAnswer(text);
+        return setStatus("Nothing was changed.");
+      }
       if (looksLikeQuestion(instructionText)) {
         const answer = answerQuestion(
           instructionText,
@@ -1726,6 +1732,8 @@ function showAnswer(text: string) {
   row.textContent = text;
   list.appendChild(row);
   card.hidden = false;
+  // The conversation is where a chat reader looks for the answer.
+  renderConversation("assistant", text);
 }
 
 /** Local, private insights: shown to the person, never sent anywhere. */

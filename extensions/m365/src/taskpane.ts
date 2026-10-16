@@ -77,6 +77,7 @@ import {
   readLookupSheetInfo,
   listWorksheetNames,
   listVynorSheets,
+  type ExcelActionResult,
 } from "./officeExcel.js";
 import {
   formatFormulaInspection,
@@ -145,6 +146,8 @@ let excludedKinds = new Set<string>();
 let lastCreated:
   | { planId: string; sheets: string[]; tables: string[]; names: string[] }
   | undefined;
+let galleryPlanId = "";
+let galleryResults: ExcelActionResult[] = [];
 let language: Language = loadLanguage();
 let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
@@ -434,6 +437,9 @@ function signOutOfMicrosoft() {
   if (preview) preview.textContent = "No preview yet.";
   conversationMessages = [];
   renderConversationHistory();
+  galleryPlanId = "";
+  galleryResults = [];
+  renderResultGallery();
   lastConversationRequest = "";
   updateAuthenticationUi(false);
   log.record("session:sign-out", "pass", "local session removed");
@@ -1134,6 +1140,9 @@ apply?.addEventListener("click", async () => {
       approvedPlan.planId,
       report.results,
     );
+    galleryPlanId = approvedPlan.planId;
+    galleryResults = report.results;
+    renderResultGallery();
     if (rollbackButton)
       rollbackButton.hidden =
         lastCreated.sheets.length + lastCreated.tables.length === 0;
@@ -2095,6 +2104,128 @@ function doneSentence(
   return `${base}${exists.length ? " Some items already existed." : ""} ${sourceUnchanged ? "Your original data was not changed." : "Please check your source data."}`;
 }
 
+async function replaceOlderResultSheets(keepSheet: string) {
+  if (!config || !accessToken) return;
+  if (
+    !(await askInPane(
+      localizeMessage(
+        language,
+        "Remove older VynorAI result sheets and keep this result? Your original data is not touched.",
+      ),
+      localizeMessage(language, "Replace"),
+    ))
+  )
+    return log.record("gallery:replace", "skip", "user cancelled");
+  try {
+    const older = (await listVynorSheets(officeRuntime())).filter(
+      (sheet) => sheet !== keepSheet,
+    );
+    if (!older.length)
+      return setStatus("No older VynorAI result sheets found.");
+    const removed = await rollbackCreatedItems(
+      officeRuntime(),
+      { sheets: older, tables: [] },
+      true,
+    );
+    renderChanged([
+      ...galleryResults.map(
+        (result) => `${result.kind} - ${result.targetSheet}`,
+      ),
+      `Removed ${removed.removedSheets.length} older VynorAI result sheet(s).`,
+    ]);
+    setStatus(`Removed ${removed.removedSheets.length} older result sheet(s).`);
+    log.record("gallery:replace", "pass", {
+      removedSheets: removed.removedSheets.length,
+    });
+  } catch (error) {
+    handleApiError("gallery:replace", error);
+  }
+}
+
+function renderResultGallery() {
+  const gallery = document.querySelector<HTMLElement>("#result-gallery");
+  const list = document.querySelector<HTMLElement>("#result-gallery-list");
+  if (!gallery || !list) return;
+  list.replaceChildren();
+  const visible = galleryResults.filter(
+    (result) => result.status === "created" || result.status === "exists",
+  );
+  gallery.hidden = visible.length === 0;
+  for (const result of visible) {
+    const item = document.createElement("article");
+    item.className = "result-item";
+    const head = document.createElement("div");
+    head.className = "result-item-head";
+    const title = document.createElement("strong");
+    title.textContent = kindTitle(result.kind, language);
+    const target = document.createElement("span");
+    target.textContent = result.targetSheet;
+    head.append(title, target);
+    const actions = document.createElement("div");
+    actions.className = "result-item-actions";
+    const show = document.createElement("button");
+    show.type = "button";
+    show.textContent = translate(language, "show_result", "Show result");
+    show.addEventListener("click", () => {
+      void revealExcelResult(officeRuntime(), result.targetSheet);
+    });
+    actions.appendChild(show);
+    if (result.status === "created") {
+      const undo = document.createElement("button");
+      undo.type = "button";
+      undo.textContent = translate(language, "undo", "Undo");
+      undo.addEventListener("click", async () => {
+        const sameSheet = galleryResults.filter(
+          (candidate) =>
+            candidate.targetSheet === result.targetSheet &&
+            candidate.status === "created",
+        );
+        if (
+          !(await askInPane(
+            localizeMessage(
+              language,
+              "Remove this VynorAI result? Your original data is not touched.",
+            ),
+            localizeMessage(language, "Remove"),
+          ))
+        )
+          return;
+        try {
+          const removed = await rollbackCreatedItems(
+            officeRuntime(),
+            rollbackItemsFromApplyReport(galleryPlanId, sameSheet),
+            true,
+          );
+          galleryResults = galleryResults.filter(
+            (candidate) => candidate.targetSheet !== result.targetSheet,
+          );
+          lastCreated = rollbackItemsFromApplyReport(
+            galleryPlanId,
+            galleryResults.filter(
+              (candidate) => candidate.status === "created",
+            ),
+          );
+          renderResultGallery();
+          markChangeNote("undone");
+          setStatus(`Removed ${removed.removedSheets.length} result sheet(s).`);
+        } catch (error) {
+          handleApiError("gallery:undo", error);
+        }
+      });
+      actions.appendChild(undo);
+    }
+    const replace = document.createElement("button");
+    replace.type = "button";
+    replace.textContent = translate(language, "cleanup", "Replace older");
+    replace.addEventListener("click", () => {
+      void replaceOlderResultSheets(result.targetSheet);
+    });
+    actions.appendChild(replace);
+    item.append(head, actions);
+    list.appendChild(item);
+  }
+}
+
 /** One checkbox per planned action; changing it re-plans with only the chosen steps. */
 function renderSteps(
   wanted: string[],
@@ -2162,6 +2293,9 @@ rollbackButton?.addEventListener("click", async () => {
         log.record("api:rollback", "fail", describeError(error)),
       );
     lastCreated = undefined;
+    galleryPlanId = "";
+    galleryResults = [];
+    renderResultGallery();
     if (rollbackButton) rollbackButton.hidden = true;
     markChangeNote("undone");
     setStatus(
@@ -2300,6 +2434,7 @@ overviewButton?.addEventListener("click", async () => {
 function refreshLanguage() {
   applyLanguage(document, language);
   renderConversationHistory();
+  renderResultGallery();
   const previewNode = document.querySelector<HTMLElement>("#preview");
   if (previewNode && previewNode.textContent?.startsWith("{"))
     previewNode.textContent = previewNode.textContent;

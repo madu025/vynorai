@@ -359,6 +359,62 @@ test("CSV export copies the source, marks the result and starts a download", asy
   }
 });
 
+test("PDF export copies the source, marks the result and downloads Office file slices", async () => {
+  const excel = fakeWorkbook(sourceCells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["export-pdf"]);
+  const downloads: string[] = [];
+  (globalThis as any).document = {
+    createElement: () => ({
+      click() {
+        downloads.push(this.download);
+      },
+    }),
+  };
+  (globalThis as any).Office = {
+    FileType: { Pdf: "pdf" },
+    context: {
+      document: {
+        getFileAsync(_type: string, callback: (result: any) => void) {
+          callback({
+            status: "succeeded",
+            value: {
+              sliceCount: 1,
+              getSliceAsync(
+                _index: number,
+                sliceCallback: (result: any) => void,
+              ) {
+                sliceCallback({
+                  status: "succeeded",
+                  value: { data: "JVBERi0xLjQ=" },
+                });
+              },
+              closeAsync() {},
+            },
+          });
+        },
+      },
+    },
+  };
+  try {
+    const report = await applyApprovedExcelPlan(
+      excel.runtime,
+      plan,
+      true,
+      "approval",
+      { expectedSourceFingerprint: plan.sourceFingerprint },
+    );
+    assert.equal(report.results[0].kind, "export-pdf");
+    assert.equal(report.results[0].status, "created");
+    assert.equal(report.sourceUnchangedAfterApply, true);
+    assert.deepEqual(downloads, ["PDF export of Sales.pdf"]);
+    assert.ok(excel.calls.includes("mark PDF export of Sales vynorai=result"));
+  } finally {
+    delete (globalThis as any).document;
+    delete (globalThis as any).Office;
+  }
+});
+
 test("local address strips the sheet prefix, including quoted names", () => {
   assert.equal(localExcelAddress("Sales!A1:B3"), "A1:B3");
   assert.equal(localExcelAddress("'My!Sheet'!C2:D9"), "C2:D9");

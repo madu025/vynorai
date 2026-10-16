@@ -67,7 +67,8 @@ type ExcelActionPlan = {
       | "statistics"
       | "dashboard"
       | "view"
-      | "export-csv";
+      | "export-csv"
+      | "export-pdf";
     name: string;
     targetSheet: string;
     preservesSource: true;
@@ -99,6 +100,7 @@ const EXCEL_ACTION_ORDER: ExcelActionKind[] = [
   "dashboard",
   "view",
   "export-csv",
+  "export-pdf",
 ];
 
 function orderExcelActions(
@@ -1940,6 +1942,12 @@ export function selectExcelActions(instruction: string): ExcelActionKind[] {
     )
   )
     return ["export-csv"];
+  if (
+    /\b(?:export|download)\b.*\bpdf\b|\bpdf\b.*\b(?:export|download|file)\b/.test(
+      normalized,
+    )
+  )
+    return ["export-pdf"];
   if (/\b(?:kpi\s+)?dashboard\b/.test(normalized)) return ["dashboard"];
   const withoutPivot = normalized.replace(/pivot\s*table/g, " ");
   const requested = new Set<ExcelActionKind>();
@@ -2135,7 +2143,9 @@ export function createExcelPreviewPlan(
                               ? `${baseName}_Vynor_Dashboard`
                               : kind === "export-csv"
                                 ? `${baseName}_Vynor_CSV`
-                                : resultSheet;
+                                : kind === "export-pdf"
+                                  ? `${baseName}_Vynor_PDF`
+                                  : resultSheet;
   if (
     (requested.has("summary") ||
       requested.has("format") ||

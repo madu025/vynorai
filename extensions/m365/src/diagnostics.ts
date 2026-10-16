@@ -203,6 +203,7 @@ export const ACTION_REQUIREMENTS: Record<string, string> = {
   slicer: "1.10",
   view: "1.4",
   "export-csv": "1.4",
+  "export-pdf": "1.1",
 };
 
 function stringClaim(value: unknown): string | undefined {

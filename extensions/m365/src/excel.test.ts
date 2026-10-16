@@ -112,11 +112,21 @@ test("instruction planner selects only explicit allowlisted Excel actions", () =
   assert.deepEqual(selectExcelActions("Export this result to CSV"), [
     "export-csv",
   ]);
+  assert.deepEqual(selectExcelActions("Export the dashboard to PDF"), [
+    "export-pdf",
+  ]);
 });
 
 test("CSV export plans a separate source-preserving result sheet", () => {
   const plan = createExcelPreviewPlan(input, ["export-csv"]);
   assert.equal(plan.actions[0].targetSheet, "Sales_Vynor_CSV");
+  assert.equal(plan.actions[0].preservesSource, true);
+  assert.equal(plan.requiresConfirmation, true);
+});
+
+test("PDF export plans a separate source-preserving result sheet", () => {
+  const plan = createExcelPreviewPlan(input, ["export-pdf"]);
+  assert.equal(plan.actions[0].targetSheet, "Sales_Vynor_PDF");
   assert.equal(plan.actions[0].preservesSource, true);
   assert.equal(plan.requiresConfirmation, true);
 });

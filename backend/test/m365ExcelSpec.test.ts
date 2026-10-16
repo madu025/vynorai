@@ -1268,6 +1268,7 @@ test("the apply-result schema accepts every action kind a plan can contain", asy
     "add-column",
     "view",
     "export-csv",
+    "export-pdf",
   ])
     assert.ok(schema.includes(`"${kind}"`), `apply-result misses ${kind}`);
   assert.match(
@@ -1282,6 +1283,14 @@ test("server and add-in agree on the source-preserving CSV export plan", () => {
   const local = createExcelPreviewPlan(input as any, ["export-csv"], 500);
   assert.equal(excelPlansMatch(local, server), true);
   assert.equal(server.actions[0].targetSheet, "Sheet1_Vynor_CSV");
+  assert.equal(server.actions[0].preservesSource, true);
+});
+
+test("server and add-in agree on the source-preserving PDF export plan", () => {
+  const server = createServerExcelPreviewPlan(input, ["export-pdf"], 500);
+  const local = createExcelPreviewPlan(input as any, ["export-pdf"], 500);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].targetSheet, "Sheet1_Vynor_PDF");
   assert.equal(server.actions[0].preservesSource, true);
 });
 

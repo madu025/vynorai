@@ -6,6 +6,7 @@
 
 const EXACT: Record<string, string> = {
   "export-csv": "CSV අපනයනය",
+  "export-pdf": "PDF අපනයනය",
   "No preview yet.": "තවමත් පෙරදසුනක් නැත.",
   "Nothing has changed in your workbook yet.":
     "ඔබේ වැඩපොතේ තවමත් කිසිදු වෙනසක් සිදු කර නැත.",

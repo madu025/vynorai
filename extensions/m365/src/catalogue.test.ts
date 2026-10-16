@@ -14,6 +14,16 @@ test("CSV export is an explicit, fully served action", () => {
   assert.deepEqual(interpreted.problems, []);
 });
 
+test("PDF export is an explicit, fully served action", () => {
+  const interpreted = interpretInstruction(
+    "Export the dashboard to PDF",
+    HEADERS,
+    ROWS,
+  );
+  assert.deepEqual(interpreted.actions, ["export-pdf"]);
+  assert.deepEqual(interpreted.problems, []);
+});
+
 type CataloguePrompt = {
   category: string;
   expectedActions: string[];

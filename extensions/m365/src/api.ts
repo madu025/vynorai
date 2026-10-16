@@ -56,7 +56,8 @@ export interface M365ApiClient {
         | "statistics"
         | "dashboard"
         | "view"
-        | "export-csv";
+        | "export-csv"
+        | "export-pdf";
       status: "created" | "exists" | "failed" | "skipped_unsupported";
     }>;
   }): Promise<any>;

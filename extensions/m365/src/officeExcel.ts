@@ -317,6 +317,18 @@ export function excelValuesToCsv(values: any[][]): string {
   return values.map((row) => row.map(cell).join(",")).join("\r\n") + "\r\n";
 }
 
+function downloadLocalBlob(blob: Blob, filename: string): void {
+  if (typeof document === "undefined" || typeof URL === "undefined")
+    throw new Error("FILE_DOWNLOAD_UNAVAILABLE");
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 /** Starts a local browser download; no workbook or server state is changed by this helper. */
 export function downloadExcelCsv(values: any[][], filename: string): void {
   if (
@@ -329,13 +341,96 @@ export function downloadExcelCsv(values: any[][], filename: string): void {
   const blob = new Blob([excelValuesToCsv(values)], {
     type: "text/csv;charset=utf-8",
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.rel = "noopener";
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadLocalBlob(blob, filename);
+}
+
+function decodeOfficeFileSlice(data: unknown): Uint8Array {
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (typeof data !== "string" || typeof atob !== "function")
+    throw new Error("PDF_SLICE_INVALID");
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1)
+    bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+/** Downloads the current Excel document as PDF through the Office common File API. */
+export function downloadExcelPdf(filename: string): Promise<void> {
+  const office = (globalThis as any).Office;
+  const documentApi = office?.context?.document;
+  if (typeof documentApi?.getFileAsync !== "function")
+    return Promise.reject(new Error("PDF_EXPORT_UNAVAILABLE"));
+  return new Promise((resolve, reject) => {
+    documentApi.getFileAsync(
+      office.FileType?.Pdf ?? "pdf",
+      (fileResult: any) => {
+        if (fileResult?.status !== "succeeded" || !fileResult.value) {
+          reject(new Error("PDF_EXPORT_FAILED"));
+          return;
+        }
+        const file = fileResult.value;
+        const chunks: Uint8Array[] = [];
+        const readSlice = (index: number) => {
+          file.getSliceAsync(index, (sliceResult: any) => {
+            if (sliceResult?.status !== "succeeded" || !sliceResult.value) {
+              try {
+                file.closeAsync?.();
+              } catch {
+                // Closing is best effort after a failed slice read.
+              }
+              reject(new Error("PDF_SLICE_READ_FAILED"));
+              return;
+            }
+            try {
+              chunks.push(decodeOfficeFileSlice(sliceResult.value.data));
+            } catch (error) {
+              try {
+                file.closeAsync?.();
+              } catch {
+                // Closing is best effort after malformed data.
+              }
+              reject(error);
+              return;
+            }
+            if (index + 1 < Number(file.sliceCount)) {
+              readSlice(index + 1);
+              return;
+            }
+            try {
+              downloadLocalBlob(
+                new Blob(chunks, { type: "application/pdf" }),
+                filename,
+              );
+              file.closeAsync?.();
+              resolve();
+            } catch (error) {
+              try {
+                file.closeAsync?.();
+              } catch {
+                // Closing is best effort after a local download failure.
+              }
+              reject(error);
+            }
+          });
+        };
+        if (
+          !Number.isInteger(Number(file.sliceCount)) ||
+          Number(file.sliceCount) < 1
+        ) {
+          try {
+            file.closeAsync?.();
+          } catch {
+            // Closing is best effort after an invalid file response.
+          }
+          reject(new Error("PDF_SLICE_COUNT_INVALID"));
+          return;
+        }
+        readSlice(0);
+      },
+    );
+  });
 }
 
 async function readValuesInChunks(
@@ -897,6 +992,13 @@ export async function applyApprovedExcelPlan(
               if (!lastCopiedValues)
                 throw new Error("CSV source copy was not created");
               downloadExcelCsv(lastCopiedValues, `${action.targetSheet}.csv`);
+            }
+          } else if (action.kind === "export-pdf") {
+            if (sheetExists) {
+              result.status = "exists";
+            } else {
+              await writeSourceCopy(sheet);
+              await downloadExcelPdf(`${action.targetSheet}.pdf`);
             }
           } else if (action.kind === "dashboard") {
             const dashboard = action.spec?.dashboard;

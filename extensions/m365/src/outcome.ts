@@ -62,6 +62,7 @@ const KIND_TITLES: Record<string, [string, string]> = {
   statistics: ["Statistics", "සංඛ්‍යාලේඛන"],
   "lookup-columns": ["Lookup columns", "Lookup columns"],
   "export-csv": ["CSV export", "CSV අපනයනය"],
+  "export-pdf": ["PDF export", "PDF අපනයනය"],
 };
 
 export function kindTitle(kind: string, language: OutcomeLanguage): string {
@@ -179,6 +180,15 @@ export function buildOutcomes(
         say(
           "Copies the selected data to a new VynorAI result sheet and downloads a sanitized CSV after confirmation. Source data stays unchanged.",
           "තෝරාගත් දත්ත නව VynorAI ප්‍රතිඵල පත්‍රයකට පිටපත් කර, තහවුරු කළ පසු ආරක්ෂිත CSV ගොනුවක් බාගත කරයි. මුල් දත්ත වෙනස් නොවේ.",
+        ),
+      );
+      return item;
+    }
+    if (action.kind === "export-pdf") {
+      item.details.push(
+        say(
+          "Copies the selected data to a new VynorAI result sheet and downloads a PDF of the workbook after confirmation. Source data stays unchanged.",
+          "තෝරාගත් දත්ත නව VynorAI ප්‍රතිඵල පත්‍රයකට පිටපත් කර, තහවුරු කළ පසු workbook එකේ PDF එකක් බාගත කරයි. මුල් දත්ත වෙනස් නොවේ.",
         ),
       );
       return item;
@@ -1138,6 +1148,7 @@ const KIND_PREFIX: Record<string, string> = {
   summary: "Summary of",
   dashboard: "Dashboard of",
   "export-csv": "CSV export of",
+  "export-pdf": "PDF export of",
   "add-column": "Calc of",
   "lookup-columns": "Lookup of",
   "new-sheet": "Result of",

@@ -85,7 +85,7 @@ test("M365 diagnostics names each failing gate, then reports ready once onboarde
     assert.equal(capabilities.excel.canInspect, true);
     assert.equal(capabilities.excel.canPreview, true);
     assert.equal(capabilities.excel.canApply, true);
-    assert.equal(capabilities.excel.actionKinds.length, 18);
+    assert.equal(capabilities.excel.actionKinds.length, 19);
     assert.deepEqual(
       capabilities.excel.writableActionKinds,
       capabilities.excel.actionKinds,

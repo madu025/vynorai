@@ -17,6 +17,7 @@ import {
   LARGE_FORMAT_ROWS,
   qualityReportCells,
   splitColumnFormulas,
+  unpivotFormula,
   viewFormula,
 } from "./largeRange.js";
 
@@ -2456,6 +2457,59 @@ export async function applyApprovedExcelPlan(
               );
             if (sheetExists) {
               result.status = "exists";
+            } else if (plan.profile?.sample) {
+              // Very large data: one spilled formula over the first rows (see the warning).
+              const headers = await readHeaderCells();
+              const values = spec.unpivotValueIndexes as number[];
+              if (
+                values.some(
+                  (index) =>
+                    headers[index] !==
+                    spec.unpivotValueColumns?.[values.indexOf(index)],
+                )
+              )
+                throw new Error(
+                  "The unpivot source changed after the preview. Preview again.",
+                );
+              const dimensions = headers
+                .map((_header, index) => index)
+                .filter((index) => !values.includes(index));
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const outHeaders = [
+                ...dimensions.map((index) => headers[index]),
+                spec.unpivotNameColumn,
+                spec.unpivotValueColumn,
+              ];
+              sheet.getRangeByIndexes(0, 0, 1, outHeaders.length).values = [
+                outHeaders.map(literal),
+              ];
+              sheet.getRange("A2").formulas = [
+                [
+                  unpivotFormula(
+                    {
+                      sheetName: plan.worksheetName,
+                      startColumn: parsed.startColumn,
+                      startRow: parsed.startRow,
+                      endRow: parsed.endRow,
+                      columns: headers.length,
+                    },
+                    {
+                      dimensions,
+                      values,
+                      valueHeaders: values.map((index) => headers[index]),
+                    },
+                  ),
+                ],
+              ];
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                1,
+                outHeaders.length,
+              ).format.font.bold = true;
+              await context.sync();
             } else {
               const { headers, rows } = splitHeader(await readSourceValues());
               const values = spec.unpivotValueIndexes as number[];

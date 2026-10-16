@@ -1284,7 +1284,7 @@ test("a sampled range allows clean-up and formatting, with a warning that says h
     clean: { operations: ["trim"] },
   });
   assert.equal(clean.actions[0].kind, "clean");
-  assert.ok(clean.warnings.some((w: string) => /first 100,000 rows/.test(w)));
+  assert.ok(clean.warnings.some((w: string) => /first 50,000 rows/.test(w)));
   assert.throws(
     () =>
       createExcelPreviewPlan(base, ["clean"], 500, {

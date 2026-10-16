@@ -52,6 +52,8 @@ function sampledKindAllowed(
   if (kind === "lookup-columns") return true;
   // A name split is a source column plus two spilled formulas.
   if (kind === "split-column") return true;
+  // An unpivot is one spilled formula over the first rows.
+  if (kind === "unpivot") return true;
   // Describe and correlation are live formulas over whole columns; Excel computes them.
   if (kind === "statistics")
     return (
@@ -2349,7 +2351,11 @@ export function createExcelPreviewPlan(
     warnings.push(`${profile.blankCells} blank cells require review.`);
   if (input.sample && requested.has("clean"))
     warnings.push(
-      `The cleaned sheet covers the first ${Math.max(1000, Math.min(100_000, Math.floor(1_000_000 / Math.max(1, profile.columnCount)))).toLocaleString("en-US")} rows; Excel on the web cannot hold more.`,
+      `The cleaned sheet covers the first ${Math.max(1000, Math.min(50_000, Math.floor(500_000 / Math.max(1, profile.columnCount)))).toLocaleString("en-US")} rows; Excel on the web cannot hold more.`,
+    );
+  if (input.sample && requested.has("unpivot"))
+    warnings.push(
+      "The unpivoted sheet covers the first rows only; Excel on the web cannot hold more.",
     );
   if (input.sample && requested.has("format"))
     warnings.push("The formatted sheet shows the first 5,000 rows.");

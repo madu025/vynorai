@@ -402,3 +402,40 @@ export function splitColumnFormulas(
     last: `=MAP(${column},LAMBDA(v,IFERROR(TRIM(MID(v,FIND(" ",v&" ")+1,999)),"")))`,
   };
 }
+
+// --- unpivot ----------------------------------------------------------------------------------
+
+/** An unpivoted copy is bounded like a cleaned copy, counted in output cells. */
+export function unpivotRows(
+  outputColumns: number,
+  valueColumns: number,
+): number {
+  return Math.max(
+    1000,
+    Math.floor(
+      LARGE_CLEAN_MAX_CELLS / Math.max(1, outputColumns * valueColumns),
+    ),
+  );
+}
+
+/** One spilled formula: the kept columns, the value column's header and its value, per value column. */
+export function unpivotFormula(
+  range: LargeRef,
+  spec: {
+    dimensions: number[];
+    values: number[];
+    valueHeaders: string[];
+  },
+): string {
+  if (!spec.dimensions.length || spec.values.length < 2)
+    throw new Error("An unpivot needs kept columns and two value columns.");
+  if (spec.values.length !== spec.valueHeaders.length)
+    throw new Error("Every value column needs its header.");
+  const rows = unpivotRows(spec.dimensions.length + 2, spec.values.length);
+  const keep = `CHOOSECOLS(d,${spec.dimensions.map((index) => index + 1).join(",")})`;
+  const parts = spec.values.map(
+    (index, at) =>
+      `HSTACK(${keep},IF(SEQUENCE(ROWS(d)),${excelText(spec.valueHeaders[at])}),INDEX(d,,${index + 1}))`,
+  );
+  return `=LET(d,TAKE(${dataRef(range)},${rows}),IFERROR(VSTACK(${parts.join(",")}),""))`;
+}

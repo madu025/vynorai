@@ -213,3 +213,32 @@ test("splitting a name column is spilled formulas over every row", () => {
   assert.ok(out.last.includes("TRIM(MID(v,"));
   assert.ok(out.source.startsWith("=LET(a,'detail-report'!$E$2:$E$520125"));
 });
+
+import { unpivotFormula, unpivotRows } from "./largeRange.js";
+
+test("an unpivot is one bounded spilled formula", () => {
+  const formula = unpivotFormula(
+    {
+      sheetName: "detail-report",
+      startColumn: 0,
+      startRow: 0,
+      endRow: 520124,
+      columns: 10,
+    },
+    {
+      dimensions: [0, 1, 2],
+      values: [6, 7],
+      valueHeaders: ["Requested Quantity", "Issued Quantity"],
+    },
+  );
+  assert.ok(formula.startsWith("=LET(d,TAKE('detail-report'!$A$2:$J$520125,"));
+  assert.ok(formula.includes("VSTACK(HSTACK(CHOOSECOLS(d,1,2,3)"));
+  assert.ok(formula.includes('"Issued Quantity"'));
+  assert.equal(unpivotRows(5, 2), 50000);
+  assert.throws(() =>
+    unpivotFormula(
+      { sheetName: "s", startColumn: 0, startRow: 0, endRow: 9, columns: 3 },
+      { dimensions: [0], values: [1], valueHeaders: ["b"] },
+    ),
+  );
+});

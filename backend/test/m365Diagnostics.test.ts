@@ -24,7 +24,7 @@ test("M365 diagnostics names each failing gate, then reports ready once onboarde
     const db = await import("../src/db.js");
     await db.initDb();
     const registry = await import("../src/services/m365TenantRegistry.js");
-    const { diagnoseM365Identity } = await import(
+    const { diagnoseM365Identity, getM365Capabilities } = await import(
       "../src/services/m365Diagnostics.js"
     );
     const identity = {
@@ -77,6 +77,24 @@ test("M365 diagnostics names each failing gate, then reports ready once onboarde
     assert.equal(stage(after, "credits").ok, true);
     assert.deepEqual(after.ready, { read: true, write: true });
     assert.doesNotMatch(JSON.stringify(after), /owner@example\.com|key-a/);
+    const capabilities = await getM365Capabilities({
+      ...identity,
+      scopes: ["m365.excel.read", "m365.excel.write"],
+    });
+    assert.equal(capabilities.contractVersion, 1);
+    assert.equal(capabilities.excel.canInspect, true);
+    assert.equal(capabilities.excel.canPreview, true);
+    assert.equal(capabilities.excel.canApply, true);
+    assert.equal(capabilities.excel.actionKinds.length, 17);
+    assert.deepEqual(
+      capabilities.excel.writableActionKinds,
+      capabilities.excel.actionKinds,
+    );
+    assert.equal(capabilities.aiAnalysis, true);
+    assert.doesNotMatch(
+      JSON.stringify(capabilities),
+      /owner@example\.com|key-a/,
+    );
 
     const otherTenant = await diagnoseM365Identity({
       tenantId: "tenant-b",

@@ -76,6 +76,39 @@ test("M365 API reports network failures and calls diagnostics with GET", async (
   });
 });
 
+test("M365 API reads tenant capabilities without sending workbook data", async () => {
+  let seen: { url: string; method?: string; body?: unknown } | undefined;
+  const client = createM365ApiClient(
+    "https://api.example",
+    "t",
+    async (url, init) => {
+      seen = { url: String(url), method: init?.method, body: init?.body };
+      return new Response(
+        JSON.stringify({
+          contractVersion: 1,
+          excel: {
+            canInspect: true,
+            canPreview: true,
+            canApply: false,
+            actionKinds: ["chart"],
+            writableActionKinds: [],
+          },
+          aiAnalysis: false,
+        }),
+        { status: 200 },
+      );
+    },
+  );
+  const capabilities = await client.capabilities();
+  assert.equal(capabilities.excel.canInspect, true);
+  assert.equal(capabilities.excel.canApply, false);
+  assert.deepEqual(seen, {
+    url: "https://api.example/v1/m365/excel/capabilities",
+    method: "GET",
+    body: undefined,
+  });
+});
+
 test("M365 API reports only bounded workbook result metadata", async () => {
   let seen: { url: string; body?: string } | undefined;
   const client = createM365ApiClient(

@@ -8,6 +8,18 @@ export interface M365AccessDiagnostics {
   ready: { read: boolean; write: boolean };
 }
 
+export interface M365Capabilities {
+  contractVersion: 1;
+  excel: {
+    canInspect: boolean;
+    canPreview: boolean;
+    canApply: boolean;
+    actionKinds: string[];
+    writableActionKinds: string[];
+  };
+  aiAnalysis: boolean;
+}
+
 export interface M365ApiClient {
   planExcel(input: unknown): Promise<any>;
   approveExcel(input: {
@@ -48,6 +60,7 @@ export interface M365ApiClient {
     }>;
   }): Promise<any>;
   diagnose(): Promise<M365AccessDiagnostics>;
+  capabilities(): Promise<M365Capabilities>;
   assistText(input: {
     host: "word" | "powerpoint" | "outlook";
     task: string;
@@ -158,6 +171,7 @@ export function createM365ApiClient(
     reportExcelResult: (input) =>
       request("POST", "/v1/m365/excel/apply-result", input),
     diagnose: () => request("GET", "/v1/m365/diagnostics"),
+    capabilities: () => request("GET", "/v1/m365/excel/capabilities"),
     assistText: (input) => request("POST", "/v1/m365/text/assist", input),
     draftDocument: (input) => request("POST", "/v1/m365/text/draft", input),
     reportRollback: (input) =>

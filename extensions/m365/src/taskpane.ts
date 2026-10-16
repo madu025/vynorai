@@ -40,6 +40,7 @@ import {
 import {
   createM365ApiClient,
   M365ApiError,
+  type M365Capabilities,
   type M365RequestTrace,
 } from "./api.js";
 import { askInPane } from "./confirmDialog.js";
@@ -117,6 +118,7 @@ const diagnostics = document.querySelector<HTMLElement>("#diagnostics");
 const summary = document.querySelector<HTMLElement>("#diagnostics-summary");
 const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
+let capabilities: M365Capabilities | undefined;
 let currentPlan: any;
 /** Headers and rows of the last inspected selection; used only to draw the preview picture. */
 let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
@@ -257,9 +259,33 @@ function supportsExcelApi(version: string): boolean {
 function updateAuthenticationUi(signedIn: boolean) {
   if (signIn) signIn.disabled = signedIn;
   if (signOut) signOut.disabled = !signedIn;
-  if (inspect) inspect.disabled = !signedIn;
-  if (analyze) analyze.disabled = !signedIn;
+  if (inspect)
+    inspect.disabled = !signedIn || capabilities?.excel.canInspect === false;
+  if (analyze)
+    analyze.disabled = !signedIn || capabilities?.aiAnalysis === false;
   document.body.dataset.auth = signedIn ? "in" : "out";
+}
+
+async function refreshCapabilities(reason: "oauth" | "restore") {
+  if (!accessToken) return;
+  try {
+    capabilities = await log.step(
+      `api:capabilities:${reason}`,
+      () => apiClient().capabilities(),
+      (value) => ({
+        canInspect: value.excel.canInspect,
+        canApply: value.excel.canApply,
+        actionKinds: value.excel.actionKinds.length,
+        writableActionKinds: value.excel.writableActionKinds.length,
+        aiAnalysis: value.aiAnalysis,
+      }),
+    );
+    updateAuthenticationUi(true);
+  } catch (error) {
+    capabilities = undefined;
+    log.record("api:capabilities", "fail", describeError(error));
+    updateAuthenticationUi(true);
+  }
 }
 
 function saveSession(tokens: { accessToken: string; expiresIn: number }) {
@@ -293,6 +319,7 @@ function restoreSession(): boolean {
 
 function signOutOfMicrosoft() {
   accessToken = "";
+  capabilities = undefined;
   currentPlan = undefined;
   previewFingerprint = "";
   if (analysisOutput) analysisOutput.textContent = "";
@@ -497,6 +524,7 @@ signIn?.addEventListener("click", async () => {
     saveSession(tokens);
     updateAuthenticationUi(true);
     recordTokenSummary("oauth:token-claims");
+    void refreshCapabilities("oauth");
     setStatus("Signed in. Select data and inspect it.");
   } catch (error) {
     log.record("oauth:sign-in", "fail", describeError(error));
@@ -1422,6 +1450,20 @@ async function runSelfTest() {
         report.ready.read && report.ready.write ? "pass" : "fail",
         report.ready,
       );
+      const available = await apiClient().capabilities();
+      log.record(
+        "self-test:backend:capabilities",
+        available.contractVersion === 1 &&
+          available.excel.canInspect === report.ready.read &&
+          available.excel.canApply === report.ready.write
+          ? "pass"
+          : "fail",
+        {
+          actionKinds: available.excel.actionKinds.length,
+          writableActionKinds: available.excel.writableActionKinds.length,
+          aiAnalysis: available.aiAnalysis,
+        },
+      );
     } catch (error) {
       log.record("self-test:backend", "fail", describeError(error));
     }
@@ -2178,6 +2220,7 @@ async function initialize() {
   if (restoreSession()) {
     updateAuthenticationUi(true);
     recordTokenSummary("session:restore");
+    void refreshCapabilities("restore");
     return setStatus("Signed in. Select data and inspect it.");
   }
   log.record("session:restore", "info", "no unexpired session");

@@ -150,6 +150,13 @@ async function post(body: unknown, bearer = token()) {
   };
 }
 
+async function getCapabilities(bearer = token()) {
+  const response = await fetch(`${baseUrl}/v1/m365/excel/capabilities`, {
+    headers: { authorization: `Bearer ${bearer}` },
+  });
+  return { status: response.status, json: (await response.json()) as any };
+}
+
 before(async () => {
   process.chdir(tempDir);
   Object.assign(process.env, {
@@ -213,6 +220,25 @@ beforeEach(async () => {
     allowedScopes: ["m365.excel.read", "m365.excel.write"],
     consentedAt: "2026-10-15T00:00:00.000Z",
   });
+});
+
+test("capabilities endpoint exposes only effective allowlisted Excel features", async () => {
+  const response = await getCapabilities();
+  assert.equal(response.status, 200);
+  assert.equal(response.json.contractVersion, 1);
+  assert.equal(response.json.excel.canInspect, true);
+  assert.equal(response.json.excel.canPreview, true);
+  assert.equal(response.json.excel.canApply, true);
+  assert.equal(response.json.excel.actionKinds.length, 17);
+  assert.deepEqual(
+    response.json.excel.writableActionKinds,
+    response.json.excel.actionKinds,
+  );
+  assert.equal(response.json.aiAnalysis, true);
+  assert.doesNotMatch(
+    JSON.stringify(response.json),
+    /owner@example|key-analysis/,
+  );
 });
 
 after(async () => {

@@ -31,6 +31,7 @@ import {
 import {
   diagnoseM365Identity,
   findM365IdentityLink,
+  getM365Capabilities,
 } from "../services/m365Diagnostics.js";
 import {
   analyzeSchemaSummary,
@@ -577,6 +578,13 @@ m365Router.get("/diagnostics", async (req: Request, res: Response) => {
   }
   res.json(await diagnoseM365Identity(m365Identity));
 });
+m365Router.get(
+  "/excel/capabilities",
+  requireM365Auth,
+  async (req: Request, res: Response) => {
+    res.json(await getM365Capabilities(identity(req)));
+  },
+);
 m365Router.post(
   "/excel/plan",
   requireM365Auth,

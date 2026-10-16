@@ -4,6 +4,26 @@ import { getM365Tenant, requireM365TenantScope } from "./m365TenantRegistry.js";
 
 const M365_SCOPES = ["m365.excel.read", "m365.excel.write"] as const;
 
+export const M365_EXCEL_ACTION_KINDS = [
+  "table",
+  "chart",
+  "new-sheet",
+  "named-range",
+  "slicer",
+  "pivot-table",
+  "clean",
+  "add-column",
+  "lookup-columns",
+  "split-column",
+  "unpivot",
+  "summary",
+  "format",
+  "quality",
+  "statistics",
+  "dashboard",
+  "view",
+] as const;
+
 export interface M365IdentityLink {
   user_id: string;
   email: string;
@@ -15,6 +35,18 @@ export interface M365DiagnosticStage {
   ok: boolean;
   code?: string;
   detail?: Record<string, unknown>;
+}
+
+export interface M365Capabilities {
+  contractVersion: 1;
+  excel: {
+    canInspect: boolean;
+    canPreview: boolean;
+    canApply: boolean;
+    actionKinds: readonly string[];
+    writableActionKinds: readonly string[];
+  };
+  aiAnalysis: boolean;
 }
 
 /** Enabled link from a validated Entra identity to a VynorAI account; email is never the key. */
@@ -129,5 +161,28 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
         passed("policy:m365.excel.write") &&
         passed("tenant:m365.excel.write"),
     },
+  };
+}
+
+/** Effective non-secret capability flags for the linked tenant/user. */
+export async function getM365Capabilities(
+  identity: M365Identity,
+): Promise<M365Capabilities> {
+  const diagnostics = await diagnoseM365Identity(identity);
+  const tenant = await getM365Tenant(identity.tenantId);
+  const actionKinds = diagnostics.ready.read ? M365_EXCEL_ACTION_KINDS : [];
+  const writableActionKinds = diagnostics.ready.write
+    ? M365_EXCEL_ACTION_KINDS
+    : [];
+  return {
+    contractVersion: 1,
+    excel: {
+      canInspect: diagnostics.ready.read,
+      canPreview: diagnostics.ready.read,
+      canApply: diagnostics.ready.write,
+      actionKinds,
+      writableActionKinds,
+    },
+    aiAnalysis: diagnostics.ready.read && (tenant?.aiEnabled ?? false),
   };
 }

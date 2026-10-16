@@ -94,7 +94,10 @@ const excelPlanSchema = z.object({
   specs: z
     .object({
       namedRange: z
-        .object({ source: z.number().int().min(0).max(99) })
+        .object({
+          source: z.number().int().min(0).max(99),
+          name: z.string().max(40).optional(),
+        })
         .strict()
         .optional(),
       slicer: z
@@ -228,7 +231,7 @@ const excelPlanSchema = z.object({
             })
             .strict()
             .optional(),
-          limit: z.number().int().min(1).max(1000).optional(),
+          limit: z.number().int().min(1).max(50000).optional(),
         })
         .strict()
         .optional(),
@@ -284,6 +287,7 @@ const excelPlanSchema = z.object({
                     "non-negative",
                     "between",
                     "max-length",
+                    "date",
                   ]),
                   min: z.number().finite().optional(),
                   max: z.number().finite().optional(),

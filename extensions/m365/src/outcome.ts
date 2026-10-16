@@ -335,6 +335,13 @@ export function buildOutcomes(
               `${entry.column}: ${entry.min} සිට ${entry.max} දක්වා සංඛ්‍යා පමණක් පිළිගනී`,
             ),
           );
+        } else if (entry.rule === "date") {
+          item.details.push(
+            say(
+              `${entry.column}: only dates are accepted`,
+              `${entry.column}: දින වකවානු පමණක් පිළිගනී`,
+            ),
+          );
         } else if (entry.rule === "max-length") {
           item.details.push(
             say(

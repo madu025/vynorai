@@ -9,7 +9,7 @@ import {
 type Cell = string | number | boolean | null;
 
 export interface InstructionSpecs {
-  namedRange?: { source: number };
+  namedRange?: { source: number; name?: string };
   slicer?: { source: number };
   chart?: {
     category: number;
@@ -121,7 +121,7 @@ export interface InstructionSpecs {
     }>;
     validation?: Array<{
       column: number;
-      rule: "list" | "non-negative" | "between" | "max-length";
+      rule: "list" | "non-negative" | "between" | "max-length" | "date";
       min?: number;
       max?: number;
     }>;
@@ -394,6 +394,23 @@ export function interpretInstruction(
     }
   }
 
+  const namedColumn =
+    /\b(?:name|call|rename)\s+(?:the\s+)?(.+?)\s+column\s+(?:as\s+|to\s+)?["']?([A-Za-z_][A-Za-z0-9_.]*)["']?\s*\.?$/i.exec(
+      text,
+    );
+  if (namedColumn) {
+    const source = findHeader(headers, namedColumn[1].trim());
+    if (source < 0)
+      result.problems.push(
+        `"${namedColumn[1].trim()}" is not a column of your data. Available: ${headers.join(", ")}.`,
+      );
+    else
+      return {
+        actions: ["named-range"],
+        specs: { namedRange: { source, name: namedColumn[2] } },
+        problems: [],
+      };
+  }
   const namedRangeMatch =
     /\b(?:create|define|add)\s+(?:a\s+)?named\s+range\s+for\s+["']?([^"'.,]+?)["']?\s*\.?$/i.exec(
       text,
@@ -883,9 +900,17 @@ export function interpretInstruction(
     }
   }
 
+  // "add a column Year from PAT Complete Date" is "year of PAT Complete Date".
+  const datePartColumn =
+    /\b(?:add|create|insert)\s+(?:a\s+|an\s+|new\s+)*column\s+(?:called\s+|named\s+)?["']?(year|month|day)["']?\s+(?:from|of|using)\s+(.+?)\s*\.?$/i.exec(
+      text,
+    );
+  const columnText = datePartColumn
+    ? `add a column ${datePartColumn[1]} that is ${datePartColumn[1].toLowerCase()} of ${datePartColumn[2]}`
+    : text;
   const column =
     /\b(?:add|create|insert)\s+(?:a\s+|an\s+|new\s+)*(?:computed\s+|calculated\s+)?column\s+(?:called\s+|named\s+)?["']?([^"'=:]+?)["']?\s*(?:=|:|\bas\b|\bthat\s+(?:is|equals)\b|\bwhich\s+is\b|\bequal\s+to\b|\bequals\b)\s*(.+?)\s*\.?$/i.exec(
-      text,
+      columnText,
     ) || /^\s*["']?([A-Za-z][\w ]{0,39}?)["']?\s*=\s*(.+?)\s*\.?$/i.exec(text);
   if (column) {
     const name = column[1].trim();
@@ -1408,7 +1433,17 @@ function interpretView(
       };
     }
   }
-  if (view.sort || view.filter || view.highlight) {
+  // "copy this data to a new sheet": a live, bounded copy of the first 50,000 rows.
+  if (
+    !view.sort &&
+    !view.filter &&
+    !view.highlight &&
+    /\b(?:copy|duplicate|clone)\b[^.\n]{0,40}\b(?:to|into|in)\s+(?:a\s+)?new\s+(?:sheet|worksheet|tab)\b/i.test(
+      text,
+    )
+  )
+    view.limit = 50000;
+  if (view.sort || view.filter || view.highlight || view.limit) {
     result.actions.push("view");
     result.specs.view = view;
   }
@@ -1727,6 +1762,14 @@ function interpretFormatAndQuality(
   rows: Cell[][],
   result: InterpretedInstruction,
 ) {
+  // "highlight Sales above 10" reads like "greater than 10".
+  if (/\b(?:highlight|mark|colou?r|flag)\b/i.test(text))
+    text = text
+      .replace(
+        /\b(?:above|over|exceeding|more\s+than)\s+(?=-?\d)/gi,
+        "greater than ",
+      )
+      .replace(/\b(?:below|under|fewer\s+than)\s+(?=-?\d)/gi, "less than ");
   const formulaRepair =
     /\b(?:repair|fix|correct|replace)\b[^.\n]{0,80}(?:formulas?|#REF!|#DIV\/0!)/i.test(
       text,
@@ -1738,7 +1781,7 @@ function interpretFormatAndQuality(
     );
   if (
     formulaAudit ||
-    /\b(?:data\s+)?quality\b|\bhealth\s*check\b|\bfind\s+(?:problems|issues|errors)\b|\bcheck\s+(?:the\s+)?data\b|\baudit\b/i.test(
+    /\b(?:data\s+)?quality\b|\bhealth\s*check\b|\bfind\s+(?:problems|issues|errors)\b|\b(?:repair|fix)\s+(?:the\s+)?data(?:\s+(?:problems|issues|errors))?\b|\bcheck\s+(?:the\s+)?data\b|\baudit\b/i.test(
       text,
     )
   ) {
@@ -1748,7 +1791,7 @@ function interpretFormatAndQuality(
   }
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\b(?:allow|accept|require|ensure)\b[^.\n]{0,20}\bdates?\s+(?:in|for|on)\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -1907,6 +1950,14 @@ function interpretFormatAndQuality(
   if (nonNegative) {
     const column = headerPositions(headers, nonNegative[1])[0]?.index ?? -1;
     if (column >= 0) validation.push({ column, rule: "non-negative" });
+  }
+  const dateOnly =
+    /\b(?:only\s+allow|allow\s+only|accept\s+only|require|ensure|allow)\s+(?:only\s+)?(?:valid\s+)?dates?\s+(?:in|for|on)\s+(.+?)(?:[.,]|$)/i.exec(
+      text,
+    );
+  if (dateOnly) {
+    const column = headerPositions(headers, dateOnly[1])[0]?.index ?? -1;
+    if (column >= 0) validation.push({ column, rule: "date" });
   }
   const range =
     /\bbetween\s+(-?\d[\d,]*(?:\.\d+)?)\s+(?:and|to)\s+(-?\d[\d,]*(?:\.\d+)?)/i.exec(

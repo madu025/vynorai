@@ -105,3 +105,36 @@ test("an insight report groups by the column that was asked for", () => {
   );
   assert.equal(result.specs.statistics.category, 0);
 });
+
+test("everyday wording: above N, only dates, name a column, date part, copy to a new sheet, repair", () => {
+  const headers = [
+    "Service ID",
+    "PAT Complete Date",
+    "Status",
+    "Requested Quantity",
+  ];
+  const rows = [["a", "04-Mar-25", "S", 1]];
+  const run = (text: string): any => interpretInstruction(text, headers, rows);
+
+  const above = run("highlight Requested Quantity above 10");
+  assert.deepEqual(above.actions, ["format"]);
+  assert.equal(above.problems.length, 0);
+
+  const dates = run("allow only dates in PAT Complete Date");
+  assert.deepEqual(dates.specs.format.validation, [
+    { column: 1, rule: "date" },
+  ]);
+
+  const named = run("name the Requested Quantity column Requested");
+  assert.deepEqual(named.actions, ["named-range"]);
+  assert.deepEqual(named.specs.namedRange, { source: 3, name: "Requested" });
+
+  const year = run("add a column Year from PAT Complete Date");
+  assert.deepEqual(year.actions, ["add-column"]);
+
+  const copy = run("copy this data to a new sheet");
+  assert.deepEqual(copy.actions, ["view"]);
+  assert.equal(copy.specs.view.limit, 50000);
+
+  assert.deepEqual(run("repair the data problems").actions, ["quality"]);
+});

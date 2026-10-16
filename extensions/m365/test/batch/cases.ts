@@ -230,7 +230,7 @@ export const CASES: BatchCase[] = [
     "s-summary",
     "summary",
     "summary of Requested Quantity by RTOM",
-    "summary",
+    "pivot-table",
     { size: "520k", proven: "summary" },
   ),
   c(
@@ -415,7 +415,7 @@ export const CASES: BatchCase[] = [
     "lk-lookup",
     "lookup",
     "add RTOM Name from the Lookup sheet by RTOM",
-    "lookup-columns",
+    "add-column",
     { files: [...base, ...large] },
   ),
   c("sp-name", "split", "split Item Code into two columns", "split-column", {
@@ -433,7 +433,7 @@ export const CASES: BatchCase[] = [
     size: "520k",
   }),
   c("r-slicer", "refuse", "add a slicer for Status", "slicer"),
-  c("r-newsheet", "refuse", "copy this data to a new sheet", "new-sheet", {
+  c("r-newsheet", "refuse", "copy this data to a new sheet", "view", {
     size: "520k",
   }),
   // --- sinhala / singlish ---------------------------------------------------------------------

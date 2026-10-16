@@ -152,7 +152,7 @@ export interface ExcelColumnSpecs {
     aggregation?: ExcelAggregation;
   };
   quality?: { mode?: "data" | "formula" | "repair" };
-  namedRange?: { source: number };
+  namedRange?: { source: number; name?: string };
   slicer?: { source: number };
   chart?: {
     category: number;
@@ -199,7 +199,7 @@ export interface ExcelColumnSpecs {
     }>;
     validation?: Array<{
       column: number;
-      rule: "list" | "non-negative" | "between" | "max-length";
+      rule: "list" | "non-negative" | "between" | "max-length" | "date";
       min?: number;
       max?: number;
     }>;
@@ -508,6 +508,17 @@ function resolveColumnSpecs(
       );
     if (!inRange(specs.namedRange.source))
       fail("EXCEL_SPEC_INVALID", "Choose a valid column for the named range.");
+    const customName = specs.namedRange.name;
+    if (
+      customName !== undefined &&
+      (!/^[A-Za-z_][A-Za-z0-9_.]{0,39}$/.test(customName) ||
+        /^[A-Za-z]{1,3}\d+$/.test(customName) ||
+        /^[RrCc]$/.test(customName))
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "A range name starts with a letter, uses letters, digits and underscores, and is not a cell address.",
+      );
     const header = headers[specs.namedRange.source] ?? "Column";
     const safeHeader =
       header
@@ -517,7 +528,9 @@ function resolveColumnSpecs(
     resolved.namedRange = {
       namedRangeColumn: header,
       namedRangeIndex: specs.namedRange.source,
-      namedRangeName: `VynorAI_${safeHeader}_${specs.namedRange.source + 1}`,
+      namedRangeName:
+        specs.namedRange.name ??
+        `VynorAI_${safeHeader}_${specs.namedRange.source + 1}`,
     };
   }
   if (specs.slicer) {
@@ -1364,7 +1377,9 @@ function resolveColumnSpecs(
     for (const entry of options.validation ?? []) {
       if (
         !inRange(entry.column) ||
-        !["list", "non-negative", "between", "max-length"].includes(entry.rule)
+        !["list", "non-negative", "between", "max-length", "date"].includes(
+          entry.rule,
+        )
       )
         fail(
           "EXCEL_SPEC_INVALID",
@@ -1401,6 +1416,14 @@ function resolveColumnSpecs(
           rule: entry.rule,
           ...(entry.rule === "between" ? { min: low } : {}),
           max: high,
+        });
+        continue;
+      }
+      if (entry.rule === "date") {
+        validation.push({
+          column: headers[entry.column],
+          index: entry.column,
+          rule: entry.rule,
         });
         continue;
       }
@@ -1779,8 +1802,8 @@ function resolveColumnSpecs(
       };
     }
     if (limit !== undefined) {
-      if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
-        fail("EXCEL_SPEC_INVALID", "Choose how many rows to show (1-1000).");
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50000)
+        fail("EXCEL_SPEC_INVALID", "Choose how many rows to show (1-50000).");
       view.limit = limit;
     }
     resolved.view = view;

@@ -2360,6 +2360,13 @@ export async function applyApprovedExcelPlan(
                         operator: "Between",
                       },
                     };
+                  } else if (check.rule === "date") {
+                    range.dataValidation.rule = {
+                      date: {
+                        formula1: "1900-01-01",
+                        operator: "GreaterThanOrEqualTo",
+                      },
+                    };
                   } else if (check.rule === "max-length") {
                     range.dataValidation.rule = {
                       textLength: {

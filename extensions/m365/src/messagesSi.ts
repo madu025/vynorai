@@ -62,6 +62,8 @@ const EXACT: Record<string, string> = {
     "උපදෙස සකසන ලදී. “පරීක්ෂා කර පෙරදසුන බලන්න” ඔබන්න; ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
   "Use this recommendation": "මෙම නිර්දේශය භාවිතා කරන්න",
   "Use these steps": "මෙම පියවර භාවිතා කරන්න",
+  "I remember this request from before, so no AI call was needed.":
+    "මට මෙම ඉල්ලීම කලින් සිට මතකයි, එබැවින් AI කැඳවීමක් අවශ්‍ය නොවීය.",
   "I could not read that directly. Agree below and the AI will interpret it; only column names and types are sent.":
     "මට මෙය සෘජුව තේරුම් ගත නොහැකි විය. පහත එකඟ වුවහොත් AI එක එය අර්ථකථනය කරයි; යවන්නේ තීරු නම් සහ වර්ග පමණි.",
   "Describe what you want first, then plan the steps.":

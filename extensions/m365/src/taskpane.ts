@@ -1348,6 +1348,30 @@ inspect?.addEventListener("click", async () => {
         capabilities?.aiAnalysis !== false &&
         accessToken
       ) {
+        const remembered = recallSteps(
+          memoryKey(instructionText, layout.headers.map(String)),
+        );
+        if (
+          remembered &&
+          interpretInstruction(
+            remembered.join(" then "),
+            layout.headers,
+            input.values.slice(layout.headerRowCount),
+          ).actions.length > 0
+        ) {
+          log.record("script:remembered", "pass", { steps: remembered.length });
+          renderConversation(
+            "assistant",
+            localizeMessage(
+              language,
+              "I remember this request from before, so no AI call was needed.",
+            ),
+          );
+          useSteps({
+            steps: remembered.map((instruction) => ({ instruction })),
+          });
+          return;
+        }
         scriptMode = true;
         void startConsent();
         renderConversation(
@@ -1939,6 +1963,48 @@ function renderAnalysis(result: AnalysisResult) {
 
 let scriptMode = false;
 
+/**
+ * What the AI understood is remembered on this device (request text + column names -> the plain steps),
+ * so the same request next time needs no AI call. Only sentences are stored, never cell values.
+ */
+const MEMORY_KEY = "vynorai.m365.interpretMemory";
+const MEMORY_LIMIT = 50;
+let pendingMemoryKey = "";
+type Memory = Record<string, { steps: string[]; at: number }>;
+
+function memoryKey(text: string, names: string[]): string {
+  return `${text.toLowerCase().replace(/\s+/g, " ").trim()}|${names.join("\u0001")}`;
+}
+
+function readMemory(): Memory {
+  try {
+    return JSON.parse(localStorage.getItem(MEMORY_KEY) || "{}") as Memory;
+  } catch {
+    return {};
+  }
+}
+
+function rememberSteps(key: string, steps: string[]) {
+  if (!key) return;
+  try {
+    const memory = readMemory();
+    memory[key] = { steps, at: Date.now() };
+    const kept = Object.entries(memory)
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, MEMORY_LIMIT);
+    localStorage.setItem(MEMORY_KEY, JSON.stringify(Object.fromEntries(kept)));
+  } catch {
+    // Private window or blocked storage: the AI is simply asked again next time.
+  }
+}
+
+function recallSteps(key: string): string[] | undefined {
+  const found = readMemory()[key];
+  return Array.isArray(found?.steps) && found.steps.length
+    ? found.steps.filter((step) => typeof step === "string")
+    : undefined;
+}
+
 /** Steps from the AI planner: plain sentences only; running them goes through the normal preview and approval. */
 function renderScript(result: {
   title: string;
@@ -2010,6 +2076,10 @@ async function startConsent() {
       () => buildSchemaSummary(input),
       (value) => ({ columns: value.columnCount, rows: value.rowCount }),
     );
+    pendingMemoryKey = memoryKey(
+      instruction?.value || "",
+      pendingSummary.columns.map((column) => String(column.name)),
+    );
     if (consentSummary)
       consentSummary.textContent = JSON.stringify(pendingSummary, null, 2);
     lastSummary = pendingSummary;
@@ -2079,6 +2149,10 @@ consentSend?.addEventListener("click", async () => {
       // The person already agreed to send the summary; the preview is the next safe step.
       setStatus(
         "The AI understood your request. Preparing the preview; nothing changes until you confirm.",
+      );
+      rememberSteps(
+        pendingMemoryKey,
+        planned.steps.map((step: { instruction: string }) => step.instruction),
       );
       useSteps(planned);
       return;

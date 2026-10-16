@@ -15,6 +15,7 @@ import {
   cleanFormula,
   keyColumnFormula,
   LARGE_FORMAT_ROWS,
+  histogramCells,
   qualityReportCells,
   splitColumnFormulas,
   unpivotFormula,
@@ -1385,6 +1386,43 @@ export async function applyApprovedExcelPlan(
               }
               await context.sync();
             }
+          } else if (
+            action.kind === "chart" &&
+            plan.profile?.sample &&
+            action.spec?.chartType === "histogram"
+          ) {
+            // Very large data: ten COUNTIFS bins over every row, charted as columns.
+            const spec = action.spec;
+            const headers = await readHeaderCells();
+            const parsed = parseLocalRange(
+              localExcelAddress(plan.sourceAddress),
+            );
+            const cells = histogramCells(
+              {
+                sheetName: plan.worksheetName,
+                startColumn: parsed.startColumn,
+                startRow: parsed.startRow,
+                endRow: parsed.endRow,
+                columns: headers.length,
+              },
+              spec.valueIndex as number,
+              String(spec.valueColumn),
+            );
+            sheet.getRangeByIndexes(0, 0, cells.length, 4).formulas = cells.map(
+              (row, rowIndex) =>
+                row.map((cell) => (rowIndex === 0 ? literal(cell) : cell)),
+            );
+            await context.sync();
+            sheet.getRangeByIndexes(0, 0, 1, 4).format.font.bold = true;
+            const chart = sheet.charts.add(
+              "ColumnClustered",
+              sheet.getRangeByIndexes(0, 0, cells.length, 2),
+              "Columns",
+            );
+            chart.name = action.name;
+            chart.title.text = `${spec.valueColumn} distribution`;
+            chart.setPosition("F2");
+            await context.sync();
           } else if (action.kind === "chart") {
             const existing = sheet.charts.getItemOrNullObject(action.name);
             existing.load("isNullObject");

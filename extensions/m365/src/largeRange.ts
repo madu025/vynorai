@@ -439,3 +439,28 @@ export function unpivotFormula(
   );
   return `=LET(d,TAKE(${dataRef(range)},${rows}),IFERROR(VSTACK(${parts.join(",")}),""))`;
 }
+
+// --- histogram ---------------------------------------------------------------------------------
+
+/** Ten equal-width bins over the whole column; Excel counts every row with COUNTIFS. */
+export function histogramCells(
+  range: LargeRef,
+  valueIndex: number,
+  header: string,
+  bins = 10,
+): string[][] {
+  const column = columnRef(range, valueIndex);
+  const span = `(MAX(${column})-MIN(${column}))/${bins}`;
+  const out: string[][] = [[header, "Count", "From", "To"]];
+  for (let bin = 0; bin < bins; bin += 1) {
+    const row = bin + 2;
+    const last = bin === bins - 1;
+    out.push([
+      `=TEXT(C${row},"#,##0.##")&" - "&TEXT(D${row},"#,##0.##")`,
+      `=COUNTIFS(${column},">="&C${row},${column},"${last ? "<=" : "<"}"&D${row})`,
+      `=MIN(${column})+${bin}*${span}`,
+      `=C${row}+${span}`,
+    ]);
+  }
+  return out;
+}

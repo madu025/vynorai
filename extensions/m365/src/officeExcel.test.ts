@@ -1254,13 +1254,14 @@ test("a sampled range turns a chart or a summary into a PivotTable and allows de
     statistics: { mode: "forecast", value: 1, periods: 3 },
   });
   assert.equal(forecast.actions[0].kind, "statistics");
-  assert.throws(
-    () =>
-      createExcelPreviewPlan(base, ["statistics"], 500, {
-        statistics: { mode: "insights", value: 1 },
-      }),
-    /too large to read in full/,
-  );
+  const insights: any = createExcelPreviewPlan(base, ["statistics"], 500, {
+    statistics: { mode: "insights", value: 1 },
+  });
+  assert.equal(insights.actions[0].kind, "statistics");
+  const histogram: any = createExcelPreviewPlan(base, ["chart"], 500, {
+    chart: { category: 1, value: 1, chartType: "histogram" },
+  });
+  assert.equal(histogram.actions[0].kind, "chart");
   assert.throws(
     () =>
       createExcelPreviewPlan(base, ["chart"], 500, {

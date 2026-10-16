@@ -242,3 +242,26 @@ test("an unpivot is one bounded spilled formula", () => {
     ),
   );
 });
+
+import { histogramCells } from "./largeRange.js";
+
+test("a histogram of a very large column is ten COUNTIFS bins over every row", () => {
+  const cells = histogramCells(
+    {
+      sheetName: "Big",
+      startColumn: 0,
+      startRow: 0,
+      endRow: 520124,
+      columns: 10,
+    },
+    6,
+    "Requested Quantity",
+  );
+  assert.equal(cells.length, 11);
+  assert.equal(cells[0][0], "Requested Quantity");
+  assert.ok(
+    cells[1][1].startsWith("=COUNTIFS('Big'!$G$2:$G$520125,\">=\"&C2,"),
+  );
+  assert.ok(cells[10][1].includes('"<="&D11'));
+  assert.ok(cells[1][1].includes('"<"&D2'));
+});

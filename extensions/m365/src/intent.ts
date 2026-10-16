@@ -1104,12 +1104,18 @@ function interpretDashboard(
   return true;
 }
 
+const numericColumn = isNumericColumn;
+const TEMPORAL_HEADER = /\b(date|day|week|month|quarter|year|period|time)\b/i;
+
 function interpretChartAndPivot(
   text: string,
   headers: string[],
   rows: Cell[][],
   result: InterpretedInstruction,
 ) {
+  // Dates are serial numbers in Office.js, but a column named like a date is a category to group by.
+  const isNumericColumn = (data: Cell[][], index: number) =>
+    numericColumn(data, index) && !TEMPORAL_HEADER.test(headers[index] ?? "");
   const positions = headerPositions(headers, text);
   const numeric = positions.filter((entry) =>
     isNumericColumn(rows, entry.index),
@@ -1190,8 +1196,17 @@ function interpretChartAndPivot(
           : {}),
     };
   }
-  if (/\bpivot\b/i.test(text) && categoryEntry && numericEntries.length) {
-    const aggregation = /\b(count|how many)\b/i.test(text)
+  // "count of Service ID by Status" counts a text column: there is no numeric column to add up.
+  const countLabel =
+    /\b(count|counting|how many)\b/i.test(text) && !numericEntries.length
+      ? labels.find((entry) => entry.index !== categoryEntry?.index)
+      : undefined;
+  if (
+    /\bpivot\b/i.test(text) &&
+    categoryEntry &&
+    (numericEntries.length || countLabel)
+  ) {
+    const aggregation = /\b(count|counting|how many)\b/i.test(text)
       ? "count"
       : /\b(average|avg|mean)\b/i.test(text)
         ? "average"
@@ -1215,7 +1230,7 @@ function interpretChartAndPivot(
       /\b(?:top|highest|best|largest|biggest)\s+(\d{1,3})\b/i.exec(text);
     result.specs.pivot = {
       rows: categoryEntry.index,
-      values: numericEntries[0].index,
+      values: numericEntries[0]?.index ?? countLabel!.index,
       aggregation,
       ...(columns ? { columns: columns.index } : {}),
       ...(moreValues.length ? { extraValues: moreValues } : {}),
@@ -1311,14 +1326,15 @@ function interpretView(
     if (column >= 0) view.highlight = { column, rule: "duplicates" };
   }
   const filter =
-    /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bequals?\b|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
+    /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bequals?\b|\bis\b|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
       text,
     );
   if (filter) {
     const column = header(filter[1]);
     const operator = (
       filter[2].toLowerCase() === "equals" ||
-      filter[2].toLowerCase() === "equal"
+      filter[2].toLowerCase() === "equal" ||
+      filter[2].toLowerCase() === "is"
         ? "="
         : filter[2].toLowerCase()
     ) as NonNullable<

@@ -19,7 +19,7 @@ function sampledKindAllowed(
   kind: string,
   requested: ReadonlySet<string>,
   specs?: {
-    chart?: { pivotResult?: boolean };
+    chart?: { pivotResult?: boolean; chartType?: string };
     statistics?: { mode?: string };
     clean?: { operations?: string[] };
     quality?: { mode?: string };
@@ -49,8 +49,11 @@ function sampledKindAllowed(
     return (
       specs?.statistics?.mode === "describe" ||
       specs?.statistics?.mode === "correlation" ||
-      specs?.statistics?.mode === "forecast"
+      specs?.statistics?.mode === "forecast" ||
+      specs?.statistics?.mode === "insights"
     );
+  // A histogram is ten COUNTIFS bins over the whole column.
+  if (kind === "chart" && specs?.chart?.chartType === "histogram") return true;
   return (
     kind === "chart" &&
     requested.has("pivot-table") &&

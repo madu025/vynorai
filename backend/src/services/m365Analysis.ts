@@ -228,7 +228,7 @@ export function extractJsonObject(text: string): unknown {
   if (!candidate.startsWith("{") || !candidate.endsWith("}"))
     throw new M365AnalysisError(
       "AI_ANALYSIS_INVALID",
-      502,
+      422,
       "not a JSON object",
     );
   try {
@@ -244,7 +244,7 @@ export function extractJsonObject(text: string): unknown {
     } catch {
       throw new M365AnalysisError(
         "AI_ANALYSIS_INVALID",
-        502,
+        422,
         "unparseable JSON",
       );
     }
@@ -263,12 +263,19 @@ export function parseAnalysisResponse(
   if (text.length > 30_000)
     throw new M365AnalysisError(
       "AI_ANALYSIS_INVALID",
-      502,
+      422,
       "response too large",
     );
   const parsed = analysisResultSchema.safeParse(extractJsonObject(text));
   if (!parsed.success)
-    throw new M365AnalysisError("AI_ANALYSIS_INVALID", 502, "schema mismatch");
+    throw new M365AnalysisError(
+      "AI_ANALYSIS_INVALID",
+      422,
+      `schema mismatch: ${parsed.error.issues
+        .slice(0, 5)
+        .map((issue) => issue.path.join(".") || issue.code)
+        .join(", ")}`,
+    );
   const result = parsed.data;
   const count = summary.columnCount;
   const inRange = (index: number) => index >= 0 && index < count;
@@ -279,7 +286,7 @@ export function parseAnalysisResponse(
     ) ||
     result.recommendations.some((rec) => rec.columns.some((i) => !inRange(i)))
   )
-    throw new M365AnalysisError("AI_ANALYSIS_INVALID", 502, "unknown column");
+    throw new M365AnalysisError("AI_ANALYSIS_INVALID", 422, "unknown column");
 
   const column = (index: number) => summary.columns[index];
   const restricted = (index: number) =>
@@ -496,10 +503,32 @@ export async function analyzeSchemaSummary(
     Math.ceil(chars / 4) + maxTokens,
     maxTokens,
   );
-  const { result, droppedRecommendations } = parseAnalysisResponse(
-    text,
-    summary,
-  );
+  let parsedAnswer: ReturnType<typeof parseAnalysisResponse>;
+  try {
+    parsedAnswer = parseAnalysisResponse(text, summary);
+  } catch (error) {
+    if (
+      !(error instanceof M365AnalysisError) ||
+      error.code !== "AI_ANALYSIS_INVALID"
+    )
+      throw error;
+    // A model sometimes breaks the strict contract once; ask again once, naming what was wrong.
+    const retry = await runner(
+      user,
+      [
+        ...messages,
+        { role: "assistant", content: text.slice(0, 4000) },
+        {
+          role: "user",
+          content: `That answer was rejected (${String(error.detail ?? "invalid").slice(0, 200)}). Reply again with ONLY one JSON object that follows the contract exactly, with no extra keys and every text within its length limit.`,
+        },
+      ],
+      Math.ceil(chars / 4) + maxTokens * 2,
+      maxTokens,
+    );
+    parsedAnswer = parseAnalysisResponse(retry, summary);
+  }
+  const { result, droppedRecommendations } = parsedAnswer;
   return {
     result,
     summaryHash: summaryHash(checked.data),

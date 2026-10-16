@@ -222,7 +222,7 @@ test("model output outside the contract is rejected", async () => {
     runnerAnswer = answer;
     analysis.resetAnalysisRateLimitForTests();
     const { status, json } = await post(validBody);
-    assert.equal(status, 502);
+    assert.equal(status, 422);
     assert.equal(json.error.code, "AI_ASSIST_INVALID");
   }
   runnerAnswer = "```json\n" + JSON.stringify({ text: "fenced ok" }) + "\n```";
@@ -280,7 +280,7 @@ test("document drafting is consent gated, strict and audited", async () => {
     drafting.setDraftRunnerForTests(async () => "not json");
     analysis.resetAnalysisRateLimitForTests();
     const bad = await call(body);
-    assert.equal(bad.status, 502);
+    assert.equal(bad.status, 422);
     assert.equal(bad.json.error.code, "AI_DRAFT_INVALID");
     const events = await dbm.dbAll<{ details: string }>(
       "SELECT details FROM security_audit_logs WHERE event_type = 'M365_DOC_DRAFT_COMPLETED'",

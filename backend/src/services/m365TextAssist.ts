@@ -88,16 +88,16 @@ export function parseAssistResponse(text: string): AssistResult {
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
   const candidate = fenced ? fenced[1] : trimmed;
   if (!candidate.startsWith("{") || !candidate.endsWith("}"))
-    throw new M365AnalysisError("AI_ASSIST_INVALID", 502, "not a JSON object");
+    throw new M365AnalysisError("AI_ASSIST_INVALID", 422, "not a JSON object");
   let parsed: unknown;
   try {
     parsed = JSON.parse(candidate);
   } catch {
-    throw new M365AnalysisError("AI_ASSIST_INVALID", 502, "unparseable JSON");
+    throw new M365AnalysisError("AI_ASSIST_INVALID", 422, "unparseable JSON");
   }
   const checked = assistResultSchema.safeParse(parsed);
   if (!checked.success)
-    throw new M365AnalysisError("AI_ASSIST_INVALID", 502, "schema mismatch");
+    throw new M365AnalysisError("AI_ASSIST_INVALID", 422, "schema mismatch");
   return checked.data;
 }
 

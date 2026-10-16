@@ -215,16 +215,16 @@ export function parseDraftResponse(text: string): DocumentDraft {
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
   const candidate = fenced ? fenced[1] : trimmed;
   if (!candidate.startsWith("{") || !candidate.endsWith("}"))
-    throw new M365AnalysisError("AI_DRAFT_INVALID", 502, "not a JSON object");
+    throw new M365AnalysisError("AI_DRAFT_INVALID", 422, "not a JSON object");
   let parsed: unknown;
   try {
     parsed = JSON.parse(candidate);
   } catch {
-    throw new M365AnalysisError("AI_DRAFT_INVALID", 502, "unparseable JSON");
+    throw new M365AnalysisError("AI_DRAFT_INVALID", 422, "unparseable JSON");
   }
   const checked = documentDraftSchema.safeParse(parsed);
   if (!checked.success)
-    throw new M365AnalysisError("AI_DRAFT_INVALID", 502, "schema mismatch");
+    throw new M365AnalysisError("AI_DRAFT_INVALID", 422, "schema mismatch");
   const draft = checked.data;
   for (const block of draft.blocks) {
     if (
@@ -233,12 +233,12 @@ export function parseDraftResponse(text: string): DocumentDraft {
     )
       throw new M365AnalysisError(
         "AI_DRAFT_INVALID",
-        502,
+        422,
         "table row width differs from the headers",
       );
   }
   if (totalChars(draft) > MAX_DRAFT_CHARS)
-    throw new M365AnalysisError("AI_DRAFT_INVALID", 502, "draft too long");
+    throw new M365AnalysisError("AI_DRAFT_INVALID", 422, "draft too long");
   return draft;
 }
 

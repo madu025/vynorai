@@ -393,7 +393,7 @@ test("model output that is not the strict contract fails closed", async () => {
     runnerAnswer = answer;
     analysis.resetAnalysisRateLimitForTests();
     const { status, json } = await post({ summary: summary(), consent: true });
-    assert.equal(status, 502, label);
+    assert.equal(status, 422, label);
     assert.equal(json.error.code, "AI_ANALYSIS_INVALID", label);
   }
   runnerAnswer = "```json\n" + JSON.stringify(goodAnswer) + "\n```";

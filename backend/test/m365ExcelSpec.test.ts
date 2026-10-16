@@ -1428,3 +1428,53 @@ test("server and add-in agree on a PivotTable top N and the server refuses a bad
     /top N must be between 1 and 100/,
   );
 });
+
+test("server and add-in agree on a sampled chart over a PivotTable and on describe statistics", () => {
+  const input = {
+    workbookId: "w",
+    worksheetName: "Big",
+    address: "A1:C600000",
+    values: [
+      ["Item", "Qty", "Region"],
+      ["a", 1, "N"],
+      ["b", 2, "S"],
+      ["a", 3, "N"],
+    ],
+    hasHeaders: true,
+    sample: { totalRows: 600000, sampledRows: 4 },
+  };
+  const chartSpecs = {
+    pivot: { rows: 0, values: 1, aggregation: "sum" },
+    chart: { category: 0, value: 1, chartType: "column", pivotResult: true },
+  } as any;
+  const kinds = ["pivot-table", "chart"];
+  const server = createServerExcelPreviewPlan(input, kinds, 500, chartSpecs);
+  const local = createExcelPreviewPlan(
+    input as any,
+    kinds as any,
+    500,
+    chartSpecs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  const statSpecs = { statistics: { mode: "describe", columns: [1] } } as any;
+  const serverStats = createServerExcelPreviewPlan(
+    input,
+    ["statistics"],
+    500,
+    statSpecs,
+  );
+  const localStats = createExcelPreviewPlan(
+    input as any,
+    ["statistics"],
+    500,
+    statSpecs,
+  );
+  assert.equal(excelPlansMatch(localStats, serverStats), true);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["chart"], 500, {
+        chart: { category: 0, value: 1, chartType: "column" },
+      } as any),
+    /too large to read in full/,
+  );
+});

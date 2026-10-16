@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createExcelPreviewPlan, fingerprintExcelRange } from "./excel.js";
+import {
+  adaptForSampledRange,
+  createExcelPreviewPlan,
+  fingerprintExcelRange,
+} from "./excel.js";
 import {
   applyApprovedExcelPlan,
   excelValuesToCsv,
@@ -1189,5 +1193,71 @@ test("a sampled very large range plans only a PivotTable and pins the source by 
       values: [["Other", "Qty", "Region"], ...base.values.slice(1)],
     }),
     fingerprintExcelRange(base),
+  );
+});
+
+test("a sampled range turns a chart or a summary into a PivotTable and allows describe statistics", () => {
+  const base: any = {
+    workbookId: "w",
+    worksheetName: "Big",
+    address: "A1:C600000",
+    values: [
+      ["Item", "Qty", "Region"],
+      ["a", 1, "N"],
+      ["b", 2, "S"],
+      ["a", 3, "N"],
+    ],
+    hasHeaders: true,
+    sample: { totalRows: 600000, sampledRows: 4 },
+  };
+  const chart = adaptForSampledRange(["chart"], {
+    chart: { category: 0, value: 1, chartType: "column" },
+  });
+  assert.deepEqual(chart.actions.sort(), ["chart", "pivot-table"]);
+  assert.equal(chart.specs.chart?.pivotResult, true);
+  assert.deepEqual(chart.specs.pivot, {
+    rows: 0,
+    values: 1,
+    aggregation: "sum",
+  });
+  const plan: any = createExcelPreviewPlan(
+    base,
+    chart.actions,
+    500,
+    chart.specs,
+  );
+  assert.deepEqual(
+    plan.actions.map((action: any) => action.kind),
+    ["pivot-table", "chart"],
+  );
+  const summary = adaptForSampledRange(["summary"], {
+    summary: {
+      group: 0,
+      values: [
+        { column: 1, aggregation: "average" },
+        { column: 2, aggregation: "sum" },
+      ],
+    },
+  } as any);
+  assert.deepEqual(summary.actions, ["pivot-table"]);
+  assert.equal(summary.specs.pivot?.aggregation, "average");
+  assert.equal(summary.specs.summary, undefined);
+  const stats: any = createExcelPreviewPlan(base, ["statistics"], 500, {
+    statistics: { mode: "describe", columns: [1] },
+  });
+  assert.equal(stats.actions[0].kind, "statistics");
+  assert.throws(
+    () =>
+      createExcelPreviewPlan(base, ["statistics"], 500, {
+        statistics: { mode: "forecast", value: 1, periods: 3 },
+      }),
+    /too large to read in full/,
+  );
+  assert.throws(
+    () =>
+      createExcelPreviewPlan(base, ["chart"], 500, {
+        chart: { category: 0, value: 1, chartType: "column" },
+      }),
+    /too large to read in full/,
   );
 });

@@ -9,6 +9,29 @@ import {
 /** With a sampled (very large) range only results that Excel computes over every row are safe. */
 const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set(["pivot-table"]);
 
+/** A chart is allowed on a sampled range only when it charts a PivotTable Excel computes. */
+function sampledKindAllowed(
+  kind: string,
+  requested: ReadonlySet<string>,
+  specs?: {
+    chart?: { pivotResult?: boolean };
+    statistics?: { mode?: string };
+  },
+): boolean {
+  if (SAMPLED_RANGE_ACTIONS.has(kind)) return true;
+  // Describe and correlation are live formulas over whole columns; Excel computes them.
+  if (kind === "statistics")
+    return (
+      specs?.statistics?.mode === "describe" ||
+      specs?.statistics?.mode === "correlation"
+    );
+  return (
+    kind === "chart" &&
+    requested.has("pivot-table") &&
+    specs?.chart?.pivotResult === true
+  );
+}
+
 export class InvalidExcelRangeError extends Error {
   constructor(
     public readonly code: string,
@@ -1937,7 +1960,9 @@ export function createServerExcelPreviewPlan(
   if (
     sample &&
     (layout.normalization ||
-      [...requested].some((kind) => !SAMPLED_RANGE_ACTIONS.has(kind)))
+      [...requested].some(
+        (kind) => !sampledKindAllowed(kind, requested, specs),
+      ))
   )
     throw new InvalidExcelRangeError(
       "EXCEL_SPEC_INVALID",

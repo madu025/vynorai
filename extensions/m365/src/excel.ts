@@ -23,6 +23,29 @@ export const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set([
 ]);
 export const SAMPLED_FINGERPRINT_ROWS = 3;
 
+/** A chart is allowed on a sampled range only when it charts a PivotTable Excel computes. */
+function sampledKindAllowed(
+  kind: string,
+  requested: ReadonlySet<string>,
+  specs?: {
+    chart?: { pivotResult?: boolean };
+    statistics?: { mode?: string };
+  },
+): boolean {
+  if (SAMPLED_RANGE_ACTIONS.has(kind)) return true;
+  // Describe and correlation are live formulas over whole columns; Excel computes them.
+  if (kind === "statistics")
+    return (
+      specs?.statistics?.mode === "describe" ||
+      specs?.statistics?.mode === "correlation"
+    );
+  return (
+    kind === "chart" &&
+    requested.has("pivot-table") &&
+    specs?.chart?.pivotResult === true
+  );
+}
+
 export class InvalidExcelRangeError extends Error {
   constructor(
     public readonly code: string,
@@ -2160,7 +2183,7 @@ export function createExcelPreviewPlan(
   if (input.sample) {
     if (
       layout.normalization ||
-      [...requested].some((kind) => !SAMPLED_RANGE_ACTIONS.has(kind))
+      [...requested].some((kind) => !sampledKindAllowed(kind, requested, specs))
     )
       throw new InvalidExcelRangeError(
         "EXCEL_SPEC_INVALID",
@@ -2382,4 +2405,55 @@ export function excelSafeBaseName(worksheetName: string): string {
   );
   const base = origin.replace(/[^A-Za-z0-9_]/g, "_").slice(0, 18) || "Sheet";
   return /^[A-Za-z_]/.test(base) ? base : `S_${base}`.slice(0, 18);
+}
+
+/**
+ * A very large range is never read in full, so a chart or a group summary is computed by a
+ * PivotTable instead (Excel aggregates every row). Other requests are left for the planner to refuse.
+ */
+export function adaptForSampledRange(
+  actions: ExcelActionKind[],
+  specs: ExcelColumnSpecs,
+): { actions: ExcelActionKind[]; specs: ExcelColumnSpecs } {
+  const next = new Set<ExcelActionKind>(actions);
+  const out: ExcelColumnSpecs = { ...specs };
+  if (
+    next.has("chart") &&
+    !next.has("pivot-table") &&
+    specs.chart &&
+    specs.chart.chartType !== "histogram" &&
+    specs.chart.chartType !== "waterfall"
+  ) {
+    next.add("pivot-table");
+    out.chart = { ...specs.chart, pivotResult: true };
+    out.pivot = {
+      rows: specs.chart.category,
+      values: specs.chart.value,
+      aggregation: "sum",
+      ...(specs.chart.extraValues?.length
+        ? { extraValues: specs.chart.extraValues.slice(0, 3) }
+        : {}),
+    };
+  }
+  if (
+    next.has("summary") &&
+    !next.has("pivot-table") &&
+    specs.summary?.values?.length
+  ) {
+    const [first, ...others] = specs.summary.values;
+    next.delete("summary");
+    next.add("pivot-table");
+    delete out.summary;
+    const extra = others
+      .filter((value) => value.aggregation === first.aggregation)
+      .slice(0, 3)
+      .map((value) => value.column);
+    out.pivot = {
+      rows: specs.summary.group,
+      values: first.column,
+      aggregation: first.aggregation,
+      ...(extra.length ? { extraValues: extra } : {}),
+    };
+  }
+  return { actions: [...next], specs: out };
 }

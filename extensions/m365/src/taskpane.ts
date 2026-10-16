@@ -55,6 +55,7 @@ import {
   stableStorageFingerprint,
 } from "./diagnostics.js";
 import {
+  adaptForSampledRange,
   createExcelPreviewPlan,
   excelPlansMatch,
   getExcelHeaderLayout,
@@ -932,7 +933,7 @@ inspect?.addEventListener("click", async () => {
       ]),
     ];
     const filtered = wanted.filter((kind) => !excludedKinds.has(kind));
-    const actions = filtered.length > 0 ? filtered : wanted;
+    let actions = filtered.length > 0 ? filtered : wanted;
     const {
       lookup: lookupWish,
       lookupColumns: lookupColumnsWish,
@@ -1114,6 +1115,13 @@ inspect?.addEventListener("click", async () => {
         "Say what to create: a table, chart, result sheet, PivotTable, clean-up, or a computed column. Or ask a question about the data.";
       renderConversation("error", hint);
       return setStatus(hint);
+    }
+    if (input.sample) {
+      // Very large data: Excel computes a chart or a summary through a PivotTable.
+      const adapted = adaptForSampledRange(actions, specs);
+      actions = adapted.actions;
+      specs = adapted.specs;
+      previewSpecs = specs;
     }
     log.record("instruction:actions", "pass", { actions });
     const localPreview = await log.step(

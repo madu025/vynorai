@@ -1615,7 +1615,18 @@ export async function applyApprovedExcelPlan(
             if (sheetExists) {
               result.status = "exists";
             } else {
-              const { headers } = splitHeader(await readSourceValues());
+              let headers: string[];
+              if (plan.profile?.sample) {
+                // Very large data: only the header row is needed, the formulas cover every row.
+                const headerRow = sourceRange().getRow(0);
+                headerRow.load("values");
+                await context.sync();
+                headers = (headerRow.values[0] ?? []).map((cell: any) =>
+                  String(cell ?? ""),
+                );
+              } else {
+                headers = splitHeader(await readSourceValues()).headers;
+              }
               const parsed = parseLocalRange(
                 localExcelAddress(plan.sourceAddress),
               );

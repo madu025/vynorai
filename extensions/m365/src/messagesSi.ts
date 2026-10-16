@@ -101,6 +101,10 @@ const EXACT: Record<string, string> = {
     "සෘජුකෝණාස්‍රාකාර Excel පරාසයක් තෝරන්න.",
   "The selected range is too large. Select at most 100,000 cells and 100 columns.":
     "තෝරාගත් පරාසය ඉතා විශාලයි. උපරිම කොටු 100,000ක් සහ තීරු 100ක් තෝරන්න.",
+  "The selection is too wide. Select at most 100 columns.":
+    "තෝරාගත් පරාසය ඉතා පළලයි. උපරිම තීරු 100ක් තෝරන්න.",
+  "This data is too large to read in full. A PivotTable works on every row; select at most 100,000 cells for other results.":
+    "මෙම දත්ත සම්පූර්ණයෙන් කියවීමට නොහැකි තරම් විශාලයි. PivotTable එක සියලු පේළි මත ක්‍රියා කරයි; අනෙක් ප්‍රතිඵල සඳහා කොටු 100,000ක් දක්වා තෝරන්න.",
   "The VynorAI service is busy or restarting. Try again in a moment.":
     "VynorAI සේවාව කාර්යබහුලයි හෝ නැවත ආරම්භ වෙමින් පවතී. මොහොතකින් නැවත උත්සාහ කරන්න.",
   "Click a cell inside your table (or select it) so it has a header row and at least one data row.":

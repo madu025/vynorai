@@ -6,6 +6,9 @@ import {
   wantsPercentFormat,
 } from "./m365Expression.js";
 
+/** With a sampled (very large) range only results that Excel computes over every row are safe. */
+const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set(["pivot-table"]);
+
 export class InvalidExcelRangeError extends Error {
   constructor(
     public readonly code: string,
@@ -1895,9 +1898,12 @@ export function createServerExcelPreviewPlan(
   }
   const dataOffset = layout.headerRowCount;
   const dataRows = Math.max(0, values.length - dataOffset);
-  const chunkCount = Math.max(1, Math.ceil(dataRows / chunkRows));
+  const sample = input.sample as
+    | { totalRows: number; sampledRows: number }
+    | undefined;
+  const chunkCount = sample ? 1 : Math.max(1, Math.ceil(dataRows / chunkRows));
   const profile = {
-    rowCount: values.length,
+    rowCount: sample ? sample.totalRows : values.length,
     columnCount: values.reduce((max, row) => Math.max(max, row.length), 0),
     headerRowCount: layout.headerRowCount,
     headerCount: headers.length,
@@ -1912,9 +1918,19 @@ export function createServerExcelPreviewPlan(
       .createHash("sha256")
       .update(JSON.stringify(input))
       .digest("hex"),
+    ...(sample ? { sample } : {}),
   };
   const baseName = excelSafeBaseName(input.worksheetName);
   const requested = new Set(requestedActions);
+  if (
+    sample &&
+    (layout.normalization ||
+      [...requested].some((kind) => !SAMPLED_RANGE_ACTIONS.has(kind)))
+  )
+    throw new InvalidExcelRangeError(
+      "EXCEL_SPEC_INVALID",
+      "This data is too large to read in full. A PivotTable works on every row; select at most 100,000 cells for other results.",
+    );
   if (layout.normalization) requested.add("new-sheet");
   if (
     (requested.has("summary") ||
@@ -2032,9 +2048,13 @@ export function createServerExcelPreviewPlan(
   const warnings = [
     ...profile.duplicateHeaderNames.map((name) => `Duplicate header: ${name}`),
   ];
-  if (profile.blankCells > 0)
+  if (sample)
+    warnings.push(
+      `Very large data: the preview uses a sample of ${sample.sampledRows.toLocaleString("en-US")} of ${sample.totalRows.toLocaleString("en-US")} rows; Excel calculates the result over every row.`,
+    );
+  else if (profile.blankCells > 0)
     warnings.push(`${profile.blankCells} blank cells require review.`);
-  if (chunkCount > 1)
+  if (!sample && chunkCount > 1)
     warnings.push(`Large range will be processed in ${chunkCount} chunks.`);
   return {
     contractVersion: "2026-10-14.excel.v1",

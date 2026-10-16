@@ -13,7 +13,15 @@ type ExcelRangeInput = {
   address: string;
   values: ExcelRow[];
   hasHeaders?: boolean;
+  /** Set when `values` is a sample of a much larger range; `address` is still the whole range. */
+  sample?: ExcelSampleInfo;
 };
+export type ExcelSampleInfo = { totalRows: number; sampledRows: number };
+/** With a sampled (very large) range only results that Excel itself computes over every row are safe. */
+export const SAMPLED_RANGE_ACTIONS: ReadonlySet<string> = new Set([
+  "pivot-table",
+]);
+export const SAMPLED_FINGERPRINT_ROWS = 3;
 
 export class InvalidExcelRangeError extends Error {
   constructor(
@@ -33,6 +41,7 @@ type ExcelRangeProfile = {
   duplicateHeaderNames: string[];
   chunkCount: number;
   sourceFingerprint: string;
+  sample?: ExcelSampleInfo;
 };
 type ExcelHeaderNormalization = {
   headerRowCount: 2;
@@ -2064,12 +2073,23 @@ function sha256Hex(value: string): string {
 
 /** SHA-256 fingerprint of the exact source cells used by the local mutation gate. */
 export function fingerprintExcelRange(input: ExcelRangeInput): string {
-  const serialized = JSON.stringify({
-    workbookId: input.workbookId,
-    worksheetName: input.worksheetName,
-    address: input.address,
-    values: input.values,
-  });
+  // A sampled range cannot be re-read in full cheaply: it is pinned by its size and header rows.
+  const serialized = JSON.stringify(
+    input.sample
+      ? {
+          workbookId: input.workbookId,
+          worksheetName: input.worksheetName,
+          address: input.address,
+          sample: input.sample,
+          values: input.values.slice(0, SAMPLED_FINGERPRINT_ROWS),
+        }
+      : {
+          workbookId: input.workbookId,
+          worksheetName: input.worksheetName,
+          address: input.address,
+          values: input.values,
+        },
+  );
   return sha256Hex(serialized);
 }
 
@@ -2103,14 +2123,15 @@ export function profileExcelRange(
   );
   const dataRows = Math.max(0, input.values.length - layout.headerRowCount);
   return {
-    rowCount: input.values.length,
+    rowCount: input.sample ? input.sample.totalRows : input.values.length,
     columnCount,
     headerRowCount: layout.headerRowCount,
     headerCount: headers.length,
     blankCells,
     duplicateHeaderNames: [...duplicateHeaderNames].sort(),
-    chunkCount: Math.max(1, Math.ceil(dataRows / chunkRows)),
+    chunkCount: input.sample ? 1 : Math.max(1, Math.ceil(dataRows / chunkRows)),
     sourceFingerprint: fingerprintExcelRange(input),
+    ...(input.sample ? { sample: input.sample } : {}),
   };
 }
 
@@ -2124,6 +2145,16 @@ export function createExcelPreviewPlan(
   const layout =
     input.hasHeaders === false ? noHeaderLayout : getExcelHeaderLayout(input);
   const requested = new Set(requestedActions);
+  if (input.sample) {
+    if (
+      layout.normalization ||
+      [...requested].some((kind) => !SAMPLED_RANGE_ACTIONS.has(kind))
+    )
+      throw new InvalidExcelRangeError(
+        "EXCEL_SPEC_INVALID",
+        "This data is too large to read in full. A PivotTable works on every row; select at most 100,000 cells for other results.",
+      );
+  }
   if (layout.normalization) requested.add("new-sheet");
   const safeActions = orderExcelActions(
     requested,
@@ -2256,9 +2287,13 @@ export function createExcelPreviewPlan(
   const warnings = [
     ...profile.duplicateHeaderNames.map((name) => `Duplicate header: ${name}`),
   ];
-  if (profile.blankCells > 0)
+  if (input.sample)
+    warnings.push(
+      `Very large data: the preview uses a sample of ${input.sample.sampledRows.toLocaleString("en-US")} of ${input.sample.totalRows.toLocaleString("en-US")} rows; Excel calculates the result over every row.`,
+    );
+  else if (profile.blankCells > 0)
     warnings.push(`${profile.blankCells} blank cells require review.`);
-  if (profile.chunkCount > 1)
+  if (!input.sample && profile.chunkCount > 1)
     warnings.push(
       `Large range will be processed in ${profile.chunkCount} chunks.`,
     );
@@ -2290,6 +2325,7 @@ export function excelPlansMatch(
     blankCells: profile?.blankCells,
     duplicateHeaderNames: profile?.duplicateHeaderNames,
     chunkCount: profile?.chunkCount,
+    sample: profile?.sample,
   });
   return (
     server.contractVersion === local.contractVersion &&

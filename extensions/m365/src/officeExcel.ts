@@ -8,6 +8,7 @@ import {
 import {
   assertValidExcelTabularRange,
   fingerprintExcelRange,
+  SAMPLED_FINGERPRINT_ROWS,
 } from "./excel.js";
 
 import {
@@ -34,6 +35,7 @@ type ExcelRangeInput = {
   address: string;
   values: any[][];
   hasHeaders?: boolean;
+  sample?: { totalRows: number; sampledRows: number };
 };
 type ExcelActionPlan = any;
 
@@ -471,6 +473,78 @@ async function readValuesInChunks(
   return values;
 }
 
+const SAMPLE_HEAD_ROWS = 1000;
+const SAMPLE_BLOCK_ROWS = 100;
+const SAMPLE_MAX_ROWS = 4000;
+
+/** How many rows of a very large range are read for planning: at most 4,000 and 100,000 cells. */
+export function sampleRowBudget(columns: number): number {
+  return Math.max(
+    2,
+    Math.min(SAMPLE_MAX_ROWS, Math.floor(MAX_EXCEL_SELECTION_CELLS / columns)),
+  );
+}
+
+/**
+ * Row ranges [start, count] to read from a very large range: the first rows (header and
+ * first data), then evenly spaced blocks across the rest, the last block touching the end.
+ */
+export function sampleBlocks(
+  rows: number,
+  budget: number,
+): Array<[number, number]> {
+  if (rows <= budget) return [[0, rows]];
+  const head = Math.min(SAMPLE_HEAD_ROWS, budget);
+  const blocks: Array<[number, number]> = [[0, head]];
+  const rest = budget - head;
+  const blockCount = Math.floor(rest / SAMPLE_BLOCK_ROWS);
+  const span = rows - head - SAMPLE_BLOCK_ROWS;
+  for (let index = 0; index < blockCount; index += 1) {
+    const start =
+      head +
+      (blockCount === 1 ? span : Math.floor((index * span) / (blockCount - 1)));
+    blocks.push([start, SAMPLE_BLOCK_ROWS]);
+  }
+  return blocks;
+}
+
+async function readSampleRows(
+  context: ExcelContextLike,
+  range: any,
+  rows: number,
+  columns: number,
+  budget: number,
+  options?: {
+    maxTextChars?: number;
+    onProgress?: (completedRows: number, totalRows: number) => void;
+    isCancelled?: () => boolean;
+  },
+): Promise<any[][]> {
+  const blocks = sampleBlocks(rows, budget);
+  const values: any[][] = [];
+  let textChars = 0;
+  for (const [start, count] of blocks) {
+    if (options?.isCancelled?.()) throw new Error("EXCEL_READ_CANCELLED");
+    const chunk = range
+      .getCell(start, 0)
+      .getResizedRange(count - 1, columns - 1);
+    chunk.load("values");
+    await context.sync();
+    if (options?.maxTextChars !== undefined) {
+      for (const row of chunk.values)
+        for (const cell of row)
+          if (typeof cell === "string") textChars += cell.length;
+      if (textChars > options.maxTextChars)
+        throw new Error(
+          `The selection contains more than ${options.maxTextChars.toLocaleString()} text characters. Select a smaller range.`,
+        );
+    }
+    values.push(...chunk.values);
+    options?.onProgress?.(values.length, budget);
+  }
+  return values;
+}
+
 async function writeValuesInChunks(
   context: ExcelContextLike,
   sheet: any,
@@ -536,7 +610,6 @@ export async function inspectSelectedExcelRange(
           );
           return used;
         });
-      let oversizedBlock = false;
       for (const make of candidates) {
         try {
           let found = make();
@@ -558,11 +631,11 @@ export async function inspectSelectedExcelRange(
               // keep the whole used range
             }
           }
+          // A table over the cell limit is still usable: it is sampled below, not refused.
           if (
             Number(found.rowCount) >= 2 &&
             Number(found.columnCount) >= 1 &&
-            Number(found.rowCount) * Number(found.columnCount) <=
-              MAX_EXCEL_SELECTION_CELLS
+            Number(found.columnCount) <= MAX_EXCEL_SELECTION_COLUMNS
           ) {
             found.worksheet?.load?.("name");
             await context.sync();
@@ -570,19 +643,10 @@ export async function inspectSelectedExcelRange(
             onAutoDetect?.(String(found.address));
             break;
           }
-          if (Number(found.rowCount) >= 2) oversizedBlock = true;
         } catch {
           // try the next way of finding the data
         }
       }
-      // Say "too large" when the table was found but is over the limit, not "click a table".
-      if (
-        oversizedBlock &&
-        Number(selected.rowCount) * Number(selected.columnCount) <= 1
-      )
-        throw new Error(
-          "The selected range is too large. Select at most 100,000 cells and 100 columns.",
-        );
     }
     const rows = Number(selected.rowCount);
     const columns = Number(selected.columnCount);
@@ -594,29 +658,34 @@ export async function inspectSelectedExcelRange(
       !Number.isSafeInteger(rows) ||
       !Number.isSafeInteger(columns) ||
       columns < 1 ||
-      columns > MAX_EXCEL_SELECTION_COLUMNS ||
-      rows * columns > MAX_EXCEL_SELECTION_CELLS
+      columns > MAX_EXCEL_SELECTION_COLUMNS
     )
       throw new Error(
-        `The selection is too large. Select at most ${MAX_EXCEL_SELECTION_CELLS.toLocaleString()} cells and ${MAX_EXCEL_SELECTION_COLUMNS} columns.`,
+        `The selection is too wide. Select at most ${MAX_EXCEL_SELECTION_COLUMNS} columns.`,
       );
-    const input = {
-      workbookId,
-      worksheetName: selected.worksheet.name,
-      address: selected.address,
-      values: await readValuesInChunks(
-        context,
-        selected,
-        rows,
-        columns,
-        chunkRows,
-        {
+    // Over the cell limit: read a sample for planning; Excel computes the result over every row.
+    const sampled = rows * columns > MAX_EXCEL_SELECTION_CELLS;
+    const sampleRows = sampled ? sampleRowBudget(columns) : rows;
+    const values = sampled
+      ? await readSampleRows(context, selected, rows, columns, sampleRows, {
           maxTextChars: MAX_EXCEL_SELECTION_TEXT_CHARS,
           onProgress,
           isCancelled,
-        },
-      ),
+        })
+      : await readValuesInChunks(context, selected, rows, columns, chunkRows, {
+          maxTextChars: MAX_EXCEL_SELECTION_TEXT_CHARS,
+          onProgress,
+          isCancelled,
+        });
+    const input: ExcelRangeInput = {
+      workbookId,
+      worksheetName: selected.worksheet.name,
+      address: selected.address,
+      values,
       hasHeaders: true,
+      ...(sampled
+        ? { sample: { totalRows: rows, sampledRows: values.length } }
+        : {}),
     };
     assertValidExcelTabularRange(input);
     return input;
@@ -661,10 +730,14 @@ async function sourceFingerprint(
     .getRange(localExcelAddress(plan.sourceAddress));
   range.load(["rowCount", "columnCount"]);
   await context.sync();
+  const sample = plan.profile?.sample;
   const values = await readValuesInChunks(
     context,
     range,
-    Number(range.rowCount),
+    // A sampled range is pinned by its size and header rows, not by every row.
+    sample
+      ? Math.min(Number(range.rowCount), SAMPLED_FINGERPRINT_ROWS)
+      : Number(range.rowCount),
     Number(range.columnCount),
     500,
   );
@@ -673,6 +746,14 @@ async function sourceFingerprint(
     worksheetName: plan.worksheetName,
     address: plan.sourceAddress,
     values,
+    ...(sample
+      ? {
+          sample:
+            Number(range.rowCount) === sample.totalRows
+              ? sample
+              : { ...sample, totalRows: Number(range.rowCount) },
+        }
+      : {}),
   });
 }
 

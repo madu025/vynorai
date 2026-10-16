@@ -1365,3 +1365,29 @@ test("server and add-in agree on statistics plans and the server refuses bad one
     /numeric/,
   );
 });
+
+test("server and add-in agree on a sampled very large range and refuse other results", () => {
+  const input = {
+    workbookId: "w",
+    worksheetName: "Big",
+    address: "A1:C600000",
+    values: [
+      ["Item", "Qty", "Region"],
+      ["a", 1, "N"],
+      ["b", 2, "S"],
+      ["a", 3, "N"],
+    ],
+    hasHeaders: true,
+    sample: { totalRows: 600000, sampledRows: 4 },
+  };
+  const server = createServerExcelPreviewPlan(input, ["pivot-table"], 500);
+  const local = createExcelPreviewPlan(input as any, ["pivot-table"], 500);
+  assert.equal(server.profile.rowCount, 600000);
+  assert.deepEqual(server.profile.sample, input.sample);
+  assert.equal(excelPlansMatch(local, server), true);
+  for (const kind of ["chart", "table", "summary", "clean"])
+    assert.throws(
+      () => createServerExcelPreviewPlan(input, [kind], 500),
+      /too large to read in full/,
+    );
+});

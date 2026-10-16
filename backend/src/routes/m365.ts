@@ -54,6 +54,13 @@ const excelPlanSchema = z.object({
     .min(1)
     .max(100_000),
   hasHeaders: z.boolean().optional(),
+  // Set when `values` is a sample of a much larger range (`address` stays the whole range).
+  sample: z
+    .object({
+      totalRows: z.number().int().min(2).max(1_048_576),
+      sampledRows: z.number().int().min(2).max(100_000),
+    })
+    .optional(),
   actions: z
     .array(
       z.enum([

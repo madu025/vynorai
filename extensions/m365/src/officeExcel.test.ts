@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createExcelPreviewPlan } from "./excel.js";
+import { createExcelPreviewPlan, fingerprintExcelRange } from "./excel.js";
 import {
   applyApprovedExcelPlan,
   excelValuesToCsv,
   inspectSelectedExcelRange,
   localExcelAddress,
   rollbackItemsFromApplyReport,
+  sampleBlocks,
+  sampleRowBudget,
 } from "./officeExcel.js";
 
 test("CSV export quotes cells and neutralizes formula injection", () => {
@@ -429,25 +431,36 @@ test("inspect rejects a selection without a data row", async () => {
   );
 });
 
-test("inspect refuses an oversized selection before reading cell values", async () => {
-  const rows = Array.from({ length: 1001 }, () =>
-    Array.from({ length: 100 }, () => 1),
+test("inspect refuses a selection with too many columns before reading cell values", async () => {
+  const rows = Array.from({ length: 5 }, () =>
+    Array.from({ length: 101 }, () => 1),
   );
   const excel = fakeWorkbook(rows);
   await assert.rejects(
     inspectSelectedExcelRange(excel.runtime, "book-1"),
-    /at most 100,000 cells and 100 columns/,
+    /at most 100 columns/,
   );
 });
 
-test("inspect says too large when a clicked cell's table is over the limit", async () => {
+test("inspect samples a table over the cell limit instead of refusing it", async () => {
   const nothing = { isNullObject: true, load() {} };
   const hugeRegion = {
     isNullObject: false,
     address: "A1:T6000",
     rowCount: 6000,
     columnCount: 20,
+    worksheet: { name: "Big", load() {} },
     load() {},
+    getCell: (start: number) => ({
+      getResizedRange: (lastRow: number, lastColumn: number) => ({
+        load() {},
+        values: Array.from({ length: lastRow + 1 }, (_, row) =>
+          Array.from({ length: lastColumn + 1 }, (_, column) =>
+            start + row === 0 ? `H${column}` : start + row,
+          ),
+        ),
+      }),
+    }),
   };
   const selected: any = {
     address: "A2",
@@ -469,10 +482,27 @@ test("inspect says too large when a clicked cell's table is over the limit", asy
         sync: async () => {},
       }),
   };
-  await assert.rejects(
-    inspectSelectedExcelRange(runtime, "book-1"),
-    /at most 100,000 cells and 100 columns/,
+  const input: any = await inspectSelectedExcelRange(runtime, "book-1");
+  assert.equal(input.address, "A1:T6000");
+  assert.deepEqual(input.sample, { totalRows: 6000, sampledRows: 4000 });
+  assert.equal(input.values.length, 4000);
+  assert.equal(input.values[0][0], "H0");
+  assert.equal(input.values[3999][0], 5999);
+});
+
+test("sample blocks start at the top, are spaced evenly and reach the last row", () => {
+  assert.deepEqual(sampleBlocks(500, 4000), [[0, 500]]);
+  const blocks = sampleBlocks(1_000_000, 4000);
+  assert.deepEqual(blocks[0], [0, 1000]);
+  assert.equal(blocks.length, 31);
+  const [lastStart, lastCount] = blocks[blocks.length - 1];
+  assert.equal(lastStart + lastCount, 1_000_000);
+  assert.equal(
+    blocks.reduce((total, [, count]) => total + count, 0),
+    4000,
   );
+  assert.equal(sampleRowBudget(100), 1000);
+  assert.equal(sampleRowBudget(5), 4000);
 });
 
 test("inspect stops between read chunks when cancelled", async () => {
@@ -1115,4 +1145,49 @@ test("formula repair writes safe candidates to a new copy and leaves source unch
     JSON.stringify(excel.formulaWrites),
   );
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
+});
+
+test("a sampled very large range plans only a PivotTable and pins the source by its header", () => {
+  const base = {
+    workbookId: "w",
+    worksheetName: "Big",
+    address: "A1:C600000",
+    values: [
+      ["Item", "Qty", "Region"],
+      ["a", 1, "N"],
+      ["b", 2, "S"],
+      ["a", 3, "N"],
+    ],
+    hasHeaders: true,
+    sample: { totalRows: 600000, sampledRows: 4 },
+  };
+  const plan: any = createExcelPreviewPlan(base, ["pivot-table"]);
+  assert.equal(plan.profile.rowCount, 600000);
+  assert.deepEqual(plan.profile.sample, base.sample);
+  assert.equal(plan.profile.chunkCount, 1);
+  assert.ok(
+    plan.warnings.some((w: string) => /Very large data.*600,000 rows/.test(w)),
+  );
+  assert.throws(
+    () => createExcelPreviewPlan(base, ["chart"]),
+    /too large to read in full/,
+  );
+  // Only the first rows pin the source; later rows are not re-read at apply time.
+  assert.equal(
+    fingerprintExcelRange({
+      ...base,
+      values: [...base.values.slice(0, 3), ["x", 1, "N"]],
+    }),
+    fingerprintExcelRange({
+      ...base,
+      values: [...base.values.slice(0, 3), ["y", 9, "Q"]],
+    }),
+  );
+  assert.notEqual(
+    fingerprintExcelRange({
+      ...base,
+      values: [["Other", "Qty", "Region"], ...base.values.slice(1)],
+    }),
+    fingerprintExcelRange(base),
+  );
 });

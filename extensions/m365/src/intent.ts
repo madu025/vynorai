@@ -889,7 +889,7 @@ export function interpretInstruction(
     ) || /^\s*["']?([A-Za-z][\w ]{0,39}?)["']?\s*=\s*(.+?)\s*\.?$/i.exec(text);
   if (column) {
     const name = column[1].trim();
-    const expression = column[2].trim();
+    const expression = plainExpression(column[2].trim(), headers);
     // Anything beyond `ColumnA op ColumnB` (parentheses, numbers, functions, three columns)
     // becomes a validated expression column; the plain two-column form keeps its own spec.
     let handled = false;
@@ -972,6 +972,61 @@ export function interpretInstruction(
  * Maps common Sinhala and Singlish words to the English keywords the deterministic readers use,
  * so the same instructions work in all three without sending anything to a model.
  */
+/**
+ * Everyday wording for a computed column ("yes if A < B otherwise no", "the first 3 letters of X",
+ * "year of Date") as the closed expression grammar; anything else is returned unchanged.
+ */
+export function plainExpression(text: string, headers: string[]): string {
+  return bracketHeaders(plainExpressionRaw(text, headers), headers);
+}
+
+function plainExpressionRaw(text: string, headers: string[]): string {
+  const known = new Set(
+    headers.map((header) => header.trim().toLocaleLowerCase()),
+  );
+  const literal = (value: string) => {
+    const clean = value.trim().replace(/^["']|["']$/g, "");
+    return known.has(clean.toLocaleLowerCase()) ||
+      /^-?\d+(?:\.\d+)?$/.test(clean)
+      ? clean
+      : `"${clean.replace(/"/g, '""')}"`;
+  };
+  const choice =
+    /^(.+?)\s+if\s+(.+?)\s+(?:otherwise|else|or\s+else)\s+(.+)$/i.exec(text);
+  if (choice)
+    return `IF(${choice[2].trim()},${literal(choice[1])},${literal(choice[3])})`;
+  const yesNo = /^(yes|true)\s+if\s+(.+)$/i.exec(text);
+  if (yesNo) return `IF(${yesNo[2].trim()},"Yes","No")`;
+  const part =
+    /^(?:the\s+)?(first|last)\s+(\d{1,3})\s+(?:letters?|characters?|chars?)\s+of\s+(.+)$/i.exec(
+      text,
+    );
+  if (part)
+    return `${part[1].toLowerCase() === "first" ? "LEFT" : "RIGHT"}(${part[3].trim()},${part[2]})`;
+  const datePart = /^(?:the\s+)?(year|month|day)\s+(?:of|from)\s+(.+)$/i.exec(
+    text,
+  );
+  if (datePart) return `${datePart[1].toUpperCase()}(${datePart[2].trim()})`;
+  return text;
+}
+
+/** A column whose name has spaces is written [like this] in the expression grammar. */
+function bracketHeaders(text: string, headers: string[]): string {
+  let out = text;
+  const spaced = headers
+    .map((header) => header.trim())
+    .filter((header) => /[^A-Za-z0-9_]/.test(header))
+    .sort((a, b) => b.length - a.length);
+  for (const header of spaced) {
+    const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(
+      new RegExp(`(?<![\\[\\w])${escaped}(?![\\]\\w])`, "gi"),
+      `[${header}]`,
+    );
+  }
+  return out;
+}
+
 export function normalizeInstruction(text: string): string {
   const table: Array<[RegExp, string]> = [
     // "Sales walata Region anuwa total" means "total of Sales by Region".
@@ -1599,15 +1654,23 @@ function interpretStatistics(
     const date = headers.findIndex((header) =>
       /\b(date|month|quarter|year|week)\b/i.test(header),
     );
-    const category = headers.findIndex(
-      (header, index) =>
-        index !== date &&
-        index !== value &&
-        !isNumericColumn(rows, index) &&
-        /\b(region|category|status|customer|department|product|type)\b/i.test(
-          header,
-        ),
+    const asked = headerPositions(headers, text).find(
+      (entry) =>
+        entry.index !== date &&
+        entry.index !== value &&
+        !isNumericColumn(rows, entry.index),
     );
+    const category =
+      asked?.index ??
+      headers.findIndex(
+        (header, index) =>
+          index !== date &&
+          index !== value &&
+          !isNumericColumn(rows, index) &&
+          /\b(region|category|status|customer|department|product|type)\b/i.test(
+            header,
+          ),
+      );
     result.actions.push("statistics");
     result.specs.statistics = {
       mode: "insights",

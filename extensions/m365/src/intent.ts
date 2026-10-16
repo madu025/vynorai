@@ -224,6 +224,36 @@ export function interpretInstruction(
     problems: [],
   };
   const text = instruction.replace(/[_]+/g, " ");
+  // These requests need capabilities that are deliberately outside the add-in's
+  // current permission and Office.js safety boundary. Return an actionable
+  // refusal instead of falling through to the generic "unsupported action"
+  // hint, and never invent a plan that could appear to have succeeded.
+  if (/\bsparklines?\b/i.test(text)) {
+    result.problems.push(
+      "Sparklines are not available in this Excel add-in yet. Use a line chart on a new result sheet instead.",
+    );
+    return result;
+  }
+  if (
+    /\b(?:refresh|update)\b.*\b(?:every|each|on)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|day)/i.test(
+      text,
+    )
+  ) {
+    result.problems.push(
+      "Scheduled refresh is not available in this add-in yet. Run the request again when you want a fresh, reviewed result.",
+    );
+    return result;
+  }
+  if (
+    /\bemail\b.*\b(?:result|sheet|workbook|report)\b|\bsend\b.*\b(?:result|sheet|workbook|report)\b.*\b(?:email|finance team|team)\b/i.test(
+      text,
+    )
+  ) {
+    result.problems.push(
+      "Email delivery is not enabled. VynorAI will not request Mail permissions or send workbook data by email.",
+    );
+    return result;
+  }
   if (sequenceDepth === 0) {
     const clauses = text
       .split(/\s+(?:and\s+)?then\s+|\s*;\s*/i)

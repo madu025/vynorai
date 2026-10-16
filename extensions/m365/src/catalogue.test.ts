@@ -24,6 +24,19 @@ test("PDF export is an explicit, fully served action", () => {
   assert.deepEqual(interpreted.problems, []);
 });
 
+test("unsupported automation requests explain the safe boundary", () => {
+  for (const prompt of [
+    "Add sparklines for monthly Sales",
+    "Refresh this result every Monday",
+    "Email the result sheet to the finance team",
+  ]) {
+    const interpreted = interpretInstruction(prompt, HEADERS, ROWS);
+    assert.deepEqual(interpreted.actions, [], prompt);
+    assert.equal(interpreted.problems.length, 1, prompt);
+    assert.match(interpreted.problems[0], /not available|not enabled/i, prompt);
+  }
+});
+
 type CataloguePrompt = {
   category: string;
   expectedActions: string[];

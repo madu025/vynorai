@@ -476,6 +476,8 @@ async function readValuesInChunks(
   return values;
 }
 
+/** Rows Excel copies per request when a very large range is copied natively. */
+const NATIVE_COPY_ROWS = 50_000;
 const SAMPLE_HEAD_ROWS = 1000;
 const SAMPLE_BLOCK_ROWS = 100;
 const SAMPLE_MAX_ROWS = 4000;
@@ -889,22 +891,26 @@ export async function applyApprovedExcelPlan(
         whole.load(["rowCount", "columnCount"]);
         await context.sync();
         const rowTotal = Number(whole.rowCount);
-        const target = sheet.getRangeByIndexes(
-          0,
-          0,
-          rowTotal,
-          Number(whole.columnCount),
-        );
-        target.copyFrom(whole, "Values");
-        await context.sync();
-        try {
-          target.copyFrom(whole, "Formats");
+        const columnTotal = Number(whole.columnCount);
+        // Excel Online refuses one huge copy, so Excel copies it block by block.
+        for (let start = 0; start < rowTotal; start += NATIVE_COPY_ROWS) {
+          const count = Math.min(NATIVE_COPY_ROWS, rowTotal - start);
+          const from = whole
+            .getCell(start, 0)
+            .getResizedRange(count - 1, columnTotal - 1);
+          const to = sheet.getRangeByIndexes(start, 0, count, columnTotal);
+          to.copyFrom(from, "Values");
           await context.sync();
-        } catch {
-          // The values are the result; formats are presentation.
+          try {
+            to.copyFrom(from, "Formats");
+            await context.sync();
+          } catch {
+            // The values are the result; formats are presentation.
+          }
+          options.onProgress?.(start + count, rowTotal);
         }
         lastCopiedValues = undefined;
-        normalizedSource = target;
+        normalizedSource = sheet.getRangeByIndexes(0, 0, rowTotal, columnTotal);
         return rowTotal;
       }
       const range = sourceRange();
@@ -2779,9 +2785,17 @@ export async function applyApprovedExcelPlan(
                     [rowFormula(3)],
                   ];
                 await context.sync();
-                if (rowTotal > 2) {
+                for (
+                  let start = 3;
+                  start < rowTotal + 1;
+                  start += NATIVE_COPY_ROWS
+                ) {
+                  const count = Math.min(
+                    NATIVE_COPY_ROWS,
+                    rowTotal + 1 - start,
+                  );
                   sheet
-                    .getRangeByIndexes(3, column, rowTotal - 2, 1)
+                    .getRangeByIndexes(start, column, count, 1)
                     .copyFrom(sheet.getRangeByIndexes(2, column, 1, 1), "All");
                   await context.sync();
                 }

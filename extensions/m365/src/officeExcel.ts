@@ -1806,7 +1806,10 @@ export async function applyApprovedExcelPlan(
               if (cleaned.dateColumns.length > 0 && cleaned.rows.length > 0)
                 await context.sync();
             }
-          } else if (action.kind === "view" && plan.profile?.sample) {
+          } else if (
+            action.kind === "view" &&
+            (plan.profile?.sample || action.spec?.where)
+          ) {
             if (sheetExists) {
               result.status = "exists";
             } else {
@@ -1834,6 +1837,10 @@ export async function applyApprovedExcelPlan(
                         operator: spec.filter.operator,
                         value: spec.filter.value,
                       }
+                    : undefined,
+                  where: spec.where
+                    ? parseExpression(String(spec.where), headers.map(String))
+                        .ast
                     : undefined,
                   limit: spec.limit,
                 },

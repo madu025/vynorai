@@ -32,8 +32,10 @@ const scriptResultSchema = z
           })
           .strict(),
       )
-      .min(1)
+      .min(0)
       .max(MAX_SCRIPT_STEPS),
+    /** Set (with no steps) when the request needs something the assistant cannot do. */
+    cannot: z.string().min(1).max(240).optional(),
   })
   .strict();
 
@@ -42,7 +44,7 @@ export type ScriptResult = z.infer<typeof scriptResultSchema>;
 const SYSTEM_PROMPT = [
   "You understand what a person wants from a spreadsheet, however they phrase it (English, Sinhala, Singlish, long or vague) and turn it into a short list of steps for a spreadsheet assistant.",
   "You receive ONLY a statistical summary of a worksheet (column names, types, counts). You never see cell values.",
-  "Reply with ONE JSON object and nothing else: {title: string, steps: [{instruction: string, reason: string}]}.",
+  'Reply with ONE valid JSON object and nothing else, with every key in double quotes, for example: {"title": "Revenue by region", "steps": [{"instruction": "pivot table of total Revenue by Region", "reason": "Totals per region"}]}.',
   `Give 1 to ${MAX_SCRIPT_STEPS} steps in the order they should run. Each instruction is ONE plain English sentence that uses column names exactly as given.`,
   "The assistant understands only these kinds of sentences:",
   "- pivot table of total <measure> by <category> (optionally: top 5, average, count, as percent of total)",
@@ -57,15 +59,19 @@ const SYSTEM_PROMPT = [
   "- highlight <measure> with a color scale / add data bars to <measure> / add icon sets to <measure> / highlight duplicates in <column>",
   "- add a dropdown list to <column> / allow only dates in <column> / highlight <measure> above <number>",
   "- name the <column> column <Name> / copy this data to a new sheet",
-  "- show the top 10 rows by <measure> / sort by <measure> descending / show rows where <column> is <value>",
+  "- show the top 10 rows by <measure> / sort by <measure> descending / show rows where <column> is <value> / show rows where <column> is <value> and <column2> is <value2> (also or) / show rows where <measure> is less than <measure2> (a test between two columns)",
+  "  To highlight or find the rows that break a rule between columns, use: show rows where <test>. It lists the matching rows.",
   "- describe <measure> / forecast <measure> for the next 5 periods / correlation between <measure> and <measure> / dashboard with total <measure> by <category>",
   "- check the data quality of this data",
   "Do ONLY what the request asks. Never add steps the person did not ask for (no extra reports, charts, columns or formatting). Most requests need ONE step; use more only when the request clearly asks for several things.",
-  "Use AT MOST ONE pivot table step in a plan.",
+  "Use AT MOST ONE pivot table step in a plan. Two measures for the same category are ONE pivot: pivot table of total <measure> and total <measure2> by <category>.",
+  "If the request needs something the assistant cannot do (sending email, schedules, running code or Python, regression, counting distinct values, anything not listed above), do NOT pick a near-miss step. Reply with steps [] and cannot: ONE sentence in the person's language saying what is not possible and the closest thing that is.",
+  'When nothing can be done: {"title": "Not possible", "steps": [], "cannot": "one sentence"}.',
   "Examples (request -> steps):",
   'remove duplicate rows and fix extra spaces -> ["clean the data: trim extra spaces and remove duplicate rows"]',
   'show total <measure> for each <category> as a pie -> ["pie chart of <measure> by <category>"]',
-  'which items were used per <id column> and how much -> ["pivot table of total <measure> by <id column> and <item column> as rows"]',
+  'how many rows for each <category> -> ["pivot table of count of <another text column> by <category>"]',
+  'which items were used per <id column> and how much ->["pivot table of total <measure> by <id column> and <item column> as rows"]',
   'check for problems in my data -> ["check the data quality of this data"]',
   'predict <measure> for the next 6 periods -> ["forecast <measure> for the next 6 periods"]',
   'mark <measure> bigger than 50 -> ["highlight <measure> above 50"]',
@@ -113,7 +119,23 @@ export function parseScriptResponse(text: string): ScriptResult {
   try {
     json = extractJsonObject(text);
   } catch {
-    throw new M365AnalysisError("AI_SCRIPT_INVALID", 422, "not a JSON object");
+    // A model sometimes writes {title: "x"} with unquoted keys: quote them once and try again.
+    try {
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start < 0 || end <= start) throw new Error("no object");
+      json = JSON.parse(
+        text
+          .slice(start, end + 1)
+          .replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":'),
+      );
+    } catch {
+      throw new M365AnalysisError(
+        "AI_SCRIPT_INVALID",
+        422,
+        "not a JSON object",
+      );
+    }
   }
   const parsed = scriptResultSchema.safeParse(json);
   if (!parsed.success)
@@ -124,6 +146,12 @@ export function parseScriptResponse(text: string): ScriptResult {
         .slice(0, 5)
         .map((issue) => issue.path.join(".") || issue.code)
         .join(", ")}`,
+    );
+  if (parsed.data.steps.length === 0 && !parsed.data.cannot)
+    throw new M365AnalysisError(
+      "AI_SCRIPT_INVALID",
+      422,
+      "no steps and no reason",
     );
   for (const step of parsed.data.steps)
     if (

@@ -196,3 +196,44 @@ test("an ID with a leading zero stays text in a filter", () => {
   );
   assert.equal(plain.specs.view.filter.value, 15);
 });
+
+test("several conditions and a test between two columns become one row test", () => {
+  const headers = [
+    "Service ID",
+    "RTOM",
+    "Status",
+    "Requested Quantity",
+    "Issued Quantity",
+  ];
+  const rows = [["a", "R-HK", "S", 3, 2]];
+  const run = (text: string): any => interpretInstruction(text, headers, rows);
+
+  const two = run("show only rows where Status is S and RTOM is R-HK");
+  assert.deepEqual(two.actions, ["view"]);
+  assert.equal(two.specs.view.where, 'AND([Status]="S",[RTOM]="R-HK")');
+  assert.equal(two.specs.view.filter, undefined);
+
+  const cross = run(
+    "show rows where Issued Quantity is less than Requested Quantity",
+  );
+  assert.equal(
+    cross.specs.view.where,
+    "[Issued Quantity]<[Requested Quantity]",
+  );
+
+  const either = run("show rows where Status is E or Status is X");
+  assert.equal(either.specs.view.where, 'OR([Status]="E",[Status]="X")');
+
+  const direct = run(
+    'show rows where AND([Status] = "S", [Issued Quantity] < 3)',
+  );
+  assert.equal(
+    direct.specs.view.where,
+    'AND([Status] = "S", [Issued Quantity] < 3)',
+  );
+
+  // One plain condition keeps the ordinary filter.
+  const plain = run("show rows where Requested Quantity is more than 10");
+  assert.equal(plain.specs.view.where, undefined);
+  assert.equal(plain.specs.view.filter.column, 3);
+});

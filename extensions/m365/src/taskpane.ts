@@ -1082,6 +1082,21 @@ inspect?.addEventListener("click", async () => {
     renderConversation("user", instruction?.value?.trim() || instructionText);
     lastConversationRequest = instructionText;
   }
+  // "AI reads every request" (the person's own setting): the AI turns the request into plain steps first.
+  // The steps it returns come back through here once, and are read by the built-in reader.
+  const aiTurn =
+    aiFirstOn() &&
+    !skipAiOnce &&
+    Boolean(instructionText) &&
+    capabilities?.aiAnalysis !== false;
+  skipAiOnce = false;
+  if (aiTurn) {
+    setPreviewCancelVisible(false);
+    scriptMode = true;
+    autoAi = true;
+    void startConsent();
+    return;
+  }
   try {
     if (
       isFormulaInspectionRequest(instructionText) &&
@@ -1819,6 +1834,7 @@ function renderInsights(result: LocalInsights) {
         chartType: suggestion.chartType,
       });
       setStatus("Preparing the preview. Nothing changes until you confirm.");
+      skipAiOnce = true;
       showInstructionAndPreview();
     });
     insightsActions.appendChild(button);
@@ -1880,6 +1896,7 @@ function useRecommendation(
     kind: recommendation.kind,
   });
   setStatus("Preparing the preview. Nothing changes until you confirm.");
+  skipAiOnce = true;
   showInstructionAndPreview();
 }
 
@@ -1962,6 +1979,28 @@ function renderAnalysis(result: AnalysisResult) {
 }
 
 let scriptMode = false;
+/** The AI-read request came from "AI reads every request": agreement is the setting itself. */
+let autoAi = false;
+/** The steps the AI returned run through the reader once without asking the AI again. */
+let skipAiOnce = false;
+const AI_FIRST_KEY = "vynorai.m365.aiReadsEveryRequest";
+
+function aiFirstOn(): boolean {
+  try {
+    return localStorage.getItem(AI_FIRST_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setAiFirst(on: boolean) {
+  try {
+    if (on) localStorage.setItem(AI_FIRST_KEY, "1");
+    else localStorage.removeItem(AI_FIRST_KEY);
+  } catch {
+    // Without storage the setting simply stays off.
+  }
+}
 
 /**
  * What the AI understood is remembered on this device (request text + column names -> the plain steps),
@@ -2045,6 +2084,7 @@ function useSteps(result: { steps: { instruction: string }[] }) {
   if (preview) preview.textContent = "No preview yet.";
   log.record("script:use-steps", "pass", { steps: result.steps.length });
   setStatus("Preparing the preview. Nothing changes until you confirm.");
+  skipAiOnce = true;
   showInstructionAndPreview();
 }
 
@@ -2083,9 +2123,39 @@ async function startConsent() {
     if (consentSummary)
       consentSummary.textContent = JSON.stringify(pendingSummary, null, 2);
     lastSummary = pendingSummary;
+    if (scriptMode) {
+      // The same request on the same columns was understood before: no AI call is needed.
+      const remembered = recallSteps(pendingMemoryKey);
+      if (remembered) {
+        autoAi = false;
+        resetAnalysisConsent();
+        renderConversation(
+          "assistant",
+          localizeMessage(
+            language,
+            "I remember this request from before, so no AI call was needed.",
+          ),
+        );
+        useSteps({
+          steps: remembered.map((instruction) => ({ instruction })),
+        });
+        return;
+      }
+    }
     if (consentPanel) {
       consentPanel.hidden = false;
       consentPanel.scrollIntoView?.({ block: "nearest" });
+    }
+    if (autoAi && consentCheck && consentSend) {
+      // "AI reads every request" is on: the setting is the agreement, the summary is still shown above.
+      autoAi = false;
+      consentCheck.checked = true;
+      consentSend.disabled = false;
+      setStatus(
+        "Asking the AI to read your request (only column names and types are sent)...",
+      );
+      consentSend.click();
+      return;
     }
     setStatus("Review exactly what will be sent, then confirm to continue.");
   } catch (error) {
@@ -2145,6 +2215,16 @@ consentSend?.addEventListener("click", async () => {
         throw new Error("script-invalid");
       log.record("api:script", "pass", { steps: planned.steps.length });
       resetAnalysisConsent();
+      if (planned.steps.length === 0) {
+        // The AI says this cannot be done: show why, change nothing.
+        const reason =
+          typeof planned.cannot === "string" && planned.cannot.trim()
+            ? planned.cannot.trim().slice(0, 240)
+            : "This request cannot be done with the tools available here.";
+        renderConversation("assistant", reason);
+        setStatus("Nothing was changed.");
+        return;
+      }
       renderScript(planned);
       // The person already agreed to send the summary; the preview is the next safe step.
       setStatus(
@@ -3152,6 +3232,24 @@ function refreshLanguage() {
 function translateLabel(): string {
   return language === "si" ? "භාෂාව" : language === "ta" ? "மொழி" : "Language";
 }
+const aiFirstButton = document.querySelector<HTMLButtonElement>("#ai-first");
+const showAiFirst = () => {
+  if (aiFirstButton)
+    aiFirstButton.textContent = aiFirstOn()
+      ? "AI reads every request: ON (click to turn off)"
+      : "AI reads every request: OFF (click to turn on)";
+};
+showAiFirst();
+aiFirstButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setAiFirst(!aiFirstOn());
+  showAiFirst();
+  setStatus(
+    aiFirstOn()
+      ? "AI mode is on: each request sends only column names and types to the AI, which turns it into plain steps. You still preview and confirm everything. Turn it off here any time."
+      : "AI mode is off: requests are read on this device first; the AI is used only when it cannot read one.",
+  );
+});
 languageButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   language = nextLanguage(language);

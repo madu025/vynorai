@@ -41,6 +41,8 @@ export type LargeViewSpec = {
     operator: ">" | ">=" | "<" | "<=" | "=" | "!=" | "contains";
     value: string | number;
   };
+  /** A row test in the closed expression grammar, calculated for every row by Excel. */
+  where?: ExprNode;
   limit?: number;
 };
 
@@ -57,10 +59,20 @@ const assertIndex = (index: unknown, columns: number) => {
 export function viewFormula(range: LargeRef, spec: LargeViewSpec): string {
   const steps: string[] = [`d,${dataRef(range)}`];
   let current = "d";
+  if (spec.where) {
+    // Calculated on the whole data range first, so every row of the test lines up with a row of d.
+    const test = mapRows(range, astColumns(spec.where), (name) =>
+      expressionToFormula(spec.where as ExprNode, name, (index) =>
+        columnRef(range, index),
+      ).replace(/^=/, ""),
+    ).replace(/^=/, "");
+    steps.push(`w,FILTER(d,${test},"")`);
+    current = "w";
+  }
   if (spec.filter) {
     const { index, operator, value } = spec.filter;
     assertIndex(index, range.columns);
-    const column = `INDEX(d,,${index + 1})`;
+    const column = `INDEX(${current},,${index + 1})`;
     let test: string;
     if (operator === "contains") {
       if (typeof value !== "string") throw new Error("contains needs text");
@@ -76,7 +88,7 @@ export function viewFormula(range: LargeRef, spec: LargeViewSpec): string {
           ? `${column}&""${operator === "!=" ? "<>" : "="}${excelText(String(value))}`
           : `${column}${operator}${operand}`;
     }
-    steps.push(`f,FILTER(d,${test},"")`);
+    steps.push(`f,FILTER(${current},${test},"")`);
     current = "f";
   }
   if (spec.sort) {

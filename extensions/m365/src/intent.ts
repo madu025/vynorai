@@ -65,6 +65,8 @@ export interface InstructionSpecs {
       operator: ">" | ">=" | "<" | "<=" | "=" | "!=" | "contains";
       value: string | number;
     };
+    /** A row test in the closed expression grammar. */
+    where?: string;
     highlight?: {
       column: number;
       rule:
@@ -1150,6 +1152,96 @@ function headerPositions(headers: string[], text: string) {
   return found.sort((a, b) => a.at - b.at);
 }
 
+/**
+ * A row test for a view: several conditions ("where Status is S and RTOM is R-HK"), a test between two
+ * columns ("where Issued is less than Requested") or an expression written directly
+ * ("where AND([Status] = "S", [Issued] < [Requested])"). The result is in the closed expression grammar;
+ * a single plain condition is left to the ordinary filter.
+ */
+function whereFromText(text: string, headers: string[]): string | undefined {
+  const direct =
+    /\b(?:rows?\s+)?where\s+((?:AND|OR|NOT|IF)\s*\(.+\)|[^.]*\[[^\]]+\][^.]*)\s*\.?$/i.exec(
+      text,
+    );
+  if (direct) {
+    try {
+      parseExpression(direct[1], headers);
+      return direct[1].trim();
+    } catch {
+      // Words around brackets ("[Issued] is less than [Requested]"): read it as a sentence below.
+    }
+  }
+  const body =
+    /\b(?:filter|only|where|show\s+only)\s+(?:rows?\s+)?(?:where\s+)?(.+)$/i
+      .exec(text)?.[1]
+      ?.replace(/[[\]]/g, "");
+  if (!body) return undefined;
+  const pieces = body.split(/\s+(and|or)\s+/i);
+  const parts: string[] = [];
+  const joiners: string[] = [];
+  pieces.forEach((piece, index) =>
+    index % 2 === 0
+      ? parts.push(piece.replace(/[.,]+$/, "").trim())
+      : joiners.push(piece.toLowerCase()),
+  );
+  if (parts.length > 6 || new Set(joiners).size > 1) return undefined;
+  const tests: string[] = [];
+  let crossColumn = false;
+  for (const part of parts) {
+    const match =
+      /^(.+?)\s*(>=|<=|<>|!=|=|>|<|\bis\s+not\b|\bis\s+(?:greater|more|bigger|higher)\s+than\b|\bis\s+(?:less|fewer|smaller|lower)\s+than\b|\bequals?\b|\bis\b|\bcontains\b)\s*(.+)$/i.exec(
+        part,
+      );
+    if (!match) return undefined;
+    const left = headerPositions(headers, match[1])[0]?.index;
+    if (left === undefined) return undefined;
+    const word = match[2].toLowerCase().replace(/\s+/g, " ");
+    const operator = /contains/.test(word)
+      ? "contains"
+      : />=|<=/.test(word)
+        ? word
+        : /greater|more|bigger|higher|^>$/.test(word)
+          ? ">"
+          : /less|fewer|smaller|lower|^<$/.test(word)
+            ? "<"
+            : /not|!=|<>/.test(word)
+              ? "<>"
+              : "=";
+    const rawRight = match[3].trim().replace(/^["']|["']$/g, "");
+    const rightHeader = headers.findIndex(
+      (header) =>
+        header.trim().toLocaleLowerCase() === rawRight.toLocaleLowerCase(),
+    );
+    const column = `[${headers[left]}]`;
+    if (rightHeader >= 0) crossColumn = true;
+    const right =
+      rightHeader >= 0
+        ? `[${headers[rightHeader]}]`
+        : Number.isFinite(Number(rawRight.replace(/,/g, ""))) &&
+            !/^0\d/.test(rawRight) &&
+            rawRight !== ""
+          ? String(Number(rawRight.replace(/,/g, "")))
+          : `"${rawRight.replace(/"/g, '""')}"`;
+    tests.push(
+      operator === "contains"
+        ? `ISNUMBER(SEARCH(${right},${column}))`
+        : `${column}${operator}${right}`,
+    );
+  }
+  // One plain condition against a value is the ordinary filter's job.
+  if (tests.length === 1 && !crossColumn) return undefined;
+  const expression =
+    tests.length === 1
+      ? tests[0]
+      : `${joiners[0] === "or" ? "OR" : "AND"}(${tests.join(",")})`;
+  try {
+    parseExpression(expression, headers);
+  } catch {
+    return undefined;
+  }
+  return expression;
+}
+
 function isNumericColumn(rows: Cell[][], index: number): boolean {
   const cells = rows
     .map((row) => row[index])
@@ -1305,7 +1397,15 @@ function interpretChartAndPivot(
   // "count of Service ID by Status" counts a text column: there is no numeric column to add up.
   const countLabel =
     /\b(count|counting|how many)\b/i.test(text) && !numericEntries.length
-      ? labels.find((entry) => entry.index !== categoryEntry?.index)
+      ? (labels.find((entry) => entry.index !== categoryEntry?.index) ??
+        // "how many rows for each Status": nothing else is named, so count the first other text column.
+        headers
+          .map((_, index) => ({ index, at: 0 }))
+          .find(
+            (entry) =>
+              entry.index !== categoryEntry?.index &&
+              !isNumericColumn(rows, entry.index),
+          ))
       : undefined;
   if (
     /\bpivot\b/i.test(text) &&
@@ -1404,7 +1504,7 @@ function interpretView(
     }
   }
   const sort =
-    /\bsort(?:ed)?\s+(?:(?:by|on)\s+)?(.+?)(?:\s+(descending|desc|ascending|asc|highest first|lowest first))?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
+    /\bsort(?:ed)?\s+(?:(?:by|on)\s+)?(.+?)(?:\s+(descending|desc|ascending|asc|(?:highest|biggest|largest|greatest|most)(?:\s+first)?|(?:lowest|smallest|least)(?:\s+first)?|high(?:est)?\s+to\s+low(?:est)?|low(?:est)?\s+to\s+high(?:est)?))?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
       text,
     );
   if (sort && !view.sort) {
@@ -1412,7 +1512,12 @@ function interpretView(
     if (column >= 0)
       view.sort = {
         column,
-        direction: /desc|highest/i.test(sort[2] ?? "") ? "desc" : "asc",
+        direction:
+          /desc|highest|biggest|largest|greatest|\bmost\b|high(?:est)?\s+to\s+low/i.test(
+            sort[2] ?? "",
+          )
+            ? "desc"
+            : "asc",
       };
   }
   const above = /\bhighlight\s+(above|below)\s+average\s+(.+?)(?:[.,]|$)/i.exec(
@@ -1440,10 +1545,13 @@ function interpretView(
     const column = header(dup?.[1] ?? shownDup?.[1] ?? "");
     if (column >= 0) view.highlight = { column, rule: "duplicates" };
   }
-  const filter =
-    /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bequals?\b|\bis\b|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
-      text,
-    );
+  const where = whereFromText(text, headers);
+  if (where) view.where = where;
+  const filter = where
+    ? null
+    : /\b(?:filter|only|where|show only)\s+(?:rows?\s+where\s+)?(.+?)\s*(>=|<=|!=|=|>|<|\bequals?\b|\bis\b|\bcontains\b)\s*["']?([^"'.,]+?)["']?(?:\s+(?:and|then)\b|[.,]|$)/i.exec(
+        text,
+      );
   if (filter) {
     const column = header(filter[1]);
     const operator = (
@@ -1477,13 +1585,14 @@ function interpretView(
   if (
     !view.sort &&
     !view.filter &&
+    !view.where &&
     !view.highlight &&
     /\b(?:copy|duplicate|clone)\b[^.\n]{0,40}\b(?:to|into|in)\s+(?:a\s+)?new\s+(?:sheet|worksheet|tab)\b/i.test(
       text,
     )
   )
     view.limit = 50000;
-  if (view.sort || view.filter || view.highlight || view.limit) {
+  if (view.sort || view.filter || view.highlight || view.limit || view.where) {
     result.actions.push("view");
     result.specs.view = view;
   }
@@ -1716,7 +1825,15 @@ function interpretStatistics(
   const mentioned = headerPositions(headers, text)
     .filter((entry) => isNumericColumn(rows, entry.index))
     .map((entry) => entry.index);
+  // "the trend over time as a line" asks for a chart, not an insight report.
+  const trendAsChart =
+    /\btrends?\b/i.test(text) &&
+    !/\b(?:insights?|anomal(?:y|ies)|outliers?)\b/i.test(text) &&
+    /\b(?:chart|graph|line|plot|over\s+time|monthly|per\s+month|by\s+month)\b/i.test(
+      text,
+    );
   if (
+    !trendAsChart &&
     /\b(?:insight|insights|anomal(?:y|ies)|outliers?|trends?|recommend(?:ed|ation)?\s+(?:next\s+)?actions?)\b/i.test(
       text,
     )

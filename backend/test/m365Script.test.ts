@@ -151,3 +151,25 @@ test("a step may use comparison signs but not markup", () => {
     (error: any) => error.code === "AI_SCRIPT_INVALID",
   );
 });
+
+test("a request the assistant cannot do comes back as a reason, not a near-miss step", () => {
+  const parsed = parseScriptResponse(
+    JSON.stringify({
+      title: "t",
+      steps: [],
+      cannot: "Email cannot be sent from here.",
+    }),
+  );
+  assert.equal(parsed.steps.length, 0);
+  assert.equal(parsed.cannot, "Email cannot be sent from here.");
+});
+
+test("a model answer with unquoted keys is still read", () => {
+  const parsed = parseScriptResponse(
+    '{title: "Find duplicates", steps: [{instruction: "highlight duplicates in Service ID", reason: "Marks repeats"}]}',
+  );
+  assert.equal(
+    parsed.steps[0].instruction,
+    "highlight duplicates in Service ID",
+  );
+});

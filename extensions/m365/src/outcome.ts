@@ -958,6 +958,13 @@ export function buildOutcomes(
             `${spec.highlight.column} හි ${spec.highlight.rule} උද්දීපනය`,
           ),
         );
+      if (spec.where)
+        item.details.push(
+          say(
+            `Shows only the rows where ${spec.where}`,
+            `${spec.where} සත්‍ය වන පේළි පමණක් පෙන්වයි`,
+          ),
+        );
       if (spec.limit)
         item.details.push(
           say(

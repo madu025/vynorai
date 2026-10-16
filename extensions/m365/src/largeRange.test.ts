@@ -331,3 +331,33 @@ test("a whole-column figure inside a computed column reads the full source colum
   assert.equal(formula.match(/SUM\(/g)?.length, 1);
   assert.match(formula, /_v7\/_k0\)/);
 });
+
+test("a row test is calculated for every row first, then the view filters on it", () => {
+  const headers = [
+    "Service ID",
+    "RTOM",
+    "LEA",
+    "PAT Complete Date",
+    "Status",
+    "Item Code",
+    "Requested Quantity",
+    "Issued Quantity",
+    "UoM",
+    "Circuit ID",
+  ];
+  const { ast } = parseExpression(
+    'AND([Status]="S",[Issued Quantity]<[Requested Quantity])',
+    headers,
+  );
+  const formula = viewFormula(range, { where: ast, limit: 10 });
+  assert.match(
+    formula,
+    /^=LET\(d,'detail-report'!\$A\$2:\$J\$520126,w,FILTER\(d,MAP\(/,
+  );
+  assert.match(formula, /t,TAKE\(w,10\)/);
+  const both = viewFormula(range, {
+    where: ast,
+    sort: { index: 7, direction: "desc" },
+  });
+  assert.match(both, /s,SORTBY\(w,INDEX\(w,,8\),-1\)/);
+});

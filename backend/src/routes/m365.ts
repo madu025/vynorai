@@ -210,6 +210,7 @@ const excelPlanSchema = z.object({
             })
             .strict()
             .optional(),
+          where: z.string().min(1).max(240).optional(),
           filter: z
             .object({
               column: z.number().int().min(0).max(99),

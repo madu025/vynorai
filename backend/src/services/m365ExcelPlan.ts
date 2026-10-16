@@ -266,6 +266,8 @@ export interface ExcelColumnSpecs {
     };
     highlight?: { column: number; rule: ExcelHighlightRule; n?: number };
     limit?: number;
+    /** A row test in the closed expression grammar: AND([Status] = "S", [Issued] < [Requested]). */
+    where?: string;
   };
 }
 
@@ -427,6 +429,8 @@ export interface ExcelActionSpec {
     n?: number;
   };
   limit?: number;
+  where?: string;
+  whereCanonical?: string;
 }
 
 /**
@@ -1745,8 +1749,8 @@ function resolveColumnSpecs(
   if (specs.view) {
     if (!requested.has("view"))
       fail("EXCEL_SPEC_UNUSED", "View options need the view action.");
-    const { sort, filter, highlight, limit } = specs.view;
-    if (!sort && !filter && !highlight && limit === undefined)
+    const { sort, filter, highlight, limit, where } = specs.view;
+    if (!sort && !filter && !highlight && limit === undefined && !where)
       fail("EXCEL_SPEC_INVALID", "A view needs a sort, filter or highlight.");
     const view: ExcelActionSpec = {};
     if (sort) {
@@ -1787,6 +1791,16 @@ function resolveColumnSpecs(
         operator: filter.operator,
         value: filter.value,
       };
+    }
+    if (where !== undefined) {
+      let parsedWhere: ReturnType<typeof parseExpression>;
+      try {
+        parsedWhere = parseExpression(String(where), headers);
+      } catch (error) {
+        return fail("EXCEL_SPEC_INVALID", (error as Error).message);
+      }
+      view.where = String(where).trim();
+      view.whereCanonical = canonicalExpression(parsedWhere.ast);
     }
     if (highlight) {
       const rules = [

@@ -1295,7 +1295,7 @@ test("server and add-in agree on the source-preserving PDF export plan", () => {
 });
 
 test("server and add-in reuse one dashboard sheet for dashboard PDF export", () => {
-  const specs = { dashboard: { category: 2, values: [1] } };
+  const specs = { dashboard: { category: 1, values: [2] } };
   const server = createServerExcelPreviewPlan(
     input,
     ["dashboard", "export-pdf"],

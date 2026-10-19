@@ -33,8 +33,11 @@ import {
   type CleanOperation,
 } from "./transform.js";
 import {
+  buildAdvancedForecastCells,
+  buildAnomalyCells,
   buildCorrelationCells,
   buildDescribeCells,
+  buildFinancialCells,
   buildForecastCells,
   buildForecastCellsLarge,
   buildInsightReportCells,
@@ -370,6 +373,246 @@ function decodeOfficeFileSlice(data: unknown): Uint8Array {
   for (let index = 0; index < binary.length; index += 1)
     bytes[index] = binary.charCodeAt(index);
   return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof btoa !== "function") throw new Error("EMAIL_BASE64_UNAVAILABLE");
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, Math.min(bytes.length, offset + chunkSize)),
+    );
+  }
+  return btoa(binary);
+}
+
+/** Reads the current workbook as an XLSX attachment without sending it to VynorAI. */
+export function readExcelWorkbookBase64(
+  maxBytes = 3_000_000,
+): Promise<{ base64: string; byteLength: number }> {
+  const office = (globalThis as any).Office;
+  const documentApi = office?.context?.document;
+  if (typeof documentApi?.getFileAsync !== "function")
+    return Promise.reject(new Error("XLSX_EXPORT_UNAVAILABLE"));
+  return new Promise((resolve, reject) => {
+    documentApi.getFileAsync(
+      office.FileType?.Compressed ?? "compressed",
+      (fileResult: any) => {
+        if (fileResult?.status !== "succeeded" || !fileResult.value) {
+          reject(new Error("XLSX_EXPORT_FAILED"));
+          return;
+        }
+        const file = fileResult.value;
+        const chunks: Uint8Array[] = [];
+        let byteLength = 0;
+        const close = () => {
+          try {
+            file.closeAsync?.();
+          } catch {
+            // Closing is best effort after a file API failure.
+          }
+        };
+        const fail = (error: Error) => {
+          close();
+          reject(error);
+        };
+        const sliceCount = Number(file.sliceCount);
+        if (!Number.isInteger(sliceCount) || sliceCount < 1) {
+          fail(new Error("XLSX_SLICE_COUNT_INVALID"));
+          return;
+        }
+        const readSlice = (index: number) => {
+          file.getSliceAsync(index, (sliceResult: any) => {
+            if (sliceResult?.status !== "succeeded" || !sliceResult.value) {
+              fail(new Error("XLSX_SLICE_READ_FAILED"));
+              return;
+            }
+            try {
+              const bytes = decodeOfficeFileSlice(sliceResult.value.data);
+              byteLength += bytes.length;
+              if (byteLength > maxBytes) {
+                fail(new Error("EMAIL_ATTACHMENT_TOO_LARGE"));
+                return;
+              }
+              chunks.push(bytes);
+            } catch (error) {
+              fail(
+                error instanceof Error
+                  ? error
+                  : new Error("XLSX_SLICE_INVALID"),
+              );
+              return;
+            }
+            if (index + 1 < sliceCount) {
+              readSlice(index + 1);
+              return;
+            }
+            try {
+              const bytes = new Uint8Array(byteLength);
+              let offset = 0;
+              for (const chunk of chunks) {
+                bytes.set(chunk, offset);
+                offset += chunk.length;
+              }
+              const base64 = bytesToBase64(bytes);
+              close();
+              resolve({ base64, byteLength });
+            } catch (error) {
+              fail(
+                error instanceof Error
+                  ? error
+                  : new Error("XLSX_EXPORT_FAILED"),
+              );
+            }
+          });
+        };
+        readSlice(0);
+      },
+    );
+  });
+}
+
+/** Reads a PDF snapshot through the Office common File API for an email attachment. */
+export function readExcelPdfBase64(
+  maxBytes = 150_000_000,
+): Promise<{ base64: string; byteLength: number }> {
+  const office = (globalThis as any).Office;
+  const documentApi = office?.context?.document;
+  if (typeof documentApi?.getFileAsync !== "function")
+    return Promise.reject(new Error("PDF_EXPORT_UNAVAILABLE"));
+  return new Promise((resolve, reject) => {
+    documentApi.getFileAsync(
+      office.FileType?.Pdf ?? "pdf",
+      (fileResult: any) => {
+        if (fileResult?.status !== "succeeded" || !fileResult.value) {
+          reject(new Error("PDF_EXPORT_FAILED"));
+          return;
+        }
+        const file = fileResult.value;
+        const chunks: Uint8Array[] = [];
+        let byteLength = 0;
+        const close = () => {
+          try {
+            file.closeAsync?.();
+          } catch {
+            // Closing is best effort after a file API failure.
+          }
+        };
+        const fail = (error: Error) => {
+          close();
+          reject(error);
+        };
+        const sliceCount = Number(file.sliceCount);
+        if (!Number.isInteger(sliceCount) || sliceCount < 1) {
+          fail(new Error("PDF_SLICE_COUNT_INVALID"));
+          return;
+        }
+        const readSlice = (index: number) => {
+          file.getSliceAsync(index, (sliceResult: any) => {
+            if (sliceResult?.status !== "succeeded" || !sliceResult.value) {
+              fail(new Error("PDF_SLICE_READ_FAILED"));
+              return;
+            }
+            try {
+              const bytes = decodeOfficeFileSlice(sliceResult.value.data);
+              byteLength += bytes.length;
+              if (byteLength > maxBytes) {
+                fail(new Error("EMAIL_ATTACHMENT_TOO_LARGE"));
+                return;
+              }
+              chunks.push(bytes);
+            } catch (error) {
+              fail(
+                error instanceof Error ? error : new Error("PDF_SLICE_INVALID"),
+              );
+              return;
+            }
+            if (index + 1 < sliceCount) {
+              readSlice(index + 1);
+              return;
+            }
+            try {
+              const bytes = new Uint8Array(byteLength);
+              let offset = 0;
+              for (const chunk of chunks) {
+                bytes.set(chunk, offset);
+                offset += chunk.length;
+              }
+              const base64 = bytesToBase64(bytes);
+              close();
+              resolve({ base64, byteLength });
+            } catch (error) {
+              fail(
+                error instanceof Error ? error : new Error("PDF_EXPORT_FAILED"),
+              );
+            }
+          });
+        };
+        readSlice(0);
+      },
+    );
+  });
+}
+
+/** Reads a bounded result-sheet table locally for CSV or email-body reports. */
+export function readExcelReportValues(
+  sheetName: string,
+  maxRows = 200,
+  maxColumns = 30,
+): Promise<{ values: any[][]; truncated: boolean }> {
+  const runtime = (globalThis as any).Excel;
+  if (typeof runtime?.run !== "function")
+    return Promise.reject(new Error("EXCEL_API_UNAVAILABLE"));
+  return runtime.run(async (context: any) => {
+    const sheet = context.workbook.worksheets.getItem(sheetName);
+    const used =
+      sheet.getUsedRangeOrNullObject?.(true) ?? sheet.getUsedRange(true);
+    used.load("rowCount,columnCount,isNullObject");
+    await context.sync();
+    if (used.isNullObject) throw new Error("REPORT_SHEET_EMPTY");
+    const rows = Math.min(maxRows, Number(used.rowCount));
+    const columns = Math.min(maxColumns, Number(used.columnCount));
+    const range = sheet.getRangeByIndexes(0, 0, rows, columns);
+    range.load("values");
+    await context.sync();
+    return {
+      values: (range.values ?? []) as any[][],
+      truncated:
+        Number(used.rowCount) > rows || Number(used.columnCount) > columns,
+    };
+  });
+}
+
+/** Gets up to three report charts as base64 JPEG images for an HTML email body. */
+export function readExcelChartImages(
+  sheetName: string,
+  maxCharts = 3,
+): Promise<Array<{ name: string; contentId: string; base64: string }>> {
+  const runtime = (globalThis as any).Excel;
+  if (typeof runtime?.run !== "function")
+    return Promise.reject(new Error("EXCEL_API_UNAVAILABLE"));
+  return runtime.run(async (context: any) => {
+    const sheet = context.workbook.worksheets.getItem(sheetName);
+    const charts = sheet.charts;
+    charts.load("items/name");
+    await context.sync();
+    const result: Array<{ name: string; contentId: string; base64: string }> =
+      [];
+    for (const chart of (charts.items ?? []).slice(0, maxCharts)) {
+      const image = chart.getImage(1000, 560, "Fit");
+      await context.sync();
+      if (typeof image.value === "string" && image.value) {
+        const name = String(chart.name || `Chart-${result.length + 1}`);
+        result.push({
+          name,
+          contentId: `vynorai-${result.length + 1}@chart`,
+          base64: image.value,
+        });
+      }
+    }
+    return result;
+  });
 }
 
 /** Downloads the current Excel document as PDF through the Office common File API. */
@@ -1050,7 +1293,7 @@ export async function applyApprovedExcelPlan(
           !options.supportsExcelApi(required)
         ) {
           result.status = "skipped_unsupported";
-          result.error = `requires ExcelApi ${required}`;
+          result.error = `UNSUPPORTED_CAPABILITY: requires ExcelApi ${required}`;
         } else if (action.kind === "table") {
           const existing = context.workbook.tables.getItemOrNullObject(
             action.name,
@@ -1943,6 +2186,26 @@ export async function applyApprovedExcelPlan(
                   spec.pair?.[0]?.index ?? 0,
                   spec.pair?.[1]?.index ?? 0,
                 );
+              else if (spec.mode === "advanced-forecast")
+                cells = buildAdvancedForecastCells(
+                  range,
+                  headers,
+                  spec.value?.index ?? 0,
+                  spec.periods ?? 3,
+                  spec.date?.index,
+                );
+              else if (spec.mode === "financial")
+                cells = buildFinancialCells(
+                  range,
+                  headers,
+                  (spec.columns ?? []).map((entry: any) => entry.index),
+                );
+              else if (spec.mode === "anomaly")
+                cells = buildAnomalyCells(
+                  range,
+                  headers,
+                  spec.value?.index ?? 0,
+                );
               else if (spec.mode === "forecast" && plan.profile?.sample)
                 cells = buildForecastCellsLarge(
                   range,
@@ -1970,7 +2233,8 @@ export async function applyApprovedExcelPlan(
               grid.formulas = cells.map((row, rowIndex) =>
                 row.map((cell, columnIndex) =>
                   rowIndex === 0 ||
-                  (spec.mode !== "forecast" && columnIndex === 0)
+                  (!["forecast", "advanced-forecast"].includes(spec.mode) &&
+                    columnIndex === 0)
                     ? literal(cell)
                     : cell,
                 ),
@@ -1998,7 +2262,10 @@ export async function applyApprovedExcelPlan(
                 // Formatting is presentation only.
               }
               grid.format.autofitColumns();
-              if (spec.mode === "forecast" && cells.length > 3) {
+              if (
+                ["forecast", "advanced-forecast"].includes(spec.mode) &&
+                cells.length > 3
+              ) {
                 try {
                   const chart = sheet.charts.add(
                     "Line",

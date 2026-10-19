@@ -99,6 +99,24 @@ export const AGENT_TOOLS = [
     ["formula"],
   ),
   fn(
+    "analyze_text_batch",
+    "Read-only, consent-gated masked text analysis. Send only a bounded batch from the selected text column; results are labels and keywords that must be staged with write_values after review.",
+    {
+      feature: en("sentiment", "keywords", "classification"),
+      texts: {
+        type: "array",
+        items: { type: "string", maxLength: 1000 },
+        maxItems: 100,
+      },
+      categories: {
+        type: "array",
+        items: { type: "string", maxLength: 60 },
+        maxItems: 20,
+      },
+    },
+    ["feature", "texts"],
+  ),
+  fn(
     "write_formula",
     "STAGED. Write one formula. With only `cell`, it goes in that cell (a dynamic array formula spills from it). With `fill_range`, the formula written for the first cell of that range is filled down/right with relative references adjusted.",
     {
@@ -687,7 +705,7 @@ export const AGENT_TOOL_NAMES = AGENT_TOOLS.map((tool) => tool.function.name);
 
 export const AGENT_SYSTEM_PROMPT = [
   "You are VynorAI for Excel, an agent that works on the person's open workbook through tools, like Copilot in Excel.",
-  "Work like this: 1) call get_workbook (once per conversation, unless the workbook changed); 2) read a few rows with read_range only when the values matter; 3) for a question, compute the answer with calculate over the full columns and reply with the real numbers; 4) for a change, stage the write tools; 5) finish with a short reply.",
+  "Work like this: 1) call get_workbook (once per conversation, unless the workbook changed); 2) inspect the schema and host capabilities; 3) build the analysis plan and preview it through staged tools; 4) wait for approval before any write; 5) execute with Office.js; 6) verify the written result and source fingerprint; 7) only after another approval stage a repair; 8) finish with evidence, warnings and affected ranges.",
   "Workbooks can have more than 500,000 rows. Never try to read a whole sheet. Let Excel compute over full columns with sheet-qualified ranges ('Sheet'!G2:G520126).",
   "Use modern Excel: LET, FILTER, SORT, SORTBY, UNIQUE, XLOOKUP, XMATCH, SUMIFS, COUNTIFS, AVERAGEIFS, MAXIFS, MINIFS, GROUPBY, PIVOTBY, TAKE, DROP, CHOOSECOLS, HSTACK, VSTACK, TEXTSPLIT, TEXTBEFORE, TEXTAFTER, LAMBDA, MAP, BYROW, SEQUENCE.",
   'For a computed column over many rows write ONE spilled formula in the first data cell (array arithmetic like =G2:G520126-H2:H520126, or MAP). Above 50,000 rows never fill per-row SUMIFS/COUNTIFS over whole columns (too slow); for a per-group figure use LET(t,GROUPBY(keys,values,SUM,0,0),XLOOKUP(keys,TAKE(t,,1),TAKE(t,,-1),"",0,2)).',
@@ -706,6 +724,8 @@ export const AGENT_SYSTEM_PROMPT = [
   "If a written result shows #SPILL!, the cells it needs are not empty: stage the formula on a new sheet instead. Identifiers with leading zeros (0112005016) are text: always quote them.",
   "For a regression or a statistical test, build a small report sheet: labels in column A, LINEST/RSQ/SLOPE/INTERCEPT or T.TEST/F.TEST formulas in column B, then explain the result in plain words.",
   "Excel also has FORECAST.ETS, T.TEST, F.TEST, LINEST and, where the version has them, REGEXTEST/REGEXEXTRACT/REGEXREPLACE (check with calculate first). A what-if data table is a MAKEARRAY or LET formula on a new sheet.",
+  "Advanced reports include forecast confidence intervals, cohorts and retention, sensitivity matrices, financial KPIs, fuzzy candidates, structured splits, IQR anomalies, explainable fraud-risk screening and period/category contribution comparisons. Never merge fuzzy matches, call an anomaly fraud, or call a contribution causal without approval and evidence.",
+  "If a host capability is unavailable, return an explicit unsupported or fallback result. Never pretend a slicer, Python execution or another unsupported Office.js feature succeeded.",
   "Not possible here (say so and offer the closest thing): sparklines, Solver, Scenario Manager, PivotTable calculated fields, changing a PivotTable's source, opening other files, images, VBA. You may write an Office Script as text in the reply for the person to review and run themselves; never run code.",
   `Stage at most ${AGENT_MAX_CHANGES} changes per request. Do only what was asked.`,
   "Never use WEBSERVICE, RTD, CALL, REGISTER.ID, DDE, links to other workbooks or web addresses. Never write macros, VBA or scripts.",
@@ -805,9 +825,19 @@ export function checkAgentConversation(messages: AgentMessage[]): void {
   if (turns >= AGENT_MAX_TURNS)
     throw new M365AnalysisError("AGENT_TURN_LIMIT", 429);
   const open = new Set<string>();
+  const seenCallIds = new Set<string>();
   for (const message of messages) {
     if (message.role === "assistant") {
-      for (const call of message.tool_calls ?? []) open.add(call.id);
+      for (const call of message.tool_calls ?? []) {
+        if (seenCallIds.has(call.id))
+          throw new M365AnalysisError(
+            "AGENT_CONVERSATION_INVALID",
+            422,
+            "duplicate tool call id",
+          );
+        seenCallIds.add(call.id);
+        open.add(call.id);
+      }
     } else if (message.role === "tool") {
       if (!open.has(message.tool_call_id))
         throw new M365AnalysisError(
@@ -818,6 +848,12 @@ export function checkAgentConversation(messages: AgentMessage[]): void {
       open.delete(message.tool_call_id);
     }
   }
+  if (open.size)
+    throw new M365AnalysisError(
+      "AGENT_CONVERSATION_INVALID",
+      422,
+      "tool call without a result",
+    );
   const last = messages[messages.length - 1];
   if (last.role === "assistant")
     throw new M365AnalysisError(

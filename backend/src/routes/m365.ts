@@ -43,6 +43,11 @@ import {
 } from "../services/m365Analysis.js";
 import { planScript } from "../services/m365Script.js";
 import { agentTurn } from "../services/m365Agent.js";
+import {
+  analyzeTextBatch,
+  TEXT_ANALYSIS_CONTRACT_VERSION,
+  textAnalysisRequestSchema,
+} from "../services/m365TextAnalysis.js";
 import { z, validateBody } from "../middleware/validate.js";
 
 const excelPlanSchema = z.object({
@@ -178,7 +183,15 @@ const excelPlanSchema = z.object({
         .optional(),
       statistics: z
         .object({
-          mode: z.enum(["describe", "correlation", "forecast", "insights"]),
+          mode: z.enum([
+            "describe",
+            "correlation",
+            "forecast",
+            "advanced-forecast",
+            "financial",
+            "anomaly",
+            "insights",
+          ]),
           columns: z.array(z.number().int().min(0).max(99)).max(8).optional(),
           pair: z
             .tuple([
@@ -910,6 +923,53 @@ m365Router.post(
       );
       await logSecurityEvent({
         eventType: "M365_EXCEL_ANALYSIS_FAILED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ code, correlationId }),
+      });
+      return res.status(known ? error.status : 500).json({ error: { code } });
+    }
+  },
+);
+
+/** Consent-gated masked text batches. Results are advisory until the add-in stages them. */
+m365Router.post(
+  "/excel/text-analysis",
+  requireM365Auth,
+  validateBody(textAnalysisRequestSchema),
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const tenant = identity(req);
+    const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
+    res.setHeader("x-correlation-id", correlationId);
+    const tenantRecord = await getM365Tenant(tenant.tenantId);
+    if (tenantRecord && !tenantRecord.aiEnabled)
+      return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
+    if (req.body.consent !== true)
+      return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
+    try {
+      const result = await analyzeTextBatch(user, req.body);
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_TEXT_ANALYSIS_COMPLETED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          correlationId,
+          feature: req.body.feature,
+          itemCount: req.body.texts.length,
+          batches: result.batches,
+          maskedCount: result.maskedCount,
+        }),
+      });
+      return res.json({
+        ...result,
+        contractVersion: TEXT_ANALYSIS_CONTRACT_VERSION,
+      });
+    } catch (error) {
+      const known = error instanceof M365AnalysisError;
+      const code = known ? error.code : "AI_TEXT_ANALYSIS_FAILED";
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_TEXT_ANALYSIS_FAILED",
         actor: user.id,
         target: tenant.tenantId,
         details: JSON.stringify({ code, correlationId }),

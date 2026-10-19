@@ -7,5 +7,12 @@ window.__VYNORAI_M365_CONFIG__ = {
     "api://4ffebafc-d84a-414b-a50f-0bc8e65fc46c/m365.excel.read",
     "api://4ffebafc-d84a-414b-a50f-0bc8e65fc46c/m365.excel.write",
   ],
+  // Enable only after the Entra app registration has delegated Mail.Send consent.
+  graphScopes: ["https://graph.microsoft.com/Mail.Send"],
+  // Enable only after delegated Mail.ReadWrite consent is approved for large attachments/drafts.
+  graphLargeScopes: [
+    "https://graph.microsoft.com/Mail.Send",
+    "https://graph.microsoft.com/Mail.ReadWrite",
+  ],
   apiBaseUrl: "https://vynor.lk",
 };

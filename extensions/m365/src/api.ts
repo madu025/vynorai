@@ -1,3 +1,5 @@
+import type { AdvancedCapability } from "./diagnostics.js";
+
 export interface M365AccessDiagnostics {
   stages: Array<{
     name: string;
@@ -18,6 +20,7 @@ export interface M365Capabilities {
     writableActionKinds: string[];
   };
   aiAnalysis: boolean;
+  advanced?: Record<string, AdvancedCapability>;
 }
 
 export interface M365ApiClient {
@@ -85,6 +88,17 @@ export interface M365ApiClient {
     request?: string;
     consent: true;
   }): Promise<any>;
+  analyzeTextBatch(
+    input: {
+      contractVersion?: string;
+      feature: "sentiment" | "keywords" | "classification";
+      language?: "en" | "si" | "ta";
+      texts: string[];
+      categories?: string[];
+      consent: true;
+    },
+    signal?: AbortSignal,
+  ): Promise<any>;
   scriptExcel(input: {
     summary: unknown;
     language?: "en" | "si" | "ta";
@@ -202,6 +216,8 @@ export function createM365ApiClient(
     reportRollback: (input) =>
       request("POST", "/v1/m365/excel/rollback", input),
     analyzeExcel: (input) => request("POST", "/v1/m365/excel/analyze", input),
+    analyzeTextBatch: (input, signal) =>
+      request("POST", "/v1/m365/excel/text-analysis", input, signal),
     scriptExcel: (input) => request("POST", "/v1/m365/excel/script", input),
     agentExcel: (input) => request("POST", "/v1/m365/excel/agent", input),
   };

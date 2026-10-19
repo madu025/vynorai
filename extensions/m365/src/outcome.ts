@@ -14,6 +14,11 @@ import {
   numericSeries,
   buildInsightReportPreview,
 } from "./statistics.js";
+import {
+  advancedForecast,
+  findAnomalies,
+  financialMetrics,
+} from "./advancedAnalytics.js";
 
 export type OutcomeLanguage = "en" | "si" | "ta";
 
@@ -1128,6 +1133,88 @@ export function buildOutcomes(
             `අගයන් ${known.length} හරහා සරල රේඛා ප්‍රවණතාවක්, කාල පරිච්ඡේද ${periods} දක්වා දිගු කර ඇත.`,
           ),
         );
+      } else if (stats.mode === "advanced-forecast") {
+        const value = stats.value as { column: string; index: number };
+        const periods = Number(stats.periods ?? 6);
+        const result = advancedForecast(
+          rows.map((row) => row[value.index]),
+          periods,
+        );
+        item.table = {
+          headers: [
+            "Period",
+            `Forecast ${value.column}`,
+            "Lower 95%",
+            "Upper 95%",
+          ],
+          rows: result.forecast
+            .slice(0, MAX_TABLE_ROWS)
+            .map((entry, at) => [
+              String(at + 1),
+              String(entry),
+              String(result.lower[at]),
+              String(result.upper[at]),
+            ]),
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          say(
+            `Forecast with a seasonal index and approximate 95% interval; slope ${result.slope}.`,
+            `සෘතුමය දර්ශකය සහ ආසන්න 95% පරාසය සහිත අනාවැකියක්; slope ${result.slope}.`,
+          ),
+        );
+        if (result.warning) item.details.push(result.warning);
+      } else if (stats.mode === "financial") {
+        const columns = (stats.columns ?? []) as Array<{
+          column: string;
+          index: number;
+        }>;
+        const total = (index: number) =>
+          rows.reduce(
+            (sum, row) =>
+              sum +
+              (typeof row[index] === "number" ? (row[index] as number) : 0),
+            0,
+          );
+        const metrics = financialMetrics({
+          revenue: total(columns[0].index),
+          cogs: total(columns[1].index),
+          operatingExpenses: total(columns[2].index),
+          ...(columns[3] ? { depreciation: total(columns[3].index) } : {}),
+          ...(columns[4] ? { interest: total(columns[4].index) } : {}),
+          ...(columns[5] ? { taxes: total(columns[5].index) } : {}),
+          ...(columns[6] ? { investedCapital: total(columns[6].index) } : {}),
+        });
+        item.table = {
+          headers: ["Metric", "Value"],
+          rows: Object.entries(metrics)
+            .slice(0, MAX_TABLE_ROWS)
+            .map(([key, value]) => [key, String(value)]),
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          say(
+            "Financial metrics are calculated in the result sheet from live source formulas.",
+            "මූල්‍ය දර්ශක live source formulas වලින් report sheet එකේ ගණනය වේ.",
+          ),
+        );
+      } else if (stats.mode === "anomaly") {
+        const value = stats.value as { column: string; index: number };
+        const anomalies = findAnomalies(rows.map((row) => row[value.index]));
+        item.table = {
+          headers: ["Column", "Anomalies in preview"],
+          rows: [[value.column, String(anomalies.length)]],
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          say(
+            "IQR screening only; an anomaly is not proof of fraud.",
+            "මෙය IQR පරීක්ෂාවක් පමණි; anomaly එකක් වංචාවක් බවට සාක්ෂියක් නොවේ.",
+          ),
+        );
       } else {
         const value = stats.value as { column: string; index: number };
         const preview = buildInsightReportPreview(
@@ -1255,6 +1342,18 @@ export function friendlySheetName(
     label = `Pivot - ${spec.valuesColumn} by ${spec.rowsColumn}`;
   else if (action.kind === "statistics" && spec.statistics?.mode === "forecast")
     label = `Forecast of ${spec.statistics.value?.column ?? sourceSheet}`;
+  else if (
+    action.kind === "statistics" &&
+    spec.statistics?.mode === "advanced-forecast"
+  )
+    label = `Advanced forecast of ${spec.statistics.value?.column ?? sourceSheet}`;
+  else if (
+    action.kind === "statistics" &&
+    spec.statistics?.mode === "financial"
+  )
+    label = "Financial metrics report";
+  else if (action.kind === "statistics" && spec.statistics?.mode === "anomaly")
+    label = `Anomaly report for ${spec.statistics.value?.column ?? sourceSheet}`;
   else if (action.kind === "statistics" && spec.statistics?.mode === "insights")
     label = `Insights of ${spec.statistics.value?.column ?? sourceSheet}`;
   else if (action.kind === "dashboard" && spec.dashboard)

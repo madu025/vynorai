@@ -209,6 +209,131 @@ export function buildForecastCells(
   return out;
 }
 
+/** Forecast report with an Excel ETS primary path and a linear fallback. */
+export function buildAdvancedForecastCells(
+  range: RangeInfo,
+  headers: string[],
+  index: number,
+  periods: number,
+  dateIndex?: number,
+): string[][] {
+  const count = range.endRow - range.startRow;
+  const valueLetter = columnLetter(range.startColumn + index);
+  const dateLetter =
+    dateIndex === undefined
+      ? undefined
+      : columnLetter(range.startColumn + dateIndex);
+  const values = `${quoted(range.sheetName)}$${valueLetter}$${range.startRow + 1}:$${valueLetter}$${range.endRow}`;
+  const out: string[][] = [
+    [
+      "Period",
+      `Actual ${headers[index]}`,
+      "Forecast",
+      "Lower 95%",
+      "Upper 95%",
+      "Detected seasonality",
+    ],
+  ];
+  for (let at = 1; at <= count; at += 1)
+    out.push([
+      dateIndex === undefined
+        ? String(at)
+        : `=${quoted(range.sheetName)}${dateLetter}${range.startRow + at}`,
+      `=${quoted(range.sheetName)}${valueLetter}${range.startRow + at}`,
+      "",
+      "",
+      "",
+      "",
+    ]);
+  const known = `$B$2:$B$${count + 1}`;
+  const periodsRange = `$A$2:$A$${count + 1}`;
+  for (let step = 1; step <= periods; step += 1) {
+    const row = count + 1 + step;
+    const forecast = `IFERROR(FORECAST.ETS(A${row},${known},${periodsRange},12,1,1),FORECAST(A${row},${known},${periodsRange}))`;
+    const conf = `IFERROR(FORECAST.ETS.CONFINT(A${row},${known},${periodsRange},0.95,12,1,1),0)`;
+    const futurePeriod =
+      dateIndex === undefined
+        ? String(count + step)
+        : `=MAX($A$2:$A$${count + 1})+${step}`;
+    out.push([
+      futurePeriod,
+      "",
+      `=${forecast}`,
+      `=C${row}-${conf}`,
+      `=C${row}+${conf}`,
+      `=IFERROR(FORECAST.ETS.SEASONALITY(${known},${periodsRange},1,1),12)`,
+    ]);
+  }
+  return out;
+}
+
+/** Financial KPI report. Column indexes are revenue, COGS, operating expenses, then optional fields. */
+export function buildFinancialCells(
+  range: RangeInfo,
+  headers: string[],
+  indexes: number[],
+): string[][] {
+  const ref = (index: number) => columnRange(range, index);
+  const revenue = ref(indexes[0]);
+  const cogs = ref(indexes[1]);
+  const operating = ref(indexes[2]);
+  const depreciation =
+    indexes[3] === undefined ? "0" : `SUM(${ref(indexes[3])})`;
+  const interest = indexes[4] === undefined ? "0" : `SUM(${ref(indexes[4])})`;
+  const taxes = indexes[5] === undefined ? "0" : `SUM(${ref(indexes[5])})`;
+  const capital =
+    indexes[6] === undefined ? undefined : `SUM(${ref(indexes[6])})`;
+  const ebitda = `SUM(${revenue})-SUM(${cogs})-SUM(${operating})`;
+  const net = `${ebitda}-${depreciation}-${interest}-${taxes}`;
+  return [
+    ["Metric", "Value", "Evidence"],
+    ["Revenue", `=SUM(${revenue})`, headers[indexes[0]]],
+    ["COGS", `=SUM(${cogs})`, headers[indexes[1]]],
+    ["Operating expenses", `=SUM(${operating})`, headers[indexes[2]]],
+    ["Gross profit", "=B2-B3", "Revenue - COGS"],
+    ["Gross margin", '=IFERROR(B5/B2,"")', "Gross profit / Revenue"],
+    ["EBITDA", `=${ebitda}`, "Revenue - COGS - Operating expenses"],
+    ["Operating margin", '=IFERROR(B7/B2,"")', "EBITDA / Revenue"],
+    ["Net income", `=${net}`, "EBITDA - depreciation - interest - taxes"],
+    [
+      "ROI",
+      capital ? `=IFERROR(B9/${capital},"")` : "",
+      capital ? headers[indexes[6]] : "No invested-capital column supplied",
+    ],
+  ];
+}
+
+/** Explainable IQR anomaly report; Excel calculates it over the full source range. */
+export function buildAnomalyCells(
+  range: RangeInfo,
+  headers: string[],
+  index: number,
+): string[][] {
+  const value = columnRange(range, index);
+  const q1 = `QUARTILE.INC(${value},1)`;
+  const q3 = `QUARTILE.INC(${value},3)`;
+  const iqr = `(${q3}-${q1})`;
+  return [
+    ["Anomaly metric", "Value", "Evidence"],
+    ["Column", headers[index], "Selected numeric column"],
+    ["Q1", `=${q1}`, "25th percentile"],
+    ["Q3", `=${q3}`, "75th percentile"],
+    ["IQR", `=${iqr}`, "Q3 - Q1"],
+    ["Lower fence", `=${q1}-1.5*${iqr}`, "Q1 - 1.5 × IQR"],
+    ["Upper fence", `=${q3}+1.5*${iqr}`, "Q3 + 1.5 × IQR"],
+    [
+      "Anomaly count",
+      `=COUNTIF(${value},"<"&B6)+COUNTIF(${value},">"&B7)`,
+      "Values outside the fences",
+    ],
+    [
+      "Interpretation",
+      '=IF(B8=0,"No IQR outliers detected","Review flagged low/high values")',
+      "Screening only; not proof of fraud",
+    ],
+  ];
+}
+
 export interface InsightReportPreview {
   headers: [string, string];
   rows: Array<[string, string]>;

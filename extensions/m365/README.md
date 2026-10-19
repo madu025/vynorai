@@ -12,6 +12,8 @@ Configure the task pane at runtime with `window.__VYNORAI_M365_CONFIG__`:
   clientId: "<public SPA client application ID>",
   redirectUri: "https://<add-in-host>/taskpane.html",
   scopes: ["api://<API-client-id>/m365.excel.read", "api://<API-client-id>/m365.excel.write"],
+  graphScopes: ["https://graph.microsoft.com/Mail.Send"], // requested only after Send approval
+  graphLargeScopes: ["https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/Mail.ReadWrite"], // optional large/draft delivery
   apiBaseUrl: "https://<vynorai-api-host>"
 }
 ```
@@ -37,6 +39,13 @@ public Entra IDs only; backend secrets remain in the server's `backend/.env`.
 The task pane uses a browser-compatible bundle. An unexpired sign-in access token is kept only in this add-in origin's
 local storage, is never logged, and can be removed with **Sign out**. Test on a current Microsoft 365 Apps / WebView2
 Excel client, or use Excel for the web when a legacy desktop Excel webview reports that it cannot start the add-in.
+
+After a report is applied, the **Email report** panel can deliver an `.xlsx`, `.pdf`, `.csv`, combined XLSX/PDF,
+or summary-only report. It can add bounded report details and up to three report charts as HTML inline images.
+The recipient, format, body and attachment list are reviewed in the pane, then a second confirmation requests
+Microsoft Graph consent and sends directly to `/me/sendMail`; report bytes are not uploaded to VynorAI or written
+to its logs. Small messages use direct send; larger attachments use a resumable Outlook draft upload session when
+`Mail.ReadWrite` is configured. Microsoft tenant/message limits still apply and are surfaced as explicit errors.
 
 ## How updates reach users
 

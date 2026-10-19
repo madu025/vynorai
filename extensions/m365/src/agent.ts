@@ -107,6 +107,12 @@ export interface AgentHost {
   ): Promise<{ address: string; values: unknown[][]; formulas?: unknown[][] }>;
   /** Evaluates a formula over the real data without leaving anything in the workbook. */
   calculate(formula: string): Promise<unknown>;
+  /** Consent-gated, masked and bounded AI text analysis; this is read-only until a write tool is staged. */
+  analyzeTextBatch?(input: {
+    feature: "sentiment" | "keywords" | "classification";
+    texts: string[];
+    categories?: string[];
+  }): Promise<unknown>;
   /** Read-only details: names, tables, charts, pivots, hidden, merged, comments, rules, links. */
   getDetails?(what: string, sheet?: string, address?: string): Promise<unknown>;
   /** Checks a built-in step sentence now; it runs only after approval. */
@@ -118,6 +124,9 @@ export interface AgentHost {
 export type AgentModel = (
   messages: AgentMessage[],
 ) => Promise<{ content: string; tool_calls: ToolCall[] }>;
+
+/** The local lifecycle of one agent request. Office.js stays on the device in every phase. */
+export type AgentPhase = "planning" | "executing" | "verifying" | "final";
 
 // --- personal data --------------------------------------------------------------------------
 
@@ -580,6 +589,7 @@ export interface AgentRun {
   reply: string;
   changes: { callId: string; change: StagedChange }[];
   turns: number;
+  phase: AgentPhase;
   /** Set when the loop stopped at the turn limit. */
   stoppedAtLimit?: boolean;
 }
@@ -595,6 +605,7 @@ export async function runAgent(options: {
   model: AgentModel;
   mask: PersonalMask;
   onTool?: (name: string, args: Record<string, unknown>) => void;
+  onPhase?: (phase: AgentPhase) => void;
   maxTurns?: number;
 }): Promise<AgentRun> {
   const { host, model, mask } = options;
@@ -606,6 +617,7 @@ export async function runAgent(options: {
   const counts = { calculate: 0 };
   const maxTurns = options.maxTurns ?? AGENT_MAX_TURNS;
   for (let turn = 1; turn <= maxTurns; turn += 1) {
+    options.onPhase?.("planning");
     const answer = await model(messages);
     const calls = answer.tool_calls ?? [];
     messages.push({
@@ -613,13 +625,17 @@ export async function runAgent(options: {
       content: answer.content || null,
       ...(calls.length ? { tool_calls: calls } : {}),
     });
-    if (!calls.length)
+    if (!calls.length) {
+      options.onPhase?.("final");
       return {
         messages,
         reply: plainText(mask.unmask(answer.content || "")),
         changes,
         turns: turn,
+        phase: "final",
       };
+    }
+    options.onPhase?.("executing");
     for (const call of calls) {
       let content: string;
       try {
@@ -649,12 +665,15 @@ export async function runAgent(options: {
         content: clip(mask.mask(content)),
       });
     }
+    options.onPhase?.("verifying");
   }
+  options.onPhase?.("final");
   return {
     messages,
     reply: "",
     changes,
     turns: maxTurns,
+    phase: "final",
     stoppedAtLimit: true,
   };
 }
@@ -716,6 +735,40 @@ async function runTool(
             }),
           }
         : { result };
+    }
+    case "analyze_text_batch": {
+      if (!host.analyzeTextBatch)
+        throw new AgentToolError(
+          "Text analysis is not available in this host.",
+        );
+      const feature = String(args.feature ?? "") as
+        | "sentiment"
+        | "keywords"
+        | "classification";
+      if (!["sentiment", "keywords", "classification"].includes(feature))
+        throw new AgentToolError(
+          "feature must be sentiment, keywords or classification.",
+        );
+      if (
+        !Array.isArray(args.texts) ||
+        args.texts.length < 1 ||
+        args.texts.length > 100
+      )
+        throw new AgentToolError("texts must contain 1 to 100 items.");
+      const texts = args.texts.map((value) =>
+        mask.mask(restore(String(value ?? "")).slice(0, 1000)),
+      );
+      const categories = Array.isArray(args.categories)
+        ? args.categories
+            .map((value) => restore(String(value ?? "")).slice(0, 60))
+            .filter(Boolean)
+            .slice(0, 20)
+        : undefined;
+      return host.analyzeTextBatch({
+        feature,
+        texts,
+        ...(categories?.length ? { categories } : {}),
+      });
     }
     case "vynor_step": {
       if (changes.length >= AGENT_MAX_CHANGES)

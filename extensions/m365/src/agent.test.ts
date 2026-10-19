@@ -220,6 +220,60 @@ test("a broken argument or failing host becomes an error result, not a crash", a
   assert.equal(run.reply, "done");
 });
 
+test("text analysis is read-only and bounded before a result column can be staged", async () => {
+  let received: unknown;
+  const run = await runAgent({
+    request: "classify the review text",
+    host: host({
+      analyzeTextBatch: async (input) => {
+        received = input;
+        return { results: [{ index: 0, label: "positive" }] };
+      },
+    }),
+    mask: new PersonalMask(),
+    model: async () => ({
+      content: "",
+      tool_calls: [
+        call("text", "analyze_text_batch", {
+          feature: "sentiment",
+          texts: ["great support"],
+        }),
+      ],
+    }),
+  });
+  assert.deepEqual(received, {
+    feature: "sentiment",
+    texts: ["great support"],
+  });
+  assert.equal(run.changes.length, 0);
+  assert.match(run.messages.at(-1)?.content ?? "", /positive/);
+});
+
+test("reports the planner, execution and verification phases", async () => {
+  const phases: string[] = [];
+  let turn = 0;
+  const run = await runAgent({
+    request: "read it",
+    host: host(),
+    mask: new PersonalMask(),
+    onPhase: (phase) => phases.push(phase),
+    model: async () => {
+      turn += 1;
+      return turn === 1
+        ? { content: "", tool_calls: [call("read", "get_workbook", {})] }
+        : { content: "Done", tool_calls: [] };
+    },
+  });
+  assert.deepEqual(phases, [
+    "planning",
+    "executing",
+    "verifying",
+    "planning",
+    "final",
+  ]);
+  assert.equal(run.phase, "final");
+});
+
 test("the loop stops at the turn limit", async () => {
   const run = await runAgent({
     request: "loop",

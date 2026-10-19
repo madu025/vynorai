@@ -9,6 +9,8 @@ import {
 type Cell = string | number | boolean | null;
 
 export interface InstructionSpecs {
+  /** A separate, explicitly approved workbook-email request handled by the task pane. */
+  email?: { to: string };
   namedRange?: { source: number; name?: string };
   slicer?: { source: number };
   chart?: {
@@ -81,7 +83,14 @@ export interface InstructionSpecs {
     limit?: number;
   };
   statistics?: {
-    mode: "describe" | "correlation" | "forecast" | "insights";
+    mode:
+      | "describe"
+      | "correlation"
+      | "forecast"
+      | "advanced-forecast"
+      | "financial"
+      | "anomaly"
+      | "insights";
     columns?: number[];
     pair?: [number, number];
     value?: number;
@@ -255,9 +264,19 @@ export function interpretInstruction(
       text,
     )
   ) {
-    result.problems.push(
-      "Email delivery is not enabled. VynorAI will not request Mail permissions or send workbook data by email.",
-    );
+    const recipient = text.match(
+      /[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+/i,
+    )?.[0];
+    if (!recipient) {
+      result.problems.push(
+        "Add a recipient email address, then use the Email Excel workbook panel and approve the send.",
+      );
+    } else {
+      result.specs.email = { to: recipient };
+      result.problems.push(
+        "Email preview is ready. Review the recipient and current XLSX workbook, then approve the send.",
+      );
+    }
     return result;
   }
   if (sequenceDepth === 0) {
@@ -1840,6 +1859,78 @@ function interpretStatistics(
   const mentioned = headerPositions(headers, text)
     .filter((entry) => isNumericColumn(rows, entry.index))
     .map((entry) => entry.index);
+  const headerBy = (pattern: RegExp): number | undefined => {
+    const index = headers.findIndex((header) => pattern.test(header));
+    return index >= 0 && isNumericColumn(rows, index) ? index : undefined;
+  };
+  if (
+    /\b(?:forecast|predict|project|extrapolate)\b/i.test(text) &&
+    /\b(?:confidence|interval|seasonal|seasonality|ets)\b/i.test(text)
+  ) {
+    const value = mentioned[0] ?? numericAll[0];
+    if (value === undefined) {
+      result.problems.push("An advanced forecast needs a numeric column.");
+      return;
+    }
+    const periods = /\b(?:next|for|another)\s+(\d{1,2})\b/i.exec(text);
+    const date = headers.findIndex((header) =>
+      /\b(date|month|quarter|year|week|period)\b/i.test(header),
+    );
+    result.actions.push("statistics");
+    result.specs.statistics = {
+      mode: "advanced-forecast",
+      value,
+      periods: periods ? Math.min(24, Math.max(1, Number(periods[1]))) : 6,
+      ...(date >= 0 && date !== value ? { date } : {}),
+    };
+    return;
+  }
+  if (
+    /\b(?:roi|ebitda|gross\s+margin|operating\s+margin|financial|budget|actual)\b/i.test(
+      text,
+    )
+  ) {
+    const candidates = [
+      headerBy(/revenue|sales|income|turnover/i),
+      headerBy(/cogs|cost\s+of\s+goods|cost/i),
+      headerBy(/operating\s+expense|opex|expense/i),
+      headerBy(/depreciation/i),
+      headerBy(/interest/i),
+      headerBy(/tax/i),
+      headerBy(/invested\s+capital|capital|assets|equity/i),
+      ...mentioned,
+      ...numericAll,
+    ].filter(
+      (index, position, all): index is number =>
+        index !== undefined && all.indexOf(index) === position,
+    );
+    if (candidates.length < 3) {
+      result.problems.push(
+        "A financial report needs revenue, cost and expense columns.",
+      );
+      return;
+    }
+    result.actions.push("statistics");
+    result.specs.statistics = {
+      mode: "financial",
+      columns: candidates.slice(0, 7),
+    };
+    return;
+  }
+  if (
+    /\b(?:anomal(?:y|ies)|outliers?|fraud(?:ulent)?|unusual|abnormal)\b/i.test(
+      text,
+    )
+  ) {
+    const value = mentioned[0] ?? numericAll[0];
+    if (value === undefined) {
+      result.problems.push("Anomaly analysis needs a numeric column.");
+      return;
+    }
+    result.actions.push("statistics");
+    result.specs.statistics = { mode: "anomaly", value };
+    return;
+  }
   // "the trend over time as a line" asks for a chart, not an insight report.
   const trendAsChart =
     /\btrends?\b/i.test(text) &&

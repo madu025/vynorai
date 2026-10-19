@@ -122,3 +122,27 @@ anything about production environment values is marked "not verified".
   against a blocklist (external links, WEBSERVICE, other files) before staging.
 - Gateway surface `m365`: the coding-agent extras (mutation-tool pruning, project memory, RAG, scaffolds) are
   skipped for these requests; the system prompt and tool list are fixed so the provider prefix cache hits.
+
+### Excel advanced analyst safety (2026-10-19)
+
+- Analyst reports use Excel-native formulas first. Forecasting prefers `FORECAST.ETS` and
+  `FORECAST.ETS.CONFINT`, with a visible linear fallback and no fabricated values. Financial and
+  anomaly reports include their source columns/formulas as evidence; anomaly and fraud-risk outputs
+  are screening signals, never claims of fraud or causation.
+- Deterministic local analytics (cohorts, sensitivity matrices, fuzzy candidates, structured splits,
+  clustering, similarity groups and text helpers) preserve the source range and return reviewable
+  candidates. Fuzzy matches and repairs never merge or overwrite rows without a fresh approval.
+- Desktop/Web differences are reported before planning. Unsupported Office.js objects return an
+  explicit capability/fallback status; they are never silently pretended to work. Slicers and richer
+  dashboard objects may fall back to filtered result sheets.
+- AI text classification is consent-gated, masked and batch-bounded, and its output must be schema
+  validated before staged result columns are offered. Python is deliberately not executable in the
+  first production release; any later Python feature requires an isolated, no-network, resource-limited
+  sandbox with explicit approval and a result-only boundary.
+- Excel email delivery is a separate, explicit side effect. It uses a second OAuth consent for delegated Graph
+  mail scopes only after the user reviews recipients, format, body, charts, attachment list and confirms Send.
+  XLSX/PDF/CSV bytes and bounded result-sheet details are produced locally; raw report bytes never go through the
+  VynorAI backend or audit logs. Direct Graph send is used for small messages. Larger attachments use a draft and
+  resumable Outlook upload session when `Mail.ReadWrite` is separately configured; Microsoft tenant/message limits
+  remain explicit, never silently bypassed. Unsupported Excel host APIs return a fallback/error, and auto-send is
+  not allowed.

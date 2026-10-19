@@ -150,6 +150,13 @@
       .apply-dock { position: sticky; bottom: var(--composer-h, 96px); z-index: 3; justify-content: space-between; margin: 10px -11px -11px; padding: 9px 11px; border-top: 1px solid var(--line); background: var(--surface); }
       .apply-dock .primary { flex: 1; }
       .apply-options { display: grid; gap: 5px; margin-top: 9px; font-size: 12px; color: var(--muted); }
+      .email-form { display: grid; gap: 7px; }
+      .email-form label { display: grid; gap: 3px; color: var(--muted); font-size: 11px; font-weight: 600; }
+      .email-form input, .email-form select, .email-form textarea { width: 100%; min-height: 32px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+      .email-form textarea { min-height: 58px; resize: vertical; }
+      .email-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+      .email-check { display: flex !important; grid-template-columns: auto 1fr; gap: 6px !important; align-items: center; }
+      #email-note { margin: 0 0 8px; color: var(--muted); font-size: 11px; }
       #ai-result:empty { display: none; }
       #ai-result > div { margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
       #ai-result h3 { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
@@ -244,6 +251,33 @@
           <section id="result-gallery" class="card" hidden aria-labelledby="result-gallery-heading">
             <div class="card-head"><h2 id="result-gallery-heading" data-i18n="outcomes_label">Results</h2></div>
             <div id="result-gallery-list"></div>
+          </section>
+          <section id="email-card" class="card" hidden aria-labelledby="email-heading">
+            <div class="card-head"><h2 id="email-heading">Email report</h2><span class="badge">reviewed</span></div>
+            <p id="email-note">Choose the report format and review everything before sending.</p>
+            <div class="email-form">
+              <label for="email-to">Recipient email<input id="email-to" type="email" autocomplete="email" placeholder="recipient@example.com" /></label>
+              <div class="email-options">
+                <label for="email-cc">CC<input id="email-cc" type="text" placeholder="optional" /></label>
+                <label for="email-bcc">BCC<input id="email-bcc" type="text" placeholder="optional" /></label>
+              </div>
+              <label for="email-subject">Subject<input id="email-subject" type="text" maxlength="200" placeholder="VynorAI Excel report" /></label>
+              <div class="email-options">
+                <label for="email-format">Delivery format<select id="email-format">
+                  <option value="auto">Automatic fallback</option>
+                  <option value="xlsx">Excel workbook (.xlsx)</option>
+                  <option value="pdf">PDF report (.pdf)</option>
+                  <option value="csv">CSV report (.csv)</option>
+                  <option value="xlsx-pdf">Excel workbook + PDF</option>
+                  <option value="summary">Summary in email only</option>
+                </select></label>
+                <label for="email-body-type">Body format<select id="email-body-type"><option value="HTML">HTML with details</option><option value="Text">Plain text</option></select></label>
+                <label for="email-delivery-mode">Delivery<select id="email-delivery-mode"><option value="send">Send now</option><option value="draft">Save Outlook draft</option></select></label>
+              </div>
+              <label for="email-body">Message<textarea id="email-body" maxlength="4000" placeholder="Please find the Excel report attached."></textarea></label>
+              <label class="email-check"><input id="email-include-chart" type="checkbox" checked /><span>Include report charts in the email body</span></label>
+              <button id="email-send" class="primary" type="button" disabled>Review and send report</button>
+            </div>
           </section>
           <details data-dev><summary data-i18n="tech_details">Technical details</summary><pre id="preview">No preview yet.</pre></details>
         </section>

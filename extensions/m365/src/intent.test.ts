@@ -15,6 +15,17 @@ test("a Sinhala pivot request names its rows and values", () => {
   assert.equal(result.specs.pivot.values, 3);
 });
 
+test("an Excel email request becomes an explicit recipient preview request", () => {
+  const result: any = interpretInstruction(
+    "Email the approved workbook report to prasad@slts.lk",
+    ["Name", "Amount"],
+    [["A", 10]],
+  );
+  assert.deepEqual(result.actions, []);
+  assert.deepEqual(result.specs.email, { to: "prasad@slts.lk" });
+  assert.match(result.problems[0], /Email preview is ready/);
+});
+
 const BATCH_HEADERS = [
   "Service ID",
   "RTOM",

@@ -1,5 +1,16 @@
 export type DiagnosticStatus = "pass" | "fail" | "skip" | "info";
 
+export type AdvancedCapabilityStatus =
+  | "available"
+  | "available_with_fallback"
+  | "unsupported"
+  | "consent_required";
+
+export interface AdvancedCapability {
+  status: AdvancedCapabilityStatus;
+  reason?: string;
+}
+
 export interface DiagnosticEntry {
   at: string;
   step: string;
@@ -192,6 +203,28 @@ export function describeOfficeHost(office: any): Record<string, unknown> {
     ),
     dialogApi: supports("DialogApi", "1.1"),
   };
+}
+
+/** Merges server policy with local Office.js requirements without exposing workbook data. */
+export function buildAdvancedCapabilityReport(
+  server: Record<string, AdvancedCapability> | undefined,
+  supports: (version: string) => boolean,
+): Record<string, AdvancedCapability> {
+  const report = { ...(server ?? {}) };
+  const slicer = report.slicer;
+  if (slicer && !supports("1.10"))
+    report.slicer = {
+      status: "available_with_fallback",
+      reason:
+        "This Excel host does not support slicers; use a filtered result instead.",
+    };
+  if (report.dashboard && !supports("1.8"))
+    report.dashboard = {
+      status: "available_with_fallback",
+      reason:
+        "This Excel host supports the report sheet but not every dashboard object.",
+    };
+  return report;
 }
 
 /** Minimum Excel API set for each action the add-in can apply. */

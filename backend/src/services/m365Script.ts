@@ -62,6 +62,7 @@ export const STEP_FORMS = [
   "- show the top 10 rows by <measure> / sort by <measure> descending / show rows where <column> is <value> / show rows where <column> is <value> and <column2> is <value2> (also or) / show rows where <measure> is less than <measure2> (a test between two columns)",
   "  To highlight or find the rows that break a rule between columns, use: show rows where <test>. It lists the matching rows.",
   "- describe <measure> (or describe <measure> and <measure2> in ONE step) / find outliers in <measure> (use this for unusual or strange values) / forecast <measure> for the next 5 periods / correlation between <measure> and <measure> / dashboard with total <measure> by <category>",
+  "- advanced forecast <measure> for the next 6 periods with seasonality and confidence intervals / financial report with revenue, cost and expense / anomaly report for <measure>",
   "- check the data quality of this data",
 ];
 

@@ -4,6 +4,10 @@ export interface M365OAuthConfig {
   clientId: string;
   redirectUri: string;
   scopes: string[];
+  /** Optional delegated scopes requested only for separately approved features such as email. */
+  graphScopes?: string[];
+  /** Optional additional scopes for draft/upload-session delivery of large attachments. */
+  graphLargeScopes?: string[];
 }
 
 export interface M365OAuthTokens {

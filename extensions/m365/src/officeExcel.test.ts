@@ -10,6 +10,7 @@ import {
   excelValuesToCsv,
   inspectSelectedExcelRange,
   localExcelAddress,
+  readExcelWorkbookBase64,
   rollbackItemsFromApplyReport,
   sampleBlocks,
   sampleRowBudget,
@@ -417,6 +418,45 @@ test("PDF export copies the source, marks the result and downloads Office file s
     assert.ok(excel.calls.includes("mark PDF export of Sales vynorai=result"));
   } finally {
     delete (globalThis as any).document;
+    delete (globalThis as any).Office;
+  }
+});
+
+test("XLSX attachment reads Office compressed slices with a size guard", async () => {
+  let closed = false;
+  (globalThis as any).Office = {
+    FileType: { Compressed: "compressed" },
+    context: {
+      document: {
+        getFileAsync(_type: string, callback: (result: any) => void) {
+          callback({
+            status: "succeeded",
+            value: {
+              sliceCount: 2,
+              getSliceAsync(
+                index: number,
+                sliceCallback: (result: any) => void,
+              ) {
+                sliceCallback({
+                  status: "succeeded",
+                  value: { data: index === 0 ? "UEsDBA==" : "AQID" },
+                });
+              },
+              closeAsync() {
+                closed = true;
+              },
+            },
+          });
+        },
+      },
+    },
+  };
+  try {
+    const result = await readExcelWorkbookBase64(10);
+    assert.equal(result.base64, "UEsDBAECAw==");
+    assert.equal(result.byteLength, 7);
+    assert.equal(closed, true);
+  } finally {
     delete (globalThis as any).Office;
   }
 });

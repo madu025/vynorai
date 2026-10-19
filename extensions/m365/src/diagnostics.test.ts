@@ -5,6 +5,7 @@ import {
   describeAccessToken,
   describeError,
   describeOfficeHost,
+  buildAdvancedCapabilityReport,
   redactDiagnostic,
   stableStorageFingerprint,
 } from "./diagnostics.js";
@@ -123,4 +124,19 @@ test("office host description reports requirement sets", () => {
     officeLoaded: false,
     context: false,
   });
+});
+
+test("advanced capability report downgrades unsupported host APIs explicitly", () => {
+  const report = buildAdvancedCapabilityReport(
+    {
+      dashboard: { status: "available" },
+      slicer: { status: "available" },
+      forecast: { status: "available_with_fallback" },
+    },
+    (version) => version === "1.4",
+  );
+  assert.equal(report.forecast.status, "available_with_fallback");
+  assert.equal(report.dashboard.status, "available_with_fallback");
+  assert.equal(report.slicer.status, "available_with_fallback");
+  assert.match(report.slicer.reason!, /slicers/i);
 });

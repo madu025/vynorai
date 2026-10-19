@@ -55,6 +55,26 @@ test("M365 OAuth uses the organizations authority for multitenant sign-in", asyn
   assert.equal(authorize.pathname, "/organizations/oauth2/v2.0/authorize");
 });
 
+test("Graph email consent is requested as a separate scope set", async () => {
+  const storage = new MemoryStorage();
+  const authorize = new URL(
+    await beginM365OAuth(
+      {
+        tenantId: "tenant",
+        clientId: "client",
+        redirectUri: "https://addin.example/callback",
+        scopes: ["https://graph.microsoft.com/Mail.Send"],
+        graphScopes: ["https://graph.microsoft.com/Mail.Send"],
+      },
+      storage,
+    ),
+  );
+  assert.equal(
+    authorize.searchParams.get("scope"),
+    "https://graph.microsoft.com/Mail.Send",
+  );
+});
+
 test("M365 OAuth opens only Microsoft sign-in URLs in an Office dialog", () => {
   const dialog = new URL(
     createOfficeAuthDialogUrl(

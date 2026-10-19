@@ -134,6 +134,72 @@ test("a malformed conversation is refused before any model call", async () => {
   assert.equal(called, false);
 });
 
+test("a conversation with duplicate or unanswered tool calls is refused", async () => {
+  let called = false;
+  setM365AgentRunnerForTests(async () => {
+    called = true;
+    return { content: "", tool_calls: [] };
+  });
+  assert.equal(
+    await code(
+      agentTurn(user, {
+        consent: true,
+        messages: [
+          { role: "user", content: "hi" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "same",
+                type: "function",
+                function: { name: "get_workbook", arguments: "{}" },
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+    "AGENT_CONVERSATION_INVALID",
+  );
+  assert.equal(
+    await code(
+      agentTurn(user, {
+        consent: true,
+        messages: [
+          { role: "user", content: "hi" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "same",
+                type: "function",
+                function: { name: "get_workbook", arguments: "{}" },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: "same", content: "{}" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "same",
+                type: "function",
+                function: { name: "get_workbook", arguments: "{}" },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: "same", content: "{}" },
+        ],
+      }),
+    ),
+    "AGENT_CONVERSATION_INVALID",
+  );
+  assert.equal(called, false);
+});
+
 test("a request stops after the turn limit", async () => {
   setM365AgentRunnerForTests(async () => ({ content: "", tool_calls: [] }));
   const messages: any[] = [{ role: "user", content: "go" }];

@@ -14,6 +14,7 @@ import {
   type StagedChange,
 } from "./agent.js";
 import type { ExcelRuntimeLike } from "./officeExcel.js";
+import type { M365ApiClient } from "./api.js";
 import {
   CHART_TYPES,
   readDetails,
@@ -77,6 +78,7 @@ function guessType(values: unknown[], formats: unknown[]): string {
 export function createOfficeAgentHost(
   runtime: ExcelRuntimeLike,
   checkStep: AgentHost["checkStep"],
+  api?: M365ApiClient,
 ): AgentHost {
   return {
     checkStep,
@@ -222,6 +224,19 @@ export function createOfficeAgentHost(
           await context.sync();
         }
       }),
+    ...(api
+      ? {
+          analyzeTextBatch: (input: {
+            feature: "sentiment" | "keywords" | "classification";
+            texts: string[];
+            categories?: string[];
+          }) =>
+            api.analyzeTextBatch({
+              ...input,
+              consent: true,
+            }),
+        }
+      : {}),
   };
 }
 

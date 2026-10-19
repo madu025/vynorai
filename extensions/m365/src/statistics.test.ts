@@ -5,6 +5,9 @@ import { interpretInstruction } from "./intent.js";
 import { buildOutcomes } from "./outcome.js";
 import {
   buildDescribeCells,
+  buildAdvancedForecastCells,
+  buildAnomalyCells,
+  buildFinancialCells,
   buildForecastCells,
   buildInsightReportCells,
   buildInsightReportPreview,
@@ -61,6 +64,24 @@ test("formulas reference the source range and never contain model text", () => {
   );
 });
 
+test("advanced reports use source formulas with explicit fallbacks and evidence", () => {
+  const range = { sheetName: "Sheet1", startColumn: 0, startRow: 1, endRow: 5 };
+  const forecast = buildAdvancedForecastCells(range, headers, 2, 2, 0);
+  assert.equal(forecast[0][5], "Detected seasonality");
+  assert.match(forecast.at(-1)![0], /^=MAX\(\$A\$2:\$A\$5\)\+2$/);
+  assert.match(forecast.at(-1)![2], /FORECAST\.ETS/);
+  assert.match(forecast.at(-1)![2], /FORECAST\(/);
+  assert.match(forecast.at(-1)![5], /FORECAST\.ETS\.SEASONALITY/);
+
+  const financial = buildFinancialCells(range, headers, [2, 3, 3]);
+  assert.match(financial[6][1], /SUM\('Sheet1'!\$C\$2:\$C\$5\)/);
+  assert.match(financial[9][2], /No invested-capital/);
+
+  const anomaly = buildAnomalyCells(range, headers, 2);
+  assert.match(anomaly[7][2], /outside the fences/);
+  assert.match(anomaly[8][2], /not proof of fraud/);
+});
+
 test("instructions are understood and planned like any other action", () => {
   const stats = interpretInstruction(
     "Describe Sales and Cost",
@@ -98,6 +119,32 @@ test("instructions are understood and planned like any other action", () => {
       }),
     /numeric/,
   );
+});
+
+test("advanced analyst wording selects the matching deterministic report mode", () => {
+  const advanced = interpretInstruction(
+    "forecast Sales for the next 6 periods with seasonality and confidence intervals",
+    headers,
+    rows as any,
+  );
+  assert.equal(advanced.specs.statistics?.mode, "advanced-forecast");
+  assert.equal(advanced.specs.statistics?.date, 0);
+
+  const financial = interpretInstruction(
+    "create a financial report for Revenue, COGS and Operating Expenses",
+    ["Month", "Revenue", "COGS", "Operating Expenses"],
+    rows.map((row) => [row[0], row[2], row[3], row[3]]) as any,
+  );
+  assert.equal(financial.specs.statistics?.mode, "financial");
+  assert.equal(financial.specs.statistics?.columns?.length, 3);
+
+  const anomaly = interpretInstruction(
+    "detect anomalies and outliers in Sales",
+    headers,
+    rows as any,
+  );
+  assert.equal(anomaly.specs.statistics?.mode, "anomaly");
+  assert.equal(anomaly.specs.statistics?.value, 2);
 });
 
 test("a dashboard request becomes one dashboard action and one result sheet", () => {

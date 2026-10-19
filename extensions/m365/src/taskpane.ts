@@ -4,6 +4,7 @@ import {
   describeChange,
   runAgent,
   type AgentMessage,
+  type AgentPhase,
   type AgentRun,
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
@@ -78,6 +79,7 @@ import {
   describeAccessToken,
   describeError,
   describeOfficeHost,
+  buildAdvancedCapabilityReport,
   formatEntry,
   stableStorageFingerprint,
 } from "./diagnostics.js";
@@ -96,13 +98,30 @@ import {
   type M365OAuthConfig,
 } from "./oauth.js";
 import {
+  sendGraphMailAdaptive,
+  MAX_DIRECT_ATTACHMENT_BYTES,
+  MAX_OUTLOOK_ATTACHMENT_BYTES,
+  EXCEL_WORKBOOK_MIME,
+  PDF_MIME,
+  CSV_MIME,
+  JPEG_MIME,
+  type GraphMailAttachment,
+  type GraphMailRequest,
+  type GraphDeliveryMode,
+} from "./email.js";
+import {
   applyApprovedExcelPlan,
+  excelValuesToCsv,
   inspectSelectedExcelFormulas,
   inspectSelectedExcelRange,
   inspectWorkbookOverview,
   rollbackItemsFromApplyReport,
   rollbackCreatedItems,
   revealExcelResult,
+  readExcelWorkbookBase64,
+  readExcelPdfBase64,
+  readExcelReportValues,
+  readExcelChartImages,
   readLookupSheetInfo,
   listWorksheetNames,
   listVynorSheets,
@@ -143,6 +162,23 @@ const consentSend = document.querySelector<HTMLButtonElement>("#ai-send");
 const consentCancel = document.querySelector<HTMLButtonElement>("#ai-cancel");
 const analysisOutput = document.querySelector<HTMLElement>("#ai-result");
 const apply = document.querySelector<HTMLButtonElement>("#apply");
+const emailCard = document.querySelector<HTMLElement>("#email-card");
+const emailTo = document.querySelector<HTMLInputElement>("#email-to");
+const emailSubject = document.querySelector<HTMLInputElement>("#email-subject");
+const emailBody = document.querySelector<HTMLTextAreaElement>("#email-body");
+const emailFormat = document.querySelector<HTMLSelectElement>("#email-format");
+const emailBodyType =
+  document.querySelector<HTMLSelectElement>("#email-body-type");
+const emailDeliveryMode = document.querySelector<HTMLSelectElement>(
+  "#email-delivery-mode",
+);
+const emailIncludeChart = document.querySelector<HTMLInputElement>(
+  "#email-include-chart",
+);
+const emailCc = document.querySelector<HTMLInputElement>("#email-cc");
+const emailBcc = document.querySelector<HTMLInputElement>("#email-bcc");
+const emailSend = document.querySelector<HTMLButtonElement>("#email-send");
+const emailNote = document.querySelector<HTMLElement>("#email-note");
 const selfTest = document.querySelector<HTMLButtonElement>("#self-test");
 const copyDiagnostics =
   document.querySelector<HTMLButtonElement>("#copy-diagnostics");
@@ -636,6 +672,379 @@ function supportsExcelApi(version: string): boolean {
   }
 }
 
+let emailSending = false;
+
+type EmailFormat = "auto" | "xlsx" | "pdf" | "csv" | "xlsx-pdf" | "summary";
+
+function splitEmailAddresses(value: string): string[] {
+  return value
+    .split(/[;,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function hasWorkbookReportForEmail(): boolean {
+  return Boolean(lastCreated?.sheets.length || galleryResults.length);
+}
+
+function updateEmailUi(signedIn = Boolean(accessToken)) {
+  const configured = Boolean(config?.graphScopes?.length);
+  const available = signedIn && hasWorkbookReportForEmail();
+  if (emailCard) emailCard.hidden = !available;
+  if (emailNote && available) {
+    emailNote.textContent = configured
+      ? "Choose XLSX, PDF, CSV, summary or automatic fallback. Charts and bounded report details stay local until you approve Send."
+      : "Email is not configured for this deployment. An administrator must add the Microsoft Graph Mail.Send delegated permission to runtime-config.js.";
+  }
+  if (emailSend) {
+    emailSend.disabled =
+      !available ||
+      !configured ||
+      emailSending ||
+      !emailTo?.value.trim() ||
+      !emailSubject?.value.trim();
+  }
+}
+
+function prepareEmailComposer(recipient = "") {
+  if (emailTo && recipient && !emailTo.value) emailTo.value = recipient;
+  if (emailSubject && !emailSubject.value)
+    emailSubject.value = `VynorAI Excel report - ${lastRevealSheet || currentSourceSheet || "Workbook"}`;
+  if (emailBody && !emailBody.value)
+    emailBody.value = "Please find the approved VynorAI Excel report attached.";
+  updateEmailUi();
+  emailCard?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  emailTo?.focus();
+}
+
+function createOAuthAttemptStorage() {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => void values.set(key, value),
+    removeItem: (key: string) => void values.delete(key),
+  };
+}
+
+async function acquireGraphMailToken(
+  scopesOverride?: string[],
+): Promise<string> {
+  if (!config) throw new Error("EMAIL_PERMISSION_NOT_CONFIGURED");
+  const scopes = scopesOverride ?? config?.graphScopes;
+  if (!scopes?.length) throw new Error("EMAIL_PERMISSION_NOT_CONFIGURED");
+  const graphConfig: M365OAuthConfig = {
+    ...config,
+    scopes: [...new Set(scopes)],
+  };
+  const attemptStorage = createOAuthAttemptStorage();
+  const authorizeUrl = await log.step("email:oauth-authorize-url", () =>
+    beginM365OAuth(graphConfig, attemptStorage),
+  );
+  const callbackUrl = await signInWithOfficeDialog(authorizeUrl);
+  const tokens = await log.step(
+    "email:oauth-token-exchange",
+    () => completeM365OAuth(callbackUrl, graphConfig, attemptStorage),
+    (value) => ({ expiresIn: value.expiresIn, tokenType: value.tokenType }),
+  );
+  return tokens.accessToken;
+}
+
+function emailErrorMessage(error: unknown): string {
+  const code = error instanceof Error ? error.message : String(error);
+  const messages: Record<string, string> = {
+    EMAIL_PERMISSION_NOT_CONFIGURED:
+      "Email is not configured for this deployment. Ask the Microsoft 365 administrator to add Mail.Send consent.",
+    EMAIL_PERMISSION_DENIED:
+      "Microsoft denied Mail.Send. Grant the permission or ask your administrator, then try again.",
+    EMAIL_LARGE_ATTACHMENT_PERMISSION_REQUIRED:
+      "Large or multiple attachments need delegated Mail.ReadWrite and Mail.Send consent. Add graphLargeScopes to the deployment configuration.",
+    EMAIL_ATTACHMENT_TOO_LARGE: `This report is larger than the Microsoft Outlook attachment limit of ${Math.round(MAX_OUTLOOK_ATTACHMENT_BYTES / 1_000_000)} MB. Use a SharePoint/OneDrive link or a smaller report.`,
+    XLSX_EXPORT_UNAVAILABLE:
+      "This Excel host cannot export the workbook as XLSX through Office.js.",
+    XLSX_EXPORT_FAILED: "Excel could not prepare the XLSX attachment.",
+    XLSX_SLICE_READ_FAILED: "Excel could not read one XLSX attachment slice.",
+    PDF_EXPORT_UNAVAILABLE:
+      "This Excel host cannot export a PDF through Office.js.",
+    PDF_EXPORT_FAILED: "Excel could not prepare the PDF report.",
+    PDF_SLICE_READ_FAILED: "Excel could not read one PDF report slice.",
+    EXCEL_API_UNAVAILABLE:
+      "This Excel host does not expose the required report API.",
+    REPORT_SHEET_EMPTY: "The applied report sheet is empty.",
+    EMAIL_RECIPIENT_INVALID: "Enter one valid recipient email address.",
+    EMAIL_RECIPIENT_LIMIT:
+      "Use no more than 20 recipients in each address field.",
+    EMAIL_CC_INVALID: "Enter valid CC email addresses.",
+    EMAIL_BCC_INVALID: "Enter valid BCC email addresses.",
+    EMAIL_SUBJECT_INVALID: "Enter a subject without line breaks.",
+    EMAIL_BODY_INVALID:
+      "The email body is too long or contains too many blank lines.",
+    EMAIL_ATTACHMENT_SIZE_MISMATCH:
+      "The generated attachment failed its size verification and was not sent.",
+    EMAIL_DRAFT_INVALID: "Microsoft did not return a valid Outlook draft.",
+    EMAIL_UPLOAD_SESSION_INVALID:
+      "Microsoft did not return a valid large-file upload session.",
+  };
+  return messages[code] || `Email was not sent (${code}).`;
+}
+
+emailTo?.addEventListener("input", () => updateEmailUi());
+emailSubject?.addEventListener("input", () => updateEmailUi());
+
+function escapeEmailHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function textToBase64(value: string): { base64: string; bytes: number } {
+  const data = new TextEncoder().encode(value);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < data.length; offset += chunkSize)
+    binary += String.fromCharCode(
+      ...data.subarray(offset, Math.min(data.length, offset + chunkSize)),
+    );
+  return { base64: btoa(binary), bytes: data.byteLength };
+}
+
+function base64Bytes(value: string): number {
+  return Math.max(
+    0,
+    Math.floor((value.length * 3) / 4) -
+      (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0),
+  );
+}
+
+function reportSummaryText(values: any[][], truncated: boolean): string {
+  const resultLines = galleryResults
+    .slice(-20)
+    .map(
+      (result) =>
+        `- ${result.kind}: ${result.name} on ${result.targetSheet} (${result.status})`,
+    );
+  const tableLines = values
+    .slice(0, 40)
+    .map((row) => row.map((cell) => String(cell ?? "")).join(" | "));
+  return [
+    "VynorAI Excel report",
+    `Report sheet: ${lastRevealSheet || currentSourceSheet || "Workbook"}`,
+    resultLines.length ? "Results:" : "Results: none recorded",
+    ...resultLines,
+    tableLines.length ? "" : "",
+    ...tableLines,
+    truncated ? "[Report preview truncated to a bounded local sample]" : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function reportSummaryHtml(values: any[][], truncated: boolean): string {
+  const rows = values
+    .slice(0, 80)
+    .map(
+      (row) =>
+        `<tr>${row
+          .slice(0, 30)
+          .map((cell) => `<td>${escapeEmailHtml(cell)}</td>`)
+          .join("")}</tr>`,
+    )
+    .join("");
+  const results = galleryResults
+    .slice(-20)
+    .map(
+      (result) =>
+        `<li>${escapeEmailHtml(`${result.kind}: ${result.name} on ${result.targetSheet} (${result.status})`)}</li>`,
+    )
+    .join("");
+  return `<h3>VynorAI Excel report</h3><p>Report sheet: ${escapeEmailHtml(lastRevealSheet || currentSourceSheet || "Workbook")}</p><ul>${results}</ul>${rows ? `<table border="1" cellpadding="4" cellspacing="0"><tbody>${rows}</tbody></table>` : ""}${truncated ? "<p><em>Report preview truncated to a bounded local sample.</em></p>" : ""}`;
+}
+
+async function buildEmailRequest(): Promise<{
+  request: GraphMailRequest;
+  format: string;
+}> {
+  const requested = (emailFormat?.value || "auto") as EmailFormat;
+  const bodyType = emailBodyType?.value === "Text" ? "Text" : "HTML";
+  const reportSheet = lastRevealSheet || currentSourceSheet;
+  let values: any[][] = [];
+  let truncated = false;
+  if (reportSheet && requested !== "xlsx") {
+    const report = await readExcelReportValues(reportSheet, 200, 30);
+    values = report.values;
+    truncated = report.truncated;
+  }
+  const attachments: GraphMailAttachment[] = [];
+  let actualFormat: string = requested;
+  const addFile = (
+    name: string,
+    contentType: string,
+    contentBytes: string,
+    bytes: number,
+    options: Pick<GraphMailAttachment, "isInline" | "contentId"> = {},
+  ) => attachments.push({ name, contentType, contentBytes, bytes, ...options });
+  const readWorkbook = async () => {
+    const file = await readExcelWorkbookBase64(MAX_OUTLOOK_ATTACHMENT_BYTES);
+    addFile(
+      "VynorAI-Excel-Report.xlsx",
+      EXCEL_WORKBOOK_MIME,
+      file.base64,
+      file.byteLength,
+    );
+  };
+  const readPdf = async () => {
+    const file = await readExcelPdfBase64(MAX_OUTLOOK_ATTACHMENT_BYTES);
+    addFile("VynorAI-Excel-Report.pdf", PDF_MIME, file.base64, file.byteLength);
+  };
+  if (requested === "xlsx" || requested === "xlsx-pdf") await readWorkbook();
+  if (requested === "pdf" || requested === "xlsx-pdf") await readPdf();
+  if (requested === "csv") {
+    const csv = textToBase64(excelValuesToCsv(values));
+    addFile("VynorAI-Report.csv", CSV_MIME, csv.base64, csv.bytes);
+  }
+  if (requested === "auto") {
+    try {
+      await readWorkbook();
+      actualFormat = "xlsx";
+    } catch (error) {
+      if (!/XLSX_EXPORT|XLSX_SLICE|COMPRESSED/i.test(String(error)))
+        throw error;
+      await readPdf();
+      actualFormat = "pdf-fallback";
+    }
+  }
+  if (requested === "summary" && !values.length && reportSheet) {
+    const report = await readExcelReportValues(reportSheet, 200, 30);
+    values = report.values;
+    truncated = report.truncated;
+  }
+  const includeChart = emailIncludeChart?.checked === true;
+  const charts =
+    includeChart && reportSheet
+      ? await readExcelChartImages(reportSheet, 3)
+      : [];
+  const baseMessage =
+    emailBody?.value.trim() ||
+    "Please find the approved VynorAI report attached.";
+  let body = baseMessage;
+  if (bodyType === "HTML") {
+    body = `<p>${escapeEmailHtml(baseMessage).replace(/\n/g, "<br>")}</p>${reportSummaryHtml(values, truncated)}`;
+    for (const chart of charts) {
+      const attachmentName = `${chart.name.replace(/[^A-Za-z0-9 _.-]/g, "_")}.jpg`;
+      addFile(
+        attachmentName,
+        JPEG_MIME,
+        chart.base64,
+        base64Bytes(chart.base64),
+        {
+          isInline: true,
+          contentId: chart.contentId,
+        },
+      );
+      body += `<h4>${escapeEmailHtml(chart.name)}</h4><img src="cid:${escapeEmailHtml(chart.contentId)}" alt="${escapeEmailHtml(chart.name)}" />`;
+    }
+  } else {
+    body = `${baseMessage}\n\n${reportSummaryText(values, truncated)}`;
+    for (const chart of charts)
+      addFile(
+        `${chart.name.replace(/[^A-Za-z0-9 _.-]/g, "_")}.jpg`,
+        JPEG_MIME,
+        chart.base64,
+        base64Bytes(chart.base64),
+      );
+  }
+  return {
+    format: actualFormat,
+    request: {
+      to: splitEmailAddresses(emailTo?.value || ""),
+      cc: splitEmailAddresses(emailCc?.value || ""),
+      bcc: splitEmailAddresses(emailBcc?.value || ""),
+      subject: emailSubject?.value.trim() || "VynorAI Excel report",
+      body,
+      bodyType,
+      attachments,
+    },
+  };
+}
+
+emailSend?.addEventListener("click", async () => {
+  if (!emailTo || !emailSubject || !emailBody || !emailSend) return;
+  const to = emailTo.value.trim();
+  const subject = emailSubject.value.trim();
+  const body = emailBody.value.trim();
+  if (!to || !subject) return setStatus("Enter a recipient and subject first.");
+  if (
+    !(await askInPane(
+      `Deliver the reviewed report to ${to}? The selected format may include workbook data, report details and charts.`,
+      "Send Excel report",
+    ))
+  )
+    return;
+  emailSending = true;
+  updateEmailUi();
+  try {
+    setStatus("Preparing the approved report variants...");
+    const prepared = await log.step(
+      "email:prepare-report",
+      buildEmailRequest,
+      (value) => ({
+        format: value.format,
+        attachments: value.request.attachments?.map((attachment) => ({
+          name: attachment.name,
+          bytes: attachment.bytes,
+        })),
+      }),
+    );
+    const requiresLargePermission =
+      (prepared.request.attachments ?? []).some(
+        (attachment) => attachment.bytes >= MAX_DIRECT_ATTACHMENT_BYTES,
+      ) ||
+      (prepared.request.attachments ?? []).reduce(
+        (total, attachment) => total + attachment.bytes,
+        0,
+      ) >= MAX_DIRECT_ATTACHMENT_BYTES;
+    const deliveryMode: GraphDeliveryMode =
+      emailDeliveryMode?.value === "draft" ? "draft" : "send";
+    setStatus(
+      requiresLargePermission || deliveryMode === "draft"
+        ? "Requesting Microsoft draft and large-attachment permission..."
+        : "Requesting Microsoft email permission...",
+    );
+    const graphToken = await acquireGraphMailToken(
+      requiresLargePermission || deliveryMode === "draft"
+        ? (config?.graphLargeScopes ?? config?.graphScopes)
+        : config?.graphScopes,
+    );
+    setStatus(
+      deliveryMode === "draft"
+        ? "Creating and verifying the Outlook draft..."
+        : "Sending and verifying the approved report...",
+    );
+    const delivery = await log.step("email:send-report", () =>
+      sendGraphMailAdaptive(graphToken, prepared.request, fetch, deliveryMode),
+    );
+    log.record("email:send", "pass", {
+      recipient: "redacted",
+      delivery,
+      format: prepared.format,
+      attachments: prepared.request.attachments?.length ?? 0,
+    });
+    setStatus(
+      deliveryMode === "draft"
+        ? `Outlook draft created for ${to} and verified by Microsoft Graph.`
+        : `Report sent to ${to} and verified by Microsoft Graph.`,
+    );
+  } catch (error) {
+    log.record("email:send", "fail", emailErrorMessage(error));
+    setStatus(emailErrorMessage(error));
+  } finally {
+    emailSending = false;
+    updateEmailUi();
+  }
+});
+
 function updateAuthenticationUi(signedIn: boolean) {
   if (signIn) signIn.disabled = signedIn;
   if (signOut) signOut.disabled = !signedIn;
@@ -648,6 +1057,7 @@ function updateAuthenticationUi(signedIn: boolean) {
   const agentRun = document.querySelector<HTMLButtonElement>("#agent-run");
   if (agentRun)
     agentRun.disabled = !signedIn || capabilities?.aiAnalysis === false;
+  updateEmailUi(signedIn);
   document.body.dataset.auth = signedIn ? "in" : "out";
 }
 
@@ -665,6 +1075,13 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
         aiAnalysis: value.aiAnalysis,
       }),
     );
+    capabilities = {
+      ...capabilities,
+      advanced: buildAdvancedCapabilityReport(
+        capabilities.advanced,
+        supportsExcelApi,
+      ),
+    };
     updateAuthenticationUi(true);
   } catch (error) {
     capabilities = undefined;
@@ -1176,6 +1593,19 @@ inspect?.addEventListener("click", async () => {
       layout.headers,
       input.values.slice(layout.headerRowCount),
     );
+    if (interpreted.specs.email) {
+      if (!hasWorkbookReportForEmail()) {
+        const message =
+          "Create and apply the Excel report first. Then use the Email Excel workbook panel to review and approve the XLSX send.";
+        renderConversation("error", message);
+        return setStatus(message);
+      }
+      prepareEmailComposer(interpreted.specs.email.to);
+      const message =
+        "Email preview is ready. Review the recipient and workbook attachment, then approve Send.";
+      renderConversation("assistant", message);
+      return setStatus(message);
+    }
     const wanted = [
       ...new Set([
         ...selectExcelActions(instructionText),
@@ -1662,6 +2092,8 @@ apply?.addEventListener("click", async () => {
     galleryResults = report.results;
     persistResultGallery();
     renderResultGallery();
+    prepareEmailComposer();
+    updateEmailUi();
     if (rollbackButton)
       rollbackButton.hidden =
         lastCreated.sheets.length + lastCreated.tables.length === 0;
@@ -3103,6 +3535,7 @@ rollbackButton?.addEventListener("click", async () => {
     persistResultGallery();
     renderResultGallery();
     if (rollbackButton) rollbackButton.hidden = true;
+    updateEmailUi();
     markChangeNote("undone");
     setStatus(
       `Removed ${report.removedSheets.length} sheet(s), ${report.removedNames.length} named range(s), and converted ${report.convertedTables.length} table(s) back to a range.`,
@@ -3402,7 +3835,11 @@ function renderAgentRun(run: AgentRun) {
   show(agentApprove, pending);
   show(agentDiscard, pending);
   if (agentBadge)
-    agentBadge.textContent = pending ? "Waiting for approval" : "Done";
+    agentBadge.textContent = pending
+      ? "Waiting for approval"
+      : run.phase === "verifying"
+        ? "Verifying"
+        : "Done";
 }
 
 async function agentModel(messages: AgentMessage[]) {
@@ -3452,7 +3889,11 @@ async function agentLoop(request: string) {
   show(agentDiscard, false);
   if (agentBadge) agentBadge.textContent = "Working";
   const readInput = agentInputReader();
-  const host = createOfficeAgentHost(officeRuntime(), checkStepWith(readInput));
+  const host = createOfficeAgentHost(
+    officeRuntime(),
+    checkStepWith(readInput),
+    apiClient(),
+  );
   try {
     const run = await runAgent({
       request,
@@ -3460,6 +3901,22 @@ async function agentLoop(request: string) {
       host,
       model: agentModel,
       mask: agentMask,
+      onPhase: (phase: AgentPhase) => {
+        if (agentBadge)
+          agentBadge.textContent =
+            phase === "planning"
+              ? "Planning"
+              : phase === "executing"
+                ? "Executing"
+                : phase === "verifying"
+                  ? "Verifying"
+                  : "Final answer";
+        if (phase === "planning") setStatus("Planning the next step...");
+        else if (phase === "executing")
+          setStatus("Running the selected tool...");
+        else if (phase === "verifying")
+          setStatus("Checking the tool result...");
+      },
       onTool: (name, args) => {
         const label = agentToolLabel(name, args);
         if (agentProgress) agentProgress.textContent = label;
@@ -3658,6 +4115,8 @@ agentApprove?.addEventListener("click", async () => {
   // The agent checks what was written once or twice and may stage fixes (they need approval again).
   if (agentRounds < 2) {
     agentRounds += 1;
+    if (agentBadge) agentBadge.textContent = "Verifying";
+    setStatus("Verifying the applied result...");
     await agentLoop(
       appliedReport(
         report.results.map((result) => ({

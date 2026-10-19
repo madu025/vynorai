@@ -3415,7 +3415,23 @@ async function agentModel(messages: AgentMessage[]) {
   const reply = response?.reply;
   if (!reply || !Array.isArray(reply.tool_calls))
     throw new Error("agent-invalid");
+  if (reply.usage) {
+    agentUsage.prompt += Number(reply.usage.prompt) || 0;
+    agentUsage.cached += Number(reply.usage.cached) || 0;
+    agentUsage.completion += Number(reply.usage.completion) || 0;
+  }
   return { content: String(reply.content ?? ""), tool_calls: reply.tool_calls };
+}
+
+/** Tokens of the current request, shown under the agent card. */
+const agentUsage = { prompt: 0, cached: 0, completion: 0 };
+function usageLine(): string {
+  const total = agentUsage.prompt + agentUsage.completion;
+  if (!total) return "";
+  const cached = agentUsage.prompt
+    ? Math.round((agentUsage.cached / agentUsage.prompt) * 100)
+    : 0;
+  return `Used about ${total.toLocaleString("en-US")} tokens (${cached}% of the input from cache).`;
 }
 
 function agentInputReader() {
@@ -3458,7 +3474,7 @@ async function agentLoop(request: string) {
     });
     renderAgentRun(run);
     if (run.reply) renderConversation("assistant", run.reply);
-    if (agentProgress) agentProgress.textContent = "";
+    if (agentProgress) agentProgress.textContent = usageLine();
     setStatus(
       run.changes.length
         ? "The agent prepared changes. Nothing has changed yet: review them, then approve."
@@ -3514,6 +3530,9 @@ async function startAgent() {
     show(agentUndo, false);
   }
   agentRounds = 0;
+  agentUsage.prompt = 0;
+  agentUsage.cached = 0;
+  agentUsage.completion = 0;
   renderConversation("user", request);
   if (instruction) instruction.value = "";
   setStatus("The agent is working. Nothing changes until you approve.");
@@ -3581,6 +3600,8 @@ agentApprove?.addEventListener("click", async () => {
   show(agentApprove, false);
   show(agentDiscard, false);
   if (agentBadge) agentBadge.textContent = "Applying";
+  agentStopped = false;
+  show(agentStop, true);
   setStatus("Applying the approved changes...");
   log.record("agent:approve", "pass", { changes: run.changes.length });
   const readInput = agentInputReader();
@@ -3596,21 +3617,31 @@ agentApprove?.addEventListener("click", async () => {
         supportsExcelApi,
         requirements: ACTION_REQUIREMENTS,
       }),
+      {
+        onProgress: (index, total, label) => {
+          if (agentProgress)
+            agentProgress.textContent = `Applying ${index} of ${total}: ${label.slice(0, 120)}`;
+        },
+        isCancelled: () => agentStopped,
+      },
     );
   } catch (error) {
     agentBusy = false;
+    show(agentStop, false);
     log.record("agent:apply", "fail", describeError(error));
     setStatus("Applying failed. See Diagnostics.");
     return;
   }
   agentBusy = false;
+  show(agentStop, false);
+  if (agentProgress) agentProgress.textContent = "";
   agentLastUndo = mergeUndo(agentLastUndo, report.undo);
   show(agentUndo, true);
   if (agentChanges) {
     agentChanges.textContent = "";
     for (const result of report.results) {
       const li = document.createElement("li");
-      li.textContent = `${result.status === "applied" ? "✓" : result.status === "failed" ? "✗" : "–"} ${result.change}${result.status === "failed" ? ` (${String(result.detail ?? "")})` : ""}`;
+      li.textContent = `${result.status === "applied" ? "✓" : result.status === "failed" ? "✗" : "–"} ${result.change}${result.status === "failed" ? ` (${String(result.detail ?? "")})` : ""}${result.ms && result.ms >= 1000 ? ` - ${(result.ms / 1000).toFixed(1)} s` : ""}`;
       agentChanges.appendChild(li);
     }
   }

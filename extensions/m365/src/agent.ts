@@ -552,6 +552,7 @@ export const DETAILS = [
   "dependents",
   "protection",
   "page_setup",
+  "formula_check",
 ];
 
 const clip = (text: string) =>

@@ -158,7 +158,7 @@ test("every workbook-object tool checks its arguments and describes the change",
     assert.equal(change.kind, "excel_action", tool);
     assert.match(describeChange(change), pattern, tool);
   }
-  assert.equal(Object.keys(ACTION_TOOLS).length, 16);
+  assert.equal(Object.keys(ACTION_TOOLS).length, 17);
 });
 
 test("bad arguments come back as messages the model can act on", () => {
@@ -352,4 +352,28 @@ test("format painter, left-to-right sort, rule replace and stop-if-true are stag
   });
   assert.equal(rule.args.replace, true);
   assert.equal(rule.args.stop_if_true, true);
+});
+
+test("clean_in_place keeps formulas and leading-zero IDs, and parses d/m/y dates", async () => {
+  const { cleanValue } = await import("./officeAgentActions.js");
+  assert.equal(cleanValue("  Ea   km ", "trim"), "Ea km");
+  assert.equal(cleanValue("a\u00a0b\u0007", "clean"), "a b");
+  assert.equal(cleanValue("=TRIM(A1)", "trim"), "=TRIM(A1)");
+  assert.equal(cleanValue("1,250", "to_number"), 1250);
+  assert.equal(cleanValue("0112005016", "to_number"), "0112005016");
+  assert.equal(cleanValue(42, "to_number"), 42);
+  assert.equal(cleanValue("2025-03-01", "to_date"), 45717);
+  assert.equal(cleanValue("01/03/2025", "to_date"), 45717);
+  assert.equal(cleanValue("31/02/2025", "to_date"), "31/02/2025");
+  assert.equal(cleanValue("hello WORLD", "proper"), "Hello World");
+  const change = stage("clean_in_place", {
+    sheet: "Data",
+    address: "I2:I520126",
+    op: "trim",
+  });
+  assert.match(
+    describeChange(change),
+    /Clean 'Data'!I2:I520126 in place: trim/,
+  );
+  assert.equal(needsSheetBackup("clean_in_place", {}), true);
 });

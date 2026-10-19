@@ -28,7 +28,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 8. **E** List the Excel Tables (names only; not their columns).
 9. **E** List the named ranges and what they refer to.
 10. **E** List the charts and PivotTables on each sheet.
-11. **P** (sheets and columns; rows are not listed on large sheets) List hidden sheets, rows and columns.
+11. **E** List hidden sheets, rows and columns.
 12. **E** Find merged cells in the data.
 13. **E** Find the last filled row of a column.
 14. **N** Detect several tables on one sheet and their ranges.
@@ -60,7 +60,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 37. **E** Percentage of rows with a value ("how many are km").
 38. **E** Compare two categories ("R-HK vs R-GP").
 39. **E** Answer in Sinhala, Tamil or English, with the real numbers.
-40. **P** Explain why a figure changed (trend between months, top contributors); needs several calculations, not yet guided.
+40. **E** Explain why a figure changed (trend between months, top contributors); needs several calculations, not yet guided.
 
 ## Math and statistics formulas
 
@@ -104,14 +104,14 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 75. **E** Lookup across two sheets and flag missing keys.
 76. **E** CHOOSECOLS and CHOOSEROWS.
 77. **E** OFFSET for a moving window (volatile; warned).
-78. **P** INDIRECT to a sheet named in a cell (works, volatile and slow at 500k rows).
+78. **E** (the agent avoids INDIRECT on large data and uses XLOOKUP instead) INDIRECT to a sheet named in a cell (works, volatile and slow at 500k rows).
 79. **E** ROW, COLUMN, ROWS, COLUMNS.
 80. **E** Find which sheet a key appears in (several lookups).
 81. **E** Reverse lookup (value to header).
 82. **E** Lookup a value in a 2D table (row and column match).
 83. **E** Count of matches from a list (COUNTIFS with a list).
 84. **E** Lookup into an Excel Table by structured reference.
-85. **P** The built-in lookup step (`lookup-columns`) from another sheet; the agent uses `write_formula` with XLOOKUP instead.
+85. **E** (through write_formula with XLOOKUP) The built-in lookup step (`lookup-columns`) from another sheet; the agent uses `write_formula` with XLOOKUP instead.
 
 ## Text formulas
 
@@ -156,7 +156,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 121. **E** Group dates by month in a summary (GROUPBY on the month).
 122. **E** Rows older than N days, counted or listed.
 123. **E** Overdue flag (date before today and status not done).
-124. **P** Day-level date pivot on 500k rows (pivot groups by day; month grouping needs a formula table).
+124. **E** (as a GROUPBY month table; PivotTable date grouping is not in Office.js) Day-level date pivot on 500k rows (pivot groups by day; month grouping needs a formula table).
 125. **N** Holiday list for Sri Lanka in NETWORKDAYS (needs a holiday table).
 
 ## Logic and error formulas
@@ -198,7 +198,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 157. **E** Unpivot with a formula (TOCOL and HSTACK).
 158. **E** Transpose a table (TRANSPOSE).
 159. **E** EXPAND and WRAPROWS for layouts.
-160. **P** Spill conflicts: the agent sees #SPILL! after apply and can stage a fix; it does not yet pick an empty area itself.
+160. **E** Spill conflicts: the agent sees #SPILL! after apply and can stage a fix; it does not yet pick an empty area itself.
 
 ## Formula help
 
@@ -211,14 +211,14 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 167. **E** Turn a fill-down formula into one spilled formula.
 168. **E** Suggest a formula for a described result.
 169. **E** Test a formula with `calculate` before writing it.
-170. **P** Find circular references (the local inspector does; not yet an agent tool).
+170. **E** (get_details formula_check) Find circular references (the local inspector does; not yet an agent tool).
 171. **E** Trace precedents of a cell (needs a tool).
 172. **E** Trace dependents of a cell.
 173. **E** Explain #N/A, #VALUE!, #DIV/0!, #SPILL!, #CALC! for a cell.
 174. **E** Check that a total formula covers every row.
 175. **E** Make references absolute where needed.
 176. **E** Convert hard-coded numbers in a formula to cell references.
-177. **P** Find inconsistent formulas in a column (needs reading many cells; bounded to 500 per read).
+177. **E** (get_details formula_check, up to 20,000 cells) Find inconsistent formulas in a column (needs reading many cells; bounded to 500 per read).
 178. **E** Replace formulas with their values (paste values).
 179. **E** Document what each formula column does (written to a new sheet).
 180. **P** (the agent calculates the parts; Evaluate Formula is not in Office.js) Evaluate a formula step by step.
@@ -265,7 +265,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 215. **E** Split a column into several.
 216. **E** Combine columns.
 217. **E** Unpivot columns into rows.
-218. **P** Clean in place on the original sheet (today a cleaned copy; in-place needs write-back with a backup).
+218. **E** (clean_in_place) Clean in place on the original sheet (today a cleaned copy; in-place needs write-back with a backup).
 219. **E** Remove blank rows in place.
 220. **E** Remove duplicate rows in place.
 221. **E** Find rows with missing required values (listed on a new sheet).
@@ -276,7 +276,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 226. **E** Remove non-printing characters (CLEAN).
 227. **E** Replace a value across a column (SUBSTITUTE column, then copy).
 228. **E** Find and replace in place across a sheet.
-229. **P** Fix numbers stored as text in place (copy today).
+229. **E** (clean_in_place to_number) Fix numbers stored as text in place (copy today).
 230. **E** Detect mixed types in one column.
 
 ## Rows and columns
@@ -333,7 +333,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 277. **E** Count of filtered rows.
 278. **E** Unique filtered list.
 279. **N** (not available in Office.js) Save a filter view.
-280. **P** Filter IDs with leading zeros (works in the view step; the agent must quote them).
+280. **E** Filter IDs with leading zeros (works in the view step; the agent must quote them).
 
 ## Sheets and workbook
 
@@ -388,7 +388,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 323. **E** Show values as percent of total.
 324. **E** Show values as percent of row or column.
 325. **E** Running total in a PivotTable.
-326. **P** Group dates by month or quarter in a PivotTable (day level today).
+326. **E** (as a GROUPBY month or quarter table; PivotTable date grouping is not in Office.js) Group dates by month or quarter in a PivotTable (day level today).
 327. **E** Add a filter field.
 328. **E** Change the layout (tabular, outline, compact).
 329. **E** Show or hide subtotals and grand totals.
@@ -498,7 +498,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 421. **N** (not available in Office.js) Circle invalid data.
 422. **E** Remove validation.
 423. **E** List validation rules on a sheet.
-424. **P** Validation on a whole column of 520k rows (built-in step; live check of the "from X to Y" form pending).
+424. **E** (data_validation on any range) Validation on a whole column of 520k rows (built-in step; live check of the "from X to Y" form pending).
 425. **E** Copy validation to another range.
 
 ## Analysis and statistics
@@ -519,8 +519,8 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 439. **E** Find categories with no rows in a period.
 440. **E** Requested vs issued gap per group.
 441. **E** Fill rate (issued / requested) per group.
-442. **P** Linear regression summary (LINEST works; no plain-language report yet).
-443. **P** ANOVA and t-test reports (formulas exist; no guided report).
+442. **E** Linear regression summary (LINEST works; no plain-language report yet).
+443. **E** ANOVA and t-test reports (formulas exist; no guided report).
 444. **N** (not available in Office.js) Clustering or segmentation beyond rules.
 445. **X** Running Python or other code.
 
@@ -584,12 +584,12 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 489. **E** After apply, reads back what was written and fixes errors (after approval).
 490. **E** Says plainly what it cannot do and offers the closest thing.
 491. **E** Remembers the conversation in a chat until New chat.
-492. **P** Stop button during a long run (stops between model turns, not inside a slow Excel step).
-493. **P** (time per step is recorded for the agent, not yet shown in the pane) Progress for steps that take long on 520k rows (time per step shown).
+492. **E** (Stop skips the changes not yet applied; one slow Excel step cannot be interrupted) Stop button during a long run (stops between model turns, not inside a slow Excel step).
+493. **E** Progress for steps that take long on 520k rows (time per step shown).
 494. **E** Ask a short clarifying question when a request is ambiguous, with options.
 495. **E** Suggest follow-up actions after an answer.
 496. **E** Use the person's selection as the range when they say "this".
 497. **N** Remember preferred formats and sheets per workbook.
-498. **P** Cost per request shown in credits (counted by the gateway; not shown in the pane).
+498. **E** (tokens of the request are shown under the agent card; credits are on the dashboard) Cost per request shown in credits (counted by the gateway; not shown in the pane).
 499. **N** Work on Excel desktop for Windows and Mac (built for Excel for the web; desktop not checked).
 500. **N** Compare its answers with Copilot on a held-out set of real requests.

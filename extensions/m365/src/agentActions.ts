@@ -269,6 +269,15 @@ export const COMMENT_ACTIONS = [
   "reopen",
   "note",
 ] as const;
+export const CLEAN_OPS = [
+  "trim",
+  "clean",
+  "upper",
+  "lower",
+  "proper",
+  "to_number",
+  "to_date",
+] as const;
 export const PROTECT_ACTIONS = [
   "protect",
   "unprotect",
@@ -841,6 +850,17 @@ export const ACTION_TOOLS: Record<string, ActionDef> = {
     describe: (args) =>
       `Replace "${args.find}" with "${args.replace}" in ${args.address ? at(args) : `sheet "${args.sheet}"`}${args.whole_cell ? " (whole cell)" : ""} (undo restores it)`,
   },
+  clean_in_place: {
+    check(args, restore) {
+      return {
+        sheet: checkSheetName(restore(String(args.sheet ?? ""))),
+        address: checkRange(args.address),
+        op: oneOf(args.op, CLEAN_OPS, "op"),
+      };
+    },
+    describe: (args) =>
+      `Clean ${at(args)} in place: ${String(args.op).replace(/_/g, " ")} (formulas and IDs with leading zeros are kept; undo restores it)`,
+  },
   goal_seek: {
     check(args, restore) {
       const target = optionalNumber(args.target, "target", -1e15, 1e15);
@@ -902,7 +922,12 @@ function tableStyle(value: unknown): string {
 
 /** Changes that need a backup copy of the sheet first, so undo can put the data back. */
 export function needsSheetBackup(tool: string, args: ActionArgs): boolean {
-  if (tool === "delete_rows_where" || tool === "find_replace") return true;
+  if (
+    tool === "delete_rows_where" ||
+    tool === "find_replace" ||
+    tool === "clean_in_place"
+  )
+    return true;
   if (tool === "edit_rows_columns")
     return ![
       "hide_rows",

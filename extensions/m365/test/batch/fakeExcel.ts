@@ -120,6 +120,44 @@ export function fakeCalculator(rows: unknown[][]) {
       const ref = col(args[0]);
       if (ref) return [[fold(ref.index, ref.last)[simple[name]]]];
     }
+    if (
+      /^(SLOPE|INTERCEPT|RSQ|CORREL|PEARSON)$/.test(name) &&
+      args.length === 2
+    ) {
+      // SLOPE(known_y, known_x); CORREL(x, y) is symmetric.
+      const y = col(args[0]);
+      const x = col(args[1]);
+      if (!x || !y) return unknown(body);
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      let sxx = 0;
+      let syy = 0;
+      let sxy = 0;
+      for (let row = 0; row < FAKE_ROWS; row += 1) {
+        const a = Number(at(row, x.index));
+        const b = Number(at(row, y.index));
+        n += 1;
+        sx += a;
+        sy += b;
+        sxx += a * a;
+        syy += b * b;
+        sxy += a * b;
+      }
+      const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+      const r =
+        (n * sxy - sx * sy) /
+        Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+      const value =
+        name === "SLOPE"
+          ? slope
+          : name === "INTERCEPT"
+            ? (sy - slope * sx) / n
+            : name === "RSQ"
+              ? r * r
+              : r;
+      return [[value]];
+    }
     if (/^(SUMIFS|AVERAGEIFS|COUNTIFS)$/.test(name)) {
       const measure = name === "COUNTIFS" ? undefined : col(args[0]);
       const pairs = name === "COUNTIFS" ? args : args.slice(1);

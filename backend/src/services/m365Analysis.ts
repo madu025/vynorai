@@ -369,12 +369,13 @@ class InProcessResponse {
   flushHeaders() {}
 
   /** The assistant message with its tool calls, from a JSON body or from SSE chunks. */
-  message(): { content: string; tool_calls: any[] } {
+  message(): { content: string; tool_calls: any[]; usage?: any } {
     const whole = (this.body as any)?.choices?.[0]?.message;
     if (whole && typeof whole === "object")
       return {
         content: typeof whole.content === "string" ? whole.content : "",
         tool_calls: Array.isArray(whole.tool_calls) ? whole.tool_calls : [],
+        usage: (this.body as any)?.usage,
       };
     let content = "";
     const calls: any[] = [];
@@ -503,7 +504,7 @@ export interface AgentRunner {
     tools: unknown[],
     estimatedCredits: number,
     maxTokens: number,
-  ): Promise<{ content: string; tool_calls: any[] }>;
+  ): Promise<{ content: string; tool_calls: any[]; usage?: any }>;
 }
 
 /** The Excel agent's model turn: same proxy (credits, ledger), its own tools, the "m365" surface. */

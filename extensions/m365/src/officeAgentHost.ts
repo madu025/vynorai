@@ -253,6 +253,12 @@ export async function applyAgentChanges(
   runtime: ExcelRuntimeLike,
   changes: StagedChange[],
   runStep: StepRunner,
+  options: {
+    /** Called before each change: 1-based position, total, description. */
+    onProgress?: (index: number, total: number, label: string) => void;
+    /** True when the person pressed Stop: the rest is skipped (what ran stays undoable). */
+    isCancelled?: () => boolean;
+  } = {},
 ): Promise<{ results: AgentApplyResult[]; undo: AgentUndo }> {
   const undo: AgentUndo = {
     createdSheets: [],
@@ -268,12 +274,13 @@ export async function applyAgentChanges(
   const backedUp = new Set<string>();
   const sheetOf = (name: string) => renamed.get(name) ?? name;
   let failed = false;
-  for (const change of changes) {
+  for (const [position, change] of changes.entries()) {
     const label = describeChange(change);
-    if (failed) {
+    if (failed || options.isCancelled?.()) {
       results.push({ change: label, status: "skipped" });
       continue;
     }
+    options.onProgress?.(position + 1, changes.length, label);
     const started = Date.now();
     try {
       if (change.kind === "vynor_step") {

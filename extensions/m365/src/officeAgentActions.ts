@@ -6,6 +6,7 @@
  * undo. The few actions Excel cannot undo say so in their description.
  */
 import { parseA1 } from "./agent.js";
+import { inspectFormulas } from "./formulaInspector.js";
 
 export type JournalEntry =
   | { type: "backup"; sheetId: string; backupId: string }
@@ -1343,6 +1344,55 @@ export async function runExcelAction(
       return { replaced };
     }
 
+    case "clean_in_place": {
+      if (!ours) await run.backup(sheetName!);
+      const range = sheet.getRange(args.address);
+      range.load(["rowCount", "columnCount", "rowIndex", "columnIndex"]);
+      await context.sync();
+      const rows = Number(range.rowCount);
+      const columns = Number(range.columnCount);
+      if (rows * columns > 2_000_000)
+        throw new Error(
+          "clean_in_place is limited to 2,000,000 cells; clean one column at a time",
+        );
+      let changed = 0;
+      const dates: [number, number][] = [];
+      // Chunks keep each Excel call small on 500k rows.
+      const chunk = Math.max(1, Math.floor(20_000 / columns));
+      for (let start = 0; start < rows; start += chunk) {
+        const part = range
+          .getCell(start, 0)
+          .getResizedRange(Math.min(chunk, rows - start) - 1, columns - 1);
+        part.load("formulas");
+        await context.sync();
+        let touched = false;
+        const next = (part.formulas as unknown[][]).map((row, r) =>
+          row.map((cell, c) => {
+            const out = cleanValue(cell, args.op);
+            if (out !== cell) {
+              touched = true;
+              changed += 1;
+              if (args.op === "to_date") dates.push([start + r, c]);
+            }
+            return out;
+          }),
+        );
+        if (touched) {
+          part.formulas = next;
+          await context.sync();
+        }
+      }
+      if (dates.length && args.op === "to_date") {
+        // Dates need a date format to show as dates; set it on the cleaned columns.
+        const cols = new Set(dates.map(([, c]) => c));
+        for (const c of cols)
+          (range.getColumn(c) as { numberFormat: unknown }).numberFormat =
+            "yyyy-mm-dd";
+        await context.sync();
+      }
+      return { changed };
+    }
+
     case "goal_seek": {
       const changing = sheet.getRange(args.changing_cell);
       const result = sheet.getRange(args.formula_cell);
@@ -1817,9 +1867,34 @@ export async function readDetails(
         )
         .map((item: any) => item.name);
       const used = sheet.getUsedRangeOrNullObject();
-      used.load(["isNullObject", "rowCount", "columnCount"]);
+      used.load(["isNullObject", "rowCount", "columnCount", "rowIndex"]);
       await context.sync();
       if (used.isNullObject) return { hiddenSheets };
+      // Hidden rows by halving: a block that is all shown or all hidden needs no more checks.
+      const hiddenRows: string[] = [];
+      let probes = 0;
+      const scan = async (start: number, count: number): Promise<void> => {
+        if (hiddenRows.length >= 30 || probes >= 200 || count < 1) return;
+        probes += 1;
+        const block = used
+          .getRow(start)
+          .getResizedRange(count - 1, 0)
+          .getEntireRow();
+        block.load("rowHidden");
+        await context.sync();
+        if (block.rowHidden === false) return;
+        const first = Number(used.rowIndex) + start + 1;
+        if (block.rowHidden === true) {
+          hiddenRows.push(
+            count === 1 ? String(first) : `${first}:${first + count - 1}`,
+          );
+          return;
+        }
+        const half = Math.floor(count / 2);
+        await scan(start, half);
+        await scan(start + half, count - half);
+      };
+      await scan(0, Number(used.rowCount));
       const columns = Array.from(
         { length: Math.min(Number(used.columnCount), 100) },
         (_, index) => {
@@ -1834,7 +1909,53 @@ export async function readDetails(
         hiddenColumns: columns
           .filter((column: any) => column.columnHidden)
           .map((column: any) => strip(column.address)),
-        note: "Hidden rows are not listed (too many to check on large sheets).",
+        hiddenRows,
+        ...(hiddenRows.length >= 30 || probes >= 200
+          ? { note: "More hidden rows exist than are listed." }
+          : {}),
+      };
+    }
+    case "formula_check": {
+      // Errors, possible circular references and formulas that differ from their neighbours.
+      const range = address
+        ? sheet.getRange(address)
+        : sheet.getUsedRange(true);
+      range.load(["address", "cellCount"]);
+      await context.sync();
+      if (Number(range.cellCount) > 20_000)
+        throw new Error(
+          "formula_check reads at most 20,000 cells; give a smaller address",
+        );
+      range.load(["formulas", "values"]);
+      sheet.load("name");
+      await context.sync();
+      const report = inspectFormulas({
+        worksheetName: String(sheet.name),
+        address: strip(range.address)!,
+        formulas: range.formulas,
+        values: range.values,
+      });
+      return {
+        formulas: report.formulaCellCount,
+        errors: report.errorCellCount,
+        possibleCircular: report.possibleCircularReferenceCount,
+        inconsistent: report.inconsistentFormulaCount,
+        hardCoded: report.hardCodedCellCount,
+        cells: report.items
+          .filter(
+            (item) =>
+              item.errors.length ||
+              item.possibleCircularReference ||
+              item.inconsistentFormula,
+          )
+          .slice(0, 30)
+          .map((item) => ({
+            cell: item.address,
+            formula: item.formula,
+            errors: item.errors,
+            circular: item.possibleCircularReference || undefined,
+            inconsistent: item.inconsistentFormula || undefined,
+          })),
       };
     }
     case "merged": {
@@ -1949,6 +2070,67 @@ export async function readDetails(
 }
 
 export { parseA1 };
+
+/**
+ * One cell of clean_in_place. Formulas are never touched. A text such as 0112005016 is an
+ * identifier, so to_number leaves it as text.
+ */
+export function cleanValue(cell: unknown, op: string): unknown {
+  if (typeof cell !== "string" || cell.startsWith("=")) return cell;
+  switch (op) {
+    case "trim":
+      return cell.replace(/ +/g, " ").trim();
+    case "clean":
+      return cell
+        .replace(/[\u0000-\u001f\u007f]/g, "")
+        .replace(/\u00a0/g, " ")
+        .replace(/ +/g, " ")
+        .trim();
+    case "upper":
+      return cell.toLocaleUpperCase();
+    case "lower":
+      return cell.toLocaleLowerCase();
+    case "proper":
+      return cell
+        .toLocaleLowerCase()
+        .replace(
+          /(^|[^\p{L}])(\p{L})/gu,
+          (_m, p: string, c: string) => p + c.toLocaleUpperCase(),
+        );
+    case "to_number": {
+      const text = cell.trim().replace(/,/g, "");
+      if (!/^-?\d+(?:\.\d+)?$/.test(text) || /^-?0\d/.test(text)) return cell;
+      return Number(text);
+    }
+    case "to_date": {
+      const text = cell.trim();
+      let match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+      let year: number, month: number, day: number;
+      if (match)
+        [year, month, day] = [
+          Number(match[1]),
+          Number(match[2]),
+          Number(match[3]),
+        ];
+      else {
+        match = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/.exec(text);
+        if (!match) return cell;
+        // d/m/y, the usual order in the product's markets.
+        [day, month, year] = [
+          Number(match[1]),
+          Number(match[2]),
+          Number(match[3]),
+        ];
+        if (year < 100) year += 2000;
+      }
+      if (month < 1 || month > 12 || day < 1 || day > 31) return cell;
+      const time = Date.UTC(year, month - 1, day);
+      if (new Date(time).getUTCDate() !== day) return cell;
+      return Math.round(time / 86_400_000) + 25569;
+    }
+  }
+  return cell;
+}
 
 /** The Excel test (an array of TRUE/1 per data row) for delete_rows_where; = and != compare as text. */
 export function rowTestFormula(

@@ -786,6 +786,61 @@ const CASES: Case[] = [
         need(run.reply.length > 0, "no reply"),
       ),
   },
+  {
+    id: "p-clean-inplace",
+    text: "trim the extra spaces in the UoM column on the data itself",
+    check: (run) =>
+      need(
+        action(run, "clean_in_place").some(
+          (a) => a.op === "trim" && /^I/.test(a.address),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "p-why",
+    text: "why did the issued quantity change between March and April 2025?",
+    check: (run, seen) =>
+      all(
+        usedCalc(seen),
+        noChanges(run),
+        need(run.reply.length > 40, "short reply"),
+      ),
+  },
+  {
+    id: "p-formula-check",
+    text: "check the formulas in K2:K100 for errors or circular references",
+    check: (_run, seen) =>
+      need(
+        seen.some(
+          (s) => s.name === "get_details" && s.args.what === "formula_check",
+        ),
+        "no formula_check",
+      ),
+  },
+  {
+    id: "p-regression",
+    text: "give me a regression report of issued quantity against requested quantity",
+    check: (run, seen) =>
+      all(
+        need(kinds(run).includes("create_sheet"), "no report sheet"),
+        need(
+          formulas(run, seen).some((f) => /LINEST|SLOPE|RSQ/i.test(f)),
+          "no LINEST/SLOPE",
+        ),
+      ),
+  },
+  {
+    id: "p-month-summary",
+    text: "summary of total issued quantity per month on a new sheet",
+    check: (run, seen) =>
+      need(
+        formulas(run, seen).some(
+          (f) => /GROUPBY|PIVOTBY/i.test(f) && /EOMONTH|MONTH|TEXT\(/i.test(f),
+        ) || steps(run).some((s) => /month/i.test(s)),
+        `changes ${kinds(run)} ${steps(run).join(" | ")}`,
+      ),
+  },
 ];
 
 let pass = 0;

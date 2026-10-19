@@ -212,7 +212,7 @@ export const AGENT_TOOLS = [
   ),
   fn(
     "get_details",
-    "Read-only: names, tables (with columns), charts, pivots (with fields), hidden sheets/columns, merged cells, comments, conditional_formats, validation, freeze, autofilter, precedents/dependents of one cell, protection, page_setup. Call it before changing an object so you use its real name.",
+    "Read-only: names, tables (with columns), charts, pivots (with fields), hidden sheets/columns, merged cells, comments, conditional_formats, validation, freeze, autofilter, precedents/dependents of one cell, protection, page_setup, formula_check (errors, possible circular references and inconsistent formulas of a range). Call it before changing an object so you use its real name.",
     {
       what: en(
         "names",
@@ -230,6 +230,7 @@ export const AGENT_TOOLS = [
         "dependents",
         "protection",
         "page_setup",
+        "formula_check",
       ),
       sheet: str("Optional sheet (default the active one)"),
       address: str("Optional range or cell"),
@@ -647,6 +648,24 @@ export const AGENT_TOOLS = [
     ["sheet", "find", "replace"],
   ),
   fn(
+    "clean_in_place",
+    "STAGED, in place, undo restores it. Clean a range on the original sheet: trim spaces, clean (non-printing characters and non-breaking spaces), upper, lower, proper case, text to numbers (IDs with leading zeros stay text), text to dates. Formulas are kept.",
+    {
+      sheet: str("Sheet name"),
+      address: str("Range, e.g. I2:I520126"),
+      op: en(
+        "trim",
+        "clean",
+        "upper",
+        "lower",
+        "proper",
+        "to_number",
+        "to_date",
+      ),
+    },
+    ["sheet", "address", "op"],
+  ),
+  fn(
     "goal_seek",
     "STAGED. Change a value cell until a formula cell reaches a target (like Excel's Goal Seek). Undo restores the old value.",
     {
@@ -676,6 +695,10 @@ export const AGENT_SYSTEM_PROMPT = [
   "Edits in place (delete rows, sort, filter, formats, validation, sheet changes) are allowed when asked: they are staged, approved and undoable. Use get_details first to find the real names of tables, charts, PivotTables and names.",
   'If a request is truly ambiguous, ask ONE short question with 2 to 4 options instead of guessing. "This" or "here" means the selection from get_workbook.',
   "After answering, you may suggest at most two short follow-ups.",
+  'For "why did X change": compare the two periods with GROUPBY by category and list the largest increases and decreases with their numbers.',
+  "Avoid INDIRECT and OFFSET on large data (they recalculate on every change); use XLOOKUP, CHOOSECOLS or sheet-qualified ranges. PivotTables cannot group dates here: for a month or quarter summary write GROUPBY on EOMONTH(dates,-1)+1 (or a quarter key) on a new sheet.",
+  "If a written result shows #SPILL!, the cells it needs are not empty: stage the formula on a new sheet instead. Identifiers with leading zeros (0112005016) are text: always quote them.",
+  "For a regression or a statistical test, build a small report sheet: labels in column A, LINEST/RSQ/SLOPE/INTERCEPT or T.TEST/F.TEST formulas in column B, then explain the result in plain words.",
   "Excel also has FORECAST.ETS, T.TEST, F.TEST, LINEST and, where the version has them, REGEXTEST/REGEXEXTRACT/REGEXREPLACE (check with calculate first). A what-if data table is a MAKEARRAY or LET formula on a new sheet.",
   "Not possible here (say so and offer the closest thing): sparklines, Solver, Scenario Manager, PivotTable calculated fields, changing a PivotTable's source, opening other files, images, VBA. You may write an Office Script as text in the reply for the person to review and run themselves; never run code.",
   `Stage at most ${AGENT_MAX_CHANGES} changes per request. Do only what was asked.`,
@@ -732,6 +755,8 @@ export const agentRequestSchema = z
 
 export type AgentMessage = z.infer<typeof messageSchema>;
 export type AgentReply = {
+  /** Provider tokens of this turn, so the pane can show what a request cost. */
+  usage?: { prompt: number; cached: number; completion: number };
   content: string;
   tool_calls: {
     id: string;
@@ -805,6 +830,7 @@ const LANGUAGE_LINE: Record<string, string> = {
 export function cleanAgentReply(raw: {
   content?: unknown;
   tool_calls?: unknown;
+  usage?: any;
 }): AgentReply {
   const calls = Array.isArray(raw.tool_calls) ? raw.tool_calls : [];
   const tool_calls = calls
@@ -824,9 +850,21 @@ export function cleanAgentReply(raw: {
     }))
     .filter((call) => AGENT_TOOL_NAMES.includes(call.function.name))
     .slice(0, AGENT_MAX_CHANGES + 4);
+  const usage = raw.usage
+    ? {
+        prompt: Number(raw.usage.prompt_tokens) || 0,
+        cached:
+          Number(
+            raw.usage.prompt_cache_hit_tokens ??
+              raw.usage.prompt_tokens_details?.cached_tokens,
+          ) || 0,
+        completion: Number(raw.usage.completion_tokens) || 0,
+      }
+    : undefined;
   return {
     content: typeof raw.content === "string" ? raw.content.slice(0, 8000) : "",
     tool_calls,
+    ...(usage ? { usage } : {}),
   };
 }
 

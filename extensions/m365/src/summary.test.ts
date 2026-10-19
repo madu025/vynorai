@@ -159,3 +159,42 @@ test("the plan lists the groups and a sheet name that fits Excel's limit", () =>
       .length <= 31,
   );
 });
+
+test("pivotFallbackFormula groups one column like a PivotTable with one spilled formula", async () => {
+  const { pivotFallbackFormula } = await import("./transform.js");
+  const out = pivotFallbackFormula({
+    sheetName: "T2",
+    localAddress: "A1:M366379",
+    headers: ["Status", "Item Code", "Issued Quantity"],
+    rowsColumn: "item code",
+    valuesColumns: ["Issued Quantity"],
+    aggregation: "sum",
+  });
+  assert.deepEqual(out.headers, ["item code", "Sum of Issued Quantity"]);
+  assert.equal(
+    out.formula,
+    "=LET(k,SORT(FILTER(UNIQUE('T2'!$B$2:$B$366379),UNIQUE('T2'!$B$2:$B$366379)<>\"\")),r,HSTACK(k,SUMIFS('T2'!$C$2:$C$366379,'T2'!$B$2:$B$366379,k)),r)",
+  );
+  const top = pivotFallbackFormula({
+    sheetName: "T2",
+    localAddress: "A1:M366379",
+    headers: ["Status", "Item Code", "Issued Quantity"],
+    rowsColumn: "Item Code",
+    valuesColumns: ["Issued Quantity"],
+    aggregation: "count",
+    topN: 5,
+  });
+  assert.match(top.formula, /COUNTIFS\('T2'!\$B\$2:\$B\$366379,k\)/);
+  assert.match(top.formula, /TAKE\(SORTBY\(r,INDEX\(r,0,2\),-1\),5\)\)$/);
+  assert.throws(
+    () =>
+      pivotFallbackFormula({
+        sheetName: "T2",
+        localAddress: "A1:C10",
+        headers: ["A"],
+        rowsColumn: "Nope",
+        valuesColumns: ["A"],
+      }),
+    /not a header/,
+  );
+});

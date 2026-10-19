@@ -370,8 +370,15 @@ const CASES: Case[] = [
     text: "pivot of total issued quantity by RTOM and a column chart of it",
     check: (run) =>
       need(
-        steps(run).some((s) => /pivot/i.test(s)) &&
-          steps(run).some((s) => /chart/i.test(s)),
+        (steps(run).some((s) => /pivot/i.test(s)) ||
+          run.changes.some((c) =>
+            /GROUPBY|PIVOTBY/i.test(String((c.change as any).formula ?? "")),
+          )) &&
+          run.changes.some(
+            (c) =>
+              c.change.kind === "create_chart" ||
+              steps(run).some((s) => /chart/i.test(s)),
+          ),
         `steps ${steps(run).join(" | ")}`,
       ),
   },

@@ -26,6 +26,7 @@ import {
   applyView,
   buildQualityReport,
   buildSummaryTable,
+  pivotFallbackFormula,
   cleanRows,
   columnLetter,
   computedColumnFormula,
@@ -1894,13 +1895,55 @@ export async function applyApprovedExcelPlan(
             if (!existing.isNullObject) result.status = "exists";
             else {
               // Office.js order is (name, source, destination); A3 keeps clear of the A1 note.
-              const pivot = sheet.pivotTables.add(
-                action.name,
-                actionSourceRange(),
-                sheet.getRange("A3"),
-              );
-              await context.sync();
-              if (action.spec?.rowsColumn) {
+              let pivot: any;
+              try {
+                pivot = sheet.pivotTables.add(
+                  action.name,
+                  actionSourceRange(),
+                  sheet.getRange("A3"),
+                );
+                await context.sync();
+              } catch (pivotError) {
+                // Excel on the web refuses PivotTableCollection.add for some sources (GeneralException).
+                // The same grouping then becomes one spilled formula that Excel calculates over every row.
+                if (!action.spec?.rowsColumn) throw pivotError;
+                pivot = undefined;
+                const headers = await readHeaderCells();
+                const fallback = pivotFallbackFormula({
+                  sheetName: plan.worksheetName,
+                  localAddress: localExcelAddress(plan.sourceAddress),
+                  headers,
+                  rowsColumn: action.spec.rowsColumn,
+                  valuesColumns: [
+                    action.spec.valuesColumn,
+                    ...(action.spec.extraValuesColumns ?? []),
+                  ],
+                  aggregation: action.spec.aggregation,
+                  topN: action.spec.topN,
+                  lowest: action.spec.lowest,
+                });
+                sheet.getRange("A2").values = [
+                  [
+                    "Excel could not create a PivotTable for this source, so this is a live formula summary of the same grouping.",
+                  ],
+                ];
+                sheet.getRangeByIndexes(
+                  2,
+                  0,
+                  1,
+                  fallback.headers.length,
+                ).values = [fallback.headers.map(literal)];
+                sheet.getRange("A4").formulas = [[fallback.formula]];
+                sheet.getRangeByIndexes(
+                  2,
+                  0,
+                  1,
+                  fallback.headers.length,
+                ).format.font.bold = true;
+                await context.sync();
+                result.error = undefined;
+              }
+              if (pivot && action.spec?.rowsColumn) {
                 const field = await pivotFieldResolver(pivot);
                 pivot.rowHierarchies.add(field(action.spec.rowsColumn));
                 if (action.spec.subRowsColumn)

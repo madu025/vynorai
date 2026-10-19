@@ -618,3 +618,87 @@ export function buildQualityReport(
   ];
   return { values, findings, headerRow: 7 };
 }
+
+export interface PivotFallbackInput {
+  sheetName: string;
+  /** Local address of the source range including the header row, for example A1:M366379. */
+  localAddress: string;
+  headers: string[];
+  rowsColumn: string;
+  valuesColumns: string[];
+  aggregation?: string;
+  topN?: number;
+  lowest?: boolean;
+}
+
+const PIVOT_FALLBACK_FUNCTION: Record<string, string> = {
+  sum: "SUMIFS",
+  count: "COUNTIFS",
+  average: "AVERAGEIFS",
+  min: "MINIFS",
+  max: "MAXIFS",
+};
+
+/**
+ * One spilled formula that groups a source range like a PivotTable does: the distinct values of one
+ * column and an aggregate of each value column. It is the fallback when the host refuses to create
+ * a real PivotTable (Excel on the web does for some sources); Excel still calculates it over every row.
+ */
+export function pivotFallbackFormula(input: PivotFallbackInput): {
+  headers: string[];
+  formula: string;
+} {
+  const range = parseLocalRange(input.localAddress);
+  const quoted = "'" + input.sheetName.replace(/'/g, "''") + "'!";
+  const first = range.startRow + 1;
+  const last = range.endRow;
+  const indexOf = (name: string) => {
+    const at = input.headers.findIndex(
+      (header) => header.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
+    if (at < 0)
+      throw new Error('"' + name + '" is not a header of the source range');
+    return at;
+  };
+  const column = (name: string) => {
+    const letter = columnLetter(range.startColumn + indexOf(name));
+    return quoted + "$" + letter + "$" + first + ":$" + letter + "$" + last;
+  };
+  const aggregation = PIVOT_FALLBACK_FUNCTION[input.aggregation ?? "sum"]
+    ? (input.aggregation ?? "sum")
+    : "sum";
+  const fn = PIVOT_FALLBACK_FUNCTION[aggregation];
+  const rows = column(input.rowsColumn);
+  const parts = input.valuesColumns.map((name) =>
+    aggregation === "count"
+      ? "COUNTIFS(" + rows + ",k)"
+      : fn + "(" + column(name) + "," + rows + ",k)",
+  );
+  const label =
+    AGGREGATION_LABEL[aggregation as keyof typeof AGGREGATION_LABEL];
+  const stacked = "HSTACK(k," + parts.join(",") + ")";
+  const finish =
+    input.topN && input.topN > 0
+      ? "TAKE(SORTBY(r,INDEX(r,0,2)," +
+        (input.lowest ? "1" : "-1") +
+        ")," +
+        Math.floor(input.topN) +
+        ")"
+      : "r";
+  return {
+    headers: [
+      input.rowsColumn,
+      ...input.valuesColumns.map((name) => label + " of " + name),
+    ],
+    formula:
+      "=LET(k,SORT(FILTER(UNIQUE(" +
+      rows +
+      "),UNIQUE(" +
+      rows +
+      ')<>"")),r,' +
+      stacked +
+      "," +
+      finish +
+      ")",
+  };
+}

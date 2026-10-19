@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>VynorAI Microsoft sign-in</title>
+    <meta name="robots" content="noindex" />
+  </head>
+  <body>
+    <p>Completing Microsoft sign-in…</p>
+    <script>
+      (function () {
+        // Hands the redirect (code and state only) back to the admin page that opened this window.
+        try {
+          if (window.opener) {
+            window.opener.postMessage(
+              { type: "vynor-admin-graph", search: window.location.search },
+              window.location.origin,
+            );
+          }
+        } catch (_) {}
+        window.close();
+      })();
+    </script>
+  </body>
+</html>

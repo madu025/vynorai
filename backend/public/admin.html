@@ -789,11 +789,11 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
           <div class="panel-header"><div class="panel-title">✉️ SMTP Infrastructure Test</div></div>
           <div class="panel-body">
             <p style="font-size:.8rem;color:var(--muted);margin-bottom:1.2rem;line-height:1.6">
-              Test your transactional SMTP connection by dispatching a verification test email to any inbox.
+              Test your transactional SMTP connection using the approved test inbox only.
             </p>
             <div class="form-row">
               <label>Recipient Email</label>
-              <input id="testEmailRecipient" placeholder="e.g. dev@vynor.lk or your personal email"/>
+              <input id="testEmailRecipient" value="prasad@slts.lk" readonly aria-readonly="true"/>
             </div>
             <button class="btn btn-ghost" id="btnSendTestEmail" onclick="sendTestEmail()" style="width:100%;border-color:var(--accent);color:var(--accent2);margin-bottom:1.2rem">
               📨 Dispatch Test Email
@@ -1085,37 +1085,94 @@ function loadBroadcast() {
   // ready form
 }
 
+// Microsoft sign-in for the test email: authorization code + PKCE in a popup. The Graph token
+// stays in this function's memory for one request; it is never stored, logged or shown.
+function b64url(bytes) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function acquireGraphMailToken() {
+  const sec = S();
+  const cfgRes = await fetch(API + '/admin/email/graph-config', { headers: sec ? { 'x-admin-secret': sec } : {} });
+  const cfg = await cfgRes.json().catch(() => null);
+  if (!cfg?.configured) throw new Error('M365_ENTRA_TENANT_ID and M365_ENTRA_CLIENT_ID are not set on the backend.');
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const redirectUri = window.location.origin + cfg.redirectPath;
+  const authorize = 'https://login.microsoftonline.com/' + encodeURIComponent(cfg.authority) + '/oauth2/v2.0/authorize?' +
+    new URLSearchParams({
+      client_id: cfg.clientId, response_type: 'code', redirect_uri: redirectUri, response_mode: 'query',
+      scope: cfg.scope, state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'select_account', login_hint: cfg.loginHint,
+    });
+  const popup = window.open(authorize, 'vynor-graph-signin', 'width=520,height=680');
+  if (!popup) throw new Error('The sign-in window was blocked. Allow pop-ups for this page.');
+  const search = await new Promise((resolve, reject) => {
+    const timer = setInterval(() => { if (popup.closed) { cleanup(); reject(new Error('Sign-in was cancelled.')); } }, 500);
+    function onMessage(ev) {
+      if (ev.origin !== window.location.origin || ev.data?.type !== 'vynor-admin-graph') return;
+      cleanup(); resolve(ev.data.search);
+    }
+    function cleanup() { clearInterval(timer); window.removeEventListener('message', onMessage); }
+    window.addEventListener('message', onMessage);
+  });
+  const params = new URLSearchParams(search);
+  if (params.get('error')) throw new Error('Microsoft sign-in failed: ' + (params.get('error_description') || params.get('error')).split(String.fromCharCode(10))[0]);
+  if (params.get('state') !== state || !params.get('code')) throw new Error('Microsoft sign-in returned an unexpected response.');
+  const tokenRes = await fetch('https://login.microsoftonline.com/' + encodeURIComponent(cfg.authority) + '/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: cfg.clientId, grant_type: 'authorization_code', code: params.get('code'),
+      redirect_uri: redirectUri, code_verifier: verifier, scope: cfg.scope,
+    }),
+  });
+  const tokens = await tokenRes.json().catch(() => ({}));
+  if (!tokenRes.ok || !tokens.access_token) throw new Error('Microsoft did not issue a token: ' + (tokens.error_description || tokens.error || tokenRes.status).toString().split(String.fromCharCode(10))[0]);
+  return tokens.access_token;
+}
+
 async function sendTestEmail() {
-  const inp = document.getElementById('testEmailRecipient');
   const resultBox = document.getElementById('testEmailResult');
   const btn = document.getElementById('btnSendTestEmail');
-  const to = inp.value.trim();
-  if (!to || !to.includes('@')) {
-    showToast('Enter a valid recipient email', 'err');
-    return;
-  }
+  // The recipient is fixed and read-only; the server rejects every other address.
+  const to = 'prasad@slts.lk';
 
   btn.disabled = true;
   btn.innerText = 'Sending Test Email...';
   resultBox.style.display = 'none';
 
-  const res = await api('POST', '/admin/email/test', { to });
+  let res = null;
+  let status = 0;
+  try {
+    // Not api(): a Graph 401 (M365_GRAPH_AUTH_REQUIRED) must not log the admin out.
+    const headers = { 'Content-Type': 'application/json' };
+    const sec = S();
+    if (sec) headers['x-admin-secret'] = sec;
+    headers['x-m365-graph-token'] = await acquireGraphMailToken();
+    const r = await fetch(API + '/admin/email/test', { method: 'POST', headers, body: JSON.stringify({ to }) });
+    status = r.status;
+    res = await r.json().catch(() => null);
+  } catch (e) {
+    res = { ok: false, error: { code: 'M365_GRAPH_AUTH_REQUIRED', message: e.message } };
+  }
   btn.disabled = false;
   btn.innerText = '📨 Dispatch Test Email';
 
+  resultBox.style.display = 'block';
   if (res?.ok) {
-    resultBox.style.display = 'block';
     resultBox.style.borderColor = 'var(--success)';
     resultBox.style.color = 'var(--success)';
-    resultBox.innerHTML = `✅ Delivered successfully!<br/>Message ID: ${escHtml(res.messageId)}<br/>Simulated: ${res.simulated ? 'Yes (Local mock)' : 'No (Live SMTP)'}`;
-    showToast('Test email sent successfully');
-  } else {
-    resultBox.style.display = 'block';
-    resultBox.style.borderColor = 'var(--danger)';
-    resultBox.style.color = 'var(--danger)';
-    resultBox.innerText = `❌ Delivery failed: ${res?.error || 'Unknown error'}`;
-    showToast('Failed to dispatch test email', 'err');
+    resultBox.innerHTML = `✅ Microsoft Graph accepted the message (HTTP ${escHtml(String(res.graphStatus))}).<br/>Request ID: ${escHtml(String(res.requestId || ''))}`;
+    showToast('Test email sent through Microsoft Graph');
+    return;
   }
+  const err = res?.error;
+  const code = typeof err === 'object' && err ? err.code : '';
+  const message = typeof err === 'object' && err ? err.message : (err || 'Unknown error');
+  resultBox.style.borderColor = 'var(--danger)';
+  resultBox.style.color = 'var(--danger)';
+  resultBox.innerText = `❌ Not sent (HTTP ${status || 'n/a'}${code ? ', ' + code : ''}): ${message}`;
+  showToast('Test email was not sent', 'err');
 }
 
 async function sendBroadcastEmail() {

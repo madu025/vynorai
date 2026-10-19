@@ -182,7 +182,7 @@ export function securityHeadersMiddleware(
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data:",
-      "connect-src 'self' http://127.0.0.1:* http://localhost:*",
+      "connect-src 'self' http://127.0.0.1:* http://localhost:* https://login.microsoftonline.com",
       "frame-src https://challenges.cloudflare.com",
       "form-action 'self' https://www.payhere.lk https://sandbox.payhere.lk",
       "frame-ancestors 'self'",

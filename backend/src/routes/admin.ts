@@ -27,6 +27,13 @@ import {
 import { getAdmissionSnapshot } from "../services/admissionControl.js";
 import { sendEmail } from "../services/emailService.js";
 import {
+  GraphMailError,
+  acquireGraphTokenOnBehalfOf,
+  bearerFromHeader,
+  oboConfigured,
+  sendGraphMail,
+} from "../services/m365GraphMail.js";
+import {
   z,
   validateBody,
   validateParams,
@@ -160,8 +167,17 @@ export const AdminTestProviderKeySchema = z
   .optional()
   .default({});
 
+/** Safety recipient for the current backend SMTP integration test. */
+export const ADMIN_EMAIL_TEST_RECIPIENT = "prasad@slts.lk";
+
 export const AdminEmailTestSchema = z.object({
-  to: z.string().email("Valid email address is required"),
+  to: z
+    .string()
+    .email("Valid email address is required")
+    .refine(
+      (value) => value.trim().toLowerCase() === ADMIN_EMAIL_TEST_RECIPIENT,
+      `Test email is restricted to ${ADMIN_EMAIL_TEST_RECIPIENT}`,
+    ),
 });
 
 export const AdminEmailBroadcastSchema = z.object({
@@ -1816,34 +1832,121 @@ adminRouter.get(
  * ── EMAIL BROADCAST & ANNOUNCEMENTS ────────────────────────────────────────
  */
 
+/**
+ * GET /admin/email/graph-config — public client settings the admin page needs to sign the admin in
+ * to Microsoft (delegated Mail.Send, PKCE, token kept in the browser's memory). No secrets.
+ */
+adminRouter.get(
+  "/email/graph-config",
+  requireAdmin,
+  (_req: Request, res: Response) => {
+    const tenantId = process.env.M365_ENTRA_TENANT_ID?.trim() || "";
+    const clientId = process.env.M365_ENTRA_CLIENT_ID?.trim() || "";
+    // The mailbox user (prasad@slts.lk) signs in from their own organization, so the sign-in authority
+    // is "organizations" like the add-in, not the app's home tenant. The app must be multi-tenant.
+    res.json({
+      configured: Boolean(tenantId && clientId),
+      tenantId,
+      authority: process.env.M365_ENTRA_AUTHORITY?.trim() || "organizations",
+      loginHint: ADMIN_EMAIL_TEST_RECIPIENT,
+      clientId,
+      scope: "https://graph.microsoft.com/Mail.Send",
+      redirectPath: "/admin-graph-callback.html",
+      obo: oboConfigured(),
+    });
+  },
+);
+
 /** POST /admin/email/test — test delivery to single address */
 adminRouter.post(
   "/email/test",
   requireAdmin,
   validateBody(AdminEmailTestSchema),
   async (req: Request, res: Response) => {
-    const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
-    if (!to || !to.includes("@")) {
-      return res.status(400).json({ error: "Valid email address is required" });
-    }
-
-    const result = await sendEmail({
-      to,
-      subject: "VynorAI Operations Center - Test Email",
-      html: `
+    // Real Microsoft Graph delegated /me/sendMail only: no SMTP, Resend or simulated fallback.
+    // Tokens live in this request's memory; logs carry the recipient as "redacted".
+    const to = ADMIN_EMAIL_TEST_RECIPIENT;
+    const correlationId = crypto.randomUUID();
+    const audit = (
+      eventType: string,
+      severity: "INFO" | "WARN",
+      details: string,
+    ) =>
+      logSecurityEvent({
+        eventType,
+        severity,
+        actor: "ADMIN",
+        target: "email-test",
+        details: `${details}; recipient: redacted; correlation: ${correlationId}`,
+        ipAddress: req.ip,
+      });
+    try {
+      let graphToken = bearerFromHeader(req.headers["x-m365-graph-token"]);
+      if (!graphToken) {
+        const apiToken = bearerFromHeader(req.headers["x-m365-api-token"]);
+        if (!apiToken || !oboConfigured())
+          throw new GraphMailError(
+            "M365_GRAPH_AUTH_REQUIRED",
+            401,
+            "A Microsoft Graph token with Mail.Send is required. Sign in to Microsoft 365 and retry.",
+          );
+        graphToken = await acquireGraphTokenOnBehalfOf(apiToken);
+      }
+      const result = await sendGraphMail({
+        token: graphToken,
+        to,
+        subject: "VynorAI Operations Center - Test Email",
+        html: `
         <div style="font-family:sans-serif;background:#0a0a0f;color:#e2e8f0;padding:24px;border-radius:12px;">
           <h2 style="color:#7c5cfc;">⚡ VynorAI Operations Center</h2>
           <p>This is a test email dispatched from your admin dashboard.</p>
           <p style="color:#64748b;font-size:12px;">Timestamp: ${new Date().toISOString()}</p>
         </div>
       `,
-    });
-
-    res.json({
-      ok: result.success,
-      messageId: result.messageId,
-      simulated: result.simulated || false,
-    });
+        correlationId,
+      });
+      await audit(
+        "ADMIN_EMAIL_TEST_SENT",
+        "INFO",
+        `Graph status ${result.graphStatus}; request ${result.requestId}`,
+      );
+      res.json({
+        ok: true,
+        graphStatus: result.graphStatus,
+        requestId: result.requestId,
+        correlationId,
+      });
+    } catch (error) {
+      if (!(error instanceof GraphMailError)) {
+        await audit("ADMIN_EMAIL_TEST_FAILED", "WARN", "Unexpected error");
+        return res
+          .status(500)
+          .json({
+            ok: false,
+            error: {
+              code: "M365_GRAPH_UNAVAILABLE",
+              message: "Test email failed.",
+            },
+          });
+      }
+      await audit(
+        "ADMIN_EMAIL_TEST_FAILED",
+        "WARN",
+        `${error.code}; Graph status ${error.options.graphStatus ?? "none"}; request ${error.options.requestId ?? "none"}`,
+      );
+      if (error.options.retryAfterSeconds)
+        res.setHeader("retry-after", String(error.options.retryAfterSeconds));
+      res.status(error.status).json({
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+          graphStatus: error.options.graphStatus,
+          requestId: error.options.requestId,
+          correlationId,
+        },
+      });
+    }
   },
 );
 

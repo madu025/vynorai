@@ -3679,6 +3679,7 @@ function mergeUndo(earlier: AgentUndo | undefined, next: AgentUndo): AgentUndo {
     backups: [...earlier.backups, ...next.backups],
     steps: [...earlier.steps, ...next.steps],
     charts: [...(earlier.charts ?? []), ...(next.charts ?? [])],
+    tableSizes: [...(earlier.tableSizes ?? []), ...(next.tableSizes ?? [])],
     journal: [...(earlier.journal ?? []), ...(next.journal ?? [])],
   };
 }

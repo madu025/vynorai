@@ -272,3 +272,29 @@ test("after six calculations the agent is told to act or answer", async () => {
   assert.equal(results.filter((r) => /"result"/.test(r)).length, 6);
   assert.match(results[7], /already ran 6 calculations/);
 });
+
+test("numbers come back with grouped text, and replies lose markdown marks", async () => {
+  const { plainText } = await import("./agent.js");
+  assert.equal(
+    plainText("- **Total:** 1,090,404.455 `=SUM(H:H)`\n## Rows"),
+    "- Total: 1,090,404.455 =SUM(H:H)\nRows",
+  );
+  let turn = 0;
+  const run = await runAgent({
+    request: "total",
+    host: host({ calculate: async () => [[1090404.455]] }),
+    mask: new PersonalMask(),
+    model: async () => {
+      turn += 1;
+      return turn === 1
+        ? {
+            content: "",
+            tool_calls: [call("t", "calculate", { formula: "=SUM(H:H)" })],
+          }
+        : { content: "**Total:** 1,090,404.455", tool_calls: [] };
+    },
+  });
+  const result = (run.messages.find((m) => m.role === "tool") as any).content;
+  assert.match(result, /"as_text":"1,090,404.455"/);
+  assert.equal(run.reply, "Total: 1,090,404.455");
+});

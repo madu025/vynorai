@@ -27,6 +27,8 @@ const CALC_SHEET = "VynorAI_calc";
 const BACKUP_MARK = "vynorai-backup";
 /** In-place formats up to this size are undone from a snapshot; larger ones from a backup copy. */
 const SNAPSHOT_CELLS = 50_000;
+/** Rows per request when undo writes old formulas back. */
+const RESTORE_ROWS = 20_000;
 const CHART_MAX_ROWS = 5000;
 const isInternal = (name: string) =>
   name === CALC_SHEET || /^VynorAI_backup/.test(name);
@@ -109,7 +111,25 @@ export function createOfficeAgentHost(
           const [headers, ...firstRows] = top.values as any[][];
           const formats = (top.numberFormat as any[][]).slice(1);
           const start = parseA1(String(activeUsed.address).split("!").pop()!);
+          // An Excel Table changes how new columns behave: say so.
+          const tables = active.tables;
+          tables.load("items/name");
+          await context.sync();
+          const tableRanges = tables.items.map((table: any) => {
+            const range = table.getRange();
+            range.load("address");
+            return { table, range };
+          });
+          await context.sync();
           data = {
+            ...(tableRanges.length
+              ? {
+                  tables: tableRanges.map(({ table, range }: any) => ({
+                    name: String(table.name),
+                    address: String(range.address).split("!").pop(),
+                  })),
+                }
+              : {}),
             sheet: String(active.name),
             address: String(activeUsed.address).split("!").pop(),
             headerRow: start.row,
@@ -216,7 +236,10 @@ function columnLetter(index: number): string {
 export interface AgentUndo {
   createdSheets: string[];
   /** Old formulas of overwritten cells, restored in reverse order. */
-  restores: { sheet: string; address: string; formulas: any[][] }[];
+  /** Old formulas of overwritten cells; null when they were all empty (undo clears them). */
+  restores: { sheet: string; address: string; formulas: any[][] | null }[];
+  /** Table sizes before a write next to them: Excel grows a Table into the new column. */
+  tableSizes?: { name: string; columns: number }[];
   formats: {
     sheet: string;
     address: string;
@@ -372,13 +395,38 @@ export async function applyAgentChanges(
           if (!ours) {
             for (const range of [target, header].filter(Boolean))
               range.load(["address", "formulas"]);
+            const tables = sheet.tables;
+            tables.load("items/name");
             await context.sync();
-            for (const range of [target, header].filter(Boolean))
+            const counts = tables.items.map((table: any) => {
+              const columns = table.columns;
+              columns.load("count");
+              return { table, columns };
+            });
+            await context.sync();
+            for (const { table, columns } of counts)
+              if (
+                !(undo.tableSizes ??= []).some(
+                  (item) => item.name === table.name,
+                )
+              )
+                undo.tableSizes.push({
+                  name: String(table.name),
+                  columns: Number(columns.count),
+                });
+            for (const range of [target, header].filter(Boolean)) {
+              const formulas = range.formulas as any[][];
               undo.restores.push({
                 sheet: sheetKey,
                 address: String(range.address).split("!").pop()!,
-                formulas: range.formulas,
+                // A large empty area is cleared on undo instead of written back cell by cell.
+                formulas: formulas.every((row) =>
+                  row.every((cell) => cell === "" || cell === null),
+                )
+                  ? null
+                  : formulas,
               });
+            }
           }
           if (header) header.values = [[(change as any).header]];
           if (change.kind === "write_values") target.values = change.values;
@@ -663,9 +711,41 @@ export async function undoAgentChanges(
       await context.sync();
       return sheet.isNullObject ? undefined : sheet;
     };
+    // A Table that grew into a written column shrinks back first (an empty header is not allowed).
+    for (const size of [...(undo.tableSizes ?? [])].reverse()) {
+      const table = context.workbook.tables.getItemOrNullObject(size.name);
+      table.load("isNullObject");
+      await context.sync();
+      if (table.isNullObject) continue;
+      const columns = table.columns;
+      columns.load("count");
+      await context.sync();
+      for (
+        let index = Number(columns.count) - 1;
+        index >= size.columns;
+        index -= 1
+      )
+        columns.getItemAt(index).delete();
+      await context.sync();
+    }
     for (const item of [...undo.restores].reverse()) {
       const sheet = await byKey(item.sheet);
-      if (sheet) sheet.getRange(item.address).formulas = item.formulas;
+      if (!sheet) continue;
+      const range = sheet.getRange(item.address);
+      if (!item.formulas) {
+        range.clear("Contents");
+        await context.sync();
+        continue;
+      }
+      // Written back in parts: one request for 366k cells is too large for Excel on the web.
+      const rows = item.formulas.length;
+      for (let start = 0; start < rows; start += RESTORE_ROWS) {
+        const part = item.formulas.slice(start, start + RESTORE_ROWS);
+        range
+          .getCell(start, 0)
+          .getResizedRange(part.length - 1, part[0].length - 1).formulas = part;
+        await context.sync();
+      }
     }
     for (const item of [...undo.formats].reverse()) {
       const sheet = await byKey(item.sheet);

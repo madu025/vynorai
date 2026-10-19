@@ -616,7 +616,7 @@ export async function runAgent(options: {
     if (!calls.length)
       return {
         messages,
-        reply: mask.unmask(answer.content || ""),
+        reply: plainText(mask.unmask(answer.content || "")),
         changes,
         turns: turn,
       };
@@ -706,7 +706,16 @@ async function runTool(
           `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
         );
       const formula = checkFormula(restore(String(args.formula ?? "")));
-      return { result: boundResult(await host.calculate(formula)) };
+      const result = boundResult(await host.calculate(formula));
+      // The model once read 1090404.455 as 1,090,404,455: give it the grouped text to copy.
+      return typeof result === "number"
+        ? {
+            result,
+            as_text: result.toLocaleString("en-US", {
+              maximumFractionDigits: 6,
+            }),
+          }
+        : { result };
     }
     case "vynor_step": {
       if (changes.length >= AGENT_MAX_CHANGES)
@@ -747,6 +756,15 @@ async function runTool(
       };
     }
   }
+}
+
+/** The pane shows plain text: markdown marks (bold, code, headings) are removed. */
+export function plainText(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "- ");
 }
 
 /** What the add-in tells the agent after applying (or the person declining) the changes. */

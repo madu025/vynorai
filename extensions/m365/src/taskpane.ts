@@ -49,6 +49,7 @@ import {
   interpretInstruction,
   looksLikeQuestion,
 } from "./intent.js";
+import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import {
   detectMacroRequest,
   generateMacro,
@@ -1934,6 +1935,14 @@ inspect?.addEventListener("click", async () => {
       previewSpecs = specs;
     }
     log.record("instruction:actions", "pass", { actions });
+    const unhandledJobs = findUnhandledJobs(instructionText, actions);
+    if (unhandledJobs.length) {
+      log.record("instruction:unhandled", "fail", {
+        jobs: unhandledJobs.map((job) => job.label),
+      });
+      const notice = describeUnhandledJobs(unhandledJobs);
+      if (notice) renderConversation("assistant", notice);
+    }
     const localPreview = await log.step(
       "local:preview",
       () => createExcelPreviewPlan(input, actions, undefined, specs),

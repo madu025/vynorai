@@ -1388,3 +1388,37 @@ test("decodeOfficeFileSlice accepts bytes, buffers, byte arrays (Excel on the we
   assert.throws(() => decodeOfficeFileSlice([300, 1]), /PDF_SLICE_INVALID/);
   assert.throws(() => decodeOfficeFileSlice({}), /PDF_SLICE_INVALID/);
 });
+
+test("one Undo covers every action of a multi-step workflow", () => {
+  const items = rollbackItemsFromApplyReport("workflow", [
+    {
+      kind: "clean",
+      name: "Clean",
+      targetSheet: "_Vynor_Clean",
+      status: "created",
+      createdSheet: true,
+    },
+    {
+      kind: "pivot-table",
+      name: "Pivot",
+      targetSheet: "_Vynor_Pivot",
+      status: "created",
+      createdSheet: true,
+    },
+    {
+      kind: "chart",
+      name: "Chart",
+      targetSheet: "_Vynor_Pivot",
+      status: "created",
+    },
+    {
+      kind: "table",
+      name: "Result",
+      targetSheet: "_Vynor_Clean",
+      status: "created",
+    },
+  ] as never);
+  assert.equal(items.planId, "workflow");
+  assert.deepEqual(items.sheets.sort(), ["_Vynor_Clean", "_Vynor_Pivot"]);
+  assert.deepEqual(items.tables, ["Result"]);
+});

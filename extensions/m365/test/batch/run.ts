@@ -18,6 +18,7 @@ import {
   looksLikeQuestion,
 } from "../../src/intent.js";
 import { createServerExcelPreviewPlan } from "../../../../backend/src/services/m365ExcelPlan.js";
+import { findUnhandledJobs } from "../../src/workflowCheck.js";
 import { generateMacro } from "../../src/macroGen.js";
 import { CASES, type BatchCase } from "./cases.js";
 
@@ -122,6 +123,12 @@ function runOne(item: BatchCase, text: string, variant: "en" | "si"): Outcome {
       actions = adapted.actions;
       specs = adapted.specs;
     }
+    const unhandled = findUnhandledJobs(text, actions);
+    if (unhandled.length)
+      return done(
+        "fail",
+        `request not in the plan: ${unhandled.map((job) => job.label).join(", ")}`,
+      );
     if (!actions.includes(item.expect))
       return done("fail", `expected ${item.expect}, got ${actions.join("+")}`);
     let local: any;

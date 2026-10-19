@@ -520,6 +520,21 @@ export const CASES: BatchCase[] = [
       proven: "ai-analysis",
     },
   ),
+  // --- multi-step workflows (every named job must be in the plan) ----------------------------
+  c(
+    "w-clean-pivot-chart",
+    "workflow",
+    "clean the data, then pivot total Requested Quantity by RTOM, then chart it",
+    "pivot-table",
+    { files: [...base, "extensions/m365/src/workflowCheck.ts"] },
+  ),
+  c(
+    "w-pivot-chart-summary",
+    "workflow",
+    "make a pivot table of Requested Quantity by RTOM with a chart and a summary",
+    "pivot-table",
+    { files: [...base, "extensions/m365/src/workflowCheck.ts"] },
+  ),
   // --- code generation -----------------------------------------------------------------------
   c(
     "g-script",

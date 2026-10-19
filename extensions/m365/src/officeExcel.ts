@@ -1896,35 +1896,24 @@ export async function applyApprovedExcelPlan(
             else {
               // Office.js order is (name, source, destination); A3 keeps clear of the A1 note.
               let pivot: any;
-              try {
-                pivot = sheet.pivotTables.add(
-                  action.name,
-                  actionSourceRange(),
-                  sheet.getRange("A3"),
-                );
-                await context.sync();
-              } catch (pivotError) {
-                // Excel on the web refuses PivotTableCollection.add for some sources (GeneralException).
-                // The same grouping then becomes one spilled formula that Excel calculates over every row.
-                if (!action.spec?.rowsColumn) throw pivotError;
-                pivot = undefined;
+              const formulaSummary = async () => {
                 const headers = await readHeaderCells();
                 const fallback = pivotFallbackFormula({
                   sheetName: plan.worksheetName,
                   localAddress: localExcelAddress(plan.sourceAddress),
                   headers,
-                  rowsColumn: action.spec.rowsColumn,
+                  rowsColumn: action.spec!.rowsColumn!,
                   valuesColumns: [
-                    action.spec.valuesColumn,
-                    ...(action.spec.extraValuesColumns ?? []),
+                    action.spec!.valuesColumn!,
+                    ...(action.spec!.extraValuesColumns ?? []),
                   ],
-                  aggregation: action.spec.aggregation,
-                  topN: action.spec.topN,
-                  lowest: action.spec.lowest,
+                  aggregation: action.spec!.aggregation,
+                  topN: action.spec!.topN,
+                  lowest: action.spec!.lowest,
                 });
                 sheet.getRange("A2").values = [
                   [
-                    "Excel could not create a PivotTable for this source, so this is a live formula summary of the same grouping.",
+                    "A live formula summary of the same grouping (a PivotTable is not used on very large data in Excel on the web).",
                   ],
                 ];
                 sheet.getRangeByIndexes(
@@ -1941,7 +1930,25 @@ export async function applyApprovedExcelPlan(
                   fallback.headers.length,
                 ).format.font.bold = true;
                 await context.sync();
-                result.error = undefined;
+              };
+              if (plan.profile?.sample && action.spec?.rowsColumn) {
+                // Very large data: Excel on the web times out or refuses PivotTableCollection.add
+                // (GeneralException after about a minute), so the grouping is one live formula that
+                // Excel calculates over every row, like the other very-large-data results.
+                await formulaSummary();
+              } else {
+                try {
+                  pivot = sheet.pivotTables.add(
+                    action.name,
+                    actionSourceRange(),
+                    sheet.getRange("A3"),
+                  );
+                  await context.sync();
+                } catch (pivotError) {
+                  if (!action.spec?.rowsColumn) throw pivotError;
+                  pivot = undefined;
+                  await formulaSummary();
+                }
               }
               if (pivot && action.spec?.rowsColumn) {
                 const field = await pivotFieldResolver(pivot);

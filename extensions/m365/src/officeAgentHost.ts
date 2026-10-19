@@ -14,20 +14,20 @@ import {
   type StagedChange,
 } from "./agent.js";
 import type { ExcelRuntimeLike } from "./officeExcel.js";
+import {
+  CHART_TYPES,
+  readDetails,
+  runExcelAction,
+  undoJournalEntry,
+  type ActionRun,
+  type JournalEntry,
+} from "./officeAgentActions.js";
 
 const CALC_SHEET = "VynorAI_calc";
 const BACKUP_MARK = "vynorai-backup";
 /** In-place formats up to this size are undone from a snapshot; larger ones from a backup copy. */
 const SNAPSHOT_CELLS = 50_000;
 const CHART_MAX_ROWS = 5000;
-const CHART_TYPES: Record<string, string> = {
-  column: "ColumnClustered",
-  bar: "BarClustered",
-  line: "Line",
-  pie: "Pie",
-  area: "Area",
-  scatter: "XYScatter",
-};
 const isInternal = (name: string) =>
   name === CALC_SHEET || /^VynorAI_backup/.test(name);
 
@@ -74,6 +74,8 @@ export function createOfficeAgentHost(
 ): AgentHost {
   return {
     checkStep,
+    getDetails: (what, sheet, address) =>
+      runtime.run((context) => readDetails(context, what, sheet, address)),
     getWorkbook: () =>
       runtime.run(async (context) => {
         const sheets = context.workbook.worksheets;
@@ -227,12 +229,16 @@ export interface AgentUndo {
   steps: unknown[];
   /** Charts added to sheets the agent did not create. */
   charts?: { sheet: string; name: string }[];
+  /** Undo of workbook-object actions (officeAgentActions.ts), newest last. */
+  journal?: JournalEntry[];
 }
 
 export type AgentApplyResult = {
   change: string;
   status: "applied" | "failed" | "skipped";
   detail?: unknown;
+  /** How long the change took in Excel. */
+  ms?: number;
 };
 
 export type StepRunner = (instruction: string) => Promise<{
@@ -254,9 +260,12 @@ export async function applyAgentChanges(
     formats: [],
     backups: [],
     steps: [],
+    journal: [],
   };
   const results: AgentApplyResult[] = [];
   const renamed = new Map<string, string>();
+  const createdNames = new Set<string>();
+  const backedUp = new Set<string>();
   const sheetOf = (name: string) => renamed.get(name) ?? name;
   let failed = false;
   for (const change of changes) {
@@ -265,16 +274,54 @@ export async function applyAgentChanges(
       results.push({ change: label, status: "skipped" });
       continue;
     }
+    const started = Date.now();
     try {
       if (change.kind === "vynor_step") {
         const ran = await runStep(change.instruction);
         if (ran.rollback) undo.steps.push(ran.rollback);
         if (!ran.ok) throw new Error(ran.error ?? "the step failed");
-        results.push({ change: label, status: "applied", detail: ran.detail });
+        results.push({
+          change: label,
+          status: "applied",
+          detail: ran.detail,
+          ms: Date.now() - started,
+        });
         continue;
       }
       const detail = await runtime.run(async (context) => {
         const sheets = context.workbook.worksheets;
+        if (change.kind === "excel_action") {
+          const run: ActionRun = {
+            context,
+            sheet: (name) => sheets.getItem(sheetOf(name)),
+            ours: (name) => createdNames.has(sheetOf(name)),
+            journal: undo.journal!,
+            rename: (from, to) => {
+              renamed.set(from, to);
+              if (createdNames.has(from)) createdNames.add(to);
+            },
+            backup: async (name) => {
+              const sheet = sheets.getItem(sheetOf(name));
+              sheet.load("id");
+              await context.sync();
+              const id = String(sheet.id);
+              if (backedUp.has(id)) return;
+              const copy = sheet.copy("End");
+              copy.load("id");
+              await context.sync();
+              copy.visibility = "Hidden";
+              copy.customProperties.add(BACKUP_MARK, id);
+              await context.sync();
+              undo.journal!.push({
+                type: "backup",
+                sheetId: id,
+                backupId: String(copy.id),
+              });
+              backedUp.add(id);
+            },
+          };
+          return runExcelAction(run, change.tool, change.args);
+        }
         if (change.kind === "create_sheet") {
           sheets.load("items/name");
           await context.sync();
@@ -286,14 +333,20 @@ export async function applyAgentChanges(
             name = `${change.name.slice(0, 28)} ${n}`;
           const sheet = sheets.add(name);
           sheet.customProperties.add("vynorai", "agent");
+          sheet.load("id");
           await context.sync();
           renamed.set(change.name, name);
-          undo.createdSheets.push(name);
+          createdNames.add(name);
+          undo.createdSheets.push(String(sheet.id));
           return { sheet: name };
         }
         const sheetName = sheetOf(change.sheet);
         const sheet = sheets.getItem(sheetName);
-        const ours = undo.createdSheets.includes(sheetName);
+        sheet.load("id");
+        await context.sync();
+        // Undo data refers to the sheet id, so a later rename cannot break it.
+        const sheetKey = String(sheet.id);
+        const ours = createdNames.has(sheetName);
         if (change.kind === "write_formula" || change.kind === "write_values") {
           const anchor = parseA1(change.cell);
           const target =
@@ -315,7 +368,7 @@ export async function applyAgentChanges(
             await context.sync();
             for (const range of [target, header].filter(Boolean))
               undo.restores.push({
-                sheet: sheetName,
+                sheet: sheetKey,
                 address: String(range.address).split("!").pop()!,
                 formulas: range.formulas,
               });
@@ -371,11 +424,15 @@ export async function applyAgentChanges(
             "Auto",
           );
           if (change.title) chart.title.text = change.title;
+          if (change.position) {
+            const [start, end = start] = change.position.split(":");
+            chart.setPosition(start, end);
+          }
           chart.load("name");
           await context.sync();
           if (!ours)
             (undo.charts ??= []).push({
-              sheet: sheetName,
+              sheet: sheetKey,
               name: String(chart.name),
             });
           return {
@@ -391,32 +448,39 @@ export async function applyAgentChanges(
           if (change.kind === "sort_range") headerRow.load("values");
           await context.sync();
           const cells = Number(range.rowCount) * Number(range.columnCount);
+          const structural =
+            change.kind === "format_range" &&
+            (change.mergeCenter ||
+              change.style ||
+              change.clear ||
+              change.copyFrom);
           if (!ours) {
-            if (change.kind === "format_range" && cells <= SNAPSHOT_CELLS) {
+            if (
+              change.kind === "format_range" &&
+              cells <= SNAPSHOT_CELLS &&
+              !structural
+            ) {
               range.load("numberFormat");
               const props = range.getCellProperties({
-                format: {
-                  fill: { color: true },
-                  font: { bold: true, color: true },
-                },
+                format: SNAPSHOT_FORMAT,
               });
               await context.sync();
               undo.formats.push({
-                sheet: sheetName,
+                sheet: sheetKey,
                 address: change.address,
                 numberFormat: range.numberFormat,
                 cells: props.value,
               });
             } else {
               const copy = sheet.copy("End");
-              copy.load("name");
+              copy.load("id");
               await context.sync();
               copy.visibility = "Hidden";
-              copy.customProperties.add(BACKUP_MARK, sheetName);
+              copy.customProperties.add(BACKUP_MARK, sheetKey);
               await context.sync();
               undo.backups.push({
-                sheet: sheetName,
-                backup: String(copy.name),
+                sheet: sheetKey,
+                backup: String(copy.id),
                 address: change.address,
               });
             }
@@ -425,44 +489,155 @@ export async function applyAgentChanges(
             const header = (headerRow.values as any[][])[0].map((value) =>
               String(value).trim().toLowerCase(),
             );
-            const key = header.indexOf(change.column.trim().toLowerCase());
-            if (key < 0)
-              throw new Error(
-                `"${change.column}" is not a header of ${change.address}`,
+            const keyOf = (column: string) => {
+              const key = header.indexOf(column.trim().toLowerCase());
+              if (key < 0)
+                throw new Error(
+                  `"${column}" is not a header of ${change.address}`,
+                );
+              return key;
+            };
+            if (change.byColumns) {
+              range.sort.apply(
+                [{ key: 0, ascending: !change.descending }],
+                false,
+                false,
+                "Columns",
               );
+              await context.sync();
+              return { sortedColumns: Number(range.columnCount) };
+            }
             range.sort.apply(
-              [{ key, ascending: !change.descending }],
+              [
+                {
+                  key: keyOf(change.column),
+                  ascending: !change.descending,
+                  ...(change.customOrder
+                    ? { customOrder: change.customOrder }
+                    : {}),
+                },
+                ...(change.then ?? []).map((next) => ({
+                  key: keyOf(next.column),
+                  ascending: !next.descending,
+                })),
+              ],
               false,
               true,
             );
             await context.sync();
             return { sorted: Number(range.rowCount) - 1 };
           }
+          if (change.copyFrom)
+            range.copyFrom(sheet.getRange(change.copyFrom), "Formats");
+          if (change.clear) range.clear("Formats");
+          if (change.style) range.style = change.style;
           if (change.numberFormat !== undefined)
             // One value applies to every cell, without building a huge array.
             (range as { numberFormat: unknown }).numberFormat =
               change.numberFormat;
-          if (change.bold !== undefined) range.format.font.bold = change.bold;
-          if (change.fontColor) range.format.font.color = change.fontColor;
-          if (change.fill) range.format.fill.color = change.fill;
-          if (change.autofit) range.format.autofitColumns();
+          const format = range.format;
+          if (change.bold !== undefined) format.font.bold = change.bold;
+          if (change.italic !== undefined) format.font.italic = change.italic;
+          if (change.underline !== undefined)
+            format.font.underline = change.underline ? "Single" : "None";
+          if (change.fontColor) format.font.color = change.fontColor;
+          if (change.fontName) format.font.name = change.fontName;
+          if (change.fontSize) format.font.size = change.fontSize;
+          if (change.fill) format.fill.color = change.fill;
+          if (change.horizontal)
+            format.horizontalAlignment =
+              change.horizontal === "center"
+                ? "Center"
+                : change.horizontal === "left"
+                  ? "Left"
+                  : "Right";
+          if (change.vertical)
+            format.verticalAlignment =
+              change.vertical === "center"
+                ? "Center"
+                : change.vertical === "top"
+                  ? "Top"
+                  : "Bottom";
+          if (change.wrap !== undefined) format.wrapText = change.wrap;
+          if (change.indent !== undefined) format.indentLevel = change.indent;
+          if (change.rotation !== undefined)
+            format.textOrientation = change.rotation;
+          if (change.borders) {
+            const edges =
+              change.borders === "bottom"
+                ? ["EdgeBottom"]
+                : change.borders === "outside"
+                  ? ["EdgeTop", "EdgeBottom", "EdgeLeft", "EdgeRight"]
+                  : [
+                      "EdgeTop",
+                      "EdgeBottom",
+                      "EdgeLeft",
+                      "EdgeRight",
+                      "InsideHorizontal",
+                      "InsideVertical",
+                    ];
+            for (const edge of [
+              "EdgeTop",
+              "EdgeBottom",
+              "EdgeLeft",
+              "EdgeRight",
+              "InsideHorizontal",
+              "InsideVertical",
+            ]) {
+              const border = format.borders.getItem(edge);
+              border.style =
+                change.borders !== "none" && edges.includes(edge)
+                  ? "Continuous"
+                  : "None";
+            }
+          }
+          if (change.mergeCenter) {
+            range.merge(false);
+            format.horizontalAlignment = "Center";
+          }
+          if (change.autofit) format.autofitColumns();
           await context.sync();
           return { formatted: cells };
         }
         throw new Error("unknown change");
       });
-      results.push({ change: label, status: "applied", detail });
+      results.push({
+        change: label,
+        status: "applied",
+        detail,
+        ms: Date.now() - started,
+      });
     } catch (error) {
       failed = true;
       results.push({
         change: label,
         status: "failed",
         detail: String((error as Error)?.message ?? error).slice(0, 300),
+        ms: Date.now() - started,
       });
     }
   }
   return { results, undo };
 }
+
+/** The cell formats a small in-place format records, so undo can set them back exactly. */
+const SNAPSHOT_FORMAT = {
+  fill: { color: true },
+  font: {
+    bold: true,
+    color: true,
+    italic: true,
+    underline: true,
+    name: true,
+    size: true,
+  },
+  horizontalAlignment: true,
+  verticalAlignment: true,
+  wrapText: true,
+  indentLevel: true,
+  textOrientation: true,
+  borders: { style: true, color: true, weight: true },
+};
 
 /** Puts back what the agent changed, newest first. Built-in steps are rolled back by `undoStep`. */
 export async function undoAgentChanges(
@@ -472,20 +647,32 @@ export async function undoAgentChanges(
 ): Promise<void> {
   for (const rollback of [...undo.steps].reverse()) await undoStep(rollback);
   await runtime.run(async (context) => {
+    for (const entry of [...(undo.journal ?? [])].reverse())
+      await undoJournalEntry(context, entry);
     const sheets = context.workbook.worksheets;
-    for (const item of [...undo.restores].reverse())
-      sheets.getItem(item.sheet).getRange(item.address).formulas =
-        item.formulas;
+    const byKey = async (key: string) => {
+      const sheet = sheets.getItemOrNullObject(key);
+      sheet.load("isNullObject");
+      await context.sync();
+      return sheet.isNullObject ? undefined : sheet;
+    };
+    for (const item of [...undo.restores].reverse()) {
+      const sheet = await byKey(item.sheet);
+      if (sheet) sheet.getRange(item.address).formulas = item.formulas;
+    }
     for (const item of [...undo.formats].reverse()) {
-      const range = sheets.getItem(item.sheet).getRange(item.address);
+      const sheet = await byKey(item.sheet);
+      if (!sheet) continue;
+      const range = sheet.getRange(item.address);
       range.numberFormat = item.numberFormat;
       range.setCellProperties(item.cells);
     }
     await context.sync();
     for (const item of [...undo.backups].reverse()) {
-      const backup = sheets.getItem(item.backup);
-      sheets
-        .getItem(item.sheet)
+      const sheet = await byKey(item.sheet);
+      const backup = await byKey(item.backup);
+      if (!sheet || !backup) continue;
+      sheet
         .getRange(item.address)
         .copyFrom(backup.getRange(item.address), "All");
       await context.sync();
@@ -493,18 +680,16 @@ export async function undoAgentChanges(
       await context.sync();
     }
     for (const item of [...(undo.charts ?? [])].reverse()) {
-      const chart = sheets
-        .getItem(item.sheet)
-        .charts.getItemOrNullObject(item.name);
+      const sheet = await byKey(item.sheet);
+      if (!sheet) continue;
+      const chart = sheet.charts.getItemOrNullObject(item.name);
       chart.load("isNullObject");
       await context.sync();
       if (!chart.isNullObject) chart.delete();
     }
-    for (const name of [...undo.createdSheets].reverse()) {
-      const sheet = sheets.getItemOrNullObject(name);
-      sheet.load("isNullObject");
-      await context.sync();
-      if (!sheet.isNullObject) sheet.delete();
+    for (const key of [...undo.createdSheets].reverse()) {
+      const sheet = await byKey(key);
+      if (sheet) sheet.delete();
     }
     await context.sync();
   });
@@ -515,12 +700,20 @@ export async function dropAgentBackups(
   runtime: ExcelRuntimeLike,
   undo: AgentUndo,
 ): Promise<void> {
-  if (!undo.backups.length) return;
+  const hidden = [
+    ...undo.backups.map((item) => item.backup),
+    ...(undo.journal ?? []).flatMap((entry) =>
+      entry.type === "backup"
+        ? [entry.backupId]
+        : entry.data?.restoreId
+          ? [entry.data.restoreId as string]
+          : [],
+    ),
+  ];
+  if (!hidden.length) return;
   await runtime.run(async (context) => {
-    for (const item of undo.backups) {
-      const sheet = context.workbook.worksheets.getItemOrNullObject(
-        item.backup,
-      );
+    for (const key of hidden) {
+      const sheet = context.workbook.worksheets.getItemOrNullObject(key);
       sheet.load("isNullObject");
       await context.sync();
       if (!sheet.isNullObject) sheet.delete();
@@ -528,4 +721,7 @@ export async function dropAgentBackups(
     await context.sync();
   });
   undo.backups = [];
+  undo.journal = (undo.journal ?? []).filter(
+    (entry) => entry.type !== "backup" && !entry.data?.restoreId,
+  );
 }

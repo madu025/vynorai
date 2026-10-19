@@ -102,6 +102,8 @@ const host = (seen: Seen): AgentHost => ({
         rows: 520126,
         columns: 10,
       },
+      { name: "Pivot", usedRange: "A3:B30", rows: 28, columns: 2 },
+      { name: "Model", usedRange: "A1:B5", rows: 5, columns: 2 },
     ],
     tables: [],
     data: {
@@ -117,7 +119,29 @@ const host = (seen: Seen): AgentHost => ({
       firstRows: rows.slice(0, 3),
     },
   }),
-  readRange: async (_sheet, address) => {
+  readRange: async (sheet, address, withFormulas) => {
+    if (sheet === "Model")
+      return {
+        address: "A1:B5",
+        values: [
+          ["Price", 10],
+          ["Units", 50],
+          ["Cost", 300],
+          ["", ""],
+          ["Profit", 200],
+        ],
+        ...(withFormulas
+          ? {
+              formulas: [
+                ["Price", 10],
+                ["Units", 50],
+                ["Cost", 300],
+                ["", ""],
+                ["Profit", "=B1*B2-B3"],
+              ],
+            }
+          : {}),
+      };
     const match = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(address);
     const top = match ? Number(match[2]) : 1;
     const bottom = match ? Number(match[4]) : 1;
@@ -128,6 +152,25 @@ const host = (seen: Seen): AgentHost => ({
     };
   },
   calculate: async (formula) => calculate(formula),
+  getDetails: async (what) =>
+    ({
+      pivots: [
+        {
+          sheet: "Pivot",
+          pivot: "PivotTable1",
+          rows: ["RTOM"],
+          columns: [],
+          values: ["Sum of Issued Quantity"],
+          filters: [],
+        },
+      ],
+      charts: [{ sheet: "Pivot", chart: "Chart 1", type: "ColumnClustered" }],
+      tables: [],
+      names: [],
+      comments: [],
+      freeze: { frozen: null },
+      autofilter: { enabled: false },
+    })[what] ?? [],
   checkStep: async (instruction) => {
     const interpreted: any = interpretInstruction(
       instruction,
@@ -233,6 +276,13 @@ const formulas = (run: AgentRun, seen: Seen) => [
     c.change.kind === "write_formula" ? [c.change.formula] : [],
   ),
 ];
+/** Arguments of staged workbook-object actions of one tool. */
+const action = (run: AgentRun, tool: string): any[] =>
+  run.changes.flatMap((c) =>
+    c.change.kind === "excel_action" && c.change.tool === tool
+      ? [c.change.args]
+      : [],
+  );
 const kinds = (run: AgentRun) => run.changes.map((c) => c.change.kind);
 const steps = (run: AgentRun) =>
   run.changes.flatMap((c) =>
@@ -430,7 +480,15 @@ const CASES: Case[] = [
       need(
         run.changes.length === 0 ||
           steps(run).some((s) => /!=|<>|not/i.test(s)) ||
-          formulas(run, []).some((f) => /<>"X"/i.test(f)),
+          formulas(run, []).some((f) => /<>"X"/i.test(f)) ||
+          action(run, "delete_rows_where").some((a) =>
+            a.conditions?.some(
+              (c: any) =>
+                /status/i.test(c.column) &&
+                c.operator === "=" &&
+                c.value === "X",
+            ),
+          ),
         `unsafe: ${JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200)}`,
       ),
   },
@@ -442,7 +500,7 @@ const CASES: Case[] = [
         ?.change as any;
       if (chart)
         return all(
-          need(chart.chartType === "line", `chart ${chart.chartType}`),
+          need(/^line/.test(chart.chartType), `chart ${chart.chartType}`),
           need(
             formulas(run, seen).some(
               (f) =>
@@ -466,6 +524,266 @@ const CASES: Case[] = [
         steps(run).some((s) => /top 5/i.test(s) && /Item Code/i.test(s)) ||
           (usedCalc(seen) === true && /OSPACC|R-HK/.test(run.reply)),
         `steps ${steps(run).join(" | ")} reply ${run.reply.slice(0, 80)}`,
+      ),
+  },
+  {
+    id: "n-delete-inplace",
+    text: "remove every row with status X from the data itself, not a copy",
+    check: (run) =>
+      need(
+        action(run, "delete_rows_where").some((a) =>
+          a.conditions?.some(
+            (c: any) =>
+              /status/i.test(c.column) && c.operator === "=" && c.value === "X",
+          ),
+        ),
+        `changes ${kinds(run)} ${JSON.stringify(run.changes.map((c) => c.change)).slice(0, 160)}`,
+      ),
+  },
+  {
+    id: "n-autofilter",
+    text: "filter the data so only R-HK rows are visible",
+    check: (run) =>
+      need(
+        action(run, "filter_range").some(
+          (a) => /rtom/i.test(a.column) && (a.values ?? []).includes("R-HK"),
+        ) || steps(run).some((s) => /R-HK/.test(s)),
+        `changes ${kinds(run)}`,
+      ),
+  },
+  {
+    id: "n-freeze",
+    text: "freeze the header row",
+    check: (run) =>
+      need(
+        action(run, "sheet_action").some(
+          (a) => a.action === "freeze_rows" && a.value === 1,
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-rename-sheet",
+    text: "rename the sheet detail-report to Lines 2025 and make its tab green",
+    check: (run) =>
+      all(
+        need(
+          action(run, "sheet_action").some(
+            (a) => a.action === "rename" && a.value === "Lines 2025",
+          ),
+          "no rename",
+        ),
+        need(
+          action(run, "sheet_action").some((a) => a.action === "tab_color"),
+          "no tab colour",
+        ),
+      ),
+  },
+  {
+    id: "n-row-highlight",
+    text: "on my data, highlight the whole row in light red when the status is X",
+    check: (run) =>
+      need(
+        action(run, "conditional_format").some(
+          (a) =>
+            a.rule === "formula" &&
+            /\$E/i.test(a.formula ?? "") &&
+            /"X"/.test(a.formula ?? ""),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-cf-above",
+    text: "colour issued quantity cells above 4 in red directly on the data",
+    check: (run) =>
+      need(
+        action(run, "conditional_format").some(
+          (a) =>
+            a.rule === "greater_than" &&
+            Number(a.value) === 4 &&
+            /^H/i.test(a.address),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-dropdown",
+    text: "add a dropdown with S, E and X to the Status column",
+    check: (run) =>
+      need(
+        action(run, "data_validation").some(
+          (a) =>
+            a.rule === "list" &&
+            /^E/i.test(a.address) &&
+            ["S", "E", "X"].every((v) => (a.values ?? []).includes(v)),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-table",
+    text: "turn my data into an Excel table named Lines",
+    check: (run) =>
+      need(
+        action(run, "table_action").some(
+          (a) => a.action === "create" && a.name === "Lines",
+        ) || steps(run).some((s) => /table/i.test(s)),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-name",
+    text: "create a name TaxRate that equals 15%",
+    check: (run) =>
+      need(
+        action(run, "named_range").some(
+          (a) =>
+            a.action === "add" &&
+            a.name === "TaxRate" &&
+            /0\.15|15%/.test(a.refers_to),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-pivot-pct",
+    text: "change PivotTable1 to show the values as a percent of the grand total",
+    check: (run) =>
+      need(
+        action(run, "pivot_action").some(
+          (a) => a.action === "show_as" && a.value === "percent_of_grand_total",
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-chart-edit",
+    text: "on Chart 1 put the legend at the bottom and show data labels",
+    check: (run) =>
+      all(
+        need(
+          action(run, "chart_action").some(
+            (a) => a.action === "legend" && a.value === "bottom",
+          ),
+          "no legend",
+        ),
+        need(
+          action(run, "chart_action").some(
+            (a) => a.action === "data_labels_on",
+          ),
+          "no labels",
+        ),
+      ),
+  },
+  {
+    id: "n-comment",
+    text: "add a comment to H2 saying please check this quantity",
+    check: (run) =>
+      need(
+        action(run, "comment").some(
+          (a) => a.action === "add" && a.cell === "H2" && /check/i.test(a.text),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-print",
+    text: "set the data sheet up for printing: landscape, one page wide, header row on every page",
+    check: (run) =>
+      need(
+        action(run, "page_setup").some(
+          (a) =>
+            a.orientation === "landscape" &&
+            a.fit_width === 1 &&
+            a.print_title_rows === "1:1",
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-replace",
+    text: "replace km with Km in the UoM column",
+    check: (run) =>
+      need(
+        action(run, "find_replace").some(
+          (a) => a.find === "km" && a.replace === "Km",
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-hide-cols",
+    text: "hide the LEA and UoM columns",
+    check: (run) =>
+      need(
+        action(run, "edit_rows_columns")
+          .filter((a) => a.action === "hide_columns")
+          .map((a) => a.address)
+          .join(" ")
+          .match(/C/) !== null &&
+          action(run, "edit_rows_columns")
+            .filter((a) => a.action === "hide_columns")
+            .map((a) => a.address)
+            .join(" ")
+            .match(/I/) !== null,
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-insert-col",
+    text: "insert an empty column before column C",
+    check: (run) =>
+      need(
+        action(run, "edit_rows_columns").some(
+          (a) => a.action === "insert_columns" && /^C/.test(a.address),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-dupes-inplace",
+    text: "remove duplicate Service IDs from the data itself",
+    check: (run) =>
+      need(
+        action(run, "edit_rows_columns").some(
+          (a) =>
+            a.action === "remove_duplicates" &&
+            (a.columns ?? []).some((c: string) => /service id/i.test(c)),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200),
+      ),
+  },
+  {
+    id: "n-goal-seek",
+    text: "on the Model sheet, find the value of B1 that makes B5 equal to 0",
+    check: (run) =>
+      need(
+        action(run, "goal_seek").some(
+          (a) =>
+            a.formula_cell === "B5" &&
+            a.changing_cell === "B1" &&
+            a.target === 0,
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-protect",
+    text: "protect the detail-report sheet",
+    check: (run) =>
+      need(
+        action(run, "protect_sheet").some((a) => a.action === "protect"),
+        JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-sparkline",
+    text: "add sparklines next to each RTOM total",
+    check: (run) =>
+      all(
+        need(!action(run, "chart_action").length, "used a chart tool"),
+        need(run.reply.length > 0, "no reply"),
       ),
   },
 ];

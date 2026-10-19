@@ -247,3 +247,28 @@ test("whole columns like A:B are accepted, and a read of them is bounded", () =>
     clipped: true,
   });
 });
+
+test("after six calculations the agent is told to act or answer", async () => {
+  let turn = 0;
+  const run = await runAgent({
+    request: "x",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async () => {
+      turn += 1;
+      if (turn <= 2)
+        return {
+          content: "",
+          tool_calls: Array.from({ length: 4 }, (_, i) =>
+            call(`${turn}-${i}`, "calculate", { formula: "=1" }),
+          ),
+        };
+      return { content: "done", tool_calls: [] };
+    },
+  });
+  const results = run.messages
+    .filter((m) => m.role === "tool")
+    .map((m: any) => m.content);
+  assert.equal(results.filter((r) => /"result"/.test(r)).length, 6);
+  assert.match(results[7], /already ran 6 calculations/);
+});

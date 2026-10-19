@@ -6,13 +6,16 @@
  * fake one. See docs/ARCHITECTURE_DECISIONS.md, "Excel agent".
  */
 import { PERSONAL_PATTERNS } from "./analysis.js";
+import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
 
 export const AGENT_MAX_TURNS = 12;
-export const AGENT_MAX_CHANGES = 8;
+export const AGENT_MAX_CHANGES = 25;
 export const READ_MAX_ROWS = 50;
 export const READ_MAX_CELLS = 500;
 export const CALC_MAX_ROWS = 50;
 export const CALC_MAX_COLUMNS = 10;
+/** calculate calls per request before the agent is told to act or answer. */
+export const CALC_PER_REQUEST = 6;
 const TOOL_RESULT_CHARS = 12_000;
 
 export type ToolCall = {
@@ -47,6 +50,12 @@ export type StagedChange =
       address: string;
       column: string;
       descending: boolean;
+      /** Further sort keys, in order. */
+      then?: { column: string; descending: boolean }[];
+      /** A custom order for the first key, e.g. "High,Medium,Low". */
+      customOrder?: string;
+      /** Sort the columns left to right by the values of the first row. */
+      byColumns?: boolean;
     }
   | {
       kind: "format_range";
@@ -57,6 +66,21 @@ export type StagedChange =
       fill?: string;
       fontColor?: string;
       autofit?: boolean;
+      fontName?: string;
+      fontSize?: number;
+      italic?: boolean;
+      underline?: boolean;
+      borders?: "all" | "outside" | "bottom" | "none";
+      horizontal?: "left" | "center" | "right";
+      vertical?: "top" | "center" | "bottom";
+      wrap?: boolean;
+      indent?: number;
+      rotation?: number;
+      mergeCenter?: boolean;
+      style?: string;
+      clear?: boolean;
+      /** Format painter: copy every format of this range first. */
+      copyFrom?: string;
     }
   | {
       kind: "create_chart";
@@ -65,17 +89,13 @@ export type StagedChange =
       address?: string;
       chartType: ChartKind;
       title?: string;
+      /** Cells the chart covers, e.g. E2:L20. */
+      position?: string;
     }
-  | { kind: "vynor_step"; instruction: string; understood: string };
+  | { kind: "vynor_step"; instruction: string; understood: string }
+  | { kind: "excel_action"; tool: string; args: Record<string, unknown> };
 
-export const CHART_KINDS = [
-  "column",
-  "bar",
-  "line",
-  "pie",
-  "area",
-  "scatter",
-] as const;
+export const CHART_KINDS = CHART_TYPE_NAMES;
 export type ChartKind = (typeof CHART_KINDS)[number];
 
 export interface AgentHost {
@@ -87,6 +107,8 @@ export interface AgentHost {
   ): Promise<{ address: string; values: unknown[][]; formulas?: unknown[][] }>;
   /** Evaluates a formula over the real data without leaving anything in the workbook. */
   calculate(formula: string): Promise<unknown>;
+  /** Read-only details: names, tables, charts, pivots, hidden, merged, comments, rules, links. */
+  getDetails?(what: string, sheet?: string, address?: string): Promise<unknown>;
   /** Checks a built-in step sentence now; it runs only after approval. */
   checkStep(
     instruction: string,
@@ -333,6 +355,7 @@ export function stageChange(
         ...(args.address ? { address: checkRange(args.address) } : {}),
         chartType,
         ...(args.title ? { title: text(args.title).slice(0, 120) } : {}),
+        ...(args.position ? { position: checkRange(args.position) } : {}),
       };
     }
     case "sort_range":
@@ -344,6 +367,22 @@ export function stageChange(
         address: checkRange(args.address),
         column: text(args.column).trim(),
         descending: args.descending === true,
+        ...(Array.isArray(args.then) && args.then.length
+          ? {
+              then: args.then.slice(0, 5).map((key: any) => {
+                if (!String(key?.column ?? "").trim())
+                  throw new AgentToolError("Each `then` key needs column.");
+                return {
+                  column: text(key.column).trim(),
+                  descending: key.descending === true,
+                };
+              }),
+            }
+          : {}),
+        ...(args.custom_order
+          ? { customOrder: text(args.custom_order).slice(0, 255) }
+          : {}),
+        ...(args.by_columns === true ? { byColumns: true } : {}),
       };
     case "format_range": {
       for (const key of ["fill", "font_color"] as const)
@@ -364,11 +403,81 @@ export function stageChange(
         ...(args.fill ? { fill: String(args.fill) } : {}),
         ...(args.font_color ? { fontColor: String(args.font_color) } : {}),
         ...(args.autofit === true ? { autofit: true } : {}),
+        ...formatExtras(args, text),
       };
     }
-    default:
-      throw new AgentToolError(`${name} is not a write tool.`);
+    default: {
+      const tool = ACTION_TOOLS[name];
+      if (!tool) throw new AgentToolError(`${name} is not a write tool.`);
+      return {
+        kind: "excel_action",
+        tool: name,
+        args: tool.check(args, restore),
+      };
+    }
   }
+}
+
+/** The extra format options of format_range. */
+function formatExtras(
+  args: Record<string, unknown>,
+  text: (value: unknown) => string,
+) {
+  const pick = <T extends string>(
+    value: unknown,
+    allowed: readonly T[],
+    what: string,
+  ): T | undefined => {
+    if (value === undefined || value === null || value === "") return undefined;
+    const choice = String(value).toLowerCase() as T;
+    if (!allowed.includes(choice))
+      throw new AgentToolError(`${what} must be one of ${allowed.join(", ")}.`);
+    return choice;
+  };
+  const number = (value: unknown, what: string, min: number, max: number) => {
+    if (value === undefined || value === null || value === "") return undefined;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < min || n > max)
+      throw new AgentToolError(`${what} must be from ${min} to ${max}.`);
+    return n;
+  };
+  const fontName = args.font_name
+    ? text(args.font_name).slice(0, 60)
+    : undefined;
+  if (fontName && !/^[A-Za-z0-9 \-]+$/.test(fontName))
+    throw new AgentToolError("font_name looks like Calibri.");
+  const style = args.style ? text(args.style).slice(0, 60) : undefined;
+  const out = {
+    fontName,
+    fontSize: number(args.font_size, "font_size", 1, 409),
+    italic: typeof args.italic === "boolean" ? args.italic : undefined,
+    underline: typeof args.underline === "boolean" ? args.underline : undefined,
+    borders: pick(
+      args.borders,
+      ["all", "outside", "bottom", "none"] as const,
+      "borders",
+    ),
+    horizontal: pick(
+      args.horizontal,
+      ["left", "center", "right"] as const,
+      "horizontal",
+    ),
+    vertical: pick(
+      args.vertical,
+      ["top", "center", "bottom"] as const,
+      "vertical",
+    ),
+    wrap: typeof args.wrap === "boolean" ? args.wrap : undefined,
+    indent: number(args.indent, "indent", 0, 15),
+    rotation: number(args.rotation, "rotation", -90, 90),
+    mergeCenter: args.merge_center === true ? true : undefined,
+    style,
+    clear: args.clear === true ? true : undefined,
+    copyFrom: args.copy_from ? checkRange(args.copy_from) : undefined,
+  };
+  return Object.fromEntries(
+    Object.entries(out).filter(([, value]) => value !== undefined),
+  );
 }
 
 /** A plain sentence for the approval list. */
@@ -392,11 +501,31 @@ export function describeChange(change: StagedChange): string {
         change.fill ? `fill ${change.fill}` : "",
         change.fontColor ? `font ${change.fontColor}` : "",
         change.autofit ? "autofit" : "",
+        change.fontName ? `font ${change.fontName}` : "",
+        change.fontSize ? `size ${change.fontSize}` : "",
+        change.italic ? "italic" : "",
+        change.underline ? "underline" : "",
+        change.borders ? `borders ${change.borders}` : "",
+        change.horizontal ? `align ${change.horizontal}` : "",
+        change.vertical ? `vertical ${change.vertical}` : "",
+        change.wrap !== undefined
+          ? change.wrap
+            ? "wrap text"
+            : "no wrap"
+          : "",
+        change.indent !== undefined ? `indent ${change.indent}` : "",
+        change.rotation !== undefined ? `rotate ${change.rotation}°` : "",
+        change.mergeCenter ? "merge and centre" : "",
+        change.style ? `style ${change.style}` : "",
+        change.clear ? "clear formats first" : "",
+        change.copyFrom ? `formats copied from ${change.copyFrom}` : "",
       ]
         .filter(Boolean)
         .join(", ")}`;
     case "vynor_step":
       return `${change.instruction} (${change.understood})`;
+    case "excel_action":
+      return ACTION_TOOLS[change.tool]?.describe(change.args) ?? change.tool;
   }
 }
 
@@ -406,6 +535,24 @@ export function editsInPlace(change: StagedChange): boolean {
 }
 
 // --- the loop -------------------------------------------------------------------------------
+
+export const DETAILS = [
+  "names",
+  "tables",
+  "charts",
+  "pivots",
+  "hidden",
+  "merged",
+  "comments",
+  "conditional_formats",
+  "validation",
+  "freeze",
+  "autofilter",
+  "precedents",
+  "dependents",
+  "protection",
+  "page_setup",
+];
 
 const clip = (text: string) =>
   text.length > TOOL_RESULT_CHARS
@@ -455,6 +602,7 @@ export async function runAgent(options: {
     { role: "user", content: mask.mask(options.request).slice(0, 4000) },
   ];
   const changes: AgentRun["changes"] = [];
+  const counts = { calculate: 0 };
   const maxTurns = options.maxTurns ?? AGENT_MAX_TURNS;
   for (let turn = 1; turn <= maxTurns; turn += 1) {
     const answer = await model(messages);
@@ -484,7 +632,7 @@ export async function runAgent(options: {
         }
         options.onTool?.(call.function.name, args);
         content = JSON.stringify(
-          await runTool(call, args, host, mask, changes),
+          await runTool(call, args, host, mask, changes, counts),
         );
       } catch (error) {
         content = JSON.stringify({
@@ -516,6 +664,7 @@ async function runTool(
   host: AgentHost,
   mask: PersonalMask,
   changes: AgentRun["changes"],
+  counts: { calculate: number },
 ): Promise<unknown> {
   const restore = (text: string) => mask.unmask(text);
   switch (call.function.name) {
@@ -534,7 +683,27 @@ async function runTool(
           : {}),
       };
     }
+    case "get_details": {
+      if (!host.getDetails)
+        throw new AgentToolError("get_details is not available here.");
+      const what = String(args.what ?? "")
+        .trim()
+        .toLowerCase();
+      if (!DETAILS.includes(what))
+        throw new AgentToolError(`what must be one of ${DETAILS.join(", ")}.`);
+      const sheet = args.sheet
+        ? checkSheetName(restore(String(args.sheet)))
+        : undefined;
+      const address = args.address ? checkRange(args.address) : undefined;
+      return { [what]: await host.getDetails(what, sheet, address) };
+    }
     case "calculate": {
+      // Each calculation is a model turn and a full pass over the data: enough is enough.
+      counts.calculate += 1;
+      if (counts.calculate > CALC_PER_REQUEST)
+        throw new AgentToolError(
+          `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
+        );
       const formula = checkFormula(restore(String(args.formula ?? "")));
       return { result: boundResult(await host.calculate(formula)) };
     }

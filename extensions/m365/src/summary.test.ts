@@ -173,19 +173,21 @@ test("pivotFallbackFormula groups one column like a PivotTable with one spilled 
   assert.deepEqual(out.headers, ["item code", "Sum of Issued Quantity"]);
   assert.equal(
     out.formula,
-    "=LET(k,SORT(FILTER(UNIQUE('T2'!$B$2:$B$366379),UNIQUE('T2'!$B$2:$B$366379)<>\"\")),r,HSTACK(k,SUMIFS('T2'!$C$2:$C$366379,'T2'!$B$2:$B$366379,k)),r)",
+    "=GROUPBY('T2'!$B$2:$B$366379,'T2'!$C$2:$C$366379,SUM,0,0,1)",
   );
   const top = pivotFallbackFormula({
     sheetName: "T2",
     localAddress: "A1:M366379",
     headers: ["Status", "Item Code", "Issued Quantity"],
     rowsColumn: "Item Code",
-    valuesColumns: ["Issued Quantity"],
+    valuesColumns: ["Issued Quantity", "Status"],
     aggregation: "count",
     topN: 5,
   });
-  assert.match(top.formula, /COUNTIFS\('T2'!\$B\$2:\$B\$366379,k\)/);
-  assert.match(top.formula, /TAKE\(SORTBY\(r,INDEX\(r,0,2\),-1\),5\)\)$/);
+  assert.equal(
+    top.formula,
+    "=TAKE(GROUPBY('T2'!$B$2:$B$366379,HSTACK('T2'!$C$2:$C$366379,'T2'!$A$2:$A$366379),COUNTA,0,0,-2),5)",
+  );
   assert.throws(
     () =>
       pivotFallbackFormula({

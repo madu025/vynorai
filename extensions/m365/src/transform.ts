@@ -632,11 +632,11 @@ export interface PivotFallbackInput {
 }
 
 const PIVOT_FALLBACK_FUNCTION: Record<string, string> = {
-  sum: "SUMIFS",
-  count: "COUNTIFS",
-  average: "AVERAGEIFS",
-  min: "MINIFS",
-  max: "MAXIFS",
+  sum: "SUM",
+  count: "COUNTA",
+  average: "AVERAGE",
+  min: "MIN",
+  max: "MAX",
 };
 
 /**
@@ -668,37 +668,33 @@ export function pivotFallbackFormula(input: PivotFallbackInput): {
     ? (input.aggregation ?? "sum")
     : "sum";
   const fn = PIVOT_FALLBACK_FUNCTION[aggregation];
-  const rows = column(input.rowsColumn);
-  const parts = input.valuesColumns.map((name) =>
-    aggregation === "count"
-      ? "COUNTIFS(" + rows + ",k)"
-      : fn + "(" + column(name) + "," + rows + ",k)",
-  );
   const label =
     AGGREGATION_LABEL[aggregation as keyof typeof AGGREGATION_LABEL];
-  const stacked = "HSTACK(k," + parts.join(",") + ")";
-  const finish =
-    input.topN && input.topN > 0
-      ? "TAKE(SORTBY(r,INDEX(r,0,2)," +
-        (input.lowest ? "1" : "-1") +
-        ")," +
-        Math.floor(input.topN) +
-        ")"
-      : "r";
+  const values =
+    input.valuesColumns.length === 1
+      ? column(input.valuesColumns[0])
+      : "HSTACK(" + input.valuesColumns.map(column).join(",") + ")";
+  // GROUPBY(rows, values, function, no headers, no totals, sort by the first value, biggest first).
+  const sortOrder = input.topN && input.topN > 0 ? (input.lowest ? 2 : -2) : 1;
+  const grouped =
+    "GROUPBY(" +
+    column(input.rowsColumn) +
+    "," +
+    values +
+    "," +
+    fn +
+    ",0,0," +
+    sortOrder +
+    ")";
   return {
     headers: [
       input.rowsColumn,
       ...input.valuesColumns.map((name) => label + " of " + name),
     ],
     formula:
-      "=LET(k,SORT(FILTER(UNIQUE(" +
-      rows +
-      "),UNIQUE(" +
-      rows +
-      ')<>"")),r,' +
-      stacked +
-      "," +
-      finish +
-      ")",
+      "=" +
+      (input.topN && input.topN > 0
+        ? "TAKE(" + grouped + "," + Math.floor(input.topN) + ")"
+        : grouped),
   };
 }

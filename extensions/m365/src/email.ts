@@ -408,3 +408,51 @@ export async function sendExcelWorkbookEmail(
   });
   await sendDirectGraphMail(accessToken, valid, fetcher);
 }
+
+export const OUTLOOK_WEB_COMPOSE_URL =
+  "https://outlook.office.com/mail/deeplink/compose";
+/** Outlook on the web reads the whole compose link, so it is kept well under common URL limits. */
+const MAX_COMPOSE_URL_LENGTH = 6000;
+
+/**
+ * A link that opens a new message in Outlook on the web with the recipients, subject and a text body
+ * already filled in. It needs no Microsoft Graph permission, so it works where an administrator has not
+ * approved Mail.Send. Attachments cannot be passed through a link; the body carries the summary only.
+ */
+export function outlookWebDraftUrl(input: {
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  body: string;
+}): { url: string; bodyTruncated: boolean } {
+  const build = (body: string) => {
+    const parts = [
+      ["to", input.to.join(",")],
+      ["cc", (input.cc ?? []).join(",")],
+      ["bcc", (input.bcc ?? []).join(",")],
+      ["subject", input.subject],
+      ["body", body],
+    ]
+      .filter(([, value]) => value)
+      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`);
+    return `${OUTLOOK_WEB_COMPOSE_URL}?${parts.join("&")}`;
+  };
+  let body = input.body;
+  let url = build(body);
+  let bodyTruncated = false;
+  while (url.length > MAX_COMPOSE_URL_LENGTH && body.length > 40) {
+    body = `${body.slice(0, Math.max(40, Math.floor(body.length * 0.8)))}…`;
+    bodyTruncated = true;
+    url = build(body);
+  }
+  return { url, bodyTruncated };
+}
+
+/** True when the failure is Microsoft refusing the Graph permission (admin approval, denied or cancelled consent). */
+export function isGraphConsentFailure(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error ?? "");
+  return /OAuth authorization failed: (access_denied|consent_required|interaction_required|invalid_scope|unauthorized_client)|AADSTS(65001|65004|90094|90095|900941|50105)|EMAIL_PERMISSION_DENIED|EMAIL_LARGE_ATTACHMENT_PERMISSION_REQUIRED|Graph.*\b(401|403)\b/i.test(
+    text,
+  );
+}

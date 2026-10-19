@@ -137,3 +137,49 @@ test("sending an Excel email uses Microsoft Graph and reports permission failure
     /EMAIL_PERMISSION_DENIED/,
   );
 });
+
+test("outlookWebDraftUrl fills a compose link and keeps it short", async () => {
+  const { outlookWebDraftUrl } = await import("./email.js");
+  const small = outlookWebDraftUrl({
+    to: ["prasad@slts.lk"],
+    subject: "Report & test",
+    body: "Line 1\nLine 2",
+  });
+  assert.equal(small.bodyTruncated, false);
+  assert.equal(
+    small.url,
+    "https://outlook.office.com/mail/deeplink/compose?to=prasad%40slts.lk&subject=Report%20%26%20test&body=Line%201%0ALine%202",
+  );
+  const big = outlookWebDraftUrl({
+    to: ["a@b.co"],
+    cc: ["c@d.co"],
+    subject: "S",
+    body: "x".repeat(20000),
+  });
+  assert.equal(big.bodyTruncated, true);
+  assert.ok(big.url.length <= 6000);
+  assert.match(big.url, /cc=c%40d\.co/);
+});
+
+test("isGraphConsentFailure recognises admin-approval and denied consent only", async () => {
+  const { isGraphConsentFailure } = await import("./email.js");
+  assert.equal(
+    isGraphConsentFailure(
+      new Error("OAuth authorization failed: access_denied"),
+    ),
+    true,
+  );
+  assert.equal(
+    isGraphConsentFailure(new Error("EMAIL_PERMISSION_DENIED")),
+    true,
+  );
+  assert.equal(
+    isGraphConsentFailure(new Error("AADSTS90094: admin consent required")),
+    true,
+  );
+  assert.equal(isGraphConsentFailure(new Error("PDF_SLICE_INVALID")), false);
+  assert.equal(
+    isGraphConsentFailure(new Error("EMAIL_RECIPIENT_INVALID")),
+    false,
+  );
+});

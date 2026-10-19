@@ -99,6 +99,8 @@ import {
 } from "./oauth.js";
 import {
   sendGraphMailAdaptive,
+  outlookWebDraftUrl,
+  isGraphConsentFailure,
   MAX_DIRECT_ATTACHMENT_BYTES,
   MAX_OUTLOOK_ATTACHMENT_BYTES,
   EXCEL_WORKBOOK_MIME,
@@ -164,6 +166,12 @@ const analysisOutput = document.querySelector<HTMLElement>("#ai-result");
 const apply = document.querySelector<HTMLButtonElement>("#apply");
 const emailCard = document.querySelector<HTMLElement>("#email-card");
 const emailTo = document.querySelector<HTMLInputElement>("#email-to");
+const emailDraftFallback = document.querySelector<HTMLElement>(
+  "#email-draft-fallback",
+);
+const emailDraftLink =
+  document.querySelector<HTMLAnchorElement>("#email-draft-link");
+const emailDraftNote = document.querySelector<HTMLElement>("#email-draft-note");
 const emailSubject = document.querySelector<HTMLInputElement>("#email-subject");
 const emailBody = document.querySelector<HTMLTextAreaElement>("#email-body");
 const emailFormat = document.querySelector<HTMLSelectElement>("#email-format");
@@ -969,6 +977,47 @@ async function buildEmailRequest(): Promise<{
   };
 }
 
+/**
+ * When Microsoft will not give the Mail.Send permission (an administrator has not approved the app),
+ * the report summary becomes a ready draft in Outlook on the web. No Graph permission is involved, and
+ * nothing is sent: the person reviews the draft and presses Send themselves.
+ */
+async function offerOutlookDraft(): Promise<void> {
+  if (!emailDraftFallback || !emailDraftLink || !emailTo || !emailSubject)
+    return;
+  const reportSheet = lastRevealSheet || currentSourceSheet;
+  let values: any[][] = [];
+  let truncated = false;
+  try {
+    if (reportSheet) {
+      const report = await readExcelReportValues(reportSheet, 30, 8);
+      values = report.values;
+      truncated = report.truncated;
+    }
+  } catch {
+    // The draft still opens with the message only.
+  }
+  const message =
+    emailBody?.value.trim() ||
+    "Please find the approved VynorAI report summary below.";
+  const draft = outlookWebDraftUrl({
+    to: splitEmailAddresses(emailTo.value),
+    cc: splitEmailAddresses(emailCc?.value || ""),
+    bcc: splitEmailAddresses(emailBcc?.value || ""),
+    subject: emailSubject.value.trim() || "VynorAI Excel report",
+    body: `${message}
+
+${reportSummaryText(values, truncated)}`,
+  });
+  emailDraftLink.href = draft.url;
+  if (emailDraftNote)
+    emailDraftNote.textContent = draft.bodyTruncated
+      ? "The summary was shortened for the link. Attach the workbook yourself if you need all of it."
+      : "Attachments cannot be added through a link; attach the workbook yourself if you need it.";
+  emailDraftFallback.hidden = false;
+  log.record("email:outlook-draft-link", "pass", { recipient: "redacted" });
+}
+
 emailSend?.addEventListener("click", async () => {
   if (!emailTo || !emailSubject || !emailBody || !emailSend) return;
   const to = emailTo.value.trim();
@@ -1038,7 +1087,12 @@ emailSend?.addEventListener("click", async () => {
     );
   } catch (error) {
     log.record("email:send", "fail", emailErrorMessage(error));
-    setStatus(emailErrorMessage(error));
+    if (isGraphConsentFailure(error)) {
+      await offerOutlookDraft();
+      setStatus(
+        "Microsoft did not give this add-in permission to send mail (your organization's administrator may need to approve it). Nothing was sent. Use the link below to open the report as a draft in Outlook on the web.",
+      );
+    } else setStatus(emailErrorMessage(error));
   } finally {
     emailSending = false;
     updateEmailUi();

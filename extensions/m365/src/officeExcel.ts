@@ -1,3 +1,4 @@
+import { guardText } from "./textGuard.js";
 import {
   canonicalExpression,
   expressionColumnLetter,
@@ -2088,12 +2089,18 @@ export async function applyApprovedExcelPlan(
                 action.spec?.fillBlanks as string | number | undefined,
                 action.spec?.fillBlanksColumnIndex as number | undefined,
               );
+              // Text Excel would convert on write ("007", "1/2", "TRUE") keeps its text prefix.
               const out = [headers, ...cleaned.rows].map((row) =>
-                row.map(literal),
+                row.map((cell) => literal(guardText(cell))),
               );
               sheet.getRangeByIndexes(0, 0, out.length, headers.length).values =
                 out;
               await context.sync();
+              // Real dates and currency in the source keep their look in the cleaned copy.
+              await copyColumnFormats(
+                sheet,
+                headers.map((_header, index) => index),
+              );
               for (const column of cleaned.dateColumns) {
                 sheet.getRangeByIndexes(
                   1,

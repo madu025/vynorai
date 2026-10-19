@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { existsSync } from "fs";
 import { describe, expect, it } from "vitest";
 import { normalizeRepoUrl } from "./repoUrl";
 import { sanitizeShellArgument, validateGitHubRepoUrl } from "./sanitization";
@@ -175,188 +176,198 @@ describe("validateGitHubRepoUrl", () => {
  * that sanitization transforms inputs, but only these integration tests prove
  * that the transformed output is safe when executed in a real shell.
  */
-describe("sanitizeShellArgument - integration tests", () => {
-  // Helper function to safely execute a command with a timeout
-  const safeExec = (command: string): string => {
-    try {
-      return execSync(command, {
-        encoding: "utf-8",
-        timeout: 5000, // 5 second timeout to prevent hanging
-        shell: "/bin/sh", // Use standard POSIX shell
-      }).trim();
-    } catch (error: any) {
-      // If command fails (non-zero exit), return the error output
-      return error.stdout?.trim() || "";
-    }
-  };
+// Windows has no /bin/sh; Git for Windows ships a POSIX sh. Skip when none is available.
+const POSIX_SHELL = [
+  "/bin/sh",
+  "C:/Program Files/Git/bin/sh.exe",
+  "C:/Program Files/Git/usr/bin/sh.exe",
+].find((candidate) => existsSync(candidate));
 
-  it("should prevent command injection with semicolon separator", () => {
-    const malicious = "; echo INJECTED";
-    const sanitized = sanitizeShellArgument(malicious);
+describe.skipIf(!POSIX_SHELL)(
+  "sanitizeShellArgument - integration tests",
+  () => {
+    // Helper function to safely execute a command with a timeout
+    const safeExec = (command: string): string => {
+      try {
+        return execSync(command, {
+          encoding: "utf-8",
+          timeout: 5000, // 5 second timeout to prevent hanging
+          shell: POSIX_SHELL, // Use standard POSIX shell
+        }).trim();
+      } catch (error: any) {
+        // If command fails (non-zero exit), return the error output
+        return error.stdout?.trim() || "";
+      }
+    };
 
-    // Execute echo command with the sanitized input
-    const result = safeExec(`echo ${sanitized}`);
+    it("should prevent command injection with semicolon separator", () => {
+      const malicious = "; echo INJECTED";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // The output should be the literal string, not execute "echo INJECTED"
-    expect(result).toBe(malicious);
-    expect(result).not.toBe("INJECTED");
-  });
+      // Execute echo command with the sanitized input
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should prevent command injection with && operator", () => {
-    const malicious = "safe && echo INJECTED";
-    const sanitized = sanitizeShellArgument(malicious);
+      // The output should be the literal string, not execute "echo INJECTED"
+      expect(result).toBe(malicious);
+      expect(result).not.toBe("INJECTED");
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should prevent command injection with && operator", () => {
+      const malicious = "safe && echo INJECTED";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should output the literal string, not execute the injected command
-    // The string "INJECTED" will appear, but as part of "echo INJECTED" literal text
-    expect(result).toBe(malicious);
-    expect(result).toContain("echo INJECTED"); // Verify it's the literal command text
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should prevent command injection with || operator", () => {
-    const malicious = "safe || echo INJECTED";
-    const sanitized = sanitizeShellArgument(malicious);
+      // Should output the literal string, not execute the injected command
+      // The string "INJECTED" will appear, but as part of "echo INJECTED" literal text
+      expect(result).toBe(malicious);
+      expect(result).toContain("echo INJECTED"); // Verify it's the literal command text
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should prevent command injection with || operator", () => {
+      const malicious = "safe || echo INJECTED";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should output the literal string, not execute the injected command
-    expect(result).toBe(malicious);
-    expect(result).toContain("echo INJECTED"); // Verify it's the literal command text
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should prevent command injection with pipe operator", () => {
-    const malicious = "safe | echo INJECTED";
-    const sanitized = sanitizeShellArgument(malicious);
+      // Should output the literal string, not execute the injected command
+      expect(result).toBe(malicious);
+      expect(result).toContain("echo INJECTED"); // Verify it's the literal command text
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should prevent command injection with pipe operator", () => {
+      const malicious = "safe | echo INJECTED";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    expect(result).toBe(malicious);
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should prevent command substitution with $()", () => {
-    const malicious = "$(echo INJECTED)";
-    const sanitized = sanitizeShellArgument(malicious);
+      expect(result).toBe(malicious);
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should prevent command substitution with $()", () => {
+      const malicious = "$(echo INJECTED)";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should output the literal string "$(echo INJECTED)", not "INJECTED"
-    expect(result).toBe(malicious);
-    expect(result).not.toBe("INJECTED");
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should prevent command substitution with backticks", () => {
-    const malicious = "`echo INJECTED`";
-    const sanitized = sanitizeShellArgument(malicious);
+      // Should output the literal string "$(echo INJECTED)", not "INJECTED"
+      expect(result).toBe(malicious);
+      expect(result).not.toBe("INJECTED");
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should prevent command substitution with backticks", () => {
+      const malicious = "`echo INJECTED`";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should output the literal backtick string, not execute it
-    expect(result).toBe(malicious);
-    expect(result).not.toBe("INJECTED");
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should prevent variable expansion", () => {
-    // Set an environment variable for this test
-    process.env.TEST_VAR = "EXPANDED";
+      // Should output the literal backtick string, not execute it
+      expect(result).toBe(malicious);
+      expect(result).not.toBe("INJECTED");
+    });
 
-    const malicious = "$TEST_VAR";
-    const sanitized = sanitizeShellArgument(malicious);
+    it("should prevent variable expansion", () => {
+      // Set an environment variable for this test
+      process.env.TEST_VAR = "EXPANDED";
 
-    const result = safeExec(`echo ${sanitized}`);
+      const malicious = "$TEST_VAR";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should output literal "$TEST_VAR", not "EXPANDED"
-    expect(result).toBe(malicious);
-    expect(result).not.toBe("EXPANDED");
+      const result = safeExec(`echo ${sanitized}`);
 
-    // Cleanup
-    delete process.env.TEST_VAR;
-  });
+      // Should output literal "$TEST_VAR", not "EXPANDED"
+      expect(result).toBe(malicious);
+      expect(result).not.toBe("EXPANDED");
 
-  it("should handle git stash message use case safely", () => {
-    // This mirrors the actual usage in VsCodeMessenger.ts:269
-    const agentId = "agent-123; rm -rf /";
-    const stashMessage = `Continue: Stashed before opening agent ${agentId}`;
-    const sanitized = sanitizeShellArgument(stashMessage);
+      // Cleanup
+      delete process.env.TEST_VAR;
+    });
 
-    // Simulate the git stash command (using echo as a safe substitute)
-    // In real code: `git stash push -m ${sanitized}`
-    const result = safeExec(`echo ${sanitized}`);
+    it("should handle git stash message use case safely", () => {
+      // This mirrors the actual usage in VsCodeMessenger.ts:269
+      const agentId = "agent-123; rm -rf /";
+      const stashMessage = `Continue: Stashed before opening agent ${agentId}`;
+      const sanitized = sanitizeShellArgument(stashMessage);
 
-    // The message should contain the full literal string including dangerous chars
-    expect(result).toContain("agent-123; rm -rf /");
-    expect(result).toContain("Continue: Stashed before opening agent");
-    // Verify it's one line (not executed as multiple commands)
-    expect(result.split("\n").length).toBe(1);
-  });
+      // Simulate the git stash command (using echo as a safe substitute)
+      // In real code: `git stash push -m ${sanitized}`
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should handle multi-line injection attempts", () => {
-    const malicious = "line1\necho INJECTED\nline3";
-    const sanitized = sanitizeShellArgument(malicious);
+      // The message should contain the full literal string including dangerous chars
+      expect(result).toContain("agent-123; rm -rf /");
+      expect(result).toContain("Continue: Stashed before opening agent");
+      // Verify it's one line (not executed as multiple commands)
+      expect(result.split("\n").length).toBe(1);
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should handle multi-line injection attempts", () => {
+      const malicious = "line1\necho INJECTED\nline3";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should preserve the structure but not execute embedded commands
-    expect(result).toContain("line1");
-    expect(result).toContain("line3");
-    // The literal "echo INJECTED" text should appear, but not executed
-    expect(result).toContain("echo INJECTED");
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should handle shell redirection attempts", () => {
-    const malicious = "message > /tmp/test.txt";
-    const sanitized = sanitizeShellArgument(malicious);
+      // Should preserve the structure but not execute embedded commands
+      expect(result).toContain("line1");
+      expect(result).toContain("line3");
+      // The literal "echo INJECTED" text should appear, but not executed
+      expect(result).toContain("echo INJECTED");
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should handle shell redirection attempts", () => {
+      const malicious = "message > /tmp/test.txt";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should output the literal string, not create a file
-    expect(result).toBe(malicious);
-    // The command should not have created the file
-    // (we're not checking file system to keep test isolated)
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should handle complex injection with multiple attack vectors", () => {
-    const malicious = "; $(whoami) && `date` || $HOME | cat > /dev/null";
-    const sanitized = sanitizeShellArgument(malicious);
+      // Should output the literal string, not create a file
+      expect(result).toBe(malicious);
+      // The command should not have created the file
+      // (we're not checking file system to keep test isolated)
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should handle complex injection with multiple attack vectors", () => {
+      const malicious = "; $(whoami) && `date` || $HOME | cat > /dev/null";
+      const sanitized = sanitizeShellArgument(malicious);
 
-    // Should output the entire literal string
-    expect(result).toBe(malicious);
-    // Verify none of the commands were executed by checking output is literal
-    expect(result).toContain("$(whoami)");
-    expect(result).toContain("`date`");
-    expect(result).toContain("$HOME");
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should handle special characters safely", () => {
-    const special = 'test with spaces, quotes\', and "more"';
-    const sanitized = sanitizeShellArgument(special);
+      // Should output the entire literal string
+      expect(result).toBe(malicious);
+      // Verify none of the commands were executed by checking output is literal
+      expect(result).toContain("$(whoami)");
+      expect(result).toContain("`date`");
+      expect(result).toContain("$HOME");
+    });
 
-    const result = safeExec(`echo ${sanitized}`);
+    it("should handle special characters safely", () => {
+      const special = 'test with spaces, quotes\', and "more"';
+      const sanitized = sanitizeShellArgument(special);
 
-    expect(result).toBe(special);
-  });
+      const result = safeExec(`echo ${sanitized}`);
 
-  it("should handle empty string without errors", () => {
-    const sanitized = sanitizeShellArgument("");
+      expect(result).toBe(special);
+    });
 
-    // Should not throw when used in a command
-    expect(() => safeExec(`echo ${sanitized}`)).not.toThrow();
-  });
+    it("should handle empty string without errors", () => {
+      const sanitized = sanitizeShellArgument("");
 
-  it("should verify shell-quote properly escapes for git log format strings", () => {
-    // Another common use case: git log with custom format strings
-    const userInput = "Author: $(whoami) Date: `date`";
-    const sanitized = sanitizeShellArgument(userInput);
+      // Should not throw when used in a command
+      expect(() => safeExec(`echo ${sanitized}`)).not.toThrow();
+    });
 
-    // Simulate: git log --format="%s: ${sanitized}"
-    // Using printf as a safer test substitute
-    const result = safeExec(`printf '%s' ${sanitized}`);
+    it("should verify shell-quote properly escapes for git log format strings", () => {
+      // Another common use case: git log with custom format strings
+      const userInput = "Author: $(whoami) Date: `date`";
+      const sanitized = sanitizeShellArgument(userInput);
 
-    // Should output the literal string, not execute substitutions
-    expect(result).toBe(userInput);
-    expect(result).toContain("$(whoami)");
-    expect(result).toContain("`date`");
-  });
-});
+      // Simulate: git log --format="%s: ${sanitized}"
+      // Using printf as a safer test substitute
+      const result = safeExec(`printf '%s' ${sanitized}`);
+
+      // Should output the literal string, not execute substitutions
+      expect(result).toBe(userInput);
+      expect(result).toContain("$(whoami)");
+      expect(result).toContain("`date`");
+    });
+  },
+);

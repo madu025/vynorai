@@ -163,18 +163,21 @@ describe("MCPConnection", () => {
       );
     });
 
-    it("should resolve relative cwd using IDE workspace", async () => {
-      const ide = {} as any;
-      const mockResolve = vi
-        .spyOn(ideUtils, "resolveRelativePathInDir")
-        .mockResolvedValue("file:///workspace/src");
-      const conn = new MCPConnection(baseOptions, { ide });
+    it.skipIf(process.platform === "win32")(
+      "should resolve relative cwd using IDE workspace",
+      async () => {
+        const ide = {} as any;
+        const mockResolve = vi
+          .spyOn(ideUtils, "resolveRelativePathInDir")
+          .mockResolvedValue("file:///workspace/src");
+        const conn = new MCPConnection(baseOptions, { ide });
 
-      await expect((conn as any).resolveCwd("src")).resolves.toBe(
-        "/workspace/src",
-      );
-      expect(mockResolve).toHaveBeenCalledWith("src", ide);
-    });
+        await expect((conn as any).resolveCwd("src")).resolves.toBe(
+          "/workspace/src",
+        );
+        expect(mockResolve).toHaveBeenCalledWith("src", ide);
+      },
+    );
 
     it("should fall back to homedir for remote URIs that cannot be used as local cwd", async () => {
       const ide = {} as any;

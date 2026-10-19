@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { expect, vi } from "vitest";
 
 import Parser from "web-tree-sitter";
@@ -53,7 +54,10 @@ export async function testRootPathContext(
     "test",
     folderName,
   );
-  const workspaceDir = (await ide.getWorkspaceDirs())[0];
+  const workspaceUri = (await ide.getWorkspaceDirs())[0];
+  const workspaceDir = workspaceUri.startsWith("file:")
+    ? fileURLToPath(workspaceUri)
+    : workspaceUri;
   const testFolderPath = path.join(workspaceDir, folderName);
   fs.cpSync(folderPath, testFolderPath, {
     recursive: true,

@@ -106,7 +106,10 @@ describe("SwarmCommand", () => {
     expect(output).toContain("package.json");
     expect(output).toContain("Git worktree isolation engine initialized");
     expect(output).toContain("VynorAI Self-Driving Maintenance Briefing");
-    expect(output).toContain("Pull Requests Ready for Review");
+    expect(output).toContain("Dry-run previews");
+    expect(output).toContain(
+      "No branch, commit, push, or pull request was created",
+    );
   });
 
   it("yields git repository required message if workspace is not a git repo", async () => {

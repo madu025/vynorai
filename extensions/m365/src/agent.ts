@@ -58,7 +58,25 @@ export type StagedChange =
       fontColor?: string;
       autofit?: boolean;
     }
+  | {
+      kind: "create_chart";
+      sheet: string;
+      /** Without an address the chart uses the used range of the sheet (e.g. a spilled table). */
+      address?: string;
+      chartType: ChartKind;
+      title?: string;
+    }
   | { kind: "vynor_step"; instruction: string; understood: string };
+
+export const CHART_KINDS = [
+  "column",
+  "bar",
+  "line",
+  "pie",
+  "area",
+  "scatter",
+] as const;
+export type ChartKind = (typeof CHART_KINDS)[number];
 
 export interface AgentHost {
   getWorkbook(): Promise<unknown>;
@@ -120,6 +138,9 @@ export class AgentToolError extends Error {}
 const CELL = /^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}$/i;
 const RANGE =
   /^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i;
+/** Whole columns such as A:B. */
+const COLUMNS = /^\$?[A-Z]{1,3}:\$?[A-Z]{1,3}$/i;
+const SHEET_ROWS = 1_048_576;
 
 export function checkSheetName(name: unknown): string {
   const text = String(name ?? "").trim();
@@ -144,7 +165,7 @@ export function checkRange(address: unknown): string {
   const text = String(address ?? "")
     .trim()
     .toUpperCase();
-  if (!RANGE.test(text))
+  if (!RANGE.test(text) && !COLUMNS.test(text))
     throw new AgentToolError(`"${text}" is not a range like A1:J20.`);
   return text.replace(/\$/g, "");
 }
@@ -195,13 +216,16 @@ export function parseA1(address: string): {
   lastRow: number;
 } {
   const [first, second = first] = address.replace(/\$/g, "").split(":");
-  const part = (cell: string) => {
+  const whole = COLUMNS.test(address.replace(/\$/g, ""));
+  const part = (cell: string, last: boolean) => {
+    if (whole && /^[A-Z]{1,3}$/i.test(cell))
+      return { column: columnIndex(cell), row: last ? SHEET_ROWS : 1 };
     const match = /^([A-Z]{1,3})(\d+)$/i.exec(cell);
     if (!match) throw new AgentToolError(`"${address}" is not a range.`);
     return { column: columnIndex(match[1]), row: Number(match[2]) };
   };
-  const a = part(first);
-  const b = part(second);
+  const a = part(first, false);
+  const b = part(second, true);
   return {
     column: Math.min(a.column, b.column),
     row: Math.min(a.row, b.row),
@@ -295,6 +319,22 @@ export function stageChange(
     }
     case "create_sheet":
       return { kind: "create_sheet", name: checkSheetName(text(args.name)) };
+    case "create_chart": {
+      const chartType = String(
+        args.chart_type ?? "column",
+      ).toLowerCase() as ChartKind;
+      if (!CHART_KINDS.includes(chartType))
+        throw new AgentToolError(
+          `chart_type must be one of ${CHART_KINDS.join(", ")}.`,
+        );
+      return {
+        kind: "create_chart",
+        sheet: checkSheetName(text(args.sheet)),
+        ...(args.address ? { address: checkRange(args.address) } : {}),
+        chartType,
+        ...(args.title ? { title: text(args.title).slice(0, 120) } : {}),
+      };
+    }
     case "sort_range":
       if (!String(args.column ?? "").trim())
         throw new AgentToolError("Name the column to sort by.");
@@ -341,6 +381,8 @@ export function describeChange(change: StagedChange): string {
       return `Write ${change.values.length} x ${change.values[0]?.length ?? 0} values from ${at(change.sheet, change.cell)}`;
     case "create_sheet":
       return `Add a new sheet "${change.name}"`;
+    case "create_chart":
+      return `Add a ${change.chartType} chart of ${change.address ? `'${change.sheet}'!${change.address}` : `the table on '${change.sheet}'`}${change.title ? ` titled "${change.title}"` : ""}`;
     case "sort_range":
       return `Sort ${at(change.sheet, change.address)} by ${change.column} ${change.descending ? "descending" : "ascending"} (edits the data; undo restores it)`;
     case "format_range":

@@ -134,6 +134,20 @@ export const AGENT_TOOLS = [
     },
     ["instruction"],
   ),
+  fn(
+    "create_chart",
+    "STAGED. Add a chart of a small table (at most 5,000 rows, header row first), for example a summary you wrote with GROUPBY on a new sheet. Without address it charts the whole used range of the sheet.",
+    {
+      sheet: str("Sheet name"),
+      address: str("Optional range with the header row, e.g. A1:B13"),
+      chart_type: {
+        type: "string",
+        enum: ["column", "bar", "line", "pie", "area", "scatter"],
+      },
+      title: str("Optional chart title"),
+    },
+    ["sheet", "chart_type"],
+  ),
 ];
 
 export const AGENT_TOOL_NAMES = AGENT_TOOLS.map((tool) => tool.function.name);
@@ -145,9 +159,11 @@ export const AGENT_SYSTEM_PROMPT = [
   "Use modern Excel: LET, FILTER, SORT, SORTBY, UNIQUE, XLOOKUP, XMATCH, SUMIFS, COUNTIFS, AVERAGEIFS, MAXIFS, MINIFS, GROUPBY, PIVOTBY, TAKE, DROP, CHOOSECOLS, HSTACK, VSTACK, TEXTSPLIT, TEXTBEFORE, TEXTAFTER, LAMBDA, MAP, BYROW, SEQUENCE.",
   'For a computed column over many rows write ONE spilled formula in the first data cell (array arithmetic like =G2:G520126-H2:H520126, or MAP). Above 50,000 rows never fill per-row SUMIFS/COUNTIFS over whole columns (too slow); for a per-group figure use LET(t,GROUPBY(keys,values,SUM,0,0),XLOOKUP(keys,TAKE(t,,1),TAKE(t,,-1),"",0,2)).',
   "Put new results on a new sheet (create_sheet) or in empty columns next to the data; never overwrite data the person did not ask to change. Write a header above every new column.",
-  "Prefer vynor_step for pivot tables, charts, dashboards, cleaning, statistics and forecasts. Its sentence forms:",
+  "Prefer vynor_step for pivot tables, charts of the data, dashboards, cleaning, statistics and forecasts. It works on the original data only: a step cannot use a column or sheet that another staged change creates. For a summary by month or any custom table, create_sheet, write ONE GROUPBY/PIVOTBY formula (e.g. GROUPBY(EOMONTH(dates,-1)+1,values,SUM,0,0)) with a header row, then create_chart on that sheet. Its sentence forms:",
   ...STEP_FORMS,
   "Every write tool is only STAGED: the person sees the list of changes and approves before anything happens. After approval you get what was written (values and errors) and may stage fixes.",
+  "calculate results are exact: Excel computed them over every row. Never re-check a result you already have. For a question, use at most 3 calculate calls. For a change request, use calculate only when a number decides what to write; otherwise stage the writes at once (create_sheet, write_formula, create_chart): the add-in shows you what was written after approval.",
+  'To delete or remove rows, do not show only those rows: stage vynor_step "show rows where <column> != <value>" (a copy WITHOUT them) and say the original is kept unchanged.',
   `Stage at most ${AGENT_MAX_CHANGES} changes per request. Do only what was asked.`,
   "Never use WEBSERVICE, RTD, CALL, REGISTER.ID, DDE, links to other workbooks or web addresses. Never write macros, VBA or scripts.",
   "Never invent numbers: every number in a reply comes from calculate or read_range. If something cannot be done, say so in one sentence and offer the closest thing that can.",

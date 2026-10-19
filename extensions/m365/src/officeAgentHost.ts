@@ -19,6 +19,15 @@ const CALC_SHEET = "VynorAI_calc";
 const BACKUP_MARK = "vynorai-backup";
 /** In-place formats up to this size are undone from a snapshot; larger ones from a backup copy. */
 const SNAPSHOT_CELLS = 50_000;
+const CHART_MAX_ROWS = 5000;
+const CHART_TYPES: Record<string, string> = {
+  column: "ColumnClustered",
+  bar: "BarClustered",
+  line: "Line",
+  pie: "Pie",
+  area: "Area",
+  scatter: "XYScatter",
+};
 const isInternal = (name: string) =>
   name === CALC_SHEET || /^VynorAI_backup/.test(name);
 
@@ -216,6 +225,8 @@ export interface AgentUndo {
   backups: { sheet: string; backup: string; address: string }[];
   /** Undo data of built-in steps, handed back to the caller's rollback. */
   steps: unknown[];
+  /** Charts added to sheets the agent did not create. */
+  charts?: { sheet: string; name: string }[];
 }
 
 export type AgentApplyResult = {
@@ -344,10 +355,40 @@ export async function applyAgentChanges(
             ),
           };
         }
+        if (change.kind === "create_chart") {
+          const source = change.address
+            ? sheet.getRange(change.address)
+            : sheet.getUsedRange(true);
+          source.load(["address", "rowCount"]);
+          await context.sync();
+          if (Number(source.rowCount) > CHART_MAX_ROWS)
+            throw new Error(
+              `${source.rowCount} rows is too many for a chart; chart a summary table (GROUPBY) instead`,
+            );
+          const chart = sheet.charts.add(
+            CHART_TYPES[change.chartType],
+            source,
+            "Auto",
+          );
+          if (change.title) chart.title.text = change.title;
+          chart.load("name");
+          await context.sync();
+          if (!ours)
+            (undo.charts ??= []).push({
+              sheet: sheetName,
+              name: String(chart.name),
+            });
+          return {
+            chart: String(chart.name),
+            source: String(source.address).split("!").pop(),
+          };
+        }
         if (change.kind === "sort_range" || change.kind === "format_range") {
           const range = sheet.getRange(change.address);
-          range.load(["rowCount", "columnCount", "values"]);
-          if (change.kind === "sort_range") range.getRow(0).load("values");
+          // Never load the cells of a large range: only its size, and the header row for a sort.
+          range.load(["rowCount", "columnCount"]);
+          const headerRow = range.getRow(0);
+          if (change.kind === "sort_range") headerRow.load("values");
           await context.sync();
           const cells = Number(range.rowCount) * Number(range.columnCount);
           if (!ours) {
@@ -381,7 +422,7 @@ export async function applyAgentChanges(
             }
           }
           if (change.kind === "sort_range") {
-            const header = (range.values as any[][])[0].map((value) =>
+            const header = (headerRow.values as any[][])[0].map((value) =>
               String(value).trim().toLowerCase(),
             );
             const key = header.indexOf(change.column.trim().toLowerCase());
@@ -398,14 +439,9 @@ export async function applyAgentChanges(
             return { sorted: Number(range.rowCount) - 1 };
           }
           if (change.numberFormat !== undefined)
-            range.numberFormat = Array.from(
-              { length: Number(range.rowCount) },
-              () =>
-                Array.from(
-                  { length: Number(range.columnCount) },
-                  () => change.numberFormat,
-                ),
-            );
+            // One value applies to every cell, without building a huge array.
+            (range as { numberFormat: unknown }).numberFormat =
+              change.numberFormat;
           if (change.bold !== undefined) range.format.font.bold = change.bold;
           if (change.fontColor) range.format.font.color = change.fontColor;
           if (change.fill) range.format.fill.color = change.fill;
@@ -455,6 +491,14 @@ export async function undoAgentChanges(
       await context.sync();
       backup.delete();
       await context.sync();
+    }
+    for (const item of [...(undo.charts ?? [])].reverse()) {
+      const chart = sheets
+        .getItem(item.sheet)
+        .charts.getItemOrNullObject(item.name);
+      chart.load("isNullObject");
+      await context.sync();
+      if (!chart.isNullObject) chart.delete();
     }
     for (const name of [...undo.createdSheets].reverse()) {
       const sheet = sheets.getItemOrNullObject(name);

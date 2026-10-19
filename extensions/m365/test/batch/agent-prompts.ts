@@ -21,6 +21,7 @@ import {
   AGENT_SYSTEM_PROMPT,
   AGENT_TOOLS,
 } from "../../../../backend/src/services/m365Agent.js";
+import { fakeCalculator } from "./fakeExcel.js";
 
 const KEY = process.env.VYNORAI_E2E_API_KEY || "";
 const BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
@@ -76,6 +77,20 @@ const data: any = {
 };
 
 type Seen = { name: string; args: any }[];
+const calculate = fakeCalculator(rows);
+const expectedTotal = (
+  calculate("=SUM('detail-report'!H2:H520126)") as number[][]
+)[0][0];
+const topRtom = String(
+  (
+    calculate(
+      "=SORT(GROUPBY('detail-report'!B2:B520126,'detail-report'!G2:G520126,SUM))",
+    ) as any[][]
+  )[0][0],
+);
+/** A number as the reply may write it: 1,234,567 or 1234567. */
+const numberIn = (reply: string, value: number) =>
+  reply.replace(/,/g, "").includes(String(value));
 const host = (seen: Seen): AgentHost => ({
   getWorkbook: async () => ({
     activeSheet: "detail-report",
@@ -112,14 +127,7 @@ const host = (seen: Seen): AgentHost => ({
       values: all.slice(top - 1, Math.min(bottom, all.length)),
     };
   },
-  calculate: async (formula) =>
-    /GROUPBY|PIVOTBY|UNIQUE|FILTER|SORT|TAKE|CHOOSECOLS|HSTACK/i.test(formula)
-      ? [
-          ["R-HK", 1200],
-          ["R-GP", 900],
-          ["R-HT", 700],
-        ]
-      : [[12345]],
+  calculate: async (formula) => calculate(formula),
   checkStep: async (instruction) => {
     const interpreted: any = interpretInstruction(
       instruction,
@@ -147,36 +155,44 @@ const host = (seen: Seen): AgentHost => ({
 });
 
 let calls = 0;
+const usage = { prompt: 0, cached: 0, completion: 0 };
 async function model(messages: AgentMessage[], language: string) {
   calls += 1;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const res = await fetch(`${BASE}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${KEY}`,
-      },
-      body: JSON.stringify({
-        model: "vynor-auto",
-        messages: [
-          { role: "system", content: AGENT_SYSTEM_PROMPT },
-          {
-            role: "system",
-            content:
-              language === "si"
-                ? "The person writes Sinhala (සිංහල) or Singlish: reply in Sinhala script."
-                : "The person writes English.",
-          },
-          ...messages,
-        ],
-        tools: AGENT_TOOLS,
-        tool_choice: "auto",
-        temperature: 0,
-        max_tokens: 2500,
-        stream: false,
-        vynor_surface: "m365",
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${KEY}`,
+        },
+        body: JSON.stringify({
+          model: "vynor-auto",
+          messages: [
+            { role: "system", content: AGENT_SYSTEM_PROMPT },
+            {
+              role: "system",
+              content:
+                language === "si"
+                  ? "The person writes Sinhala (සිංහල) or Singlish: reply in Sinhala script."
+                  : "The person writes English.",
+            },
+            ...messages,
+          ],
+          tools: AGENT_TOOLS,
+          tool_choice: "auto",
+          temperature: 0,
+          max_tokens: 2500,
+          stream: false,
+          vynor_surface: "m365",
+        }),
+      });
+    } catch {
+      // A dropped connection (proxy, Wi-Fi): wait and try again.
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      continue;
+    }
     if (res.status === 429) {
       await new Promise((resolve) => setTimeout(resolve, 15_000));
       continue;
@@ -186,6 +202,13 @@ async function model(messages: AgentMessage[], language: string) {
       throw new Error(
         `gateway ${res.status} ${JSON.stringify(json).slice(0, 160)}`,
       );
+    usage.prompt += Number(json?.usage?.prompt_tokens) || 0;
+    usage.cached +=
+      Number(
+        json?.usage?.prompt_cache_hit_tokens ??
+          json?.usage?.prompt_tokens_details?.cached_tokens,
+      ) || 0;
+    usage.completion += Number(json?.usage?.completion_tokens) || 0;
     const message = json?.choices?.[0]?.message ?? {};
     return {
       content: typeof message.content === "string" ? message.content : "",
@@ -238,7 +261,10 @@ const CASES: Case[] = [
           formulas(run, seen).some((f) => /SUM\(/i.test(f) && /H/.test(f)),
           "no SUM over H",
         ),
-        need(/12,?345/.test(run.reply), "reply lacks the number"),
+        need(
+          numberIn(run.reply, expectedTotal),
+          `reply lacks ${expectedTotal}`,
+        ),
       ),
   },
   {
@@ -248,7 +274,7 @@ const CASES: Case[] = [
       all(
         usedCalc(seen),
         noChanges(run),
-        need(/R-HK/.test(run.reply), "reply lacks R-HK"),
+        need(run.reply.includes(topRtom), `reply lacks ${topRtom}`),
       ),
   },
   {
@@ -404,18 +430,32 @@ const CASES: Case[] = [
       need(
         run.changes.length === 0 ||
           steps(run).some((s) => /!=|<>|not/i.test(s)) ||
-          formulas(run, { length: 0 } as any).some((f) => /<>"X"/i.test(f)),
+          formulas(run, []).some((f) => /<>"X"/i.test(f)),
         `unsafe: ${JSON.stringify(run.changes.map((c) => c.change)).slice(0, 200)}`,
       ),
   },
   {
     id: "a-month-trend",
     text: "show me how issued quantity changes month by month as a line chart",
-    check: (run) =>
-      need(
-        steps(run).some((s) => /line/i.test(s) || /month/i.test(s)),
+    check: (run, seen) => {
+      const chart = run.changes.find((c) => c.change.kind === "create_chart")
+        ?.change as any;
+      if (chart)
+        return all(
+          need(chart.chartType === "line", `chart ${chart.chartType}`),
+          need(
+            formulas(run, seen).some(
+              (f) =>
+                /GROUPBY|PIVOTBY/i.test(f) && /EOMONTH|MONTH|TEXT\(/i.test(f),
+            ),
+            "no monthly GROUPBY",
+          ),
+        );
+      return need(
+        steps(run).some((s) => /line/i.test(s)),
         `steps ${steps(run).join(" | ")} ${kinds(run)}`,
-      ),
+      );
+    },
   },
   {
     id: "a-singlish",
@@ -466,6 +506,6 @@ for (const item of CASES) {
   }
 }
 console.log(
-  `agent-prompts: ${pass}/${ran} (model turns ${turns}, calls ${calls})`,
+  `agent-prompts: ${pass}/${ran} (model turns ${turns}, calls ${calls}; tokens in ${usage.prompt} (cached ${usage.cached}), out ${usage.completion})`,
 );
 process.exit(pass === ran ? 0 : 1);

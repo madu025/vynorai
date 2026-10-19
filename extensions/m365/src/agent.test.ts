@@ -234,3 +234,16 @@ test("the loop stops at the turn limit", async () => {
   assert.equal(run.stoppedAtLimit, true);
   assert.equal(run.turns, 3);
 });
+
+test("whole columns like A:B are accepted, and a read of them is bounded", () => {
+  const change: any = stageChange(
+    "format_range",
+    { sheet: "Out", address: "a:b", autofit: true },
+    String,
+  );
+  assert.equal(change.address, "A:B");
+  assert.deepEqual(clampReadAddress("A:B"), {
+    address: "A1:B50",
+    clipped: true,
+  });
+});

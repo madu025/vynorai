@@ -226,6 +226,47 @@ export const LOOKUP_PHRASE =
 export const LOOKUP_COLUMNS_PHRASE =
   /^(?:please\s+)?(?:add|get|bring|fetch|lookup|pull)\s+columns?\s+(.+?)\s+from\s+(?:the\s+)?(?:sheet\s+)?["']?([^"'\n]{1,31}?)["']?\s+(?:by|using|matching|on|with|where)\s+["']?([^"'\n]+?)["']?\s*\.?$/i;
 
+/**
+ * Everyday wordings of three computed-column requests, rewritten into the explicit form the reader
+ * already understands ("add a column NAME that is EXPRESSION"). Needs the headers, so a column that
+ * does not exist is never invented: with no matching header the sentence is returned unchanged.
+ */
+function rewriteColumnWishes(text: string, headers: string[]): string {
+  if (!/\b(?:add|new|create|make|show|give|need|put)\b/i.test(text))
+    return text;
+  // A pivot, chart or summary can show a share itself; only a per-row column is rewritten here.
+  if (/\b(?:pivot|chart|graph|dashboard|summary|summari[sz]e)\b/i.test(text))
+    return text;
+  const column = mentioned(headers, text);
+  if (column < 0) return text;
+  const name = headers[column];
+  // "show each row Qty as a percentage of the total Qty", "add a column with the share of total Qty"
+  if (
+    /\b(?:percentage|percent|share|proportion|fraction)\s+of\s+(?:the\s+)?(?:grand\s+)?(?:total|sum)\b/i.test(
+      text,
+    )
+  )
+    return `add a column ${name} Share that is [${name}] / COLSUM([${name}])`;
+  // "add a column that says Above or Below depending on whether Qty is over the average"
+  if (
+    /\b(?:above|over|higher|greater)\b[^.]*\b(?:below|under|lower|less)\b[^.]*\baverage\b|\b(?:above|below)\s+(?:or\s+(?:above|below)\s+)?(?:the\s+)?average\b[^.]*\bcolumn\b/i.test(
+      text,
+    ) &&
+    /\bcolumn\b|\bsays?\b|\blabel\b/i.test(text)
+  )
+    return `add a column ${name} Level that is IF([${name}] > COLAVG([${name}]), "Above", "Below")`;
+  // "I need a new column with only the month of Order Date"
+  const part =
+    /\b(?:new\s+)?column\b[^.]*?\b(year|month|day|quarter|weekday)\b[^.]*?\b(?:of|from)\b/i.exec(
+      text,
+    );
+  if (part) {
+    const label = part[1][0].toUpperCase() + part[1].slice(1).toLowerCase();
+    return `add a column ${label} from ${name}`;
+  }
+  return text;
+}
+
 export function interpretInstruction(
   rawInstruction: string,
   headers: string[],
@@ -238,7 +279,22 @@ export function interpretInstruction(
     specs: {},
     problems: [],
   };
-  const text = instruction.replace(/[_]+/g, " ");
+  const text = rewriteColumnWishes(instruction.replace(/[_]+/g, " "), headers);
+  // A view sorts by one column. Say so instead of reading "then B" as a separate, meaningless step.
+  const twoKeySort =
+    /\bsort(?:ed)?\s+(?:the\s+(?:rows|data|sheet)\s+)?by\s+(.+?)[\s,]+(?:and\s+)?then\s+(?:by\s+)?(.+)$/i.exec(
+      text,
+    );
+  if (
+    twoKeySort &&
+    mentioned(headers, twoKeySort[1]) >= 0 &&
+    mentioned(headers, twoKeySort[2]) >= 0
+  ) {
+    result.problems.push(
+      `Sorting by two columns is not supported yet. Sort by one column, for example: sort by ${headers[mentioned(headers, twoKeySort[1])]}.`,
+    );
+    return result;
+  }
   // These requests need capabilities that are deliberately outside the add-in's
   // current permission and Office.js safety boundary. Return an actionable
   // refusal instead of falling through to the generic "unsupported action"
@@ -769,11 +825,15 @@ export function interpretInstruction(
   )
     operations.add("text-to-date");
   const targetedFillMatch =
-    /\bfill\s+(?:in\s+)?(?:the\s+)?blank(?:s|\s+cells?)?\s+(.+?)\s+values?\s+(?:with|using)\s+["']?([^"'\n,.]+?)["']?(?:\s|$)/i.exec(
+    /\bfill\s+(?:in\s+)?(?:the\s+)?(?:blank|empty)(?:s|\s+cells?)?\s+(.+?)\s+(?:values?|cells?)\s+(?:with|using)\s+["']?([^"'\n,.]+?)["']?(?:\s|$)/i.exec(
+      text,
+    ) ??
+    // "fill blank cells in Qty with 0", "fill the empty cells of the Qty column with 0"
+    /\bfill\s+(?:in\s+)?(?:the\s+)?(?:blank|empty)(?:s|\s+(?:cells?|values?))?\s+(?:in|of|for)\s+(?:the\s+)?(.+?)(?:\s+column)?\s+(?:with|using)\s+["']?([^"'\n,.]+?)["']?(?:\s|$)/i.exec(
       text,
     );
   const fillMatch =
-    /\bfill\s+(?:in\s+)?(?:the\s+)?blank(?:s|\s+cells?)?\s+(?:with|using)\s+["']?([^"'\n,.]+?)["']?(?:\s|$)/i.exec(
+    /\bfill\s+(?:in\s+)?(?:the\s+)?(?:blank|empty)(?:s|\s+cells?)?\s+(?:with|using)\s+["']?([^"'\n,.]+?)["']?(?:\s|$)/i.exec(
       text,
     );
   if (targetedFillMatch || fillMatch) {
@@ -1153,6 +1213,25 @@ export function normalizeInstruction(text: string): string {
     "",
   );
   out = out.replace(asked ? /[.!?\s]+$/ : /[.!\s]+$/, "");
+  // Everyday wordings of requests the reader already supports.
+  out = out
+    .replace(
+      /\b(?:delete|remove|drop|get\s+rid\s+of)\s+(?:all\s+)?(?:the\s+)?duplicates?\b(?!\s+(?:in|from|of|where|by)\b)/gi,
+      "remove duplicate rows",
+    )
+    .replace(
+      /^(?:(?:are|is)\s+there\s+(?:any\s+)?|check\s+(?:for\s+)?|find\s+|look\s+for\s+|scan\s+for\s+|any\s+)(?:\w+\s+){0,3}?(?:problems?|issues?|errors?|mistakes?)\b.*$/i,
+      "data quality report",
+    )
+    .replace(/^.*\bawul\b.*$/i, "data quality report")
+    .replace(
+      /\bsplit\s+(.+?)\s+into\s+first\s+name\s+and\s+last\s+name\b/gi,
+      "split $1 into first and last name columns",
+    )
+    .replace(
+      /\bsplit\s+(.+?)\s+into\s+first\s+and\s+last\s+name(?!\s+columns)/gi,
+      "split $1 into first and last name columns",
+    );
   return out.trim();
 }
 

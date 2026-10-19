@@ -89,6 +89,7 @@ const SYSTEM_PROMPT = [
   "Never output code, formulas as code, macros, scripts, links, or any step that deletes or overwrites the original data. Every step must write to a new result sheet.",
   'To delete or remove rows, do NOT show only those rows. The original is never changed: offer a copy WITHOUT them instead, for example for "delete all rows where Status is X" use ["show rows where Status != X"] and say in the reason that it is a copy and the original is untouched.',
   "Use at most one view step and at most one pivot step in a plan (a view step is show rows, sort, top rows or copy).",
+  'Clean-up is ONE step per plan. "Fill empty or blank cells with 0" is ONE step, "clean the data: fill blank cells with 0", that covers every column; never write one fill step per column, and name a column only when the person names it.',
   "Use only column names that appear in the summary, exactly as written; never invent a column.",
   'Prefer the fewest steps that fully answer the request. A person asking "for each X, which Y and how much" wants ONE pivot with X and Y as rows.',
   "A Circuit ID, Service ID or other identifier may be the category when the person names it, but never a measure.",

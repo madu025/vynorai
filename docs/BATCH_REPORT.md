@@ -2,7 +2,7 @@
 
 ## Phase 2 - offline batch
 
-proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
+proven and skipped: 0; ran: 88; pass 82, fail 0, skipped 6
 
 | id               | variant | size  | status | detail                                                                                   |
 | ---------------- | ------- | ----- | ------ | ---------------------------------------------------------------------------------------- |
@@ -91,5 +91,6 @@ proven and skipped: 0; ran: 87; pass 79, fail 0, skipped 8
 | ui-newchat       | en      | small | skip   | live only                                                                                |
 | ui-session       | en      | small | skip   | live only                                                                                |
 | ui-ai            | en      | small | skip   | live only                                                                                |
-| g-script         | en      | small | skip   | known gap: not implemented                                                               |
-| g-vba            | en      | small | skip   | known gap: not implemented                                                               |
+| g-script         | en      | small | pass   | office-script: Adds a "Total" column: a live =SUM of Requested Quantity, Issued Quant    |
+| g-vba            | en      | small | pass   | vba: Sorts by "Service ID" ascending, keeping the header row.                            |
+| g-script-multi   | en      | small | pass   | office-script: Sorts by "Requested Quantity" descending, keeping the header row. Free    |

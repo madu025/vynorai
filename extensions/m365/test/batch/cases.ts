@@ -9,7 +9,7 @@ export interface BatchCase {
   en: string;
   si?: string;
   size: Size;
-  /** Action kind(s) the plan must contain, "answer" for a local answer, "refuse" or "gap". */
+  /** Action kind(s) the plan must contain, "answer" for a local answer, "macro" for generated code, "refuse" or "gap". */
   expect: string;
   files: string[];
   proven?: string;
@@ -520,15 +520,22 @@ export const CASES: BatchCase[] = [
       proven: "ai-analysis",
     },
   ),
-  // --- gaps -----------------------------------------------------------------------------------
+  // --- code generation -----------------------------------------------------------------------
   c(
     "g-script",
-    "gap",
+    "code",
     "write an Office Script that adds a Total column",
-    "gap",
-    { files: [] },
+    "macro",
+    { files: ["extensions/m365/src/macroGen.ts"] },
   ),
-  c("g-vba", "gap", "write a VBA macro that sorts the sheet", "gap", {
-    files: [],
+  c("g-vba", "code", "write a VBA macro that sorts the sheet", "macro", {
+    files: ["extensions/m365/src/macroGen.ts"],
   }),
+  c(
+    "g-script-multi",
+    "code",
+    "write an Office Script that sorts by Requested Quantity descending and freezes the header",
+    "macro",
+    { files: ["extensions/m365/src/macroGen.ts"] },
+  ),
 ];

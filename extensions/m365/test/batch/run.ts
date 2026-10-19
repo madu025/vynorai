@@ -18,6 +18,7 @@ import {
   looksLikeQuestion,
 } from "../../src/intent.js";
 import { createServerExcelPreviewPlan } from "../../../../backend/src/services/m365ExcelPlan.js";
+import { generateMacro } from "../../src/macroGen.js";
 import { CASES, type BatchCase } from "./cases.js";
 
 const HEADERS = [
@@ -91,6 +92,12 @@ function runOne(item: BatchCase, text: string, variant: "en" | "si"): Outcome {
       return answer
         ? done("pass", answer.answer.slice(0, 80))
         : done("fail", "no deterministic answer");
+    }
+    if (item.expect === "macro") {
+      const made = generateMacro(text, HEADERS, rows as any);
+      return made.ok
+        ? done("pass", `${made.language}: ${made.steps.join(" ").slice(0, 70)}`)
+        : done("fail", made.problem.slice(0, 120));
     }
     if (item.id === "q-large") return done("skip", "live only");
     const interpreted: any = interpretInstruction(text, HEADERS, rows as any);

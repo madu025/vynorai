@@ -50,6 +50,11 @@ import {
   looksLikeQuestion,
 } from "./intent.js";
 import {
+  detectMacroRequest,
+  generateMacro,
+  type MacroResult,
+} from "./macroGen.js";
+import {
   buildLocalInsights,
   suggestionToPlanInput,
   type LocalInsights,
@@ -1642,6 +1647,24 @@ inspect?.addEventListener("click", async () => {
       headers: layout.headers.map(String),
       rows: input.values.slice(layout.headerRowCount),
     };
+    if (detectMacroRequest(instructionText)) {
+      const macro = generateMacro(
+        instructionText,
+        layout.headers.map(String),
+        input.values.slice(layout.headerRowCount),
+      );
+      log.record(
+        "macro:generate",
+        macro.ok ? "pass" : "fail",
+        macro.ok ? { language: macro.language } : macro.problem,
+      );
+      if (!macro.ok) {
+        renderConversation("error", macro.problem);
+        return setStatus(macro.problem);
+      }
+      showMacro(macro);
+      return setStatus("Code is ready to copy. Nothing was run or changed.");
+    }
     const interpreted = interpretInstruction(
       instructionText,
       layout.headers,
@@ -2307,6 +2330,39 @@ function showAnswer(text: string) {
   card.hidden = false;
   // The conversation is where a chat reader looks for the answer.
   renderConversation("assistant", text);
+}
+
+/** Generated Office Script / VBA: shown as text to copy; the add-in never runs it. */
+function showMacro(macro: Extract<MacroResult, { ok: true }>) {
+  const list = document.querySelector<HTMLElement>("#insights-list");
+  const card = document.querySelector<HTMLElement>("#insights-card");
+  if (!list || !card) return;
+  list.textContent = "";
+  const title = document.createElement("p");
+  title.textContent = `${macro.title}: ${macro.steps.join(" ")}`;
+  const code = document.createElement("pre");
+  code.textContent = macro.code;
+  code.style.whiteSpace = "pre-wrap";
+  code.style.userSelect = "all";
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.textContent = "Copy code";
+  copy.addEventListener("click", () => {
+    void navigator.clipboard
+      ?.writeText(macro.code)
+      .then(() => setStatus("Code copied."))
+      .catch(() => setStatus("Select the code and copy it with Ctrl+C."));
+  });
+  const notes = document.createElement("p");
+  notes.className = "muted";
+  notes.textContent = macro.notes.join(" ");
+  list.append(title, code, copy, notes);
+  card.hidden = false;
+  card.setAttribute("open", "");
+  renderConversation(
+    "assistant",
+    `${macro.title} is ready below. ${macro.notes.join(" ")}`,
+  );
 }
 
 /** Local, private insights: shown to the person, never sent anywhere. */

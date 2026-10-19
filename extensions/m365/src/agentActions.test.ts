@@ -428,3 +428,35 @@ test("batch-test fixes: a name without = works, Table filters use the same crite
     dynamicCriteria: "ThisMonth",
   });
 });
+
+test("delete_rows_where uses a filter pass per OR condition and one pass for AND", async () => {
+  const { conditionCriteria, deletePasses } = await import(
+    "./officeAgentActions.js"
+  );
+  assert.deepEqual(conditionCriteria({ operator: "=", value: "m" }), {
+    criterion1: "=m",
+  });
+  assert.deepEqual(conditionCriteria({ operator: "!=", value: "S" }), {
+    criterion1: "<>S",
+  });
+  assert.deepEqual(conditionCriteria({ operator: ">", value: 100 }), {
+    criterion1: ">100",
+  });
+  assert.deepEqual(conditionCriteria({ operator: "contains", value: "km" }), {
+    criterion1: "=*km*",
+  });
+  assert.deepEqual(conditionCriteria({ operator: "blank" }), {
+    criterion1: "=",
+  });
+  assert.deepEqual(conditionCriteria({ operator: "not_blank" }), {
+    criterion1: "<>",
+  });
+  const a = { column: "UoM", operator: "=", value: "m" };
+  const b = { column: "Status", operator: "=", value: "X" };
+  assert.deepEqual(deletePasses([a, b], "any"), [[a], [b]]);
+  assert.deepEqual(deletePasses([a, b], "all"), [[a, b]]);
+  // Three conditions on one column cannot be one filter: the formula route takes over.
+  const c = (v: number) => ({ column: "Qty", operator: ">", value: v });
+  assert.equal(deletePasses([c(1), c(2), c(3)], "all"), undefined);
+  assert.deepEqual(deletePasses([c(1), c(2)], "all"), [[c(1), c(2)]]);
+});

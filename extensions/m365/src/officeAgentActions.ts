@@ -252,80 +252,7 @@ export async function runExcelAction(
 
     case "delete_rows_where": {
       if (!ours) await run.backup(sheetName!);
-      const range = sheet.getRange(args.address);
-      range.load(["rowIndex", "columnIndex", "rowCount", "columnCount"]);
-      const header = range.getRow(0);
-      header.load("values");
-      const used = sheet.getUsedRange(true);
-      used.load(["columnIndex", "columnCount"]);
-      await context.sync();
-      const rows = Number(range.rowCount) - 1;
-      if (rows < 1) return { deleted: 0 };
-      const names = (header.values[0] as unknown[]).map((value) =>
-        String(value).trim().toLowerCase(),
-      );
-      const top = Number(range.rowIndex) + 2;
-      const bottom = Number(range.rowIndex) + Number(range.rowCount);
-      const test = rowTestFormula(
-        names,
-        args.conditions,
-        args.match,
-        Number(range.columnIndex),
-        top,
-        bottom,
-      );
-      // Two helper columns after everything on the sheet: delete flag and original order.
-      const helper = Math.max(
-        Number(used.columnIndex) + Number(used.columnCount),
-        Number(range.columnIndex) + Number(range.columnCount),
-      );
-      const flags = sheet.getRangeByIndexes(top - 1, helper, rows, 1);
-      const order = sheet.getRangeByIndexes(top - 1, helper + 1, rows, 1);
-      flags.getCell(0, 0).formulas = [[`=IF(${test},1,0)`]];
-      order.getCell(0, 0).formulas = [[`=SEQUENCE(${rows})`]];
-      await context.sync();
-      flags.copyFrom(flags, "Values");
-      order.copyFrom(order, "Values");
-      const count = sheet.getRangeByIndexes(top - 1, helper + 2, 1, 1);
-      count.formulas = [
-        [
-          `=SUM(${columnLetter(helper)}${top}:${columnLetter(helper)}${bottom})`,
-        ],
-      ];
-      count.load("values");
-      await context.sync();
-      const remove = Number(count.values[0][0]) || 0;
-      count.clear("All");
-      const width = helper + 2 - Number(range.columnIndex);
-      const body = sheet.getRangeByIndexes(
-        top - 1,
-        Number(range.columnIndex),
-        rows,
-        width,
-      );
-      if (remove > 0) {
-        // Rows to delete go to the bottom (original order kept), then that block is removed.
-        body.sort.apply(
-          [
-            { key: width - 2, ascending: true },
-            { key: width - 1, ascending: true },
-          ],
-          false,
-          false,
-        );
-        await context.sync();
-        sheet
-          .getRangeByIndexes(
-            top - 1 + rows - remove,
-            Number(range.columnIndex),
-            remove,
-            width,
-          )
-          .delete("Up");
-      }
-      sheet.getRangeByIndexes(top - 1, helper, rows, 2).clear("All");
-      await context.sync();
-      return { deleted: remove, kept: rows - remove };
+      return deleteRowsWhere(context, sheet, args);
     }
 
     case "filter_range": {
@@ -1487,6 +1414,8 @@ export async function runExcelAction(
 
 /** Cells per copy request when a backup is put back: one request for millions of cells times out. */
 const RESTORE_CELLS = 100_000;
+const RESTORE_CELLS_MAX = 1_000_000;
+const RESTORE_CELLS_MIN = 20_000;
 
 /**
  * Puts a backup copy of a sheet (or of one range of it) back, in parts. Nothing is cleared up front:
@@ -1526,9 +1455,14 @@ export async function restoreFromBackup(
   const col0 = Number(source.columnIndex);
   const rows = Number(source.rowCount);
   const columns = Number(source.columnCount);
-  const step = Math.max(1, Math.floor(RESTORE_CELLS / columns));
-  for (let start = 0; start < rows; start += step) {
-    const count = Math.min(step, rows - start);
+  // The part size adapts: a part that finishes quickly doubles it, a slow one halves it.
+  let cells = RESTORE_CELLS;
+  for (let start = 0; start < rows; ) {
+    const count = Math.min(
+      Math.max(1, Math.floor(cells / columns)),
+      rows - start,
+    );
+    const began = Date.now();
     sheet
       .getRangeByIndexes(row0 + start, col0, count, columns)
       .copyFrom(
@@ -1536,6 +1470,11 @@ export async function restoreFromBackup(
         "All",
       );
     await context.sync();
+    start += count;
+    const took = Date.now() - began;
+    if (took < 4_000) cells = Math.min(RESTORE_CELLS_MAX, cells * 2);
+    else if (took > 20_000)
+      cells = Math.max(RESTORE_CELLS_MIN, Math.floor(cells / 2));
   }
   if (!address && !current.isNullObject) {
     // Rows and columns the agent added after the backup was made.
@@ -2249,6 +2188,218 @@ export function cleanValue(cell: unknown, op: string): unknown {
     }
   }
   return cell;
+}
+
+/** AutoFilter criteria for one delete_rows_where condition. */
+export function conditionCriteria(condition: {
+  operator: string;
+  value?: unknown;
+}): {
+  criterion1: string;
+} {
+  const value = String(condition.value ?? "");
+  switch (condition.operator) {
+    case "=":
+      return { criterion1: `=${value}` };
+    case "!=":
+      return { criterion1: `<>${value}` };
+    case "contains":
+      return { criterion1: `=*${value}*` };
+    case "not_contains":
+      return { criterion1: `<>*${value}*` };
+    case "blank":
+      return { criterion1: "=" };
+    case "not_blank":
+      return { criterion1: "<>" };
+    default:
+      return { criterion1: `${condition.operator}${value}` };
+  }
+}
+
+/** Splits conditions into passes: "any" is one pass per condition, "all" is one pass (at most two per column). */
+export function deletePasses(
+  conditions: { column: string; operator: string; value?: unknown }[],
+  match: unknown,
+): { column: string; operator: string; value?: unknown }[][] | undefined {
+  if (match === "any") return conditions.map((condition) => [condition]);
+  const perColumn = new Map<string, number>();
+  for (const condition of conditions) {
+    const key = condition.column.trim().toLowerCase();
+    perColumn.set(key, (perColumn.get(key) ?? 0) + 1);
+  }
+  // A filter column carries two criteria at most: more than that uses the formula route.
+  return [...perColumn.values()].every((count) => count <= 2)
+    ? [conditions]
+    : undefined;
+}
+
+/**
+ * Deletes the rows that match, the way a person does: AutoFilter the rows, delete the visible
+ * ones, clear the filter. On 366k rows this takes seconds; a helper-column and sort route times out.
+ */
+async function deleteRowsWhere(
+  context: any,
+  sheet: any,
+  args: any,
+): Promise<unknown> {
+  const passes = deletePasses(args.conditions, args.match);
+  if (!passes) return deleteRowsByFormula(context, sheet, args);
+  const range = sheet.getRange(args.address);
+  range.load(["rowCount", "columnCount"]);
+  const header = range.getRow(0);
+  header.load("values");
+  const tables = sheet.tables;
+  tables.load("items/name");
+  await context.sync();
+  const names = (header.values[0] as unknown[]).map((value) =>
+    String(value).trim().toLowerCase(),
+  );
+  const overlaps = tables.items.map((table: any) => {
+    const tableRange = table.getRange();
+    const shared = range.getIntersectionOrNullObject(tableRange);
+    shared.load("isNullObject");
+    return { table, tableRange, shared };
+  });
+  await context.sync();
+  const hit = overlaps.find((item: any) => !item.shared.isNullObject);
+  const filter = hit ? hit.table.autoFilter : sheet.autoFilter;
+  const filterRange = hit ? hit.tableRange : range;
+  // Filter columns count from the first column of the filtered range (a Table can start elsewhere).
+  const filterHeader = filterRange.getRow(0);
+  filterHeader.load("values");
+  await context.sync();
+  const filterNames = (filterHeader.values[0] as unknown[]).map((value) =>
+    String(value).trim().toLowerCase(),
+  );
+  const body = range.getOffsetRange(1, 0).getResizedRange(-1, 0);
+  const index = (column: string) => {
+    const at = filterNames.indexOf(column.trim().toLowerCase());
+    if (at < 0) throw new Error(`"${column}" is not a header of the range`);
+    return at;
+  };
+  void names;
+  let deleted = 0;
+  for (const pass of passes) {
+    filter.clearCriteria();
+    await context.sync();
+    const byColumn = new Map<number, { criterion1: string }[]>();
+    for (const condition of pass) {
+      const at = index(condition.column);
+      byColumn.set(at, [
+        ...(byColumn.get(at) ?? []),
+        conditionCriteria(condition),
+      ]);
+    }
+    for (const [at, list] of byColumn) {
+      filter.apply(
+        filterRange,
+        // A table's filter columns count from the table, a sheet filter's from the range.
+        at,
+        list.length === 1
+          ? { filterOn: "Custom", criterion1: list[0].criterion1 }
+          : {
+              filterOn: "Custom",
+              criterion1: list[0].criterion1,
+              criterion2: list[1].criterion1,
+              operator: "And",
+            },
+      );
+    }
+    await context.sync();
+    const view = body.getVisibleView();
+    view.load("rowCount");
+    const visible = body.getSpecialCellsOrNullObject("Visible");
+    visible.load("isNullObject");
+    await context.sync();
+    if (!visible.isNullObject) {
+      deleted += Number(view.rowCount);
+      visible.getEntireRow().delete("Up");
+      await context.sync();
+    }
+    filter.clearCriteria();
+    await context.sync();
+  }
+  return { deleted };
+}
+
+/** The slow route for conditions a filter cannot express: a flag column, a sort, a delete. */
+async function deleteRowsByFormula(
+  context: any,
+  sheet: any,
+  args: any,
+): Promise<unknown> {
+  const range = sheet.getRange(args.address);
+  range.load(["rowIndex", "columnIndex", "rowCount", "columnCount"]);
+  const header = range.getRow(0);
+  header.load("values");
+  const used = sheet.getUsedRange(true);
+  used.load(["columnIndex", "columnCount"]);
+  await context.sync();
+  const rows = Number(range.rowCount) - 1;
+  if (rows < 1) return { deleted: 0 };
+  const names = (header.values[0] as unknown[]).map((value) =>
+    String(value).trim().toLowerCase(),
+  );
+  const top = Number(range.rowIndex) + 2;
+  const bottom = Number(range.rowIndex) + Number(range.rowCount);
+  const test = rowTestFormula(
+    names,
+    args.conditions,
+    args.match,
+    Number(range.columnIndex),
+    top,
+    bottom,
+  );
+  // Two helper columns after everything on the sheet: delete flag and original order.
+  const helper = Math.max(
+    Number(used.columnIndex) + Number(used.columnCount),
+    Number(range.columnIndex) + Number(range.columnCount),
+  );
+  const flags = sheet.getRangeByIndexes(top - 1, helper, rows, 1);
+  const order = sheet.getRangeByIndexes(top - 1, helper + 1, rows, 1);
+  flags.getCell(0, 0).formulas = [[`=IF(${test},1,0)`]];
+  order.getCell(0, 0).formulas = [[`=SEQUENCE(${rows})`]];
+  await context.sync();
+  flags.copyFrom(flags, "Values");
+  order.copyFrom(order, "Values");
+  const count = sheet.getRangeByIndexes(top - 1, helper + 2, 1, 1);
+  count.formulas = [
+    [`=SUM(${columnLetter(helper)}${top}:${columnLetter(helper)}${bottom})`],
+  ];
+  count.load("values");
+  await context.sync();
+  const remove = Number(count.values[0][0]) || 0;
+  count.clear("All");
+  const width = helper + 2 - Number(range.columnIndex);
+  const body = sheet.getRangeByIndexes(
+    top - 1,
+    Number(range.columnIndex),
+    rows,
+    width,
+  );
+  if (remove > 0) {
+    // Rows to delete go to the bottom (original order kept), then that block is removed.
+    body.sort.apply(
+      [
+        { key: width - 2, ascending: true },
+        { key: width - 1, ascending: true },
+      ],
+      false,
+      false,
+    );
+    await context.sync();
+    sheet
+      .getRangeByIndexes(
+        top - 1 + rows - remove,
+        Number(range.columnIndex),
+        remove,
+        width,
+      )
+      .delete("Up");
+  }
+  sheet.getRangeByIndexes(top - 1, helper, rows, 2).clear("All");
+  await context.sync();
+  return { deleted: remove, kept: rows - remove };
 }
 
 /** The AutoFilter criteria of a filter_range call. */

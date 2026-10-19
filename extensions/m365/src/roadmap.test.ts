@@ -799,7 +799,8 @@ test("apply writes converted ISO dates only to a formatted clean result sheet", 
   assert.deepEqual(excel.written["Cleaned Sheet1!0,0,3,2.values"], [
     ["Date", "Sales"],
     [46267, 1200],
-    ["03/04/2026", 1500],
+    // Ambiguous locale dates stay text: the apostrophe stops Excel from parsing them on write.
+    ["'03/04/2026", 1500],
   ]);
   assert.deepEqual(excel.written["Cleaned Sheet1!1,0,2,1.numberFormat"], [
     ["yyyy-mm-dd"],
@@ -808,6 +809,34 @@ test("apply writes converted ISO dates only to a formatted clean result sheet", 
   assert.ok(
     Object.keys(excel.written).every((key) => !key.startsWith("Sheet1!")),
   );
+});
+
+test("apply keeps identifier text with leading zeros as text in the clean result", async () => {
+  const idInput = {
+    workbookId: "book",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:B4",
+    hasHeaders: true,
+    values: [
+      ["Service ID", "Sales"],
+      ["0112559962", 10],
+      [" 007 ", 20],
+      ["North", 30],
+    ],
+  };
+  const plan = createExcelPreviewPlan(idInput as any, ["clean"], undefined, {
+    clean: { operations: ["trim", "text-to-number"] },
+  });
+  const excel = fakeWorkbook(idInput.values as any[][]);
+  await applyApprovedExcelPlan(excel.runtime, plan, true, "approval", {
+    expectedSourceFingerprint: plan.sourceFingerprint,
+  });
+  assert.deepEqual(excel.written["Cleaned Sheet1!0,0,4,2.values"], [
+    ["Service ID", "Sales"],
+    ["'0112559962", 10],
+    ["'007", 20],
+    ["North", 30],
+  ]);
 });
 
 test("apply fills blanks on a new result sheet and never the source sheet", async () => {

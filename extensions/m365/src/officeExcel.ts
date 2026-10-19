@@ -364,9 +364,15 @@ export function downloadExcelCsv(values: any[][], filename: string): void {
   downloadLocalBlob(blob, filename);
 }
 
-function decodeOfficeFileSlice(data: unknown): Uint8Array {
+/** Office hosts return a file slice as bytes, an ArrayBuffer, a plain array of byte values (Excel on the web) or base64 text. */
+export function decodeOfficeFileSlice(data: unknown): Uint8Array {
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (
+    Array.isArray(data) &&
+    data.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)
+  )
+    return Uint8Array.from(data as number[]);
   if (typeof data !== "string" || typeof atob !== "function")
     throw new Error("PDF_SLICE_INVALID");
   const binary = atob(data);

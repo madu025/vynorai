@@ -1372,3 +1372,19 @@ test("a sampled range allows a dashboard, because Excel calculates it over every
   } as any);
   assert.equal(plan.actions[0].kind, "dashboard");
 });
+
+test("decodeOfficeFileSlice accepts bytes, buffers, byte arrays (Excel on the web) and base64 text", async () => {
+  const { decodeOfficeFileSlice } = await import("./officeExcel.js");
+  assert.deepEqual([...decodeOfficeFileSlice(new Uint8Array([1, 2]))], [1, 2]);
+  assert.deepEqual(
+    [...decodeOfficeFileSlice(new Uint8Array([3, 4]).buffer)],
+    [3, 4],
+  );
+  assert.deepEqual(
+    [...decodeOfficeFileSlice([37, 80, 68, 70])],
+    [37, 80, 68, 70],
+  );
+  assert.deepEqual([...decodeOfficeFileSlice("JVBERg==")], [37, 80, 68, 70]);
+  assert.throws(() => decodeOfficeFileSlice([300, 1]), /PDF_SLICE_INVALID/);
+  assert.throws(() => decodeOfficeFileSlice({}), /PDF_SLICE_INVALID/);
+});

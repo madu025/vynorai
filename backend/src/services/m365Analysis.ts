@@ -368,6 +368,44 @@ class InProcessResponse {
   }
   flushHeaders() {}
 
+  /** The assistant message with its tool calls, from a JSON body or from SSE chunks. */
+  message(): { content: string; tool_calls: any[] } {
+    const whole = (this.body as any)?.choices?.[0]?.message;
+    if (whole && typeof whole === "object")
+      return {
+        content: typeof whole.content === "string" ? whole.content : "",
+        tool_calls: Array.isArray(whole.tool_calls) ? whole.tool_calls : [],
+      };
+    let content = "";
+    const calls: any[] = [];
+    for (const line of this.chunks.join("").split("\n")) {
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const delta = JSON.parse(data)?.choices?.[0]?.delta;
+        if (typeof delta?.content === "string") content += delta.content;
+        for (const part of delta?.tool_calls ?? []) {
+          const index = Number.isInteger(part.index)
+            ? part.index
+            : calls.length;
+          const call = (calls[index] ??= {
+            id: "",
+            type: "function",
+            function: { name: "", arguments: "" },
+          });
+          if (part.id) call.id = part.id;
+          if (part.function?.name) call.function.name += part.function.name;
+          if (part.function?.arguments)
+            call.function.arguments += part.function.arguments;
+        }
+      } catch {
+        // Ignore a partial SSE line.
+      }
+    }
+    return { content, tool_calls: calls.filter(Boolean) };
+  }
+
   text(): string {
     const message = (this.body as any)?.choices?.[0]?.message?.content;
     if (typeof message === "string") return message;
@@ -456,6 +494,84 @@ let runner: AnalysisRunner = proxyAnalysisRunner;
 /** Test seam: the route tests use a deterministic runner; production always uses the proxy. */
 export function setM365AnalysisRunnerForTests(next?: AnalysisRunner): void {
   runner = next ?? proxyAnalysisRunner;
+}
+
+export interface AgentRunner {
+  (
+    user: AuthenticatedUser,
+    messages: unknown[],
+    tools: unknown[],
+    estimatedCredits: number,
+    maxTokens: number,
+  ): Promise<{ content: string; tool_calls: any[] }>;
+}
+
+/** The Excel agent's model turn: same proxy (credits, ledger), its own tools, the "m365" surface. */
+export const proxyAgentRunner: AgentRunner = async (
+  user,
+  messages,
+  tools,
+  estimatedCredits,
+  maxTokens,
+) => {
+  const reservation = await reserveQuotaAtomic(
+    user.id,
+    user.subscriptionPlan || "free",
+    estimatedCredits,
+  );
+  if (!reservation) throw new M365AnalysisError("CREDITS_EXHAUSTED", 403);
+  const response = new InProcessResponse();
+  const proxied = new Proxy(response, {
+    get(target, property, receiver) {
+      if (property in target) return Reflect.get(target, property, receiver);
+      return () => proxied;
+    },
+  });
+  try {
+    await handleChatCompletions(
+      user,
+      {
+        messages,
+        tools,
+        tool_choice: "auto",
+        stream: false,
+        temperature: 0,
+        max_tokens: maxTokens,
+        cache_policy: "bypass",
+      },
+      proxied as unknown as Response,
+      reservation,
+      {},
+      "m365",
+    );
+  } catch (error) {
+    await releaseQuotaReservation(reservation).catch(() => undefined);
+    throw new M365AnalysisError(
+      "AI_PROVIDER_UNAVAILABLE",
+      502,
+      (error as Error).message?.slice(0, 80),
+    );
+  }
+  if (response.statusCode >= 400) {
+    const code = (response.body as any)?.error?.code;
+    throw new M365AnalysisError(
+      typeof code === "string" && /^[A-Za-z0-9_.-]{1,60}$/.test(code)
+        ? code
+        : "AI_PROVIDER_UNAVAILABLE",
+      response.statusCode >= 500 ? 502 : response.statusCode,
+    );
+  }
+  return response.message();
+};
+
+let agentRunner: AgentRunner = proxyAgentRunner;
+export function setM365AgentRunnerForTests(next?: AgentRunner): void {
+  agentRunner = next ?? proxyAgentRunner;
+}
+export function runAgentModel(
+  ...args: Parameters<AgentRunner>
+): ReturnType<AgentRunner> {
+  return agentRunner(...args);
 }
 
 const WINDOW_MS = 60_000;

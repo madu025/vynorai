@@ -101,7 +101,7 @@ export class AnalysisConsentError extends Error {
 const MAX_COLUMNS = 100;
 const MAX_NAME = 60;
 const MAX_CATEGORY_DISTINCT = 20;
-const PERSONAL_PATTERNS: RegExp[] = [
+export const PERSONAL_PATTERNS: RegExp[] = [
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
   /\+\d[\d\s-]{8,14}\d/,
   /\b0\d{9}\b/,

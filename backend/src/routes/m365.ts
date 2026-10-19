@@ -42,6 +42,7 @@ import {
   M365AnalysisError,
 } from "../services/m365Analysis.js";
 import { planScript } from "../services/m365Script.js";
+import { agentTurn } from "../services/m365Agent.js";
 import { z, validateBody } from "../middleware/validate.js";
 
 const excelPlanSchema = z.object({
@@ -999,6 +1000,58 @@ m365Router.post(
         target: tenant.tenantId,
         details: JSON.stringify({ code, correlationId }),
       });
+      return res.status(known ? error.status : 500).json({ error: { code } });
+    }
+  },
+);
+
+/**
+ * One turn of the Excel agent. The add-in sends the conversation (its own tool results included,
+ * personal data already masked on the device); the reply is text and tool calls. Nothing here
+ * changes a workbook: the add-in stages every write and applies it only after the person approves.
+ * The audit log carries counts, never content.
+ */
+m365Router.post(
+  "/excel/agent",
+  requireM365Auth,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const tenant = identity(req);
+    const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
+    res.setHeader("x-correlation-id", correlationId);
+    const tenantRecord = await getM365Tenant(tenant.tenantId);
+    if (tenantRecord && !tenantRecord.aiEnabled)
+      return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
+    if (req.body?.consent !== true)
+      return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
+    try {
+      const reply = await agentTurn(user, req.body);
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_AGENT_TURN",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({
+          correlationId,
+          messages: Array.isArray(req.body.messages)
+            ? req.body.messages.length
+            : 0,
+          toolCalls: reply.tool_calls.length,
+        }),
+      });
+      return res.json({ contractVersion: ANALYSIS_CONTRACT_VERSION, reply });
+    } catch (error) {
+      const known = error instanceof M365AnalysisError;
+      const code = known ? error.code : "AI_AGENT_FAILED";
+      console.error(
+        "[m365] excel agent failed",
+        JSON.stringify({
+          code,
+          detail: known
+            ? error.detail
+            : (error as Error)?.message?.slice(0, 120),
+          correlationId,
+        }),
+      );
       return res.status(known ? error.status : 500).json({ error: { code } });
     }
   },

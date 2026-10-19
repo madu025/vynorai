@@ -41,12 +41,8 @@ const scriptResultSchema = z
 
 export type ScriptResult = z.infer<typeof scriptResultSchema>;
 
-const SYSTEM_PROMPT = [
-  "You understand what a person wants from a spreadsheet, however they phrase it (English, Sinhala, Singlish, long or vague) and turn it into a short list of steps for a spreadsheet assistant.",
-  "You receive ONLY a statistical summary of a worksheet (column names, types, counts). You never see cell values.",
-  'Reply with ONE valid JSON object and nothing else, with every key in double quotes, for example: {"title": "Revenue by region", "steps": [{"instruction": "pivot table of total Revenue by Region", "reason": "Totals per region"}]}.',
-  `Give 1 to ${MAX_SCRIPT_STEPS} steps in the order they should run. Each instruction is ONE plain English sentence that uses column names exactly as given.`,
-  "The assistant understands only these kinds of sentences:",
+/** The sentence forms the add-in reader understands (shared with the Excel agent tool vynor_step). */
+export const STEP_FORMS = [
   "- pivot table of total <measure> by <category> (optionally: top N, bottom N (the N smallest; keep the number the person asked for), average, count, as percent of total)",
   '- pivot table of total <measure> by <category> and <category2> as rows (lists every <category2> under each <category> with its total; use it for "what was used per X and how much")',
   "- pivot table of total <measure> by <category> and <category2> (second field becomes columns)",
@@ -67,6 +63,15 @@ const SYSTEM_PROMPT = [
   "  To highlight or find the rows that break a rule between columns, use: show rows where <test>. It lists the matching rows.",
   "- describe <measure> (or describe <measure> and <measure2> in ONE step) / find outliers in <measure> (use this for unusual or strange values) / forecast <measure> for the next 5 periods / correlation between <measure> and <measure> / dashboard with total <measure> by <category>",
   "- check the data quality of this data",
+];
+
+const SYSTEM_PROMPT = [
+  "You understand what a person wants from a spreadsheet, however they phrase it (English, Sinhala, Singlish, long or vague) and turn it into a short list of steps for a spreadsheet assistant.",
+  "You receive ONLY a statistical summary of a worksheet (column names, types, counts). You never see cell values.",
+  'Reply with ONE valid JSON object and nothing else, with every key in double quotes, for example: {"title": "Revenue by region", "steps": [{"instruction": "pivot table of total Revenue by Region", "reason": "Totals per region"}]}.',
+  `Give 1 to ${MAX_SCRIPT_STEPS} steps in the order they should run. Each instruction is ONE plain English sentence that uses column names exactly as given.`,
+  "The assistant understands only these kinds of sentences:",
+  ...STEP_FORMS,
   "Do ONLY what the request asks. Never add steps the person did not ask for (no extra reports, charts, columns or formatting). Most requests need ONE step; use more only when the request clearly asks for several things.",
   "Use AT MOST ONE pivot table step in a plan. Two measures for the same category are ONE pivot: pivot table of total <measure> and total <measure2> by <category>.",
   "If the request needs something the assistant cannot do (sending email, schedules, running code or Python, regression, anything not listed above), do NOT pick a near-miss step. Reply with steps [] and cannot: ONE sentence in the person's language saying what is not possible and the closest thing that is.",

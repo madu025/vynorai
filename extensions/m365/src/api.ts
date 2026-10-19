@@ -91,6 +91,11 @@ export interface M365ApiClient {
     request: string;
     consent: true;
   }): Promise<any>;
+  agentExcel(input: {
+    language: "en" | "si" | "ta";
+    messages: unknown[];
+    consent: true;
+  }): Promise<any>;
 }
 
 export interface M365RequestTrace {
@@ -198,5 +203,6 @@ export function createM365ApiClient(
       request("POST", "/v1/m365/excel/rollback", input),
     analyzeExcel: (input) => request("POST", "/v1/m365/excel/analyze", input),
     scriptExcel: (input) => request("POST", "/v1/m365/excel/script", input),
+    agentExcel: (input) => request("POST", "/v1/m365/excel/agent", input),
   };
 }

@@ -1,4 +1,20 @@
 import {
+  PersonalMask,
+  appliedReport,
+  describeChange,
+  runAgent,
+  type AgentMessage,
+  type AgentRun,
+} from "./agent.js";
+import { checkStepWith, runStepWith } from "./agentSteps.js";
+import {
+  applyAgentChanges,
+  createOfficeAgentHost,
+  dropAgentBackups,
+  undoAgentChanges,
+  type AgentUndo,
+} from "./officeAgentHost.js";
+import {
   AnalysisConsentError,
   buildSchemaSummary,
   createAnalysisRequest,
@@ -629,6 +645,9 @@ function updateAuthenticationUi(signedIn: boolean) {
     analyze.disabled = !signedIn || capabilities?.aiAnalysis === false;
   if (scriptPlan)
     scriptPlan.disabled = !signedIn || capabilities?.aiAnalysis === false;
+  const agentRun = document.querySelector<HTMLButtonElement>("#agent-run");
+  if (agentRun)
+    agentRun.disabled = !signedIn || capabilities?.aiAnalysis === false;
   document.body.dataset.auth = signedIn ? "in" : "out";
 }
 
@@ -3300,5 +3319,371 @@ async function initialize() {
   updateAuthenticationUi(false);
   setStatus("Sign in to inspect selected Excel data.");
 }
+
+// --- Excel agent (DeepSeek with tools, like Copilot) ----------------------------------------
+// Read tools run at once on bounded, masked data; writes are staged and shown here; nothing
+// changes until "Approve and apply"; "Undo" puts everything back. See src/agent.ts.
+
+const AGENT_CONSENT_KEY = "vynorai.m365.agentConsent";
+const agentCard = document.querySelector<HTMLElement>("#agent-card");
+const agentProgress = document.querySelector<HTMLElement>("#agent-progress");
+const agentReply = document.querySelector<HTMLElement>("#agent-reply");
+const agentChanges = document.querySelector<HTMLOListElement>("#agent-changes");
+const agentNote = document.querySelector<HTMLElement>("#agent-note");
+const agentBadge = document.querySelector<HTMLElement>("#agent-badge");
+const agentApprove =
+  document.querySelector<HTMLButtonElement>("#agent-approve");
+const agentDiscard =
+  document.querySelector<HTMLButtonElement>("#agent-discard");
+const agentUndo = document.querySelector<HTMLButtonElement>("#agent-undo");
+const agentStop = document.querySelector<HTMLButtonElement>("#agent-stop");
+let agentHistory: AgentMessage[] = [];
+let agentMask = new PersonalMask();
+let agentPending: AgentRun | undefined;
+let agentLastUndo: AgentUndo | undefined;
+let agentBusy = false;
+let agentStopped = false;
+/** Verification rounds after an apply (the agent may stage fixes once more). */
+let agentRounds = 0;
+
+const show = (element: HTMLElement | null, visible: boolean) => {
+  if (element) element.hidden = !visible;
+};
+
+function agentLanguage(): "en" | "si" | "ta" {
+  return responseLanguage(instruction?.value || "", language) as
+    | "en"
+    | "si"
+    | "ta";
+}
+
+function agentToolLabel(name: string, args: Record<string, unknown>): string {
+  switch (name) {
+    case "get_workbook":
+      return "Looking at the workbook";
+    case "read_range":
+      return `Reading ${String(args.sheet ?? "")}!${String(args.address ?? "")}`;
+    case "calculate":
+      return `Calculating ${String(args.formula ?? "").slice(0, 80)}`;
+    case "vynor_step":
+      return `Checking a step: ${String(args.instruction ?? "").slice(0, 80)}`;
+    default:
+      return `Preparing a change (${name})`;
+  }
+}
+
+function renderAgentRun(run: AgentRun) {
+  show(agentCard, true);
+  if (agentReply) {
+    agentReply.textContent = "";
+    for (const line of (
+      run.reply ||
+      (run.stoppedAtLimit
+        ? "The agent stopped at its step limit. Try a smaller request."
+        : "")
+    ).split(/\n+/)) {
+      if (!line.trim()) continue;
+      const p = document.createElement("p");
+      p.textContent = line;
+      agentReply.appendChild(p);
+    }
+  }
+  if (agentChanges) {
+    agentChanges.textContent = "";
+    for (const item of run.changes) {
+      const li = document.createElement("li");
+      li.textContent = describeChange(item.change);
+      agentChanges.appendChild(li);
+    }
+  }
+  const pending = run.changes.length > 0;
+  show(agentChanges, pending);
+  show(agentNote, pending);
+  show(agentApprove, pending);
+  show(agentDiscard, pending);
+  if (agentBadge)
+    agentBadge.textContent = pending ? "Waiting for approval" : "Done";
+}
+
+async function agentModel(messages: AgentMessage[]) {
+  if (agentStopped) throw new Error("stopped");
+  const response = await apiClient().agentExcel({
+    consent: true,
+    language: agentLanguage(),
+    messages,
+  });
+  const reply = response?.reply;
+  if (!reply || !Array.isArray(reply.tool_calls))
+    throw new Error("agent-invalid");
+  return { content: String(reply.content ?? ""), tool_calls: reply.tool_calls };
+}
+
+function agentInputReader() {
+  let cached: Promise<any> | undefined;
+  return () =>
+    (cached ??= inspectSelectedExcelRange(
+      officeRuntime(),
+      crypto.randomUUID(),
+      500,
+    ));
+}
+
+async function agentLoop(request: string) {
+  agentBusy = true;
+  agentStopped = false;
+  show(agentStop, true);
+  show(agentApprove, false);
+  show(agentDiscard, false);
+  if (agentBadge) agentBadge.textContent = "Working";
+  const readInput = agentInputReader();
+  const host = createOfficeAgentHost(officeRuntime(), checkStepWith(readInput));
+  try {
+    const run = await runAgent({
+      request,
+      history: agentHistory,
+      host,
+      model: agentModel,
+      mask: agentMask,
+      onTool: (name, args) => {
+        const label = agentToolLabel(name, args);
+        if (agentProgress) agentProgress.textContent = label;
+        log.record(`agent:tool:${name}`, "info", label.slice(0, 120));
+      },
+    });
+    agentHistory = run.messages;
+    agentPending = run.changes.length ? run : undefined;
+    log.record("agent:run", "pass", {
+      turns: run.turns,
+      changes: run.changes.length,
+    });
+    renderAgentRun(run);
+    if (run.reply) renderConversation("assistant", run.reply);
+    if (agentProgress) agentProgress.textContent = "";
+    setStatus(
+      run.changes.length
+        ? "The agent prepared changes. Nothing has changed yet: review them, then approve."
+        : "The agent answered. Nothing was changed.",
+    );
+  } catch (error) {
+    if (agentProgress) agentProgress.textContent = "";
+    if (agentStopped) setStatus("Stopped. Nothing was changed.");
+    else if (error instanceof M365ApiError) handleApiError("agent", error);
+    else {
+      log.record("agent:run", "fail", describeError(error));
+      setStatus("The agent could not finish. Nothing was changed.");
+    }
+  } finally {
+    agentBusy = false;
+    show(agentStop, false);
+  }
+}
+
+async function startAgent() {
+  const request = (instruction?.value || "").trim();
+  if (!request) return setStatus("Describe what you want first.");
+  if (!config || !accessToken) return setStatus("Sign in first.");
+  if (agentBusy) return;
+  let agreed = false;
+  try {
+    agreed = localStorage.getItem(AGENT_CONSENT_KEY) === "1";
+  } catch {
+    agreed = false;
+  }
+  if (!agreed) {
+    agreed = await askInPane(
+      localizeMessage(
+        language,
+        "The agent sends your request, the column names and small samples of the cells it reads (at most 50 rows at a time) to the VynorAI AI service. Personal data such as e-mail addresses and phone numbers is replaced before anything leaves this workbook. Nothing changes until you approve.",
+      ),
+      localizeMessage(language, "Agree"),
+      localizeMessage(language, "Cancel"),
+    );
+    if (!agreed) return setStatus("Nothing was sent.");
+    try {
+      localStorage.setItem(AGENT_CONSENT_KEY, "1");
+    } catch {
+      // Asked again next time.
+    }
+  }
+  // A new request: earlier backups are no longer needed once the person moved on.
+  if (agentLastUndo) {
+    await dropAgentBackups(officeRuntime(), agentLastUndo).catch(
+      () => undefined,
+    );
+    agentLastUndo = undefined;
+    show(agentUndo, false);
+  }
+  agentRounds = 0;
+  renderConversation("user", request);
+  if (instruction) instruction.value = "";
+  setStatus("The agent is working. Nothing changes until you approve.");
+  await agentLoop(request);
+}
+
+document
+  .querySelector("#agent-run")
+  ?.addEventListener("click", () => void startAgent());
+
+// The agent is a preview: its button shows only when the person turns it on in the menu.
+const AGENT_ON_KEY = "vynorai.m365.agentOn";
+function agentOn(): boolean {
+  try {
+    return localStorage.getItem(AGENT_ON_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function showAgentToggle() {
+  const on = agentOn();
+  show(document.querySelector<HTMLElement>("#agent-run"), on);
+  const toggle = document.querySelector<HTMLElement>("#agent-toggle");
+  if (toggle)
+    toggle.textContent = on
+      ? "Agent (preview): ON (click to turn off)"
+      : "Agent (preview): OFF (click to turn on)";
+}
+document.querySelector("#agent-toggle")?.addEventListener("click", () => {
+  try {
+    localStorage.setItem(AGENT_ON_KEY, agentOn() ? "0" : "1");
+  } catch {
+    // Stays as it was.
+  }
+  showAgentToggle();
+});
+showAgentToggle();
+agentStop?.addEventListener("click", () => {
+  agentStopped = true;
+});
+agentDiscard?.addEventListener("click", () => {
+  agentPending = undefined;
+  // The agent must know nothing was applied.
+  agentHistory = [
+    ...agentHistory,
+    {
+      role: "user",
+      content:
+        "[Report from the add-in] The person discarded the staged changes. Nothing was applied.",
+    },
+  ];
+  show(agentChanges, false);
+  show(agentNote, false);
+  show(agentApprove, false);
+  show(agentDiscard, false);
+  if (agentBadge) agentBadge.textContent = "Discarded";
+  setStatus("Discarded. Nothing was changed.");
+});
+
+agentApprove?.addEventListener("click", async () => {
+  const run = agentPending;
+  if (!run || agentBusy) return;
+  agentPending = undefined;
+  agentBusy = true;
+  show(agentApprove, false);
+  show(agentDiscard, false);
+  if (agentBadge) agentBadge.textContent = "Applying";
+  setStatus("Applying the approved changes...");
+  log.record("agent:approve", "pass", { changes: run.changes.length });
+  const readInput = agentInputReader();
+  let report: Awaited<ReturnType<typeof applyAgentChanges>>;
+  try {
+    report = await applyAgentChanges(
+      officeRuntime(),
+      run.changes.map((item) => item.change),
+      runStepWith({
+        runtime: officeRuntime(),
+        api: apiClient(),
+        readInput,
+        supportsExcelApi,
+        requirements: ACTION_REQUIREMENTS,
+      }),
+    );
+  } catch (error) {
+    agentBusy = false;
+    log.record("agent:apply", "fail", describeError(error));
+    setStatus("Applying failed. See Diagnostics.");
+    return;
+  }
+  agentBusy = false;
+  agentLastUndo = mergeUndo(agentLastUndo, report.undo);
+  show(agentUndo, true);
+  if (agentChanges) {
+    agentChanges.textContent = "";
+    for (const result of report.results) {
+      const li = document.createElement("li");
+      li.textContent = `${result.status === "applied" ? "✓" : result.status === "failed" ? "✗" : "–"} ${result.change}${result.status === "failed" ? ` (${String(result.detail ?? "")})` : ""}`;
+      agentChanges.appendChild(li);
+    }
+  }
+  show(agentNote, false);
+  const failed = report.results.some((result) => result.status === "failed");
+  log.record("agent:apply", failed ? "fail" : "pass", {
+    results: report.results.map((result) => result.status).join(","),
+  });
+  setStatus(
+    failed
+      ? "Partly applied. Undo puts everything back."
+      : "Applied. Undo puts everything back.",
+  );
+  // The agent checks what was written once or twice and may stage fixes (they need approval again).
+  if (agentRounds < 2) {
+    agentRounds += 1;
+    await agentLoop(
+      appliedReport(
+        report.results.map((result) => ({
+          change: result.change,
+          status: result.status === "applied" ? "applied" : "failed",
+          detail: result.detail,
+        })),
+      ),
+    );
+  }
+});
+
+function mergeUndo(earlier: AgentUndo | undefined, next: AgentUndo): AgentUndo {
+  if (!earlier) return next;
+  return {
+    createdSheets: [...earlier.createdSheets, ...next.createdSheets],
+    restores: [...earlier.restores, ...next.restores],
+    formats: [...earlier.formats, ...next.formats],
+    backups: [...earlier.backups, ...next.backups],
+    steps: [...earlier.steps, ...next.steps],
+  };
+}
+
+agentUndo?.addEventListener("click", async () => {
+  if (!agentLastUndo || agentBusy) return;
+  agentBusy = true;
+  setStatus("Undoing the agent's changes...");
+  try {
+    await undoAgentChanges(officeRuntime(), agentLastUndo, async (rollback) => {
+      await rollbackCreatedItems(officeRuntime(), rollback as any, true);
+    });
+    agentLastUndo = undefined;
+    show(agentUndo, false);
+    agentHistory = [
+      ...agentHistory,
+      {
+        role: "user",
+        content:
+          "[Report from the add-in] The person undid all applied changes.",
+      },
+    ];
+    if (agentBadge) agentBadge.textContent = "Undone";
+    log.record("agent:undo", "pass");
+    setStatus("Undone. The workbook is back as it was.");
+  } catch (error) {
+    log.record("agent:undo", "fail", describeError(error));
+    setStatus("Undo did not finish. See Diagnostics.");
+  } finally {
+    agentBusy = false;
+  }
+});
+
+document.querySelector("#new-chat")?.addEventListener("click", () => {
+  agentHistory = [];
+  agentMask = new PersonalMask();
+  agentPending = undefined;
+  show(agentCard, false);
+});
 
 void initialize();

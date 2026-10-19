@@ -303,6 +303,10 @@ proxyRouter.post(
       }
 
       const quotaInfo = (req as any).quotaInfo;
+      // Opt-in for the Excel agent harness: the same surface the add-in uses in process. The VS Code
+      // extension never sends it, so its requests take the "ide" path exactly as before.
+      const surface = sanitized.vynor_surface === "m365" ? "m365" : "ide";
+      delete sanitized.vynor_surface;
       await handleChatCompletions(
         user,
         sanitized,
@@ -313,6 +317,7 @@ proxyRouter.post(
           exhausted: quotaInfo?.exhausted,
           creditError: quotaInfo?.creditError,
         },
+        surface,
       );
     } catch (err: any) {
       await releaseQuotaReservation((req as any).quotaInfo?.reservation).catch(

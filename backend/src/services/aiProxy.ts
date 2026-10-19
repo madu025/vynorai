@@ -241,6 +241,12 @@ export async function handleChatCompletions(
   res: Response,
   quotaReservation?: QuotaReservation,
   quota: QuotaContext = {},
+  /**
+   * "m365": the Excel add-in agent (in process, or `vynor_surface: "m365"` from its test harness). Its tools are its own
+   * staged workbook actions, so they are not pruned, and coding-agent memory and project RAG are skipped.
+   * Every other caller is "ide" and behaves exactly as before.
+   */
+  surface: "ide" | "m365" = "ide",
 ) {
   const {
     model = DEFAULT_CHAT_MODEL,
@@ -911,6 +917,7 @@ export async function handleChatCompletions(
   // the tool list is part of the provider prefix, so toggling it per turn
   // throws away the prefix cache (and blocks edits on "now explain…" turns).
   const allowMutation =
+    surface === "m365" ||
     slmDecision.allowMutation ||
     (body.messages || []).some(
       (m: any) =>
@@ -955,11 +962,10 @@ export async function handleChatCompletions(
   const projectScope = body.projectRoot
     ? String(body.projectRoot).slice(-16)
     : undefined;
-  const { body: memBody } = await enrichWithMemory(
-    enriched,
-    user.id,
-    projectScope,
-  );
+  const { body: memBody } =
+    surface === "m365"
+      ? { body: enriched }
+      : await enrichWithMemory(enriched, user.id, projectScope);
 
   // ── 2b. Per-turn context (@web, project RAG, golden scaffold) ─────────────
   // Attached to the LAST user message and memoized per turn, so the system
@@ -987,7 +993,10 @@ export async function handleChatCompletions(
         ? { context: "" }
         : await enrichWithWeb(memBody);
       if (webContext) blocks.push(webContext);
-      const { context: ragContext } = enrichWithRAG(memBody, user.id, planId);
+      const { context: ragContext } =
+        surface === "m365"
+          ? { context: "" }
+          : enrichWithRAG(memBody, user.id, planId);
       if (ragContext) blocks.push(ragContext);
       if (scaffold) blocks.push(formatTemplateContext(scaffold));
       return blocks.join("\n\n");

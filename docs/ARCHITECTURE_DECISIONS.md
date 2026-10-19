@@ -104,3 +104,21 @@ anything about production environment values is marked "not verified".
   credits priced in LKR, target users in price-sensitive markets (Sri Lanka, South Asia).
 - Goal: Claude Code level agent quality at a fraction of the cost. Never trade quality for tokens
   without a measured check.
+
+## Excel agent (Microsoft 365 add-in)
+
+- Decided 2026-10-19 by the owner: the Excel add-in moves from "AI writes sentences, the reader decides" to an
+  agent like Copilot in Excel. DeepSeek (through the user's VynorAI key and the normal gateway, credits and
+  ledger) runs a tool-calling loop; the add-in executes the tools with Office.js.
+- Data sent to the model: the schema summary plus a bounded sample (at most 50 rows per read, 200 cells per
+  answer) with personal data masked on the device (`redactPersonalData`) before it leaves. Never the whole sheet.
+- Writes: every write tool is staged, not run. The person sees the change list, approves, and only then is it
+  applied. In-place edits (sort, delete rows, overwrite cells) are allowed after approval, with undo: a backup copy
+  of the edited sheet is made first (hidden, marked `vynorai-backup`) and undo restores from it.
+- After apply the agent reads back the written ranges once (errors such as #VALUE!, #SPILL!) and may stage fixes,
+  which need approval again. At most 12 model turns per request.
+- The proven engine is kept: the reader stays the free fast path, and its builders (pivot, chart, dashboard,
+  clean, statistics, views at 520k rows) are one agent tool (`vynor_step`). Formulas the agent writes are checked
+  against a blocklist (external links, WEBSERVICE, other files) before staging.
+- Gateway surface `m365`: the coding-agent extras (mutation-tool pruning, project memory, RAG, scaffolds) are
+  skipped for these requests; the system prompt and tool list are fixed so the provider prefix cache hits.

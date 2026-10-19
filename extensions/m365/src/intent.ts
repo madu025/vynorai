@@ -1142,7 +1142,18 @@ export function normalizeInstruction(text: string): string {
   let out = text;
   for (const [pattern, replacement] of table)
     out = out.replace(pattern, replacement);
-  return out.replace(/\s{2,}/g, " ").trim();
+  out = out.replace(/\s{2,}/g, " ").trim();
+  // Politeness is not part of the request: "could you add X, thanks." means "add X".
+  const politeStart =
+    /^(?:(?:hi|hello|hey)[,!]?\s+)?(?:(?:could|can|would|will)\s+you\s+(?:please\s+)?|please\s+|kindly\s+|i\s+(?:want|need|would\s+like)\s+(?:you\s+)?to\s+)/i;
+  const asked = politeStart.test(out);
+  out = out.replace(politeStart, "");
+  out = out.replace(
+    /[\s,;]*\b(?:please|pls|plz|thanks|thank\s+you|thx|ty)\b[\s.!]*$/i,
+    "",
+  );
+  out = out.replace(asked ? /[.!?\s]+$/ : /[.!\s]+$/, "");
+  return out.trim();
 }
 
 const CHART_TYPE_WORDS: Array<

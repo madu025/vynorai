@@ -50,6 +50,7 @@ import {
   looksLikeQuestion,
 } from "./intent.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
+import { describeNearDuplicates } from "./valueCheck.js";
 import {
   detectMacroRequest,
   generateMacro,
@@ -1942,6 +1943,16 @@ inspect?.addEventListener("click", async () => {
       });
       const notice = describeUnhandledJobs(unhandledJobs);
       if (notice) renderConversation("assistant", notice);
+    }
+    // A PivotTable groups by exact text: "Central" and " Central " would show as two rows.
+    const nearDuplicateNotice = describeNearDuplicates(
+      layout.headers.map(String),
+      input.values.slice(layout.headerRowCount),
+      specs as Parameters<typeof describeNearDuplicates>[2],
+    );
+    if (nearDuplicateNotice) {
+      log.record("instruction:near-duplicates", "fail", nearDuplicateNotice);
+      renderConversation("assistant", nearDuplicateNotice);
     }
     const localPreview = await log.step(
       "local:preview",

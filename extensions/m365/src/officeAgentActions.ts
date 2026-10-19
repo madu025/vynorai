@@ -330,6 +330,55 @@ export async function runExcelAction(
 
     case "filter_range": {
       const range = sheet.getRange(args.address);
+      // Data inside an Excel Table is filtered through the Table: a sheet AutoFilter on it is refused.
+      const tables = sheet.tables;
+      tables.load("items/name");
+      await context.sync();
+      const overlaps = tables.items.map((table: any) => {
+        const tableRange = table.getRange();
+        const shared = range.getIntersectionOrNullObject(tableRange);
+        shared.load("isNullObject");
+        return { table, tableRange, shared };
+      });
+      await context.sync();
+      const hit = overlaps.find((item: any) => !item.shared.isNullObject);
+      if (hit) {
+        const tableFilter = hit.table.autoFilter;
+        const tableName = String(hit.table.name);
+        const id = await sheetId();
+        run.journal.push({
+          type: "inverse",
+          tool,
+          data: { sheetId: id, table: tableName },
+        });
+        if (args.kind === "clear") {
+          tableFilter.clearCriteria();
+          await context.sync();
+          return { cleared: true, table: tableName };
+        }
+        if (args.kind === "remove") {
+          hit.table.showFilterButton = false;
+          await context.sync();
+          return { removed: true, table: tableName };
+        }
+        const headers = hit.table.getHeaderRowRange();
+        headers.load("values");
+        await context.sync();
+        const at = (headers.values[0] as unknown[])
+          .map((value) => String(value).trim().toLowerCase())
+          .indexOf(String(args.column).trim().toLowerCase());
+        if (at < 0)
+          throw new Error(`"${args.column}" is not a column of ${tableName}`);
+        tableFilter.apply(hit.tableRange, at, filterCriteria(args));
+        await context.sync();
+        const visible = hit.tableRange.getVisibleView();
+        visible.load("rowCount");
+        await context.sync();
+        return {
+          shownRows: Math.max(0, Number(visible.rowCount) - 1),
+          table: tableName,
+        };
+      }
       const filter = sheet.autoFilter;
       filter.load(["enabled", "criteria"]);
       const current = filter.getRangeOrNullObject();
@@ -354,34 +403,7 @@ export async function runExcelAction(
         return { cleared: true };
       }
       const index = await headerIndex(context, range, args.column);
-      const criteria: any =
-        args.kind === "values"
-          ? { filterOn: "Values", values: args.values }
-          : args.kind === "custom"
-            ? {
-                filterOn: "Custom",
-                criterion1: args.criterion1,
-                ...(args.criterion2
-                  ? {
-                      criterion2: args.criterion2,
-                      operator: title(args.operator),
-                    }
-                  : {}),
-              }
-            : args.kind === "dynamic"
-              ? { filterOn: "Dynamic", dynamicCriteria: title(args.dynamic) }
-              : args.kind === "cell_color"
-                ? { filterOn: "CellColor", color: args.color }
-                : {
-                    filterOn: {
-                      top: "TopItems",
-                      bottom: "BottomItems",
-                      top_percent: "TopPercent",
-                      bottom_percent: "BottomPercent",
-                    }[args.kind as "top"],
-                    criterion1: String(args.count),
-                  };
-      filter.apply(range, index, criteria);
+      filter.apply(range, index, filterCriteria(args));
       await context.sync();
       const visible = range.getVisibleView?.();
       if (visible) {
@@ -452,6 +474,7 @@ export async function runExcelAction(
           const copy = sheet.copy("End");
           copy.load("id");
           await context.sync();
+          copy.name = `VynorAI_backup_${Date.now().toString(36)}`;
           copy.visibility = "Hidden";
           copy.customProperties.add("vynorai-backup", sheet.name);
           await context.sync();
@@ -1304,13 +1327,15 @@ export async function runExcelAction(
         await context.sync();
         return { replaced: count.value };
       }
-      // Inside a range: constants only (formulas are kept), at most 200,000 cells.
+      // Inside a range: constants only (formulas are kept), in chunks, at most 2,000,000 cells.
       const range = sheet.getRange(args.address);
-      range.load(["cellCount", "formulas"]);
+      range.load(["rowCount", "columnCount"]);
       await context.sync();
-      if (Number(range.cellCount) > 200_000)
+      const rows = Number(range.rowCount);
+      const width = Number(range.columnCount);
+      if (rows * width > 2_000_000)
         throw new Error(
-          "a range replace is limited to 200,000 cells; leave out address to replace on the whole sheet",
+          "a range replace is limited to 2,000,000 cells; leave out address to replace on the whole sheet",
         );
       let replaced = 0;
       const flags = args.match_case ? "g" : "gi";
@@ -1318,29 +1343,42 @@ export async function runExcelAction(
         String(args.find).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
         flags,
       );
-      const next = (range.formulas as any[][]).map((row) =>
-        row.map((cell) => {
-          if (typeof cell !== "string" || cell.startsWith("=")) return cell;
-          if (args.whole_cell) {
-            if (
-              args.match_case
-                ? cell === args.find
-                : cell.toLowerCase() === String(args.find).toLowerCase()
-            ) {
-              replaced += 1;
-              return args.replace;
+      const chunk = Math.max(1, Math.floor(20_000 / width));
+      for (let start = 0; start < rows; start += chunk) {
+        const part = range
+          .getCell(start, 0)
+          .getResizedRange(Math.min(chunk, rows - start) - 1, width - 1);
+        part.load("formulas");
+        await context.sync();
+        let touched = false;
+        const next = (part.formulas as any[][]).map((row) =>
+          row.map((cell) => {
+            if (typeof cell !== "string" || cell.startsWith("=")) return cell;
+            if (args.whole_cell) {
+              if (
+                args.match_case
+                  ? cell === args.find
+                  : cell.toLowerCase() === String(args.find).toLowerCase()
+              ) {
+                replaced += 1;
+                touched = true;
+                return args.replace;
+              }
+              return cell;
             }
-            return cell;
-          }
-          const out = cell.replace(pattern, () => {
-            replaced += 1;
-            return args.replace;
-          });
-          return out;
-        }),
-      );
-      range.formulas = next;
-      await context.sync();
+            const out = cell.replace(pattern, () => {
+              replaced += 1;
+              touched = true;
+              return args.replace;
+            });
+            return out;
+          }),
+        );
+        if (touched) {
+          part.formulas = next;
+          await context.sync();
+        }
+      }
       return { replaced };
     }
 
@@ -1447,6 +1485,86 @@ export async function runExcelAction(
   throw new Error(`unknown action ${tool}`);
 }
 
+/** Cells per copy request when a backup is put back: one request for millions of cells times out. */
+const RESTORE_CELLS = 100_000;
+
+/**
+ * Puts a backup copy of a sheet (or of one range of it) back, in parts. Nothing is cleared up front:
+ * every part is overwritten from the backup, so a failure half way leaves the data in place (the
+ * backup sheet is kept) instead of an empty sheet. Cells the agent added outside the backup's
+ * range are cleared at the end.
+ */
+export async function restoreFromBackup(
+  context: any,
+  sheet: any,
+  backup: any,
+  address?: string,
+): Promise<void> {
+  const source = address
+    ? backup.getRange(address)
+    : backup.getUsedRangeOrNullObject();
+  const current = sheet.getUsedRangeOrNullObject();
+  source.load(
+    address
+      ? ["rowIndex", "columnIndex", "rowCount", "columnCount"]
+      : ["isNullObject", "rowIndex", "columnIndex", "rowCount", "columnCount"],
+  );
+  current.load([
+    "isNullObject",
+    "rowIndex",
+    "columnIndex",
+    "rowCount",
+    "columnCount",
+  ]);
+  await context.sync();
+  if (!address && source.isNullObject) {
+    if (!current.isNullObject) current.clear("All");
+    await context.sync();
+    return;
+  }
+  const row0 = Number(source.rowIndex);
+  const col0 = Number(source.columnIndex);
+  const rows = Number(source.rowCount);
+  const columns = Number(source.columnCount);
+  const step = Math.max(1, Math.floor(RESTORE_CELLS / columns));
+  for (let start = 0; start < rows; start += step) {
+    const count = Math.min(step, rows - start);
+    sheet
+      .getRangeByIndexes(row0 + start, col0, count, columns)
+      .copyFrom(
+        backup.getRangeByIndexes(row0 + start, col0, count, columns),
+        "All",
+      );
+    await context.sync();
+  }
+  if (!address && !current.isNullObject) {
+    // Rows and columns the agent added after the backup was made.
+    const endRow = Number(current.rowIndex) + Number(current.rowCount);
+    const endColumn = Number(current.columnIndex) + Number(current.columnCount);
+    if (endRow > row0 + rows) {
+      sheet
+        .getRangeByIndexes(
+          row0 + rows,
+          Number(current.columnIndex),
+          endRow - row0 - rows,
+          Number(current.columnCount),
+        )
+        .clear("All");
+    }
+    if (endColumn > col0 + columns) {
+      sheet
+        .getRangeByIndexes(
+          Number(current.rowIndex),
+          col0 + columns,
+          Number(current.rowCount),
+          endColumn - col0 - columns,
+        )
+        .clear("All");
+    }
+    await context.sync();
+  }
+}
+
 /** Undoes one journal entry (newest first). Entries for objects already gone are skipped. */
 export async function undoJournalEntry(
   context: any,
@@ -1464,17 +1582,8 @@ export async function undoJournalEntry(
     const sheet = await byId(entry.sheetId);
     const backup = await byId(entry.backupId);
     if (!sheet || !backup) return;
-    const used = sheet.getUsedRangeOrNullObject();
-    used.load("isNullObject");
-    const source = backup.getUsedRangeOrNullObject();
-    source.load(["isNullObject", "address"]);
-    await context.sync();
-    if (!used.isNullObject) used.clear("All");
-    if (!source.isNullObject) {
-      const address = String(source.address).split("!").pop()!;
-      sheet.getRange(address).copyFrom(source, "All");
-    }
-    await context.sync();
+    await restoreFromBackup(context, sheet, backup);
+    // Only after every part is back: the backup is no longer needed.
     backup.delete();
     await context.sync();
     return;
@@ -1511,6 +1620,16 @@ export async function undoJournalEntry(
       }
       break;
     case "filter_range": {
+      if (data.table) {
+        const table = workbook.tables.getItemOrNullObject(data.table);
+        table.load("isNullObject");
+        await context.sync();
+        if (!table.isNullObject) {
+          table.autoFilter.clearCriteria();
+          table.showFilterButton = true;
+        }
+        break;
+      }
       if (!sheet) return;
       sheet.autoFilter.remove();
       await context.sync();
@@ -2130,6 +2249,33 @@ export function cleanValue(cell: unknown, op: string): unknown {
     }
   }
   return cell;
+}
+
+/** The AutoFilter criteria of a filter_range call. */
+export function filterCriteria(args: any): any {
+  return args.kind === "values"
+    ? { filterOn: "Values", values: args.values }
+    : args.kind === "custom"
+      ? {
+          filterOn: "Custom",
+          criterion1: args.criterion1,
+          ...(args.criterion2
+            ? { criterion2: args.criterion2, operator: title(args.operator) }
+            : {}),
+        }
+      : args.kind === "dynamic"
+        ? { filterOn: "Dynamic", dynamicCriteria: title(args.dynamic) }
+        : args.kind === "cell_color"
+          ? { filterOn: "CellColor", color: args.color }
+          : {
+              filterOn: {
+                top: "TopItems",
+                bottom: "BottomItems",
+                top_percent: "TopPercent",
+                bottom_percent: "BottomPercent",
+              }[args.kind as "top"],
+              criterion1: String(args.count),
+            };
 }
 
 /** The Excel test (an array of TRUE/1 per data row) for delete_rows_where; = and != compare as text. */

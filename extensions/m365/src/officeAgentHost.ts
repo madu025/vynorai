@@ -17,6 +17,7 @@ import type { ExcelRuntimeLike } from "./officeExcel.js";
 import {
   CHART_TYPES,
   readDetails,
+  restoreFromBackup,
   runExcelAction,
   undoJournalEntry,
   type ActionRun,
@@ -30,6 +31,9 @@ const SNAPSHOT_CELLS = 50_000;
 /** Rows per request when undo writes old formulas back. */
 const RESTORE_ROWS = 20_000;
 const CHART_MAX_ROWS = 5000;
+/** A hidden backup copy has its own recognisable name, so the agent never mistakes it for the person's sheet. */
+const backupName = () =>
+  `VynorAI_backup_${Date.now().toString(36)}${Math.floor(Math.random() * 36).toString(36)}`;
 const isInternal = (name: string) =>
   name === CALC_SHEET || /^VynorAI_backup/.test(name);
 
@@ -339,6 +343,7 @@ export async function applyAgentChanges(
               const copy = sheet.copy("End");
               copy.load("id");
               await context.sync();
+              copy.name = backupName();
               copy.visibility = "Hidden";
               copy.customProperties.add(BACKUP_MARK, id);
               await context.sync();
@@ -530,6 +535,7 @@ export async function applyAgentChanges(
               const copy = sheet.copy("End");
               copy.load("id");
               await context.sync();
+              copy.name = backupName();
               copy.visibility = "Hidden";
               copy.customProperties.add(BACKUP_MARK, sheetKey);
               await context.sync();
@@ -759,10 +765,7 @@ export async function undoAgentChanges(
       const sheet = await byKey(item.sheet);
       const backup = await byKey(item.backup);
       if (!sheet || !backup) continue;
-      sheet
-        .getRange(item.address)
-        .copyFrom(backup.getRange(item.address), "All");
-      await context.sync();
+      await restoreFromBackup(context, sheet, backup, item.address);
       backup.delete();
       await context.sync();
     }

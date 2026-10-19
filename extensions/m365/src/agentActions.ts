@@ -617,7 +617,10 @@ export const ACTION_TOOLS: Record<string, ActionDef> = {
         );
       const out: ActionArgs = { action, name };
       if (action === "add") {
-        out.refers_to = checkFormula(restore(String(args.refers_to ?? "")));
+        const target = restore(String(args.refers_to ?? "")).trim();
+        out.refers_to = checkFormula(
+          target.startsWith("=") ? target : `=${target}`,
+        );
         out.comment = shortText(args.comment, 255);
       }
       if (action === "rename") {

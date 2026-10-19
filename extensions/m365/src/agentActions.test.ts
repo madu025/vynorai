@@ -377,3 +377,54 @@ test("clean_in_place keeps formulas and leading-zero IDs, and parses d/m/y dates
   );
   assert.equal(needsSheetBackup("clean_in_place", {}), true);
 });
+
+test("batch-test fixes: a name without = works, Table filters use the same criteria builder", async () => {
+  const withoutEquals = stage("named_range", {
+    action: "add",
+    name: "BatchTest",
+    refers_to: "'Test copy'!$A$1:$J$10",
+  });
+  assert.equal(withoutEquals.args.refers_to, "='Test copy'!$A$1:$J$10");
+  const withEquals = stage("named_range", {
+    action: "add",
+    name: "TaxRate",
+    refers_to: "=0.15",
+  });
+  assert.equal(withEquals.args.refers_to, "=0.15");
+  assert.throws(
+    () =>
+      stage("named_range", {
+        action: "add",
+        name: "Bad",
+        refers_to: 'WEBSERVICE("x")',
+      }),
+    AgentToolError,
+  );
+  const { filterCriteria } = await import("./officeAgentActions.js");
+  assert.deepEqual(filterCriteria({ kind: "values", values: ["R-KO"] }), {
+    filterOn: "Values",
+    values: ["R-KO"],
+  });
+  assert.deepEqual(
+    filterCriteria({
+      kind: "custom",
+      criterion1: ">5",
+      criterion2: "<9",
+      operator: "and",
+    }),
+    {
+      filterOn: "Custom",
+      criterion1: ">5",
+      criterion2: "<9",
+      operator: "And",
+    },
+  );
+  assert.deepEqual(filterCriteria({ kind: "top", count: 10 }), {
+    filterOn: "TopItems",
+    criterion1: "10",
+  });
+  assert.deepEqual(filterCriteria({ kind: "dynamic", dynamic: "this_month" }), {
+    filterOn: "Dynamic",
+    dynamicCriteria: "ThisMonth",
+  });
+});

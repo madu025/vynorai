@@ -65,6 +65,11 @@ test("every workbook-object tool checks its arguments and describes the change",
     ],
     ["sheet_action", { action: "delete", sheet: "Old" }, /hidden copy is kept/],
     [
+      "sheet_action",
+      { action: "delete", sheet: "Old", permanent: true },
+      /PERMANENTLY/,
+    ],
+    [
       "conditional_format",
       { sheet: "Data", address: "H2:H9", rule: "greater_than", value: 100 },
       /greater than 100, fill #FFC7CE/,

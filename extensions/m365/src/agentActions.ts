@@ -427,13 +427,14 @@ export const ACTION_TOOLS: Record<string, ActionDef> = {
           optionalNumber(args.value, "value (position, 0 is first)", 0, 500) ??
           0;
       if (action === "tab_color") out.value = colour(args.value, "value");
+      if (action === "delete" && args.permanent === true) out.permanent = true;
       if (action === "freeze_rows" || action === "freeze_columns")
         out.value = optionalNumber(args.value, "value (how many)", 1, 100) ?? 1;
       if (action === "freeze_at") out.value = checkRange(args.value);
       return clean(out);
     },
     describe: (args) =>
-      `${String(args.action).replace(/_/g, " ")} sheet "${args.sheet}"${args.value !== undefined ? ` (${args.value})` : ""}${args.action === "delete" ? " (a hidden copy is kept for undo)" : ""}`,
+      `${String(args.action).replace(/_/g, " ")} sheet "${args.sheet}"${args.value !== undefined ? ` (${args.value})` : ""}${args.action === "delete" ? (args.permanent ? " PERMANENTLY (no copy is kept, undo cannot bring it back)" : " (a hidden copy is kept for undo)") : ""}`,
   },
   conditional_format: {
     check(args, restore) {

@@ -398,6 +398,11 @@ export async function runExcelAction(
               .length < 2
           )
             throw new Error("the last visible sheet cannot be deleted");
+          if (args.permanent) {
+            // The person asked for it explicitly: no hidden copy, undo cannot bring the sheet back.
+            sheet.delete();
+            break;
+          }
           const copy = sheet.copy("End");
           copy.load("id");
           await context.sync();

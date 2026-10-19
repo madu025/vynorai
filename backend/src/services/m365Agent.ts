@@ -376,6 +376,11 @@ export const AGENT_TOOLS = [
       ),
       sheet: str("Sheet name"),
       value: { type: ["string", "number"] },
+      permanent: {
+        type: "boolean",
+        description:
+          "For delete: no hidden copy is kept and undo cannot bring the sheet back. Use it only when the person says delete permanently, or to remove a hidden VynorAI_backup_ sheet.",
+      },
     },
     ["action", "sheet"],
   ),

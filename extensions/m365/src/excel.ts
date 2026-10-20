@@ -236,6 +236,8 @@ export interface ExcelColumnSpecs {
     category: number;
     values: number[];
     aggregation?: ExcelAggregation;
+    /** Usage dashboard: how much of each item each category used, by unit. */
+    usage?: { item: number; unit?: number };
   };
   quality?: { mode?: "data" | "formula" | "repair" };
   namedRange?: { source: number; name?: string };
@@ -398,6 +400,10 @@ export interface ExcelActionSpec {
     category: { column: string; index: number };
     values: Array<{ column: string; index: number }>;
     aggregation: ExcelAggregation;
+    usage?: {
+      item: { column: string; index: number };
+      unit?: { column: string; index: number };
+    };
   };
   qualityMode?: "data" | "formula" | "repair";
   categoryColumn?: string;
@@ -1886,11 +1892,45 @@ function resolveColumnSpecs(
       );
     if (!["sum", "count", "average", "min", "max"].includes(aggregation))
       fail("EXCEL_SPEC_INVALID", "Choose a supported dashboard aggregation.");
+    let usage:
+      | {
+          item: { column: string; index: number };
+          unit?: { column: string; index: number };
+        }
+      | undefined;
+    if (specs.dashboard.usage) {
+      const { item, unit } = specs.dashboard.usage;
+      if (values.length !== 1 || aggregation !== "sum")
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "A usage dashboard adds up exactly one quantity column.",
+        );
+      if (!inRange(item) || item === category || values.includes(item))
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose an existing item column that differs from the category and quantity columns.",
+        );
+      if (
+        unit !== undefined &&
+        (!inRange(unit) || [category, item, ...values].includes(unit))
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose an existing unit column that differs from the other dashboard columns.",
+        );
+      usage = {
+        item: { column: headers[item], index: item },
+        ...(unit !== undefined
+          ? { unit: { column: headers[unit], index: unit } }
+          : {}),
+      };
+    }
     resolved.dashboard = {
       dashboard: {
         category: { column: headers[category], index: category },
         values: values.map((index) => ({ column: headers[index], index })),
         aggregation,
+        ...(usage ? { usage } : {}),
       },
     };
   }

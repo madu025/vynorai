@@ -58,10 +58,11 @@ test("the dashboard request that named Circuit ID and Item Code is a weak readin
   const second = read(
     "dashboard of Issued Quantity by Item Code for each Circuit ID",
   );
-  assert.match(
-    weakReading(second.text, HEADERS, second.reading) ?? "",
-    /ignores "Circuit ID"/,
-  );
+  // A dashboard of what each circuit used is read as a usage dashboard now, so it is not weak.
+  assert.equal(weakReading(second.text, HEADERS, second.reading), undefined);
+  // A dashboard that still ignores a named column is weak.
+  const third = read("dashboard of Issued Quantity by Status and RTOM");
+  assert.ok(weakReading(third.text, HEADERS, third.reading));
 });
 
 test("plain requests the reader handles well are not weak", () => {

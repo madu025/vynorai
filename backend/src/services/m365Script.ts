@@ -61,7 +61,7 @@ export const STEP_FORMS = [
   "- name the <column> column <Name> / copy this data to a new sheet",
   "- show the top 10 rows by <measure> / sort by <measure> descending / show rows where <column> is <value> / show rows where <column> is <value> and <column2> is <value2> (also or) / show rows where <measure> is less than <measure2> (a test between two columns)",
   "  To highlight or find the rows that break a rule between columns, use: show rows where <test>. It lists the matching rows.",
-  "- describe <measure> (or describe <measure> and <measure2> in ONE step) / find outliers in <measure> (use this for unusual or strange values) / forecast <measure> for the next 5 periods / correlation between <measure> and <measure> / dashboard with total <measure> by <category>",
+  "- describe <measure> (or describe <measure> and <measure2> in ONE step) / find outliers in <measure> (use this for unusual or strange values) / forecast <measure> for the next 5 periods / correlation between <measure> and <measure> / dashboard with total <measure> by <category> / usage dashboard of total <quantity> by <id column> and <item column> with units in <unit column>",
   "- advanced forecast <measure> for the next 6 periods with seasonality and confidence intervals / financial report with revenue, cost and expense / anomaly report for <measure>",
   "- check the data quality of this data",
 ];
@@ -93,7 +93,7 @@ const SYSTEM_PROMPT = [
   "Use only column names that appear in the summary, exactly as written; never invent a column.",
   'Prefer the fewest steps that fully answer the request. A person asking "for each X, which Y and how much" wants ONE pivot with X and Y as rows.',
 
-  'A "dashboard" or "report" that breaks a measure down by TWO categories ("per <id column>, how much of each <item column>") is ONE pivot table step with both as rows: ["pivot table of total <measure> by <id column> and <item column> as rows"]. The dashboard step takes one category only; use it only for one category.',
+  'A "dashboard" or "report" of how much of each <item column> each <id column> used ("per circuit, how much of each material") is ONE step: ["usage dashboard of total <quantity column> by <id column> and <item column> with units in <unit column>"]. Name the unit column (UoM, Unit) only when the summary has one; otherwise leave out "with units in". It totals each unit separately, so quantities in different units are never added together, and it shows totals, a lookup of one id and the top ids. Use it instead of a pivot whenever the person asks for a dashboard of usage.',
 ].join("\n");
 
 const LANGUAGE_NAMES: Record<AnalysisLanguage, string> = {

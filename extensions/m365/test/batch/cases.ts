@@ -554,6 +554,18 @@ export const CASES: BatchCase[] = [
     { files: ["extensions/m365/src/macroGen.ts"] },
   ),
   c(
+    "g-usage-dashboard",
+    "dashboard",
+    "dashboard of how much Item Code each Circuit ID used",
+    "dashboard",
+    {
+      files: [
+        "extensions/m365/src/usageDashboard.ts",
+        "extensions/m365/src/usageSheet.ts",
+      ],
+    },
+  ),
+  c(
     "g-script-blank",
     "code",
     "write a VBA macro that deletes blank rows",

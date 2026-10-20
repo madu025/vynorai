@@ -5,6 +5,7 @@
  * the person's own selected data. Nothing is simulated or invented.
  */
 
+import { UsageAccumulator } from "./usageDashboard.js";
 import { parseExpression } from "./expression.js";
 import { previewExpressionValue } from "./previewValue.js";
 import {
@@ -991,6 +992,64 @@ export function buildOutcomes(
         say(
           `Cleans a copy: ${(spec.operations ?? []).join(", ")}`,
           `පිටපතක් පිරිසිදු කරයි: ${(spec.operations ?? []).join(", ")}`,
+        ),
+      );
+    } else if (action.kind === "dashboard" && spec.dashboard?.usage) {
+      // Usage dashboard: the picture is computed from the rows read for the preview (a sample on big data).
+      const dashboard = spec.dashboard as {
+        category: { column: string; index: number };
+        values: Array<{ column: string; index: number }>;
+        usage: {
+          item: { column: string; index: number };
+          unit?: { column: string; index: number };
+        };
+      };
+      const accumulator = new UsageAccumulator();
+      for (const row of rows)
+        accumulator.add(
+          row[dashboard.category.index],
+          row[dashboard.usage.item.index],
+          row[dashboard.values[0].index],
+          dashboard.usage.unit ? row[dashboard.usage.unit.index] : undefined,
+        );
+      const usage = accumulator.finish(8);
+      const top = usage.units[0];
+      item.title = say(
+        `Usage dashboard: ${dashboard.values[0].column} by ${dashboard.category.column} and ${dashboard.usage.item.column}`,
+        `භාවිත දත්ත පුවරුව: ${dashboard.category.column} සහ ${dashboard.usage.item.column} අනුව`,
+      );
+      if (top) {
+        const ranked = usage.topByUnit[top.label] ?? [];
+        item.chart = {
+          type: "bar",
+          categories: ranked.map((entry) => entry.entity),
+          series: [
+            {
+              name: `${dashboard.values[0].column} (${top.label})`,
+              values: ranked.map((entry) => entry.quantity),
+            },
+          ],
+        };
+      }
+      item.table = {
+        headers: [say("KPI", "දර්ශකය"), say("Value", "අගය")],
+        rows: [
+          [`${dashboard.category.column}s`, String(usage.entities)],
+          [`${dashboard.usage.item.column}s`, String(usage.items)],
+          ...usage.units
+            .slice(0, 4)
+            .map((unit) => [
+              `${dashboard.values[0].column} (${unit.label})`,
+              String(unit.total),
+            ]),
+        ].slice(0, MAX_TABLE_ROWS),
+        barColumns: [],
+        dropdownColumns: [],
+      };
+      item.details.push(
+        say(
+          "One new result sheet: totals for each unit (never added together), a lookup of one id, the top ids with charts. Your original data is not changed.",
+          "අලුත් ප්‍රතිඵල පත්‍රිකාවක්: එකක් එකක් අනුව එකතු (මිශ්‍ර නොකර), ID සෙවුමක්, ඉහළම ID සහ ප්‍රස්ථාර. ඔබේ මුල් දත්ත වෙනස් නොවේ.",
         ),
       );
     } else if (action.kind === "dashboard" && spec.dashboard) {

@@ -117,3 +117,68 @@ test("how much a value differs from the average becomes a computed column (Engli
     assert.match(JSON.stringify(result.specs), /COLAVG/, text);
   }
 });
+
+test("a dashboard of how much of each item each id used becomes a usage dashboard with units", () => {
+  const headers = [
+    "Service ID",
+    "Item Code",
+    "Requested Quantity",
+    "Issued Quantity",
+    "UoM",
+    "Circuit ID",
+  ];
+  const rows = Array.from({ length: 20 }, (_, i) => [
+    `S${i}`,
+    `IC${i % 4}`,
+    i,
+    i * 2,
+    ["Ea", "km", "m"][i % 3],
+    `C${i % 5}`,
+  ]);
+  for (const text of [
+    "usage dashboard of total Issued Quantity by Circuit ID and Item Code with units in UoM",
+    "dashboard of how much Item Code each Circuit ID used",
+    "Circuit ID walata Item Code kopamana use unada kiyala dashboard ekak hadanna",
+  ]) {
+    const result: any = interpretInstruction(text, headers, rows as any);
+    assert.deepEqual(result.actions, ["dashboard"], text);
+    assert.deepEqual(
+      result.specs.dashboard,
+      {
+        category: 5,
+        values: [3],
+        aggregation: "sum",
+        usage: { item: 1, unit: 4 },
+      },
+      text,
+    );
+  }
+  // One category and a measure stays the ordinary dashboard.
+  const plain: any = interpretInstruction(
+    "dashboard of Issued Quantity by Circuit ID",
+    headers,
+    rows as any,
+  );
+  assert.equal(plain.specs.dashboard.usage, undefined);
+});
+
+test("a usage dashboard can name its unit column in the sentence", () => {
+  const headers = ["Customer", "Product", "Category", "Qty"];
+  const rows = Array.from({ length: 12 }, (_, i) => [
+    `C${i % 3}`,
+    `P${i % 4}`,
+    ["Network", "Mobile"][i % 2],
+    i,
+  ]);
+  const result: any = interpretInstruction(
+    "usage dashboard of total Qty by Customer and Product with units in Category",
+    headers,
+    rows as any,
+  );
+  assert.deepEqual(result.specs.dashboard, {
+    category: 0,
+    values: [3],
+    aggregation: "sum",
+    usage: { item: 1, unit: 2 },
+  });
+});

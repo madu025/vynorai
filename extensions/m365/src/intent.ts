@@ -104,6 +104,7 @@ export interface InstructionSpecs {
     category: number;
     values: number[];
     aggregation?: "sum" | "count" | "average" | "min" | "max";
+    usage?: { item: number; unit?: number };
   };
   quality?: { mode?: "data" | "formula" | "repair" };
   clean?: {
@@ -1226,7 +1227,12 @@ export function normalizeInstruction(text: string): string {
     // Kept as one action so the result, approval and undo are one marked worksheet.
     [/\b(?:kpi\s+)?dashboard\b/gi, "dashboard"],
     [/pivot\s*tables?\b/gi, "pivot"],
-    [/\b(\w+)\s+(?:walata|walin|anuwa)\b/gi, "by $1"],
+    // "Circuit ID walata" keeps a two-word column name together: a word before a common name ending
+    // (ID, Code, Date, Quantity ...) belongs to the name.
+    [
+      /\b((?:[\w%()]+\s+)?(?:id|no|code|name|date|number|amount|quantity|qty|type|status|category|cost|price|value)|\w+)\s+(?:walata|walin|anuwa)\b/gi,
+      "by $1",
+    ],
     [/\beka\b/gi, ""],
     [
       /ප්‍රස්තාරය?|ප්‍රස්ථාරය?|prasthara(ya)?|grap[h]? ekak?\b|chart ekak?\b/gi,
@@ -1410,6 +1416,85 @@ function isNumericColumn(rows: Cell[][], index: number): boolean {
   return cells.length > 0 && cells.every((cell) => typeof cell === "number");
 }
 
+const USAGE_WORDS =
+  /\b(?:usage|used|use|uses|using|consum\w*|issued|upayog\w*)\b|how much|how many (?:of|did)|kopamana/i;
+const ITEM_HEADER =
+  /item|material|product|part|sku|article|component|goods|stock/i;
+const UNIT_HEADER =
+  /^(?:uom|um|units?|unit of measure|unit of measurement|measure)$/i;
+const QUANTITY_PREFERENCE = [
+  /issued|used|consum|actual/i,
+  /qty|quantity|amount|count/i,
+];
+
+/**
+ * "Dashboard of how much of each item each circuit used": one entity column, one item column, one
+ * quantity and, when the data has one, a unit column. Needs both the entity and the item named.
+ */
+function interpretUsage(
+  text: string,
+  headers: string[],
+  rows: Cell[][],
+): NonNullable<InterpretedInstruction["specs"]["dashboard"]> | undefined {
+  if (!USAGE_WORDS.test(text)) return undefined;
+  const named = headerPositions(headers, text);
+  const labelNamed = named.filter(
+    (entry) => !isNumericColumn(rows, entry.index),
+  );
+  const itemEntry = labelNamed.find((entry) =>
+    ITEM_HEADER.test(headers[entry.index]),
+  );
+  const entityEntry = labelNamed.find(
+    (entry) =>
+      entry.index !== itemEntry?.index &&
+      !UNIT_HEADER.test(headers[entry.index].trim()),
+  );
+  if (!itemEntry || !entityEntry) return undefined;
+  const numericAll = headers
+    .map((_, index) => index)
+    .filter(
+      (index) => isNumericColumn(rows, index) && index !== entityEntry.index,
+    );
+  const namedNumeric = named.filter((entry) =>
+    numericAll.includes(entry.index),
+  );
+  const quantity =
+    namedNumeric.find((entry) =>
+      QUANTITY_PREFERENCE[0].test(headers[entry.index]),
+    )?.index ??
+    namedNumeric[0]?.index ??
+    numericAll.find((index) => QUANTITY_PREFERENCE[0].test(headers[index])) ??
+    numericAll.find((index) => QUANTITY_PREFERENCE[1].test(headers[index])) ??
+    numericAll[0];
+  if (quantity === undefined) return undefined;
+  // "with units in UoM" names the unit column; otherwise a column called UoM or Unit is used.
+  const unitTail =
+    /\bunits?\s+(?:in|from|as|column|are in)\s+(.+)$/i.exec(text)?.[1] ?? "";
+  const unitNamed = unitTail
+    ? headerPositions(headers, unitTail).find(
+        (entry) =>
+          entry.index !== entityEntry.index &&
+          entry.index !== itemEntry.index &&
+          !isNumericColumn(rows, entry.index),
+      )?.index
+    : undefined;
+  const unit =
+    unitNamed ??
+    headers.findIndex(
+      (header, index) =>
+        UNIT_HEADER.test(String(header).trim()) &&
+        index !== entityEntry.index &&
+        index !== itemEntry.index &&
+        !isNumericColumn(rows, index),
+    );
+  return {
+    category: entityEntry.index,
+    values: [quantity],
+    aggregation: "sum",
+    usage: { item: itemEntry.index, ...(unit >= 0 ? { unit } : {}) },
+  };
+}
+
 /** A dashboard is deliberately one action: it creates one reviewable, removable result sheet. */
 function interpretDashboard(
   text: string,
@@ -1418,6 +1503,12 @@ function interpretDashboard(
   result: InterpretedInstruction,
 ): boolean {
   if (!/\bdashboard\b/i.test(text)) return false;
+  const usage = interpretUsage(text, headers, rows);
+  if (usage) {
+    result.actions.push("dashboard");
+    result.specs.dashboard = usage;
+    return true;
+  }
   const positions = headerPositions(headers, text);
   const numeric = positions.filter((entry) =>
     isNumericColumn(rows, entry.index),

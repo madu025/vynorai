@@ -1515,3 +1515,51 @@ test("server and add-in agree on a sampled clean-up and format, including their 
     );
   }
 });
+
+test("server and add-in agree on a usage dashboard and refuse bad column choices", () => {
+  const actions = ["dashboard"];
+  const specs = {
+    dashboard: {
+      category: 1,
+      values: [2],
+      aggregation: "sum" as const,
+      usage: { item: 0 },
+    },
+  };
+  const server = createServerExcelPreviewPlan(input, actions, 500, specs);
+  const local = createExcelPreviewPlan(
+    input as any,
+    actions as any,
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  const usage = server.actions[0].spec.dashboard.usage;
+  assert.equal(usage.item.column, input.values[0][0]);
+  assert.equal(usage.unit, undefined);
+  for (const [bad, pattern] of [
+    [
+      { category: 1, values: [2, 3], usage: { item: 0 } },
+      /exactly one quantity/,
+    ],
+    [
+      { category: 1, values: [2], usage: { item: 1 } },
+      /item column that differs/,
+    ],
+    [
+      { category: 1, values: [2], usage: { item: 0, unit: 2 } },
+      /unit column that differs/,
+    ],
+    [
+      { category: 1, values: [2], aggregation: "average", usage: { item: 0 } },
+      /exactly one quantity/,
+    ],
+  ] as const)
+    assert.throws(
+      () =>
+        createServerExcelPreviewPlan(input, actions, 500, {
+          dashboard: bad,
+        } as any),
+      pattern,
+    );
+});

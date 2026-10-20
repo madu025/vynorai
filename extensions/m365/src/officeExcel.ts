@@ -73,6 +73,7 @@ export type ExcelActionStatus =
   | "skipped_unsupported";
 
 import { plannedSheetName } from "./outcome.js";
+import { writeUsageDashboard } from "./usageSheet.js";
 
 export interface ExcelActionResult {
   kind: string;
@@ -1510,6 +1511,54 @@ export async function applyApprovedExcelPlan(
               throw new Error("A dashboard needs a range with one header row");
             if (sheetExists) {
               result.status = "exists";
+            } else if (dashboard.usage) {
+              // Usage dashboard: the totals by unit are computed here over every row, in chunks, and the
+              // KPIs and the lookup stay live formulas over the source columns.
+              const usage = dashboard.usage as {
+                item: { column: string; index: number };
+                unit?: { column: string; index: number };
+              };
+              const entity = dashboard.category as {
+                column: string;
+                index: number;
+              };
+              const quantity = (
+                dashboard.values as Array<{ column: string; index: number }>
+              )[0];
+              const parsed = parseLocalRange(
+                localExcelAddress(plan.sourceAddress),
+              );
+              const quotedSheet = `'${String(plan.worksheetName).replace(/'/g, "''")}'!`;
+              const columnRef = (index: number) => {
+                const letter = columnLetter(parsed.startColumn + index);
+                return `${quotedSheet}$${letter}$${parsed.startRow + 1}:$${letter}$${parsed.endRow}`;
+              };
+              const whole = sourceRange();
+              whole.load(["rowCount"]);
+              await context.sync();
+              await writeUsageDashboard({
+                context,
+                sheet,
+                sourceRange: whole,
+                rowCount: Number(whole.rowCount),
+                columns: {
+                  entity: entity.index,
+                  item: usage.item.index,
+                  quantity: quantity.index,
+                  ...(usage.unit ? { unit: usage.unit.index } : {}),
+                },
+                refs: {
+                  entityName: entity.column,
+                  itemName: usage.item.column,
+                  quantityName: quantity.column,
+                  entity: columnRef(entity.index),
+                  item: columnRef(usage.item.index),
+                  quantity: columnRef(quantity.index),
+                  ...(usage.unit ? { unit: columnRef(usage.unit.index) } : {}),
+                },
+                chartPrefix: action.name,
+                snapshotText: new Date().toISOString().slice(0, 10),
+              });
             } else {
               const dashboardSampled = Boolean(plan.profile?.sample);
               // Very large data: the totals and the category table are formulas over every row.

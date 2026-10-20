@@ -213,6 +213,13 @@ const excelPlanSchema = z.object({
           aggregation: z
             .enum(["sum", "count", "average", "min", "max"])
             .optional(),
+          usage: z
+            .object({
+              item: z.number().int().min(0).max(99),
+              unit: z.number().int().min(0).max(99).optional(),
+            })
+            .strict()
+            .optional(),
         })
         .strict()
         .optional(),

@@ -173,13 +173,28 @@ const host = (seen: Seen): AgentHost => ({
             }
           : {}),
       };
-    const match = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(address);
+    // Like Excel: only the asked columns, and "" for cells past the data (K2 is empty here).
+    const match = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(address);
+    const column = (letters: string) =>
+      [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
     const top = match ? Number(match[2]) : 1;
-    const bottom = match ? Number(match[4]) : 1;
+    const bottom = match ? Number(match[4] ?? match[2]) : 1;
+    const first = match ? column(match[1]) : 0;
+    const last = match ? column(match[3] ?? match[1]) : HEADERS.length - 1;
     const all = [HEADERS, ...rows];
+    const values = all
+      .slice(top - 1, Math.min(bottom, all.length))
+      .map((row) =>
+        Array.from(
+          { length: last - first + 1 },
+          (_, index) => row[first + index] ?? "",
+        ),
+      );
     return {
       address,
-      values: all.slice(top - 1, Math.min(bottom, all.length)),
+      values,
+      // The data sheet holds values only, so its formulas read back as the values.
+      ...(withFormulas ? { formulas: values } : {}),
     };
   },
   calculate: async (formula) => calculate(formula),

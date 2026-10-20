@@ -68,6 +68,9 @@ const saveSubsetFilters = [
     "errorReportsEnabled",
   ]),
   createFilter("indexing", []),
+  // Never restore a workspace snapshot from an earlier load: it can name a
+  // folder that is no longer open, or "No workspace" before the live answer.
+  createFilter("workspace", [], []),
   createFilter("tabs", ["tabs"]),
   createFilter("profiles", ["preferencesByProfileId", "selectedProfileId"]),
 ];

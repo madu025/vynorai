@@ -101,6 +101,12 @@
     }
   ],
   "systemMessage": "TEST_SYS_MSG",
+  "experimental": {
+    "modelRoles": {
+      "inlineEdit": "TEST LLM",
+      "applyCodeBlock": "TEST LLM"
+    }
+  },
   "tabAutocompleteModel": {
     "title": "TEST LLM",
     "provider": "test",

@@ -39,6 +39,11 @@ the files you changed.
   as in "Sales" and "Status".
 - Excel reads an empty cell back as `""`, never `null`. Fixtures that feed the fingerprint must
   match, or every apply fails with `source_changed_since_preview`.
+- "Cost Centre" and "Profit Center" are groups, not money, even though they contain "cost".
+- After an apply, the add-in's own report comes back to `runAgent` as the request. Checks on the
+  person's words (multi-step coverage, target, audience) must skip it.
+- Agent steps (`vynor_step`) must pass `warnings` and `notes` on to the agent, and pass the request to
+  apply, or the agent never hears about fallbacks or lost leading zeros.
 - A refused PivotTable (Excel on the web) must leave no half-made pivot. Write the formula fallback
   and add a `notes` entry.
 

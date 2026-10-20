@@ -7,6 +7,8 @@
  */
 import { PERSONAL_PATTERNS } from "./analysis.js";
 import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
+import { findUnhandledJobs } from "./workflowCheck.js";
+import { describeRequestMeaning } from "./businessContext.js";
 
 export const AGENT_MAX_TURNS = 12;
 export const AGENT_MAX_CHANGES = 25;
@@ -609,13 +611,25 @@ export async function runAgent(options: {
   maxTurns?: number;
 }): Promise<AgentRun> {
   const { host, model, mask } = options;
+  // After an apply the add-in's own report comes back as the request; it is not the person's words.
+  const fromPerson = !options.request.startsWith("[Report from the add-in");
   const messages: AgentMessage[] = [
     ...(options.history ?? []),
-    { role: "user", content: mask.mask(options.request).slice(0, 4000) },
+    {
+      role: "user",
+      content: [
+        mask.mask(options.request).slice(0, 4000),
+        // A target or audience read locally from the request, after it (the prefix stays fixed).
+        fromPerson ? describeRequestMeaning(options.request) : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    },
   ];
   const changes: AgentRun["changes"] = [];
   const counts = { calculate: 0 };
   const maxTurns = options.maxTurns ?? AGENT_MAX_TURNS;
+  let nudged = false;
   for (let turn = 1; turn <= maxTurns; turn += 1) {
     options.onPhase?.("planning");
     const answer = await model(messages);
@@ -626,6 +640,20 @@ export async function runAgent(options: {
       ...(calls.length ? { tool_calls: calls } : {}),
     });
     if (!calls.length) {
+      // A multi-step request ("clean it, pivot by region and chart it") must not lose a step
+      // silently: once per request, name the steps nothing staged covers and let the model go on.
+      const missing =
+        fromPerson && changes.length
+          ? findUnhandledJobs(options.request, coveredKinds(changes))
+          : [];
+      if (missing.length && !nudged && turn < maxTurns) {
+        nudged = true;
+        messages.push({
+          role: "user",
+          content: `[Report from the add-in, not from the person] The request also asks for: ${missing.map((job) => job.label).join(", ")}. Nothing staged covers ${missing.length === 1 ? "it" : "them"}. Stage ${missing.length === 1 ? "it" : "them"} now, or say in the reply why not.`,
+        });
+        continue;
+      }
       options.onPhase?.("final");
       return {
         messages,
@@ -676,6 +704,41 @@ export async function runAgent(options: {
     phase: "final",
     stoppedAtLimit: true,
   };
+}
+
+/** The plan action kinds (workflowCheck.ts vocabulary) that the staged changes cover. */
+export function coveredKinds(
+  changes: readonly { change: StagedChange }[],
+): string[] {
+  const kinds = new Set<string>();
+  for (const { change } of changes) {
+    if (change.kind === "vynor_step")
+      for (const kind of change.understood.split(",")) kinds.add(kind.trim());
+    else if (change.kind === "write_formula") {
+      kinds.add("add-column");
+      if (
+        /\b(GROUPBY|PIVOTBY|SUMIFS|COUNTIFS|AVERAGEIFS)\(/i.test(change.formula)
+      )
+        kinds.add("summary");
+      if (
+        /\b(CORREL|FORECAST\w*|TREND|STDEV\w*|LINEST)\(/i.test(change.formula)
+      )
+        kinds.add("statistics");
+    } else if (change.kind === "create_chart") kinds.add("chart");
+    else if (change.kind === "format_range") kinds.add("format");
+    else if (change.kind === "sort_range") kinds.add("view");
+    else if (change.kind === "excel_action") {
+      const covers: Record<string, string[]> = {
+        chart_action: ["chart"],
+        pivot_action: ["pivot-table", "summary"],
+        conditional_format: ["format"],
+        clean_in_place: ["clean"],
+        filter_range: ["view"],
+      };
+      for (const kind of covers[change.tool] ?? []) kinds.add(kind);
+    }
+  }
+  return [...kinds];
 }
 
 async function runTool(

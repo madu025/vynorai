@@ -125,7 +125,7 @@ export function currencyFromRequest(text: unknown): CurrencyInfo | undefined {
 const MONEY_HEADER =
   /(amount|amt|sales|revenue|turnover|income|cost|costs|price|profit|expense|expenses|spend|spent|salary|salaries|wage|wages|payment|paid|fee|fees|budget|balance|gross|net|tax|vat|discount|charge|charges|bill|billing|value|earning|earnings|commission|rent|tariff|bonus|allowance|debit|credit|payable|receivable|invoice\s*amount)/i;
 const NOT_MONEY_HEADER =
-  /\b(qty|quantity|count|pcs|pieces|percent|rate|ratio|score|age|id|no|number|code|year|month)\b|%/i;
+  /\b(qty|quantity|count|pcs|pieces|percent|rate|ratio|score|age|id|no|number|code|year|month|cent(?:re|er)s?)\b|%/i;
 
 /** True when a header reads as money: sales, cost, amount, price, profit, salary... */
 export function isMoneyHeader(header: unknown): boolean {
@@ -600,4 +600,78 @@ export function suggestDashboardColumns(
       .slice(0, 3)
       .map((entry) => entry.index),
   };
+}
+
+/** What the agent is told about the data's business meaning: derived facts, never cell values. */
+export interface BusinessMeaning {
+  /** ISO code, or a note that the rows are in more than one currency. */
+  currency?: string;
+  currencyFormat?: string;
+  moneyColumns: string[];
+  /** The record key, such as "Invoice No" or "Invoice No + Line", with its confidence. */
+  businessKey?: { columns: string[]; confidence: BusinessKey["confidence"] };
+  /** Columns a summary or dashboard would group by and add up when the person names none. */
+  groupBy?: string;
+  measures: string[];
+}
+
+export function describeBusinessMeaning(
+  headers: string[],
+  rows: Cell[][],
+  numberFormats?: unknown[],
+): BusinessMeaning {
+  const columnOf = (index: number) =>
+    rows.map((row) => row[index]).filter((cell) => cell !== "" && cell != null);
+  const money = headers
+    .map((header, index) => ({ header, index }))
+    .filter(
+      ({ header, index }) =>
+        isMoneyHeader(header) ||
+        Boolean(currencyFromNumberFormat(numberFormats?.[index])) ||
+        Boolean(currencyFromValues(columnOf(index).slice(0, 50))),
+    );
+  const samples: Record<number, Cell[]> = {};
+  headers.forEach(
+    (_, index) => (samples[index] = columnOf(index).slice(0, 50)),
+  );
+  const currency = money.length
+    ? inferCurrency({
+        headers,
+        columns: money.map(({ index }) => index),
+        numberFormats,
+        samples,
+      })
+    : undefined;
+  const key = detectBusinessKey(headers, rows);
+  const suggested = suggestDashboardColumns(headers, rows);
+  return {
+    ...(currency
+      ? currency.mixed
+        ? {
+            currency: `mixed: ${currency.mixed.join(", ")}${currency.mixedBy ? ` (see ${currency.mixedBy})` : ""}; never total them as one`,
+          }
+        : { currency: currency.code, currencyFormat: currency.numberFormat }
+      : {}),
+    moneyColumns: money.map(({ header }) => header),
+    ...(key
+      ? { businessKey: { columns: key.names, confidence: key.confidence } }
+      : {}),
+    ...(suggested.category !== undefined
+      ? { groupBy: headers[suggested.category] }
+      : {}),
+    measures: suggested.values.map((index) => headers[index]),
+  };
+}
+
+/** One line about the request's business meaning for the agent, or "" when there is nothing to say. */
+export function describeRequestMeaning(request: string): string {
+  const target = parseBusinessTarget(request);
+  const audience = inferAudience(request);
+  const parts = [
+    ...(target ? [`${target.label} ${target.value}`] : []),
+    ...(audience !== "general" ? [`audience ${audience}`] : []),
+  ];
+  return parts.length
+    ? `[From the add-in, read from the request] ${parts.join("; ")}.`
+    : "";
 }

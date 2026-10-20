@@ -8,6 +8,8 @@ import {
   clampReadAddress,
   describeChange,
   runAgent,
+  coveredKinds,
+  appliedReport,
   stageChange,
   type AgentHost,
   type AgentMessage,
@@ -351,4 +353,162 @@ test("numbers come back with grouped text, and replies lose markdown marks", asy
   const result = (run.messages.find((m) => m.role === "tool") as any).content;
   assert.match(result, /"as_text":"1,090,404.455"/);
   assert.equal(run.reply, "Total: 1,090,404.455");
+});
+
+test("a step of a multi-step request that nothing staged covers is named once, then the model goes on", async () => {
+  const seen: AgentMessage[][] = [];
+  const script = [
+    {
+      content: "",
+      tool_calls: [
+        call("1", "create_chart", { sheet: "Data", address: "A1:B20" }),
+      ],
+    },
+    { content: "Chart staged.", tool_calls: [] },
+    {
+      content: "",
+      tool_calls: [
+        call("2", "vynor_step", {
+          instruction: "pivot table of Sales by Region",
+        }),
+      ],
+    },
+    { content: "PivotTable and chart staged.", tool_calls: [] },
+  ];
+  const run = await runAgent({
+    request: "make a pivot by region and chart it",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async (messages) => {
+      seen.push(structuredClone(messages));
+      return script[seen.length - 1];
+    },
+  });
+  assert.equal(run.turns, 4);
+  assert.equal(run.reply, "PivotTable and chart staged.");
+  const nudges = run.messages.filter(
+    (m) =>
+      m.role === "user" &&
+      String(m.content).startsWith("[Report from the add-in"),
+  );
+  assert.equal(nudges.length, 1);
+  assert.match(String(nudges[0].content), /also asks for: PivotTable\./);
+  assert.deepEqual(
+    run.changes.map((item) => item.change.kind),
+    ["create_chart", "vynor_step"],
+  );
+});
+
+test("no step is named when the staged changes cover the request, or when nothing was staged", async () => {
+  const covered = await runAgent({
+    request: "pivot by region and chart it",
+    host: host(),
+    mask: new PersonalMask(),
+    model: (() => {
+      const script = [
+        {
+          content: "",
+          tool_calls: [
+            call("1", "vynor_step", {
+              instruction: "pivot of Sales by Region",
+            }),
+            call("2", "create_chart", { sheet: "Data" }),
+          ],
+        },
+        { content: "Done.", tool_calls: [] },
+      ];
+      let index = 0;
+      return async () => script[index++];
+    })(),
+  });
+  assert.equal(covered.turns, 2);
+  const question = await runAgent({
+    request: "which chart and pivot would suit this?",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async () => ({
+      content: "A column chart by region.",
+      tool_calls: [],
+    }),
+  });
+  assert.equal(question.turns, 1);
+});
+
+test("staged changes map to the plan kinds the multi-step check uses", () => {
+  const kinds = coveredKinds([
+    {
+      change: {
+        kind: "vynor_step",
+        instruction: "x",
+        understood: "clean, pivot-table",
+      },
+    },
+    {
+      change: {
+        kind: "write_formula",
+        sheet: "S",
+        cell: "A1",
+        formula: "=GROUPBY(A2:A9,B2:B9,SUM)",
+      } as any,
+    },
+    { change: { kind: "excel_action", tool: "conditional_format", args: {} } },
+  ]);
+  assert.deepEqual(kinds.sort(), [
+    "add-column",
+    "clean",
+    "format",
+    "pivot-table",
+    "summary",
+  ]);
+});
+
+test("a target and audience from the request follow the request text, not the fixed prompt", async () => {
+  let first: AgentMessage[] = [];
+  await runAgent({
+    request: "management dashboard, target 5M",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async (messages) => {
+      first = structuredClone(messages);
+      return { content: "ok", tool_calls: [] };
+    },
+  });
+  assert.equal(first.length, 1);
+  assert.equal(
+    first[0].content,
+    "management dashboard, target 5M\n\n[From the add-in, read from the request] target 5000000; audience management.",
+  );
+});
+
+test("the add-in's own report after an apply is never checked as a request", async () => {
+  const script = [
+    {
+      content: "",
+      tool_calls: [call("1", "create_chart", { sheet: "Data" })],
+    },
+    { content: "Fixed the chart.", tool_calls: [] },
+  ];
+  let index = 0;
+  const run = await runAgent({
+    request: appliedReport([
+      {
+        change: {
+          kind: "vynor_step",
+          instruction: "pivot by region",
+          understood: "pivot-table",
+        },
+        status: "failed",
+        detail: "target 5M",
+      } as any,
+    ]),
+    host: host(),
+    mask: new PersonalMask(),
+    model: async () => script[index++],
+  });
+  assert.equal(run.turns, 2);
+  assert.ok(
+    !String(run.messages[0].content).includes(
+      "[From the add-in, read from the request]",
+    ),
+  );
 });

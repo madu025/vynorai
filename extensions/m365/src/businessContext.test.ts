@@ -6,6 +6,8 @@ import {
   currencyFromNumberFormat,
   currencyFromValues,
   describeBusinessKey,
+  describeBusinessMeaning,
+  describeRequestMeaning,
   detectBusinessKey,
   inferAudience,
   inferCurrency,
@@ -273,4 +275,51 @@ test("a dashboard with no columns named groups by a business category and adds u
   assert.equal(picked.category, 3); // Region, not Order No or Customer
   // Net Amount first; the date, the unit price and the percentage are never added up.
   assert.deepEqual(picked.values, [7, 4]);
+});
+
+test("the agent is told the data's business meaning as derived facts, never cell values", () => {
+  const headers = [
+    "Voucher No",
+    "Cost Centre",
+    "Debit",
+    "Currency",
+    "Narration",
+  ];
+  const rows = Array.from({ length: 40 }, (_, i) => [
+    `JV-${1000 + i}`,
+    ["Colombo", "Kandy", "Galle"][i % 3],
+    1000 + i * 10,
+    i % 4 ? "LKR" : "USD",
+    `Payment to supplier ${i}`,
+  ]);
+  const meaning = describeBusinessMeaning(headers, rows, [
+    "General",
+    "General",
+    "#,##0.00",
+  ]);
+  assert.match(meaning.currency!, /^mixed: .*LKR.*USD.*\(see Currency\)/);
+  assert.deepEqual(meaning.moneyColumns, ["Debit"]);
+  assert.deepEqual(meaning.businessKey?.columns, ["Voucher No"]);
+  assert.equal(meaning.groupBy, "Cost Centre");
+  assert.deepEqual(meaning.measures, ["Debit"]);
+  assert.ok(!JSON.stringify(meaning).includes("supplier"));
+  const single = describeBusinessMeaning(
+    ["Region", "Sales"],
+    [
+      ["North", 10],
+      ["South", 20],
+      ["North", 5],
+    ],
+    ["General", '"Rs "#,##0.00'],
+  );
+  assert.equal(single.currency, "LKR");
+  assert.equal(single.currencyFormat, '"Rs "#,##0.00');
+});
+
+test("a target and the audience are read from the request for the agent", () => {
+  assert.equal(
+    describeRequestMeaning("management dashboard, target 5M"),
+    "[From the add-in, read from the request] target 5000000; audience management.",
+  );
+  assert.equal(describeRequestMeaning("sort by date"), "");
 });

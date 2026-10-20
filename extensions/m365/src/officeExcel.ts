@@ -2192,6 +2192,10 @@ export async function applyApprovedExcelPlan(
                 // (GeneralException after about a minute), so the grouping is one live formula that
                 // Excel calculates over every row, like the other very-large-data results.
                 await formulaSummary();
+                result.notes = [
+                  ...(result.notes ?? []),
+                  "The data is very large, so the grouping is a live formula summary instead of a PivotTable (Excel on the web refuses PivotTables this big).",
+                ];
               } else {
                 try {
                   pivot = sheet.pivotTables.add(
@@ -2204,6 +2208,10 @@ export async function applyApprovedExcelPlan(
                   if (!action.spec?.rowsColumn) throw pivotError;
                   pivot = undefined;
                   await formulaSummary();
+                  result.notes = [
+                    ...(result.notes ?? []),
+                    `Excel could not create a PivotTable here (${describePivotError(pivotError)}), so a live formula summary of the same grouping was written instead.`,
+                  ];
                 }
               }
               if (pivot && action.spec?.rowsColumn) {

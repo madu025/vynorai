@@ -14,6 +14,11 @@ import {
   type StagedChange,
 } from "./agent.js";
 import type { ExcelRuntimeLike } from "./officeExcel.js";
+import { compareWrittenRows } from "./integrity.js";
+import {
+  describeBusinessMeaning,
+  type BusinessMeaning,
+} from "./businessContext.js";
 import type { M365ApiClient } from "./api.js";
 import {
   CHART_TYPES,
@@ -73,6 +78,76 @@ function guessType(values: unknown[], formats: unknown[]): string {
     return "date";
   if (present.every((item) => typeof item.value === "number")) return "number";
   return "text";
+}
+
+/** Rows read on the device to work out business meaning; only the derived facts are sent. */
+const MEANING_ROWS = 50;
+
+async function readMeaning(
+  context: any,
+  used: any,
+  headers: unknown[],
+  formats: unknown[] | undefined,
+): Promise<BusinessMeaning | undefined> {
+  try {
+    const rows = Math.min(MEANING_ROWS, Number(used.rowCount) - 1);
+    if (rows < 1) return undefined;
+    const body = used
+      .getCell(1, 0)
+      .getResizedRange(rows - 1, headers.length - 1);
+    body.load("values");
+    await context.sync();
+    return describeBusinessMeaning(
+      headers.map((header) => String(header ?? "")),
+      body.values as any[][],
+      formats,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/** Rows of a write_values change that are read back and compared with what was meant. */
+const READ_BACK_ROWS = 200;
+
+/**
+ * Reads the top of a write_values target back and names what Excel changed on the way in, such as
+ * an ID that lost its leading zeros or text Excel turned into a number or date. Advisory: a failed
+ * read never fails the write. Formulas written as values are skipped, since they read back as results.
+ */
+export async function readBackMismatches(
+  context: any,
+  target: any,
+  values: unknown[][],
+): Promise<string[]> {
+  try {
+    const rows = Math.min(values.length, READ_BACK_ROWS);
+    const columns = values[0]?.length ?? 0;
+    if (!rows || !columns) return [];
+    const back = target.getCell(0, 0).getResizedRange(rows - 1, columns - 1);
+    back.load("values");
+    await context.sync();
+    const isFormula = (cell: unknown) =>
+      typeof cell === "string" && cell.startsWith("=");
+    const expected = values.slice(0, rows).map((row) =>
+      row.map((cell) =>
+        isFormula(cell)
+          ? null
+          : typeof cell === "string" && cell.startsWith("'")
+            ? cell.slice(1) // Excel keeps the text and drops the apostrophe.
+            : (cell as any),
+      ),
+    );
+    const actual = (back.values as unknown[][]).map((row, r) =>
+      row.map((cell, c) => (isFormula(values[r]?.[c]) ? null : cell)),
+    );
+    // Columns are named by their place in the written range ("column 1" is its first column).
+    return compareWrittenRows(expected, actual, [], expected.length).map(
+      (issue) => issue.message,
+    );
+  } catch {
+    return [];
+  }
 }
 
 export function createOfficeAgentHost(
@@ -149,6 +224,12 @@ export function createOfficeAgentHost(
               ),
             })),
             firstRows: readable(firstRows, formats),
+            meaning: await readMeaning(
+              context,
+              activeUsed,
+              headers,
+              formats[0],
+            ),
           };
         }
         return {
@@ -469,6 +550,10 @@ export async function applyAgentChanges(
           top.load("values");
           await context.sync();
           const firstValues = (top.values as any[][]).map((row) => row[0]);
+          const mismatches =
+            change.kind === "write_values"
+              ? await readBackMismatches(context, target, change.values)
+              : [];
           return {
             address: spill.isNullObject
               ? ((change.kind === "write_formula"
@@ -481,6 +566,7 @@ export async function applyAgentChanges(
               (value) =>
                 typeof value === "string" && /^#[A-Z/0!?]+/.test(value),
             ),
+            ...(mismatches.length ? { mismatches } : {}),
           };
         }
         if (change.kind === "create_chart") {

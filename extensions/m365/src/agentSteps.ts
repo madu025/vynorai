@@ -111,6 +111,8 @@ export function runStepWith(deps: {
         expectedSourceFingerprint: prepared.preview.sourceFingerprint,
         supportsExcelApi: deps.supportsExcelApi,
         requirements: deps.requirements,
+        // Read locally for business meaning (currency, target, audience); never sent anywhere.
+        request: text,
       },
     );
     const failed = report.results.filter(
@@ -140,6 +142,21 @@ export function runStepWith(deps: {
         sheet: result.targetSheet,
         status: result.status,
         ...(result.error ? { error: String(result.error).slice(0, 160) } : {}),
+        // Read-back differences and fallbacks, so the agent can tell the person or fix them.
+        ...(result.warnings?.length
+          ? {
+              warnings: result.warnings
+                .slice(0, 5)
+                .map((text: string) => String(text).slice(0, 200)),
+            }
+          : {}),
+        ...(result.notes?.length
+          ? {
+              notes: result.notes
+                .slice(0, 5)
+                .map((text: string) => String(text).slice(0, 240)),
+            }
+          : {}),
       })),
       rollback: rollbackItemsFromApplyReport(plan.planId, report.results),
       ...(failed.length

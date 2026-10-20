@@ -1040,9 +1040,10 @@ emailAiWrite?.addEventListener("click", async () => {
     )
       return setStatus("Nothing was sent to AI.");
     setStatus("Writing the message...");
-    const answer = validateAssistResult(
-      await apiClient().assistText(buildReportEmailRequest(summary, true)),
+    const response = await apiClient().assistText(
+      buildReportEmailRequest(summary, true),
     );
+    const answer = validateAssistResult(response?.result);
     emailBody.value = answer.text.slice(0, 4000);
     updateEmailUi();
     setStatus(

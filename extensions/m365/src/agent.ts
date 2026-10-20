@@ -613,18 +613,11 @@ export async function runAgent(options: {
   const { host, model, mask } = options;
   // After an apply the add-in's own report comes back as the request; it is not the person's words.
   const fromPerson = !options.request.startsWith("[Report from the add-in");
+  // A target or audience read locally from the request goes after it (the prefix stays fixed).
+  const meaning = fromPerson ? describeRequestMeaning(options.request) : "";
   const messages: AgentMessage[] = [
     ...(options.history ?? []),
-    {
-      role: "user",
-      content: [
-        mask.mask(options.request).slice(0, 4000),
-        // A target or audience read locally from the request, after it (the prefix stays fixed).
-        fromPerson ? describeRequestMeaning(options.request) : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-    },
+    { role: "user", content: userContent(mask.mask(options.request), meaning) },
   ];
   const changes: AgentRun["changes"] = [];
   const counts = { calculate: 0 };
@@ -704,6 +697,15 @@ export async function runAgent(options: {
     phase: "final",
     stoppedAtLimit: true,
   };
+}
+
+/** The backend accepts at most this many characters in one user message. */
+const USER_MESSAGE_MAX = 4000;
+
+/** The request, then the add-in's note about it, within the backend's message limit. */
+export function userContent(request: string, note: string): string {
+  if (!note) return request.slice(0, USER_MESSAGE_MAX);
+  return `${request.slice(0, USER_MESSAGE_MAX - note.length - 2)}\n\n${note}`;
 }
 
 /** The plan action kinds (workflowCheck.ts vocabulary) that the staged changes cover. */

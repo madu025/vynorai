@@ -10,6 +10,7 @@ import {
   runAgent,
   coveredKinds,
   appliedReport,
+  userContent,
   stageChange,
   type AgentHost,
   type AgentMessage,
@@ -511,4 +512,12 @@ test("the add-in's own report after an apply is never checked as a request", asy
       "[From the add-in, read from the request]",
     ),
   );
+});
+
+test("a long request with the add-in's note still fits the backend's 4000-character limit", () => {
+  const note = "[From the add-in, read from the request] target 5000000.";
+  const content = userContent("x".repeat(5000), note);
+  assert.equal(content.length, 4000);
+  assert.ok(content.endsWith(`\n\n${note}`));
+  assert.equal(userContent("y".repeat(5000), "").length, 4000);
 });

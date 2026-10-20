@@ -36,6 +36,8 @@ export function headerRef(range: LargeRef): string {
 
 export type LargeViewSpec = {
   sort?: { index: number; direction: "asc" | "desc" };
+  /** Second sort key: rows that tie on the first column are ordered by this one. */
+  thenSort?: { index: number; direction: "asc" | "desc" };
   filter?: {
     index: number;
     operator: ">" | ">=" | "<" | "<=" | "=" | "!=" | "contains";
@@ -89,9 +91,16 @@ export function viewFormula(range: LargeRef, spec: LargeViewSpec): string {
   }
   if (spec.sort) {
     assertIndex(spec.sort.index, range.columns);
-    steps.push(
-      `s,SORTBY(${current},INDEX(${current},,${spec.sort.index + 1}),${spec.sort.direction === "desc" ? -1 : 1})`,
-    );
+    const keys = [
+      `INDEX(${current},,${spec.sort.index + 1}),${spec.sort.direction === "desc" ? -1 : 1}`,
+    ];
+    if (spec.thenSort) {
+      assertIndex(spec.thenSort.index, range.columns);
+      keys.push(
+        `INDEX(${current},,${spec.thenSort.index + 1}),${spec.thenSort.direction === "desc" ? -1 : 1}`,
+      );
+    }
+    steps.push(`s,SORTBY(${current},${keys.join(",")})`);
     current = "s";
   }
   if (spec.limit !== undefined) {

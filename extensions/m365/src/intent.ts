@@ -63,6 +63,8 @@ export interface InstructionSpecs {
   };
   view?: {
     sort?: { column: number; direction: "asc" | "desc" };
+    /** Second sort key for rows that tie on the first. */
+    thenSort?: { column: number; direction: "asc" | "desc" };
     filter?: {
       column: number;
       operator: ">" | ">=" | "<" | "<=" | "=" | "!=" | "contains";
@@ -280,7 +282,7 @@ export function interpretInstruction(
     problems: [],
   };
   const text = rewriteColumnWishes(instruction.replace(/[_]+/g, " "), headers);
-  // A view sorts by one column. Say so instead of reading "then B" as a separate, meaningless step.
+  // "sorted by A then B": two keys on one view (never a separate, meaningless "B" step).
   const twoKeySort =
     /\bsort(?:ed)?\s+(?:the\s+(?:rows|data|sheet)\s+)?by\s+(.+?)[\s,]+(?:and\s+)?then\s+(?:by\s+)?(.+)$/i.exec(
       text,
@@ -290,9 +292,27 @@ export function interpretInstruction(
     mentioned(headers, twoKeySort[1]) >= 0 &&
     mentioned(headers, twoKeySort[2]) >= 0
   ) {
-    result.problems.push(
-      `Sorting by two columns is not supported yet. Sort by one column, for example: sort by ${headers[mentioned(headers, twoKeySort[1])]}.`,
-    );
+    const first = mentioned(headers, twoKeySort[1]);
+    const second = mentioned(headers, twoKeySort[2]);
+    if (first === second) {
+      result.problems.push(
+        "Choose two different columns to sort by, for example: sort by Region then Qty.",
+      );
+      return result;
+    }
+    const descending =
+      /\b(?:desc(?:ending)?|z-a|largest|biggest|highest|high\s+to\s+low|newest|latest)\b/i;
+    result.actions.push("view");
+    result.specs.view = {
+      sort: {
+        column: first,
+        direction: descending.test(twoKeySort[1]) ? "desc" : "asc",
+      },
+      thenSort: {
+        column: second,
+        direction: descending.test(twoKeySort[2]) ? "desc" : "asc",
+      },
+    };
     return result;
   }
   // These requests need capabilities that are deliberately outside the add-in's

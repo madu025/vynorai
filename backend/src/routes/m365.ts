@@ -225,6 +225,13 @@ const excelPlanSchema = z.object({
             })
             .strict()
             .optional(),
+          thenSort: z
+            .object({
+              column: z.number().int().min(0).max(99),
+              direction: z.enum(["asc", "desc"]),
+            })
+            .strict()
+            .optional(),
           where: z.string().min(1).max(240).optional(),
           filter: z
             .object({

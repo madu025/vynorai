@@ -96,8 +96,8 @@ test("highlighting duplicates is not turned into removing them", () => {
   assert.ok(!read("highlight duplicates in Region").actions.includes("clean"));
 });
 
-test("sorting by two columns is refused with a clear message, not misread", () => {
+test("sorting by two columns is one view with two keys, not two steps", () => {
   const result = read("show the rows sorted by Region then Qty");
-  assert.deepEqual(result.actions, []);
-  assert.match(result.problems[0], /two columns/);
+  assert.deepEqual(result.actions, ["view"]);
+  assert.equal(result.specs.view.thenSort.column, 3);
 });

@@ -1,3 +1,4 @@
+import { compareWrittenRows } from "./integrity.js";
 import { guardText } from "./textGuard.js";
 import {
   canonicalExpression,
@@ -83,6 +84,8 @@ export interface ExcelActionResult {
   /** Workbook names created as helper lists for one result. */
   createdNames?: string[];
   error?: string;
+  /** Differences found when the written result was read back; shown so a bad copy is never sent on silently. */
+  warnings?: string[];
   /** Milliseconds this action took in Excel, shown when a result is slow. */
   ms?: number;
 }
@@ -2114,6 +2117,30 @@ export async function applyApprovedExcelPlan(
               }
               if (cleaned.dateColumns.length > 0 && cleaned.rows.length > 0)
                 await context.sync();
+              // Read a bounded part back and compare it with what was meant to be written. The check
+              // is advisory: if Excel cannot be read back, the result stands without a warning.
+              try {
+                const checked = Math.min(cleaned.rows.length, 200);
+                if (checked > 0) {
+                  const readBack = sheet.getRangeByIndexes(
+                    1,
+                    0,
+                    checked,
+                    headers.length,
+                  );
+                  readBack.load("values");
+                  await context.sync();
+                  const found = compareWrittenRows(
+                    cleaned.rows.slice(0, checked),
+                    readBack.values,
+                    headers.map(String),
+                  );
+                  if (found.length)
+                    result.warnings = found.map((issue) => issue.message);
+                }
+              } catch {
+                // Advisory only.
+              }
             }
           } else if (
             action.kind === "view" &&
@@ -2139,6 +2166,12 @@ export async function applyApprovedExcelPlan(
                 {
                   sort: spec.sort
                     ? { index: spec.sort.index, direction: spec.sort.direction }
+                    : undefined,
+                  thenSort: spec.thenSort
+                    ? {
+                        index: spec.thenSort.index,
+                        direction: spec.thenSort.direction,
+                      }
                     : undefined,
                   filter: spec.filter
                     ? {
@@ -2186,6 +2219,7 @@ export async function applyApprovedExcelPlan(
               const spec = action.spec ?? {};
               const view = applyView(rows, {
                 sort: spec.sort,
+                thenSort: spec.thenSort,
                 filter: spec.filter,
                 highlight: spec.highlight,
                 limit: spec.limit,

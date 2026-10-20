@@ -376,8 +376,13 @@ test("plans for clean and computed column carry validated specs and their own re
 });
 
 // ---------------------------------------------------------------- apply (fake Office.js)
-function fakeWorkbook(sourceValues: any[][] = input.values as any[][]) {
+function fakeWorkbook(
+  sourceValues: any[][] = input.values as any[][],
+  // Simulates Excel converting what was written when it is read back (for the result check).
+  readBack?: (values: any[][]) => any[][],
+) {
   const written: Record<string, any> = {};
+  const fullSheet = new Map<string, any[][]>();
   const sheets = new Map<string, any>();
   const nullable = (exists: boolean) => ({ isNullObject: !exists, load() {} });
   const source = (values: any[][]) => ({
@@ -406,7 +411,15 @@ function fakeWorkbook(sourceValues: any[][] = input.values as any[][]) {
           {
             set(_t, prop, value) {
               written[`${key}.${String(prop)}`] = value;
+              if (prop === "values" && row === 0 && column === 0)
+                fullSheet.set(name, value);
               return true;
+            },
+            get(_t, prop) {
+              if (prop === "load") return () => undefined;
+              if (prop === "values" && readBack && fullSheet.has(name))
+                return readBack(fullSheet.get(name)!).slice(row, row + r);
+              return undefined;
             },
           },
         );
@@ -1008,4 +1021,84 @@ test("a bare chart request is column-aware with a line chart over a time column"
     chartType: "line",
     extraValues: [3],
   });
+});
+
+test("apply reports when Excel changed what the clean result wrote (leading zeros lost)", async () => {
+  const idInput = {
+    workbookId: "book",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:B3",
+    hasHeaders: true,
+    values: [
+      ["Service ID", "Sales"],
+      ["0112559962", 10],
+      ["007", 20],
+    ],
+  };
+  const plan = createExcelPreviewPlan(idInput as any, ["clean"], undefined, {
+    clean: { operations: ["trim"] },
+  });
+  // A broken Excel: every text value that looks like a number is turned into a number.
+  const excel = fakeWorkbook(idInput.values as any[][], (values) =>
+    values.map((row) =>
+      row.map((cell: any) =>
+        typeof cell === "string" && /^'?\d+$/.test(cell)
+          ? Number(cell.replace("'", ""))
+          : cell,
+      ),
+    ),
+  );
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    {
+      expectedSourceFingerprint: plan.sourceFingerprint,
+    },
+  );
+  const clean = report.results.find((result) => result.kind === "clean");
+  assert.ok(clean?.warnings?.length);
+  assert.match(
+    clean!.warnings![0],
+    /"Service ID": 2 value\(s\) lost their leading zeros/,
+  );
+});
+
+test("apply reports nothing when the clean result reads back unchanged", async () => {
+  const idInput = {
+    workbookId: "book",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:B3",
+    hasHeaders: true,
+    values: [
+      ["Service ID", "Sales"],
+      ["0112559962", 10],
+      ["007", 20],
+    ],
+  };
+  const plan = createExcelPreviewPlan(idInput as any, ["clean"], undefined, {
+    clean: { operations: ["trim"] },
+  });
+  // Excel keeps the text prefix: the apostrophe is not part of the stored value.
+  const excel = fakeWorkbook(idInput.values as any[][], (values) =>
+    values.map((row) =>
+      row.map((cell: any) =>
+        typeof cell === "string" && cell.startsWith("'") ? cell.slice(1) : cell,
+      ),
+    ),
+  );
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    {
+      expectedSourceFingerprint: plan.sourceFingerprint,
+    },
+  );
+  assert.equal(
+    report.results.find((result) => result.kind === "clean")?.warnings,
+    undefined,
+  );
 });

@@ -233,8 +233,8 @@ export function buildPrompts(dataset: Dataset): Prompt[] {
   add("sort", "action", ["view"], [`sort by ${m1} descending`]);
   add(
     "sort-two-keys",
-    "refuse",
-    [],
+    "action",
+    ["view"],
     [`show the rows sorted by ${c1} then ${m1}`],
   );
   add(

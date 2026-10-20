@@ -51,6 +51,7 @@ import {
 } from "./intent.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import { describeNearDuplicates } from "./valueCheck.js";
+import { describeIntegrityIssues } from "./integrity.js";
 import {
   detectMacroRequest,
   generateMacro,
@@ -2181,6 +2182,18 @@ apply?.addEventListener("click", async () => {
         (result) =>
           `${result.kind}: ${result.name} (${result.targetSheet})${result.status === "exists" ? " - already existed, left unchanged (undo it first to rebuild)" : ""}`,
       );
+    const integrityNotice = describeIntegrityIssues(
+      report.results.flatMap((result) =>
+        (result.warnings ?? []).map((message) => ({
+          kind: "value-changed" as const,
+          message,
+        })),
+      ),
+    );
+    if (integrityNotice) {
+      log.record("apply:integrity", "fail", integrityNotice);
+      renderConversation("error", integrityNotice);
+    }
     lastCreated = rollbackItemsFromApplyReport(
       approvedPlan.planId,
       report.results,

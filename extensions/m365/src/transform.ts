@@ -213,6 +213,8 @@ export function isSafeColumnName(name: unknown): name is string {
 
 export interface ViewSpec {
   sort?: { index: number; direction: "asc" | "desc" };
+  /** Second sort key for rows that tie on the first. */
+  thenSort?: { index: number; direction: "asc" | "desc" };
   filter?: {
     index: number;
     operator: ">" | ">=" | "<" | "<=" | "=" | "!=" | "contains";
@@ -283,17 +285,23 @@ export function applyView(
   if (spec.sort) {
     const { index, direction } = spec.sort;
     const factor = direction === "asc" ? 1 : -1;
+    const then = spec.thenSort;
+    const thenFactor = then?.direction === "desc" ? -1 : 1;
+    // Blanks always sort last, whatever the direction (same as SORTBY on the sheet).
+    const byKey = (a: Cell[], b: Cell[], key: number, sign: number) => {
+      const blankA = isBlank(a[key]);
+      const blankB = isBlank(b[key]);
+      if (blankA || blankB) return compareCells(a[key], b[key]);
+      return sign * compareCells(a[key], b[key]);
+    };
     result = result
       .map((row, position) => ({ row, position }))
-      .sort((a, b) => {
-        const blankA = isBlank(a.row[index]);
-        const blankB = isBlank(b.row[index]);
-        if (blankA || blankB) return compareCells(a.row[index], b.row[index]);
-        return (
-          factor * compareCells(a.row[index], b.row[index]) ||
-          a.position - b.position
-        );
-      })
+      .sort(
+        (a, b) =>
+          byKey(a.row, b.row, index, factor) ||
+          (then ? byKey(a.row, b.row, then.index, thenFactor) : 0) ||
+          a.position - b.position,
+      )
       .map((entry) => entry.row);
   }
   if (spec.limit !== undefined && spec.limit >= 1)

@@ -268,6 +268,7 @@ export interface ExcelColumnSpecs {
   };
   view?: {
     sort?: { column: number; direction: "asc" | "desc" };
+    thenSort?: { column: number; direction: "asc" | "desc" };
     filter?: {
       column: number;
       operator: ExcelFilterOperator;
@@ -433,6 +434,7 @@ export interface ExcelActionSpec {
   unpivotNameColumn?: string;
   unpivotValueColumn?: string;
   sort?: { column: string; index: number; direction: "asc" | "desc" };
+  thenSort?: { column: string; index: number; direction: "asc" | "desc" };
   filter?: {
     column: string;
     index: number;
@@ -1799,7 +1801,7 @@ function resolveColumnSpecs(
   if (specs.view) {
     if (!requested.has("view"))
       fail("EXCEL_SPEC_UNUSED", "View options need the view action.");
-    const { sort, filter, highlight, limit, where } = specs.view;
+    const { sort, thenSort, filter, highlight, limit, where } = specs.view;
     if (!sort && !filter && !highlight && limit === undefined && !where)
       fail("EXCEL_SPEC_INVALID", "A view needs a sort, filter or highlight.");
     const view: ExcelActionSpec = {};
@@ -1810,6 +1812,24 @@ function resolveColumnSpecs(
         column: headers[sort.column],
         index: sort.column,
         direction: sort.direction,
+      };
+    }
+    if (thenSort) {
+      if (!sort)
+        fail("EXCEL_SPEC_INVALID", "A second sort column needs a first one.");
+      if (
+        !inRange(thenSort.column) ||
+        !["asc", "desc"].includes(thenSort.direction) ||
+        thenSort.column === sort!.column
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Choose a different column and a direction for the second sort.",
+        );
+      view.thenSort = {
+        column: headers[thenSort.column],
+        index: thenSort.column,
+        direction: thenSort.direction,
       };
     }
     if (filter) {

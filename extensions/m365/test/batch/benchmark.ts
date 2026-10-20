@@ -1,0 +1,551 @@
+/**
+ * Copilot-parity benchmark: business requests over the five benchmark workbooks (retail, HR,
+ * finance, inventory, support), each run end to end the way the task pane runs it: reader, plan,
+ * approval and apply, into an in-memory workbook (gridWorkbook.ts) that keeps every written cell.
+ * Then the result sheet is graded on what a senior analyst would check: did it understand the
+ * request, pick business columns (not IDs or dates), use the right currency, lay the page out as
+ * a dashboard, fall back cleanly on Excel on the web, find duplicate records by their key, and
+ * leave the source untouched. No Excel and no model: a regression guard, not a live benchmark.
+ *   npx tsx test/batch/benchmark.ts [--write]   (--write updates docs/BENCHMARK_REPORT.md)
+ */
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { createExcelPreviewPlan, selectExcelActions } from "../../src/excel.js";
+import { interpretInstruction } from "../../src/intent.js";
+import { applyApprovedExcelPlan } from "../../src/officeExcel.js";
+import { detectBusinessKey } from "../../src/businessContext.js";
+import { DATASETS, type Dataset } from "./datasets500.js";
+import {
+  cellText,
+  columnName,
+  filledCells,
+  gridWorkbook,
+  type GridSheet,
+  type HostProfile,
+} from "./gridWorkbook.js";
+
+export interface Check {
+  name: string;
+  dimension:
+    | "understanding"
+    | "business meaning"
+    | "layout"
+    | "fallback"
+    | "duplicates"
+    | "safety";
+  pass: boolean;
+  detail?: string;
+}
+
+export interface ScenarioResult {
+  id: string;
+  dataset: string;
+  host: HostProfile;
+  request: string;
+  checks: Check[];
+}
+
+/** Number formats the benchmark gives the source cells, as a finance team would have them. */
+const SOURCE_FORMATS: Record<string, Record<string, string>> = {
+  retail: { "Unit Price": "[$LKR] #,##0.00", "Net Amount": "[$LKR] #,##0.00" },
+  inventory: { "Unit Cost": '"Rs "#,##0.00' },
+};
+
+/** Columns that must never be the dashboard's category or values, per dataset. */
+const NOT_BUSINESS =
+  /(\bid\b|no\b|code|sku|date|opened|closed|counted|name|customer|agent|manager|approved|narration|%)/i;
+
+interface Scenario {
+  id: string;
+  request: string;
+  hosts: HostProfile[];
+  datasets?: string[];
+  grade: (ctx: GradeContext) => Check[];
+}
+
+interface GradeContext {
+  dataset: Dataset;
+  headers: string[];
+  host: HostProfile;
+  actions: string[];
+  specs: any;
+  report?: Awaited<ReturnType<typeof applyApprovedExcelPlan>>;
+  error?: string;
+  result?: GridSheet;
+  sourceBefore: string;
+  sourceAfter: string;
+}
+
+const check = (
+  dimension: Check["dimension"],
+  name: string,
+  pass: boolean,
+  detail?: string,
+): Check => ({ dimension, name, pass, ...(detail && !pass ? { detail } : {}) });
+
+function dashboardChecks(
+  ctx: GradeContext,
+  extra: (ctx: GradeContext) => Check[] = () => [],
+): Check[] {
+  const checks: Check[] = [];
+  checks.push(
+    check(
+      "understanding",
+      "reads the request as a dashboard",
+      ctx.actions.includes("dashboard"),
+      ctx.actions.join(","),
+    ),
+  );
+  const spec = ctx.specs.dashboard;
+  if (spec) {
+    const category = ctx.headers[spec.category];
+    const values = (spec.values as number[]).map((index) => ctx.headers[index]);
+    checks.push(
+      check(
+        "business meaning",
+        "groups by a business category",
+        !NOT_BUSINESS.test(category),
+        category,
+      ),
+      check(
+        "business meaning",
+        "adds up measures, never IDs, dates or percentages",
+        values.every((name) => !NOT_BUSINESS.test(name)),
+        values.join(", "),
+      ),
+    );
+  }
+  const status = ctx.report?.results[0]?.status;
+  checks.push(
+    check(
+      "safety",
+      "result is created",
+      status === "created",
+      ctx.error ?? status,
+    ),
+  );
+  checks.push(
+    check(
+      "safety",
+      "source is unchanged",
+      ctx.sourceBefore === ctx.sourceAfter &&
+        ctx.report?.sourceUnchangedAfterApply === true,
+    ),
+  );
+  const sheet = ctx.result;
+  if (!sheet) return [...checks, ...extra(ctx)];
+  const cards = filledCells(sheet).filter(
+    ([row, col, text]) => row === 3 && col < 6 && text,
+  );
+  checks.push(
+    check("layout", "title on the first row", cellText(sheet, 0, 0).length > 0),
+    check(
+      "layout",
+      "at least three KPI cards in one row",
+      cards.length >= 3,
+      `${cards.length} cards`,
+    ),
+    check(
+      "layout",
+      "every KPI card has a live value",
+      cards.every(([, col]) => cellText(sheet, 4, col).startsWith("=")),
+    ),
+    check(
+      "layout",
+      "at least one chart, placed",
+      sheet.charts.length >= 1 &&
+        sheet.charts.every((chart) => Boolean(chart.from && chart.to)),
+    ),
+    check(
+      "layout",
+      "gridlines off for a clean page",
+      sheet.showGridlines === false,
+    ),
+  );
+  if (ctx.host === "desktop") {
+    checks.push(
+      check(
+        "layout",
+        "breakdown PivotTable under the cards",
+        sheet.pivots.length === 1 && sheet.pivots[0].anchor === "A10",
+        JSON.stringify(sheet.pivots),
+      ),
+      check(
+        "layout",
+        "slicer beside the PivotTable",
+        sheet.slicers.length === 1 &&
+          sheet.slicers[0].field === ctx.headers[spec?.category],
+      ),
+    );
+  } else {
+    const notes = ctx.report?.results[0]?.notes?.join(" ") ?? "";
+    checks.push(
+      check("fallback", "no PivotTable left behind", sheet.pivots.length === 0),
+      check(
+        "fallback",
+        "live formula breakdown in the PivotTable's place",
+        /^=/.test(cellText(sheet, 10, 1)),
+        cellText(sheet, 10, 1),
+      ),
+      check(
+        "fallback",
+        "the person is told why",
+        /could not create a PivotTable/.test(notes),
+        notes,
+      ),
+    );
+  }
+  return [...checks, ...extra(ctx)];
+}
+
+const currencyCheck = (ctx: GradeContext): Check[] => {
+  const sheet = ctx.result;
+  if (!sheet) return [];
+  const expected: Record<string, RegExp | "mixed" | null> = {
+    retail: /LKR/,
+    hr: /Rs/,
+    finance: "mixed",
+    inventory: null,
+    support: null,
+  };
+  const want = expected[ctx.dataset.id];
+  const formats = filledCells(sheet)
+    .filter(([row, col]) => row === 4 && col < 6)
+    .map(([, , , cell]) => cell.numberFormat ?? "");
+  if (want === "mixed") {
+    const note = cellText(sheet, 6, 0);
+    return [
+      check(
+        "business meaning",
+        "warns that rows are in different currencies",
+        /different currencies|mixes currencies/.test(note),
+        note,
+      ),
+      check(
+        "business meaning",
+        "no single currency on mixed amounts",
+        !formats.some((format) => /LKR|USD|Rs|\$/.test(format)),
+        formats.join(" | "),
+      ),
+    ];
+  }
+  if (want)
+    return [
+      check(
+        "business meaning",
+        "money is shown in the workbook's currency",
+        formats.some((format) => want.test(format)),
+        formats.join(" | "),
+      ),
+    ];
+  return [];
+};
+
+const SCENARIOS: Scenario[] = [
+  {
+    id: "dash-management",
+    request: "make a one-page dashboard for management",
+    hosts: ["desktop", "web"],
+    grade: (ctx) =>
+      dashboardChecks(ctx, (c) => [
+        ...currencyCheck(c),
+        check(
+          "business meaning",
+          "says it is a management summary",
+          /^Management summary/.test(c.result ? cellText(c.result, 1, 0) : ""),
+        ),
+      ]),
+  },
+  {
+    id: "dash-target",
+    request: "dashboard for the monthly review, target 5M",
+    hosts: ["desktop"],
+    grade: (ctx) =>
+      dashboardChecks(ctx, (c) => {
+        const sheet = c.result;
+        const labels = sheet
+          ? filledCells(sheet)
+              .filter(([row, col]) => row === 3 && col < 6)
+              .map(([, , text]) => text)
+          : [];
+        const percent = sheet
+          ? filledCells(sheet).find(
+              ([row, col, , cell]) =>
+                row === 4 && col < 6 && cell.numberFormat === "0.0%",
+            )
+          : undefined;
+        return [
+          check(
+            "business meaning",
+            "shows % of the target",
+            labels.includes("% OF TARGET"),
+            labels.join(", "),
+          ),
+          check(
+            "business meaning",
+            "target formula divides by 5,000,000",
+            Boolean(percent && /\/5000000,0\)$/.test(percent[2])),
+            percent?.[2],
+          ),
+        ];
+      }),
+  },
+  {
+    id: "dash-operations",
+    request: "daily tracking dashboard so the team can follow up",
+    hosts: ["desktop"],
+    grade: (ctx) =>
+      dashboardChecks(ctx, (c) => [
+        check(
+          "business meaning",
+          "says it is an operational view",
+          /^Operational view/.test(c.result ? cellText(c.result, 1, 0) : ""),
+        ),
+      ]),
+  },
+  {
+    id: "duplicates",
+    request: "find duplicate transactions",
+    hosts: ["desktop"],
+    grade: (ctx) => {
+      const key = detectBusinessKey(ctx.headers, ctx.dataset.rows as any);
+      const highlight = ctx.specs.view?.highlight;
+      return [
+        check(
+          "understanding",
+          "reads it as a duplicate check",
+          highlight?.rule === "duplicates",
+          JSON.stringify(ctx.specs.view),
+        ),
+        check(
+          "duplicates",
+          "checks the record key, not a random column",
+          Boolean(key) && highlight?.column === key!.columns[0],
+          `${ctx.headers[highlight?.column] ?? "none"} vs ${key?.names.join("+") ?? "no key"}`,
+        ),
+        check(
+          "safety",
+          "result is created",
+          ctx.report?.results[0]?.status === "created",
+          ctx.error,
+        ),
+        check(
+          "safety",
+          "source is unchanged",
+          ctx.sourceBefore === ctx.sourceAfter,
+        ),
+      ];
+    },
+  },
+  {
+    id: "quality",
+    request: "data quality report",
+    hosts: ["desktop"],
+    grade: (ctx) => {
+      const sheet = ctx.result;
+      const text = sheet
+        ? filledCells(sheet)
+            .map(([, , t]) => t)
+            .join("\n")
+        : "";
+      const key = detectBusinessKey(ctx.headers, ctx.dataset.rows as any);
+      return [
+        check(
+          "understanding",
+          "reads it as a quality report",
+          ctx.actions.includes("quality"),
+          ctx.actions.join(","),
+        ),
+        check(
+          "duplicates",
+          "names the business key",
+          Boolean(key) &&
+            text.includes(`Business key\n${key!.names.join(" + ")}`),
+          key?.names.join("+"),
+        ),
+        check(
+          "duplicates",
+          "reports repeated key values",
+          !key ||
+            !key.duplicateKeys ||
+            text.includes("value(s) are used on more than one row"),
+        ),
+        check(
+          "safety",
+          "source is unchanged",
+          ctx.sourceBefore === ctx.sourceAfter,
+        ),
+      ];
+    },
+  },
+];
+
+const snapshot = (sheet: GridSheet | undefined) =>
+  sheet ? JSON.stringify(filledCells(sheet).map(([r, c, t]) => [r, c, t])) : "";
+
+export async function runBenchmark(): Promise<ScenarioResult[]> {
+  const results: ScenarioResult[] = [];
+  for (const dataset of DATASETS) {
+    const headers = dataset.columns.map((column) => column.name);
+    // Excel reads an empty cell back as "", so the source is given the way the reader sees it.
+    const values = [headers, ...dataset.rows].map((row) =>
+      row.map((cell) => (cell === null || cell === undefined ? "" : cell)),
+    );
+    const rows = values.slice(1);
+    const formats = headers.map(
+      (name) => SOURCE_FORMATS[dataset.id]?.[name] ?? "General",
+    );
+    for (const scenario of SCENARIOS) {
+      if (scenario.datasets && !scenario.datasets.includes(dataset.id))
+        continue;
+      for (const host of scenario.hosts) {
+        const book = gridWorkbook(
+          dataset.sheet,
+          values.map((row) => [...row]),
+          {
+            host,
+            sourceFormats: formats,
+          },
+        );
+        const interpreted: any = interpretInstruction(
+          scenario.request,
+          headers,
+          rows as any,
+        );
+        const actions = [
+          ...new Set([
+            ...selectExcelActions(scenario.request),
+            ...interpreted.actions,
+          ]),
+        ].filter(
+          (kind) =>
+            !(kind === "new-sheet" && interpreted.actions.includes("view")),
+        ) as any[];
+        const specs = interpreted.specs ?? {};
+        const ctx: GradeContext = {
+          dataset,
+          headers,
+          host,
+          actions,
+          specs,
+          sourceBefore: snapshot(book.sheets.get(dataset.sheet)),
+          sourceAfter: "",
+        };
+        try {
+          const input: any = {
+            workbookId: `bench-${dataset.id}`,
+            worksheetName: dataset.sheet,
+            address: `${dataset.sheet}!A1:${columnName(headers.length - 1)}${values.length}`,
+            values,
+            hasHeaders: true,
+          };
+          const plan: any = createExcelPreviewPlan(input, actions, 500, specs);
+          ctx.report = await applyApprovedExcelPlan(
+            book.runtime,
+            plan,
+            true,
+            "approval",
+            {
+              expectedSourceFingerprint: plan.sourceFingerprint,
+              supportsExcelApi: book.supportsExcelApi,
+              request: scenario.request,
+            },
+          );
+          const failed = ctx.report.results.find(
+            (entry) => entry.status === "failed",
+          );
+          if (failed) ctx.error = failed.error;
+          const target = ctx.report.results[0]?.targetSheet;
+          ctx.result = target ? book.sheets.get(target) : undefined;
+        } catch (error) {
+          ctx.error = (error as Error).message;
+        }
+        ctx.sourceAfter = snapshot(book.sheets.get(dataset.sheet));
+        results.push({
+          id: scenario.id,
+          dataset: dataset.id,
+          host,
+          request: scenario.request,
+          checks: scenario.grade(ctx),
+        });
+      }
+    }
+  }
+  return results;
+}
+
+export function scoreBoard(results: ScenarioResult[]) {
+  const byDimension = new Map<string, { pass: number; total: number }>();
+  for (const result of results)
+    for (const item of result.checks) {
+      const entry = byDimension.get(item.dimension) ?? { pass: 0, total: 0 };
+      entry.total += 1;
+      if (item.pass) entry.pass += 1;
+      byDimension.set(item.dimension, entry);
+    }
+  const all = [...byDimension.values()].reduce(
+    (sum, entry) => ({
+      pass: sum.pass + entry.pass,
+      total: sum.total + entry.total,
+    }),
+    { pass: 0, total: 0 },
+  );
+  return { byDimension, all };
+}
+
+export function benchmarkReport(results: ScenarioResult[]): string {
+  const { byDimension, all } = scoreBoard(results);
+  const pct = (pass: number, total: number) =>
+    `${total ? Math.round((pass / total) * 100) : 0}%`;
+  const lines = [
+    "# Copilot-parity benchmark",
+    "",
+    "Business requests over the five benchmark workbooks, run end to end (reader, plan, apply) into an in-memory workbook and graded cell by cell. Headless: it proves what the add-in writes, not how real Excel draws it. Regenerate with `npx tsx test/batch/benchmark.ts --write` in `extensions/m365`.",
+    "",
+    `Overall: **${all.pass}/${all.total} checks (${pct(all.pass, all.total)})** over ${results.length} runs.`,
+    "",
+    "| Dimension | Passed | Score |",
+    "| --- | --- | --- |",
+    ...[...byDimension.entries()].map(
+      ([name, entry]) =>
+        `| ${name} | ${entry.pass}/${entry.total} | ${pct(entry.pass, entry.total)} |`,
+    ),
+    "",
+    "| Scenario | Workbook | Host | Passed | Failed checks |",
+    "| --- | --- | --- | --- | --- |",
+    ...results.map((result) => {
+      const failed = result.checks.filter((item) => !item.pass);
+      return `| ${result.id} | ${result.dataset} | ${result.host} | ${result.checks.length - failed.length}/${result.checks.length} | ${
+        failed
+          .map(
+            (item) =>
+              `${item.name}${item.detail ? ` (${String(item.detail).replace(/\|/g, "/").slice(0, 80)})` : ""}`,
+          )
+          .join("; ") || "none"
+      } |`;
+    }),
+    "",
+    "Not covered here: real Excel Desktop and Excel on the web (chart drawing, slicer placement, calculated values) and the AI model path. Those need a live run on a machine with Excel.",
+    "",
+  ];
+  return lines.join("\n");
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const results = await runBenchmark();
+  const report = benchmarkReport(results);
+  const { all } = scoreBoard(results);
+  // Print the scores and only the runs that failed a check.
+  console.log(
+    report
+      .split("\n")
+      .filter((line) => !line.endsWith("| none |"))
+      .join("\n"),
+  );
+  if (process.argv.includes("--write"))
+    writeFileSync(
+      new URL("../../../../docs/BENCHMARK_REPORT.md", import.meta.url),
+      report,
+    );
+  process.exitCode = all.pass === all.total ? 0 : 1;
+}

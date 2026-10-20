@@ -433,7 +433,11 @@ export function buildDashboardLayout(
     });
   });
 
-  if (input.currency?.mixed)
+  if (input.currency?.mixedBy)
+    notes.push(
+      `The rows are in ${input.currency.mixed!.join(" and ")} (see ${input.currency.mixedBy}), so a total over all rows mixes currencies; filter the PivotTable by ${input.currency.mixedBy} before comparing amounts.`,
+    );
+  else if (input.currency?.mixed)
     notes.push(
       `The value columns are in different currencies (${input.currency.mixed.join(", ")}); they are shown side by side and never added together.`,
     );

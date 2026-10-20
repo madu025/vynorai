@@ -11,6 +11,7 @@ import {
   inferCurrency,
   isMoneyHeader,
   parseBusinessTarget,
+  suggestDashboardColumns,
 } from "./businessContext.js";
 
 test("currency is read from Excel number formats", () => {
@@ -188,15 +189,32 @@ test("a key is found by its values when the header gives no hint", () => {
   assert.match(describeBusinessKey(key!), /No Ref value is repeated/);
 });
 
-test("customer, product and name columns are never taken as the business key", () => {
-  const headers = ["Customer ID", "Product Code", "Customer Name", "Qty"];
-  const rows = Array.from({ length: 10 }, (_, index) => [
-    `C${index}`,
-    `P${index}`,
-    `Person ${index}`,
-    index + 1,
-  ]);
-  assert.equal(detectBusinessKey(headers, rows), undefined);
+test("a master list's own ID is its key, but names and phones never are", () => {
+  // A customer list: every Customer ID is different, so it identifies the record.
+  const master = detectBusinessKey(
+    ["Customer ID", "Customer Name", "Phone", "City"],
+    Array.from({ length: 10 }, (_, index) => [
+      `C${index}`,
+      `Person ${index}`,
+      `07712345${index}`,
+      index % 2 ? "Colombo" : "Kandy",
+    ]),
+  );
+  assert.deepEqual(master?.names, ["Customer ID"]);
+  // In a sales table the same Customer ID repeats on purpose and is not the key.
+  const sales = detectBusinessKey(
+    ["Customer ID", "Qty"],
+    Array.from({ length: 10 }, (_, index) => [`C${index % 3}`, index + 1]),
+  );
+  assert.equal(sales, undefined);
+  const people = detectBusinessKey(
+    ["Full Name", "Phone"],
+    Array.from({ length: 10 }, (_, index) => [
+      `Person ${index}`,
+      `07712345${index}`,
+    ]),
+  );
+  assert.equal(people, undefined);
 });
 
 test("invoice lines use invoice number plus line number as the key", () => {
@@ -227,4 +245,32 @@ test("dates, amounts and free text are never keys", () => {
     `a long text number ${index}`,
   ]);
   assert.equal(detectBusinessKey(headers, rows), undefined);
+});
+
+test("a dashboard with no columns named groups by a business category and adds up money", () => {
+  const headers = [
+    "Order No",
+    "Order Date",
+    "Customer",
+    "Region",
+    "Qty",
+    "Unit Price",
+    "Discount %",
+    "Net Amount",
+  ];
+  const regions = ["North", "South", "East", "West"];
+  const rows = Array.from({ length: 40 }, (_, index) => [
+    `ORD-${1000 + index}`,
+    45700 + index,
+    `Customer ${index}`,
+    regions[index % 4],
+    (index % 5) + 1,
+    120.5,
+    5,
+    ((index % 5) + 1) * 120.5,
+  ]);
+  const picked = suggestDashboardColumns(headers, rows);
+  assert.equal(picked.category, 3); // Region, not Order No or Customer
+  // Net Amount first; the date, the unit price and the percentage are never added up.
+  assert.deepEqual(picked.values, [7, 4]);
 });

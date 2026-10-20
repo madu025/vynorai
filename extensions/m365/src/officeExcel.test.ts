@@ -33,7 +33,13 @@ test("CSV export quotes cells and neutralizes formula injection", () => {
  */
 function fakeWorkbook(
   cells: unknown[][],
-  options: { failChart?: boolean; failPivot?: boolean; slicers?: boolean } = {},
+  options: {
+    failChart?: boolean;
+    failPivot?: boolean;
+    slicers?: boolean;
+    /** The field names Excel gives the PivotTable, when they differ from the headers. */
+    pivotFieldNames?: string[];
+  } = {},
 ) {
   const calls: string[] = [];
   const formulaWrites: Array<{
@@ -255,7 +261,11 @@ function fakeWorkbook(
           pivots.add(String(pivotName));
           return {
             layout: { getRange: () => range("Result", "A3:B6") },
-            hierarchies: { getItem: (name: string) => name },
+            hierarchies: {
+              load() {},
+              items: (options.pivotFieldNames ?? []).map((name) => ({ name })),
+              getItem: (name: string) => name,
+            },
             rowHierarchies: {
               add: (name: string) => calls.push(`pivot.row ${name}`),
             },
@@ -1526,4 +1536,24 @@ test("a dashboard falls back to a formula breakdown when the host refuses a Pivo
       .length,
     1,
   );
+});
+
+test("PivotTable fields are found when Excel spells the header with other case or spacing", async () => {
+  const excel = fakeWorkbook(
+    [
+      ["region", "net  sales"],
+      ["North", 100],
+      ["South", 200],
+    ],
+    { pivotFieldNames: ["Region", "Net Sales"] },
+  );
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["pivot-table"], 500, {
+    pivot: { rows: 0, values: 1 },
+  });
+  await applyApprovedExcelPlan(excel.runtime, plan, true, "approval", {
+    expectedSourceFingerprint: plan.sourceFingerprint,
+  });
+  assert.ok(excel.calls.includes("pivot.row Region"), excel.calls.join("\n"));
+  assert.ok(excel.calls.includes("pivot.value Net Sales"));
 });

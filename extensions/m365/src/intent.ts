@@ -1,4 +1,7 @@
-import { detectBusinessKey } from "./businessContext.js";
+import {
+  detectBusinessKey,
+  suggestDashboardColumns,
+} from "./businessContext.js";
 import { parseExpression } from "./expression.js";
 import {
   CLEAN_OPERATIONS,
@@ -1524,14 +1527,21 @@ function interpretDashboard(
     .map((_, index) => index)
     .filter((index) => !isNumericColumn(rows, index));
   const byMatch = /\b(?:by|per|for each|each)\s+/i.exec(text);
+  // Nothing named: pick like an analyst (a business category, money first), never an ID or a date.
+  const suggested = suggestDashboardColumns(headers, rows);
   const category =
     (byMatch
       ? labels.find((entry) => entry.at >= (byMatch.index ?? 0))?.index
       : undefined) ??
     labels[0]?.index ??
+    suggested.category ??
     allLabels[0];
   const values = (
-    numeric.length ? numeric.map((entry) => entry.index) : allNumeric
+    numeric.length
+      ? numeric.map((entry) => entry.index)
+      : suggested.values.length
+        ? suggested.values
+        : allNumeric
   )
     .filter((index) => index !== category)
     .slice(0, 3);

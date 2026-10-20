@@ -17,6 +17,8 @@ export interface CurrencyGuess {
   source: "number-format" | "header" | "values" | "request";
   /** Two or more different currencies were found in the money columns; nothing is formatted. */
   mixed?: string[];
+  /** The rows themselves are in different currencies, named by this column (for example "Currency"). */
+  mixedBy?: string;
 }
 
 interface CurrencyInfo {
@@ -121,7 +123,7 @@ export function currencyFromRequest(text: unknown): CurrencyInfo | undefined {
 }
 
 const MONEY_HEADER =
-  /(amount|amt|sales|revenue|turnover|income|cost|costs|price|profit|expense|expenses|spend|spent|salary|salaries|wage|wages|payment|paid|fee|fees|budget|balance|gross|net|tax|vat|discount|charge|charges|bill|billing|value|earning|earnings|commission|rent|tariff)/i;
+  /(amount|amt|sales|revenue|turnover|income|cost|costs|price|profit|expense|expenses|spend|spent|salary|salaries|wage|wages|payment|paid|fee|fees|budget|balance|gross|net|tax|vat|discount|charge|charges|bill|billing|value|earning|earnings|commission|rent|tariff|bonus|allowance|debit|credit|payable|receivable|invoice\s*amount)/i;
 const NOT_MONEY_HEADER =
   /\b(qty|quantity|count|pcs|pieces|percent|rate|ratio|score|age|id|no|number|code|year|month)\b|%/i;
 
@@ -149,6 +151,41 @@ export function inferCurrency(input: {
   samples?: Record<number, Cell[]>;
   request?: string;
 }): CurrencyGuess | undefined {
+  // A "Currency" column with more than one code means the amounts on different rows are in
+  // different currencies: a total over all rows mixes them.
+  const currencyColumn = input.headers.findIndex((header) =>
+    /^\s*(currency|curr|ccy|currency\s*code)\s*$/i.test(String(header ?? "")),
+  );
+  if (currencyColumn >= 0) {
+    const codes = [
+      ...new Set(
+        (input.samples?.[currencyColumn] ?? [])
+          .map((cell) => currencyOfToken(String(cell ?? ""))?.code)
+          .filter((code): code is string => Boolean(code)),
+      ),
+    ].sort();
+    if (codes.length > 1)
+      return {
+        code: codes[0],
+        symbol: CURRENCIES[codes[0]].symbol,
+        numberFormat: "#,##0.00",
+        source: "values",
+        mixed: codes,
+        mixedBy: String(input.headers[currencyColumn]).trim(),
+      };
+    if (
+      codes.length === 1 &&
+      input.columns.some((column) => isMoneyHeader(input.headers[column]))
+    ) {
+      const info = CURRENCIES[codes[0]];
+      return {
+        code: info.code,
+        symbol: info.symbol,
+        numberFormat: formatFor(info),
+        source: "values",
+      };
+    }
+  }
   const found: Array<{
     info: CurrencyInfo;
     source: CurrencyGuess["source"];
@@ -330,6 +367,8 @@ const GENERIC_KEY_HEADER =
 /** Columns that name who or what a row is about: they repeat on purpose and are not keys. */
 const ENTITY_HEADER =
   /(name|phone|mobile|tel|email|e-mail|nic|passport|address|customer|client|cust|account|acct|product|item|sku|material|part|employee|emp|staff|officer|agent|branch|region|area|zone|province|district|store|shop|outlet|vendor|supplier|category|department|dept|division|circuit|site|location|city|country|project|team|route|vehicle|service\s*type|status)/i;
+const PERSONAL_KEY_HEADER =
+  /(name|phone|mobile|tel\b|email|e-mail|nic|passport|address)/i;
 const LINE_HEADER =
   /(^|[^a-z])(line|ln|item|seq|sequence|row|position|pos)[\s_#.-]*(no\.?|num|number|#|id)?([^a-z]|$)/i;
 
@@ -410,11 +449,14 @@ export function detectBusinessKey(
     const strong = STRONG_KEY_HEADER.test(header);
     const generic = GENERIC_KEY_HEADER.test(header);
     const entity = ENTITY_HEADER.test(header);
-    if (entity && !strong) return;
+    // Personal columns are never keys; a customer, product or employee ID is the key of a master
+    // list (nearly every value different), but repeats on purpose in a transaction table.
+    if (PERSONAL_KEY_HEADER.test(header) && !strong) return;
     const allNumbers = present.every((cell) => typeof cell === "number");
     if (allNumbers && !strong && !generic) return; // plain integer measure such as Qty
     const { distinctShare } = duplicatesOf(rows, [index]);
     if (distinctShare < 0.5) return;
+    if (entity && !strong && distinctShare < 0.95) return;
     let score = 0;
     const reasons: string[] = [];
     if (strong) {
@@ -486,4 +528,76 @@ export function describeBusinessKey(key: BusinessKey): string {
   if (!key.duplicateKeys)
     return `Business key: ${name} (${key.confidence} confidence, ${key.reason}). No ${name} value is repeated.`;
   return `Business key: ${name} (${key.confidence} confidence, ${key.reason}). ${key.duplicateKeys} ${name} value(s) appear on more than one row (${key.duplicateRows} extra row(s)); check them for double entries.`;
+}
+
+const DATE_LIKE_HEADER =
+  /(date|time|day|month|year|period|when|opened|closed|joined|posted|counted|created|updated|due|dob|birth)/i;
+const SHARE_HEADER = /(%|percent|pct|rate|ratio|score|csat|nps|rating)/i;
+const GROUP_HEADER =
+  /(region|area|zone|province|district|branch|store|shop|outlet|department|dept|division|category|segment|channel|product|type|status|priority|warehouse|location|city|country|team|cost\s*centre|cost\s*center|account\s*name|supplier|designation|payment|method|rtom|lea)/i;
+const PERSONAL_HEADER =
+  /(name|phone|mobile|tel|email|e-mail|nic|passport|address|manager|agent|approved\s*by|customer)/i;
+
+const isNumberCell = (cell: Cell) =>
+  typeof cell === "number" && Number.isFinite(cell);
+
+/**
+ * The columns a dashboard should use when the request names none, the way an analyst would pick
+ * them: group by a short business category (Region, Department, Category; never an ID, a date or a
+ * person), and add up the money columns first, then other measures (never dates stored as numbers,
+ * IDs, or percentages, which do not add up).
+ */
+export function suggestDashboardColumns(
+  headers: string[],
+  rows: Cell[][],
+): { category?: number; values: number[] } {
+  const key = detectBusinessKey(headers, rows);
+  const keyColumns = new Set(key?.columns ?? []);
+  const categories: Array<{ index: number; score: number }> = [];
+  const values: Array<{ index: number; score: number }> = [];
+  headers.forEach((rawHeader, index) => {
+    const header = String(rawHeader ?? "");
+    const present = rows
+      .map((row) => row[index])
+      .filter((cell) => keyText(cell) !== "");
+    if (!present.length || keyColumns.has(index)) return;
+    const numeric = present.filter(isNumberCell).length / present.length >= 0.9;
+    if (DATE_LIKE_HEADER.test(header)) return;
+    if (numeric) {
+      if (SHARE_HEADER.test(header) && !isMoneyHeader(header)) return;
+      if (/(^|[^a-z])(id|code|no|number|ref)([^a-z]|$)/i.test(header)) return;
+      // A unit price or rate does not add up across rows; it is kept only when nothing else is left.
+      const perUnit =
+        /(unit|per|each|avg|average|rate|price)(?![a-z])/i.test(header) &&
+        !/(total|amount|net|gross|sales|revenue)/i.test(header);
+      values.push({
+        index,
+        score: perUnit ? 0.5 : isMoneyHeader(header) ? 3 : 2,
+      });
+      return;
+    }
+    if (
+      PERSONAL_HEADER.test(header) &&
+      !GROUP_HEADER.test(header.replace(PERSONAL_HEADER, ""))
+    )
+      return;
+    const distinct = new Set(present.map(keyText)).size;
+    if (distinct < 2 || distinct > 50) return;
+    if (distinct / present.length > 0.5) return; // nearly unique: an ID or free text
+    let score = GROUP_HEADER.test(header) ? 3 : 0;
+    if (distinct >= 3 && distinct <= 15) score += 2;
+    else if (distinct <= 30) score += 1;
+    categories.push({ index, score });
+  });
+  categories.sort((a, b) => b.score - a.score || a.index - b.index);
+  values.sort((a, b) => b.score - a.score || a.index - b.index);
+  return {
+    ...(categories[0] ? { category: categories[0].index } : {}),
+    values: (values.some((entry) => entry.score >= 1)
+      ? values.filter((entry) => entry.score >= 1)
+      : values
+    )
+      .slice(0, 3)
+      .map((entry) => entry.index),
+  };
 }

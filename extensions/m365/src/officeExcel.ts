@@ -1300,7 +1300,7 @@ export async function applyApprovedExcelPlan(
         names = [];
       }
       const normal = (text: string) =>
-        text.replace(/s+/g, " ").trim().toLowerCase();
+        text.replace(/\s+/g, " ").trim().toLowerCase();
       const nameOf = (name: string) =>
         names.find((entry) => entry === name) ??
         names.find((entry) => normal(entry) === normal(name)) ??
@@ -1674,10 +1674,16 @@ export async function applyApprovedExcelPlan(
                 String(cell ?? ""),
               );
               const samples: Record<number, any[]> = {};
-              for (const value of values)
-                samples[value.index] = rows
-                  .slice(0, 200)
-                  .map((row: any[]) => row[value.index]);
+              const currencyColumn = headerNames.findIndex((name) =>
+                /^\s*(currency|curr|ccy|currency\s*code)\s*$/i.test(name),
+              );
+              for (const index of [
+                ...values.map((value) => value.index),
+                ...(currencyColumn >= 0 ? [currencyColumn] : []),
+              ])
+                samples[index] = rows
+                  .slice(0, 500)
+                  .map((row: any[]) => row[index]);
               const currency = inferCurrency({
                 headers: headerNames,
                 columns: values.map((value) => value.index),

@@ -2,7 +2,7 @@
 
 ## Phase 2 - offline batch
 
-proven and skipped: 0; ran: 90; pass 84, fail 0, skipped 6
+proven and skipped: 0; ran: 92; pass 86, fail 0, skipped 6
 
 | id                    | variant | size  | status | detail                                                                                   |
 | --------------------- | ------- | ----- | ------ | ---------------------------------------------------------------------------------------- |
@@ -96,3 +96,5 @@ proven and skipped: 0; ran: 90; pass 84, fail 0, skipped 6
 | g-script              | en      | small | pass   | office-script: Adds a "Total" column: a live =SUM of Requested Quantity, Issued Quant    |
 | g-vba                 | en      | small | pass   | vba: Sorts by "Service ID" ascending, keeping the header row.                            |
 | g-script-multi        | en      | small | pass   | office-script: Sorts by "Requested Quantity" descending, keeping the header row. Free    |
+| g-script-blank        | en      | small | pass   | vba: Deletes rows that are completely empty inside the table (the cells bel              |
+| g-script-highlight    | en      | small | pass   | office-script: Highlights "Requested Quantity" cells greater than 10 with a light yel    |

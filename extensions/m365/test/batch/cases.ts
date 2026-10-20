@@ -553,4 +553,18 @@ export const CASES: BatchCase[] = [
     "macro",
     { files: ["extensions/m365/src/macroGen.ts"] },
   ),
+  c(
+    "g-script-blank",
+    "code",
+    "write a VBA macro that deletes blank rows",
+    "macro",
+    { files: ["extensions/m365/src/macroGen.ts"] },
+  ),
+  c(
+    "g-script-highlight",
+    "code",
+    "write an Office Script that highlights Requested Quantity greater than 10",
+    "macro",
+    { files: ["extensions/m365/src/macroGen.ts"] },
+  ),
 ];

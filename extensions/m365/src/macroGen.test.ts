@@ -148,3 +148,51 @@ test("a request outside the recipes names what is supported", () => {
   if (result.ok) return;
   assert.match(result.problem, /sort by a column/);
 });
+
+test("delete blank rows, highlight rule and PivotTable recipes in both languages", () => {
+  const rows = [
+    ["HK001", "North", 10, 4],
+    ["HK002", "South", 20, 8],
+  ];
+  const sentences = [
+    "write an Office Script that deletes blank rows",
+    "write a VBA macro that removes the empty rows",
+    "write an Office Script that highlights Sales greater than 15",
+    "write a VBA macro that highlights Cost less than 5",
+    "create an Office Script for a PivotTable of Sales by Region",
+    "create a VBA macro that makes a PivotTable of Cost by Region",
+  ];
+  for (const sentence of sentences) {
+    const result = generateMacro(sentence, HEADERS, rows);
+    assert.ok(result.ok, `${sentence}: ${(result as any).problem}`);
+    if (result.ok && result.language === "office-script")
+      assert.deepEqual(syntaxErrors(result.code), [], sentence);
+  }
+  const os: any = generateMacro(sentences[2], HEADERS, rows);
+  assert.match(os.code, /ConditionalFormatType\.cellValue/);
+  assert.match(os.code, /"GreaterThan"/);
+  assert.match(os.code, /"15"/);
+  const vbaPivot: any = generateMacro(sentences[5], HEADERS, rows);
+  assert.match(
+    vbaPivot.code,
+    /PivotFields\("Region"\)\.Orientation = xlRowField/,
+  );
+  assert.match(vbaPivot.code, /AddDataField pivot\.PivotFields\("Cost"\)/);
+  const blank: any = generateMacro(sentences[0], HEADERS, rows);
+  assert.match(blank.code, /\.delete\(ExcelScript\.DeleteShiftDirection\.up\)/);
+  assert.ok(blank.notes.some((note: string) => /copy/.test(note)));
+});
+
+test("the new recipes fail closed on a missing column, a text column or no number", () => {
+  const rows = [["HK001", "North", 10, 4]];
+  for (const sentence of [
+    "write an Office Script that highlights Profit greater than 10",
+    "write an Office Script that highlights Sales greater than",
+    "write an Office Script that highlights Region greater than 10",
+    "write an Office Script that makes a PivotTable of Region by Sales",
+    "write an Office Script that makes a PivotTable of Sales by Sales",
+  ]) {
+    const result = generateMacro(sentence, HEADERS, rows);
+    assert.equal(result.ok, false, sentence);
+  }
+});

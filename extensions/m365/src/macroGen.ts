@@ -27,6 +27,9 @@ export const MACRO_RECIPES = [
   "remove duplicate rows",
   "turn on filter buttons",
   "bold and shade the header",
+  "delete blank rows",
+  "highlight cells where a column is greater than, less than or equal to a number",
+  "create a PivotTable of a column by another column",
 ] as const;
 
 const REQUEST =
@@ -49,7 +52,27 @@ type Recipe =
   | { kind: "autofit" }
   | { kind: "dedupe" }
   | { kind: "filter" }
-  | { kind: "header-style" };
+  | { kind: "header-style" }
+  | { kind: "blank-rows" }
+  | {
+      kind: "highlight";
+      header: string;
+      operator: "GreaterThan" | "LessThan" | "EqualTo";
+      value: number;
+    }
+  | { kind: "pivot"; rows: string; values: string };
+
+const OPERATORS: Array<[RegExp, "GreaterThan" | "LessThan" | "EqualTo"]> = [
+  [
+    /\b(?:greater than|more than|bigger than|higher than|over|above|exceeds?)\b|>/i,
+    "GreaterThan",
+  ],
+  [
+    /\b(?:less than|smaller than|lower than|under|below|fewer than)\b|</i,
+    "LessThan",
+  ],
+  [/\b(?:equal to|equals?|is exactly)\b|=/i, "EqualTo"],
+];
 
 const DESCENDING =
   /\b(descending|desc|z-a|largest|biggest|highest|high to low|newest|latest)\b/i;
@@ -157,6 +180,56 @@ function readRecipes(
   )
     recipes.push({ kind: "header-style" });
 
+  if (
+    /\b(?:delet|remov|drop|clear)\w*\s+(?:all\s+|the\s+)?(?:blank|empty)\s+(?:rows?|lines?)\b/i.test(
+      task,
+    )
+  )
+    recipes.push({ kind: "blank-rows" });
+
+  if (/\bhighlight\w*\b/i.test(task)) {
+    const header = mentionedHeader(headers, task);
+    const operator = OPERATORS.find(([pattern]) => pattern.test(task))?.[1];
+    const number = /(-?\d+(?:\.\d+)?)\s*[.!?]?\s*$/.exec(task.trim())?.[1];
+    if (!header || !operator || number === undefined)
+      return {
+        recipes,
+        problem: `To highlight I need a column, a comparison and a number, for example "highlight Sales greater than 100". The columns are: ${headers.filter(Boolean).join(", ")}.`,
+      };
+    const index = headers.indexOf(header);
+    if (!isNumberColumn(rows, index))
+      return {
+        recipes,
+        problem: `"${header}" is not a number column, so a greater-than or less-than rule would be wrong. I can highlight number columns only.`,
+      };
+    recipes.push({
+      kind: "highlight",
+      header,
+      operator,
+      value: Number(number),
+    });
+  }
+
+  const pivot =
+    /\bpivot\w*(?:\s*tables?)?\s+(?:of|for|showing|with)?\s*(.+?)\s+by\s+(.+?)\s*[.!?]?$/i.exec(
+      task,
+    );
+  if (pivot) {
+    const values = mentionedHeader(headers, pivot[1]);
+    const rowHeader = mentionedHeader(headers, pivot[2]);
+    if (!values || !rowHeader || values === rowHeader)
+      return {
+        recipes,
+        problem: `For a PivotTable I need two different columns, for example "create a PivotTable of Sales by Region". The columns are: ${headers.filter(Boolean).join(", ")}.`,
+      };
+    if (!isNumberColumn(rows, headers.indexOf(values)))
+      return {
+        recipes,
+        problem: `"${values}" is not a number column, so it cannot be summed in a PivotTable.`,
+      };
+    recipes.push({ kind: "pivot", rows: rowHeader, values });
+  }
+
   if (!recipes.length)
     return {
       recipes,
@@ -215,6 +288,38 @@ function officeScript(recipes: Recipe[]): string {
       );
     } else if (recipe.kind === "filter") {
       lines.push("  sheet.getAutoFilter().apply(range);");
+    } else if (recipe.kind === "blank-rows") {
+      lines.push(
+        "  {",
+        "    const values = range.getValues();",
+        "    const top = range.getRowIndex();",
+        "    const left = range.getColumnIndex();",
+        "    const width = range.getColumnCount();",
+        "    for (let row = values.length - 1; row >= 1; row -= 1) {",
+        '      if (values[row].every((cell) => cell === "")) sheet.getRangeByIndexes(top + row, left, 1, width).delete(ExcelScript.DeleteShiftDirection.up);',
+        "    }",
+        "    range = sheet.getUsedRange();",
+        "  }",
+      );
+    } else if (recipe.kind === "highlight") {
+      lines.push(
+        "  {",
+        `    const target = sheet.getRangeByIndexes(range.getRowIndex() + 1, range.getColumnIndex() + column(${js(recipe.header)}), range.getRowCount() - 1, 1);`,
+        "    const format = target.addConditionalFormat(ExcelScript.ConditionalFormatType.cellValue);",
+        '    format.getCellValue().getFormat().getFill().setColor("#FFF2CC");',
+        `    format.getCellValue().setRule({ formula1: ${js(String(recipe.value))}, operator: ${js(recipe.operator)} });`,
+        "  }",
+      );
+    } else if (recipe.kind === "pivot") {
+      lines.push(
+        "  {",
+        '    if (workbook.getWorksheet("Vynor Pivot")) throw new Error("A sheet named Vynor Pivot already exists.");',
+        '    const pivotSheet = workbook.addWorksheet("Vynor Pivot");',
+        '    const pivot = pivotSheet.addPivotTable("VynorPivot", range, pivotSheet.getRange("A3"));',
+        `    pivot.addRowHierarchy(pivot.getHierarchy(${js(recipe.rows)}));`,
+        `    pivot.addDataHierarchy(pivot.getHierarchy(${js(recipe.values)}));`,
+        "  }",
+      );
     } else {
       lines.push(
         "  const headerFormat = range.getRow(0).getFormat();",
@@ -288,6 +393,41 @@ function vbaCode(recipes: Recipe[]): string {
         "    If ws.AutoFilterMode Then ws.AutoFilterMode = False",
         "    ur.AutoFilter",
       );
+    } else if (recipe.kind === "blank-rows") {
+      lines.push(
+        "    Dim r As Long",
+        "    For r = lastRow To firstRow + 1 Step -1",
+        "        If Application.WorksheetFunction.CountA(ws.Range(ws.Cells(r, firstCol), ws.Cells(r, lastCol))) = 0 Then ws.Range(ws.Cells(r, firstCol), ws.Cells(r, lastCol)).Delete Shift:=xlUp",
+        "    Next r",
+        "    lastRow = firstRow + ws.UsedRange.Rows.Count - 1",
+        "    Set ur = ws.Range(ws.Cells(firstRow, firstCol), ws.Cells(lastRow, lastCol))",
+      );
+    } else if (recipe.kind === "highlight") {
+      lines.push(
+        ...find(recipe.header),
+        "    With ws.Range(ws.Cells(firstRow + 1, firstCol + idx - 1), ws.Cells(lastRow, firstCol + idx - 1)).FormatConditions.Add(Type:=xlCellValue, Operator:=" +
+          (recipe.operator === "GreaterThan"
+            ? "xlGreater"
+            : recipe.operator === "LessThan"
+              ? "xlLess"
+              : "xlEqual") +
+          `, Formula1:="=${recipe.value}")`,
+        "        .Interior.Color = RGB(255, 242, 204)",
+        "    End With",
+      );
+    } else if (recipe.kind === "pivot") {
+      lines.push(
+        "    Dim pivotSheet As Worksheet",
+        "    For Each pivotSheet In ThisWorkbook.Worksheets",
+        '        If pivotSheet.Name = "Vynor Pivot" Then MsgBox "A sheet named Vynor Pivot already exists.": Exit Sub',
+        "    Next pivotSheet",
+        "    Dim cache As PivotCache: Set cache = ThisWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=ur)",
+        "    Set pivotSheet = ThisWorkbook.Worksheets.Add",
+        '    pivotSheet.Name = "Vynor Pivot"',
+        '    Dim pivot As PivotTable: Set pivot = cache.CreatePivotTable(TableDestination:=pivotSheet.Range("A3"), TableName:="VynorPivot")',
+        `    pivot.PivotFields(${vba(recipe.rows)}).Orientation = xlRowField`,
+        `    pivot.AddDataField pivot.PivotFields(${vba(recipe.values)}), ${vba("Sum of " + recipe.values)}, xlSum`,
+      );
     } else {
       lines.push(
         "    With ws.Range(ws.Cells(firstRow, firstCol), ws.Cells(firstRow, lastCol))",
@@ -315,6 +455,12 @@ const describe = (recipe: Recipe): string => {
       return "Removes rows that repeat in every column (the first copy stays).";
     case "filter":
       return "Turns on the filter buttons in the header row.";
+    case "blank-rows":
+      return "Deletes rows that are completely empty inside the table (the cells below move up).";
+    case "highlight":
+      return `Highlights "${recipe.header}" cells ${recipe.operator === "GreaterThan" ? "greater than" : recipe.operator === "LessThan" ? "less than" : "equal to"} ${recipe.value} with a light yellow fill (a conditional format, so it follows the data).`;
+    case "pivot":
+      return `Creates a PivotTable on a new "Vynor Pivot" sheet: "${recipe.rows}" down the side, the sum of "${recipe.values}".`;
     default:
       return "Makes the header row bold with a light blue fill.";
   }
@@ -354,6 +500,10 @@ export function generateMacro(
     );
   if (read.recipes.some((recipe) => recipe.kind === "dedupe"))
     notes.push("Removing duplicates deletes rows; run it on a copy.");
+  if (read.recipes.some((recipe) => recipe.kind === "blank-rows"))
+    notes.push(
+      "Deleting blank rows cannot be undone by Excel's own Undo after a macro; run it on a copy.",
+    );
 
   return {
     ok: true,

@@ -215,7 +215,9 @@ jobs:
       - name: Get package list
         id: get-packages
         run: |
-          packages=$(find packages/ -maxdepth 1 -type d -not -path packages/ -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
+          # Only packages with a lockfile: the check runs `npm ci` and `npm test`, and a
+          # package without one (for example m365-contracts, built from the add-in) cannot run them.
+          packages=$(find packages/ -mindepth 2 -maxdepth 2 -name package-lock.json -exec dirname {} \; | xargs -n1 basename | sort | jq -R -s -c 'split("\n")[:-1]')
           echo "packages=$packages" >> $GITHUB_OUTPUT
           echo "Found packages: $packages"
 

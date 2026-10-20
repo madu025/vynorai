@@ -1,6 +1,5 @@
 import {
   By,
-  DialogHandler,
   InputBox,
   Key,
   VSBrowser,
@@ -42,9 +41,15 @@ export async function openWorkspace(dir: string) {
   if (!(await windowShowsFolder(dir, 20_000))) {
     await retry(async () => {
       await new Workbench().executeCommand("File: Open Folder...");
-      const dialog = await DialogHandler.getOpenDialog();
-      await dialog.selectPath(dir);
-      await dialog.confirm();
+      // The simple dialog is a quick input: type the path, then accept it. The
+      // first Enter can only step into the folder, so accept again if it stays.
+      const input = await InputBox.create(10_000);
+      await input.setText(dir);
+      await input.confirm();
+      await sleep(1_500);
+      const still = await InputBox.create(2_000).catch(() => undefined);
+      if (still && (await still.isDisplayed().catch(() => false)))
+        await still.confirm();
     }, 30_000);
     if (!(await windowShowsFolder(dir, 60_000)))
       throw new Error(`Could not open the folder ${dir}`);

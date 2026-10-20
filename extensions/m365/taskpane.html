@@ -278,6 +278,8 @@
               <button id="email-ai-write" type="button">Write the message with AI</button>
               <label class="email-check"><input id="email-include-chart" type="checkbox" checked /><span>Include report charts in the email body</span></label>
               <button id="email-send" class="primary" type="button" disabled>Review and send report</button>
+              <button id="whatsapp-copy" type="button">Copy summary for WhatsApp</button>
+              <pre id="whatsapp-note" class="muted" hidden></pre>
               <p id="email-draft-fallback" hidden><a id="email-draft-link" href="#" target="_blank" rel="noopener noreferrer">Open the draft in Outlook on the web</a> <span id="email-draft-note"></span></p>
             </div>
           </section>
@@ -306,6 +308,17 @@
         </section>
         <div id="ai-result"></div>
         <details id="insights-card" class="card" hidden><summary><strong data-i18n="insights_title">Insights</strong></summary><p class="muted" data-i18n="insights_note">Calculated here in the task pane. Nothing is sent anywhere.</p><div id="insights-list"></div><div id="insights-actions" class="suggestions"></div></details>
+        <details id="prefs-card" class="card"><summary><strong>Workbook settings</strong></summary>
+          <p id="prefs-line" class="muted">Nothing remembered for this workbook yet.</p>
+          <p class="muted">Saved in this workbook, so everyone who opens it gets the same. Only these choices are stored, never cell values.</p>
+          <label for="prefs-currency">Currency when the data names none<select id="prefs-currency"><option value="">Not set</option><option value="LKR">LKR (Rs)</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="INR">INR</option><option value="AUD">AUD</option><option value="SGD">SGD</option><option value="AED">AED</option><option value="JPY">JPY</option></select></label>
+          <label for="prefs-number-style">Large amounts<select id="prefs-number-style"><option value="">As in the data</option><option value="lakh">Lakhs (12,34,567)</option><option value="million">Millions (Mn)</option><option value="plain">Plain (1,234,567)</option></select></label>
+          <label for="prefs-fiscal">Financial year starts<select id="prefs-fiscal"><option value="">Not set</option><option value="4">April (Sri Lanka)</option><option value="1">January</option><option value="7">July</option></select></label>
+          <label for="prefs-audience">Reports are usually for<select id="prefs-audience"><option value="">Decide from the request</option><option value="management">Management (one page)</option><option value="operational">Operations (full detail)</option></select></label>
+          <label class="email-check"><input id="prefs-changelog" type="checkbox" checked /><span>Record every change in a "VynorAI Log" sheet</span></label>
+          <button id="prefs-holidays" type="button">Add Sri Lanka holiday table</button>
+          <button id="prefs-forget" class="ghost" type="button">Forget these choices</button>
+        </details>
 
         <section class="composer" aria-label="Request a workbook change" data-i18n-aria-label="request_change">
           <label class="sr-only" for="instruction" data-i18n="instruction_label">Describe what to create</label>

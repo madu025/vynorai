@@ -153,6 +153,22 @@ import {
   isFormulaInspectionRequest,
   isFormulaRepairRequest,
 } from "./formulaInspector.js";
+import { changeLogRows, type ChangeLogEntry } from "./changeLog.js";
+import { appendChangeLog, writeHolidaySheet } from "./officeSriLanka.js";
+import {
+  describePreferences,
+  learnFromRequest,
+  parsePreferences,
+  preferenceFacts,
+  PREFERENCES_KEY,
+  type WorkbookPreferences,
+} from "./preferences.js";
+import {
+  buildPrivacyReceipt,
+  describePrivacyReceipt,
+} from "./privacyReceipt.js";
+import { currencyGuessFor } from "./businessContext.js";
+import { whatsappSummary } from "./whatsappSummary.js";
 
 declare global {
   interface Window {
@@ -1636,6 +1652,7 @@ inspect?.addEventListener("click", async () => {
   if (instructionText && instructionText !== lastConversationRequest) {
     renderConversation("user", instruction?.value?.trim() || instructionText);
     lastConversationRequest = instructionText;
+    learnPreferences(instructionText);
   }
   // "AI reads every request" (the person's own setting): the AI turns the request into plain steps first.
   // The steps it returns come back through here once, and are read by the built-in reader.
@@ -2222,6 +2239,7 @@ apply?.addEventListener("click", async () => {
             // Read locally for a dashboard's audience, target and currency; never sent anywhere.
             request:
               lastConversationRequest || instruction?.value?.trim() || "",
+            preferences: workbookPrefs,
             onProgress: (completed, total) =>
               setStatus(`Writing result rows: ${completed}/${total}...`),
             onAction: (result) =>
@@ -2316,6 +2334,17 @@ apply?.addEventListener("click", async () => {
       ? ""
       : doneSentence(report.results, report.sourceUnchangedAfterApply);
     markChangeNote(failed.length ? "partial" : "applied");
+    await logChanges({
+      at: new Date(),
+      action: failed.length ? "partly applied" : "applied",
+      request: lastConversationRequest || instruction?.value?.trim() || "",
+      changes: report.results.map((result) => ({
+        change: `${result.kind}: ${result.name}`,
+        sheet: result.targetSheet,
+        status: String(result.status),
+      })),
+      reference: approvedPlan.planId,
+    });
     renderChanged(
       report.results.map(
         (result) =>
@@ -3788,6 +3817,17 @@ rollbackButton?.addEventListener("click", async () => {
     if (rollbackButton) rollbackButton.hidden = true;
     updateEmailUi();
     markChangeNote("undone");
+    await logChanges({
+      at: new Date(),
+      action: "undone",
+      request: lastConversationRequest,
+      changes: report.removedSheets.map((sheet) => ({
+        change: "removed result sheet",
+        sheet,
+        status: "undone",
+      })),
+      reference: items.planId,
+    });
     // The "changed" list names sheets that no longer exist; clear it with the rest of the result.
     renderChanged([]);
     setStatus(
@@ -3993,6 +4033,8 @@ async function initialize() {
     );
     return setStatus("M365 OAuth configuration is missing.");
   }
+  workbookPrefs = loadPreferences();
+  renderPreferences();
   if (restoreSession()) {
     restoreConversationHistory();
     void restoreResultGallery();
@@ -4029,6 +4071,10 @@ let agentPending: AgentRun | undefined;
 let agentLastUndo: AgentUndo | undefined;
 let agentBusy = false;
 let agentStopped = false;
+/** What the last model call sent (masked), for the privacy receipt. */
+let agentSentMessages: AgentMessage[] = [];
+/** The person's request of the current agent run, for the change log. */
+let agentLastRequest = "";
 /** Verification rounds after an apply (the agent may stage fixes once more). */
 let agentRounds = 0;
 
@@ -4097,6 +4143,8 @@ function renderAgentRun(run: AgentRun) {
 
 async function agentModel(messages: AgentMessage[]) {
   if (agentStopped) throw new Error("stopped");
+  // The last call carries the whole conversation: the privacy receipt is built from it.
+  agentSentMessages = messages;
   const response = await apiClient().agentExcel({
     consent: true,
     language: agentLanguage(),
@@ -4154,6 +4202,7 @@ async function agentLoop(request: string) {
       host,
       model: agentModel,
       mask: agentMask,
+      facts: preferenceFacts(workbookPrefs),
       onPhase: (phase: AgentPhase) => {
         if (agentBadge)
           agentBadge.textContent =
@@ -4184,7 +4233,18 @@ async function agentLoop(request: string) {
     });
     renderAgentRun(run);
     if (run.reply) renderConversation("assistant", run.reply);
-    if (agentProgress) agentProgress.textContent = usageLine();
+    const receipt = buildPrivacyReceipt(agentSentMessages);
+    if (agentProgress)
+      agentProgress.textContent = [usageLine(), describePrivacyReceipt(receipt)]
+        .filter(Boolean)
+        .join(" ");
+    const leaks =
+      receipt.leaks.emails + receipt.leaks.phones + receipt.leaks.nic;
+    log.record("agent:privacy", leaks ? "fail" : "pass", {
+      characters: receipt.characters,
+      masked: receipt.masked,
+      leaks,
+    });
     setStatus(
       run.changes.length
         ? "The agent prepared changes. Nothing has changed yet: review them, then approve."
@@ -4240,6 +4300,8 @@ async function startAgent() {
     show(agentUndo, false);
   }
   agentRounds = 0;
+  agentLastRequest = request;
+  learnPreferences(request);
   agentUsage.prompt = 0;
   agentUsage.cached = 0;
   agentUsage.completion = 0;
@@ -4326,6 +4388,7 @@ agentApprove?.addEventListener("click", async () => {
         readInput,
         supportsExcelApi,
         requirements: ACTION_REQUIREMENTS,
+        preferences: workbookPrefs,
       }),
       {
         onProgress: (index, total, label) => {
@@ -4359,6 +4422,16 @@ agentApprove?.addEventListener("click", async () => {
   const failed = report.results.some((result) => result.status === "failed");
   log.record("agent:apply", failed ? "fail" : "pass", {
     results: report.results.map((result) => result.status).join(","),
+  });
+  await logChanges({
+    at: new Date(),
+    action: failed ? "partly applied" : "applied",
+    request: agentLastRequest,
+    changes: report.results.map((result) => ({
+      change: result.change,
+      status: result.status,
+    })),
+    reference: "agent",
   });
   setStatus(
     failed
@@ -4416,6 +4489,13 @@ agentUndo?.addEventListener("click", async () => {
     ];
     if (agentBadge) agentBadge.textContent = "Undone";
     log.record("agent:undo", "pass");
+    await logChanges({
+      at: new Date(),
+      action: "undone",
+      request: agentLastRequest,
+      changes: [],
+      reference: "agent",
+    });
     setStatus("Undone. The workbook is back as it was.");
   } catch (error) {
     log.record("agent:undo", "fail", describeError(error));
@@ -4431,5 +4511,188 @@ document.querySelector("#new-chat")?.addEventListener("click", () => {
   agentPending = undefined;
   show(agentCard, false);
 });
+
+// --- Workbook preferences, change log, Sri Lanka pack, WhatsApp summary ---------------------
+// Preferences live in the workbook's own document settings (they travel with the file); only
+// choices are stored, never cell values. See preferences.ts, changeLog.ts, sriLanka.ts.
+
+let workbookPrefs: WorkbookPreferences = {};
+const prefsLine = document.querySelector<HTMLElement>("#prefs-line");
+const prefsStyle = document.querySelector<HTMLSelectElement>("#prefs-number-style");
+const prefsFiscal = document.querySelector<HTMLSelectElement>("#prefs-fiscal");
+const prefsCurrency = document.querySelector<HTMLSelectElement>("#prefs-currency");
+const prefsAudience = document.querySelector<HTMLSelectElement>("#prefs-audience");
+const prefsChangeLog = document.querySelector<HTMLInputElement>("#prefs-changelog");
+
+function prefsFallbackKey(): string | undefined {
+  const workbook = workbookStorageFingerprint();
+  return workbook ? `${PREFERENCES_KEY}.${workbook}` : undefined;
+}
+
+function loadPreferences(): WorkbookPreferences {
+  try {
+    const raw = office()?.context?.document?.settings?.get?.(PREFERENCES_KEY);
+    if (raw != null) return parsePreferences(raw);
+  } catch {
+    // Settings are not available in this host; the browser copy is used.
+  }
+  try {
+    const key = prefsFallbackKey();
+    return key ? parsePreferences(localStorage.getItem(key)) : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePreferences(next: WorkbookPreferences) {
+  workbookPrefs = parsePreferences(next);
+  const text = JSON.stringify(workbookPrefs);
+  try {
+    const settings = office()?.context?.document?.settings;
+    if (settings?.set) {
+      settings.set(PREFERENCES_KEY, text);
+      settings.saveAsync?.();
+    }
+  } catch {
+    // Kept in the browser copy below.
+  }
+  try {
+    const key = prefsFallbackKey();
+    if (key) localStorage.setItem(key, text);
+  } catch {
+    // Private window: remembered for this session only.
+  }
+  renderPreferences();
+}
+
+function learnPreferences(request: string) {
+  const learnt = learnFromRequest(workbookPrefs, request);
+  if (!Object.keys(learnt).length) return;
+  savePreferences({ ...workbookPrefs, ...learnt });
+  log.record("prefs:learnt", "info", Object.keys(learnt).join(","));
+}
+
+function renderPreferences() {
+  if (prefsLine) prefsLine.textContent = describePreferences(workbookPrefs);
+  if (prefsStyle) prefsStyle.value = workbookPrefs.numberStyle ?? "";
+  if (prefsFiscal) prefsFiscal.value = String(workbookPrefs.fiscalYearStart ?? "");
+  if (prefsCurrency) prefsCurrency.value = workbookPrefs.currency ?? "";
+  if (prefsAudience) prefsAudience.value = workbookPrefs.audience ?? "";
+  if (prefsChangeLog) prefsChangeLog.checked = workbookPrefs.changeLog !== false;
+}
+
+function updatePreference(change: Partial<WorkbookPreferences>) {
+  const next: Record<string, unknown> = { ...workbookPrefs, ...change };
+  for (const [key, value] of Object.entries(change))
+    if (value === undefined || value === "") delete next[key];
+  savePreferences(next as WorkbookPreferences);
+}
+
+prefsStyle?.addEventListener("change", () =>
+  updatePreference({ numberStyle: (prefsStyle.value || undefined) as any }),
+);
+prefsFiscal?.addEventListener("change", () =>
+  updatePreference({
+    fiscalYearStart: prefsFiscal.value ? Number(prefsFiscal.value) : undefined,
+  }),
+);
+prefsCurrency?.addEventListener("change", () =>
+  updatePreference({ currency: prefsCurrency.value || undefined }),
+);
+prefsAudience?.addEventListener("change", () =>
+  updatePreference({ audience: (prefsAudience.value || undefined) as any }),
+);
+prefsChangeLog?.addEventListener("change", () =>
+  updatePreference({ changeLog: prefsChangeLog.checked }),
+);
+document.querySelector("#prefs-forget")?.addEventListener("click", () => {
+  savePreferences({});
+  setStatus("Forgot the saved choices for this workbook.");
+});
+
+/** One line per change in the "VynorAI Log" sheet; never fails an apply or an undo. */
+async function logChanges(entry: ChangeLogEntry) {
+  if (workbookPrefs.changeLog === false) return;
+  const ok = await appendChangeLog(officeRuntime(), changeLogRows(entry));
+  log.record("changelog:append", ok ? "pass" : "fail", {
+    action: entry.action,
+    rows: entry.changes.length,
+  });
+}
+
+document
+  .querySelector("#prefs-holidays")
+  ?.addEventListener("click", async () => {
+    const year = new Date().getFullYear();
+    if (
+      !(await askInPane(
+        localizeMessage(
+          language,
+          `Add an "LK Holidays" sheet with the fixed-date holidays of ${year} and ${year + 1}? Poya days and festivals change every year: add them from the gazette. NETWORKDAYS(start, end, LK_Holidays) then skips them.`,
+        ),
+        localizeMessage(language, "Add"),
+      ))
+    )
+      return;
+    const result = await writeHolidaySheet(officeRuntime(), [year, year + 1]);
+    if (!result.ok) {
+      log.record("lk:holidays", "fail", result.error);
+      return setStatus(
+        result.error === "HOLIDAY_SHEET_EXISTS"
+          ? 'An "LK Holidays" sheet already exists; nothing was changed.'
+          : "The holiday sheet could not be added. See Diagnostics.",
+      );
+    }
+    updatePreference({ holidays: true });
+    await logChanges({
+      at: new Date(),
+      action: "applied",
+      request: "Add Sri Lanka holiday table",
+      changes: [
+        { change: `${result.rows} holidays added`, sheet: "LK Holidays", status: "created" },
+      ],
+      reference: "LK_Holidays",
+    });
+    setStatus(
+      `Added the "LK Holidays" sheet (${result.rows} fixed-date holidays). Add Poya days from the gazette; delete the sheet to undo.`,
+    );
+  });
+
+const whatsappNote = document.querySelector<HTMLElement>("#whatsapp-note");
+document
+  .querySelector("#whatsapp-copy")
+  ?.addEventListener("click", async () => {
+    const sheet = lastRevealSheet || currentSourceSheet;
+    if (!sheet) return setStatus("Make a report first.");
+    try {
+      const report = await readExcelReportValues(sheet, 60, 30);
+      const currency = workbookPrefs.currency
+        ? currencyGuessFor(workbookPrefs.currency, "preference")
+        : undefined;
+      const text = whatsappSummary(report.values, {
+        sheet,
+        ...(currency ? { symbol: currency.symbol } : {}),
+        ...(workbookPrefs.numberStyle ? { style: workbookPrefs.numberStyle } : {}),
+      });
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const area = document.createElement("textarea");
+        area.value = text;
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+      }
+      if (whatsappNote) {
+        whatsappNote.hidden = false;
+        whatsappNote.textContent = text;
+      }
+      setStatus("Copied. Paste it into WhatsApp; nothing was sent.");
+    } catch (error) {
+      log.record("whatsapp:copy", "fail", describeError(error));
+      setStatus("The summary could not be made. See Diagnostics.");
+    }
+  });
 
 void initialize();

@@ -73,11 +73,15 @@ export type ExcelActionStatus =
   | "skipped_unsupported";
 
 import { plannedSheetName } from "./outcome.js";
+import {
+  audienceWithPreference,
+  withPreferredCurrency,
+  type WorkbookPreferences,
+} from "./preferences.js";
 import { writeUsageDashboard } from "./usageSheet.js";
 import {
   currencyFromNumberFormat,
   currencyFromValues,
-  inferAudience,
   inferCurrency,
   isMoneyHeader,
   parseBusinessTarget,
@@ -1130,6 +1134,8 @@ export async function applyApprovedExcelPlan(
     aggregateCharts?: boolean;
     /** The user's request, read locally for the audience, a target and the currency of a dashboard. */
     request?: string;
+    /** Saved workbook preferences: currency when the data names none, lakh grouping, audience. */
+    preferences?: WorkbookPreferences;
     requirements?: Record<string, string>;
     onAction?: (result: ExcelActionResult) => void;
     onProgress?: (completedRows: number, totalRows: number) => void;
@@ -1684,14 +1690,22 @@ export async function applyApprovedExcelPlan(
                 samples[index] = rows
                   .slice(0, 500)
                   .map((row: any[]) => row[index]);
-              const currency = inferCurrency({
-                headers: headerNames,
-                columns: values.map((value) => value.index),
-                numberFormats,
-                samples,
-                request: options.request,
-              });
-              const audience = inferAudience(options.request);
+              const prefs = options.preferences ?? {};
+              const currency = withPreferredCurrency(
+                inferCurrency({
+                  headers: headerNames,
+                  columns: values.map((value) => value.index),
+                  numberFormats,
+                  samples,
+                  request: options.request,
+                }),
+                prefs,
+                values.some((value) => isMoneyHeader(value.column)),
+              );
+              const audience = audienceWithPreference(
+                options.request ?? "",
+                prefs,
+              );
               const target = parseBusinessTarget(
                 options.request,
                 values.map((value) => value.column),

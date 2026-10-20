@@ -14,7 +14,7 @@ export interface CurrencyGuess {
   /** Excel number format for totals and averages in this currency. */
   numberFormat: string;
   /** Where the currency was found; the strongest evidence wins. */
-  source: "number-format" | "header" | "values" | "request";
+  source: "number-format" | "header" | "values" | "request" | "preference";
   /** Two or more different currencies were found in the money columns; nothing is formatted. */
   mixed?: string[];
   /** The rows themselves are in different currencies, named by this column (for example "Currency"). */
@@ -135,6 +135,17 @@ export function isMoneyHeader(header: unknown): boolean {
 }
 
 const formatFor = (info: CurrencyInfo): string => `"${info.symbol} "#,##0.00`;
+
+/** A currency known by its ISO code, with its default format (for a saved preference). */
+export function currencyGuessFor(
+  code: string,
+  source: CurrencyGuess["source"],
+): CurrencyGuess | undefined {
+  const info = CURRENCIES[code.toUpperCase()];
+  return info
+    ? { code: info.code, symbol: info.symbol, numberFormat: formatFor(info), source }
+    : undefined;
+}
 
 /**
  * The currency of the money columns, from the strongest evidence available: the cells' own

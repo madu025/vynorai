@@ -105,6 +105,7 @@ export const PERSONAL_PATTERNS: RegExp[] = [
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
   /\+\d[\d\s-]{8,14}\d/,
   /\b0\d{9}\b/,
+  /\b0\d{2}[\s-]\d{7}\b/,
   /\b\d{3}[\s-]\d{3}[\s-]?\d{4}\b/,
   /\b\d{9}[VvXx]\b/,
   /\b\d{12}\b/,

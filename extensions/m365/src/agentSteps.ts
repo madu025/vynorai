@@ -4,6 +4,7 @@
  * audit receipt). `checkStep` runs only the local part, at once, so the agent can rephrase;
  * `runStep` runs the whole path after the person approved the agent's change list.
  */
+import type { WorkbookPreferences } from "./preferences.js";
 import type { M365ApiClient } from "./api.js";
 import {
   adaptForSampledRange,
@@ -80,6 +81,8 @@ export function runStepWith(deps: {
   readInput: () => Promise<RangeInput>;
   supportsExcelApi: (version: string) => boolean;
   requirements: Record<string, string>;
+  /** Saved workbook preferences (currency, lakh grouping, audience) for dashboards. */
+  preferences?: WorkbookPreferences;
 }) {
   return async (text: string) => {
     const input = await deps.readInput();
@@ -113,6 +116,7 @@ export function runStepWith(deps: {
         requirements: deps.requirements,
         // Read locally for business meaning (currency, target, audience); never sent anywhere.
         request: text,
+        ...(deps.preferences ? { preferences: deps.preferences } : {}),
       },
     );
     const failed = report.results.filter(

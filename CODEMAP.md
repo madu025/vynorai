@@ -24,6 +24,16 @@ contract types are in `packages/m365-contracts/src/index.ts`. It reuses existing
 billing and security audit services; it does not create a second gateway or billing system. Entra JWKS validation,
 real tenant consent, and Office.js end-to-end mutation evidence remain pending until a test tenant is approved.
 
+The Sri Lanka business pack and workbook memory are in `extensions/m365/src/sriLanka.ts` (lakh/crore
+number formats and text, April-March financial year formulas, the fixed-date holiday rows behind the
+`LK_Holidays` name), `extensions/m365/src/preferences.ts` (per-workbook choices kept in Office document
+settings: currency, lakh or million style, financial year start, audience, change log on/off; learnt from
+the request and sent to the agent as one per-request line), `extensions/m365/src/changeLog.ts` (rows of the
+"VynorAI Log" sheet: every apply and undo), `extensions/m365/src/privacyReceipt.ts` (what an agent request
+sent, masked values counted, unmasked e-mail/phone/NIC flagged), `extensions/m365/src/whatsappSummary.ts`
+(a report sheet's KPI cards and top rows as a message to paste) and the Office writers in
+`extensions/m365/src/officeSriLanka.ts` (log sheet append, "LK Holidays" sheet and name).
+
 VynorAI is a multi-tier AI coding platform: an IDE extension (VS Code, Antigravity, Cursor, Windsurf, JetBrains, CLI) backed by a metered cloud proxy. It provides cost-optimized frontier models (DeepSeek V4.1 Flash by default), Sri Lankan payments (PayHere, LKR), a zero-token deterministic Golden Vault engine, with request tiers picked by an in-process classifier. Background jobs (conversation compaction) run on DeepSeek Flash or, when configured, a GPU server (`backgroundLlm.ts`).
 
 The advanced Excel analyst slice is implemented in `extensions/m365/src/advancedAnalytics.ts` (deterministic

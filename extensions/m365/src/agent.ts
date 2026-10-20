@@ -609,12 +609,18 @@ export async function runAgent(options: {
   onTool?: (name: string, args: Record<string, unknown>) => void;
   onPhase?: (phase: AgentPhase) => void;
   maxTurns?: number;
+  /** Saved workbook preferences as one line (preferences.ts); added after the request. */
+  facts?: string;
 }): Promise<AgentRun> {
   const { host, model, mask } = options;
   // After an apply the add-in's own report comes back as the request; it is not the person's words.
   const fromPerson = !options.request.startsWith("[Report from the add-in");
   // A target or audience read locally from the request goes after it (the prefix stays fixed).
-  const meaning = fromPerson ? describeRequestMeaning(options.request) : "";
+  const meaning = fromPerson
+    ? [describeRequestMeaning(options.request), options.facts ?? ""]
+        .filter(Boolean)
+        .join("\n")
+    : "";
   const messages: AgentMessage[] = [
     ...(options.history ?? []),
     { role: "user", content: userContent(mask.mask(options.request), meaning) },

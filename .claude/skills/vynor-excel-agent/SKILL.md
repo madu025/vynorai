@@ -63,7 +63,7 @@ the files you changed.
 (500 prompts) call the real gateway with the testing key. In a cloud session behind a proxy, set
 `NODE_USE_ENV_PROXY=1`, or Node's fetch fails with "fetch failed" (ai500 then reports 0 tokens). Run
 the two one after the other: run together, they hit the gateway's rate limit (429). A failure is a
-regression only if it also passes on the old code; rerun it twice first, since the model varies.
+regression only if the same task passes on the old code; rerun it twice first, since the model varies.
 
 ## Agent behaviour (agent.ts / m365Agent.ts)
 

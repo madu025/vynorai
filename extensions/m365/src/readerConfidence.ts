@@ -11,6 +11,9 @@ export interface Reading {
   problems?: string[];
 }
 
+const WHOLE_TABLE_REQUEST =
+  /\b(?:one[- ]page|executive|management|overview|kpi|scorecard|target|board|boss|summary|report)\b/i;
+
 const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -76,7 +79,8 @@ export function weakReading(
   if (!choosesColumns) return undefined;
   const words = text.split(/\s+/).filter(Boolean).length;
   // A long request that names no column at all, read as a plan that must pick columns itself.
-  if (!named.length && words >= 5)
+  // A dashboard "for management, target 5M" deliberately names no column: the built-in one-page dashboard picks them.
+  if (!named.length && words >= 5 && !WHOLE_TABLE_REQUEST.test(text))
     return "none of the words in the request match a column, so the plan would pick its own";
   // Without specs the plan reads the column names from the sentence itself (charts and pivots do), so there is nothing to compare.
   if (!hasSpecs) return undefined;

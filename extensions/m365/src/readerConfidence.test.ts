@@ -90,3 +90,10 @@ test("a request that was not recognised at all is weak, one with a plain problem
     undefined,
   );
 });
+
+test("a one-page dashboard for management names no column on purpose and is not weak", () => {
+  const { text, reading } = read(
+    "make a one-page dashboard for management, target 5M",
+  );
+  assert.equal(weakReading(text, HEADERS, reading), undefined);
+});

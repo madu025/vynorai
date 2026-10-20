@@ -9,10 +9,15 @@ import {
 } from "./agent.js";
 import {
   describeReview,
+  mergeIssues,
+  needsPlan,
+  parsePlan,
   parseReview,
+  planFacts,
   reviewAndRevise,
   reviewRequest,
   revisionRequest,
+  runTeam,
 } from "./agentReview.js";
 
 const call = (id: string, name: string, args: unknown): ToolCall => ({
@@ -145,11 +150,16 @@ test("a plan the reviewer accepts is shown unchanged", async () => {
   });
   assert.equal(result.run, run);
   assert.equal(result.revised, false);
+  // Two reviewers (accuracy, then coverage), each reading once and then answering.
   assert.deepEqual(
     seen.filter((s) => s !== "plan"),
-    ["review", "review"],
+    ["review", "review", "review", "review"],
   );
-  assert.match(describeReview(result), /no problems found/);
+  assert.deepEqual(
+    result.reviewers?.map((r) => r.focus),
+    ["accuracy", "coverage"],
+  );
+  assert.match(describeReview(result), /3 agents.*no problems found/);
 });
 
 test("a problem the reviewer finds is fixed by the first agent before the preview", async () => {
@@ -244,4 +254,144 @@ test("a run with nothing staged is not reviewed", async () => {
   });
   assert.equal(calls, 1);
   assert.equal(result.review, undefined);
+});
+
+test("each reviewer has its own focus", () => {
+  const run = { reply: "", changes: [] };
+  assert.match(reviewRequest("x", run, "accuracy"), /focus is accuracy/);
+  assert.match(reviewRequest("x", run, "coverage"), /focus is coverage/);
+  assert.match(
+    reviewRequest("x", run, "coverage"),
+    /^\[Report from the add-in: review\] You are the reviewer/,
+  );
+});
+
+test("problems from both reviewers are merged without repeats", () => {
+  assert.deepEqual(
+    mergeIssues([
+      { ok: false, issues: ["C12 misses row 11", "Header is overwritten"] },
+      { ok: false, issues: ["c12  misses row 11", "Chart has no title"] },
+    ]),
+    ["C12 misses row 11", "Header is overwritten", "Chart has no title"],
+  );
+  assert.equal(
+    mergeIssues([
+      { ok: false, issues: Array.from({ length: 6 }, (_, i) => `a${i}`) },
+      { ok: false, issues: Array.from({ length: 6 }, (_, i) => `b${i}`) },
+    ]).length,
+    8,
+  );
+});
+
+test("one reviewer's problem is enough to correct the plan", async () => {
+  let review = 0;
+  const base = scripted("VERDICT: OK", "=SUM(C2:C11)").model;
+  const model = async (messages: AgentMessage[]) => {
+    const user = lastUser(messages);
+    const last = messages[messages.length - 1];
+    if (/focus is coverage/.test(user) && last.role === "user") {
+      review += 1;
+      return {
+        content: "VERDICT: FIX\n- The total misses row 11",
+        tool_calls: [],
+      };
+    }
+    return base(messages);
+  };
+  const { run, mask } = await planned(model);
+  const result = await reviewAndRevise({
+    request: "Add a total under Amount",
+    run,
+    host,
+    model,
+    mask,
+  });
+  assert.equal(review, 1);
+  assert.equal(result.revised, true);
+  assert.deepEqual(result.review?.issues, ["The total misses row 11"]);
+  assert.deepEqual(
+    result.reviewers?.map((r) => [r.focus, r.ok]),
+    [
+      ["accuracy", true],
+      ["coverage", false],
+    ],
+  );
+});
+
+test("a question gets no planner; a change request does", () => {
+  assert.equal(needsPlan("What is the total of Amount?"), false);
+  assert.equal(needsPlan("how many rows are there"), false);
+  assert.equal(needsPlan("Add a total under Amount"), true);
+  assert.equal(needsPlan("Clean the data, pivot by region and chart it"), true);
+  assert.equal(needsPlan("[Report from the add-in] applied"), false);
+});
+
+test("the planner's steps are read strictly and passed as a note", () => {
+  assert.deepEqual(
+    parsePlan("PLAN:\n1. Read Data!A1:C11\n2) Add =SUM(C2:C11) in C12\nThanks"),
+    ["Read Data!A1:C11", "Add =SUM(C2:C11) in C12"],
+  );
+  assert.deepEqual(parsePlan("PLAN: none"), []);
+  assert.deepEqual(parsePlan("no plan here"), []);
+  assert.equal(parsePlan(`PLAN:\n${"1. x\n".repeat(12)}`).length, 8);
+  assert.equal(planFacts([]), "");
+  assert.match(planFacts(["a", "b"]), /planner agent.*\(1\) a \(2\) b/);
+});
+
+test("the team: planner, builder with the plan, two reviewers", async () => {
+  const roles: string[] = [];
+  let builderNote = "";
+  const base = scripted("VERDICT: OK").model;
+  const model = async (messages: AgentMessage[]) => {
+    const user = lastUser(messages);
+    if (/You are the planner/.test(user)) {
+      roles.push("planner");
+      return {
+        content: "PLAN:\n1. Add =SUM(C2:C11) in Data!C12",
+        tool_calls: [],
+      };
+    }
+    if (/You are the reviewer/.test(user)) {
+      if (messages[messages.length - 1].role === "user")
+        roles.push(/focus is accuracy/.test(user) ? "accuracy" : "coverage");
+    } else if (messages[messages.length - 1].role === "user") {
+      roles.push("builder");
+      builderNote = String(messages[messages.length - 1].content);
+    }
+    return base(messages);
+  };
+  const result = await runTeam({
+    request: "Add a total under Amount",
+    host,
+    model,
+    mask: new PersonalMask(),
+  });
+  assert.deepEqual(roles, ["planner", "builder", "accuracy", "coverage"]);
+  assert.match(
+    builderNote,
+    /^Add a total under Amount\n\n.*Plan from the planner agent/s,
+  );
+  assert.deepEqual(result.plan, ["Add =SUM(C2:C11) in Data!C12"]);
+  assert.equal(result.run.changes.length, 1);
+  assert.match(
+    describeReview(result),
+    /Planner \(1 step\), builder and 2 reviewer\(s\) checked the plan: no problems found/,
+  );
+});
+
+test("a failed planner leaves the builder working as before", async () => {
+  const base = scripted("VERDICT: OK").model;
+  const model = async (messages: AgentMessage[]) => {
+    if (/You are the planner/.test(lastUser(messages)))
+      throw new Error("network");
+    return base(messages);
+  };
+  const result = await runTeam({
+    request: "Add a total under Amount",
+    host,
+    model,
+    mask: new PersonalMask(),
+  });
+  assert.equal(result.plan, undefined);
+  assert.equal(result.run.changes.length, 1);
 });

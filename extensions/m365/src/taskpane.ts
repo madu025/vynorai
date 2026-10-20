@@ -8,7 +8,7 @@ import {
   type AgentRun,
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
-import { describeReview, reviewAndRevise } from "./agentReview.js";
+import { describeReview, runTeam } from "./agentReview.js";
 import {
   applyAgentChanges,
   createOfficeAgentHost,
@@ -4197,7 +4197,8 @@ async function agentLoop(request: string) {
     apiClient(),
   );
   try {
-    const first = await runAgent({
+    // A team of agents works on the request (agentReview.ts): planner, builder, two reviewers.
+    const reviewed = await runTeam({
       request,
       history: agentHistory,
       host,
@@ -4225,27 +4226,27 @@ async function agentLoop(request: string) {
         if (agentProgress) agentProgress.textContent = label;
         log.record(`agent:tool:${name}`, "info", label.slice(0, 120));
       },
-    });
-    // A second agent checks the plan before the person sees it (agentReview.ts).
-    const reviewed = await reviewAndRevise({
-      request,
-      run: first,
-      host,
-      model: agentModel,
-      mask: agentMask,
-      onPhase: (phase) => {
-        if (phase === "reviewing") {
+      onTeamPhase: (phase) => {
+        if (phase === "plan") {
+          if (agentBadge) agentBadge.textContent = "Planning";
+          setStatus("A planner agent is splitting the request into steps...");
+        } else if (phase === "reviewing") {
           if (agentBadge) agentBadge.textContent = "Reviewing";
-          setStatus("A second agent is checking the plan...");
         } else if (phase === "revising") {
           if (agentBadge) agentBadge.textContent = "Correcting";
           setStatus("Correcting the plan after the review...");
         }
       },
-      onTool: (name, args) => {
+      onReviewer: (focus) =>
+        setStatus(
+          focus === "accuracy"
+            ? "A reviewer agent is checking ranges, formulas and totals..."
+            : "A reviewer agent is checking that every part is covered and nothing is overwritten...",
+        ),
+      onHelperTool: (name, args) => {
         const label = agentToolLabel(name, args);
-        if (agentProgress) agentProgress.textContent = `Review: ${label}`;
-        log.record(`agent:review:${name}`, "info", label.slice(0, 120));
+        if (agentProgress) agentProgress.textContent = `Team: ${label}`;
+        log.record(`agent:team:${name}`, "info", label.slice(0, 120));
       },
     });
     const run = reviewed.run;
@@ -4258,6 +4259,8 @@ async function agentLoop(request: string) {
     if (reviewed.review)
       log.record("agent:review", reviewed.review.ok ? "pass" : "info", {
         issues: reviewed.review.issues.length,
+        reviewers: reviewed.reviewers?.length ?? 0,
+        planSteps: reviewed.plan?.length ?? 0,
         revised: reviewed.revised,
       });
     renderAgentRun(run);

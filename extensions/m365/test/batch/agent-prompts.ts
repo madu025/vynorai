@@ -12,7 +12,7 @@ import {
   type AgentMessage,
   type AgentRun,
 } from "../../src/agent.js";
-import { describeReview, reviewAndRevise } from "../../src/agentReview.js";
+import { describeReview, runTeam } from "../../src/agentReview.js";
 import {
   adaptForSampledRange,
   createExcelPreviewPlan,
@@ -27,9 +27,9 @@ import { fakeCalculator } from "./fakeExcel.js";
 const KEY = process.env.VYNORAI_E2E_API_KEY || "";
 const BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
 const verbose = process.argv.includes("--verbose");
-// --review: a second agent checks each plan and the first agent may correct it (agentReview.ts).
+// --review: the agent team (agentReview.ts): a planner, the builder, two reviewers, one correction.
 const reviewOn = process.argv.includes("--review");
-const reviews = { ok: 0, fix: 0, revised: 0 };
+const reviews = { ok: 0, fix: 0, revised: 0, planned: 0 };
 const onlyArg = process.argv.indexOf("--only");
 const only =
   onlyArg > 0 ? new Set(process.argv[onlyArg + 1].split(",")) : undefined;
@@ -867,21 +867,17 @@ for (const item of CASES) {
     const mask = new PersonalMask();
     const ask = (messages: AgentMessage[]) =>
       model(messages, item.language ?? "en");
-    run = await runAgent({
-      request: item.text,
-      host: host(seen),
-      mask,
-      model: ask,
-      onTool: (name, args) => seen.push({ name, args }),
-    });
     if (reviewOn) {
-      const reviewed = await reviewAndRevise({
+      // Helpers read through their own host, so the checks see only the builder's tool calls.
+      const reviewed = await runTeam({
         request: item.text,
-        run,
         host: host(seen),
-        model: ask,
+        helperHost: host([]),
         mask,
+        model: ask,
+        onTool: (name, args) => seen.push({ name, args }),
       });
+      if (reviewed.plan?.length) reviews.planned += 1;
       if (reviewed.review) {
         reviews[reviewed.review.ok ? "ok" : "fix"] += 1;
         if (reviewed.revised) reviews.revised += 1;
@@ -889,7 +885,14 @@ for (const item of CASES) {
           console.log(`    review: ${describeReview(reviewed)}`);
       }
       run = reviewed.run;
-    }
+    } else
+      run = await runAgent({
+        request: item.text,
+        host: host(seen),
+        mask,
+        model: ask,
+        onTool: (name, args) => seen.push({ name, args }),
+      });
     turns += run.turns;
     verdict = run.stoppedAtLimit
       ? "stopped at the turn limit"
@@ -910,7 +913,7 @@ for (const item of CASES) {
 }
 if (reviewOn)
   console.log(
-    `review: ${reviews.ok} accepted, ${reviews.fix} asked for a fix, ${reviews.revised} corrected`,
+    `review: ${reviews.planned} planned, ${reviews.ok} accepted, ${reviews.fix} asked for a fix, ${reviews.revised} corrected`,
   );
 console.log(
   `agent-prompts: ${pass}/${ran} (model turns ${turns}, calls ${calls}; tokens in ${usage.prompt} (cached ${usage.cached}), out ${usage.completion})`,

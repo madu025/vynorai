@@ -22,7 +22,13 @@ import {
   AGENT_SYSTEM_PROMPT,
   AGENT_TOOLS,
 } from "../../../../backend/src/services/m365Agent.js";
-import { fakeCalculator } from "./fakeExcel.js";
+import { FAKE_ROWS, fakeCalculator } from "./fakeExcel.js";
+import { NODE_PRELUDE, nodeSandboxWorker } from "./nodeSandbox.js";
+import {
+  runSandboxedCode,
+  splitHeaders,
+  workerSource,
+} from "../../src/codeSandbox.js";
 
 const KEY = process.env.VYNORAI_E2E_API_KEY || "";
 const BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
@@ -95,6 +101,25 @@ const topRtom = String(
   )[0][0],
 );
 /** A number as the reply may write it: 1,234,567 or 1234567. */
+/** Median Issued Quantity per RTOM, worked out here to check the run_code task. */
+const medians = (() => {
+  const byRtom = new Map<string, number[]>();
+  for (let index = 0; index < FAKE_ROWS; index += 1) {
+    const row = rows[index % rows.length];
+    const list = byRtom.get(String(row[1])) ?? [];
+    list.push(Number(row[7]));
+    byRtom.set(String(row[1]), list);
+  }
+  return [...byRtom].map(([rtom, values]) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
+    return { rtom, median };
+  });
+})();
 const numberIn = (reply: string, value: number) =>
   reply.replace(/,/g, "").includes(String(value));
 const host = (seen: Seen): AgentHost => ({
@@ -158,6 +183,42 @@ const host = (seen: Seen): AgentHost => ({
     };
   },
   calculate: async (formula) => calculate(formula),
+  // The same sandbox as the add-in, in a Node worker, over the same rows calculate sees
+  // (the 200 sample rows repeated to FAKE_ROWS, like fakeCalculator).
+  runCode: async ({ areas, code, hasHeaders }) => {
+    const parts = areas.map((area) => {
+      const match = /^([A-J])(\d*)(?::([A-J])(\d*))?$/.exec(area);
+      if (!match) throw new Error(`${area} is outside the data.`);
+      const first = match[1].charCodeAt(0) - 65;
+      const last = (match[3] ?? match[1]).charCodeAt(0) - 65;
+      const top = match[2] ? Number(match[2]) : 1;
+      const bottom = Math.min(
+        match[4] ? Number(match[4]) : FAKE_ROWS + 1,
+        FAKE_ROWS + 1,
+      );
+      return { first, last, top, bottom };
+    });
+    const { top, bottom } = parts[0];
+    if (parts.some((part) => part.top !== top || part.bottom !== bottom))
+      return { error: "The ranges must cover the same rows." };
+    const values: unknown[][] = [];
+    for (let row = top; row <= bottom; row += 1) {
+      const source = row === 1 ? HEADERS : rows[(row - 2) % rows.length];
+      values.push(
+        parts.flatMap((part) => source.slice(part.first, part.last + 1)),
+      );
+    }
+    const outcome = await runSandboxedCode(
+      { ...splitHeaders(values, hasHeaders), code },
+      { createWorker: nodeSandboxWorker, source: workerSource(NODE_PRELUDE) },
+    );
+    return outcome.ok
+      ? {
+          result: outcome.result,
+          rows_read: values.length - (hasHeaders ? 1 : 0),
+        }
+      : { error: outcome.error };
+  },
   getDetails: async (what) =>
     ({
       pivots: [
@@ -331,6 +392,24 @@ const CASES: Case[] = [
         usedCalc(seen),
         noChanges(run),
         need(run.reply.includes(topRtom), `reply lacks ${topRtom}`),
+      ),
+  },
+  {
+    id: "a-code-median",
+    text: "for each RTOM, what is the median issued quantity, and how many rows are more than twice that median?",
+    check: (run, seen) =>
+      all(
+        noChanges(run),
+        need(
+          seen.some((s) => s.name === "run_code" || s.name === "calculate"),
+          "no calculation",
+        ),
+        ...medians.map(({ rtom, median }) =>
+          need(
+            run.reply.includes(rtom) && numberIn(run.reply, median),
+            `reply lacks ${rtom} median ${median}`,
+          ),
+        ),
       ),
   },
   {
@@ -888,7 +967,7 @@ for (const item of CASES) {
           `    [planner] ${reviewed.plan?.length ? reviewed.plan.map((step, i) => `${i + 1}. ${step}`).join(" | ") : "no plan (question, or planner skipped)"}`,
         );
         console.log(
-          `    [builder] ${seen.length} tool call(s), ${reviewed.run.changes.length} staged change(s), ${reviewed.run.turns} turn(s)`,
+          `    [builder] ${seen.length} tool call(s) (${seen.map((s) => s.name).join(", ")}), ${reviewed.run.changes.length} staged change(s), ${reviewed.run.turns} turn(s)`,
         );
         for (const verdict of reviewed.reviewers ?? [])
           console.log(

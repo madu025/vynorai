@@ -21,6 +21,11 @@ import {
 } from "./businessContext.js";
 import type { M365ApiClient } from "./api.js";
 import {
+  RUN_CODE_MAX_CELLS,
+  runSandboxedCode,
+  splitHeaders,
+} from "./codeSandbox.js";
+import {
   CHART_TYPES,
   readDetails,
   restoreFromBackup,
@@ -37,6 +42,8 @@ const SNAPSHOT_CELLS = 50_000;
 /** Rows per request when undo writes old formulas back. */
 const RESTORE_ROWS = 20_000;
 const CHART_MAX_ROWS = 5000;
+/** Cells per read when run_code loads a large range. */
+const RUN_CODE_CHUNK_CELLS = 50_000;
 /** A hidden backup copy has its own recognisable name, so the agent never mistakes it for the person's sheet. */
 const backupName = () =>
   `VynorAI_backup_${Date.now().toString(36)}${Math.floor(Math.random() * 36).toString(36)}`;
@@ -157,6 +164,94 @@ export function createOfficeAgentHost(
 ): AgentHost {
   return {
     checkStep,
+    runCode: async ({ sheet, areas, code, hasHeaders }) => {
+      const values = await runtime.run(async (context) => {
+        const worksheet = context.workbook.worksheets.getItem(sheet);
+        const used = worksheet.getUsedRange();
+        // Whole columns (A:D) are cut to the used rows.
+        const ranges = areas.map((area) => {
+          const range = worksheet
+            .getRange(area)
+            .getIntersectionOrNullObject(used);
+          range.load(["isNullObject", "rowIndex", "rowCount", "columnCount"]);
+          return range;
+        });
+        await context.sync();
+        const present = ranges.filter((range) => !range.isNullObject);
+        if (!present.length) return [] as unknown[][];
+        const rows = Number(present[0].rowCount);
+        if (
+          present.some(
+            (range) =>
+              Number(range.rowCount) !== rows ||
+              Number(range.rowIndex) !== Number(present[0].rowIndex),
+          )
+        )
+          throw new Error("The ranges must cover the same rows.");
+        const columns = present.reduce(
+          (sum, range) => sum + Number(range.columnCount),
+          0,
+        );
+        if (rows * columns > RUN_CODE_MAX_CELLS)
+          throw new Error(
+            `That is ${rows * columns} cells; run_code reads at most ${RUN_CODE_MAX_CELLS}. Read only the columns you need (for example B:B,H:H).`,
+          );
+        // Number formats of the first rows say which columns hold dates; reading them for
+        // every cell would double what a large range costs.
+        const heads = present.map((range) => {
+          const head = range
+            .getCell(0, 0)
+            .getResizedRange(
+              Math.min(rows, 3) - 1,
+              Number(range.columnCount) - 1,
+            );
+          head.load("numberFormat");
+          return head;
+        });
+        await context.sync();
+        const formats = heads.flatMap((head, index) =>
+          Array.from(
+            { length: Number(present[index].columnCount) },
+            (_, column) =>
+              String(
+                (head.numberFormat as any[][])
+                  .map((row) => row[column])
+                  .find((format) => /[dy]/i.test(String(format))) ?? "",
+              ),
+          ),
+        );
+        // Read in blocks so a large range stays within Excel on the web's request size.
+        const step = Math.max(1, Math.floor(RUN_CODE_CHUNK_CELLS / columns));
+        const all: unknown[][] = [];
+        for (let top = 0; top < rows; top += step) {
+          const count = Math.min(step, rows - top);
+          const blocks = present.map((range) => {
+            const block = range
+              .getCell(top, 0)
+              .getResizedRange(count - 1, Number(range.columnCount) - 1);
+            block.load("values");
+            return block;
+          });
+          await context.sync();
+          for (let row = 0; row < count; row += 1) {
+            const cells = blocks.flatMap(
+              (block) => (block.values as unknown[][])[row],
+            );
+            all.push(readable([cells], [formats])[0]);
+          }
+        }
+        return all;
+      });
+      const outcome = await runSandboxedCode({
+        ...splitHeaders(values, hasHeaders),
+        code,
+      });
+      if (!outcome.ok) return { error: outcome.error };
+      return {
+        result: outcome.result,
+        rows_read: Math.max(0, values.length - (hasHeaders ? 1 : 0)),
+      };
+    },
     getDetails: (what, sheet, address) =>
       runtime.run((context) => readDetails(context, what, sheet, address)),
     getWorkbook: () =>

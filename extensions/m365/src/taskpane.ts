@@ -4098,6 +4098,8 @@ function agentToolLabel(name: string, args: Record<string, unknown>): string {
       return `Reading ${String(args.sheet ?? "")}!${String(args.address ?? "")}`;
     case "calculate":
       return `Calculating ${String(args.formula ?? "").slice(0, 80)}`;
+    case "run_code":
+      return `Running analysis code on ${String(args.sheet ?? "")}!${String(args.address ?? "")} (on this device, no network)`;
     case "vynor_step":
       return `Checking a step: ${String(args.instruction ?? "").slice(0, 80)}`;
     default:

@@ -9,21 +9,24 @@ const packageJson = JSON.parse(
   fs.readFileSync(path.join(extensionRoot, "package.json"), "utf8"),
 );
 const buildDir = path.join(extensionRoot, "build");
-// CI stamps the build with the commit ("1.2.69-abc1234") before packaging, so the
-// downloaded artifact may carry that suffix; exactly one such file is accepted.
-const stamped = (
-  fs.existsSync(buildDir) ? fs.readdirSync(buildDir) : []
-).filter((file) =>
-  new RegExp(
-    `^vynorai-${packageJson.version.replace(/\./g, "\\.")}-[0-9a-f]{7}\\.vsix$`,
-  ).test(file),
+// CI stamps the build with the commit ("1.2.69-abc1234") and packages it for one
+// platform, so vsce names it "vynorai-linux-x64-1.2.69-abc1234.vsix". The exact
+// "vynorai-<version>.vsix" wins; otherwise exactly one such variant is accepted.
+const escapedVersion = packageJson.version.replace(/\./g, "\\.");
+const variantPattern = new RegExp(
+  `^vynorai-(?:([a-z0-9]+-[a-z0-9]+)-)?(${escapedVersion}(?:-[0-9a-f]{7})?)\\.vsix$`,
 );
+const variants = (
+  fs.existsSync(buildDir) ? fs.readdirSync(buildDir) : []
+).filter((file) => variantPattern.test(file));
 const artifactName =
   fs.existsSync(path.join(buildDir, `vynorai-${packageJson.version}.vsix`)) ||
-  stamped.length !== 1
+  variants.length !== 1
     ? `vynorai-${packageJson.version}.vsix`
-    : stamped[0];
-const version = artifactName.slice("vynorai-".length, -".vsix".length);
+    : variants[0];
+const [, target, version] = variantPattern.exec(artifactName);
+// VS Code installs a platform build in "<id>-<version>-<target>".
+const installName = `vynorai.vynorai-${version}${target ? `-${target}` : ""}`;
 const artifactPath = path.join(buildDir, artifactName);
 const stagedDir = path.join(extensionRoot, "e2e", "vsix");
 const stagedPath = path.join(stagedDir, artifactName);
@@ -130,7 +133,7 @@ function installE2e() {
   // and leaves the old files. A day of benchmark runs tested a build from
   // hours earlier that way, while the marker below named the new VSIX. Remove
   // the folder first, so what is there afterwards can only be this VSIX.
-  const sameVersionDir = path.join(extensionsDir, `vynorai.vynorai-${version}`);
+  const sameVersionDir = path.join(extensionsDir, installName);
   fs.rmSync(sameVersionDir, { recursive: true, force: true });
   if (fs.existsSync(sameVersionDir)) {
     fail(
@@ -183,14 +186,14 @@ function installE2e() {
     ]);
   }
 
-  const expectedDir = path.join(extensionsDir, `vynorai.vynorai-${version}`);
+  const expectedDir = path.join(extensionsDir, installName);
   let installedPackage = path.join(expectedDir, "package.json");
   if (!fs.existsSync(installedPackage)) {
     const defaultInstall = path.join(
       os.homedir(),
       ".vscode",
       "extensions",
-      `vynorai.vynorai-${version}`,
+      installName,
     );
     if (fs.existsSync(path.join(defaultInstall, "package.json"))) {
       fs.cpSync(defaultInstall, expectedDir, { recursive: true });
@@ -210,7 +213,7 @@ function installE2e() {
     if (
       entry.isDirectory() &&
       /^vynorai\.vynorai-\d+\.\d+\.\d+$/.test(entry.name) &&
-      entry.name !== `vynorai.vynorai-${version}`
+      entry.name !== installName
     ) {
       fs.rmSync(path.join(extensionsDir, entry.name), {
         recursive: true,
@@ -295,7 +298,7 @@ function cleanOldVynorVersions(extensionsDir) {
     if (
       entry.isDirectory() &&
       /^vynorai\.vynorai-\d+\.\d+\.\d+$/.test(entry.name) &&
-      entry.name !== `vynorai.vynorai-${version}`
+      entry.name !== installName
     ) {
       try {
         fs.rmSync(path.join(safeDir, entry.name), {
@@ -327,7 +330,7 @@ function installLocal() {
       ]);
       const installedPackage = path.join(
         extensionsDir,
-        `vynorai.vynorai-${version}`,
+        installName,
         "package.json",
       );
       if (!fs.existsSync(installedPackage)) {

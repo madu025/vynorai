@@ -1272,6 +1272,32 @@ export async function applyApprovedExcelPlan(
     // A text cell that starts with "=" would be evaluated as a formula when written back.
     const literal = (cell: any) =>
       typeof cell === "string" && cell.startsWith("=") ? `'${cell}` : cell;
+    // Copied source text that Excel would convert on write ("007", "1/2", "TRUE") keeps its text prefix.
+    const textSafe = (cell: any) => literal(guardText(cell));
+    // Reads a bounded part of a written result back and records any difference as a warning on the
+    // result. Advisory: when Excel cannot be read back, the result stands without a warning.
+    const verifyWritten = async (
+      sheet: any,
+      expected: any[][],
+      headers: any[],
+      result: ExcelActionResult,
+    ) => {
+      try {
+        const checked = Math.min(expected.length, 200);
+        if (checked === 0) return;
+        const readBack = sheet.getRangeByIndexes(1, 0, checked, headers.length);
+        readBack.load("values");
+        await context.sync();
+        const found = compareWrittenRows(
+          expected.slice(0, checked),
+          readBack.values,
+          headers.map(String),
+        );
+        if (found.length) result.warnings = found.map((issue) => issue.message);
+      } catch {
+        // Advisory only.
+      }
+    };
 
     for (const planned of plan.actions) {
       const resolvedSheet = resolveTarget(planned);
@@ -2117,30 +2143,7 @@ export async function applyApprovedExcelPlan(
               }
               if (cleaned.dateColumns.length > 0 && cleaned.rows.length > 0)
                 await context.sync();
-              // Read a bounded part back and compare it with what was meant to be written. The check
-              // is advisory: if Excel cannot be read back, the result stands without a warning.
-              try {
-                const checked = Math.min(cleaned.rows.length, 200);
-                if (checked > 0) {
-                  const readBack = sheet.getRangeByIndexes(
-                    1,
-                    0,
-                    checked,
-                    headers.length,
-                  );
-                  readBack.load("values");
-                  await context.sync();
-                  const found = compareWrittenRows(
-                    cleaned.rows.slice(0, checked),
-                    readBack.values,
-                    headers.map(String),
-                  );
-                  if (found.length)
-                    result.warnings = found.map((issue) => issue.message);
-                }
-              } catch {
-                // Advisory only.
-              }
+              await verifyWritten(sheet, cleaned.rows, headers, result);
             }
           } else if (
             action.kind === "view" &&
@@ -2225,11 +2228,17 @@ export async function applyApprovedExcelPlan(
                 limit: spec.limit,
               });
               const out = [headers, ...view.rows].map((row) =>
-                row.map(literal),
+                row.map(textSafe),
               );
               sheet.getRangeByIndexes(0, 0, out.length, headers.length).values =
                 out;
               await context.sync();
+              // Real dates and currency in the source keep their look in the view.
+              await copyColumnFormats(
+                sheet,
+                headers.map((_header, index) => index),
+              );
+              await verifyWritten(sheet, view.rows, headers, result);
               for (const rowIndex of view.highlighted.slice(0, 500))
                 sheet.getRangeByIndexes(
                   rowIndex + 1,
@@ -3103,7 +3112,7 @@ export async function applyApprovedExcelPlan(
               const out = [
                 [...headers, spec.splitFirstColumn, spec.splitLastColumn],
                 ...rows.map((row) => [...row, "", ""]),
-              ].map((row) => row.map(literal));
+              ].map((row) => row.map(textSafe));
               sheet.getRangeByIndexes(
                 0,
                 0,
@@ -3111,6 +3120,11 @@ export async function applyApprovedExcelPlan(
                 headers.length + 2,
               ).values = out;
               await context.sync();
+              await copyColumnFormats(
+                sheet,
+                headers.map((_header, index) => index),
+              );
+              await verifyWritten(sheet, rows, headers, result);
               if (rows.length > 0) {
                 sheet.getRangeByIndexes(
                   1,
@@ -3272,7 +3286,7 @@ export async function applyApprovedExcelPlan(
                     ...row,
                     ...returnHeaders.map(() => ""),
                   ]),
-                ].map((row) => row.map(literal));
+                ].map((row) => row.map(textSafe));
                 sheet.getRangeByIndexes(
                   0,
                   0,
@@ -3280,6 +3294,11 @@ export async function applyApprovedExcelPlan(
                   headers.length + returnHeaders.length,
                 ).values = out;
                 await context.sync();
+                await copyColumnFormats(
+                  sheet,
+                  headers.map((_header, index) => index),
+                );
+                await verifyWritten(sheet, rows, headers, result);
                 if (rows.length > 0) {
                   sheet.getRangeByIndexes(
                     1,
@@ -3622,7 +3641,7 @@ export async function applyApprovedExcelPlan(
                 const out = [
                   [...headers, spec.columnName],
                   ...rows.map((row) => [...row, ""]),
-                ].map((row) => row.map(literal));
+                ].map((row) => row.map(textSafe));
                 sheet.getRangeByIndexes(
                   0,
                   0,
@@ -3630,6 +3649,11 @@ export async function applyApprovedExcelPlan(
                   headers.length + 1,
                 ).values = out;
                 await context.sync();
+                await copyColumnFormats(
+                  sheet,
+                  headers.map((_header, index) => index),
+                );
+                await verifyWritten(sheet, rows, headers, result);
                 if (rows.length > 0) {
                   sheet.getRangeByIndexes(
                     1,

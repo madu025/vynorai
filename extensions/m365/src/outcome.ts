@@ -948,6 +948,13 @@ export function buildOutcomes(
             `${spec.sort.column} අනුව පෙළගැස්වේ`,
           ),
         );
+      if (spec.thenSort)
+        item.details.push(
+          say(
+            `Then by ${spec.thenSort.column} (${spec.thenSort.direction === "desc" ? "largest first" : "smallest first"}) when the first column ties`,
+            `ඉන්පසු ${spec.thenSort.column} අනුව පෙළගැස්වේ`,
+          ),
+        );
       if (spec.filter)
         item.details.push(
           say(

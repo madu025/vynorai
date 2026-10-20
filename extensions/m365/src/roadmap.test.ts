@@ -1102,3 +1102,32 @@ test("apply reports nothing when the clean result reads back unchanged", async (
     undefined,
   );
 });
+
+test("apply keeps identifier text as text in a view, split, lookup and add-column copy", async () => {
+  const idInput = {
+    workbookId: "book",
+    worksheetName: "Sheet1",
+    address: "Sheet1!A1:C3",
+    hasHeaders: true,
+    values: [
+      ["Service ID", "Sales", "Name"],
+      ["0112559962", 10, "Asha Perera"],
+      ["007", 20, "Bimal Silva"],
+    ],
+  };
+  const plan = createExcelPreviewPlan(idInput as any, ["view"], undefined, {
+    view: { sort: { column: 1, direction: "desc" } },
+  });
+  const excel = fakeWorkbook(idInput.values as any[][]);
+  await applyApprovedExcelPlan(excel.runtime, plan, true, "approval", {
+    expectedSourceFingerprint: plan.sourceFingerprint,
+  });
+  const key = Object.keys(excel.written).find(
+    (name) => name.endsWith(".values") && name.includes("!0,0,"),
+  )!;
+  assert.deepEqual(excel.written[key], [
+    ["Service ID", "Sales", "Name"],
+    ["'007", 20, "Bimal Silva"],
+    ["'0112559962", 10, "Asha Perera"],
+  ]);
+});

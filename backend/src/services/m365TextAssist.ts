@@ -86,8 +86,12 @@ export function buildAssistMessages(
 }
 
 /** Accepts one JSON object (optionally in a single code fence) that matches the strict contract. */
-export function parseAssistResponse(text: string): AssistResult {
+export function parseAssistResponse(
+  text: string,
+  lenient = false,
+): AssistResult {
   const trimmed = text.trim();
+  if (lenient) return parseLenient(trimmed);
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
   const candidate = fenced ? fenced[1] : trimmed;
   if (!candidate.startsWith("{") || !candidate.endsWith("}"))
@@ -104,6 +108,31 @@ export function parseAssistResponse(text: string): AssistResult {
   return checked.data;
 }
 
+/**
+ * Only for the report email: the person reads and edits the result, so a reply that is a JSON
+ * object with surrounding words, or plain prose, is accepted instead of failing the whole request.
+ */
+function parseLenient(trimmed: string): AssistResult {
+  const first = trimmed.indexOf("{");
+  const last = trimmed.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    try {
+      const parsed = JSON.parse(trimmed.slice(first, last + 1));
+      if (typeof parsed?.text === "string" && parsed.text.trim())
+        return { text: parsed.text.trim().slice(0, 12_000) };
+    } catch {
+      /* fall through to plain text */
+    }
+  }
+  const plain = trimmed
+    .replace(/^```[a-z]*\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+  if (!plain || plain.startsWith("{"))
+    throw new M365AnalysisError("AI_ASSIST_INVALID", 422, "empty reply");
+  return { text: plain.slice(0, 12_000) };
+}
+
 let runner: AnalysisRunner = proxyAnalysisRunner;
 /** Test seam; production always goes through the existing AI proxy. */
 export function setTextAssistRunnerForTests(next?: AnalysisRunner): void {
@@ -117,5 +146,5 @@ export async function assistText(
   const messages = buildAssistMessages(input);
   const chars = messages.reduce((sum, m) => sum + m.content.length, 0);
   const answer = await runner(user, messages, Math.ceil(chars / 4) + 3000);
-  return parseAssistResponse(answer);
+  return parseAssistResponse(answer, input.task === "report-email");
 }

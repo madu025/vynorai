@@ -18,7 +18,8 @@ export function askInPane(
     box.style.cssText =
       "max-width:320px;width:100%;padding:18px;border-radius:16px;background:#fff;color:#1b2a41;box-shadow:0 12px 32px rgba(15,23,42,.25);font:14px/1.45 system-ui,sans-serif";
     const text = document.createElement("p");
-    text.style.margin = "0 0 14px";
+    text.style.cssText =
+      "margin:0 0 14px;white-space:pre-wrap;max-height:50vh;overflow:auto";
     text.textContent = message;
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:8px;justify-content:flex-end";

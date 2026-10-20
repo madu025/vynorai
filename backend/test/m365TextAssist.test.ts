@@ -308,3 +308,22 @@ test("report-email on the excel host is accepted, consent gated, and told to inv
   const refused = await post({ ...body, consent: false });
   assert.notEqual(refused.status, 200);
 });
+
+test("report-email accepts prose or wrapped JSON from the model, other tasks stay strict", async () => {
+  const body = {
+    host: "excel",
+    task: "report-email",
+    text: "Report\nNorth | 100",
+    consent: true,
+  };
+  runnerAnswer = "Hello,\n\nNorth totals 100.\n\nThanks";
+  const prose = await post(body);
+  assert.equal(prose.status, 200);
+  assert.match(prose.json.result.text, /North totals 100/);
+  runnerAnswer = 'Here you go: {"text": "Hi, North is 100."} done';
+  const wrapped = await post(body);
+  assert.equal(wrapped.json.result.text, "Hi, North is 100.");
+  runnerAnswer = "just prose";
+  const strict = await post({ ...validBody });
+  assert.notEqual(strict.status, 200);
+});

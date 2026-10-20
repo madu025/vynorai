@@ -395,3 +395,52 @@ test("a failed planner leaves the builder working as before", async () => {
   assert.equal(result.plan, undefined);
   assert.equal(result.run.changes.length, 1);
 });
+
+test("a GROUPBY that drops its first data row goes straight back to the builder, without a reviewer", async () => {
+  const seen: string[] = [];
+  const model = async (messages: AgentMessage[]) => {
+    const user = lastUser(messages);
+    const last = messages[messages.length - 1];
+    if (/You are the reviewer/.test(user)) {
+      seen.push("review");
+      return { content: "VERDICT: OK", tool_calls: [] };
+    }
+    const revising = /A reviewer checked/.test(user);
+    if (revising) seen.push("revise");
+    if (last.role === "user")
+      return {
+        content: "",
+        tool_calls: [
+          call("g1", "write_formula", {
+            sheet: "Data",
+            cell: "E2",
+            formula: revising
+              ? "=GROUPBY(Data!A2:A11,Data!C2:C11,SUM,0,0)"
+              : "=GROUPBY(Data!A2:A11,Data!C2:C11,SUM,1,0)",
+          }),
+        ],
+      };
+    return { content: "Wrote the summary.", tool_calls: [] };
+  };
+  const { run, mask } = await planned(model);
+  const result = await reviewAndRevise({
+    request: "Add a total under Amount",
+    run,
+    host,
+    model,
+    mask,
+  });
+  assert.equal(result.revised, true);
+  assert.ok(!seen.includes("review"));
+  assert.match(result.review?.issues[0] ?? "", /first data row is dropped/);
+  assert.equal(
+    (result.run.changes[0].change as any).formula,
+    "=GROUPBY(Data!A2:A11,Data!C2:C11,SUM,0,0)",
+  );
+});
+
+test("the accuracy reviewer is told to run the formulas and compare totals", () => {
+  const text = reviewRequest("Summary by region", { reply: "", changes: [] });
+  assert.match(text, /run every staged formula through calculate/);
+  assert.match(text, /compare it with the sum of the summary/);
+});

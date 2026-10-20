@@ -18,10 +18,11 @@ import {
   type AgentRun,
   type PersonalMask,
 } from "./agent.js";
+import { lintChanges } from "./formulaLint.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 
 /** The reviewer only reads and calculates; it never needs many turns. */
-export const REVIEW_MAX_TURNS = 4;
+export const REVIEW_MAX_TURNS = 6;
 /** Staged changes listed for the reviewer (the rest are counted). */
 export const REVIEW_MAX_CHANGES = 25;
 export const REVIEW_MAX_ISSUES = 5;
@@ -35,7 +36,7 @@ export const REVIEW_FOCUSES: readonly ReviewFocus[] = ["accuracy", "coverage"];
 
 const FOCUS_CHECKS: Record<ReviewFocus, string> = {
   accuracy:
-    "Your focus is accuracy: read the ranges and calculate where it helps. Look for wrong or shifted ranges, formulas that give errors or wrong totals, wrong column references, and number formats that do not fit the data.",
+    "Your focus is accuracy: read the ranges and calculate where it helps. Look for wrong or shifted ranges, formulas that give errors or wrong totals, wrong column references, and number formats that do not fit the data. Do not trust the other agent's numbers: run every staged formula through calculate and report any error value (#VALUE!, #N/A, #REF!) as a problem. For a summary table, calculate the sum of its value column over the source rows and compare it with the sum of the summary's own totals; if they differ, report both numbers as a problem. Dates stored as text make EOMONTH and TEXT fail: DATE(YEAR(x),MONTH(x),1) works on both.",
   coverage:
     "Your focus is coverage and safety: check that every part of the request is covered, nothing would overwrite existing data or headers, new cells sit next to the data they belong to, and labels and sheet names are clear.",
 };
@@ -224,7 +225,13 @@ export async function reviewAndRevise(options: {
   const { run } = options;
   if (!run.changes.length) return { run, revised: false };
   const reviewers: ReviewerVerdict[] = [];
-  for (const focus of options.focuses ?? REVIEW_FOCUSES) {
+  // A mistake that is plain from the formula text goes straight back to the builder: no reviewer needed.
+  const linted = lintChanges(run.changes);
+  if (linted.length)
+    reviewers.push({ focus: "accuracy", ok: false, issues: linted });
+  for (const focus of linted.length
+    ? []
+    : (options.focuses ?? REVIEW_FOCUSES)) {
     try {
       options.onPhase?.("reviewing");
       options.onReviewer?.(focus);

@@ -96,7 +96,7 @@ export function findUnknownColumns(text: string, headers: string[]): string[] {
   const unknown: string[] = [];
   for (const match of text.matchAll(PREPOSITION)) {
     const after = text.slice((match.index ?? 0) + match[0].length);
-    if (/^\s*(?:sheet|tab|worksheet|workbook)/i.test(after)) continue;
+    if (/^\s*(?:sheet|tab|worksheet|workbook)\b/i.test(after)) continue;
     const words = match[1].trim().split(/\s+/);
     // Keep the longest leading run of words that is not a filler word, as a candidate column name.
     while (words.length && SKIP.has(words[0].toLocaleLowerCase()))

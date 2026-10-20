@@ -230,3 +230,5 @@ export function previewSummarySi(parts: {
     (parts.warnings.length ? ` ${parts.warnings.join(" ")}` : "")
   );
 }
+
+export const SINHALA_MESSAGE_KEYS = Object.keys(EXACT);

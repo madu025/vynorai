@@ -1,4 +1,5 @@
 import { localizeMessageSi } from "./messagesSi.js";
+import { localizeMessageTa } from "./messagesTa.js";
 
 export type Language = "en" | "si" | "ta";
 
@@ -177,7 +178,9 @@ export function translate(
 
 /** Run-time messages are built in English; this renders them in the chosen language. */
 export function localizeMessage(language: Language, text: string): string {
-  return language === "si" ? localizeMessageSi(text) : text;
+  if (language === "si") return localizeMessageSi(text);
+  if (language === "ta") return localizeMessageTa(text);
+  return text;
 }
 
 /**

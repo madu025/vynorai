@@ -29,6 +29,20 @@ const isLabel = (cell: Cell) =>
   /[A-Z]/.test(cell) &&
   !/[a-z]/.test(cell) &&
   cell.length <= 60;
+/**
+ * A Sinhala or Tamil dashboard writes its KPI labels in that script ("NET AMOUNT එකතුව"), which
+ * has no capitals; such a label counts only with a number under it (or a name under the top
+ * category card), so titles and category names do not.
+ */
+const SCRIPT = /[\u0D80-\u0DFF\u0B80-\u0BFF]/;
+const isScriptLabel = (cell: Cell, below: Cell) =>
+  isText(cell) &&
+  SCRIPT.test(cell) &&
+  !/[a-z]/.test(cell) &&
+  cell.length <= 60 &&
+  (isNumber(below) || (/^(ඉහළම|முதல்)\s/.test(cell) && isText(below)));
+/** Count cards: the record count, in English, Sinhala or Tamil. */
+const COUNT_LABEL = /^(RECORDS|COUNT\b|වාර්තා ගණන|பதிவுகள்)|(ගණන|எண்ணிக்கை)$/i;
 
 /** WhatsApp formatting characters in cell text would change the message; they are removed. */
 const clean = (text: string) =>
@@ -45,7 +59,7 @@ function figure(
   if (!isNumber(value)) return clean(String(value ?? ""));
   if (/%/.test(label))
     return `${(value * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
-  if (/^(RECORDS|COUNT\b)/i.test(label)) return value.toLocaleString("en-US");
+  if (COUNT_LABEL.test(label)) return value.toLocaleString("en-US");
   const amount = shortAmount(value, options.style);
   return options.symbol && isMoneyHeader(label)
     ? `${options.symbol} ${amount}`
@@ -70,7 +84,10 @@ function findCards(
     const cards: Array<[string, Cell]> = [];
     values[r].forEach((cell, c) => {
       const below = values[r + 1]?.[c];
-      if (isLabel(cell) && (isNumber(below) || isText(below)))
+      if (
+        (isLabel(cell) && (isNumber(below) || isText(below))) ||
+        isScriptLabel(cell, below)
+      )
         cards.push([cell as string, below]);
     });
     if (cards.length >= 2) return { row: r, cards };

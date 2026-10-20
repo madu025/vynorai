@@ -883,8 +883,8 @@ export function checkAgentConversation(messages: AgentMessage[]): void {
 
 const LANGUAGE_LINE: Record<string, string> = {
   en: "The person writes English.",
-  si: "The person writes Sinhala (සිංහල) or Singlish: reply in Sinhala script.",
-  ta: "The person writes Tamil: reply in Tamil.",
+  si: "The person writes Sinhala (සිංහල) or Singlish: reply in Sinhala script. Headings, labels and chart titles you write on the sheet are in Sinhala too; column names, sheet names and formulas stay as they are.",
+  ta: "The person writes Tamil: reply in Tamil. Headings, labels and chart titles you write on the sheet are in Tamil too; column names, sheet names and formulas stay as they are.",
 };
 
 /** Keeps only well-formed tool calls the add-in can run; drops anything else the model invented. */

@@ -38,6 +38,7 @@ export interface Check {
     | "fallback"
     | "duplicates"
     | "safety"
+    | "language"
     | "backend parity";
   pass: boolean;
   detail?: string;
@@ -66,6 +67,8 @@ interface Scenario {
   request: string;
   hosts: HostProfile[];
   datasets?: string[];
+  /** The same request in English: a Sinhala or Tamil run must build the same numbers. */
+  english?: string;
   grade: (ctx: GradeContext) => Check[];
 }
 
@@ -82,6 +85,8 @@ interface GradeContext {
   sourceAfter: string;
   /** The server (backend/src/services/m365ExcelPlan.ts) built the same plan from the same request. */
   backend?: { match: boolean; detail?: string };
+  /** The run of the scenario's English request, for a Sinhala or Tamil scenario. */
+  english?: GradeContext;
 }
 
 const check = (
@@ -94,6 +99,7 @@ const check = (
 function dashboardChecks(
   ctx: GradeContext,
   extra: (ctx: GradeContext) => Check[] = () => [],
+  fallbackNote = /could not create a PivotTable/,
 ): Check[] {
   const checks: Check[] = [];
   checks.push(
@@ -198,7 +204,7 @@ function dashboardChecks(
       check(
         "fallback",
         "the person is told why",
-        /could not create a PivotTable/.test(notes),
+        fallbackNote.test(notes),
         notes,
       ),
     );
@@ -226,7 +232,11 @@ const currencyCheck = (ctx: GradeContext): Check[] => {
       check(
         "business meaning",
         "warns that rows are in different currencies",
-        /different currencies|mixes currencies/.test(note),
+        // English, or the Sinhala/Tamil note: it names both currency codes.
+        /different currencies|mixes currencies/.test(note) ||
+          (/[\u0D80-\u0DFF\u0B80-\u0BFF]/.test(note) &&
+            /LKR/.test(note) &&
+            /USD/.test(note)),
         note,
       ),
       check(
@@ -248,6 +258,148 @@ const currencyCheck = (ctx: GradeContext): Check[] => {
     ];
   return [];
 };
+
+const SCRIPTS = {
+  si: { name: "Sinhala", re: /[\u0D80-\u0DFF]/ },
+  ta: { name: "Tamil", re: /[\u0B80-\u0BFF]/ },
+} as const;
+
+/** Words of the English templates that must not be left in a Sinhala or Tamil result. */
+const ENGLISH_TEMPLATE =
+  /\b(by|of|TOTAL|RECORDS|TOP|GAP TO|BREAKDOWN|Live formulas|Management summary|Operational view|distribution|forecast)\b/;
+
+/** Formula cells without text in them: the numbers, which must not change with the language. */
+const numberFormulas = (sheet: GridSheet | undefined) =>
+  sheet
+    ? filledCells(sheet)
+        .filter(([, , text]) => text.startsWith("=") && !text.includes('"'))
+        .map(([row, col, text]) => `${row},${col}:${text}`)
+        .join("\n")
+    : "";
+
+/** A Sinhala or Tamil request reads like its English twin and writes its words in that script. */
+function languageChecks(
+  ctx: GradeContext,
+  language: keyof typeof SCRIPTS,
+  {
+    cards = false,
+    sheetWords = true,
+  }: { cards?: boolean; sheetWords?: boolean } = {},
+): Check[] {
+  const { name, re } = SCRIPTS[language];
+  const english = ctx.english;
+  const sheet = ctx.result;
+  const checks = [
+    check(
+      "understanding",
+      `reads the ${name} request like the English one`,
+      Boolean(english) &&
+        JSON.stringify([ctx.actions, ctx.specs]) ===
+          JSON.stringify([english!.actions, english!.specs]),
+      `${JSON.stringify(ctx.actions)} vs ${JSON.stringify(english?.actions)}`,
+    ),
+  ];
+  if (!sheetWords) return checks;
+  const titles = sheet?.charts.map((chart) => chart.title ?? "") ?? [];
+  const labels =
+    cards && sheet
+      ? filledCells(sheet)
+          .filter(([row, col, text]) => row === 3 && col < 6 && text)
+          .map(([, , text]) => text)
+      : [];
+  const words = [
+    ...(cards && sheet ? [cellText(sheet, 0, 0), cellText(sheet, 1, 0)] : []),
+    ...labels,
+    ...titles,
+  ];
+  checks.push(
+    check(
+      "language",
+      `chart titles are in ${name}`,
+      titles.length > 0 && titles.every((title) => re.test(title)),
+      titles.join(" / "),
+    ),
+    check(
+      "language",
+      "no English template words left on the sheet",
+      words.length > 0 && words.every((text) => !ENGLISH_TEMPLATE.test(text)),
+      words.find((text) => ENGLISH_TEMPLATE.test(text)),
+    ),
+    check(
+      "language",
+      "the same numbers as the English result",
+      Boolean(sheet && english?.result) &&
+        numberFormulas(sheet) === numberFormulas(english!.result) &&
+        sheet!.charts.length === english!.result!.charts.length &&
+        sheet!.pivots.length === english!.result!.pivots.length,
+    ),
+  );
+  if (cards)
+    checks.push(
+      check(
+        "language",
+        `title and KPI labels are in ${name}`,
+        Boolean(sheet) &&
+          re.test(cellText(sheet!, 0, 0)) &&
+          labels.length >= 3 &&
+          labels.every((label) => re.test(label)),
+        labels.join(" / "),
+      ),
+    );
+  return checks;
+}
+
+const duplicateChecks = (ctx: GradeContext): Check[] => {
+  const key = detectBusinessKey(ctx.headers, ctx.dataset.rows as any);
+  const highlight = ctx.specs.view?.highlight;
+  return [
+    check(
+      "understanding",
+      "reads it as a duplicate check",
+      highlight?.rule === "duplicates",
+      JSON.stringify(ctx.specs.view),
+    ),
+    check(
+      "duplicates",
+      "checks the record key, not a random column",
+      Boolean(key) && highlight?.column === key!.columns[0],
+      `${ctx.headers[highlight?.column] ?? "none"} vs ${key?.names.join("+") ?? "no key"}`,
+    ),
+    check(
+      "safety",
+      "result is created",
+      ctx.report?.results[0]?.status === "created",
+      ctx.error,
+    ),
+    check(
+      "safety",
+      "source is unchanged",
+      ctx.sourceBefore === ctx.sourceAfter,
+    ),
+  ];
+};
+
+const chartChecks = (ctx: GradeContext): Check[] => [
+  check(
+    "understanding",
+    "reads it as a chart of Net Amount by Region",
+    ctx.actions.includes("chart") &&
+      ctx.headers[ctx.specs.chart?.category] === "Region" &&
+      ctx.headers[ctx.specs.chart?.value] === "Net Amount",
+    JSON.stringify(ctx.specs.chart),
+  ),
+  check(
+    "business meaning",
+    "the chart title names both columns",
+    (ctx.result?.charts ?? []).some(
+      (chart) =>
+        /Net Amount/.test(chart.title ?? "") &&
+        /Region/.test(chart.title ?? ""),
+    ),
+    ctx.result?.charts.map((chart) => chart.title).join(" / "),
+  ),
+  check("safety", "source is unchanged", ctx.sourceBefore === ctx.sourceAfter),
+];
 
 const SCENARIOS: Scenario[] = [
   {
@@ -315,35 +467,7 @@ const SCENARIOS: Scenario[] = [
     id: "duplicates",
     request: "find duplicate transactions",
     hosts: ["desktop"],
-    grade: (ctx) => {
-      const key = detectBusinessKey(ctx.headers, ctx.dataset.rows as any);
-      const highlight = ctx.specs.view?.highlight;
-      return [
-        check(
-          "understanding",
-          "reads it as a duplicate check",
-          highlight?.rule === "duplicates",
-          JSON.stringify(ctx.specs.view),
-        ),
-        check(
-          "duplicates",
-          "checks the record key, not a random column",
-          Boolean(key) && highlight?.column === key!.columns[0],
-          `${ctx.headers[highlight?.column] ?? "none"} vs ${key?.names.join("+") ?? "no key"}`,
-        ),
-        check(
-          "safety",
-          "result is created",
-          ctx.report?.results[0]?.status === "created",
-          ctx.error,
-        ),
-        check(
-          "safety",
-          "source is unchanged",
-          ctx.sourceBefore === ctx.sourceAfter,
-        ),
-      ];
-    },
+    grade: duplicateChecks,
   },
   {
     id: "quality",
@@ -386,105 +510,194 @@ const SCENARIOS: Scenario[] = [
       ];
     },
   },
+  {
+    id: "si-dash-management",
+    request: "කළමනාකරණයට එක පිටුවක dashboard එකක් හදන්න",
+    english: "make a one-page dashboard for management",
+    hosts: ["desktop", "web"],
+    grade: (ctx) =>
+      dashboardChecks(
+        ctx,
+        (c) => [
+          ...currencyCheck(c),
+          check(
+            "business meaning",
+            "says it is a management summary",
+            /^කළමනාකරණ සාරාංශය/.test(c.result ? cellText(c.result, 1, 0) : ""),
+            c.result ? cellText(c.result, 1, 0) : "",
+          ),
+          ...languageChecks(c, "si", { cards: true }),
+        ],
+        /PivotTable එකක් සෑදිය නොහැකි/,
+      ),
+  },
+  {
+    id: "ta-dash-management",
+    request: "நிர்வாகத்திற்கு ஒரு பக்க dashboard உருவாக்கு",
+    english: "make a one-page dashboard for management",
+    hosts: ["desktop", "web"],
+    grade: (ctx) =>
+      dashboardChecks(
+        ctx,
+        (c) => [
+          ...currencyCheck(c),
+          check(
+            "business meaning",
+            "says it is a management summary",
+            /^நிர்வாகச் சுருக்கம்/.test(
+              c.result ? cellText(c.result, 1, 0) : "",
+            ),
+            c.result ? cellText(c.result, 1, 0) : "",
+          ),
+          ...languageChecks(c, "ta", { cards: true }),
+        ],
+        /PivotTable ஐ உருவாக்க முடியவில்லை/,
+      ),
+  },
+  {
+    id: "si-chart",
+    request: "Region අනුව මුළු Net Amount ප්‍රස්තාරයක්",
+    english: "chart of total Net Amount by Region",
+    hosts: ["desktop"],
+    datasets: ["retail"],
+    grade: (ctx) => [...chartChecks(ctx), ...languageChecks(ctx, "si")],
+  },
+  {
+    id: "ta-chart",
+    request: "Region வாரியாக மொத்த Net Amount வரைபடம்",
+    english: "chart of total Net Amount by Region",
+    hosts: ["desktop"],
+    datasets: ["retail"],
+    grade: (ctx) => [...chartChecks(ctx), ...languageChecks(ctx, "ta")],
+  },
+  {
+    id: "si-duplicates",
+    request: "අනුපිටපත් ගනුදෙනු සොයන්න",
+    english: "find duplicate transactions",
+    hosts: ["desktop"],
+    grade: (ctx) => [
+      ...duplicateChecks(ctx),
+      ...languageChecks(ctx, "si", { sheetWords: false }),
+    ],
+  },
+  {
+    id: "ta-duplicates",
+    request: "நகல் பரிவர்த்தனைகளைக் கண்டுபிடி",
+    english: "find duplicate transactions",
+    hosts: ["desktop"],
+    grade: (ctx) => [
+      ...duplicateChecks(ctx),
+      ...languageChecks(ctx, "ta", { sheetWords: false }),
+    ],
+  },
+  {
+    id: "singlish-duplicates",
+    request: "duplicate ganudenu hoyanna",
+    english: "find duplicate transactions",
+    hosts: ["desktop"],
+    grade: (ctx) => [
+      ...duplicateChecks(ctx),
+      ...languageChecks(ctx, "si", { sheetWords: false }),
+    ],
+  },
 ];
 
 const snapshot = (sheet: GridSheet | undefined) =>
   sheet ? JSON.stringify(filledCells(sheet).map(([r, c, t]) => [r, c, t])) : "";
 
+/** Runs one request end to end the way the task pane does, into a fresh in-memory workbook. */
+async function runRequest(
+  dataset: Dataset,
+  host: HostProfile,
+  request: string,
+): Promise<GradeContext> {
+  const headers = dataset.columns.map((column) => column.name);
+  // Excel reads an empty cell back as "", so the source is given the way the reader sees it.
+  const values = [headers, ...dataset.rows].map((row) =>
+    row.map((cell) => (cell === null || cell === undefined ? "" : cell)),
+  );
+  const rows = values.slice(1);
+  const formats = headers.map(
+    (name) => SOURCE_FORMATS[dataset.id]?.[name] ?? "General",
+  );
+  const book = gridWorkbook(
+    dataset.sheet,
+    values.map((row) => [...row]),
+    {
+      host,
+      sourceFormats: formats,
+    },
+  );
+  const interpreted: any = interpretInstruction(request, headers, rows as any);
+  const actions = [
+    ...new Set([...selectExcelActions(request), ...interpreted.actions]),
+  ].filter(
+    (kind) => !(kind === "new-sheet" && interpreted.actions.includes("view")),
+  ) as any[];
+  const specs = interpreted.specs ?? {};
+  const ctx: GradeContext = {
+    dataset,
+    headers,
+    host,
+    actions,
+    specs,
+    sourceBefore: snapshot(book.sheets.get(dataset.sheet)),
+    sourceAfter: "",
+  };
+  try {
+    const input: any = {
+      workbookId: `bench-${dataset.id}`,
+      worksheetName: dataset.sheet,
+      address: `${dataset.sheet}!A1:${columnName(headers.length - 1)}${values.length}`,
+      values,
+      hasHeaders: true,
+    };
+    const plan: any = createExcelPreviewPlan(input, actions, 500, specs);
+    try {
+      const server = createServerExcelPreviewPlan(input, actions, 500, specs);
+      ctx.backend = excelPlansMatch(plan, server)
+        ? { match: true }
+        : { match: false, detail: "client and server plans differ" };
+    } catch (error) {
+      ctx.backend = {
+        match: false,
+        detail: (error as Error).message.slice(0, 160),
+      };
+    }
+    ctx.report = await applyApprovedExcelPlan(
+      book.runtime,
+      plan,
+      true,
+      "approval",
+      {
+        expectedSourceFingerprint: plan.sourceFingerprint,
+        supportsExcelApi: book.supportsExcelApi,
+        request,
+      },
+    );
+    const failed = ctx.report.results.find(
+      (entry) => entry.status === "failed",
+    );
+    if (failed) ctx.error = failed.error;
+    const target = ctx.report.results[0]?.targetSheet;
+    ctx.result = target ? book.sheets.get(target) : undefined;
+  } catch (error) {
+    ctx.error = (error as Error).message;
+  }
+  ctx.sourceAfter = snapshot(book.sheets.get(dataset.sheet));
+  return ctx;
+}
+
 export async function runBenchmark(): Promise<ScenarioResult[]> {
   const results: ScenarioResult[] = [];
   for (const dataset of DATASETS) {
-    const headers = dataset.columns.map((column) => column.name);
-    // Excel reads an empty cell back as "", so the source is given the way the reader sees it.
-    const values = [headers, ...dataset.rows].map((row) =>
-      row.map((cell) => (cell === null || cell === undefined ? "" : cell)),
-    );
-    const rows = values.slice(1);
-    const formats = headers.map(
-      (name) => SOURCE_FORMATS[dataset.id]?.[name] ?? "General",
-    );
     for (const scenario of SCENARIOS) {
       if (scenario.datasets && !scenario.datasets.includes(dataset.id))
         continue;
       for (const host of scenario.hosts) {
-        const book = gridWorkbook(
-          dataset.sheet,
-          values.map((row) => [...row]),
-          {
-            host,
-            sourceFormats: formats,
-          },
-        );
-        const interpreted: any = interpretInstruction(
-          scenario.request,
-          headers,
-          rows as any,
-        );
-        const actions = [
-          ...new Set([
-            ...selectExcelActions(scenario.request),
-            ...interpreted.actions,
-          ]),
-        ].filter(
-          (kind) =>
-            !(kind === "new-sheet" && interpreted.actions.includes("view")),
-        ) as any[];
-        const specs = interpreted.specs ?? {};
-        const ctx: GradeContext = {
-          dataset,
-          headers,
-          host,
-          actions,
-          specs,
-          sourceBefore: snapshot(book.sheets.get(dataset.sheet)),
-          sourceAfter: "",
-        };
-        try {
-          const input: any = {
-            workbookId: `bench-${dataset.id}`,
-            worksheetName: dataset.sheet,
-            address: `${dataset.sheet}!A1:${columnName(headers.length - 1)}${values.length}`,
-            values,
-            hasHeaders: true,
-          };
-          const plan: any = createExcelPreviewPlan(input, actions, 500, specs);
-          try {
-            const server = createServerExcelPreviewPlan(
-              input,
-              actions,
-              500,
-              specs,
-            );
-            ctx.backend = excelPlansMatch(plan, server)
-              ? { match: true }
-              : { match: false, detail: "client and server plans differ" };
-          } catch (error) {
-            ctx.backend = {
-              match: false,
-              detail: (error as Error).message.slice(0, 160),
-            };
-          }
-          ctx.report = await applyApprovedExcelPlan(
-            book.runtime,
-            plan,
-            true,
-            "approval",
-            {
-              expectedSourceFingerprint: plan.sourceFingerprint,
-              supportsExcelApi: book.supportsExcelApi,
-              request: scenario.request,
-            },
-          );
-          const failed = ctx.report.results.find(
-            (entry) => entry.status === "failed",
-          );
-          if (failed) ctx.error = failed.error;
-          const target = ctx.report.results[0]?.targetSheet;
-          ctx.result = target ? book.sheets.get(target) : undefined;
-        } catch (error) {
-          ctx.error = (error as Error).message;
-        }
-        ctx.sourceAfter = snapshot(book.sheets.get(dataset.sheet));
+        const ctx = await runRequest(dataset, host, scenario.request);
+        if (scenario.english)
+          ctx.english = await runRequest(dataset, host, scenario.english);
         results.push({
           id: scenario.id,
           dataset: dataset.id,

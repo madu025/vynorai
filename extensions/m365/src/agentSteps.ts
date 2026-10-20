@@ -6,6 +6,7 @@
  */
 import type { WorkbookPreferences } from "./preferences.js";
 import type { M365ApiClient } from "./api.js";
+import type { Language } from "./i18n.js";
 import {
   adaptForSampledRange,
   createExcelPreviewPlan,
@@ -83,6 +84,8 @@ export function runStepWith(deps: {
   requirements: Record<string, string>;
   /** Saved workbook preferences (currency, lakh grouping, audience) for dashboards. */
   preferences?: WorkbookPreferences;
+  /** The person's language, for the words written on the sheet; the step text is the agent's. */
+  language?: () => Language;
 }) {
   return async (text: string) => {
     const input = await deps.readInput();
@@ -117,6 +120,7 @@ export function runStepWith(deps: {
         // Read locally for business meaning (currency, target, audience); never sent anywhere.
         request: text,
         ...(deps.preferences ? { preferences: deps.preferences } : {}),
+        ...(deps.language ? { language: deps.language() } : {}),
       },
     );
     const failed = report.results.filter(

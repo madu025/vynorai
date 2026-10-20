@@ -37,7 +37,13 @@ import {
   saveLanguage,
   type Language,
 } from "./i18n.js";
-import { previewSummarySi } from "./messagesSi.js";
+import {
+  didYouMean,
+  doneSentence,
+  samplePreviewNote,
+  usingRowsSummary,
+  willBeCreatedOn,
+} from "./paneText.js";
 import {
   buildOutcomes,
   kindTitle,
@@ -273,6 +279,13 @@ let lastCreated:
 let galleryPlanId = "";
 let galleryResults: ExcelActionResult[] = [];
 let language: Language = loadLanguage();
+/**
+ * The language of the request in progress: a request typed in Sinhala or Tamil script gets its
+ * messages, preview and the words written on the sheet in that language, whatever the pane shows.
+ * Labels and buttons keep the pane's language.
+ */
+let requestLanguage: Language | undefined;
+const textLanguage = (): Language => requestLanguage ?? language;
 let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
@@ -498,6 +511,7 @@ function resetWorkingState() {
   if (outcomes) outcomes.textContent = "";
   if (apply) apply.disabled = true;
   if (instruction) instruction.value = "";
+  requestLanguage = undefined;
 }
 
 function showChat(messages: ConversationMessage[]) {
@@ -524,7 +538,7 @@ function renderConversationHistory() {
           ? translate(language, "conversation_attention", "Needs attention")
           : "VynorAI";
     const body = document.createElement("span");
-    body.textContent = localizeMessage(language, message.text);
+    body.textContent = localizeMessage(textLanguage(), message.text);
     item.append(label, body);
     if (message.kind === "user" && index === conversationMessages.length - 1) {
       const tools = document.createElement("div");
@@ -653,7 +667,7 @@ function signInDialogMessage(code: unknown): string {
 let lastStatus = "";
 function setStatus(message: string) {
   lastStatus = message;
-  if (status) status.textContent = localizeMessage(language, message);
+  if (status) status.textContent = localizeMessage(textLanguage(), message);
   const normalized = message.toLocaleLowerCase();
   const tone =
     /failed|error|could not|unavailable|missing|expired|rejected|invalid|no credits|blocked/.test(
@@ -1393,11 +1407,7 @@ function suggestMissingColumn(message: string): string {
     .filter((header): header is string => Boolean(header));
   const unique = [...new Set(suggestions)];
   if (!unique.length) return message;
-  const hint =
-    language === "si"
-      ? ` ඔබ අදහස් කළේ ${unique.map((header) => `“${header}”`).join(", ")} ද?`
-      : ` Did you mean ${unique.map((header) => `"${header}"`).join(", ")} ?`;
-  return `${message}${hint}`;
+  return `${message}${didYouMean(unique, textLanguage())}`;
 }
 
 function handleApiError(step: string, error: unknown) {
@@ -1650,6 +1660,8 @@ inspect?.addEventListener("click", async () => {
   if (dupFix) dupFix.hidden = true;
   cleanFirstRequest = "";
   const instructionText = normalizeInstruction(instruction?.value || "");
+  if (instructionText)
+    requestLanguage = responseLanguage(instruction?.value || "", language);
   if (instructionText && instructionText !== lastConversationRequest) {
     renderConversation("user", instruction?.value?.trim() || instructionText);
     lastConversationRequest = instructionText;
@@ -2241,6 +2253,7 @@ apply?.addEventListener("click", async () => {
             request:
               lastConversationRequest || instruction?.value?.trim() || "",
             preferences: workbookPrefs,
+            language: textLanguage(),
             onProgress: (completed, total) =>
               setStatus(`Writing result rows: ${completed}/${total}...`),
             onAction: (result) =>
@@ -2333,7 +2346,11 @@ apply?.addEventListener("click", async () => {
     previewFingerprint = "";
     lastDoneSentence = failed.length
       ? ""
-      : doneSentence(report.results, report.sourceUnchangedAfterApply);
+      : doneSentence(
+          report.results,
+          report.sourceUnchangedAfterApply,
+          textLanguage(),
+        );
     markChangeNote(failed.length ? "partial" : "applied");
     await logChanges({
       at: new Date(),
@@ -2445,14 +2462,22 @@ apply?.addEventListener("click", async () => {
                 `${entry.kind} failed: ${String(entry.error ?? "unknown error").slice(0, 240)}`,
             )
             .join(" ")}`
-        : doneSentence(report.results, report.sourceUnchangedAfterApply) +
+        : doneSentence(
+            report.results,
+            report.sourceUnchangedAfterApply,
+            textLanguage(),
+          ) +
             (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
             timing,
     );
     setStatus(
       failed.length
         ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`
-        : doneSentence(report.results, report.sourceUnchangedAfterApply) +
+        : doneSentence(
+            report.results,
+            report.sourceUnchangedAfterApply,
+            textLanguage(),
+          ) +
             (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
             auditWarning,
     );
@@ -3223,12 +3248,10 @@ function setupLayout() {
     if (previewSummary) {
       const columnCount = Number(parsed?.profile?.columnCount ?? 0);
       const from = currentRangeAddress ? ` (${currentRangeAddress})` : "";
-      previewSummary.textContent =
-        language === "si"
-          ? `පේළි ${rows}ක් සහ තීරු ${columnCount}ක් භාවිතා කරයි${from}. ඔබේ මූලාශ්‍ර දත්ත වෙනස් නොවේ.` +
-            (warnings.length ? ` ${warnings.join(" ")}` : "")
-          : `Using ${rows} rows and ${columnCount} columns${from}. Your source data stays unchanged.` +
-            (warnings.length ? ` ${warnings.join(" ")}` : "");
+      previewSummary.textContent = usingRowsSummary(
+        { rows, columns: columnCount, from, warnings },
+        textLanguage(),
+      );
       void sheets;
       void label;
     }
@@ -3328,7 +3351,7 @@ function renderOutcomes(actions: any[]) {
     actions,
     lastRange.headers,
     lastRange.rows,
-    language,
+    textLanguage(),
   )) {
     const box = document.createElement("div");
     box.className = "outcome";
@@ -3336,10 +3359,7 @@ function renderOutcomes(actions: any[]) {
     title.textContent = outcome.title;
     const where = document.createElement("div");
     where.className = "where";
-    where.textContent =
-      language === "si"
-        ? `${outcome.where} පත්‍රිකාවේ සාදනු ඇත`
-        : `Will be created on sheet ${outcome.where}`;
+    where.textContent = willBeCreatedOn(outcome.where, textLanguage());
     box.appendChild(title);
     box.appendChild(where);
     if (outcome.chart) {
@@ -3386,10 +3406,11 @@ function renderOutcomes(actions: any[]) {
       if (lastSample) {
         const note = document.createElement("div");
         note.className = "legend";
-        note.textContent =
-          language === "si"
-            ? `නියැදි පෙරදසුනකි (පේළි ${lastSample.sampledRows.toLocaleString("en-US")} / ${lastSample.totalRows.toLocaleString("en-US")}). සැබෑ එකතු Excel විසින් සියලු පේළි මත ගණනය කරයි.`
-            : `Sample preview (${lastSample.sampledRows.toLocaleString("en-US")} of ${lastSample.totalRows.toLocaleString("en-US")} rows). Excel calculates the real totals over every row.`;
+        note.textContent = samplePreviewNote(
+          lastSample.sampledRows,
+          lastSample.totalRows,
+          textLanguage(),
+        );
         box.appendChild(note);
       }
     }
@@ -3542,37 +3563,8 @@ async function refreshSheetNames(container: HTMLElement, actions: any[]) {
       seen.set(name, resolved);
     }
     const label = labels[index];
-    if (label)
-      label.textContent =
-        language === "si"
-          ? `${resolved} පත්‍රිකාවේ සාදනු ඇත`
-          : `Will be created on sheet ${resolved}`;
+    if (label) label.textContent = willBeCreatedOn(resolved, textLanguage());
   });
-}
-
-/** A plain-language result line: what now exists and where, without internal object names. */
-function doneSentence(
-  results: Array<{ kind: string; targetSheet: string; status: string }>,
-  sourceUnchanged: boolean,
-): string {
-  const created = results.filter((entry) => entry.status === "created");
-  const exists = results.filter((entry) => entry.status === "exists");
-  const sheets = [...new Set(created.map((entry) => entry.targetSheet))];
-  const kinds = [
-    ...new Set(
-      created.map((entry) => kindTitle(entry.kind, language).toLowerCase()),
-    ),
-  ].join(", ");
-  if (language === "si") {
-    const base = created.length
-      ? `සම්පූර්ණයි. ${kinds} ${sheets.join(", ")} පත්‍රිකාවේ සාදන ලදී.`
-      : "අලුතින් කිසිවක් සාදා නැත.";
-    return `${base}${exists.length ? " සමහර අයිතම දැනටමත් තිබුණි." : ""} ${sourceUnchanged ? "ඔබේ මූලාශ්‍ර දත්ත වෙනස් වී නැත." : "මූලාශ්‍ර දත්ත පරීක්ෂා කරන්න."}`;
-  }
-  const base = created.length
-    ? `Done. ${kinds[0].toUpperCase()}${kinds.slice(1)} created on sheet ${sheets.join(", ")}.`
-    : "Nothing new was created.";
-  return `${base}${exists.length ? " Some items already existed." : ""} ${sourceUnchanged ? "Your original data was not changed." : "Please check your source data."}`;
 }
 
 async function replaceOlderResultSheets(keepSheet: string) {
@@ -3643,7 +3635,7 @@ function renderResultGallery() {
     const head = document.createElement("div");
     head.className = "result-item-head";
     const title = document.createElement("strong");
-    title.textContent = kindTitle(result.kind, language);
+    title.textContent = kindTitle(result.kind, textLanguage());
     const target = document.createElement("span");
     target.textContent = result.targetSheet;
     head.append(title, target);
@@ -4000,6 +3992,8 @@ languageButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   language = nextLanguage(language);
   saveLanguage(language);
+  // Choosing a language in the pane is the person's answer for everything that follows.
+  requestLanguage = undefined;
   refreshLanguage();
 });
 refreshLanguage();
@@ -4083,11 +4077,9 @@ const show = (element: HTMLElement | null, visible: boolean) => {
   if (element) element.hidden = !visible;
 };
 
+// The request box is cleared when the agent starts, so the language is the one taken from the request.
 function agentLanguage(): "en" | "si" | "ta" {
-  return responseLanguage(instruction?.value || "", language) as
-    | "en"
-    | "si"
-    | "ta";
+  return textLanguage();
 }
 
 function agentToolLabel(name: string, args: Record<string, unknown>): string {
@@ -4339,6 +4331,7 @@ async function startAgent() {
   }
   agentRounds = 0;
   agentLastRequest = request;
+  requestLanguage = responseLanguage(request, language);
   learnPreferences(request);
   agentUsage.prompt = 0;
   agentUsage.cached = 0;
@@ -4427,6 +4420,7 @@ agentApprove?.addEventListener("click", async () => {
         supportsExcelApi,
         requirements: ACTION_REQUIREMENTS,
         preferences: workbookPrefs,
+        language: textLanguage,
       }),
       {
         onProgress: (index, total, label) => {

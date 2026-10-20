@@ -11,6 +11,7 @@ import type {
   CurrencyGuess,
 } from "./businessContext.js";
 import { usageColumnLetter } from "./usageLayout.js";
+import { workbookText, type WorkbookLanguage } from "./workbookText.js";
 
 export type DashboardAggregation = "sum" | "count" | "average" | "min" | "max";
 
@@ -95,6 +96,8 @@ export interface DashboardLayoutInput {
   target?: BusinessTarget;
   /** Where the data comes from, for the subtitle: 'Sales'!A1:D500. */
   sourceLabel: string;
+  /** Language of the words written on the sheet; English when not given. */
+  language?: WorkbookLanguage;
 }
 
 /** Categories shown in a management view: the headline few. Others keep the longer list. */
@@ -113,14 +116,6 @@ const SECTION_ROW = 8;
 const PIVOT_ROW = 9;
 const CHART_ROW = 3;
 const CHART_HEIGHT = 16;
-
-const AGGREGATE_LABEL: Record<DashboardAggregation, string> = {
-  sum: "Total",
-  count: "Count",
-  average: "Average",
-  min: "Lowest",
-  max: "Highest",
-};
 
 /** One aggregate of a value column over a category value (a cell or a lambda parameter). */
 export function categoryAggregateFormula(
@@ -230,7 +225,8 @@ export function buildDashboardLayout(
   const charts: DashboardChartPlan[] = [];
   const notes: string[] = [];
   const { aggregation, values } = input;
-  const label = AGGREGATE_LABEL[aggregation];
+  const text = workbookText(input.language);
+  const label = text.aggregate(aggregation);
   const currencyOk = input.currency && !input.currency.mixed;
   const valueFormats = values.map((_, index) =>
     aggregation === "count"
@@ -243,7 +239,10 @@ export function buildDashboardLayout(
     ? dashboardTopN(input.audience)
     : input.categories.length;
 
-  const title = `${values.map((value) => value.name).join(", ")} by ${input.categoryName}`;
+  const title = text.valuesBy(
+    values.map((value) => value.name),
+    input.categoryName,
+  );
   blocks.push({
     row: 0,
     col: 0,
@@ -252,17 +251,17 @@ export function buildDashboardLayout(
   });
   const audienceText =
     input.audience === "management"
-      ? "Management summary: the headline numbers and the largest categories."
+      ? text.management
       : input.audience === "operational"
-        ? "Operational view: every category, with a slicer to work through them."
+        ? text.operational
         : "";
-  const currencyText = currencyOk ? ` Amounts in ${input.currency!.code}.` : "";
+  const currencyText = currencyOk ? text.amountsIn(input.currency!.code) : "";
   blocks.push({
     row: 1,
     col: 0,
     cells: [
       [
-        `${audienceText ? `${audienceText} ` : ""}Live formulas over every row of ${input.sourceLabel}.${currencyText}`,
+        `${audienceText ? `${audienceText} ` : ""}${text.liveFormulas(input.sourceLabel)}${currencyText}`,
       ],
     ],
     style: "subtitle",
@@ -279,13 +278,13 @@ export function buildDashboardLayout(
       blocks.push({
         row: 0,
         col,
-        cells: [["Chart data (live formulas)"]],
+        cells: [[text.chartData]],
         style: "helper",
       });
     blocks.push({
       row: 1,
       col,
-      cells: [[input.categoryName, `${label} of ${value.name}`]],
+      cells: [[input.categoryName, text.aggregateOf(label, value.name)]],
       style: "table-header",
     });
     if (input.sampled) {
@@ -332,7 +331,7 @@ export function buildDashboardLayout(
     if (input.sampled || input.categories.length) {
       const top = CHART_ROW + index * (CHART_HEIGHT + 1);
       charts.push({
-        title: `${label} of ${value.name} by ${input.categoryName}`,
+        title: text.aggregateOfBy(label, value.name, input.categoryName),
         headerRow: 1,
         col,
         dataRows: topCount,
@@ -352,22 +351,24 @@ export function buildDashboardLayout(
   }
   const cards: Card[] = [];
   const records: Card = {
-    label: "RECORDS",
+    label: text.records,
     value: { f: `=ROWS(${input.categoryRef})` },
     // Excel 2016 and 2019 have no UNIQUE: the count is written as text when every row was read.
     sub: input.sampled
       ? {
-          f: `=IFERROR(COUNTA(UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))),"")&" ${input.categoryName.replace(/"/g, "'")} values"`,
+          f: `=IFERROR(COUNTA(UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))),"")&"${text.categoryValues(input.categoryName.replace(/"/g, "'"))}"`,
         }
-      : `${input.totalCategories ?? input.categories.length} ${input.categoryName} values`,
+      : `${input.totalCategories ?? input.categories.length}${text.categoryValues(input.categoryName)}`,
     format: "#,##0",
   };
   const valueCards: Card[] = values.map((value, index) => ({
-    label: `${label} ${value.name}`.toUpperCase(),
+    label: text.valueCard(label, value.name).toUpperCase(),
     value: { f: headlineFormula(aggregation, value.ref) },
     sub:
       aggregation === "sum"
-        ? { f: `="Average "&TEXT(IFERROR(AVERAGE(${value.ref}),0),"#,##0.00")` }
+        ? {
+            f: `="${text.averagePrefix}"&TEXT(IFERROR(AVERAGE(${value.ref}),0),"#,##0.00")`,
+          }
         : "",
     format: valueFormats[index],
   }));
@@ -378,16 +379,16 @@ export function buildDashboardLayout(
     const total = headlineFormula(aggregation, value.ref).slice(1);
     const targetText = formatNumber(input.target.value);
     targetCards.push({
-      label: `% OF ${input.target.label}`.toUpperCase(),
+      label: text.percentOf(input.target.label).toUpperCase(),
       value: { f: `=IFERROR(${total}/${input.target.value},0)` },
       sub: `${value.name} ${input.target.label} ${targetText}`,
       format: "0.0%",
     });
     targetCards.push({
-      label: `GAP TO ${input.target.label}`.toUpperCase(),
+      label: text.gapTo(input.target.label).toUpperCase(),
       value: { f: `=${input.target.value}-${total}` },
       sub: {
-        f: `=IF(${total}>=${input.target.value},"${input.target.label} reached","still to go")`,
+        f: `=IF(${total}>=${input.target.value},"${text.reached(input.target.label).replace(/"/g, "'")}","${text.stillToGo}")`,
       },
       format: valueFormats[values.indexOf(value)] ?? "#,##0.00",
     });
@@ -395,11 +396,11 @@ export function buildDashboardLayout(
   const topCards: Card[] = helperRefs.length
     ? [
         {
-          label: `TOP ${input.categoryName}`.toUpperCase(),
+          label: text.top(input.categoryName).toUpperCase(),
           value: {
             f: `=IFERROR(INDEX(${helperRefs[0].names},MATCH(MAX(${helperRefs[0].values}),${helperRefs[0].values},0)),"")`,
           },
-          sub: `by ${label.toLowerCase()} of ${values[0].name}`,
+          sub: text.topBy(label, values[0].name),
           format: "@",
         },
       ]
@@ -434,34 +435,28 @@ export function buildDashboardLayout(
   });
 
   if (input.currency?.mixedBy)
-    notes.push(
-      `The rows are in ${input.currency.mixed!.join(" and ")} (see ${input.currency.mixedBy}), so a total over all rows mixes currencies; filter the PivotTable by ${input.currency.mixedBy} before comparing amounts.`,
-    );
+    notes.push(text.mixedRows(input.currency.mixed!, input.currency.mixedBy));
   else if (input.currency?.mixed)
-    notes.push(
-      `The value columns are in different currencies (${input.currency.mixed.join(", ")}); they are shown side by side and never added together.`,
-    );
+    notes.push(text.mixedColumns(input.currency.mixed));
   if (
     !input.sampled &&
     input.totalCategories &&
     input.totalCategories > input.categories.length
   )
     notes.push(
-      `The charts show the ${input.categories.length} largest of ${input.totalCategories} ${input.categoryName} values; the totals and the PivotTable cover all of them.`,
+      text.largestShown(
+        input.categories.length,
+        input.totalCategories,
+        input.categoryName,
+      ),
     );
-  if (input.sampled)
-    notes.push(
-      `The data is large, so the charts list up to ${shown} ${input.categoryName} values from a live formula; the totals cover every row.`,
-    );
-  if (!input.sampled && input.categories.length)
-    notes.push(
-      "The chart order is from when the dashboard was made; the figures stay live.",
-    );
+  if (input.sampled) notes.push(text.largeData(shown, input.categoryName));
+  if (!input.sampled && input.categories.length) notes.push(text.chartOrder);
 
   blocks.push({
     row: SECTION_ROW,
     col: 0,
-    cells: [[`BREAKDOWN BY ${input.categoryName}`.toUpperCase()]],
+    cells: [[text.breakdownBy(input.categoryName).toUpperCase()]],
     style: "section",
   });
 
@@ -473,7 +468,7 @@ export function buildDashboardLayout(
       cells: [
         [
           input.categoryName,
-          ...values.map((value) => `${label} of ${value.name}`),
+          ...values.map((value) => text.aggregateOf(label, value.name)),
         ],
       ],
       style: "table-header",

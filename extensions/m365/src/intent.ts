@@ -442,6 +442,20 @@ export function interpretInstruction(
             : ["Every step must describe an explicit supported Excel action."],
         };
       }
+      // "pivot X by Y, then chart it": a chart step that names no column charts the pivot just described,
+      // not the first column and every number column of the sheet.
+      const unnamedChartStep = parts.findIndex(
+        (part, index) =>
+          part.specs.chart &&
+          headerPositions(headers, clauses[index]).length === 0,
+      );
+      if (specs.pivot && specs.chart && unnamedChartStep >= 0) {
+        specs.chart = {
+          category: specs.pivot.rows,
+          value: specs.pivot.values,
+          chartType: specs.chart.chartType,
+        };
+      }
       return { actions, specs, problems: [] };
     }
   }

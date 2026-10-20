@@ -101,3 +101,8 @@ test("sorting by two columns is one view with two keys, not two steps", () => {
   assert.deepEqual(result.actions, ["view"]);
   assert.equal(result.specs.view.thenSort.column, 3);
 });
+
+test("a share-of-total column is named with % so it shows as a percentage", () => {
+  const result = read("show each row Qty as a percentage of the total Qty");
+  assert.equal(result.specs.addColumn.name, "Qty Share %");
+});

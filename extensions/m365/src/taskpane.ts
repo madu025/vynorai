@@ -3680,6 +3680,8 @@ rollbackButton?.addEventListener("click", async () => {
     if (rollbackButton) rollbackButton.hidden = true;
     updateEmailUi();
     markChangeNote("undone");
+    // The "changed" list names sheets that no longer exist; clear it with the rest of the result.
+    renderChanged([]);
     setStatus(
       `Removed ${report.removedSheets.length} sheet(s), ${report.removedNames.length} named range(s), and converted ${report.convertedTables.length} table(s) back to a range.`,
     );

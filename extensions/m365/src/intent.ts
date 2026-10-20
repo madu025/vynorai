@@ -248,7 +248,7 @@ function rewriteColumnWishes(text: string, headers: string[]): string {
       text,
     )
   )
-    return `add a column ${name} Share that is [${name}] / COLSUM([${name}])`;
+    return `add a column ${name} Share % that is [${name}] / COLSUM([${name}])`;
   // "add a column that says Above or Below depending on whether Qty is over the average"
   if (
     /\b(?:above|over|higher|greater)\b[^.]*\b(?:below|under|lower|less)\b[^.]*\baverage\b|\b(?:above|below)\s+(?:or\s+(?:above|below)\s+)?(?:the\s+)?average\b[^.]*\bcolumn\b/i.test(

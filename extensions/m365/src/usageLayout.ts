@@ -138,16 +138,17 @@ export function buildUsageLayout(
       formula: unitTotalFormula(refs, group),
     })),
   ];
+  // KPIs sit in the wide (entity) column of each table slot so a big number never shows as ####.
   kpis.forEach((kpi, index) => {
     blocks.push({
       row: 3,
-      col: index * 2,
+      col: 1 + index * 4,
       cells: [[kpi.label]],
       style: "kpi-label",
     });
     blocks.push({
       row: 4,
-      col: index * 2,
+      col: 1 + index * 4,
       cells: [[kpi.formula]],
       style: "kpi-value",
       numberFormat: index < 2 ? "#,##0" : "#,##0.00",
@@ -200,16 +201,19 @@ export function buildUsageLayout(
       format: "#,##0",
     },
   ];
+  // Three results on the input row, the rest on the next row; label in a wide column, value beside it.
   lookups.forEach((entry, index) => {
+    const row = index < 3 ? 7 : 8;
+    const slot = (index < 3 ? index : index - 3) + 1;
     blocks.push({
-      row: 7,
-      col: 2 + index * 2,
+      row,
+      col: slot * 4 + 1,
       cells: [[entry.label]],
       style: "lookup-label",
     });
     blocks.push({
-      row: 7,
-      col: 3 + index * 2,
+      row,
+      col: slot * 4 + 2,
       cells: [[entry.formula]],
       style: "lookup-value",
       numberFormat: entry.format,
@@ -217,7 +221,7 @@ export function buildUsageLayout(
   });
 
   // Top tables, side by side: one per unit, then the entities with the most distinct items.
-  const tableTop = 9;
+  const tableTop = 10;
   let col = 0;
   const addTable = (
     heading: string,

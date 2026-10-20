@@ -27,7 +27,8 @@ export interface UsageSheetOptions {
   onProgress?: (done: number, total: number) => void;
 }
 
-const WIDTHS = [44, 120, 92, 22]; // rank, entity, value, gap; repeated for each table
+const WIDTHS = [44, 150, 105, 18]; // rank, entity, value, gap; repeated for each table slot
+const SLOTS = 5;
 
 const STYLE: Record<BlockStyle, (range: any) => void> = {
   title: (range) => {
@@ -46,7 +47,7 @@ const STYLE: Record<BlockStyle, (range: any) => void> = {
   },
   "kpi-value": (range) => {
     range.format.font.bold = true;
-    range.format.font.size = 18;
+    range.format.font.size = 16;
     range.format.font.color = "#1F3864";
   },
   section: (range) => {
@@ -114,13 +115,13 @@ export async function writeUsageDashboard(options: UsageSheetOptions) {
     // Older Excel: the grid simply stays visible.
   }
   // Column widths first, so wide text never stretches a table.
-  for (let table = 0; table < 4; table += 1)
+  for (let table = 0; table < SLOTS; table += 1)
     WIDTHS.forEach((width, offset) => {
       sheet.getRangeByIndexes(0, table * 4 + offset, 1, 1).format.columnWidth =
         width;
     });
 
-  const titleBar = sheet.getRangeByIndexes(0, 0, 1, 16);
+  const titleBar = sheet.getRangeByIndexes(0, 0, 1, SLOTS * 4 - 2);
   titleBar.format.fill.color = "#1F3864";
 
   for (const block of layout.blocks) {

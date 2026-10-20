@@ -31,7 +31,8 @@ core/vendor
 coverage
 # e2e
 packages/continue-sdk
-.conductor# Reports rewritten by the m365 test scripts (benchmark.ts, run.ts, ai500.ts, qa.ts)
+.conductor
+# Reports rewritten by the m365 test scripts (benchmark.ts, run.ts, ai500.ts, qa.ts)
 docs/BENCHMARK_REPORT.md
 docs/BATCH_REPORT.md
 docs/AI500_REPORT.md

@@ -92,7 +92,8 @@ const SYSTEM_PROMPT = [
   'Clean-up is ONE step per plan. "Fill empty or blank cells with 0" is ONE step, "clean the data: fill blank cells with 0", that covers every column; never write one fill step per column, and name a column only when the person names it.',
   "Use only column names that appear in the summary, exactly as written; never invent a column.",
   'Prefer the fewest steps that fully answer the request. A person asking "for each X, which Y and how much" wants ONE pivot with X and Y as rows.',
-  "A Circuit ID, Service ID or other identifier may be the category when the person names it, but never a measure.",
+
+  'A "dashboard" or "report" that breaks a measure down by TWO categories ("per <id column>, how much of each <item column>") is ONE pivot table step with both as rows: ["pivot table of total <measure> by <id column> and <item column> as rows"]. The dashboard step takes one category only; use it only for one category.',
 ].join("\n");
 
 const LANGUAGE_NAMES: Record<AnalysisLanguage, string> = {

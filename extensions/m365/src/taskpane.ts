@@ -50,6 +50,7 @@ import {
   looksLikeQuestion,
 } from "./intent.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
+import { weakReading } from "./readerConfidence.js";
 import { describeUnknownColumns, findUnknownColumns } from "./unknownColumn.js";
 import { cleanFirstInstruction, describeNearDuplicates } from "./valueCheck.js";
 import { describeIntegrityIssues } from "./integrity.js";
@@ -171,6 +172,8 @@ const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const dupFix = document.querySelector<HTMLElement>("#dup-fix");
 const dupFixButton = document.querySelector<HTMLButtonElement>("#dup-fix-btn");
 let cleanFirstRequest = "";
+/** The person declined to send the summary to the AI: the built-in reading is used for this request. */
+let useBuiltInReader = false;
 const cancelPreviewButton =
   document.querySelector<HTMLButtonElement>("#cancel-preview");
 const analyze = document.querySelector<HTMLButtonElement>("#analyze");
@@ -1597,6 +1600,7 @@ instruction?.addEventListener("input", () => {
   currentPlan = undefined;
   previewFingerprint = "";
   lastConversationRequest = "";
+  useBuiltInReader = false;
   if (dupFix) dupFix.hidden = true;
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
@@ -1640,6 +1644,8 @@ inspect?.addEventListener("click", async () => {
     !skipAiOnce &&
     Boolean(instructionText) &&
     capabilities?.aiAnalysis !== false;
+  // The steps the AI just returned are read as they are: they are never judged weak again.
+  const stepsFromAi = skipAiOnce;
   skipAiOnce = false;
   if (aiTurn) {
     setPreviewCancelVisible(false);
@@ -1990,6 +1996,32 @@ inspect?.addEventListener("click", async () => {
       previewSpecs = specs;
     }
     log.record("instruction:actions", "pass", { actions });
+    // The built-in reader may have understood only part of the request (it ignores a column the person named,
+    // or none of the words match a column): the AI should read it, after the person agrees to send the summary.
+    const weak =
+      !stepsFromAi &&
+      !useBuiltInReader &&
+      !excludedKinds.size &&
+      capabilities?.aiAnalysis !== false
+        ? weakReading(instructionText, layout.headers.map(String), {
+            actions,
+            specs,
+            problems: interpreted.problems,
+          })
+        : undefined;
+    if (weak) {
+      log.record("instruction:weak-reading", "fail", weak);
+      scriptMode = true;
+      void startConsent();
+      renderConversation(
+        "assistant",
+        localizeMessage(
+          language,
+          'I am not sure I read that correctly. Agree below and the AI will interpret it; only column names and types are sent. Turn on "AI reads every request" in the menu to skip this question.',
+        ),
+      );
+      return;
+    }
     const unhandledJobs = findUnhandledJobs(instructionText, actions);
     if (unhandledJobs.length) {
       log.record("instruction:unhandled", "fail", {
@@ -2832,6 +2864,7 @@ consentCheck?.addEventListener("change", () => {
 });
 
 consentCancel?.addEventListener("click", () => {
+  useBuiltInReader = true;
   resetAnalysisConsent();
   log.record("analysis:consent", "skip", "user cancelled");
   setStatus("Nothing was sent.");

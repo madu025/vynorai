@@ -66,6 +66,8 @@ const EXACT: Record<string, string> = {
     "මට මෙම ඉල්ලීම කලින් සිට මතකයි, එබැවින් AI කැඳවීමක් අවශ්‍ය නොවීය.",
   "I could not read that directly. Agree below and the AI will interpret it; only column names and types are sent.":
     "මට මෙය සෘජුව තේරුම් ගත නොහැකි විය. පහත එකඟ වුවහොත් AI එක එය අර්ථකථනය කරයි; යවන්නේ තීරු නම් සහ වර්ග පමණි.",
+  'I am not sure I read that correctly. Agree below and the AI will interpret it; only column names and types are sent. Turn on "AI reads every request" in the menu to skip this question.':
+    "මම මෙය නිවැරදිව තේරුම් ගත්තාදැයි විශ්වාස නැත. පහත එකඟ වුවහොත් AI එක එය අර්ථකථනය කරයි; යවන්නේ තීරු නම් සහ වර්ග පමණි. මෙම ප්‍රශ්නය මඟහැරීමට මෙනුවේ “AI reads every request” සක්‍රිය කරන්න.",
   "Describe what you want first, then plan the steps.":
     "ඔබට අවශ්‍ය දේ මුලින් ලියන්න, ඉන්පසු පියවර සැලසුම් කරන්න.",
   "Excel could not find that sheet or range. Click a cell inside your table and try again.":

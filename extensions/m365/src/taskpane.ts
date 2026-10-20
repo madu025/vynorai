@@ -8,6 +8,7 @@ import {
   type AgentRun,
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
+import { describeReview, reviewAndRevise } from "./agentReview.js";
 import {
   applyAgentChanges,
   createOfficeAgentHost,
@@ -4196,7 +4197,7 @@ async function agentLoop(request: string) {
     apiClient(),
   );
   try {
-    const run = await runAgent({
+    const first = await runAgent({
       request,
       history: agentHistory,
       host,
@@ -4225,17 +4226,49 @@ async function agentLoop(request: string) {
         log.record(`agent:tool:${name}`, "info", label.slice(0, 120));
       },
     });
+    // A second agent checks the plan before the person sees it (agentReview.ts).
+    const reviewed = await reviewAndRevise({
+      request,
+      run: first,
+      host,
+      model: agentModel,
+      mask: agentMask,
+      onPhase: (phase) => {
+        if (phase === "reviewing") {
+          if (agentBadge) agentBadge.textContent = "Reviewing";
+          setStatus("A second agent is checking the plan...");
+        } else if (phase === "revising") {
+          if (agentBadge) agentBadge.textContent = "Correcting";
+          setStatus("Correcting the plan after the review...");
+        }
+      },
+      onTool: (name, args) => {
+        const label = agentToolLabel(name, args);
+        if (agentProgress) agentProgress.textContent = `Review: ${label}`;
+        log.record(`agent:review:${name}`, "info", label.slice(0, 120));
+      },
+    });
+    const run = reviewed.run;
     agentHistory = run.messages;
     agentPending = run.changes.length ? run : undefined;
     log.record("agent:run", "pass", {
       turns: run.turns,
       changes: run.changes.length,
     });
+    if (reviewed.review)
+      log.record("agent:review", reviewed.review.ok ? "pass" : "info", {
+        issues: reviewed.review.issues.length,
+        revised: reviewed.revised,
+      });
     renderAgentRun(run);
     if (run.reply) renderConversation("assistant", run.reply);
     const receipt = buildPrivacyReceipt(agentSentMessages);
     if (agentProgress)
-      agentProgress.textContent = [usageLine(), describePrivacyReceipt(receipt)]
+      agentProgress.textContent = [
+        describeReview(reviewed),
+        usageLine(),
+        describePrivacyReceipt(receipt),
+      ]
         .filter(Boolean)
         .join(" ");
     const leaks =

@@ -12,6 +12,7 @@ import {
   type AgentMessage,
   type AgentRun,
 } from "../../src/agent.js";
+import { describeReview, reviewAndRevise } from "../../src/agentReview.js";
 import {
   adaptForSampledRange,
   createExcelPreviewPlan,
@@ -26,6 +27,9 @@ import { fakeCalculator } from "./fakeExcel.js";
 const KEY = process.env.VYNORAI_E2E_API_KEY || "";
 const BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
 const verbose = process.argv.includes("--verbose");
+// --review: a second agent checks each plan and the first agent may correct it (agentReview.ts).
+const reviewOn = process.argv.includes("--review");
+const reviews = { ok: 0, fix: 0, revised: 0 };
 const onlyArg = process.argv.indexOf("--only");
 const only =
   onlyArg > 0 ? new Set(process.argv[onlyArg + 1].split(",")) : undefined;
@@ -408,9 +412,9 @@ const CASES: Case[] = [
       return need(
         Boolean(
           format &&
-            format.bold === true &&
-            format.fill &&
-            /^A1:J1$/i.test(format.address),
+          format.bold === true &&
+          format.fill &&
+          /^A1:J1$/i.test(format.address),
         ),
         JSON.stringify(format ?? kinds(run)),
       );
@@ -860,13 +864,32 @@ for (const item of CASES) {
   let verdict: string | true;
   let run: AgentRun | undefined;
   try {
+    const mask = new PersonalMask();
+    const ask = (messages: AgentMessage[]) =>
+      model(messages, item.language ?? "en");
     run = await runAgent({
       request: item.text,
       host: host(seen),
-      mask: new PersonalMask(),
-      model: (messages) => model(messages, item.language ?? "en"),
+      mask,
+      model: ask,
       onTool: (name, args) => seen.push({ name, args }),
     });
+    if (reviewOn) {
+      const reviewed = await reviewAndRevise({
+        request: item.text,
+        run,
+        host: host(seen),
+        model: ask,
+        mask,
+      });
+      if (reviewed.review) {
+        reviews[reviewed.review.ok ? "ok" : "fix"] += 1;
+        if (reviewed.revised) reviews.revised += 1;
+        if (!reviewed.review.ok || verbose)
+          console.log(`    review: ${describeReview(reviewed)}`);
+      }
+      run = reviewed.run;
+    }
     turns += run.turns;
     verdict = run.stoppedAtLimit
       ? "stopped at the turn limit"
@@ -885,6 +908,10 @@ for (const item of CASES) {
     console.log(`    reply: ${run.reply.replace(/\s+/g, " ").slice(0, 200)}`);
   }
 }
+if (reviewOn)
+  console.log(
+    `review: ${reviews.ok} accepted, ${reviews.fix} asked for a fix, ${reviews.revised} corrected`,
+  );
 console.log(
   `agent-prompts: ${pass}/${ran} (model turns ${turns}, calls ${calls}; tokens in ${usage.prompt} (cached ${usage.cached}), out ${usage.completion})`,
 );

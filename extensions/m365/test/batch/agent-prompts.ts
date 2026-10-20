@@ -29,6 +29,8 @@ const BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
 const verbose = process.argv.includes("--verbose");
 // --review: the agent team (agentReview.ts): a planner, the builder, two reviewers, one correction.
 const reviewOn = process.argv.includes("--review");
+// --trace (with --review): print what each agent of the team did, for a smoke test.
+const trace = process.argv.includes("--trace");
 const reviews = { ok: 0, fix: 0, revised: 0, planned: 0 };
 const onlyArg = process.argv.indexOf("--only");
 const only =
@@ -876,7 +878,26 @@ for (const item of CASES) {
         mask,
         model: ask,
         onTool: (name, args) => seen.push({ name, args }),
+        onTeamPhase: (phase) => trace && console.log(`    [team] ${phase}`),
+        onReviewer: (focus) =>
+          trace && console.log(`    [reviewer:${focus}] checking`),
+        onHelperTool: (name) => trace && console.log(`    [helper] ${name}`),
       });
+      if (trace) {
+        console.log(
+          `    [planner] ${reviewed.plan?.length ? reviewed.plan.map((step, i) => `${i + 1}. ${step}`).join(" | ") : "no plan (question, or planner skipped)"}`,
+        );
+        console.log(
+          `    [builder] ${seen.length} tool call(s), ${reviewed.run.changes.length} staged change(s), ${reviewed.run.turns} turn(s)`,
+        );
+        for (const verdict of reviewed.reviewers ?? [])
+          console.log(
+            `    [reviewer:${verdict.focus}] ${verdict.ok ? "OK" : `FIX: ${verdict.issues.join("; ")}`}`,
+          );
+        console.log(
+          `    [team] revised: ${reviewed.revised}; ${describeReview(reviewed) || "nothing staged, no review"}`,
+        );
+      }
       if (reviewed.plan?.length) reviews.planned += 1;
       if (reviewed.review) {
         reviews[reviewed.review.ok ? "ok" : "fix"] += 1;

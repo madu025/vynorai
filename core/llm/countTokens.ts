@@ -51,7 +51,10 @@ class NonWorkerAsyncEncoder implements AsyncEncoder {
 
 let gptEncoding: Encoding | null = null;
 const llamaEncoding = new LlamaEncoding();
-let llamaAsyncEncoder: AsyncEncoder | undefined;
+// Cache the promise, not the encoder: callers count many strings at once, and
+// each one that saw no encoder yet used to start its own worker pool. Only the
+// last pool was kept, so the others were never closed and kept Node running.
+let llamaAsyncEncoder: Promise<AsyncEncoder> | undefined;
 
 async function asyncEncoderForModel(modelName: string): Promise<AsyncEncoder> {
   // The GUI only needs synchronous token counting. Importing asyncEncoder at
@@ -71,8 +74,13 @@ async function asyncEncoderForModel(modelName: string): Promise<AsyncEncoder> {
   }
 
   if (!llamaAsyncEncoder) {
-    const { LlamaAsyncEncoder } = await import("./asyncEncoder.js");
-    llamaAsyncEncoder = new LlamaAsyncEncoder();
+    llamaAsyncEncoder = import("./asyncEncoder.js").then(
+      ({ LlamaAsyncEncoder }) => new LlamaAsyncEncoder(),
+    );
+    // A failed import must not stay cached.
+    llamaAsyncEncoder.catch(() => {
+      llamaAsyncEncoder = undefined;
+    });
   }
 
   const modelType = autodetectTemplateType(modelName);
@@ -574,9 +582,10 @@ function compileChatMessages({
 }
 
 async function cleanupAsyncEncoders(): Promise<void> {
+  const encoder = llamaAsyncEncoder;
+  llamaAsyncEncoder = undefined;
   try {
-    await llamaAsyncEncoder?.close();
-    llamaAsyncEncoder = undefined;
+    await (await encoder)?.close();
   } catch (e) {}
 }
 

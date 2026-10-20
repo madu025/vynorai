@@ -21,15 +21,19 @@ const createMockProcess = (
   pid: number = 123,
   killed: boolean = false,
 ): jest.Mocked<ChildProcess> => {
+  // Like a real ChildProcess: exitCode and signalCode stay null while it runs.
   const mockProcess = {
     pid,
     killed,
+    exitCode: null,
+    signalCode: null,
     kill: jest.fn(),
   } as unknown as jest.Mocked<ChildProcess>;
 
-  // Make kill() update the killed property
-  mockProcess.kill.mockImplementation(() => {
+  // By default the process ends on the signal it gets.
+  mockProcess.kill.mockImplementation((signal) => {
     (mockProcess as any).killed = true;
+    (mockProcess as any).signalCode = signal;
     return true;
   });
 
@@ -233,10 +237,11 @@ describe("processTerminalStates", () => {
       const toolCallId = "test-123";
       const mockProcess = createMockProcess();
 
-      // Mock kill to not actually set killed=true for SIGTERM
+      // The process ignores SIGTERM: kill() sends it, but it keeps running.
       mockProcess.kill.mockImplementation((signal) => {
+        (mockProcess as any).killed = true;
         if (signal === "SIGKILL") {
-          (mockProcess as any).killed = true;
+          (mockProcess as any).signalCode = signal;
         }
         return true;
       });
@@ -254,7 +259,7 @@ describe("processTerminalStates", () => {
       expect(mockProcess.kill).toHaveBeenCalledWith("SIGKILL");
     });
 
-    test("should not send SIGKILL if process was already killed", async () => {
+    test("should not send SIGKILL if the process ended on SIGTERM", async () => {
       const toolCallId = "test-123";
       const mockProcess = createMockProcess();
 

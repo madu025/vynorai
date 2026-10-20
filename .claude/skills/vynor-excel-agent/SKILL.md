@@ -57,6 +57,14 @@ the files you changed.
 4. Update `CODEMAP.md` (and `AGENTS.md` if a capability moved) and run
    `node scripts/check-doc-links.mjs`.
 
+## Live model runs
+
+`npx tsx --env-file=../../.env.e2e test/batch/agent-prompts.ts` (41 agent tasks) and `test/batch/ai500.ts`
+(500 prompts) call the real gateway with the testing key. In a cloud session behind a proxy, set
+`NODE_USE_ENV_PROXY=1`, or Node's fetch fails with "fetch failed" (ai500 then reports 0 tokens). Run
+the two one after the other: run together, they hit the gateway's rate limit (429). A failure is a
+regression only if it also passes on the old code; rerun it twice first, since the model varies.
+
 ## Agent behaviour (agent.ts / m365Agent.ts)
 
 - The system prompt and tool list are a fixed prefix: follow the `vynor-prompt-cache` skill. Put

@@ -50,6 +50,7 @@ import {
   looksLikeQuestion,
 } from "./intent.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
+import { describeUnknownColumns, findUnknownColumns } from "./unknownColumn.js";
 import { cleanFirstInstruction, describeNearDuplicates } from "./valueCheck.js";
 import { describeIntegrityIssues } from "./integrity.js";
 import {
@@ -2005,6 +2006,15 @@ inspect?.addEventListener("click", async () => {
       // One click re-plans the same request with a clean step in front; nothing is changed until Confirm.
       cleanFirstRequest = cleanFirstInstruction(instructionText);
       if (dupFix && cleanFirstRequest) dupFix.hidden = false;
+    }
+    // A column name that is not in the selection must not quietly become a plan on some other column.
+    const unknownNotice = describeUnknownColumns(
+      findUnknownColumns(instructionText, layout.headers.map(String)),
+      layout.headers.map(String),
+    );
+    if (unknownNotice) {
+      log.record("instruction:unknown-column", "fail", unknownNotice);
+      renderConversation("assistant", unknownNotice);
     }
     const localPreview = await log.step(
       "local:preview",

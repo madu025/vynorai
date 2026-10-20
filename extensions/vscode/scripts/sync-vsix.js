@@ -8,9 +8,23 @@ const extensionRoot = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(extensionRoot, "package.json"), "utf8"),
 );
-const version = packageJson.version;
-const artifactName = `vynorai-${version}.vsix`;
-const artifactPath = path.join(extensionRoot, "build", artifactName);
+const buildDir = path.join(extensionRoot, "build");
+// CI stamps the build with the commit ("1.2.69-abc1234") before packaging, so the
+// downloaded artifact may carry that suffix; exactly one such file is accepted.
+const stamped = (
+  fs.existsSync(buildDir) ? fs.readdirSync(buildDir) : []
+).filter((file) =>
+  new RegExp(
+    `^vynorai-${packageJson.version.replace(/\./g, "\\.")}-[0-9a-f]{7}\\.vsix$`,
+  ).test(file),
+);
+const artifactName =
+  fs.existsSync(path.join(buildDir, `vynorai-${packageJson.version}.vsix`)) ||
+  stamped.length !== 1
+    ? `vynorai-${packageJson.version}.vsix`
+    : stamped[0];
+const version = artifactName.slice("vynorai-".length, -".vsix".length);
+const artifactPath = path.join(buildDir, artifactName);
 const stagedDir = path.join(extensionRoot, "e2e", "vsix");
 const stagedPath = path.join(stagedDir, artifactName);
 const args = new Set(process.argv.slice(2));

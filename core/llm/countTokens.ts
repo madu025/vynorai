@@ -73,7 +73,7 @@ async function asyncEncoderForModel(modelName: string): Promise<AsyncEncoder> {
     return new NonWorkerAsyncEncoder(encoding);
   }
 
-  if (!llamaAsyncEncoder) {
+  if (llamaAsyncEncoder === undefined) {
     llamaAsyncEncoder = import("./asyncEncoder.js").then(
       ({ LlamaAsyncEncoder }) => new LlamaAsyncEncoder(),
     );

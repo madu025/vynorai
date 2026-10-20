@@ -565,7 +565,11 @@ export function buildQualityReport(
       );
     if (type === "mixed")
       findings.push(header + ": numbers and text are mixed in one column.");
-    if (type === "text" && textNumbers > 0)
+    // Codes such as 000123 are meant to be text (the leading zeros would be lost as numbers), so they are not a finding.
+    const looksLikeCodes = texts.some((cell) =>
+      /^0\d/.test(String(cell).trim()),
+    );
+    if (type === "text" && textNumbers > 0 && !looksLikeCodes)
       findings.push(
         header + ": " + textNumbers + " number(s) are stored as text.",
       );

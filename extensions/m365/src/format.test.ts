@@ -484,3 +484,21 @@ test("the quality report finds blanks, duplicates, text numbers, spaces and outl
   const clean = buildQualityReport(["A"], [[1], [2], [3], [4], [5]]);
   assert.deepEqual(clean.findings, ["No problems found in the selected data."]);
 });
+
+test("the quality report does not flag leading-zero codes as numbers stored as text", () => {
+  const codes = buildQualityReport(
+    ["Order No", "Qty"],
+    [
+      ["000001", 1],
+      ["000002", 2],
+      ["000003", 3],
+      ["000004", 4],
+    ],
+  );
+  assert.deepEqual(codes.findings, ["No problems found in the selected data."]);
+  const plain = buildQualityReport(
+    ["Amount"],
+    [["1200"], ["1300"], ["1400"], ["1500"]],
+  );
+  assert.match(plain.findings.join("\n"), /stored as text/);
+});

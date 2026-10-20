@@ -5,7 +5,11 @@
  * PivotTable (Excel on the web for some sources) the writer puts `fallbackBreakdown` in its place;
  * when slicers are not supported the PivotTable's own filter stays the way to filter.
  */
-import type { Audience, BusinessTarget, CurrencyGuess } from "./businessContext.js";
+import type {
+  Audience,
+  BusinessTarget,
+  CurrencyGuess,
+} from "./businessContext.js";
 import { usageColumnLetter } from "./usageLayout.js";
 
 export type DashboardAggregation = "sum" | "count" | "average" | "min" | "max";
@@ -125,7 +129,8 @@ export function categoryAggregateFormula(
   categoryRef: string,
   categoryCell: string,
 ): string {
-  if (aggregation === "count") return `COUNTIFS(${categoryRef},${categoryCell})`;
+  if (aggregation === "count")
+    return `COUNTIFS(${categoryRef},${categoryCell})`;
   if (aggregation === "average")
     return `IFERROR(AVERAGEIFS(${valueRef},${categoryRef},${categoryCell}),"")`;
   if (aggregation === "min")
@@ -136,7 +141,10 @@ export function categoryAggregateFormula(
 }
 
 /** The headline figure of a value column over every row. */
-function headlineFormula(aggregation: DashboardAggregation, ref: string): string {
+function headlineFormula(
+  aggregation: DashboardAggregation,
+  ref: string,
+): string {
   if (aggregation === "count") return `=COUNT(${ref})`;
   if (aggregation === "average") return `=IFERROR(AVERAGE(${ref}),0)`;
   if (aggregation === "min") return `=MIN(${ref})`;
@@ -154,7 +162,10 @@ export function rankCategories(
   valueIndex: number,
   aggregation: DashboardAggregation,
 ): string[] {
-  const groups = new Map<string, { sum: number; count: number; min: number; max: number }>();
+  const groups = new Map<
+    string,
+    { sum: number; count: number; min: number; max: number }
+  >();
   for (const row of rows) {
     const name = String(row[categoryIndex] ?? "").trim();
     if (!name) continue;
@@ -165,7 +176,10 @@ export function rankCategories(
       max: -Infinity,
     };
     const raw = row[valueIndex];
-    const value = typeof raw === "number" ? raw : Number(String(raw ?? "").replace(/,/g, ""));
+    const value =
+      typeof raw === "number"
+        ? raw
+        : Number(String(raw ?? "").replace(/,/g, ""));
     if (aggregation === "count") group.count += 1;
     else if (Number.isFinite(value) && String(raw ?? "").trim() !== "") {
       group.sum += value;
@@ -175,7 +189,12 @@ export function rankCategories(
     }
     groups.set(name, group);
   }
-  const score = (group: { sum: number; count: number; min: number; max: number }) =>
+  const score = (group: {
+    sum: number;
+    count: number;
+    min: number;
+    max: number;
+  }) =>
     aggregation === "count"
       ? group.count
       : aggregation === "average"
@@ -204,7 +223,9 @@ export function dashboardTopN(audience: Audience): number {
 const formatNumber = (value: number) =>
   value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
-export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayout {
+export function buildDashboardLayout(
+  input: DashboardLayoutInput,
+): DashboardLayout {
   const blocks: DashboardBlock[] = [];
   const charts: DashboardChartPlan[] = [];
   const notes: string[] = [];
@@ -223,16 +244,19 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
     : input.categories.length;
 
   const title = `${values.map((value) => value.name).join(", ")} by ${input.categoryName}`;
-  blocks.push({ row: 0, col: 0, cells: [[title.toUpperCase()]], style: "title" });
+  blocks.push({
+    row: 0,
+    col: 0,
+    cells: [[title.toUpperCase()]],
+    style: "title",
+  });
   const audienceText =
     input.audience === "management"
       ? "Management summary: the headline numbers and the largest categories."
       : input.audience === "operational"
         ? "Operational view: every category, with a slicer to work through them."
         : "";
-  const currencyText = currencyOk
-    ? ` Amounts in ${input.currency!.code}.`
-    : "";
+  const currencyText = currencyOk ? ` Amounts in ${input.currency!.code}.` : "";
   blocks.push({
     row: 1,
     col: 0,
@@ -245,9 +269,7 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
   });
 
   // Chart data first: the "top category" card reads it.
-  const topCount = input.sampled
-    ? shown
-    : Math.max(1, input.categories.length);
+  const topCount = input.sampled ? shown : Math.max(1, input.categories.length);
   const helperRefs: Array<{ names: string; values: string }> = [];
   values.forEach((value, index) => {
     const col = HELPER_COLUMN + index * 3;
@@ -364,7 +386,9 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
     targetCards.push({
       label: `GAP TO ${input.target.label}`.toUpperCase(),
       value: { f: `=${input.target.value}-${total}` },
-      sub: { f: `=IF(${total}>=${input.target.value},"${input.target.label} reached","still to go")` },
+      sub: {
+        f: `=IF(${total}>=${input.target.value},"${input.target.label} reached","still to go")`,
+      },
       format: valueFormats[values.indexOf(value)] ?? "#,##0.00",
     });
   }
@@ -382,12 +406,18 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
     : [];
   // Six cards fit above the breakdown; the record count gives way first, then the gap card.
   let chosen = [records, ...valueCards, ...targetCards, ...topCards];
-  if (chosen.length > CARD_COLUMNS) chosen = chosen.filter((card) => card !== records);
+  if (chosen.length > CARD_COLUMNS)
+    chosen = chosen.filter((card) => card !== records);
   if (chosen.length > CARD_COLUMNS && targetCards[1])
     chosen = chosen.filter((card) => card !== targetCards[1]);
   chosen = chosen.slice(0, CARD_COLUMNS);
   chosen.forEach((card, index) => {
-    blocks.push({ row: KPI_ROW, col: index, cells: [[card.label]], style: "kpi-label" });
+    blocks.push({
+      row: KPI_ROW,
+      col: index,
+      cells: [[card.label]],
+      style: "kpi-label",
+    });
     blocks.push({
       row: KPI_ROW + 1,
       col: index,
@@ -395,14 +425,23 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
       style: "kpi-value",
       ...(card.format !== "@" ? { numberFormat: card.format } : {}),
     });
-    blocks.push({ row: KPI_ROW + 2, col: index, cells: [[card.sub]], style: "kpi-sub" });
+    blocks.push({
+      row: KPI_ROW + 2,
+      col: index,
+      cells: [[card.sub]],
+      style: "kpi-sub",
+    });
   });
 
   if (input.currency?.mixed)
     notes.push(
       `The value columns are in different currencies (${input.currency.mixed.join(", ")}); they are shown side by side and never added together.`,
     );
-  if (!input.sampled && input.totalCategories && input.totalCategories > input.categories.length)
+  if (
+    !input.sampled &&
+    input.totalCategories &&
+    input.totalCategories > input.categories.length
+  )
     notes.push(
       `The charts show the ${input.categories.length} largest of ${input.totalCategories} ${input.categoryName} values; the totals and the PivotTable cover all of them.`,
     );
@@ -411,7 +450,9 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
       `The data is large, so the charts list up to ${shown} ${input.categoryName} values from a live formula; the totals cover every row.`,
     );
   if (!input.sampled && input.categories.length)
-    notes.push("The chart order is from when the dashboard was made; the figures stay live.");
+    notes.push(
+      "The chart order is from when the dashboard was made; the figures stay live.",
+    );
 
   blocks.push({
     row: SECTION_ROW,
@@ -425,7 +466,12 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
     {
       row: PIVOT_ROW,
       col: 0,
-      cells: [[input.categoryName, ...values.map((value) => `${label} of ${value.name}`)]],
+      cells: [
+        [
+          input.categoryName,
+          ...values.map((value) => `${label} of ${value.name}`),
+        ],
+      ],
       style: "table-header",
     },
   ];
@@ -459,7 +505,10 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
     });
 
   const columnWidths = [
-    ...Array.from({ length: CARD_COLUMNS }, (_, col) => ({ col, width: CARD_WIDTH })),
+    ...Array.from({ length: CARD_COLUMNS }, (_, col) => ({
+      col,
+      width: CARD_WIDTH,
+    })),
     { col: GAP_COLUMN, width: 14 },
     ...values.flatMap((_, index) => [
       { col: HELPER_COLUMN + index * 3, width: 110 },
@@ -468,7 +517,12 @@ export function buildDashboardLayout(input: DashboardLayoutInput): DashboardLayo
   ];
 
   if (notes.length)
-    blocks.push({ row: NOTE_ROW, col: 0, cells: [[notes.join(" ")]], style: "note" });
+    blocks.push({
+      row: NOTE_ROW,
+      col: 0,
+      cells: [[notes.join(" ")]],
+      style: "note",
+    });
 
   return {
     title,

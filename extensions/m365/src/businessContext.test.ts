@@ -47,9 +47,21 @@ test("currency is read from written amounts only when most of them agree", () =>
 });
 
 test("money headers are told apart from counts and codes", () => {
-  for (const header of ["Sales", "Total Cost", "Net Profit", "Unit Price", "Amount (LKR)"])
+  for (const header of [
+    "Sales",
+    "Total Cost",
+    "Net Profit",
+    "Unit Price",
+    "Amount (LKR)",
+  ])
     assert.ok(isMoneyHeader(header), header);
-  for (const header of ["Qty", "Order Count", "Units Sold", "Rate %", "Invoice No"])
+  for (const header of [
+    "Qty",
+    "Order Count",
+    "Units Sold",
+    "Rate %",
+    "Invoice No",
+  ])
     assert.ok(!isMoneyHeader(header), header);
 });
 
@@ -97,7 +109,9 @@ test("the audience is read from the request in English and Sinhala", () => {
     "management",
   );
   assert.equal(
-    inferAudience("daily tracking sheet so the team can follow up each pending job"),
+    inferAudience(
+      "daily tracking sheet so the team can follow up each pending job",
+    ),
     "operational",
   );
   assert.equal(inferAudience("කළමනාකරණයට සාරාංශ dashboard එකක්"), "management");
@@ -107,21 +121,37 @@ test("the audience is read from the request in English and Sinhala", () => {
 
 test("targets are read with their multiplier and bound to the named column", () => {
   const headers = ["Region", "Sales", "Cost"];
-  assert.deepEqual(parseBusinessTarget("dashboard, target 5M", headers, [1, 2]), {
-    value: 5_000_000,
-    label: "target",
-  });
   assert.deepEqual(
-    parseBusinessTarget("Cost budget is Rs 2,500,000 this year", headers, [1, 2]),
+    parseBusinessTarget("dashboard, target 5M", headers, [1, 2]),
+    {
+      value: 5_000_000,
+      label: "target",
+    },
+  );
+  assert.deepEqual(
+    parseBusinessTarget(
+      "Cost budget is Rs 2,500,000 this year",
+      headers,
+      [1, 2],
+    ),
     { value: 2_500_000, label: "budget", column: 2 },
   );
   assert.equal(
     parseBusinessTarget("sales target of 12.5 lakh", headers, [1, 2])?.value,
     1_250_000,
   );
-  assert.equal(parseBusinessTarget("ඉලක්කය 500000", headers, [1])?.value, 500_000);
-  assert.equal(parseBusinessTarget("top 10 regions by sales", headers, [1]), undefined);
-  assert.equal(parseBusinessTarget("target for 2026 by region", headers, [1]), undefined);
+  assert.equal(
+    parseBusinessTarget("ඉලක්කය 500000", headers, [1])?.value,
+    500_000,
+  );
+  assert.equal(
+    parseBusinessTarget("top 10 regions by sales", headers, [1]),
+    undefined,
+  );
+  assert.equal(
+    parseBusinessTarget("target for 2026 by region", headers, [1]),
+    undefined,
+  );
 });
 
 test("the transaction ID is found as the business key and its repeats are counted", () => {
@@ -139,7 +169,10 @@ test("the transaction ID is found as the business key and its repeats are counte
   assert.deepEqual(key?.names, ["Transaction ID"]);
   assert.equal(key?.duplicateKeys, 1);
   assert.equal(key?.duplicateRows, 1);
-  assert.match(describeBusinessKey(key!), /Transaction ID value\(s\) appear on more than one row/);
+  assert.match(
+    describeBusinessKey(key!),
+    /Transaction ID value\(s\) appear on more than one row/,
+  );
 });
 
 test("a key is found by its values when the header gives no hint", () => {

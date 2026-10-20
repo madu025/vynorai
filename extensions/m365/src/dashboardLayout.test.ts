@@ -8,7 +8,9 @@ import {
   type DashboardLayoutInput,
 } from "./dashboardLayout.js";
 
-const base = (over: Partial<DashboardLayoutInput> = {}): DashboardLayoutInput => ({
+const base = (
+  over: Partial<DashboardLayoutInput> = {},
+): DashboardLayoutInput => ({
   categoryName: "Region",
   categoryRef: "'Data'!$A$2:$A$7",
   values: [
@@ -25,8 +27,11 @@ const base = (over: Partial<DashboardLayoutInput> = {}): DashboardLayoutInput =>
   ...over,
 });
 
-const cellAt = (layout: ReturnType<typeof buildDashboardLayout>, row: number, col: number) =>
-  layout.blocks.find((block) => block.row === row && block.col === col);
+const cellAt = (
+  layout: ReturnType<typeof buildDashboardLayout>,
+  row: number,
+  col: number,
+) => layout.blocks.find((block) => block.row === row && block.col === col);
 const text = (cell: unknown) =>
   typeof cell === "object" && cell ? (cell as { f: string }).f : String(cell);
 
@@ -38,9 +43,21 @@ test("categories are ranked by their aggregate, largest first", () => {
     ["East", 5],
     ["", 99],
   ];
-  assert.deepEqual(rankCategories(rows, 0, 1, "sum"), ["North", "South", "East"]);
-  assert.deepEqual(rankCategories(rows, 0, 1, "max"), ["South", "North", "East"]);
-  assert.deepEqual(rankCategories(rows, 0, 1, "count"), ["North", "East", "South"]);
+  assert.deepEqual(rankCategories(rows, 0, 1, "sum"), [
+    "North",
+    "South",
+    "East",
+  ]);
+  assert.deepEqual(rankCategories(rows, 0, 1, "max"), [
+    "South",
+    "North",
+    "East",
+  ]);
+  assert.deepEqual(rankCategories(rows, 0, 1, "count"), [
+    "North",
+    "East",
+    "South",
+  ]);
   assert.equal(dashboardTopN("management"), 10);
   assert.equal(dashboardTopN("operational"), 50);
 });
@@ -57,12 +74,15 @@ test("the layout has a title bar, KPI cards in one row and a breakdown under the
     [3, 2, "TOTAL QTY"],
     [3, 3, "TOP REGION"],
   ]);
-  assert.equal(text(cellAt(layout, 4, 1)!.cells[0][0]), "=SUM('Data'!$B$2:$B$7)");
+  assert.equal(
+    text(cellAt(layout, 4, 1)!.cells[0][0]),
+    "=SUM('Data'!$B$2:$B$7)",
+  );
   assert.equal(cellAt(layout, 5, 0)!.cells[0][0], "3 Region values");
   // The top card reads the first chart's data.
   assert.equal(
     text(cellAt(layout, 4, 3)!.cells[0][0]),
-    "=IFERROR(INDEX($Q$3:$Q$5,MATCH(MAX($R$3:$R$5),$R$3:$R$5,0)),\"\")",
+    '=IFERROR(INDEX($Q$3:$Q$5,MATCH(MAX($R$3:$R$5),$R$3:$R$5,0)),"")',
   );
   assert.equal(layout.pivotAnchor, "A10");
   assert.equal(layout.slicerAnchor, "E10");
@@ -108,7 +128,11 @@ test("mixed currencies are never formatted as one and are named in a note", () =
 });
 
 test("a target from the request becomes % of target and gap cards", () => {
-  const target = parseBusinessTarget("sales target 5M", ["Sales", "Qty"], [0, 1]);
+  const target = parseBusinessTarget(
+    "sales target 5M",
+    ["Sales", "Qty"],
+    [0, 1],
+  );
   const layout = buildDashboardLayout(base({ target, audience: "management" }));
   const labels = layout.blocks
     .filter((block) => block.style === "kpi-label")
@@ -125,8 +149,14 @@ test("a target from the request becomes % of target and gap cards", () => {
   const percent = layout.blocks.find(
     (block) => block.style === "kpi-value" && block.numberFormat === "0.0%",
   );
-  assert.equal(text(percent!.cells[0][0]), "=IFERROR(SUM('Data'!$B$2:$B$7)/5000000,0)");
-  assert.match(String(cellAt(layout, 1, 0)!.cells[0][0]), /^Management summary/);
+  assert.equal(
+    text(percent!.cells[0][0]),
+    "=IFERROR(SUM('Data'!$B$2:$B$7)/5000000,0)",
+  );
+  assert.match(
+    String(cellAt(layout, 1, 0)!.cells[0][0]),
+    /^Management summary/,
+  );
 });
 
 test("with three values and a target the record count gives way so six cards fit", () => {
@@ -154,7 +184,11 @@ test("the fallback breakdown is a live formula table in the PivotTable's place",
   const layout = buildDashboardLayout(base());
   const [header, body] = layout.fallbackBreakdown;
   assert.deepEqual([header.row, header.col], [9, 0]);
-  assert.deepEqual(header.cells[0], ["Region", "Total of Sales", "Total of Qty"]);
+  assert.deepEqual(header.cells[0], [
+    "Region",
+    "Total of Sales",
+    "Total of Qty",
+  ]);
   assert.equal(body.cells[0][0], "North");
   assert.equal(
     text(body.cells[0][1]),
@@ -168,12 +202,20 @@ test("the fallback breakdown is a live formula table in the PivotTable's place",
 
 test("very large data uses spilled formulas for chart data and the fallback", () => {
   const layout = buildDashboardLayout(
-    base({ sampled: true, categories: [], totalCategories: 0, audience: "management" }),
+    base({
+      sampled: true,
+      categories: [],
+      totalCategories: 0,
+      audience: "management",
+    }),
   );
   const helper = layout.blocks.find(
     (block) => block.row === 2 && block.col === 16,
   )!;
-  assert.match(text(helper.cells[0][0]), /^=TAKE\(SORT\(UNIQUE\(FILTER\(.+\)\)\),10\)$/);
+  assert.match(
+    text(helper.cells[0][0]),
+    /^=TAKE\(SORT\(UNIQUE\(FILTER\(.+\)\)\),10\)$/,
+  );
   assert.match(text(helper.cells[0][1]), /^=BYROW\(Q3#,LAMBDA\(c,SUMIFS\(/);
   assert.match(text(layout.fallbackBreakdown[1].cells[0][1]), /^=BYROW\(A11#,/);
   assert.match(layout.notes.join(" "), /up to 10 Region values/);
@@ -182,7 +224,11 @@ test("very large data uses spilled formulas for chart data and the fallback", ()
 
 test("only the largest categories are charted in a management view, with a note", () => {
   const layout = buildDashboardLayout(
-    base({ categories: ["A", "B"], totalCategories: 30, audience: "management" }),
+    base({
+      categories: ["A", "B"],
+      totalCategories: 30,
+      audience: "management",
+    }),
   );
   assert.match(layout.notes.join(" "), /the 2 largest of 30 Region values/);
 });

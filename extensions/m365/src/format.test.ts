@@ -517,7 +517,10 @@ test("the quality report checks the business key, not only whole rows", () => {
   );
   const text = report.findings.join("\n");
   assert.doesNotMatch(text, /duplicate row\(s\) found/);
-  assert.match(text, /Txn ID: 1 value\(s\) are used on more than one row \(1 extra row\(s\)\)/);
+  assert.match(
+    text,
+    /Txn ID: 1 value\(s\) are used on more than one row \(1 extra row\(s\)\)/,
+  );
   assert.deepEqual(report.businessKey?.names, ["Txn ID"]);
   const keyRow = report.values.find((row) => row[0] === "Business key");
   assert.deepEqual(keyRow, ["Business key", "Txn ID"]);

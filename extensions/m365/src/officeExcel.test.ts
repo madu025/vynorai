@@ -1469,14 +1469,20 @@ test("a dashboard adds a slicer beside its PivotTable when the host supports sli
     },
   );
   assert.equal(report.results[0].status, "created");
-  assert.ok(excel.calls.some((call) => call.startsWith("slicer.add Region on Dashboard")));
+  assert.ok(
+    excel.calls.some((call) =>
+      call.startsWith("slicer.add Region on Dashboard"),
+    ),
+  );
   assert.ok(excel.calls.includes("slicer.caption = Region"));
   const formulas = excel.formulaWrites
     .filter((entry) => entry.sheet.startsWith("Dashboard"))
     .flatMap((entry) => (entry.values as unknown[][]).flat())
     .map(String);
   // The target from the request becomes a "% of target" card.
-  assert.ok(formulas.some((cell) => /^=IFERROR\(SUM\(.+\)\/1000,0\)$/.test(cell)));
+  assert.ok(
+    formulas.some((cell) => /^=IFERROR\(SUM\(.+\)\/1000,0\)$/.test(cell)),
+  );
   assert.ok(formulas.includes("% OF TARGET"));
 });
 
@@ -1502,7 +1508,10 @@ test("a dashboard falls back to a formula breakdown when the host refuses a Pivo
     { expectedSourceFingerprint: plan.sourceFingerprint },
   );
   assert.equal(report.results[0].status, "created");
-  assert.match(report.results[0].notes?.join(" ") ?? "", /could not create a PivotTable here \(NotImplemented\)/);
+  assert.match(
+    report.results[0].notes?.join(" ") ?? "",
+    /could not create a PivotTable here \(NotImplemented\)/,
+  );
   assert.ok(!excel.calls.some((call) => call.startsWith("slicer.add")));
   const formulas = excel.formulaWrites
     .filter((entry) => entry.sheet.startsWith("Dashboard"))
@@ -1513,7 +1522,8 @@ test("a dashboard falls back to a formula breakdown when the host refuses a Pivo
   assert.ok(north >= 0);
   assert.match(formulas[north + 1], /^=SUMIFS\(/);
   assert.equal(
-    excel.calls.filter((call) => call.startsWith("chart.add ColumnClustered")).length,
+    excel.calls.filter((call) => call.startsWith("chart.add ColumnClustered"))
+      .length,
     1,
   );
 });

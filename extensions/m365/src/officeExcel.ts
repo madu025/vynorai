@@ -141,7 +141,9 @@ const DASHBOARD_STYLE: Record<DashboardStyle, (range: any) => void> = {
 /** A short reason from an Office.js error, for the note on the sheet. */
 function describePivotError(error: unknown): string {
   const code = (error as { code?: unknown })?.code;
-  const message = String((error as { message?: unknown })?.message ?? error ?? "");
+  const message = String(
+    (error as { message?: unknown })?.message ?? error ?? "",
+  );
   return String(code || message || "not supported").slice(0, 80);
 }
 
@@ -1713,7 +1715,9 @@ export async function applyApprovedExcelPlan(
                 money: values.map(
                   (value) =>
                     isMoneyHeader(value.column) ||
-                    Boolean(currencyFromNumberFormat(numberFormats?.[value.index])) ||
+                    Boolean(
+                      currencyFromNumberFormat(numberFormats?.[value.index]),
+                    ) ||
                     Boolean(currencyFromValues(samples[value.index] ?? [])),
                 ),
                 audience,
@@ -1840,8 +1844,7 @@ export async function applyApprovedExcelPlan(
               const slicerSupported =
                 pivot &&
                 context.workbook.slicers?.add &&
-                (!options.supportsExcelApi ||
-                  options.supportsExcelApi("1.10"));
+                (!options.supportsExcelApi || options.supportsExcelApi("1.10"));
               if (slicerSupported) {
                 try {
                   const slicer = context.workbook.slicers.add(

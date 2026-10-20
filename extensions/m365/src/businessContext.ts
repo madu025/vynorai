@@ -132,8 +132,7 @@ export function isMoneyHeader(header: unknown): boolean {
   return MONEY_HEADER.test(text) && !NOT_MONEY_HEADER.test(text);
 }
 
-const formatFor = (info: CurrencyInfo): string =>
-  `"${info.symbol} "#,##0.00`;
+const formatFor = (info: CurrencyInfo): string => `"${info.symbol} "#,##0.00`;
 
 /**
  * The currency of the money columns, from the strongest evidence available: the cells' own
@@ -150,7 +149,11 @@ export function inferCurrency(input: {
   samples?: Record<number, Cell[]>;
   request?: string;
 }): CurrencyGuess | undefined {
-  const found: Array<{ info: CurrencyInfo; source: CurrencyGuess["source"]; format?: string }> = [];
+  const found: Array<{
+    info: CurrencyInfo;
+    source: CurrencyGuess["source"];
+    format?: string;
+  }> = [];
   for (const column of input.columns) {
     const format = input.numberFormats?.[column];
     const fromFormat = currencyFromNumberFormat(format);
@@ -273,7 +276,11 @@ export function parseBusinessTarget(
   const value = raw * multiplier;
   if (!Number.isFinite(value) || value <= 0) return undefined;
   // A bare four-digit year after "target" ("target for 2026") is not a target value.
-  if (!match[4] && /^(19|20)\d{2}$/.test(match[3]) && /\bfor\b|\bin\b/i.test(match[2]))
+  if (
+    !match[4] &&
+    /^(19|20)\d{2}$/.test(match[3]) &&
+    /\bfor\b|\bin\b/i.test(match[2])
+  )
     return undefined;
   const label = /budget/i.test(match[1])
     ? "budget"
@@ -287,7 +294,9 @@ export function parseBusinessTarget(
     .slice(Math.max(0, match.index - 40), match.index + match[0].length)
     .toLowerCase();
   const column = valueColumns.find((index) => {
-    const name = String(headers[index] ?? "").trim().toLowerCase();
+    const name = String(headers[index] ?? "")
+      .trim()
+      .toLowerCase();
     return name.length > 1 && around.includes(name);
   });
   return { value, label, ...(column !== undefined ? { column } : {}) };
@@ -377,7 +386,12 @@ export function detectBusinessKey(
   rows: Cell[][],
 ): BusinessKey | undefined {
   if (rows.length < 2) return undefined;
-  type Candidate = { index: number; score: number; reason: string; share: number };
+  type Candidate = {
+    index: number;
+    score: number;
+    reason: string;
+    share: number;
+  };
   const candidates: Candidate[] = [];
   headers.forEach((rawHeader, index) => {
     const header = String(rawHeader ?? "").trim();
@@ -387,7 +401,9 @@ export function detectBusinessKey(
     // Amounts, dates and flags are never keys.
     if (present.some((cell) => typeof cell === "boolean")) return;
     if (
-      present.some((cell) => typeof cell === "number" && !Number.isInteger(cell))
+      present.some(
+        (cell) => typeof cell === "number" && !Number.isInteger(cell),
+      )
     )
       return;
     if (/(date|time|day|month|year|period)/i.test(header)) return;
@@ -423,7 +439,12 @@ export function detectBusinessKey(
       present.filter((cell) => /\s/.test(String(cell).trim())).length /
       present.length;
     if (spaced > 0.5 && !strong) score -= 3;
-    candidates.push({ index, score, reason: reasons.join(" and "), share: distinctShare });
+    candidates.push({
+      index,
+      score,
+      reason: reasons.join(" and "),
+      share: distinctShare,
+    });
   });
   candidates.sort((a, b) => b.score - a.score || a.index - b.index);
   const best = candidates[0];
@@ -434,7 +455,8 @@ export function detectBusinessKey(
   // Invoice No repeats once per invoice line: Invoice No + Line No is the key when that pair is unique.
   if (best.share < 0.9) {
     const line = headers.findIndex(
-      (header, index) => index !== best.index && LINE_HEADER.test(String(header)),
+      (header, index) =>
+        index !== best.index && LINE_HEADER.test(String(header)),
     );
     const pairShare =
       line >= 0 ? duplicatesOf(rows, [best.index, line]).distinctShare : 0;

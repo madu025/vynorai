@@ -10,7 +10,12 @@
  */
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createExcelPreviewPlan, selectExcelActions } from "../../src/excel.js";
+import {
+  createExcelPreviewPlan,
+  excelPlansMatch,
+  selectExcelActions,
+} from "../../src/excel.js";
+import { createServerExcelPreviewPlan } from "../../../../backend/src/services/m365ExcelPlan.js";
 import { interpretInstruction } from "../../src/intent.js";
 import { applyApprovedExcelPlan } from "../../src/officeExcel.js";
 import { detectBusinessKey } from "../../src/businessContext.js";
@@ -32,7 +37,8 @@ export interface Check {
     | "layout"
     | "fallback"
     | "duplicates"
-    | "safety";
+    | "safety"
+    | "backend parity";
   pass: boolean;
   detail?: string;
 }
@@ -74,6 +80,8 @@ interface GradeContext {
   result?: GridSheet;
   sourceBefore: string;
   sourceAfter: string;
+  /** The server (backend/src/services/m365ExcelPlan.ts) built the same plan from the same request. */
+  backend?: { match: boolean; detail?: string };
 }
 
 const check = (
@@ -440,6 +448,22 @@ export async function runBenchmark(): Promise<ScenarioResult[]> {
             hasHeaders: true,
           };
           const plan: any = createExcelPreviewPlan(input, actions, 500, specs);
+          try {
+            const server = createServerExcelPreviewPlan(
+              input,
+              actions,
+              500,
+              specs,
+            );
+            ctx.backend = excelPlansMatch(plan, server)
+              ? { match: true }
+              : { match: false, detail: "client and server plans differ" };
+          } catch (error) {
+            ctx.backend = {
+              match: false,
+              detail: (error as Error).message.slice(0, 160),
+            };
+          }
           ctx.report = await applyApprovedExcelPlan(
             book.runtime,
             plan,
@@ -466,7 +490,15 @@ export async function runBenchmark(): Promise<ScenarioResult[]> {
           dataset: dataset.id,
           host,
           request: scenario.request,
-          checks: scenario.grade(ctx),
+          checks: [
+            ...scenario.grade(ctx),
+            check(
+              "backend parity",
+              "the backend builds the same plan",
+              ctx.backend?.match === true,
+              ctx.backend?.detail ?? ctx.error,
+            ),
+          ],
         });
       }
     }

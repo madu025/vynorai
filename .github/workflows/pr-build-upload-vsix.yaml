@@ -14,7 +14,8 @@ concurrency:
 jobs:
   build-and-upload-vsix:
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
+    # Windows and macOS builds take more than 10 minutes; at 10 they were cancelled on every run.
+    timeout-minutes: 25
     strategy:
       matrix:
         include:

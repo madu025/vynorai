@@ -106,3 +106,14 @@ test("a share-of-total column is named with % so it shows as a percentage", () =
   const result = read("show each row Qty as a percentage of the total Qty");
   assert.equal(result.specs.addColumn.name, "Qty Share %");
 });
+
+test("how much a value differs from the average becomes a computed column (English and Singlish)", () => {
+  for (const text of [
+    "add a column showing how much Qty differs from the average",
+    "Qty eka average ekata wada kiyak wenas da kiyala column ekak danna",
+  ]) {
+    const result = read(text);
+    assert.deepEqual(result.actions, ["add-column"], text);
+    assert.match(JSON.stringify(result.specs), /COLAVG/, text);
+  }
+});

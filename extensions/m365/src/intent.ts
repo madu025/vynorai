@@ -234,7 +234,11 @@ export const LOOKUP_COLUMNS_PHRASE =
  * does not exist is never invented: with no matching header the sentence is returned unchanged.
  */
 function rewriteColumnWishes(text: string, headers: string[]): string {
-  if (!/\b(?:add|new|create|make|show|give|need|put)\b/i.test(text))
+  if (
+    !/\b(?:add|new|create|make|show|give|need|put|danna|hadanna|denna)\b/i.test(
+      text,
+    )
+  )
     return text;
   // A pivot, chart or summary can show a share itself; only a per-row column is rewritten here.
   if (/\b(?:pivot|chart|graph|dashboard|summary|summari[sz]e)\b/i.test(text))
@@ -257,6 +261,14 @@ function rewriteColumnWishes(text: string, headers: string[]): string {
     /\bcolumn\b|\bsays?\b|\blabel\b/i.test(text)
   )
     return `add a column ${name} Level that is IF([${name}] > COLAVG([${name}]), "Above", "Below")`;
+  // "add a column showing how much Qty differs from the average" (also Singlish: "average ekata wada kiyak wenas da")
+  if (
+    /\b(?:differs?|differen\w+|deviat\w+|gap|wenas\w*)\b[^.]*\b(?:from|to|than|ekata|average)\b[^.]*\baverage\b|\baverage\b[^.]*\b(?:wenas\w*|differen\w+|deviat\w+)\b/i.test(
+      text,
+    ) &&
+    /\bcolumn\b|\bshow\w*\b|\bdanna\b/i.test(text)
+  )
+    return `add a column ${name} vs Average that is [${name}] - COLAVG([${name}])`;
   // "I need a new column with only the month of Order Date"
   const part =
     /\b(?:new\s+)?column\b[^.]*?\b(year|month|day|quarter|weekday)\b[^.]*?\b(?:of|from)\b/i.exec(

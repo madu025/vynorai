@@ -81,13 +81,15 @@ test("the layout has live KPI and lookup formulas, text ids, a snapshot note and
   const all = layout.blocks.flatMap((block) => block.cells.flat()).map(String);
   assert.ok(
     all.some((cell) =>
-      /^=COUNTA\(UNIQUE\(FILTER\('detail'!\$J\$2:\$J\$100/.test(cell),
+      /^=COUNTA\(UNIQUE\(TRIM\(FILTER\('detail'!\$J\$2:\$J\$100,TRIM\('detail'!\$J\$2:\$J\$100\)<>""\)\)\)\)$/.test(
+        cell,
+      ),
     ),
   );
   assert.ok(
     all.some((cell) =>
       cell.includes(
-        "SUM(FILTER('detail'!$H$2:$H$100,('detail'!$J$2:$J$100=$B$8)*",
+        "SUM(FILTER('detail'!$H$2:$H$100,(TRIM('detail'!$J$2:$J$100)=TRIM($B$8))*",
       ),
     ),
   );
@@ -125,4 +127,21 @@ test("without a unit column the totals are plain sums and there is one chart", (
   const all = layout.blocks.flatMap((block) => block.cells.flat()).map(String);
   assert.ok(all.includes("=SUM(S!$C$2:$C$9)"));
   assert.equal(layout.charts.length, 1);
+});
+
+test("spellings that differ only in case or spaces are one entity, item and unit", () => {
+  const acc = new UsageAccumulator();
+  acc.add("Farah Nazeer", "Phone", 10, "Ea");
+  acc.add(" farah nazeer ", "PHONE", 5, "EA");
+  acc.add("FARAH NAZEER", "cable", 1, " ea ");
+  const result = acc.finish();
+  assert.equal(result.entities, 1);
+  assert.equal(result.items, 2);
+  assert.equal(result.units.length, 1);
+  assert.equal(result.units[0].total, 16);
+  assert.equal(result.units[0].raw.length, 1); // one raw spelling, so the sheet formula adds it once
+  assert.equal(
+    result.topByUnit[result.units[0].label][0].entity,
+    "Farah Nazeer",
+  );
 });

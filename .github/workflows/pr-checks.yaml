@@ -303,13 +303,17 @@ jobs:
           cd extensions/vscode
           npm ci
           npm run e2e:compile
+          # Tests that sign in to vynor.lk need the testing-account key, which this
+          # workflow does not get; they run in e2e-smart.yml (real model, on demand).
+          LIVE=$(grep -l "signIn" e2e/_output/tests/*.test.js || true)
+          ALL=$(ls -1 e2e/_output/tests/*.test.js | grep -vxF -f <(printf '%s\n' $LIVE) || true)
           if [[ "${{ github.event.pull_request.head.repo.fork }}" == "true" || "${{ github.actor }}" == "dependabot[bot]" ]]; then
             # Exclude SSH tests for forks
-            FILES=$(ls -1 e2e/_output/tests/*.test.js | grep -v "SSH" | jq -R . | jq -s .)
+            FILES=$(printf '%s\n' $ALL | grep -v "SSH" | jq -R . | jq -s .)
           else
-            # Include all tests for non-forks
-            FILES=$(ls -1 e2e/_output/tests/*.test.js | jq -R . | jq -s .)
+            FILES=$(printf '%s\n' $ALL | jq -R . | jq -s .)
           fi
+          echo "Skipped (need the testing key): $LIVE"
           echo "test_file_matrix<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT

@@ -36,7 +36,7 @@ Rules for Claude working in this repository.
 
 ## Project skills
 
-- `vynor-live-verify`: real-IDE E2E and live-audit evidence. `vynor-postgres-check`: backend SQL on real PostgreSQL. `vynor-prompt-cache`: prompt prefix stability. `vynor-windows-shell`: shell and quoting pitfalls. `vynor-release`, `vynor-review-fix`, `vynor-parity-tick`, `docs-style`: see each skill.
+- `vynor-live-verify`: real-IDE E2E and live-audit evidence. `vynor-postgres-check`: backend SQL on real PostgreSQL. `vynor-prompt-cache`: prompt prefix stability. `vynor-windows-shell`: shell and quoting pitfalls. `vynor-excel-agent`: M365 Excel add-in and agent changes, gates and past bugs. `vynor-release`, `vynor-review-fix`, `vynor-parity-tick`, `docs-style`: see each skill.
 
 ## Verification
 

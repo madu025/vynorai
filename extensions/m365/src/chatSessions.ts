@@ -169,3 +169,16 @@ export function historyList(store: ChatStore): ChatSession[] {
     .filter((entry) => entry.messages.length > 0)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
+
+/**
+ * A different workbook starts a new chat (the earlier chats stay in the picker). Only when both
+ * workbooks are known and differ; an unknown workbook keeps the open chat.
+ */
+export function shouldStartNewChat(
+  previousWorkbook: string | null | undefined,
+  currentWorkbook: string | null | undefined,
+): boolean {
+  return Boolean(
+    previousWorkbook && currentWorkbook && previousWorkbook !== currentWorkbook,
+  );
+}

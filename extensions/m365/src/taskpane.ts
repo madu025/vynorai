@@ -84,6 +84,7 @@ import {
   openChat,
   parseChatStore,
   saveActiveChat,
+  shouldStartNewChat,
   startNewChat,
   type ChatStore,
 } from "./chatSessions.js";
@@ -549,6 +550,12 @@ function restoreConversationHistory() {
         newChatId,
         MAX_CONVERSATION_CHARS,
       );
+      // Opening a different workbook starts a fresh chat; the earlier chats stay in the picker.
+      const workbookKey = `${chatsKey}.workbook`;
+      const workbook = workbookStorageFingerprint();
+      if (shouldStartNewChat(localStorage.getItem(workbookKey), workbook))
+        chatStore = startNewChat(chatStore);
+      if (workbook) localStorage.setItem(workbookKey, workbook);
       conversationMessages = activeMessages(chatStore).map((entry) => ({
         ...entry,
       }));

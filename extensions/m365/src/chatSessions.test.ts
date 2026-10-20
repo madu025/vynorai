@@ -113,3 +113,12 @@ test("stored chats are validated, and an old single-chat history becomes the fir
   assert.equal(parsed.sessions.length, 1);
   assert.equal(parsed.activeId, "a");
 });
+
+test("a different workbook starts a new chat; the same or an unknown one keeps it", async () => {
+  const { shouldStartNewChat } = await import("./chatSessions.js");
+  assert.equal(shouldStartNewChat("a1", "b2"), true);
+  assert.equal(shouldStartNewChat("a1", "a1"), false);
+  assert.equal(shouldStartNewChat(null, "b2"), false);
+  assert.equal(shouldStartNewChat("a1", undefined), false);
+  assert.equal(shouldStartNewChat("", ""), false);
+});

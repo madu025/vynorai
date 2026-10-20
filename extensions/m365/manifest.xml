@@ -1,16 +1,72 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>9f17a1c0-46f8-4f2c-a5b3-4a3d04e0d365</Id>
-  <Version>0.2.1.0</Version>
+  <Version>1.0.0.0</Version>
   <ProviderName>VynorAI</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="VynorAI" />
   <Description DefaultValue="Preview and approve safe VynorAI Excel actions." />
-  <IconUrl DefaultValue="https://vynor.lk/m365/logo.png" />
-  <HighResolutionIconUrl DefaultValue="https://vynor.lk/m365/logo.png" />
+  <IconUrl DefaultValue="https://vynor.lk/m365/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://vynor.lk/m365/assets/icon-64.png" />
   <SupportUrl DefaultValue="https://vynor.lk/support" />
   <AppDomains><AppDomain>https://vynor.lk</AppDomain></AppDomains>
   <Hosts><Host Name="Workbook" /></Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.8"><Set Name="ExcelApi" MinVersion="1.8" /></Sets>
+  </Requirements>
   <DefaultSettings><SourceLocation DefaultValue="https://vynor.lk/m365/taskpane.html" /></DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Workbook">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="VynorAI.Group">
+                <Label resid="Group.Label" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16" />
+                  <bt:Image size="32" resid="Icon.32" />
+                  <bt:Image size="80" resid="Icon.80" />
+                </Icon>
+                <Control xsi:type="Button" id="VynorAI.OpenButton">
+                  <Label resid="Button.Label" />
+                  <Supertip>
+                    <Title resid="Button.Label" />
+                    <Description resid="Button.Tip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16" />
+                    <bt:Image size="32" resid="Icon.32" />
+                    <bt:Image size="80" resid="Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>VynorAI.Taskpane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://vynor.lk/m365/assets/icon-16.png" />
+        <bt:Image id="Icon.32" DefaultValue="https://vynor.lk/m365/assets/icon-32.png" />
+        <bt:Image id="Icon.80" DefaultValue="https://vynor.lk/m365/assets/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://vynor.lk/m365/taskpane.html" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Group.Label" DefaultValue="VynorAI" />
+        <bt:String id="Button.Label" DefaultValue="Open VynorAI" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="Button.Tip" DefaultValue="Open the VynorAI pane: describe what you want, preview it, approve it, and undo it with one click." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
 </OfficeApp>

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc && esbuild src/taskpane.ts --bundle --format=iife --target=es2020 --minify --outfile=dist/taskpane.bundle.js && esbuild src/text.ts --bundle --format=iife --target=es2020 --outfile=dist/text.bundle.js",
-    "dev-server": "node scripts/dev-server.mjs"
+    "dev-server": "node scripts/dev-server.mjs",
+    "validate-manifests": "npx --yes office-addin-manifest@latest validate manifest.xml && npx --yes office-addin-manifest@latest validate manifest-word.xml && npx --yes office-addin-manifest@latest validate manifest-powerpoint.xml && npx --yes office-addin-manifest@latest validate manifest-outlook.xml"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

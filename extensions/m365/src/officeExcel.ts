@@ -1077,8 +1077,12 @@ export async function applyApprovedExcelPlan(
         "source_changed_since_preview: the selected data changed after the preview. Inspect it again.",
       );
     const source = context.workbook.worksheets.getItem(plan.worksheetName);
+    // When a clean step ran first, the aggregating steps (PivotTable, chart, summary, dashboard) read the
+    // cleaned copy, so " Central " and "Central" are one group. Every other step keeps the original source.
+    let sourceOverride: any | undefined;
+    let cleanedRange: any | undefined;
     const sourceRange = () =>
-      source.getRange(localExcelAddress(plan.sourceAddress));
+      sourceOverride ?? source.getRange(localExcelAddress(plan.sourceAddress));
     const results: ExcelActionResult[] = [];
     let normalizedSource: any | undefined;
 
@@ -1322,6 +1326,13 @@ export async function applyApprovedExcelPlan(
         status: "created",
       };
       const actionStarted = Date.now();
+      sourceOverride =
+        cleanedRange &&
+        !plan.profile?.sample &&
+        !plan.normalization &&
+        ["pivot-table", "chart", "summary", "dashboard"].includes(action.kind)
+          ? cleanedRange
+          : undefined;
       try {
         const required = options.requirements?.[action.kind];
         if (
@@ -2144,6 +2155,12 @@ export async function applyApprovedExcelPlan(
               if (cleaned.dateColumns.length > 0 && cleaned.rows.length > 0)
                 await context.sync();
               await verifyWritten(sheet, cleaned.rows, headers, result);
+              cleanedRange = sheet.getRangeByIndexes(
+                0,
+                0,
+                cleaned.rows.length + 1,
+                headers.length,
+              );
             }
           } else if (
             action.kind === "view" &&
@@ -3682,6 +3699,7 @@ export async function applyApprovedExcelPlan(
         result.status = "failed";
         result.error = errorText(error);
       }
+      sourceOverride = undefined;
       result.ms = Date.now() - actionStarted;
       results.push(result);
       options.onAction?.(result);

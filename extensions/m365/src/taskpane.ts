@@ -1946,11 +1946,14 @@ inspect?.addEventListener("click", async () => {
       if (notice) renderConversation("assistant", notice);
     }
     // A PivotTable groups by exact text: "Central" and " Central " would show as two rows.
-    const nearDuplicateNotice = describeNearDuplicates(
-      layout.headers.map(String),
-      input.values.slice(layout.headerRowCount),
-      specs as Parameters<typeof describeNearDuplicates>[2],
-    );
+    // With a clean step in the same plan the grouping steps read the cleaned copy, so there is nothing to warn about.
+    const nearDuplicateNotice = actions.includes("clean")
+      ? undefined
+      : describeNearDuplicates(
+          layout.headers.map(String),
+          input.values.slice(layout.headerRowCount),
+          specs as Parameters<typeof describeNearDuplicates>[2],
+        );
     if (nearDuplicateNotice) {
       log.record("instruction:near-duplicates", "fail", nearDuplicateNotice);
       renderConversation("assistant", nearDuplicateNotice);

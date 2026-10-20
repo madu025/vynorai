@@ -70,6 +70,12 @@ import {
 } from "./api.js";
 import { askInPane } from "./confirmDialog.js";
 import {
+  buildReportEmailRequest,
+  reportEmailConsentMessage,
+  reportSummaryText as buildReportSummaryText,
+} from "./reportEmailAi.js";
+import { validateAssistResult } from "./textAssist.js";
+import {
   activeMessages,
   deleteChat,
   emptyChatStore,
@@ -194,6 +200,8 @@ const emailIncludeChart = document.querySelector<HTMLInputElement>(
 const emailCc = document.querySelector<HTMLInputElement>("#email-cc");
 const emailBcc = document.querySelector<HTMLInputElement>("#email-bcc");
 const emailSend = document.querySelector<HTMLButtonElement>("#email-send");
+const emailAiWrite =
+  document.querySelector<HTMLButtonElement>("#email-ai-write");
 const emailNote = document.querySelector<HTMLElement>("#email-note");
 const selfTest = document.querySelector<HTMLButtonElement>("#self-test");
 const copyDiagnostics =
@@ -835,26 +843,12 @@ function base64Bytes(value: string): number {
 }
 
 function reportSummaryText(values: any[][], truncated: boolean): string {
-  const resultLines = galleryResults
-    .slice(-20)
-    .map(
-      (result) =>
-        `- ${result.kind}: ${result.name} on ${result.targetSheet} (${result.status})`,
-    );
-  const tableLines = values
-    .slice(0, 40)
-    .map((row) => row.map((cell) => String(cell ?? "")).join(" | "));
-  return [
-    "VynorAI Excel report",
-    `Report sheet: ${lastRevealSheet || currentSourceSheet || "Workbook"}`,
-    resultLines.length ? "Results:" : "Results: none recorded",
-    ...resultLines,
-    tableLines.length ? "" : "",
-    ...tableLines,
-    truncated ? "[Report preview truncated to a bounded local sample]" : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return buildReportSummaryText(
+    galleryResults,
+    lastRevealSheet || currentSourceSheet || "Workbook",
+    values,
+    truncated,
+  );
 }
 
 function reportSummaryHtml(values: any[][], truncated: boolean): string {
@@ -1025,6 +1019,43 @@ ${reportSummaryText(values, truncated)}`,
   emailDraftFallback.hidden = false;
   log.record("email:outlook-draft-link", "pass", { recipient: "redacted" });
 }
+
+// Optional, only when asked: the AI writes the message from the same summary the email would carry.
+// The summary is shown first, nothing leaves the pane without a yes, and the result only fills the
+// editable message box; it is never sent from here.
+emailAiWrite?.addEventListener("click", async () => {
+  if (!emailBody || !emailAiWrite) return;
+  const reportSheet = lastRevealSheet || currentSourceSheet;
+  if (!reportSheet) return setStatus("Create a report first.");
+  emailAiWrite.disabled = true;
+  try {
+    const report = await readExcelReportValues(reportSheet, 200, 30);
+    const summary = reportSummaryText(report.values, report.truncated);
+    if (
+      !(await askInPane(
+        reportEmailConsentMessage(summary),
+        "Send and write",
+        "Cancel",
+      ))
+    )
+      return setStatus("Nothing was sent to AI.");
+    setStatus("Writing the message...");
+    const answer = validateAssistResult(
+      await apiClient().assistText(buildReportEmailRequest(summary, true)),
+    );
+    emailBody.value = answer.text.slice(0, 4000);
+    updateEmailUi();
+    setStatus(
+      "The message was written by AI. Read and edit it before you send the report.",
+    );
+  } catch (error) {
+    setStatus(
+      `The message could not be written (${String((error as Error)?.message ?? error).slice(0, 120)}). Write it yourself or try again.`,
+    );
+  } finally {
+    emailAiWrite.disabled = false;
+  }
+});
 
 emailSend?.addEventListener("click", async () => {
   if (!emailTo || !emailSubject || !emailBody || !emailSend) return;

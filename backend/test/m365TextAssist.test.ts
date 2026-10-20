@@ -291,3 +291,20 @@ test("document drafting is consent gated, strict and audited", async () => {
     drafting.setDraftRunnerForTests();
   }
 });
+
+test("report-email on the excel host is accepted, consent gated, and told to invent nothing", async () => {
+  const body = {
+    host: "excel",
+    task: "report-email",
+    tone: "friendly",
+    text: "VynorAI Excel report\nResults:\n- pivot-table: Sales on Report (ok)\nNorth | 100",
+    consent: true,
+  };
+  const ok = await post(body);
+  assert.equal(ok.status, 200);
+  const system = runnerCalls.at(-1)?.[0]?.content ?? "";
+  assert.match(system, /Invent no numbers/);
+  assert.match(runnerCalls.at(-1)?.[1]?.content ?? "", /North \| 100/);
+  const refused = await post({ ...body, consent: false });
+  assert.notEqual(refused.status, 200);
+});

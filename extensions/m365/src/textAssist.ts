@@ -1,7 +1,8 @@
 export const MAX_TEXT_CHARS = 8000;
 
-export type TextHost = "word" | "powerpoint" | "outlook";
+export type TextHost = "word" | "powerpoint" | "outlook" | "excel";
 export type TextTask =
+  | "report-email"
   | "summarize"
   | "rewrite"
   | "fix-grammar"
@@ -19,6 +20,7 @@ export const TASKS_BY_HOST: Record<TextHost, TextTask[]> = {
     "translate-si",
     "translate-en",
   ],
+  excel: ["report-email"],
   outlook: [
     "draft-reply",
     "summarize",

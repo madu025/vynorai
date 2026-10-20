@@ -69,7 +69,7 @@ export interface M365ApiClient {
   /** Exchange the current token for a 30 day VynorAI session (also renews one). */
   createSession(): Promise<{ sessionToken: string; expiresInSeconds: number }>;
   assistText(input: {
-    host: "word" | "powerpoint" | "outlook";
+    host: "word" | "powerpoint" | "outlook" | "excel";
     task: string;
     tone?: string;
     text: string;

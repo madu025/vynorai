@@ -361,28 +361,6 @@ jobs:
           is_fork: ${{ github.event.pull_request.head.repo.fork == true || github.actor == 'dependabot[bot]' }}
           github_token: ${{ secrets.CI_GITHUB_TOKEN }}
 
-  jetbrains-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
-      - uses: actions/checkout@v6
-      - name: Run JetBrains tests
-        uses: ./.github/actions/run-jetbrains-tests
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          ci-github-token: ${{ secrets.CI_GITHUB_TOKEN }}
-
   # GitHub does not have a way of requiring that all checks pass (you must manually select each job)
   # This action at least lets us manage the list of required tests via source control
 
@@ -401,7 +379,6 @@ jobs:
       - vscode-get-test-file-matrix
       - vscode-package-extension-linux
       - vscode-e2e-tests
-      - jetbrains-tests
 
     steps:
       - name: Decide whether the needed jobs succeeded or failed

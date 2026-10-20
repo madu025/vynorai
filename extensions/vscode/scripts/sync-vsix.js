@@ -249,9 +249,10 @@ function installE2e() {
       });
     }
   }
+  // run-e2e.js reads the file name and folder from here instead of guessing them.
   fs.writeFileSync(
     path.join(extensionsDir, ".vynor-canonical-vsix.json"),
-    `${JSON.stringify(identity, null, 2)}\n`,
+    `${JSON.stringify({ ...identity, folder: path.basename(expectedDir) }, null, 2)}\n`,
   );
 }
 

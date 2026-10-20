@@ -30,20 +30,42 @@ function sha256(file) {
 
 function assertCanonicalE2eInstall() {
   const packageJson = JSON.parse(fs.readFileSync("./package.json", "utf8"));
-  const version = packageJson.version;
-  const artifact = path.resolve(`./build/vynorai-${version}.vsix`);
+  const sourceVersion = packageJson.version;
   const installedRoot = path.resolve(extensionsDir);
-  const installedPackage = path.join(
-    installedRoot,
-    `vynorai.vynorai-${version}`,
-    "package.json",
-  );
   const markerFile = path.join(installedRoot, ".vynor-canonical-vsix.json");
+  if (!fs.existsSync(markerFile)) {
+    throw new Error(
+      `E2E does not have canonical VynorAI ${sourceVersion}. Run npm run e2e:install-vsix.`,
+    );
+  }
+  // sync-vsix.js records the VSIX it installed. CI stamps the build with the commit
+  // ("1.2.69-abc1234") and a platform ("vynorai-linux-x64-..."), so names come from there.
+  const marker = JSON.parse(fs.readFileSync(markerFile, "utf8"));
+  const version = String(marker.version || "");
+  const file = String(marker.file || `vynorai-${sourceVersion}.vsix`);
+  const folder = String(marker.folder || `vynorai.vynorai-${version}`);
+  if (
+    version !== sourceVersion &&
+    !new RegExp(`^${sourceVersion.replace(/\./g, "\\.")}-[0-9a-f]{7}$`).test(
+      version,
+    )
+  ) {
+    throw new Error(
+      `E2E VSIX drift detected (source=${sourceVersion}, installed marker=${version}). Run npm run e2e:install-vsix.`,
+    );
+  }
+  if (path.basename(file) !== file || path.basename(folder) !== folder) {
+    throw new Error(
+      `E2E marker names a path outside its folder: ${markerFile}`,
+    );
+  }
+  const artifact = path.resolve("./build", file);
+  const installedPackage = path.join(installedRoot, folder, "package.json");
 
   if (!fs.existsSync(artifact)) {
     throw new Error(`Canonical VSIX is missing: ${artifact}`);
   }
-  if (!fs.existsSync(installedPackage) || !fs.existsSync(markerFile)) {
+  if (!fs.existsSync(installedPackage)) {
     throw new Error(
       `E2E does not have canonical VynorAI ${version}. Run npm run e2e:install-vsix.`,
     );
@@ -51,13 +73,8 @@ function assertCanonicalE2eInstall() {
   const installedVersion = JSON.parse(
     fs.readFileSync(installedPackage, "utf8"),
   ).version;
-  const marker = JSON.parse(fs.readFileSync(markerFile, "utf8"));
   const artifactHash = sha256(artifact);
-  if (
-    installedVersion !== version ||
-    marker.version !== version ||
-    marker.sha256 !== artifactHash
-  ) {
+  if (installedVersion !== version || marker.sha256 !== artifactHash) {
     throw new Error(
       `E2E VSIX drift detected (source=${version}, installed=${installedVersion}, expected sha256=${artifactHash}, installed sha256=${marker.sha256}). Run npm run e2e:install-vsix.`,
     );

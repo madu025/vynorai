@@ -24,9 +24,34 @@ const artifactName =
   variants.length !== 1
     ? `vynorai-${packageJson.version}.vsix`
     : variants[0];
-const [, target, version] = variantPattern.exec(artifactName);
-// VS Code installs a platform build in "<id>-<version>-<target>".
-const installName = `vynorai.vynorai-${version}${target ? `-${target}` : ""}`;
+const version = variantPattern.exec(artifactName)[2];
+const installName = `vynorai.vynorai-${version}`;
+// A platform build may be installed as "<id>-<version>" or "<id>-<version>-<platform>",
+// depending on the VS Code version; these are this version's folders in a directory.
+function installedDirs(extensionsDir) {
+  if (!fs.existsSync(extensionsDir)) return [];
+  return fs
+    .readdirSync(extensionsDir, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        (entry.name.toLowerCase() === installName.toLowerCase() ||
+          (entry.name
+            .toLowerCase()
+            .startsWith(`${installName}-`.toLowerCase()) &&
+            /^[a-z0-9]+-[a-z0-9]+$/i.test(
+              entry.name.slice(installName.length + 1),
+            ))),
+    )
+    .map((entry) => path.join(extensionsDir, entry.name));
+}
+function installedDir(extensionsDir) {
+  return (
+    installedDirs(extensionsDir).find((dir) =>
+      fs.existsSync(path.join(dir, "package.json")),
+    ) || path.join(extensionsDir, installName)
+  );
+}
 const artifactPath = path.join(buildDir, artifactName);
 const stagedDir = path.join(extensionRoot, "e2e", "vsix");
 const stagedPath = path.join(stagedDir, artifactName);
@@ -133,12 +158,13 @@ function installE2e() {
   // and leaves the old files. A day of benchmark runs tested a build from
   // hours earlier that way, while the marker below named the new VSIX. Remove
   // the folder first, so what is there afterwards can only be this VSIX.
-  const sameVersionDir = path.join(extensionsDir, installName);
-  fs.rmSync(sameVersionDir, { recursive: true, force: true });
-  if (fs.existsSync(sameVersionDir)) {
-    fail(
-      `could not remove ${sameVersionDir}; close the E2E VS Code and try again`,
-    );
+  for (const sameVersionDir of installedDirs(extensionsDir)) {
+    fs.rmSync(sameVersionDir, { recursive: true, force: true });
+    if (fs.existsSync(sameVersionDir)) {
+      fail(
+        `could not remove ${sameVersionDir}; close the E2E VS Code and try again`,
+      );
+    }
   }
   // VS Code also keeps a registry of what is installed. With the version
   // still listed there it extracts nothing and reports success.
@@ -186,21 +212,23 @@ function installE2e() {
     ]);
   }
 
-  const expectedDir = path.join(extensionsDir, installName);
+  const expectedDir = installedDir(extensionsDir);
   let installedPackage = path.join(expectedDir, "package.json");
   if (!fs.existsSync(installedPackage)) {
-    const defaultInstall = path.join(
-      os.homedir(),
-      ".vscode",
-      "extensions",
-      installName,
+    const defaultInstall = installedDir(
+      path.join(os.homedir(), ".vscode", "extensions"),
     );
     if (fs.existsSync(path.join(defaultInstall, "package.json"))) {
       fs.cpSync(defaultInstall, expectedDir, { recursive: true });
     }
   }
   if (!fs.existsSync(installedPackage)) {
-    fail(`extest did not install ${version} at ${expectedDir}`);
+    const found = fs.existsSync(extensionsDir)
+      ? fs.readdirSync(extensionsDir).filter((name) => /vynorai/i.test(name))
+      : [];
+    fail(
+      `extest did not install ${version} at ${expectedDir} (found: ${found.join(", ") || "none"})`,
+    );
   }
   const installedVersion = JSON.parse(
     fs.readFileSync(installedPackage, "utf8"),
@@ -329,8 +357,7 @@ function installLocal() {
         extensionsDir,
       ]);
       const installedPackage = path.join(
-        extensionsDir,
-        installName,
+        installedDir(extensionsDir),
         "package.json",
       );
       if (!fs.existsSync(installedPackage)) {

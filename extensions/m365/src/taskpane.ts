@@ -4518,11 +4518,16 @@ document.querySelector("#new-chat")?.addEventListener("click", () => {
 
 let workbookPrefs: WorkbookPreferences = {};
 const prefsLine = document.querySelector<HTMLElement>("#prefs-line");
-const prefsStyle = document.querySelector<HTMLSelectElement>("#prefs-number-style");
+const prefsStyle = document.querySelector<HTMLSelectElement>(
+  "#prefs-number-style",
+);
 const prefsFiscal = document.querySelector<HTMLSelectElement>("#prefs-fiscal");
-const prefsCurrency = document.querySelector<HTMLSelectElement>("#prefs-currency");
-const prefsAudience = document.querySelector<HTMLSelectElement>("#prefs-audience");
-const prefsChangeLog = document.querySelector<HTMLInputElement>("#prefs-changelog");
+const prefsCurrency =
+  document.querySelector<HTMLSelectElement>("#prefs-currency");
+const prefsAudience =
+  document.querySelector<HTMLSelectElement>("#prefs-audience");
+const prefsChangeLog =
+  document.querySelector<HTMLInputElement>("#prefs-changelog");
 
 function prefsFallbackKey(): string | undefined {
   const workbook = workbookStorageFingerprint();
@@ -4575,10 +4580,12 @@ function learnPreferences(request: string) {
 function renderPreferences() {
   if (prefsLine) prefsLine.textContent = describePreferences(workbookPrefs);
   if (prefsStyle) prefsStyle.value = workbookPrefs.numberStyle ?? "";
-  if (prefsFiscal) prefsFiscal.value = String(workbookPrefs.fiscalYearStart ?? "");
+  if (prefsFiscal)
+    prefsFiscal.value = String(workbookPrefs.fiscalYearStart ?? "");
   if (prefsCurrency) prefsCurrency.value = workbookPrefs.currency ?? "";
   if (prefsAudience) prefsAudience.value = workbookPrefs.audience ?? "";
-  if (prefsChangeLog) prefsChangeLog.checked = workbookPrefs.changeLog !== false;
+  if (prefsChangeLog)
+    prefsChangeLog.checked = workbookPrefs.changeLog !== false;
 }
 
 function updatePreference(change: Partial<WorkbookPreferences>) {
@@ -4649,7 +4656,11 @@ document
       action: "applied",
       request: "Add Sri Lanka holiday table",
       changes: [
-        { change: `${result.rows} holidays added`, sheet: "LK Holidays", status: "created" },
+        {
+          change: `${result.rows} holidays added`,
+          sheet: "LK Holidays",
+          status: "created",
+        },
       ],
       reference: "LK_Holidays",
     });
@@ -4672,7 +4683,9 @@ document
       const text = whatsappSummary(report.values, {
         sheet,
         ...(currency ? { symbol: currency.symbol } : {}),
-        ...(workbookPrefs.numberStyle ? { style: workbookPrefs.numberStyle } : {}),
+        ...(workbookPrefs.numberStyle
+          ? { style: workbookPrefs.numberStyle }
+          : {}),
       });
       try {
         await navigator.clipboard.writeText(text);

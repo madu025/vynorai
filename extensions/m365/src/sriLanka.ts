@@ -46,7 +46,10 @@ export function formatLakh(value: number, decimals = 0): string {
 }
 
 /** A short amount for a chat message: "12.35 lakhs", "1.25 Mn", or a plain grouped number. */
-export function shortAmount(value: number, style: NumberStyle = "plain"): string {
+export function shortAmount(
+  value: number,
+  style: NumberStyle = "plain",
+): string {
   if (!Number.isFinite(value)) return String(value);
   const size = Math.abs(value);
   const round = (n: number) =>
@@ -66,7 +69,8 @@ export function shortAmount(value: number, style: NumberStyle = "plain"): string
 /** Financial year label of a date: April start gives "2026/27" for 2026-05-01 and "2025/26" for 2026-03-31. */
 export function fiscalYearLabel(date: Date, startMonth = 4): string {
   const month = date.getUTCMonth() + 1;
-  const first = month >= startMonth ? date.getUTCFullYear() : date.getUTCFullYear() - 1;
+  const first =
+    month >= startMonth ? date.getUTCFullYear() : date.getUTCFullYear() - 1;
   if (startMonth === 1) return String(first);
   return `${first}/${String((first + 1) % 100).padStart(2, "0")}`;
 }

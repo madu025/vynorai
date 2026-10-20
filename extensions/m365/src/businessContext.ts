@@ -143,7 +143,12 @@ export function currencyGuessFor(
 ): CurrencyGuess | undefined {
   const info = CURRENCIES[code.toUpperCase()];
   return info
-    ? { code: info.code, symbol: info.symbol, numberFormat: formatFor(info), source }
+    ? {
+        code: info.code,
+        symbol: info.symbol,
+        numberFormat: formatFor(info),
+        source,
+      }
     : undefined;
 }
 

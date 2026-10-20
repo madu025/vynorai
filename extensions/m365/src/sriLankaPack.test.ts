@@ -49,9 +49,18 @@ test("lakh grouping: Excel format and text", () => {
 });
 
 test("money format keeps the data's own format unless lakhs were chosen", () => {
-  assert.equal(styledMoneyFormat('"Rs "#,##0.00', "Rs", undefined), '"Rs "#,##0.00');
-  assert.equal(styledMoneyFormat('"Rs "#,##0.00', "Rs", "million"), '"Rs "#,##0.00');
-  assert.equal(styledMoneyFormat('"Rs "#,##0.00', "Rs", "lakh"), lakhNumberFormat("Rs", 2));
+  assert.equal(
+    styledMoneyFormat('"Rs "#,##0.00', "Rs", undefined),
+    '"Rs "#,##0.00',
+  );
+  assert.equal(
+    styledMoneyFormat('"Rs "#,##0.00', "Rs", "million"),
+    '"Rs "#,##0.00',
+  );
+  assert.equal(
+    styledMoneyFormat('"Rs "#,##0.00', "Rs", "lakh"),
+    lakhNumberFormat("Rs", 2),
+  );
   const lakh = lakhNumberFormat("Rs");
   assert.equal(styledMoneyFormat(lakh, "Rs", "lakh"), lakh);
 });
@@ -67,7 +76,10 @@ test("April-March financial year", () => {
     '=YEAR(EDATE(A2,-3))&"/"&TEXT(MOD(YEAR(EDATE(A2,-3))+1,100),"00")',
   );
   assert.equal(fiscalYearFormula("A2", 1), "=YEAR(A2)");
-  assert.equal(fiscalQuarterFormula("B5"), '="Q"&ROUNDUP(MONTH(EDATE(B5,-3))/3,0)');
+  assert.equal(
+    fiscalQuarterFormula("B5"),
+    '="Q"&ROUNDUP(MONTH(EDATE(B5,-3))/3,0)',
+  );
 });
 
 test("holiday table: fixed dates only, sorted by year, with a gazette note", () => {
@@ -80,7 +92,10 @@ test("holiday table: fixed dates only, sorted by year, with a gazette note", () 
   assert.deepEqual(plan.header, ["Date", "Holiday", "Source"]);
   // No Poya day is guessed: they move every year.
   assert.ok(!plan.rows.some((row) => /poya/i.test(row[1])));
-  assert.equal(networkdaysFormula("A2", "B2"), "=NETWORKDAYS(A2,B2,LK_Holidays)");
+  assert.equal(
+    networkdaysFormula("A2", "B2"),
+    "=NETWORKDAYS(A2,B2,LK_Holidays)",
+  );
   assert.equal(excelDateSerial("2026-01-01"), 46023);
   assert.equal(excelDateSerial("1900-03-01"), 61);
 });
@@ -102,25 +117,41 @@ test("preferences: only valid fields survive", () => {
     },
   );
   assert.deepEqual(
-    parsePreferences({ currency: "rupees", numberStyle: "big", fiscalYearStart: 13 }),
+    parsePreferences({
+      currency: "rupees",
+      numberStyle: "big",
+      fiscalYearStart: 13,
+    }),
     {},
   );
 });
 
 test("preferences are learnt from the request's own words", () => {
-  assert.deepEqual(learnFromRequest({}, "sales dashboard in lakhs, amounts in LKR"), {
-    currency: "LKR",
-    numberStyle: "lakh",
-  });
-  assert.deepEqual(learnFromRequest({ currency: "LKR" }, "total sales in rupees"), {});
+  assert.deepEqual(
+    learnFromRequest({}, "sales dashboard in lakhs, amounts in LKR"),
+    {
+      currency: "LKR",
+      numberStyle: "lakh",
+    },
+  );
+  assert.deepEqual(
+    learnFromRequest({ currency: "LKR" }, "total sales in rupees"),
+    {},
+  );
   assert.deepEqual(learnFromRequest({}, "show revenue in millions"), {
     numberStyle: "million",
   });
-  assert.deepEqual(learnFromRequest({}, "our financial year is April to March"), {
-    fiscalYearStart: 4,
-  });
+  assert.deepEqual(
+    learnFromRequest({}, "our financial year is April to March"),
+    {
+      fiscalYearStart: 4,
+    },
+  );
   // Nothing is learnt from an ordinary request, and the audience is never learnt.
-  assert.deepEqual(learnFromRequest({}, "management summary of sales by region"), {});
+  assert.deepEqual(
+    learnFromRequest({}, "management summary of sales by region"),
+    {},
+  );
   assert.deepEqual(learnFromRequest({}, "list the users with errors"), {});
 });
 
@@ -140,9 +171,14 @@ test("saved currency fills in only when the data names none", () => {
   assert.deepEqual(withPreferredCurrency(mixed, prefs, true), mixed);
   // With nothing saved the guess is unchanged.
   assert.deepEqual(withPreferredCurrency(usd, {}, true), usd);
-  assert.equal(audienceWithPreference("sales by region", { audience: "management" }), "management");
   assert.equal(
-    audienceWithPreference("daily follow-up list for the team", { audience: "management" }),
+    audienceWithPreference("sales by region", { audience: "management" }),
+    "management",
+  );
+  assert.equal(
+    audienceWithPreference("daily follow-up list for the team", {
+      audience: "management",
+    }),
     "operational",
   );
 });
@@ -162,7 +198,11 @@ test("preference facts for the agent are empty when nothing is saved", () => {
   assert.match(facts, /LK_Holidays/);
   assert.match(describePreferences({}), /Nothing remembered/);
   assert.match(
-    describePreferences({ currency: "LKR", numberStyle: "lakh", fiscalYearStart: 4 }),
+    describePreferences({
+      currency: "LKR",
+      numberStyle: "lakh",
+      fiscalYearStart: 4,
+    }),
     /LKR, lakh grouping, financial year from April/,
   );
 });
@@ -170,7 +210,7 @@ test("preference facts for the agent are empty when nothing is saved", () => {
 test("change log rows: plain text, bounded, one per change", () => {
   const at = new Date(2026, 9, 20, 9, 5, 7);
   assert.equal(logTime(at), "2026-10-20 09:05:07");
-  assert.equal(plainCell("=HYPERLINK(\"x\")"), "'=HYPERLINK(\"x\")");
+  assert.equal(plainCell('=HYPERLINK("x")'), '\'=HYPERLINK("x")');
   assert.equal(plainCell("+94 77"), "'+94 77");
   assert.equal(plainCell("a\nb\tc"), "a b c");
   const rows = changeLogRows({
@@ -178,8 +218,16 @@ test("change log rows: plain text, bounded, one per change", () => {
     action: "applied",
     request: "dashboard of sales by region",
     changes: [
-      { change: "dashboard: Sales Dashboard", sheet: "Dashboard", status: "created" },
-      { change: "chart: Sales by Region", sheet: "Dashboard", status: "created" },
+      {
+        change: "dashboard: Sales Dashboard",
+        sheet: "Dashboard",
+        status: "created",
+      },
+      {
+        change: "chart: Sales by Region",
+        sheet: "Dashboard",
+        status: "created",
+      },
     ],
     reference: "plan-1",
   });
@@ -193,14 +241,22 @@ test("change log rows: plain text, bounded, one per change", () => {
     "created",
     "plan-1",
   ]);
-  const undone = changeLogRows({ at, action: "undone", request: "x", changes: [] });
+  const undone = changeLogRows({
+    at,
+    action: "undone",
+    request: "x",
+    changes: [],
+  });
   assert.equal(undone.length, 1);
   assert.equal(undone[0][5], "undone");
   const many = changeLogRows({
     at,
     action: "applied",
     request: "r".repeat(400),
-    changes: Array.from({ length: 60 }, (_, i) => ({ change: `c${i}`, status: "applied" })),
+    changes: Array.from({ length: 60 }, (_, i) => ({
+      change: `c${i}`,
+      status: "applied",
+    })),
   });
   assert.equal(many.length, 51);
   assert.equal(many[0][2].length, 250);
@@ -219,16 +275,24 @@ test("privacy receipt counts masked values and catches anything left unmasked", 
   assert.doesNotMatch(describePrivacyReceipt(clean), /Check:/);
   const leaked = buildPrivacyReceipt([
     { role: "user", content: "send to a@b.com" },
-    { role: "tool", content: '{"rows":[["Kamal","+94 77 123 4567","199012345678"]]}' },
+    {
+      role: "tool",
+      content: '{"rows":[["Kamal","+94 77 123 4567","199012345678"]]}',
+    },
   ]);
   assert.equal(leaked.leaks.emails, 1);
   assert.equal(leaked.leaks.phones, 1);
   assert.equal(leaked.leaks.nic, 1);
-  assert.match(describePrivacyReceipt(leaked), /Check: 1 e-mail address\(es\), 1 phone number\(s\), 1 NIC number\(s\) went out unmasked/);
+  assert.match(
+    describePrivacyReceipt(leaked),
+    /Check: 1 e-mail address\(es\), 1 phone number\(s\), 1 NIC number\(s\) went out unmasked/,
+  );
   assert.equal(describePrivacyReceipt(buildPrivacyReceipt([])), "");
   // Amounts and dates are not mistaken for phone numbers.
   assert.equal(
-    buildPrivacyReceipt([{ role: "tool", content: "[[1250000.75, 45123, \"2026-10-20\"]]" }]).leaks.phones,
+    buildPrivacyReceipt([
+      { role: "tool", content: '[[1250000.75, 45123, "2026-10-20"]]' },
+    ]).leaks.phones,
     0,
   );
 });
@@ -240,7 +304,14 @@ test("WhatsApp summary of a dashboard sheet", () => {
     ["", "", "", "", "", ""],
     ["TOTAL SALES", "% OF TARGET", "TOP REGION", "", "", ""],
     [12345678, 0.823, "Western", "", "", ""],
-    ["Average 1,234", "Sales target 15,000,000", "by total of Sales", "", "", ""],
+    [
+      "Average 1,234",
+      "Sales target 15,000,000",
+      "by total of Sales",
+      "",
+      "",
+      "",
+    ],
     ["", "", "", "", "", ""],
     ["", "", "", "", "", ""],
     ["Row Labels", "Sum of Sales", "", "", "", ""],
@@ -275,12 +346,22 @@ test("WhatsApp summary of a dashboard sheet", () => {
   );
   // A plain sheet: label-value pairs, bounded length.
   const plain = whatsappSummary(
-    [["Item", "Qty"], ["Rice", 10], ["Dhal", 4]],
+    [
+      ["Item", "Qty"],
+      ["Rice", 10],
+      ["Dhal", 4],
+    ],
     { sheet: "Stock", date: new Date(2026, 0, 2) },
   );
-  assert.match(plain, /^\*Stock\*\n2026-01-02\n\nTop Item by Qty:\n1\. Rice: 10\n2\. Dhal: 4/);
+  assert.match(
+    plain,
+    /^\*Stock\*\n2026-01-02\n\nTop Item by Qty:\n1\. Rice: 10\n2\. Dhal: 4/,
+  );
   const long = whatsappSummary(
-    Array.from({ length: 300 }, (_, i) => [`Name ${"x".repeat(40)} ${i}`, i + 1]),
+    Array.from({ length: 300 }, (_, i) => [
+      `Name ${"x".repeat(40)} ${i}`,
+      i + 1,
+    ]),
     { sheet: "S" },
   );
   assert.ok(long.length <= 1000);

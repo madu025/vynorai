@@ -25,29 +25,47 @@ const isNumber = (cell: Cell): cell is number =>
   typeof cell === "number" && Number.isFinite(cell);
 /** KPI labels are written in capitals by the dashboard: "TOTAL SALES", "% OF TARGET". */
 const isLabel = (cell: Cell) =>
-  isText(cell) && /[A-Z]/.test(cell) && !/[a-z]/.test(cell) && cell.length <= 60;
+  isText(cell) &&
+  /[A-Z]/.test(cell) &&
+  !/[a-z]/.test(cell) &&
+  cell.length <= 60;
 
 /** WhatsApp formatting characters in cell text would change the message; they are removed. */
-const clean = (text: string) => text.replace(/[*_~`]/g, "").replace(/\s+/g, " ").trim();
+const clean = (text: string) =>
+  text
+    .replace(/[*_~`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-function figure(label: string, value: Cell, options: WhatsAppSummaryOptions): string {
+function figure(
+  label: string,
+  value: Cell,
+  options: WhatsAppSummaryOptions,
+): string {
   if (!isNumber(value)) return clean(String(value ?? ""));
   if (/%/.test(label))
     return `${(value * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
   if (/^(RECORDS|COUNT\b)/i.test(label)) return value.toLocaleString("en-US");
   const amount = shortAmount(value, options.style);
-  return options.symbol && isMoneyHeader(label) ? `${options.symbol} ${amount}` : amount;
+  return options.symbol && isMoneyHeader(label)
+    ? `${options.symbol} ${amount}`
+    : amount;
 }
 
 const titleCase = (label: string) =>
   clean(label)
     .toLowerCase()
-    .replace(/(^|\s)([a-z])/g, (_, space: string, letter: string) => space + letter.toUpperCase())
+    .replace(
+      /(^|\s)([a-z])/g,
+      (_, space: string, letter: string) => space + letter.toUpperCase(),
+    )
     .replace(/\bOf\b/g, "of")
     .replace(/\bTo\b/g, "to");
 
 /** KPI cards: a row of capital labels with a value under each. */
-function findCards(values: Cell[][]): { row: number; cards: Array<[string, Cell]> } | undefined {
+function findCards(
+  values: Cell[][],
+): { row: number; cards: Array<[string, Cell]> } | undefined {
   for (let r = 0; r < Math.min(values.length - 1, 12); r += 1) {
     const cards: Array<[string, Cell]> = [];
     values[r].forEach((cell, c) => {
@@ -75,19 +93,31 @@ function findBreakdown(values: Cell[][], from: number) {
         lines.push([name, value]);
       }
       if (lines.length >= 2)
-        return { row: r, name: String(header[c]), measure: String(header[c + 1]), lines };
+        return {
+          row: r,
+          name: String(header[c]),
+          measure: String(header[c + 1]),
+          lines,
+        };
     }
   }
   return undefined;
 }
 
-export function whatsappSummary(values: Cell[][], options: WhatsAppSummaryOptions): string {
+export function whatsappSummary(
+  values: Cell[][],
+  options: WhatsAppSummaryOptions,
+): string {
   const rows = values.map((row) => (Array.isArray(row) ? row : []));
   const cards = findCards(rows);
   const breakdown = findBreakdown(rows, cards ? cards.row + 2 : 0);
   // A sheet that starts with its table header has no title row: the sheet name is the title.
   const title = clean(
-    String(breakdown?.row === 0 ? options.sheet : (rows[0]?.find(isText) ?? options.sheet)),
+    String(
+      breakdown?.row === 0
+        ? options.sheet
+        : (rows[0]?.find(isText) ?? options.sheet),
+    ),
   );
   const date = options.date ?? new Date();
   const lines = [
@@ -105,15 +135,19 @@ export function whatsappSummary(values: Cell[][], options: WhatsAppSummaryOption
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .forEach(([name, value], index) =>
-      lines.push(`${index + 1}. ${clean(name)}: ${figure(breakdown.measure, value, options)}`),
-    );
+        lines.push(
+          `${index + 1}. ${clean(name)}: ${figure(breakdown.measure, value, options)}`,
+        ),
+      );
   }
   if (!cards && !breakdown) {
     // Not a dashboard: the first label-value pairs on the sheet.
     for (const row of rows.slice(0, 40)) {
       const at = row.findIndex(isText);
       if (at >= 0 && isNumber(row[at + 1]))
-        lines.push(`${clean(row[at] as string)}: ${figure(String(row[at]), row[at + 1], options)}`);
+        lines.push(
+          `${clean(row[at] as string)}: ${figure(String(row[at]), row[at + 1], options)}`,
+        );
       if (lines.length >= 12) break;
     }
   }

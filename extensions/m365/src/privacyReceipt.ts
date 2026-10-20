@@ -16,7 +16,8 @@ export interface PrivacyReceipt {
 const TOKEN = /\[p\d+\]/g;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 // Sri Lankan mobile and landline numbers (07X..., +947X..., 0XX-XXXXXXX).
-const PHONE = /(?<![\d.])(?:(?:\+94|0094)[\s-]?|0)(?:7\d|[1-9]\d)[\s-]?\d{3}[\s-]?\d{4}(?![\d.])/g;
+const PHONE =
+  /(?<![\d.])(?:(?:\+94|0094)[\s-]?|0)(?:7\d|[1-9]\d)[\s-]?\d{3}[\s-]?\d{4}(?![\d.])/g;
 // Old NIC (9 digits + V/X) and new NIC (12 digits starting 19xx or 20xx).
 const NIC = /(?<![\dA-Z])(?:\d{9}[VX]|(?:19|20)\d{10})(?![\dA-Z])/gi;
 
@@ -30,11 +31,15 @@ function textOf(message: unknown): string {
       : value.content == null
         ? ""
         : JSON.stringify(value.content);
-  return value.tool_calls ? `${content}${JSON.stringify(value.tool_calls)}` : content;
+  return value.tool_calls
+    ? `${content}${JSON.stringify(value.tool_calls)}`
+    : content;
 }
 
 /** Receipt for the messages of one request (the last call carries the whole conversation). */
-export function buildPrivacyReceipt(messages: readonly unknown[]): PrivacyReceipt {
+export function buildPrivacyReceipt(
+  messages: readonly unknown[],
+): PrivacyReceipt {
   const text = messages.map(textOf).join("\n");
   return {
     characters: text.length,
@@ -56,7 +61,9 @@ export function describePrivacyReceipt(receipt: PrivacyReceipt): string {
   const leaks = receipt.leaks.emails + receipt.leaks.phones + receipt.leaks.nic;
   const warning = leaks
     ? ` Check: ${[
-        receipt.leaks.emails ? `${receipt.leaks.emails} e-mail address(es)` : "",
+        receipt.leaks.emails
+          ? `${receipt.leaks.emails} e-mail address(es)`
+          : "",
         receipt.leaks.phones ? `${receipt.leaks.phones} phone number(s)` : "",
         receipt.leaks.nic ? `${receipt.leaks.nic} NIC number(s)` : "",
       ]

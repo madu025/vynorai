@@ -48,7 +48,9 @@ export async function appendChangeLog(
           ? 1
           : Number(used.rowIndex) + Number(used.rowCount) + 1;
       }
-      const target = sheet.getRange(`A${next}:${last}${next + rows.length - 1}`);
+      const target = sheet.getRange(
+        `A${next}:${last}${next + rows.length - 1}`,
+      );
       target.numberFormat = rows.map((row) => row.map(() => "@"));
       target.values = rows;
       sheet.getRange(`A:${last}`).format.autofitColumns?.();

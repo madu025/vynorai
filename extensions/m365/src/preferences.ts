@@ -103,7 +103,11 @@ export function withPreferredCurrency(
   if (!chosen || chosen.mixed) return chosen;
   return {
     ...chosen,
-    numberFormat: styledMoneyFormat(chosen.numberFormat, chosen.symbol, prefs.numberStyle),
+    numberFormat: styledMoneyFormat(
+      chosen.numberFormat,
+      chosen.symbol,
+      prefs.numberStyle,
+    ),
   };
 }
 
@@ -113,7 +117,9 @@ export function audienceWithPreference(
   prefs: WorkbookPreferences,
 ): Audience {
   const fromRequest = inferAudience(request);
-  return fromRequest !== "general" ? fromRequest : (prefs.audience ?? "general");
+  return fromRequest !== "general"
+    ? fromRequest
+    : (prefs.audience ?? "general");
 }
 
 const MONTHS = [
@@ -143,7 +149,7 @@ export function preferenceFacts(prefs: WorkbookPreferences): string {
     );
   if (prefs.numberStyle === "lakh")
     facts.push(
-      'show amounts with lakh grouping: number format [>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;#,##0',
+      "show amounts with lakh grouping: number format [>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;#,##0",
     );
   else if (prefs.numberStyle === "million")
     facts.push("show large amounts in millions (Mn)");
@@ -157,7 +163,9 @@ export function preferenceFacts(prefs: WorkbookPreferences): string {
     facts.push(
       "the workbook has a holiday table named LK_Holidays: pass it as the holidays argument of NETWORKDAYS and WORKDAY",
     );
-  return facts.length ? `[Saved preferences of this workbook] ${facts.join("; ")}.` : "";
+  return facts.length
+    ? `[Saved preferences of this workbook] ${facts.join("; ")}.`
+    : "";
 }
 
 /** A short line for the pane: what is remembered for this workbook. */

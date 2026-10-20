@@ -1,3 +1,5 @@
+import { detectBusinessKey, type BusinessKey } from "./businessContext.js";
+
 type Cell = string | number | boolean | null;
 
 export type CleanOperation =
@@ -480,6 +482,8 @@ export interface QualityReport {
   values: Array<Array<string | number>>;
   findings: string[];
   headerRow: number;
+  /** The record key (transaction, invoice or order number) the duplicate check used, when one was found. */
+  businessKey?: BusinessKey;
 }
 
 function quantile(sorted: number[], q: number): number {
@@ -598,6 +602,22 @@ export function buildQualityReport(
       extraSpaces,
     ] as Array<string | number>;
   });
+  // Whole-row duplicates miss a transaction entered twice with a different date or amount: the
+  // business key catches those, so each key value must appear once.
+  const businessKey = detectBusinessKey(headers, rows);
+  if (businessKey && businessKey.duplicateKeys > 0) {
+    const name = businessKey.names.join(" + ");
+    findings.unshift(
+      name +
+        ": " +
+        businessKey.duplicateKeys +
+        " value(s) are used on more than one row (" +
+        businessKey.duplicateRows +
+        " extra row(s)). Each " +
+        name +
+        " should appear once; check them for double entries.",
+    );
+  }
   if (duplicateRows > 0)
     findings.unshift(duplicateRows + " duplicate row(s) found.");
   if (findings.length === 0)
@@ -627,8 +647,23 @@ export function buildQualityReport(
     [],
     ["Findings"],
     ...findings.map((text) => [text]),
+    ...(businessKey
+      ? [
+          [],
+          ["Business key", businessKey.names.join(" + ")],
+          ["Key confidence", businessKey.confidence],
+          ["Why", businessKey.reason],
+          ["Repeated key values", businessKey.duplicateKeys],
+          ["Extra rows with a repeated key", businessKey.duplicateRows],
+        ]
+      : []),
   ];
-  return { values, findings, headerRow: 7 };
+  return {
+    values,
+    findings,
+    headerRow: 7,
+    ...(businessKey ? { businessKey } : {}),
+  };
 }
 
 export interface PivotFallbackInput {

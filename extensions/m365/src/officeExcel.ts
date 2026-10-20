@@ -74,6 +74,76 @@ export type ExcelActionStatus =
 
 import { plannedSheetName } from "./outcome.js";
 import { writeUsageDashboard } from "./usageSheet.js";
+import {
+  currencyFromNumberFormat,
+  currencyFromValues,
+  inferAudience,
+  inferCurrency,
+  isMoneyHeader,
+  parseBusinessTarget,
+} from "./businessContext.js";
+import {
+  buildDashboardLayout,
+  dashboardTopN,
+  rankCategories,
+  type DashboardAggregation,
+  type DashboardBlock,
+  type DashboardStyle,
+} from "./dashboardLayout.js";
+
+const DASHBOARD_STYLE: Record<DashboardStyle, (range: any) => void> = {
+  title: (range) => {
+    range.format.font.bold = true;
+    range.format.font.size = 16;
+    range.format.font.color = "#FFFFFF";
+  },
+  subtitle: (range) => {
+    range.format.font.italic = true;
+    range.format.font.color = "#595959";
+  },
+  "kpi-label": (range) => {
+    range.format.font.bold = true;
+    range.format.font.size = 9;
+    range.format.font.color = "#595959";
+    range.format.fill.color = "#DEEAF6";
+  },
+  "kpi-value": (range) => {
+    range.format.font.bold = true;
+    range.format.font.size = 16;
+    range.format.font.color = "#1F3864";
+    range.format.fill.color = "#DEEAF6";
+  },
+  "kpi-sub": (range) => {
+    range.format.font.size = 9;
+    range.format.font.color = "#595959";
+    range.format.fill.color = "#DEEAF6";
+  },
+  note: (range) => {
+    range.format.font.italic = true;
+    range.format.font.color = "#595959";
+  },
+  section: (range) => {
+    range.format.font.bold = true;
+    range.format.font.color = "#1F3864";
+  },
+  "table-header": (range) => {
+    range.format.font.bold = true;
+    range.format.font.color = "#FFFFFF";
+    range.format.fill.color = "#2F5597";
+  },
+  "table-body": () => undefined,
+  helper: (range) => {
+    range.format.font.italic = true;
+    range.format.font.color = "#808080";
+  },
+};
+
+/** A short reason from an Office.js error, for the note on the sheet. */
+function describePivotError(error: unknown): string {
+  const code = (error as { code?: unknown })?.code;
+  const message = String((error as { message?: unknown })?.message ?? error ?? "");
+  return String(code || message || "not supported").slice(0, 80);
+}
 
 export interface ExcelActionResult {
   kind: string;
@@ -89,6 +159,8 @@ export interface ExcelActionResult {
   warnings?: string[];
   /** Milliseconds this action took in Excel, shown when a result is slow. */
   ms?: number;
+  /** Plain notes about how the result was built (a fallback used, a feature this Excel lacks). */
+  notes?: string[];
 }
 
 export interface ExcelApplyReport {
@@ -1054,6 +1126,8 @@ export async function applyApprovedExcelPlan(
     supportsExcelApi?: (version: string) => boolean;
     /** Chart one bar per category (summed) instead of one per source row, e.g. after a pivot. */
     aggregateCharts?: boolean;
+    /** The user's request, read locally for the audience, a target and the currency of a dashboard. */
+    request?: string;
     requirements?: Record<string, string>;
     onAction?: (result: ExcelActionResult) => void;
     onProgress?: (completedRows: number, totalRows: number) => void;
@@ -1562,7 +1636,7 @@ export async function applyApprovedExcelPlan(
             } else {
               const dashboardSampled = Boolean(plan.profile?.sample);
               // Very large data: the totals and the category table are formulas over every row.
-              const { rows } = dashboardSampled
+              const { headers: dashboardHeaders, rows } = dashboardSampled
                 ? splitHeader(await readSourceHead(LARGE_FORMAT_ROWS + 1))
                 : splitHeader(await readSourceValues());
               const parsed = parseLocalRange(
@@ -1581,150 +1655,227 @@ export async function applyApprovedExcelPlan(
                 column: string;
                 index: number;
               }>;
-              const aggregation = String(dashboard.aggregation ?? "sum");
-              const aggregateFormula = (
-                value: string,
-                categoryCell: string,
-              ) => {
-                const categoryRange = sourceColumn(category.index);
-                if (aggregation === "count")
-                  return `=COUNTIFS(${categoryRange},${categoryCell})`;
-                if (aggregation === "average")
-                  return `=IFERROR(AVERAGEIFS(${value},${categoryRange},${categoryCell}),"")`;
-                if (aggregation === "min")
-                  return `=MINIFS(${value},${categoryRange},${categoryCell})`;
-                if (aggregation === "max")
-                  return `=MAXIFS(${value},${categoryRange},${categoryCell})`;
-                return `=SUMIFS(${value},${categoryRange},${categoryCell})`;
-              };
-              const title = `VynorAI dashboard: ${values.map((entry) => entry.column).join(", ")} by ${category.column}`;
-              sheet.getRange("A1").values = [[title]];
-              sheet.getRange("A1").format.font.bold = true;
-              const kpis: string[][] = [
-                ["KPI", "Value"],
-                ["Data rows", `=ROWS(${sourceColumn(category.index)})`],
-                ...values.flatMap((entry) => [
-                  [
-                    `Total ${entry.column}`,
-                    `=SUM(${sourceColumn(entry.index)})`,
-                  ],
-                  [
-                    `Average ${entry.column}`,
-                    `=IFERROR(AVERAGE(${sourceColumn(entry.index)}),"")`,
-                  ],
-                ]),
-              ];
-              const kpiRange = sheet.getRangeByIndexes(2, 0, kpis.length, 2);
-              kpiRange.formulas = kpis.map((row, rowIndex) =>
-                row.map((cell, columnIndex) =>
-                  rowIndex === 0 || columnIndex === 0 ? literal(cell) : cell,
-                ),
+              const aggregation = String(
+                dashboard.aggregation ?? "sum",
+              ) as DashboardAggregation;
+              // Business meaning: currency from the cells' own format, audience and target from the request.
+              let numberFormats: unknown[] | undefined;
+              try {
+                const firstRow = sourceRange().getRow(1);
+                firstRow.load("numberFormat");
+                await context.sync();
+                numberFormats = firstRow.numberFormat?.[0];
+              } catch {
+                numberFormats = undefined; // formats are a hint only
+              }
+              const headerNames = (dashboardHeaders as any[]).map((cell) =>
+                String(cell ?? ""),
               );
-              kpiRange.format.autofitColumns();
-              sheet.getRangeByIndexes(2, 0, 1, 2).format.font.bold = true;
-
-              const categories = [
-                ...new Set(
-                  rows
-                    .map((row: any[]) =>
-                      String(row[category.index] ?? "").trim(),
-                    )
-                    .filter(Boolean),
+              const samples: Record<number, any[]> = {};
+              for (const value of values)
+                samples[value.index] = rows
+                  .slice(0, 200)
+                  .map((row: any[]) => row[value.index]);
+              const currency = inferCurrency({
+                headers: headerNames,
+                columns: values.map((value) => value.index),
+                numberFormats,
+                samples,
+                request: options.request,
+              });
+              const audience = inferAudience(options.request);
+              const target = parseBusinessTarget(
+                options.request,
+                values.map((value) => value.column),
+                values.map((_, index) => index),
+              );
+              const ranked = dashboardSampled
+                ? []
+                : rankCategories(
+                    rows as unknown[][],
+                    category.index,
+                    values[0].index,
+                    aggregation,
+                  );
+              const layout = buildDashboardLayout({
+                categoryName: category.column,
+                categoryRef: sourceColumn(category.index),
+                values: values.map((value) => ({
+                  name: value.column,
+                  ref: sourceColumn(value.index),
+                })),
+                aggregation,
+                categories: ranked.slice(0, dashboardTopN(audience)),
+                totalCategories: ranked.length,
+                sampled: dashboardSampled,
+                ...(currency ? { currency } : {}),
+                // Only a column whose own name, format or cells say money gets the currency format.
+                money: values.map(
+                  (value) =>
+                    isMoneyHeader(value.column) ||
+                    Boolean(currencyFromNumberFormat(numberFormats?.[value.index])) ||
+                    Boolean(currencyFromValues(samples[value.index] ?? [])),
                 ),
-              ].slice(0, 50);
-              for (const [index, value] of values.entries()) {
-                const summaryColumn = 14 + index * 2;
-                if (dashboardSampled) {
-                  const categoryRange = sourceColumn(category.index);
-                  const letter = columnLetter(summaryColumn);
-                  const shown = Math.max(1, categories.length);
-                  sheet.getRangeByIndexes(0, summaryColumn, 1, 2).values = [
-                    [literal(category.column), literal(value.column)],
-                  ];
-                  sheet.getRange(`${letter}2`).formulas = [
-                    [
-                      `=TAKE(SORT(UNIQUE(FILTER(${categoryRange},${categoryRange}<>""))),50)`,
-                    ],
-                  ];
-                  const measure = aggregateFormula(
-                    sourceColumn(value.index),
-                    "c",
-                  ).slice(1);
-                  sheet.getRange(
-                    `${columnLetter(summaryColumn + 1)}2`,
-                  ).formulas = [[`=BYROW(${letter}2#,LAMBDA(c,${measure}))`]];
-                  await context.sync();
-                  const chartRange = sheet.getRangeByIndexes(
-                    0,
-                    summaryColumn,
-                    shown + 1,
-                    2,
+                audience,
+                ...(target ? { target } : {}),
+                sourceLabel: `${quotedSheet}${localExcelAddress(plan.sourceAddress)}`,
+              });
+              const notes = [...layout.notes];
+              const writeBlocks = (blocks: DashboardBlock[]) => {
+                for (const block of blocks) {
+                  const range = sheet.getRangeByIndexes(
+                    block.row,
+                    block.col,
+                    block.cells.length,
+                    block.cells[0].length,
                   );
-                  const chart = sheet.charts.add(
-                    "ColumnClustered",
-                    chartRange,
-                    "Columns",
-                  );
-                  chart.name = `${action.name}_chart_${index + 1}`;
-                  chart.title.text = `${value.column} by ${category.column}`;
-                  chart.setPosition(`F${3 + index * 18}`);
-                  continue;
-                }
-                const summary = [
-                  [category.column, value.column],
-                  ...categories.map((name, rowIndex) => [
-                    literal(name),
-                    aggregateFormula(
-                      sourceColumn(value.index),
-                      `${columnLetter(summaryColumn)}${rowIndex + 2}`,
+                  range.formulas = block.cells.map((row) =>
+                    row.map((cell) =>
+                      typeof cell === "object" ? cell.f : literal(cell),
                     ),
-                  ]),
-                ];
-                const summaryRange = sheet.getRangeByIndexes(
-                  0,
-                  summaryColumn,
-                  summary.length,
+                  );
+                  if (block.numberFormat)
+                    range.numberFormat = block.cells.map((row) =>
+                      row.map(() => block.numberFormat),
+                    );
+                  DASHBOARD_STYLE[block.style](range);
+                }
+              };
+              try {
+                sheet.showGridlines = false;
+              } catch {
+                // Older Excel: the grid stays visible.
+              }
+              for (const { col, width } of layout.columnWidths)
+                sheet.getRangeByIndexes(0, col, 1, 1).format.columnWidth =
+                  width;
+              sheet.getRangeByIndexes(
+                0,
+                0,
+                1,
+                layout.titleWidth,
+              ).format.fill.color = "#1F3864";
+              writeBlocks(layout.blocks);
+              await context.sync();
+
+              for (const [index, plannedChart] of layout.charts.entries()) {
+                const chartRange = sheet.getRangeByIndexes(
+                  plannedChart.headerRow,
+                  plannedChart.col,
+                  plannedChart.dataRows + 1,
                   2,
                 );
-                summaryRange.formulas = summary.map((row, rowIndex) =>
-                  row.map((cell, columnIndex) =>
-                    rowIndex === 0 || columnIndex === 0 ? literal(cell) : cell,
-                  ),
+                const chart = sheet.charts.add(
+                  "ColumnClustered",
+                  chartRange,
+                  "Columns",
                 );
-                if (categories.length > 0) {
-                  const chart = sheet.charts.add(
-                    "ColumnClustered",
-                    summaryRange,
-                    "Columns",
-                  );
-                  chart.name = `${action.name}_chart_${index + 1}`;
-                  chart.title.text = `${value.column} by ${category.column}`;
-                  chart.setPosition(`F${3 + index * 18}`);
+                chart.name = `${action.name}_chart_${index + 1}`;
+                chart.title.text = plannedChart.title;
+                try {
+                  chart.legend.visible = false;
+                  if (plannedChart.numberFormat)
+                    chart.axes.valueAxis.numberFormat =
+                      plannedChart.numberFormat;
+                } catch {
+                  // Chart styling is decoration; the chart is already there.
                 }
+                chart.setPosition(plannedChart.from, plannedChart.to);
               }
-              const pivot = sheet.pivotTables.add(
-                action.name,
-                sourceRange(),
-                sheet.getRange(`A${kpis.length + 5}`),
-              );
               await context.sync();
-              pivot.rowHierarchies.add(
-                pivot.hierarchies.getItem(category.column),
-              );
-              for (const value of values) {
-                const field = pivot.dataHierarchies.add(
-                  pivot.hierarchies.getItem(value.column),
+
+              // The breakdown: a PivotTable with a slicer, or a formula table where the host refuses one.
+              let pivot: any;
+              try {
+                pivot = sheet.pivotTables.add(
+                  action.name,
+                  sourceRange(),
+                  sheet.getRange(layout.pivotAnchor),
                 );
-                field.summarizeBy =
-                  {
-                    sum: "Sum",
-                    count: "Count",
-                    average: "Average",
-                    min: "Min",
-                    max: "Max",
-                  }[aggregation] ?? "Sum";
+                await context.sync();
+                pivot.rowHierarchies.add(
+                  pivot.hierarchies.getItem(category.column),
+                );
+                const fields = values.map((value) => {
+                  const field = pivot.dataHierarchies.add(
+                    pivot.hierarchies.getItem(value.column),
+                  );
+                  field.summarizeBy =
+                    {
+                      sum: "Sum",
+                      count: "Count",
+                      average: "Average",
+                      min: "Min",
+                      max: "Max",
+                    }[aggregation] ?? "Sum";
+                  return field;
+                });
+                await context.sync();
+                // Currency on the PivotTable values is a separate step: a host without it keeps the PivotTable.
+                if (layout.valueFormats.some((format) => format !== "#,##0.00"))
+                  try {
+                    fields.forEach((field: any, index: number) => {
+                      field.numberFormat = layout.valueFormats[index];
+                    });
+                    await context.sync();
+                  } catch {
+                    // Older Excel keeps the PivotTable's own number format.
+                  }
+              } catch (error) {
+                // A half-made PivotTable is removed so the formula table can take its place.
+                if (pivot)
+                  try {
+                    pivot.delete();
+                    await context.sync();
+                  } catch {
+                    // Nothing was created, or it is already gone.
+                  }
+                pivot = undefined;
+                writeBlocks(layout.fallbackBreakdown);
+                await context.sync();
+                notes.push(
+                  `This Excel could not create a PivotTable here (${describePivotError(error)}), so the breakdown is a formula table; it still updates with the data.`,
+                );
               }
-              await context.sync();
+              const slicerSupported =
+                pivot &&
+                context.workbook.slicers?.add &&
+                (!options.supportsExcelApi ||
+                  options.supportsExcelApi("1.10"));
+              if (slicerSupported) {
+                try {
+                  const slicer = context.workbook.slicers.add(
+                    pivot,
+                    category.column,
+                    sheet,
+                  );
+                  slicer.name = `${action.name}_slicer`.slice(0, 255);
+                  slicer.caption = category.column;
+                  const anchor = sheet.getRange(layout.slicerAnchor);
+                  anchor.load(["left", "top"]);
+                  await context.sync();
+                  if (Number.isFinite(anchor.left)) slicer.left = anchor.left;
+                  if (Number.isFinite(anchor.top)) slicer.top = anchor.top;
+                  slicer.width = 150;
+                  slicer.height = 220;
+                  await context.sync();
+                } catch {
+                  notes.push(
+                    `A ${category.column} slicer could not be added in this Excel; use the filter button on the PivotTable's row labels instead.`,
+                  );
+                }
+              } else if (pivot) {
+                notes.push(
+                  `Slicers need Excel 2021 or Microsoft 365; use the filter button on the PivotTable's row labels to pick ${category.column} values.`,
+                );
+              }
+              if (notes.length > layout.notes.length) {
+                const noteRange = sheet.getRangeByIndexes(6, 0, 1, 1);
+                noteRange.values = [[literal(notes.join(" "))]];
+                DASHBOARD_STYLE.note(noteRange);
+                await context.sync();
+              }
+              if (notes.length) result.notes = notes;
             }
           } else if (
             action.kind === "chart" &&

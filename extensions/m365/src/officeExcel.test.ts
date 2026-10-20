@@ -33,7 +33,7 @@ test("CSV export quotes cells and neutralizes formula injection", () => {
  */
 function fakeWorkbook(
   cells: unknown[][],
-  options: { failChart?: boolean } = {},
+  options: { failChart?: boolean; failPivot?: boolean; slicers?: boolean } = {},
 ) {
   const calls: string[] = [];
   const formulaWrites: Array<{
@@ -248,6 +248,10 @@ function fakeWorkbook(
           calls.push(
             `pivot.add ${typeof pivotName} ${source.kind}:${source.address} ${destination.kind}:${destination.address}`,
           );
+          if (options.failPivot)
+            throw Object.assign(new Error("pivot failed"), {
+              code: "NotImplemented",
+            });
           pivots.add(String(pivotName));
           return {
             layout: { getRange: () => range("Result", "A3:B6") },
@@ -279,6 +283,22 @@ function fakeWorkbook(
     tables: {
       getItemOrNullObject: (name: string) => nullable(tables.has(name)),
     },
+    ...(options.slicers
+      ? {
+          slicers: {
+            add(_pivot: unknown, field: string, sheet: any) {
+              calls.push(`slicer.add ${field} on ${sheet.name}`);
+              return new Proxy({} as any, {
+                set(object, key, value) {
+                  calls.push(`slicer.${String(key)} = ${String(value)}`);
+                  object[key] = value;
+                  return true;
+                },
+              });
+            },
+          },
+        }
+      : {}),
     pivotTables: {
       getItemOrNullObject: (name: string) => {
         const item = nullable(pivots.has(name));
@@ -1421,4 +1441,79 @@ test("one Undo covers every action of a multi-step workflow", () => {
   assert.equal(items.planId, "workflow");
   assert.deepEqual(items.sheets.sort(), ["_Vynor_Clean", "_Vynor_Pivot"]);
   assert.deepEqual(items.tables, ["Result"]);
+});
+
+test("a dashboard adds a slicer beside its PivotTable when the host supports slicers", async () => {
+  const excel = fakeWorkbook(
+    [
+      ["Region", "Sales"],
+      ["North", 100],
+      ["South", 200],
+      ["North", 300],
+    ],
+    { slicers: true },
+  );
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["dashboard"], 500, {
+    dashboard: { category: 0, values: [1] },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    {
+      expectedSourceFingerprint: plan.sourceFingerprint,
+      supportsExcelApi: () => true,
+      request: "sales dashboard for management, target 1000",
+    },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.ok(excel.calls.some((call) => call.startsWith("slicer.add Region on Dashboard")));
+  assert.ok(excel.calls.includes("slicer.caption = Region"));
+  const formulas = excel.formulaWrites
+    .filter((entry) => entry.sheet.startsWith("Dashboard"))
+    .flatMap((entry) => (entry.values as unknown[][]).flat())
+    .map(String);
+  // The target from the request becomes a "% of target" card.
+  assert.ok(formulas.some((cell) => /^=IFERROR\(SUM\(.+\)\/1000,0\)$/.test(cell)));
+  assert.ok(formulas.includes("% OF TARGET"));
+});
+
+test("a dashboard falls back to a formula breakdown when the host refuses a PivotTable", async () => {
+  const excel = fakeWorkbook(
+    [
+      ["Region", "Sales"],
+      ["North", 100],
+      ["South", 200],
+      ["North", 300],
+    ],
+    { failPivot: true, slicers: true },
+  );
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["dashboard"], 500, {
+    dashboard: { category: 0, values: [1] },
+  });
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  assert.match(report.results[0].notes?.join(" ") ?? "", /could not create a PivotTable here \(NotImplemented\)/);
+  assert.ok(!excel.calls.some((call) => call.startsWith("slicer.add")));
+  const formulas = excel.formulaWrites
+    .filter((entry) => entry.sheet.startsWith("Dashboard"))
+    .flatMap((entry) => (entry.values as unknown[][]).flat())
+    .map(String);
+  // North (400) is the largest region, so it is listed first, each with a live SUMIFS.
+  const north = formulas.indexOf("North");
+  assert.ok(north >= 0);
+  assert.match(formulas[north + 1], /^=SUMIFS\(/);
+  assert.equal(
+    excel.calls.filter((call) => call.startsWith("chart.add ColumnClustered")).length,
+    1,
+  );
 });

@@ -1,0 +1,197 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
+  countDuplicateKeys,
+  currencyFromHeader,
+  currencyFromNumberFormat,
+  currencyFromValues,
+  describeBusinessKey,
+  detectBusinessKey,
+  inferAudience,
+  inferCurrency,
+  isMoneyHeader,
+  parseBusinessTarget,
+} from "./businessContext.js";
+
+test("currency is read from Excel number formats", () => {
+  assert.equal(currencyFromNumberFormat("[$LKR] #,##0.00")?.code, "LKR");
+  assert.equal(currencyFromNumberFormat('"Rs "#,##0.00')?.code, "LKR");
+  assert.equal(currencyFromNumberFormat('"Rs."#,##0')?.code, "LKR");
+  assert.equal(currencyFromNumberFormat("$#,##0.00")?.code, "USD");
+  assert.equal(currencyFromNumberFormat("[$€-x-euro2] #,##0")?.code, "EUR");
+  assert.equal(currencyFromNumberFormat("£#,##0")?.code, "GBP");
+  assert.equal(currencyFromNumberFormat("#,##0.00"), undefined);
+  assert.equal(currencyFromNumberFormat("General"), undefined);
+  assert.equal(currencyFromNumberFormat('0" pcs"'), undefined);
+});
+
+test("currency is read from headers, but a plain word is not taken for money", () => {
+  assert.equal(currencyFromHeader("Amount (LKR)")?.code, "LKR");
+  assert.equal(currencyFromHeader("Sales Rs")?.code, "LKR");
+  assert.equal(currencyFromHeader("Price $")?.code, "USD");
+  assert.equal(currencyFromHeader("USD Revenue")?.code, "USD");
+  assert.equal(currencyFromHeader("Weight in pounds"), undefined);
+  assert.equal(currencyFromHeader("Sales"), undefined);
+  assert.equal(currencyFromHeader("Rs_Value")?.code, "LKR");
+});
+
+test("currency is read from written amounts only when most of them agree", () => {
+  assert.equal(
+    currencyFromValues(["Rs. 1,250.00", "Rs. 300", "Rs 40"])?.code,
+    "LKR",
+  );
+  assert.equal(currencyFromValues(["$12.50", "$3"])?.code, "USD");
+  assert.equal(currencyFromValues(["1,200 LKR", "500 LKR"])?.code, "LKR");
+  assert.equal(currencyFromValues([10, 20, 30]), undefined);
+  assert.equal(currencyFromValues(["North", "South", "Rs 10"]), undefined);
+});
+
+test("money headers are told apart from counts and codes", () => {
+  for (const header of ["Sales", "Total Cost", "Net Profit", "Unit Price", "Amount (LKR)"])
+    assert.ok(isMoneyHeader(header), header);
+  for (const header of ["Qty", "Order Count", "Units Sold", "Rate %", "Invoice No"])
+    assert.ok(!isMoneyHeader(header), header);
+});
+
+test("inferCurrency prefers the cells' own format and keeps it", () => {
+  const guess = inferCurrency({
+    headers: ["Region", "Sales", "Cost"],
+    columns: [1, 2],
+    numberFormats: ["General", "[$LKR] #,##0.00", "General"],
+    request: "dashboard in dollars",
+  });
+  assert.equal(guess?.code, "LKR");
+  assert.equal(guess?.source, "number-format");
+  assert.equal(guess?.numberFormat, "[$LKR] #,##0.00");
+});
+
+test("inferCurrency falls back to the request only for money columns", () => {
+  const money = inferCurrency({
+    headers: ["Region", "Sales"],
+    columns: [1],
+    request: "sales dashboard in rupees for management",
+  });
+  assert.equal(money?.code, "LKR");
+  assert.equal(money?.source, "request");
+  assert.equal(money?.numberFormat, '"Rs "#,##0.00');
+  const quantity = inferCurrency({
+    headers: ["Region", "Qty"],
+    columns: [1],
+    request: "qty dashboard in rupees",
+  });
+  assert.equal(quantity, undefined);
+});
+
+test("two currencies in the money columns are reported as mixed and not formatted", () => {
+  const guess = inferCurrency({
+    headers: ["Region", "Sales (LKR)", "Sales (USD)"],
+    columns: [1, 2],
+  });
+  assert.deepEqual(guess?.mixed, ["LKR", "USD"]);
+  assert.equal(guess?.numberFormat, "#,##0.00");
+});
+
+test("the audience is read from the request in English and Sinhala", () => {
+  assert.equal(
+    inferAudience("Make a one-page sales summary for management"),
+    "management",
+  );
+  assert.equal(
+    inferAudience("daily tracking sheet so the team can follow up each pending job"),
+    "operational",
+  );
+  assert.equal(inferAudience("කළමනාකරණයට සාරාංශ dashboard එකක්"), "management");
+  assert.equal(inferAudience("දෛනික විස්තර වාර්තාවක්"), "operational");
+  assert.equal(inferAudience("make a dashboard of Sales by Region"), "general");
+});
+
+test("targets are read with their multiplier and bound to the named column", () => {
+  const headers = ["Region", "Sales", "Cost"];
+  assert.deepEqual(parseBusinessTarget("dashboard, target 5M", headers, [1, 2]), {
+    value: 5_000_000,
+    label: "target",
+  });
+  assert.deepEqual(
+    parseBusinessTarget("Cost budget is Rs 2,500,000 this year", headers, [1, 2]),
+    { value: 2_500_000, label: "budget", column: 2 },
+  );
+  assert.equal(
+    parseBusinessTarget("sales target of 12.5 lakh", headers, [1, 2])?.value,
+    1_250_000,
+  );
+  assert.equal(parseBusinessTarget("ඉලක්කය 500000", headers, [1])?.value, 500_000);
+  assert.equal(parseBusinessTarget("top 10 regions by sales", headers, [1]), undefined);
+  assert.equal(parseBusinessTarget("target for 2026 by region", headers, [1]), undefined);
+});
+
+test("the transaction ID is found as the business key and its repeats are counted", () => {
+  const headers = ["Date", "Customer ID", "Transaction ID", "Amount"];
+  const rows = [
+    [45700, "C1", "T-1001", 100],
+    [45700, "C1", "T-1002", 250],
+    [45701, "C2", "T-1003", 80],
+    [45701, "C3", "T-1003", 80],
+    [45702, "C2", "T-1004", 120],
+    [45702, "C1", "T-1005", 60],
+  ];
+  const key = detectBusinessKey(headers, rows);
+  assert.deepEqual(key?.columns, [2]);
+  assert.deepEqual(key?.names, ["Transaction ID"]);
+  assert.equal(key?.duplicateKeys, 1);
+  assert.equal(key?.duplicateRows, 1);
+  assert.match(describeBusinessKey(key!), /Transaction ID value\(s\) appear on more than one row/);
+});
+
+test("a key is found by its values when the header gives no hint", () => {
+  const headers = ["Ref", "Region", "Sales"];
+  const rows = Array.from({ length: 20 }, (_, index) => [
+    `A${1000 + index}`,
+    index % 2 ? "North" : "South",
+    index * 10,
+  ]);
+  const key = detectBusinessKey(headers, rows);
+  assert.deepEqual(key?.columns, [0]);
+  assert.equal(key?.duplicateKeys, 0);
+  assert.match(describeBusinessKey(key!), /No Ref value is repeated/);
+});
+
+test("customer, product and name columns are never taken as the business key", () => {
+  const headers = ["Customer ID", "Product Code", "Customer Name", "Qty"];
+  const rows = Array.from({ length: 10 }, (_, index) => [
+    `C${index}`,
+    `P${index}`,
+    `Person ${index}`,
+    index + 1,
+  ]);
+  assert.equal(detectBusinessKey(headers, rows), undefined);
+});
+
+test("invoice lines use invoice number plus line number as the key", () => {
+  const headers = ["Invoice No", "Line No", "Item", "Amount"];
+  const rows = [
+    ["INV-1", 1, "A", 10],
+    ["INV-1", 2, "B", 20],
+    ["INV-2", 1, "A", 10],
+    ["INV-3", 1, "C", 5],
+    ["INV-3", 2, "A", 10],
+    ["INV-3", 2, "A", 10],
+  ];
+  const key = detectBusinessKey(headers, rows);
+  assert.deepEqual(key?.names, ["Invoice No", "Line No"]);
+  assert.equal(key?.duplicateRows, 1);
+  assert.deepEqual(countDuplicateKeys(rows, [0]), {
+    duplicateKeys: 2,
+    duplicateRows: 3,
+    blankKeys: 0,
+  });
+});
+
+test("dates, amounts and free text are never keys", () => {
+  const headers = ["Order Date", "Amount", "Description"];
+  const rows = Array.from({ length: 10 }, (_, index) => [
+    45700 + index,
+    index + 0.5,
+    `a long text number ${index}`,
+  ]);
+  assert.equal(detectBusinessKey(headers, rows), undefined);
+});

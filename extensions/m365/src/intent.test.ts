@@ -286,3 +286,34 @@ test("delete or remove rows where ... is a copy without them, never only those r
   // Removing duplicates is a clean-up, not a row test.
   assert.deepEqual(run("remove duplicate rows").actions, ["clean"]);
 });
+
+test("duplicate checks with no column named use the business key", () => {
+  const headers = ["Date", "Customer", "Transaction ID", "Amount"];
+  const rows: any[][] = [
+    [45700, "Kamal", "T-1", 100],
+    [45700, "Kamal", "T-2", 250],
+    [45701, "Nimal", "T-2", 250],
+    [45701, "Sunil", "T-3", 80],
+    [45702, "Kamal", "T-4", 120],
+  ];
+  for (const request of [
+    "find duplicate transactions",
+    "check for double entries",
+    "highlight duplicates",
+  ]) {
+    const result: any = interpretInstruction(request, headers, rows);
+    assert.ok(result.actions.includes("view"), request);
+    assert.deepEqual(
+      result.specs.view.highlight,
+      { column: 2, rule: "duplicates" },
+      request,
+    );
+  }
+  // A named column still wins over the key.
+  const named: any = interpretInstruction(
+    "highlight duplicates in Customer",
+    headers,
+    rows,
+  );
+  assert.equal(named.specs.view.highlight.column, 1);
+});

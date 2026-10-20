@@ -2219,6 +2219,8 @@ apply?.addEventListener("click", async () => {
             supportsExcelApi,
             requirements: ACTION_REQUIREMENTS,
             aggregateCharts: followUpAggregate,
+            // Read locally for a dashboard's audience, target and currency; never sent anywhere.
+            request: lastConversationRequest || instruction?.value?.trim() || "",
             onProgress: (completed, total) =>
               setStatus(`Writing result rows: ${completed}/${total}...`),
             onAction: (result) =>
@@ -2320,6 +2322,9 @@ apply?.addEventListener("click", async () => {
       ),
     );
     if (!failed.length) lastAppliedSpecs = previewSpecs;
+    // How a result was built (a fallback, a feature this Excel lacks), so nothing differs silently.
+    const buildNotes = report.results.flatMap((result) => result.notes ?? []);
+    if (buildNotes.length) renderConversation("assistant", buildNotes.join(" "));
     document.querySelector<HTMLElement>("#cleanup")?.removeAttribute("hidden");
     document
       .querySelectorAll<HTMLElement>("#outcomes .where")

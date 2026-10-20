@@ -502,3 +502,25 @@ test("the quality report does not flag leading-zero codes as numbers stored as t
   );
   assert.match(plain.findings.join("\n"), /stored as text/);
 });
+
+test("the quality report checks the business key, not only whole rows", () => {
+  // T-2 was entered twice with a different date, so no whole row repeats.
+  const report = buildQualityReport(
+    ["Txn ID", "Date", "Amount"],
+    [
+      ["T-1", "2026-01-01", 100],
+      ["T-2", "2026-01-01", 200],
+      ["T-2", "2026-01-02", 200],
+      ["T-3", "2026-01-02", 50],
+      ["T-4", "2026-01-03", 75],
+    ],
+  );
+  const text = report.findings.join("\n");
+  assert.doesNotMatch(text, /duplicate row\(s\) found/);
+  assert.match(text, /Txn ID: 1 value\(s\) are used on more than one row \(1 extra row\(s\)\)/);
+  assert.deepEqual(report.businessKey?.names, ["Txn ID"]);
+  const keyRow = report.values.find((row) => row[0] === "Business key");
+  assert.deepEqual(keyRow, ["Business key", "Txn ID"]);
+  // The column table stays where the writer bolds it.
+  assert.equal(report.values[report.headerRow][0], "Column");
+});

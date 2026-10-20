@@ -1,3 +1,4 @@
+import { detectBusinessKey } from "./businessContext.js";
 import { parseExpression } from "./expression.js";
 import {
   CLEAN_OPERATIONS,
@@ -1797,8 +1798,20 @@ function interpretView(
     /\b(?:show|display)\s+duplicates?\s+(.+?)(?:\s+values?)?(?:[.,]|$)/i.exec(
       text,
     );
-  if (dup || shownDup) {
-    const column = header(dup?.[1] ?? shownDup?.[1] ?? "");
+  // "find duplicate transactions", "check for double entries": no column named, so the business key.
+  const keyDup =
+    !dup &&
+    !shownDup &&
+    /\b(?:find|check|detect|flag|spot|show|list|highlight|mark)\b[^.\n]{0,40}\b(?:duplicat(?:e|es|ed)|double\s+entr(?:y|ies)|repeated)\b/i.test(
+      text,
+    ) &&
+    !/\b(?:remove|delete|drop|dedup\w*|clean)\b/i.test(text);
+  if (dup || shownDup || keyDup) {
+    let column = header(dup?.[1] ?? shownDup?.[1] ?? "");
+    if (column < 0) {
+      const key = detectBusinessKey(headers, rows);
+      if (key && key.columns.length === 1) column = key.columns[0];
+    }
     if (column >= 0) view.highlight = { column, rule: "duplicates" };
   }
   // "delete / remove the rows where ...": the original is never changed, so the safe reading is a copy WITHOUT them.
@@ -2351,7 +2364,11 @@ function interpretFormatAndQuality(
       });
   }
   if (/\bhighlight\s+(?:the\s+)?duplicates?/i.test(text)) {
-    const targets = mentionedLabel.length ? mentionedLabel : mentionedNumeric;
+    let targets = mentionedLabel.length ? mentionedLabel : mentionedNumeric;
+    if (!targets.length) {
+      const key = detectBusinessKey(headers, rows);
+      if (key && key.columns.length === 1) targets = [key.columns[0]];
+    }
     for (const column of targets.slice(0, 2))
       conditional.push({ column, rule: "duplicates" });
   }

@@ -11,6 +11,11 @@ on:
         description: "PR number to test with"
         required: true
 
+# A newer push to the same PR or branch cancels the older run, so the queue never backs up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   republish-pr-artifacts:
     runs-on: ubuntu-latest

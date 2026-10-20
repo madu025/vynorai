@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 /**
  * VynorAI High-Precision Codebase Symbol Graph Indexer (Headless CLI)
  * ──────────────────────────────────────────────────────────────────
@@ -11,7 +12,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
+
 import ts from "typescript";
 
 export type SymbolKind =
@@ -97,6 +98,7 @@ export function extractSymbolsFromTsJs(
 
   let currentEnclosingSymbol: string | null = null;
 
+  // eslint-disable-next-line max-statements
   function visit(node: ts.Node) {
     let symName: string | null = null;
     let symKind: SymbolKind | null = null;

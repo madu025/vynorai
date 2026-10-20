@@ -1,16 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { validateCodeSyntax } from "../syntaxValidator.js";
+
 import {
   CodebaseIndexer,
   extractSymbolsFromTsJs,
   buildCallGraph,
   CodeSymbol,
 } from "../codebaseIndexer.js";
+import { HeadlessGoalRunner } from "../goalRunner.js";
+import { validateCodeSyntax } from "../syntaxValidator.js";
 import {
   parseTerminalDiagnostics,
   generateHeuristicFix,
 } from "../terminalSelfHealer.js";
-import { HeadlessGoalRunner } from "../goalRunner.js";
 
 describe("Headless Syntax Validator", () => {
   it("should validate correct TypeScript code", () => {

@@ -8,6 +8,7 @@
  */
 
 import path from "node:path";
+
 import ts from "typescript";
 
 export interface SyntaxValidationResult {

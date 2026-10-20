@@ -10,12 +10,12 @@
  */
 
 import chalk from "chalk";
+
 import {
   HeadlessGoalRunner,
   GoalStep,
   GoalReport,
 } from "../headless/goalRunner.js";
-import { logger } from "../util/logger.js";
 import { gracefulExit } from "../util/exit.js";
 
 export interface GoalCommandOptions {
@@ -77,7 +77,7 @@ export async function goalCommand(
     if (options.testCmd) {
       console.log(
         chalk.blue(
-          `🧪 Test Gate: "${options.testCmd}" (Auto-heal: ${options.heal !== false ? "ON" : "OFF"})`,
+          `🧪 Test Gate: "${options.testCmd}" (Auto-heal: ${options.heal === false ? "OFF" : "ON"})`,
         ),
       );
     }

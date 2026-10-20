@@ -7,6 +7,7 @@
  */
 
 import chalk from "chalk";
+
 import {
   runTerminalSelfHealing,
   HealingIteration,

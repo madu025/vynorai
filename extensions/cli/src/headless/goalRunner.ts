@@ -9,17 +9,17 @@
  *  5. Atomic merge / diff generation and morning briefing compilation
  */
 
+import { exec, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { exec, execSync } from "node:child_process";
 import { promisify } from "node:util";
-import { CodebaseIndexer, SearchResult } from "./codebaseIndexer.js";
+
+import { CodebaseIndexer } from "./codebaseIndexer.js";
+import { validateCodeSyntax } from "./syntaxValidator.js";
 import {
   runTerminalSelfHealing,
   SelfHealingResult,
 } from "./terminalSelfHealer.js";
-import { validateCodeSyntax } from "./syntaxValidator.js";
 
 const execAsync = promisify(exec);
 
@@ -187,6 +187,7 @@ export class HeadlessGoalRunner {
     return step;
   }
 
+  // eslint-disable-next-line max-statements
   public async run(): Promise<GoalReport> {
     const t0 = performance.now();
     const goalId =

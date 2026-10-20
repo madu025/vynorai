@@ -7,10 +7,11 @@
  * performs pre-flight syntax validation, and loops until exit code 0.
  */
 
+import { exec } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { exec } from "node:child_process";
 import { promisify } from "node:util";
+
 import { validateCodeSyntax } from "./syntaxValidator.js";
 
 const execAsync = promisify(exec);
@@ -101,7 +102,7 @@ export async function executeTerminalCommand(
 
 export function parseTerminalDiagnostics(
   output: string,
-  cwd: string = process.cwd(),
+  _cwd: string = process.cwd(),
 ): ParsedDiagnostic[] {
   const diagnostics: ParsedDiagnostic[] = [];
   const lines = output.split("\n");
@@ -258,12 +259,13 @@ export function generateHeuristicFix(
       if (diagnostic.line) {
         const lines = fileContent.split("\n");
         const idx = diagnostic.line - 1;
-        if (idx >= 0 && idx < lines.length) {
-          const targetLine = lines[idx];
-          if (targetLine.includes(expectedVal)) {
-            lines[idx] = targetLine.replace(expectedVal, actualVal);
-            return lines.join("\n");
-          }
+        if (
+          idx >= 0 &&
+          idx < lines.length &&
+          lines[idx].includes(expectedVal)
+        ) {
+          lines[idx] = lines[idx].replace(expectedVal, actualVal);
+          return lines.join("\n");
         }
       }
     }
@@ -296,6 +298,7 @@ export function generateHeuristicFix(
 
 // ─── Autonomous Self-Healing Loop ────────────────────────────────────────────
 
+// eslint-disable-next-line max-statements
 export async function runTerminalSelfHealing(options: {
   command: string;
   cwd?: string;
@@ -379,7 +382,7 @@ export async function runTerminalSelfHealing(options: {
 
     // 4. Locate target file to repair
     const primaryDiag = diagnostics.find((d) => d.filePath) || diagnostics[0];
-    let targetFilePath = primaryDiag?.filePath
+    const targetFilePath = primaryDiag?.filePath
       ? path.resolve(cwd, primaryDiag.filePath)
       : undefined;
 
@@ -394,17 +397,18 @@ export async function runTerminalSelfHealing(options: {
 
       const candidateFix = generateHeuristicFix(primaryDiag, currentContent);
 
-      if (candidateFix && candidateFix !== currentContent) {
-        // Pre-flight AST syntax check
-        const syntaxCheck = validateCodeSyntax(targetFilePath, candidateFix);
-        if (syntaxCheck.valid) {
-          syntaxValid = true;
-          patchApplied = `Applied repair for ${primaryDiag.errorCode || primaryDiag.category}`;
-          if (!virtual) {
-            fs.writeFileSync(targetFilePath, candidateFix, "utf-8");
-          }
-          modifiedFiles.add(targetFilePath);
+      // Pre-flight AST syntax check
+      if (
+        candidateFix &&
+        candidateFix !== currentContent &&
+        validateCodeSyntax(targetFilePath, candidateFix).valid
+      ) {
+        syntaxValid = true;
+        patchApplied = `Applied repair for ${primaryDiag.errorCode || primaryDiag.category}`;
+        if (!virtual) {
+          fs.writeFileSync(targetFilePath, candidateFix, "utf-8");
         }
+        modifiedFiles.add(targetFilePath);
       }
     }
 
@@ -434,8 +438,8 @@ export async function runTerminalSelfHealing(options: {
     modifiedFiles: Array.from(modifiedFiles),
     totalDurationMs: Math.round(performance.now() - tStart),
     error:
-      finalExitCode !== 0
-        ? "Autonomous terminal self-healing could not achieve exit code 0"
-        : undefined,
+      finalExitCode === 0
+        ? undefined
+        : "Autonomous terminal self-healing could not achieve exit code 0",
   };
 }

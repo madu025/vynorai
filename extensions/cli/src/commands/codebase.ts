@@ -6,6 +6,7 @@
  */
 
 import chalk from "chalk";
+
 import {
   CodebaseIndexer,
   SearchResult,
@@ -151,13 +152,7 @@ export async function codebaseSymbolCommand(
   if (options.json) {
     console.log(JSON.stringify(sym || null, null, 2));
   } else {
-    if (!sym) {
-      console.log(
-        chalk.yellow(
-          `\nSymbol "${symbolName}" was not found in the codebase AST.`,
-        ),
-      );
-    } else {
+    if (sym) {
       console.log(chalk.bold.cyan(`\n⚡ Symbol Details: ${sym.name}`));
       console.log(
         chalk.gray(
@@ -177,6 +172,12 @@ export async function codebaseSymbolCommand(
         console.log(` • Callers:     ${sym.callers.join(", ")}`);
       }
       console.log("");
+    } else {
+      console.log(
+        chalk.yellow(
+          `\nSymbol "${symbolName}" was not found in the codebase AST.`,
+        ),
+      );
     }
   }
 

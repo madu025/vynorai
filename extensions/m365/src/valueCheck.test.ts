@@ -52,3 +52,19 @@ test("the notice names the column and says how to fix it", () => {
     undefined,
   );
 });
+
+test("cleanFirstInstruction puts a clean step in front and the reader plans clean then pivot", async () => {
+  const { cleanFirstInstruction } = await import("./valueCheck.js");
+  const { interpretInstruction } = await import("./intent.js");
+  const text = cleanFirstInstruction("Pivot total Net Amount by Region.");
+  assert.equal(text, "clean the data, then pivot total Net Amount by Region");
+  const result: any = interpretInstruction(
+    text,
+    ["Order No", "Region", "Net Amount"],
+    [["001", "North", 5]] as any,
+  );
+  assert.ok(result.actions.includes("clean"));
+  assert.ok(result.actions.includes("pivot-table"));
+  assert.equal(cleanFirstInstruction("clean the data"), "clean the data");
+  assert.equal(cleanFirstInstruction("  "), "");
+});

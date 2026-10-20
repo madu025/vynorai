@@ -50,7 +50,7 @@ import {
   looksLikeQuestion,
 } from "./intent.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
-import { describeNearDuplicates } from "./valueCheck.js";
+import { cleanFirstInstruction, describeNearDuplicates } from "./valueCheck.js";
 import { describeIntegrityIssues } from "./integrity.js";
 import {
   detectMacroRequest,
@@ -166,6 +166,9 @@ const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
+const dupFix = document.querySelector<HTMLElement>("#dup-fix");
+const dupFixButton = document.querySelector<HTMLButtonElement>("#dup-fix-btn");
+let cleanFirstRequest = "";
 const cancelPreviewButton =
   document.querySelector<HTMLButtonElement>("#cancel-preview");
 const analyze = document.querySelector<HTMLButtonElement>("#analyze");
@@ -1586,8 +1589,16 @@ instruction?.addEventListener("input", () => {
   currentPlan = undefined;
   previewFingerprint = "";
   lastConversationRequest = "";
+  if (dupFix) dupFix.hidden = true;
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
+});
+
+dupFixButton?.addEventListener("click", () => {
+  if (!instruction || !cleanFirstRequest) return;
+  instruction.value = cleanFirstRequest;
+  if (dupFix) dupFix.hidden = true;
+  inspect?.click();
 });
 
 inspect?.addEventListener("click", async () => {
@@ -1607,6 +1618,8 @@ inspect?.addEventListener("click", async () => {
   };
   if (apply) apply.disabled = true;
   currentPlan = undefined;
+  if (dupFix) dupFix.hidden = true;
+  cleanFirstRequest = "";
   const instructionText = normalizeInstruction(instruction?.value || "");
   if (instructionText && instructionText !== lastConversationRequest) {
     renderConversation("user", instruction?.value?.trim() || instructionText);
@@ -1989,6 +2002,9 @@ inspect?.addEventListener("click", async () => {
     if (nearDuplicateNotice) {
       log.record("instruction:near-duplicates", "fail", nearDuplicateNotice);
       renderConversation("assistant", nearDuplicateNotice);
+      // One click re-plans the same request with a clean step in front; nothing is changed until Confirm.
+      cleanFirstRequest = cleanFirstInstruction(instructionText);
+      if (dupFix && cleanFirstRequest) dupFix.hidden = false;
     }
     const localPreview = await log.step(
       "local:preview",

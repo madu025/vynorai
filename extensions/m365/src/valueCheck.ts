@@ -66,3 +66,11 @@ export function describeNearDuplicates(
   });
   return `${parts.join("; ")}. Clean the data first (trim extra spaces) to combine them.`;
 }
+
+/** The same request with a clean step in front, so grouping steps read the cleaned copy. */
+export function cleanFirstInstruction(text: string): string {
+  const request = text.trim().replace(/[.!?]+$/, "");
+  if (!request) return "";
+  if (/^clean\b/i.test(request)) return request;
+  return `clean the data, then ${request.charAt(0).toLowerCase()}${request.slice(1)}`;
+}

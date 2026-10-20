@@ -74,6 +74,8 @@ export interface UsageResult {
 }
 
 interface EntityRecord {
+  /** First spelling seen, shown in the tables. */
+  name: string;
   items: Set<string>;
   byUnit: Map<string, number>;
 }
@@ -83,6 +85,8 @@ export class UsageAccumulator {
   private readonly items = new Set<string>();
   private readonly unitTotals = new Map<string, number>();
   private readonly unitRaw = new Map<string, Map<string, number>>();
+  /** Spellings that differ only in case or surrounding spaces are one entity, item or unit (as in Excel). */
+  private readonly unitLabels = new Map<string, string>();
   private lines = 0;
   private skipped = 0;
 
@@ -108,19 +112,32 @@ export class UsageAccumulator {
       this.skipped += 1;
       return;
     }
-    const { label, factor } = normalizeUnit(unit);
+    const normalized = normalizeUnit(unit);
+    const factor = normalized.factor;
+    const unitKey = normalized.label.toLowerCase();
+    const label = this.unitLabels.get(unitKey) ?? normalized.label;
+    this.unitLabels.set(unitKey, label);
     const converted = amount * factor;
-    let record = this.entities.get(entityText);
+    const entityKey = entityText.toLowerCase();
+    let record = this.entities.get(entityKey);
     if (!record) {
-      record = { items: new Set(), byUnit: new Map() };
-      this.entities.set(entityText, record);
+      record = { name: entityText, items: new Set(), byUnit: new Map() };
+      this.entities.set(entityKey, record);
     }
-    record.items.add(itemText);
+    const itemKey = itemText.toLowerCase();
+    record.items.add(itemKey);
     record.byUnit.set(label, (record.byUnit.get(label) ?? 0) + converted);
-    this.items.add(itemText);
+    this.items.add(itemKey);
     this.unitTotals.set(label, (this.unitTotals.get(label) ?? 0) + converted);
     const raws = this.unitRaw.get(label) ?? new Map<string, number>();
-    raws.set(String(unit ?? "").trim(), factor);
+    const rawText = String(unit ?? "").trim();
+    // One entry per spelling ignoring case, because the sheet formulas compare without case.
+    if (
+      ![...raws.keys()].some(
+        (known) => known.toLowerCase() === rawText.toLowerCase(),
+      )
+    )
+      raws.set(rawText, factor);
     this.unitRaw.set(label, raws);
     this.lines += 1;
   }
@@ -139,8 +156,8 @@ export class UsageAccumulator {
     for (const { label } of units) {
       topByUnit[label] = [...this.entities.entries()]
         .filter(([, record]) => record.byUnit.has(label))
-        .map(([entity, record]) => ({
-          entity,
+        .map(([, record]) => ({
+          entity: record.name,
           quantity: round(record.byUnit.get(label) ?? 0),
           items: record.items.size,
         }))
@@ -150,7 +167,7 @@ export class UsageAccumulator {
         .slice(0, topN);
     }
     const topByItems = [...this.entities.entries()]
-      .map(([entity, record]) => ({ entity, items: record.items.size }))
+      .map(([, record]) => ({ entity: record.name, items: record.items.size }))
       .sort((a, b) => b.items - a.items || a.entity.localeCompare(b.entity))
       .slice(0, topN);
     return {

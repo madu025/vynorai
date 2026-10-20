@@ -74,6 +74,9 @@ export function usageColumnLetter(index: number): string {
 const quote = (text: string) => `"${text.replace(/"/g, '""')}"`;
 
 /** A live total for one unit group: each raw spelling is filtered and scaled on its own. */
+/** Excel compares without case; TRIM makes the live formulas agree with the trimmed snapshot tables. */
+const trimmed = (range: string) => `TRIM(${range})`;
+
 function unitTotalFormula(
   refs: LayoutRefs,
   group: UnitGroup | undefined,
@@ -85,7 +88,7 @@ function unitTotalFormula(
       : `=SUM(${refs.quantity})`;
   }
   const parts = group.raw.map((entry) => {
-    const test = `(${refs.unit}=${quote(entry.text)})`;
+    const test = `(${trimmed(refs.unit as string)}=${quote(entry.text)})`;
     const condition = scope ? `(${scope})*${test}` : test;
     const sum = `SUM(FILTER(${refs.quantity},${condition}))`;
     return entry.factor === 1 ? sum : `${entry.factor}*${sum}`;
@@ -127,11 +130,11 @@ export function buildUsageLayout(
   const kpis: Array<{ label: string; formula: string }> = [
     {
       label: `${entityLabel}s`.toUpperCase(),
-      formula: `=COUNTA(UNIQUE(FILTER(${refs.entity},${refs.entity}<>"")))`,
+      formula: `=COUNTA(UNIQUE(TRIM(FILTER(${refs.entity},TRIM(${refs.entity})<>""))))`,
     },
     {
       label: `DISTINCT ${itemLabel}s`.toUpperCase(),
-      formula: `=COUNTA(UNIQUE(FILTER(${refs.item},${refs.item}<>"")))`,
+      formula: `=COUNTA(UNIQUE(TRIM(FILTER(${refs.item},TRIM(${refs.item})<>""))))`,
     },
     ...unitBlocks.map((group) => ({
       label: `${refs.quantityName} (${group.label})`.toUpperCase(),
@@ -183,11 +186,11 @@ export function buildUsageLayout(
     style: "input",
     text: true,
   });
-  const scope = `${refs.entity}=$B$8`;
+  const scope = `${trimmed(refs.entity)}=TRIM($B$8)`;
   const lookups: Array<{ label: string; formula: string; format: string }> = [
     {
       label: `${itemLabel}s`,
-      formula: `=IFERROR(COUNTA(UNIQUE(FILTER(${refs.item},${scope}))),0)`,
+      formula: `=IFERROR(COUNTA(UNIQUE(TRIM(FILTER(${refs.item},${scope})))),0)`,
       format: "#,##0",
     },
     ...unitBlocks.map((group) => ({
@@ -197,7 +200,7 @@ export function buildUsageLayout(
     })),
     {
       label: "Lines",
-      formula: `=COUNTIFS(${refs.entity},$B$8)`,
+      formula: `=IFERROR(ROWS(FILTER(${refs.entity},${scope})),0)`,
       format: "#,##0",
     },
   ];

@@ -3191,7 +3191,7 @@ function setupLayout() {
     if (
       menu &&
       !menu.hidden &&
-      !(event.target as HTMLElement).closest("header")
+      !(event.target as HTMLElement).closest("#status")
     )
       closeMenu();
   });

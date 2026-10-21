@@ -275,6 +275,41 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     true,
     "the pane has horizontal overflow",
   );
+  assert.equal(
+    await page.evaluate(() => {
+      const composer = document
+        .querySelector(".composer")
+        ?.getBoundingClientRect();
+      const area = document
+        .querySelector("#scroll-area")
+        ?.getBoundingClientRect();
+      return Boolean(composer && area && composer.top < area.top);
+    }),
+    true,
+    "the request composer must be above the scrollable workspace",
+  );
+  await page.click("#menu-toggle");
+  await page.waitForSelector("#menu:not([hidden])");
+  const menuLayout = await page.evaluate(() => {
+    const menu = document.querySelector("#menu")?.getBoundingClientRect();
+    const composer = document
+      .querySelector(".composer")
+      ?.getBoundingClientRect();
+    return {
+      menuTop: menu?.top,
+      menuBottom: menu?.bottom,
+      composerTop: composer?.top,
+      composerBottom: composer?.bottom,
+      correct: Boolean(menu && composer && menu.bottom <= composer.top),
+    };
+  });
+  assert.equal(
+    menuLayout.correct,
+    true,
+    `the open menu must push the pane down instead of covering the prompt: ${JSON.stringify(menuLayout)}`,
+  );
+  await assertReachable(page, "#language");
+  await page.click("#menu-toggle");
   for (const selector of [
     "#menu-toggle",
     "#refresh-context",
@@ -285,14 +320,41 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   ]) {
     await assertReachable(page, selector);
   }
-  await page.click("#menu-toggle");
-  await page.waitForSelector("#menu:not([hidden])");
-  await assertReachable(page, "#language");
-  await page.click("#menu-toggle");
   await page.click("#refresh-context");
   await page.waitForSelector('#context-suggestion-list[data-count="3"]');
+  if (viewport.width <= 360) {
+    assert.equal(
+      await page.$eval("#context-suggestion-list", (element) => {
+        const columns = getComputedStyle(element).gridTemplateColumns.trim();
+        return columns.split(/\s+/).length === 1;
+      }),
+      true,
+      "compact panes must show contextual suggestions in one column",
+    );
+  }
+  await page.$eval("#scroll-area", (area) => {
+    area.scrollTop = 0;
+  });
   await page.screenshot({
     path: path.join(artifactDirectory, `taskpane-${label}.png`),
+    fullPage: true,
+  });
+  await page.$eval("#prefs-card", (details) => {
+    details.setAttribute("open", "");
+    details.scrollIntoView({ block: "center" });
+  });
+  await assertReachable(page, "#prefs-currency");
+  assert.equal(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    ),
+    true,
+    "the workbook settings have horizontal overflow",
+  );
+  await page.screenshot({
+    path: path.join(artifactDirectory, `taskpane-${label}-settings.png`),
     fullPage: true,
   });
   assert.deepEqual(
@@ -314,6 +376,12 @@ const browser = await puppeteer.launch({
 });
 
 try {
+  await verifyViewport(
+    browser,
+    baseUrl,
+    { width: 320, height: 780, deviceScaleFactor: 1 },
+    "compact",
+  );
   await verifyViewport(
     browser,
     baseUrl,

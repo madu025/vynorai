@@ -91,75 +91,97 @@ test("the pane's grids cannot be stretched past the pane by long unbroken text",
 test("the pane avoids duplicating the Office title bar and keeps its app menu reachable", () => {
   assert.match(
     html,
-    /font: 13px\/1\.45 -apple-system, BlinkMacSystemFont, "SF Pro Text"/,
+    /font:\s*13px\/1\.45 -apple-system,\s*BlinkMacSystemFont,\s*"SF Pro Text"/,
   );
   assert.match(html, /--surface-solid: #ffffff/);
   assert.match(html, /@supports \(backdrop-filter: blur\(1px\)\)/);
-  assert.match(html, /class="status-actions"><button id="menu-toggle"/);
   assert.match(
     html,
-    /id="more-pills"[^>]*data-i18n="more_suggestions">Show more<\/button>/,
+    /class="status-actions">[\s\S]*?<button[\s\S]*?id="menu-toggle"/,
   );
+  assert.match(html, /id="more-pills"/);
+  assert.match(html, /data-i18n="more_suggestions"/);
 });
 
-test("the chat scrolls above a request box that never covers it", () => {
+test("the prompt starts the pane and the workspace flows below it", () => {
   assert.match(
     html,
-    /body\[data-auth="in"\] main \{[^}]*height: 100dvh[^}]*overflow: hidden/,
+    /body\[data-auth="in"\] main\s*\{[^}]*height:\s*100dvh[^}]*overflow:\s*hidden/,
   );
-  assert.match(html, /\.scroll-area \{[^}]*overflow-y: auto/);
-  assert.match(html, /\.composer \{ position: relative;/);
-  // Every card and the chat are inside the scroll area; the composer is outside it.
+  assert.match(html, /\.scroll-area\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(html, /\.composer\s*\{[^}]*position:\s*relative/);
+  // The prompt stays above the scroll area; cards, chat and results flow below it.
   const area = html.indexOf('id="scroll-area"');
-  const composer = html.indexOf('<section class="composer"');
-  const conversation = html.indexOf('<section class="conversation"');
+  const composer = html.indexOf('class="composer"', html.indexOf("<body"));
+  const conversation = html.indexOf('class="conversation"', area);
   const agent = html.indexOf('id="agent-card"');
-  assert.ok(area > 0 && area < conversation && conversation < composer);
-  assert.ok(area < agent && agent < composer);
+  assert.ok(composer > 0 && composer < area && area < conversation);
+  assert.ok(area < agent);
 });
 
 test("selection context and suggestions appear before the conversation", () => {
   const area = html.indexOf('id="scroll-area"');
   const context = html.indexOf('id="workbook-context"');
   const suggestions = html.indexOf('id="context-suggestions"');
-  const conversation = html.indexOf('<section class="conversation"');
+  const conversation = html.indexOf('class="conversation"', area);
   assert.ok(
     area < context && context < suggestions && suggestions < conversation,
   );
-  assert.match(html, /\.smart-suggestion-list \{[^}]*minmax\(0, 1fr\)/);
+  assert.match(html, /\.smart-suggestion-list\s*\{[^}]*minmax\(0, 1fr\)/);
   assert.match(
     html,
-    /id="selection-guidance" class="selection-guidance" hidden/,
+    /id="selection-guidance"[\s\S]*?class="selection-guidance"[\s\S]*?hidden/,
   );
-  assert.match(html, /id="use-sheet-data" class="ghost"/);
-  assert.match(html, /id="starter-suggestions" class="suggestions"/);
-  assert.match(html, /\.chat-bar \{ position: sticky; top: 0;/);
+  assert.match(html, /id="use-sheet-data"[\s\S]*?class="ghost"/);
+  assert.match(html, /id="starter-suggestions"[\s\S]*?class="suggestions"/);
+  assert.match(html, /\.chat-bar\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/);
   assert.doesNotMatch(html, /<header class="topbar"/);
   assert.match(
     html,
-    /\.smart-suggestion-list \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/,
+    /\.smart-suggestion-list\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
   );
   assert.match(
     html,
-    /\.smart-suggestion-list\[data-count="1"\] \{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
+    /\.smart-suggestion-list\[data-count="1"\]\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
   );
   assert.match(
     html,
-    /\.smart-suggestion::before \{[^}]*content: attr\(data-icon\)/,
+    /@media \(max-width: 360px\)\s*\{[\s\S]*?\.smart-suggestion-list\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\)/,
+  );
+  assert.match(
+    html,
+    /\.smart-suggestion::before\s*\{[^}]*content:\s*attr\(data-icon\)/,
   );
 });
 
-test("Smart Run is the primary action and specialist controls remain available", () => {
-  assert.match(html, /id="run-mode"[\s\S]*id="smart-run" class="primary"/);
+test("narrow controls and workbook settings stack without overlap", () => {
+  assert.match(html, /#menu\s*\{[^}]*flex:\s*1 0 100%[^}]*width:\s*100%/);
+  assert.match(html, /\.chat-bar select\s*\{[^}]*flex-basis:\s*150px/);
   assert.match(
     html,
-    /<details class="more-tools">[\s\S]*id="analyze"[\s\S]*id="script-plan"[\s\S]*id="agent-run"[\s\S]*id="inspect"/,
+    /#prefs-card > label:not\(\.email-check\)\s*\{[^}]*display:\s*grid/,
+  );
+  assert.match(
+    html,
+    /#prefs-card > label:not\(\.email-check\) select\s*\{[^}]*width:\s*100%/,
+  );
+  assert.match(html, /#insights-list\s*\{[^}]*max-height:\s*280px/);
+});
+
+test("Smart Run is the primary action and specialist controls remain available", () => {
+  assert.match(
+    html,
+    /id="run-mode"[\s\S]*?id="smart-run"[\s\S]*?class="primary"/,
+  );
+  assert.match(
+    html,
+    /<details[\s\S]*?class="more-tools"[\s\S]*?id="analyze"[\s\S]*?id="script-plan"[\s\S]*?id="agent-run"[\s\S]*?id="inspect"/,
   );
 });
 
 test("preview impact and the agent approval timeline are visible structures", () => {
-  assert.match(html, /id="preview-impact" class="impact-grid"/);
-  assert.match(html, /id="agent-timeline" class="agent-timeline"/);
+  assert.match(html, /id="preview-impact"[\s\S]*?class="impact-grid"/);
+  assert.match(html, /id="agent-timeline"[\s\S]*?class="agent-timeline"/);
   for (const stage of [
     "inspect",
     "plan",
@@ -228,10 +250,13 @@ test("context suggestions are based on a bounded local schema sample, not a plac
 test("the agent workflow stays visibly staged rather than claiming an automatic apply", () => {
   assert.match(
     html,
-    /\.agent-timeline li::before \{[^}]*content: counter\(list-item\)/,
+    /\.agent-timeline li::before\s*\{[^}]*content:\s*counter\(list-item\)/,
   );
-  assert.match(html, /\.agent-timeline li\.done::before \{[^}]*content: "✓"/);
-  assert.match(html, /id="agent-approve" class="primary"[^>]*hidden/);
+  assert.match(
+    html,
+    /\.agent-timeline li\.done::before\s*\{[^}]*content:\s*"✓"/,
+  );
+  assert.match(html, /id="agent-approve"[\s\S]*?class="primary"[\s\S]*?hidden/);
 });
 
 test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {

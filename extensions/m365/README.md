@@ -51,10 +51,12 @@ to its logs. Small messages use direct send; larger attachments use a resumable 
 
 An Office add-in is a manifest plus a web app. Only the manifest is installed; everything the user sees
 (`taskpane.html`, `dist/taskpane.bundle.js`, `runtime-config.js`) is loaded from `https://vynor.lk/m365/` every time the
-task pane opens, and Caddy serves it with `Cache-Control: no-store`.
+task pane opens. Caddy serves it with `Cache-Control: no-store`, and `deploy/publish-m365.sh` gives every publish a
+unique asset query ID. Both safeguards prevent a reopened Excel WebView from using an earlier bundle.
 
 - **UI, logic, backend and styling changes:** publish the static files (see `deploy/publish-m365.sh`). Users get them the
-  next time they open the task pane. Nothing is downloaded or re-added.
+  next time they open the task pane; an already open pane must be closed and opened again because Office does not hot-reload
+  a running page. Nothing is downloaded or re-added.
 - **Manifest changes** (new host, permission, domain, icon, `SourceLocation`) are rare and are the only thing that needs a
   re-upload. Before uploading, run `npm run validate-manifests` in `extensions/m365` (Microsoft's validator, needs internet);
   `src/manifest.test.ts` checks the same structure offline. Bump `<Version>` in every manifest you change, or the admin

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  auditWorkbook,
   formatFormulaInspection,
   inspectFormulas,
   isFormulaExplanationRequest,
@@ -132,4 +133,65 @@ test("formula inspector refuses unsupported formula functions in repair advice",
     report.items[0].repair?.guidance ?? "",
     /outside the safe automatic repair subset/,
   );
+});
+
+test("the workbook audit adds up every sheet, lists the worst cells first and names skipped sheets", () => {
+  const summary = auditWorkbook(
+    [
+      inspectFormulas({
+        worksheetName: "Ops",
+        address: "Ops!A1:B4",
+        formulas: [
+          ["Qty", "Double"],
+          [1, "=A2*2"],
+          [2, "=A3*2"],
+          [3, "=A4*3"],
+        ],
+        values: [
+          ["Qty", "Double"],
+          [1, 2],
+          [2, 4],
+          [3, 9],
+        ],
+      }),
+      inspectFormulas({
+        worksheetName: "Sales",
+        address: "Sales!A1:B3",
+        formulas: [
+          ["Qty", "Total"],
+          [2, "=A2*10"],
+          [3, "=A3*10+1"],
+        ],
+        values: [
+          ["Qty", "Total"],
+          [2, 20],
+          [3, "#DIV/0!"],
+        ],
+      }),
+      inspectFormulas({
+        worksheetName: "Notes",
+        address: "Notes!A1:A2",
+        formulas: [["x"], ["y"]],
+        values: [["x"], ["y"]],
+      }),
+    ],
+    ["Raw Data (600,000 cells)"],
+  );
+  assert.equal(summary.sheetsChecked, 3);
+  assert.deepEqual(summary.skipped, ["Raw Data (600,000 cells)"]);
+  assert.equal(summary.totals.errors, 1);
+  assert.deepEqual(
+    summary.sheets.map((sheet) => sheet.sheet),
+    ["Sales", "Ops"],
+  );
+  assert.deepEqual(
+    summary.issues.map((issue) => issue.sheet),
+    ["Sales", "Ops"],
+  );
+  assert.equal(summary.issues[1].inconsistent, true);
+  const first = summary.issues[0];
+  assert.equal(first.sheet, "Sales");
+  assert.equal(first.cell, "B3");
+  assert.deepEqual(first.errors, ["#DIV/0!"]);
+  assert.ok(first.explanation.length > 0);
 });

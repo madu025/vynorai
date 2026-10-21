@@ -315,3 +315,91 @@ export function formatFormulaInspection(report: FormulaInspection): string {
   });
   return [header, ...details].join(" ");
 }
+
+export interface WorkbookAudit {
+  sheetsChecked: number;
+  /** Sheets not read, with the reason (too many cells, more sheets than the limit). */
+  skipped: string[];
+  totals: {
+    formulas: number;
+    errors: number;
+    possibleCircular: number;
+    inconsistent: number;
+    hardCoded: number;
+  };
+  /** Sheets with at least one problem, worst first. */
+  sheets: { sheet: string; errors: number; possibleCircular: number; inconsistent: number }[];
+  /** The worst cells across the workbook: errors, then circular references, then inconsistent copies. */
+  issues: {
+    sheet: string;
+    cell: string;
+    formula: string;
+    errors: string[];
+    circular?: true;
+    inconsistent?: true;
+    explanation: string;
+    repair?: string;
+  }[];
+}
+
+/** Adds up per-sheet inspections into one workbook audit with at most `limit` cells listed. */
+export function auditWorkbook(
+  reports: FormulaInspection[],
+  skipped: string[] = [],
+  limit = 40,
+): WorkbookAudit {
+  const weight = (item: FormulaInspectionItem) =>
+    (item.errors.length ? 4 : 0) +
+    (item.possibleCircularReference ? 2 : 0) +
+    (item.inconsistentFormula ? 1 : 0);
+  const sum = (pick: (report: FormulaInspection) => number) =>
+    reports.reduce((total, report) => total + pick(report), 0);
+  return {
+    sheetsChecked: reports.length,
+    skipped,
+    totals: {
+      formulas: sum((r) => r.formulaCellCount),
+      errors: sum((r) => r.errorCellCount),
+      possibleCircular: sum((r) => r.possibleCircularReferenceCount),
+      inconsistent: sum((r) => r.inconsistentFormulaCount),
+      hardCoded: sum((r) => r.hardCodedCellCount),
+    },
+    sheets: reports
+      .map((report) => ({
+        sheet: report.worksheetName,
+        errors: report.errorCellCount,
+        possibleCircular: report.possibleCircularReferenceCount,
+        inconsistent: report.inconsistentFormulaCount,
+      }))
+      .filter((s) => s.errors + s.possibleCircular + s.inconsistent > 0)
+      .sort(
+        (a, b) =>
+          b.errors * 4 + b.possibleCircular * 2 + b.inconsistent -
+          (a.errors * 4 + a.possibleCircular * 2 + a.inconsistent),
+      ),
+    issues: reports
+      .flatMap((report) =>
+        report.items
+          .filter((item) => weight(item) > 0)
+          .map((item) => ({ sheet: report.worksheetName, item })),
+      )
+      .sort((a, b) => weight(b.item) - weight(a.item))
+      .slice(0, limit)
+      .map(({ sheet, item }) => ({
+        sheet,
+        cell: item.address,
+        formula: item.formula,
+        errors: item.errors,
+        ...(item.possibleCircularReference ? { circular: true as const } : {}),
+        ...(item.inconsistentFormula ? { inconsistent: true as const } : {}),
+        explanation: item.explanation,
+        ...(item.repair
+          ? {
+              repair: item.repair.candidate
+                ? `${item.repair.guidance} Candidate: ${item.repair.candidate}`
+                : item.repair.guidance,
+            }
+          : {}),
+      })),
+  };
+}

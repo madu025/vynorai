@@ -230,7 +230,7 @@ export const AGENT_TOOLS = [
   ),
   fn(
     "get_details",
-    "Read-only: names, tables (with columns), charts, pivots (with fields), hidden sheets/columns, merged cells, comments, conditional_formats, validation, freeze, autofilter, precedents/dependents of one cell, protection, page_setup, formula_check (errors, possible circular references and inconsistent formulas of a range). Call it before changing an object so you use its real name.",
+    "Read-only: names, tables (with columns), charts, pivots (with fields), hidden sheets/columns, merged cells, comments, conditional_formats, validation, freeze, autofilter, precedents/dependents of one cell, protection, page_setup, formula_check (errors, possible circular references and inconsistent formulas of a range). formula_audit (every sheet of the workbook: error, circular and inconsistent-formula counts and the worst cells with plain explanations and repair candidates). Call it before changing an object so you use its real name.",
     {
       what: en(
         "names",
@@ -249,6 +249,7 @@ export const AGENT_TOOLS = [
         "protection",
         "page_setup",
         "formula_check",
+        "formula_audit",
       ),
       sheet: str("Optional sheet (default the active one)"),
       address: str("Optional range or cell"),

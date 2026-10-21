@@ -9,7 +9,7 @@ import { parseA1 } from "./agent.js";
 import { combineCells } from "./combineSheets.js";
 import { financialCells } from "./financialBuilders.js";
 import { whatIfRuns, whatIfTable } from "./whatIf.js";
-import { inspectFormulas } from "./formulaInspector.js";
+import { auditWorkbook, inspectFormulas } from "./formulaInspector.js";
 
 export type JournalEntry =
   | { type: "backup"; sheetId: string; backupId: string }
@@ -2138,6 +2138,41 @@ export async function readDetails(
             inconsistent: item.inconsistentFormula || undefined,
           })),
       };
+    }
+    case "formula_audit": {
+      // Every visible sheet, up to 20 sheets of at most 20,000 used cells each.
+      sheets.load("items/name,items/visibility");
+      await context.sync();
+      const visible = sheets.items.filter(
+        (item: any) => item.visibility === "Visible",
+      );
+      const skipped: string[] = visible
+        .slice(20)
+        .map((item: any) => `${item.name} (over the 20-sheet limit)`);
+      const reports = [];
+      for (const item of visible.slice(0, 20)) {
+        const used = item.getUsedRangeOrNullObject(true);
+        used.load(["isNullObject", "address", "cellCount"]);
+        await context.sync();
+        if (used.isNullObject) continue;
+        if (Number(used.cellCount) > 20_000) {
+          skipped.push(
+            `${item.name} (${Number(used.cellCount).toLocaleString("en-US")} cells; use formula_check with an address)`,
+          );
+          continue;
+        }
+        used.load(["formulas", "values"]);
+        await context.sync();
+        reports.push(
+          inspectFormulas({
+            worksheetName: String(item.name),
+            address: strip(used.address)!,
+            formulas: used.formulas,
+            values: used.values,
+          }),
+        );
+      }
+      return auditWorkbook(reports, skipped);
     }
     case "merged": {
       const range = address

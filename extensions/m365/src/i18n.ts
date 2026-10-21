@@ -23,6 +23,7 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     adjust_preview: "පෙරදසුන සකසන්න",
     steps_aria: "පියවර",
     agent_plan: "සැලසුම",
+    agent_sources: "මූලාශ්‍ර",
     request_change: "වැඩපොතේ වෙනසක් ඉල්ලන්න",
     new_chat: "+ නව කතාබහ",
     chat_history: "කතාබහ ඉතිහාසය",

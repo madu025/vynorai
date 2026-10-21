@@ -10,6 +10,7 @@ import {
   runAgent,
   coveredKinds,
   appliedReport,
+  answerSources,
   userContent,
   stageChange,
   type AgentHost,
@@ -565,4 +566,43 @@ test("a long request with the add-in's note still fits the backend's 4000-charac
   assert.equal(content.length, 4000);
   assert.ok(content.endsWith(`\n\n${note}`));
   assert.equal(userContent("y".repeat(5000), "").length, 4000);
+});
+
+test("answer sources list the ranges read and formulas computed, restored and without repeats", () => {
+  const mask = new PersonalMask();
+  const token = mask.mask("0112005016");
+  const messages: AgentMessage[] = [
+    { role: "user", content: "how many?" },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        call("1", "get_workbook", {}),
+        call("2", "read_range", { sheet: "Data", address: "A1:J50" }),
+        call("3", "calculate", {
+          formula: `=COUNTIF('Data'!J2:J520126,"${token}")`,
+        }),
+      ],
+    },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        call("4", "read_range", { sheet: "Data", address: "A1:J50" }),
+        call("5", "analyze_columns", {
+          kind: "anomalies",
+          sheet: "Data",
+          address: "A1:J520126",
+          columns: ["Qty"],
+        }),
+        call("6", "get_details", { what: "formula_audit" }),
+      ],
+    },
+  ];
+  assert.deepEqual(answerSources(messages, (text) => mask.unmask(text)), [
+    { kind: "range", sheet: "Data", address: "A1:J50" },
+    { kind: "formula", text: `=COUNTIF('Data'!J2:J520126,"0112005016")` },
+    { kind: "range", sheet: "Data", address: "A1:J520126", note: "anomalies" },
+    { kind: "check", text: "formula_audit" },
+  ]);
 });

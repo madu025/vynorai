@@ -927,6 +927,62 @@ async function runTool(
   }
 }
 
+export type AnswerSource =
+  | { kind: "range"; sheet: string; address: string; note?: string }
+  | { kind: "formula"; text: string }
+  | { kind: "check"; text: string };
+
+/**
+ * Where an answer came from, taken from the tool calls themselves (not from the model's words):
+ * ranges read or analysed, formulas Excel computed and workbook checks, first use first, no
+ * repeats, at most 10. `restore` puts personal data back for the person's own view.
+ */
+export function answerSources(
+  messages: AgentMessage[],
+  restore: (text: string) => string,
+): AnswerSource[] {
+  const sources: AnswerSource[] = [];
+  const seen = new Set<string>();
+  const add = (source: AnswerSource) => {
+    const key = JSON.stringify(source);
+    if (!seen.has(key) && sources.length < 10) {
+      seen.add(key);
+      sources.push(source);
+    }
+  };
+  for (const message of messages)
+    for (const call of (message.role === "assistant" && message.tool_calls) || []) {
+      let args: Record<string, unknown>;
+      try {
+        args = JSON.parse(call.function.arguments || "{}");
+      } catch {
+        continue;
+      }
+      const sheet = restore(String(args.sheet ?? ""));
+      switch (call.function.name) {
+        case "read_range":
+          add({ kind: "range", sheet, address: String(args.address ?? "") });
+          break;
+        case "analyze_columns":
+          add({
+            kind: "range",
+            sheet,
+            address: String(args.address ?? ""),
+            note: String(args.kind ?? ""),
+          });
+          break;
+        case "calculate":
+          add({ kind: "formula", text: restore(String(args.formula ?? "")) });
+          break;
+        case "get_details":
+          if (/^formula_(check|audit)$/.test(String(args.what)))
+            add({ kind: "check", text: String(args.what) });
+          break;
+      }
+    }
+  return sources;
+}
+
 /** The pane shows plain text: markdown marks (bold, code, headings) are removed. */
 export function plainText(text: string): string {
   return text

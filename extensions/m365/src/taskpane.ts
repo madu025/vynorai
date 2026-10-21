@@ -1,9 +1,11 @@
 import {
   PersonalMask,
+  answerSources,
   appliedReport,
   describeChange,
   runAgent,
   type AgentMessage,
+  type AnswerSource,
   type AgentPhase,
   type AgentRun,
 } from "./agent.js";
@@ -4071,6 +4073,48 @@ function showAgentPlan(steps: readonly string[]) {
   );
   show(agentPlan, steps.length > 0);
 }
+
+const agentSources = document.querySelector<HTMLElement>("#agent-sources");
+const agentSourcesList = document.querySelector<HTMLElement>(
+  "#agent-sources-list",
+);
+
+/** Where the answer came from; a range is a button that selects it in the workbook. */
+function showAgentSources(sources: readonly AnswerSource[]) {
+  if (!agentSources || !agentSourcesList) return;
+  agentSourcesList.replaceChildren(
+    ...sources.map((source) => {
+      const item = document.createElement("li");
+      if (source.kind !== "range") {
+        item.textContent =
+          source.kind === "formula"
+            ? `Excel computed ${source.text}`
+            : `Workbook check: ${source.text.replace(/_/g, " ")}`;
+        return item;
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "link";
+      button.textContent = `'${source.sheet}'!${source.address}${source.note ? ` (${source.note.replace(/_/g, " ")})` : ""}`;
+      button.addEventListener("click", () => {
+        void officeRuntime()
+          ?.run(async (context: any) => {
+            context.workbook.worksheets
+              .getItem(source.sheet)
+              .getRange(source.address)
+              .select();
+            await context.sync();
+          })
+          .catch((error: unknown) =>
+            log.record("agent:source", "fail", describeError(error)),
+          );
+      });
+      item.append(button);
+      return item;
+    }),
+  );
+  show(agentSources, sources.length > 0);
+}
 const agentReply = document.querySelector<HTMLElement>("#agent-reply");
 const agentChanges = document.querySelector<HTMLOListElement>("#agent-changes");
 const agentNote = document.querySelector<HTMLElement>("#agent-note");
@@ -4205,6 +4249,7 @@ async function agentLoop(request: string) {
   show(agentApprove, false);
   show(agentDiscard, false);
   showAgentPlan([]);
+  showAgentSources([]);
   if (agentBadge) agentBadge.textContent = "Working";
   const readInput = agentInputReader();
   const host = createOfficeAgentHost(
@@ -4282,6 +4327,9 @@ async function agentLoop(request: string) {
       });
     renderAgentRun(run);
     if (run.reply) renderConversation("assistant", run.reply);
+    showAgentSources(
+      answerSources(run.messages, (text) => agentMask.unmask(text)),
+    );
     const receipt = buildPrivacyReceipt(agentSentMessages);
     if (agentProgress)
       agentProgress.textContent = [

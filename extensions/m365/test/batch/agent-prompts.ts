@@ -865,6 +865,37 @@ const CASES: Case[] = [
       ),
   },
   {
+    id: "n-budget",
+    text: "treat Requested Quantity as the budget and Issued Quantity as the actual: show actual vs budget by RTOM on a new sheet, biggest variance first",
+    check: (run) =>
+      need(
+        action(run, "financial_model").some(
+          (a) =>
+            a.kind === "budget_variance" &&
+            /!B\d/.test(a.categories) &&
+            /!H\d/.test(a.actual) &&
+            /!G\d/.test(a.budget),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-audit",
+    text: "audit every formula in this workbook for errors and inconsistent formulas",
+    check: (run, seen) =>
+      all(
+        need(
+          seen.some(
+            (s) =>
+              s.name === "get_details" &&
+              /formula_(audit|check)/.test(String(s.args.what)),
+          ),
+          seen.map((s) => s.name).join(" ; ").slice(0, 300),
+        ),
+        noChanges(run),
+      ),
+  },
+  {
     id: "n-protect",
     text: "protect the detail-report sheet",
     check: (run) =>
@@ -939,6 +970,43 @@ const CASES: Case[] = [
   },
 ];
 
+/** Which kind of Excel expert each task stands for; the summary scores each kind. */
+const EXPERT: Record<string, string> = {
+  "a-pivot-chart": "BI and dashboards",
+  "n-pivot-pct": "BI and dashboards",
+  "n-chart-edit": "BI and dashboards",
+  "n-table": "BI and dashboards",
+  "a-share-rtom": "BI and dashboards",
+  "a-lea-summary": "BI and dashboards",
+  "n-dupes-inplace": "Data cleaning",
+  "n-replace": "Data cleaning",
+  "p-clean-inplace": "Data cleaning",
+  "n-delete-inplace": "Data cleaning",
+  "a-delete-rows": "Data cleaning",
+  "a-month-trend": "Statistics and forecasting",
+  "p-regression": "Statistics and forecasting",
+  "n-outliers": "Statistics and forecasting",
+  "p-month-summary": "Statistics and forecasting",
+  "n-join": "Data preparation",
+  "a-gap-column": "Data preparation",
+  "n-insert-col": "Data preparation",
+  "n-loan": "Financial modelling",
+  "n-budget": "FP&A and budgets",
+  "p-why": "FP&A and budgets",
+  "n-reconcile": "Accounting and reconciliation",
+  "n-goal-seek": "What-if",
+  "n-scenarios": "What-if",
+  "p-formula-check": "Formula audit",
+  "n-audit": "Formula audit",
+  "a-explain": "Formula audit",
+  "n-print": "Reporting and automation",
+  "n-protect": "Reporting and automation",
+  "n-freeze": "Reporting and automation",
+  "a-email": "Reporting and automation",
+  "a-web": "Reporting and automation",
+};
+const byExpert = new Map<string, { pass: number; ran: number }>();
+
 let pass = 0;
 let ran = 0;
 let turns = 0;
@@ -1005,6 +1073,10 @@ for (const item of CASES) {
     verdict = `error ${(error as Error).message}`;
   }
   if (verdict === true) pass += 1;
+  const expert = byExpert.get(EXPERT[item.id] ?? "General") ?? { pass: 0, ran: 0 };
+  expert.ran += 1;
+  if (verdict === true) expert.pass += 1;
+  byExpert.set(EXPERT[item.id] ?? "General", expert);
   console.log(
     `${verdict === true ? "PASS" : "FAIL"} ${item.id}${verdict === true ? "" : `: ${verdict}`}`,
   );
@@ -1019,6 +1091,8 @@ if (reviewOn)
   console.log(
     `review: ${reviews.planned} planned, ${reviews.ok} accepted, ${reviews.fix} asked for a fix, ${reviews.revised} corrected`,
   );
+for (const [expert, score] of [...byExpert].sort(([a], [b]) => a.localeCompare(b)))
+  console.log(`expert ${expert}: ${score.pass}/${score.ran}`);
 console.log(
   `agent-prompts: ${pass}/${ran} (model turns ${turns}, calls ${calls}; tokens in ${usage.prompt} (cached ${usage.cached}), out ${usage.completion})`,
 );

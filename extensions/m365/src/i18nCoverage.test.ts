@@ -88,13 +88,19 @@ test("the pane's grids cannot be stretched past the pane by long unbroken text",
   assert.match(html, /main \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
 });
 
-test("the task pane keeps its compact macOS-style theme and readable overflow action", () => {
+test("the task pane presents a compact product header and readable overflow action", () => {
   assert.match(
     html,
     /font: 13px\/1\.45 -apple-system, BlinkMacSystemFont, "SF Pro Text"/,
   );
   assert.match(html, /--surface-solid: #ffffff/);
   assert.match(html, /@supports \(backdrop-filter: blur\(1px\)\)/);
+  assert.match(html, /class="brand" aria-label="VynorAI Excel"/);
+  assert.match(html, /data-i18n="product_title">VynorAI Excel/);
+  assert.match(
+    html,
+    /data-i18n="product_subtitle">Analyze, plan and apply safely/,
+  );
   assert.match(
     html,
     /id="more-pills"[^>]*data-i18n="more_suggestions">Show more<\/button>/,
@@ -134,6 +140,14 @@ test("selection context and suggestions appear before the conversation", () => {
   assert.match(html, /id="starter-suggestions" class="suggestions"/);
   assert.match(html, /\.chat-bar \{ position: sticky; top: 0;/);
   assert.match(html, /header\.topbar \{ position: relative;/);
+  assert.match(
+    html,
+    /\.smart-suggestion-list \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/,
+  );
+  assert.match(
+    html,
+    /\.smart-suggestion::before \{[^}]*content: attr\(data-icon\)/,
+  );
 });
 
 test("Smart Run is the primary action and specialist controls remain available", () => {
@@ -201,6 +215,20 @@ test("context suggestions are based on a bounded local schema sample, not a plac
   assert.match(source, /selected\.worksheet\.getUsedRange\(\)/);
   assert.match(source, /#starter-suggestions/);
   assert.match(source, /translate\(language, "chat_history", "Chat history"\)/);
+  assert.match(source, /const suggestionIcons: Record<string, string>/);
+  assert.match(
+    source,
+    /button\.dataset\.icon = suggestionIcons\[suggestion\.id\]/,
+  );
+});
+
+test("the agent workflow stays visibly staged rather than claiming an automatic apply", () => {
+  assert.match(
+    html,
+    /\.agent-timeline li::before \{[^}]*content: counter\(list-item\)/,
+  );
+  assert.match(html, /\.agent-timeline li\.done::before \{[^}]*content: "✓"/);
+  assert.match(html, /id="agent-approve" class="primary"[^>]*hidden/);
 });
 
 test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {

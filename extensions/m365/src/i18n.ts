@@ -13,6 +13,8 @@ type Dictionary = Record<string, string>;
 
 const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
   si: {
+    product_title: "VynorAI Excel",
+    product_subtitle: "ආරක්ෂිතව විශ්ලේෂණය, සැලසුම් සහ යෙදීම",
     hero: "ඔබේ දත්ත සමඟ කුමක් කිරීමට අවශ්‍යද?",
     hero_hint:
       "VynorAI ඔබේ වගුව ස්වයංක්‍රීයව සොයා, වෙනස්කම් කිරීමට පෙර නව ප්‍රතිඵල පත්‍රිකාවක පෙරදසුනක් පෙන්වයි.",
@@ -188,6 +190,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     tech_details: "තාක්ෂණික විස්තර",
   },
   ta: {
+    product_title: "VynorAI Excel",
+    product_subtitle: "பாதுகாப்பாக பகுப்பாய்வு, திட்டம் மற்றும் பயன்படுத்து",
     hero: "உங்கள் தரவுடன் என்ன செய்ய விரும்புகிறீர்கள்?",
     hero_hint:
       "VynorAI உங்கள் அட்டவணையை தானாகக் கண்டுபிடித்து, மாற்றம் செய்வதற்கு முன் புதிய முடிவுத் தாளின் முன்னோட்டத்தைக் காட்டும்.",

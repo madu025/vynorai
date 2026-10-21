@@ -4115,11 +4115,21 @@ function renderWorkspaceContext(
     }),
   );
   const suggestions = suggestionsForSelection(info, schema);
+  const suggestionIcons: Record<string, string> = {
+    chart: "▥",
+    pivot: "▦",
+    dashboard: "◫",
+    quality: "✓",
+    formulas: "ƒ",
+    forecast: "↗",
+    clean: "✦",
+  };
   contextSuggestionList?.replaceChildren(
     ...suggestions.map((suggestion) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "smart-suggestion";
+      button.dataset.icon = suggestionIcons[suggestion.id] ?? "•";
       const title = document.createElement("strong");
       title.textContent = translate(
         language,

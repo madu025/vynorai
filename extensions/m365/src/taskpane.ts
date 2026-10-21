@@ -4,6 +4,7 @@ import {
   appliedReport,
   describeChange,
   runAgent,
+  type AgentHost,
   type AgentMessage,
   type AnswerSource,
   type AgentPhase,
@@ -11,6 +12,7 @@ import {
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
 import { describeReview, runTeam } from "./agentReview.js";
+import { previewCells, previewTarget } from "./changePreview.js";
 import { describeSelection } from "./selectionChip.js";
 import {
   applyAgentChanges,
@@ -4208,6 +4210,55 @@ function agentToolLabel(name: string, args: Record<string, unknown>): string {
   }
 }
 
+/**
+ * Under each staged write, a small table of the cells it will overwrite (before, after). The
+ * cells are read now, so they are what approval would replace; a read that fails shows
+ * "(not read)" and the change itself is unaffected.
+ */
+async function showChangePreviews(run: AgentRun, host: AgentHost) {
+  if (!agentChanges) return;
+  const created = new Set(
+    run.changes.flatMap((item) =>
+      item.change.kind === "create_sheet" ? [item.change.name] : [],
+    ),
+  );
+  const items = [...agentChanges.children] as HTMLElement[];
+  for (const [index, item] of run.changes.entries()) {
+    const target = previewTarget(item.change, created);
+    const li = items[index];
+    if (!target || !li) continue;
+    let current: unknown[][] | undefined;
+    if (!target.newSheet) {
+      try {
+        current = (await host.readRange(target.sheet, target.address, false))
+          .values as unknown[][];
+      } catch {
+        current = undefined;
+      }
+    }
+    const cells = previewCells(item.change, current, target.newSheet);
+    if (!cells.length) continue;
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `Before and after (${cells.length}${target.total > cells.length ? ` of ${target.total.toLocaleString("en-US")}` : ""} cells)`;
+    details.append(summary);
+    const table = document.createElement("table");
+    table.className = "change-preview";
+    const head = table.createTHead().insertRow();
+    for (const label of ["Cell", "Now", "After approval"])
+      head.insertCell().textContent = label;
+    const body = table.createTBody();
+    for (const cell of cells) {
+      const row = body.insertRow();
+      row.insertCell().textContent = cell.cell;
+      row.insertCell().textContent = cell.before;
+      row.insertCell().textContent = cell.after;
+    }
+    details.append(table);
+    li.append(details);
+  }
+}
+
 function renderAgentRun(run: AgentRun) {
   show(agentCard, true);
   if (agentReply) {
@@ -4370,6 +4421,7 @@ async function agentLoop(request: string) {
         revised: reviewed.revised,
       });
     renderAgentRun(run);
+    void showChangePreviews(run, host);
     if (run.reply) renderConversation("assistant", run.reply);
     showAgentSources(
       answerSources(run.messages, (text) => agentMask.unmask(text)),

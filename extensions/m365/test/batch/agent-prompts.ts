@@ -583,7 +583,10 @@ const CASES: Case[] = [
     check: (run) =>
       need(
         action(run, "sheet_action").some(
-          (a) => a.action === "freeze_rows" && a.value === 1,
+          (a) =>
+            (a.action === "freeze_rows" && a.value === 1) ||
+            // Freezing at A2 freezes exactly the first row.
+            (a.action === "freeze_at" && String(a.value).toUpperCase() === "A2"),
         ),
         JSON.stringify(run.changes.map((c) => c.change)),
       ),

@@ -295,6 +295,11 @@ test("column analysis reads at most 5,000 rows on the device and returns a summa
   assert.equal(result.outliers, 1);
   assert.equal(result.top[0].row, 10);
   assert.match(result.note, /first 5,000 data rows/);
+  // For the rows past the sample, the result hands over one exact formula over every row.
+  assert.equal(
+    result.exact_formula,
+    "=LET(v,'Data'!C5:C520126,q1,QUARTILE.INC(v,1),q3,QUARTILE.INC(v,3),i,q3-q1,FILTER(HSTACK(ROW(v),v),(v<q1-1.5*i)+(v>q3+1.5*i),\"None\"))",
+  );
   assert.equal(run.changes.length, 0);
 });
 

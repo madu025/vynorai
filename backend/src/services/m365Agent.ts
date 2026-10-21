@@ -702,7 +702,7 @@ export const AGENT_TOOLS = [
   ),
   fn(
     "combine_tables",
-    "STAGED, live formulas. Combine two tables (each address includes its header row): join = bring columns from the right table by a shared key (XLOOKUP, \"Not found\" when missing); append = stack the right table under the left, columns matched by header; reconcile = keys in both, only in left, only in right with counts, plus matched keys whose amounts differ when amount is given. Writes at sheet!cell; stage create_sheet first for a new sheet.",
+    "STAGED, live formulas. Combine two tables (each address includes its header row): join = bring columns from the right table by a shared key (XLOOKUP, \"Not found\" when missing); append = stack the right table under the left, columns matched by header; reconcile = which keys are in both lists, which are missing from either side (with counts), plus matched keys whose amounts differ when amount is given; use it for any 'which are missing, not matched, or in one list but not the other' request. Writes at sheet!cell; stage create_sheet first for a new sheet.",
     {
       mode: en("join", "append", "reconcile"),
       left_sheet: str("Sheet of the first table"),
@@ -721,7 +721,7 @@ export const AGENT_TOOLS = [
   ),
   fn(
     "analyze_columns",
-    "READ-ONLY analyst check computed on the device over the first 5,000 data rows of a range (address includes the header row); returns row numbers, counts and top items. kinds and columns: anomalies [number] (IQR outliers); fuzzy_matches [text] (similar spellings, never merge without approval); clusters [1-6 numbers] with k; cohort_retention [customer, date]; root_cause [category, current, previous] (share of the change, not proof of cause); fraud_screen [amount, optional transaction key] (risk to look at, not fraud); split_values [text] (address, phone, date, identifier patterns). Use calculate for exact totals over every row.",
+    "READ-ONLY analyst check computed on the device over the first 5,000 data rows of a range (address includes the header row); returns row numbers, counts and top items. kinds and columns: anomalies [number] (IQR outliers); fuzzy_matches [text] (similar spellings, never merge without approval); clusters [1-6 numbers] with k; cohort_retention [customer, date]; root_cause [category, current, previous] (share of the change, not proof of cause); fraud_screen [amount, optional transaction key] (risk to look at, not fraud); split_values [text] (address, phone, date, identifier patterns). Use calculate for exact totals over every row; for a longer range, anomalies also returns exact_formula: run it with calculate to get every outlier row, and do not stage anything for a question.",
     {
       kind: en(
         "anomalies",

@@ -845,12 +845,28 @@ async function runTool(
           k: typeof args.k === "number" ? args.k : undefined,
         },
       );
-      return lastRow < box.lastRow
-        ? {
-            ...result,
-            note: `Only the first ${ANALYZE_MAX_ROWS.toLocaleString("en-US")} data rows (${address}) were analysed; use calculate for exact totals over every row.`,
-          }
-        : result;
+      if (lastRow >= box.lastRow) return result;
+      // Outliers over every row: one formula calculate can run to get the exact sheet rows.
+      const outlierColumn =
+        kind === "anomalies"
+          ? headerRow.findIndex(
+              (header) =>
+                String(header ?? "").trim().toLowerCase() ===
+                restore(String((args.columns as unknown[])[0] ?? ""))
+                  .trim()
+                  .toLowerCase(),
+            )
+          : -1;
+      const letter = columnLetters(box.column + outlierColumn);
+      return {
+        ...result,
+        note: `Only the first ${ANALYZE_MAX_ROWS.toLocaleString("en-US")} data rows (${address}) were analysed; use calculate for exact results over every row.`,
+        ...(outlierColumn >= 0
+          ? {
+              exact_formula: `=LET(v,'${sheet.replace(/'/g, "''")}'!${letter}${box.row + 1}:${letter}${box.lastRow},q1,QUARTILE.INC(v,1),q3,QUARTILE.INC(v,3),i,q3-q1,FILTER(HSTACK(ROW(v),v),(v<q1-1.5*i)+(v>q3+1.5*i),"None"))`,
+            }
+          : {}),
+      };
     }
     case "analyze_text_batch": {
       if (!host.analyzeTextBatch)

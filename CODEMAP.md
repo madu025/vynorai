@@ -411,8 +411,8 @@ VynorAI packages into a fully self-contained, air-gapped capable `.vsix` bundle 
 
 - **Webview React Production Bundle Sync**:
   - Build pipeline: `npm --prefix gui run build` executes Vite 5 + Rollup across React 18, Tailwind CSS, Monaco editor, and Redux modules.
-  - Generates optimized production distribution in `gui/dist/` (`assets/index.js`, `assets/index.css`, fonts, and Web Workers).
-  - Sync target: `node scripts/prepackage.js` mirrors `gui/dist/` into `extensions/vscode/gui/` (168 files, 18.05 MB), ensuring webview HTML loads local `vscode-webview-resource:` URIs without external CDN dependencies.
+  - Generates optimized production distribution in the git-ignored `dist` folder under `gui` (`assets/index.js`, `assets/index.css`, fonts, and Web Workers); it exists only after a build.
+  - Sync target: `node scripts/prepackage.js` mirrors that `dist` folder into a generated `gui` folder under `extensions/vscode` (also git-ignored build output; 168 files, 18.05 MB), ensuring webview HTML loads local `vscode-webview-resource:` URIs without external CDN dependencies.
 - **Prepackaged Offline Runtime Assets**:
   - `onnxruntime-node`: Bundles platform-native binaries (`win32-x64`, `linux-x64`, `darwin-arm64`) for local embedding inference.
   - `tree-sitter`: Bundles WASM grammar modules (`tree-sitter.wasm`, Python, TypeScript, Rust, Go, Java) into `out/` and `bin/`.
@@ -662,7 +662,7 @@ VynorAI's 10-year language resilience engine for emerging/future programming lan
 - [binary/](binary): Headless Node.js packaging bundle allowing the core engine to execute as a standalone process for non-VS Code clients.
 - [sync/](sync): High-performance Rust crate compiled to `sync.node` using `napi-rs` for ultra-fast file watching, AST parsing, and workspace synchronization.
 
-### 6.3 Scripts, Deployment & Scratch Tools (`scripts/`, `scratch/` & Root)
+### 6.3 Scripts, Deployment & Root Tools (`scripts/` & Root)
 
 - [docker-compose.vps.yml](docker-compose.vps.yml): **Production VPS Deployment Compose**:
   - `vynor-caddy` (mounts `deploy/`, sticky load balancing), two backend workers `vynor-backend` and `vynor-backend-2` from one shared definition (5s health checks, 75s stop grace), `vynor-postgres` (256MB shared_buffers), `vynor-pg-backup` (nightly, 14 days), `vynor-redis` (256MB LRU), `vynor-embed` (bge-small :8081). `vynor-slm` is opt-in (`--profile slm`).
@@ -678,10 +678,6 @@ VynorAI's 10-year language resilience engine for emerging/future programming lan
 - [backend/scripts/bench](backend/scripts/bench): benchmarks that measure the agent on real tasks. `large.ts` and `large-tasks.ts`: three multi-file tasks on a copy of a package, scored by hidden tests, the suite and a type check ([docs/LARGE_TASK_BENCHMARK_PLAN.md](docs/LARGE_TASK_BENCHMARK_PLAN.md)). `build.ts` with `build-reference`: an empty folder and a product brief, scored from outside by 39 HTTP checks, a restart and the project's own tests ([docs/AGENTIC_BUILD_PLAN.md](docs/AGENTIC_BUILD_PLAN.md)). `evidence-tasks.mjs`: 12 synthetic, deterministic completion-evidence fixtures with stable criterion IDs and scorer mutants; `run.mjs --suite=evidence --selfcheck` validates the corpus without a model call and emits a reproducibility manifest/failure class on live runs. `evidence-live.mjs`: prepares and scores one evidence fixture through the real packaged VS Code driver, retaining only a response digest and separating invalid harness runs from product failures. `phase4-review-live.ts`: sends a blinded, read-only review corpus through the real production proxy and records only digests, classifications and aggregate recall/false-block/reliability evidence. `scope-live.ts`: calls the production proxy with the real semantic preflight prompt/parser for 20 English, Sinhala and Singlish scope cases. `inspect.ts`: reads the saved session and task journal of a real run and lists every anomaly in it (failed tool calls, wrong paths, a failed check read as passed, where the prompt prefix changed, the task's final state); no model is called; run it after every real run. `lib.mjs` is a small loop of its own; only a run through the real extension speaks for the product.
 - [extensions/vscode/e2e/tests](extensions/vscode/e2e/tests): end-to-end tests that drive a real VS Code with the packaged extension in an isolated profile (sign-in, slash commands, task outcome, the large-task benchmark, the VSIX lifecycle).
 - [scripts/check-doc-links.mjs](scripts/check-doc-links.mjs): fails when a path named in `README.md`, `AGENTS.md`, `CODEMAP.md` or `CLAUDE.md` does not exist.
-- [scratch/](scratch): End-to-end integration and verification scripts:
-  - `test_vault_healer.js`: Tests the deterministic SLM self-healer and template composer.
-  - `test_live_opensaas.js`: End-to-end cloud completion test against live endpoints.
-  - `test_speedpy_vault.js`: Latency benchmarks comparing deterministic SLM vs. cloud LLM calls.
 
 ---
 

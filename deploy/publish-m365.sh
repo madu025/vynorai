@@ -26,12 +26,7 @@ done
 
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
-for page in taskpane text; do
-  source="$SRC/$page.html"
-  target="$STAGE/$page.html"
-  grep -q '__VYNOR_M365_BUILD_ID__' "$source" || { echo "$page.html has no build ID placeholder" >&2; exit 1; }
-  sed "s/__VYNOR_M365_BUILD_ID__/$BUILD_ID/g" "$source" > "$target"
-done
+printf 'window.__VYNOR_M365_BUILD_ID__ = "%s";\n' "$BUILD_ID" > "$STAGE/build-id.js"
 
 SSH=(ssh -i "$KEY" -o BatchMode=yes "$HOST")
 SCP=(scp -i "$KEY" -o BatchMode=yes)
@@ -45,8 +40,6 @@ for bundle in taskpane text; do
   "${SCP[@]}" "$SRC/dist/$bundle.bundle.js" "$HOST:$REMOTE_DIR/dist/$bundle.bundle.js.new"
 done
 "${SCP[@]}" "$SRC/runtime-config.production.js" "$HOST:$REMOTE_DIR/runtime-config.js.new"
-for page in taskpane text; do
-  "${SCP[@]}" "$STAGE/$page.html" "$HOST:$REMOTE_DIR/$page.html.new"
-done
-"${SSH[@]}" "cd '$REMOTE_DIR' && mv -f dist/taskpane.bundle.js.new dist/taskpane.bundle.js && mv -f dist/text.bundle.js.new dist/text.bundle.js && mv -f runtime-config.js.new runtime-config.js && mv -f taskpane.html.new taskpane.html && mv -f text.html.new text.html"
+"${SCP[@]}" "$STAGE/build-id.js" "$HOST:$REMOTE_DIR/build-id.js.new"
+"${SSH[@]}" "cd '$REMOTE_DIR' && mv -f dist/taskpane.bundle.js.new dist/taskpane.bundle.js && mv -f dist/text.bundle.js.new dist/text.bundle.js && mv -f runtime-config.js.new runtime-config.js && mv -f build-id.js.new build-id.js"
 echo "Published M365 build $BUILD_ID. The manifest was not changed."

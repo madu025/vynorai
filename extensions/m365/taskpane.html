@@ -442,7 +442,24 @@
       })();
     </script>
     <script nomodule>document.getElementById("status-text").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";</script>
-    <script src="./runtime-config.js?v=__VYNOR_M365_BUILD_ID__"></script>
-    <script src="./dist/taskpane.bundle.js?v=__VYNOR_M365_BUILD_ID__"></script>
+    <script>
+      (function () {
+        var openingId = Date.now().toString(36);
+        function add(src, done) {
+          var script = document.createElement("script");
+          script.src = src;
+          script.onload = done;
+          script.onerror = done;
+          document.body.appendChild(script);
+        }
+        add("./build-id.js?open=" + openingId, function () {
+          var buildId = window.__VYNOR_M365_BUILD_ID__ || "dev";
+          var suffix = encodeURIComponent(buildId);
+          add("./runtime-config.js?v=" + suffix, function () {
+            add("./dist/taskpane.bundle.js?v=" + suffix, function () {});
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

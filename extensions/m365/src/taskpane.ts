@@ -4421,6 +4421,10 @@ async function agentLoop(request: string) {
         revised: reviewed.revised,
       });
     renderAgentRun(run);
+    // The answer and the changes to approve are below the chat: bring them into view above the box.
+    window.requestAnimationFrame(() =>
+      agentCard?.scrollIntoView?.({ block: "end", behavior: "smooth" }),
+    );
     void showChangePreviews(run, host);
     if (run.reply) renderConversation("assistant", run.reply);
     showAgentSources(

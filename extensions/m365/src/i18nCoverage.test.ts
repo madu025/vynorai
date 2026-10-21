@@ -64,3 +64,15 @@ test("switching the language does not leave an English default behind", () => {
   applyLanguage(root, "en");
   assert.equal(element.textContent, "Approve and apply");
 });
+
+test("the pane's grids cannot be stretched past the pane by long unbroken text", () => {
+  // A grid column of "auto" grows to the longest unbroken word (a formula, a long chat title),
+  // which pushed the pane wider than the task pane and cut messages off on the right.
+  assert.match(html, /\.conversation \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(
+    html,
+    /#conversation-history \{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
+  );
+  assert.match(html, /#conversation-history > article \{[^}]*overflow-wrap: anywhere/);
+  assert.match(html, /main \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
+});

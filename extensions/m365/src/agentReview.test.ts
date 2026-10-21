@@ -14,6 +14,7 @@ import {
   parsePlan,
   parseReview,
   planFacts,
+  planRequest,
   reviewAndRevise,
   reviewRequest,
   revisionRequest,
@@ -523,4 +524,24 @@ test("the accuracy reviewer is told to run the formulas and compare totals", () 
   const text = reviewRequest("Summary by region", { reply: "", changes: [] });
   assert.match(text, /run every staged formula through calculate/);
   assert.match(text, /compare it with the sum of the summary/);
+});
+
+test("the planner maps cross-sheet relationships and the accuracy reviewer verifies the join", () => {
+  const plan = planRequest(
+    "Bring Description from Items into the detail report by Item Code",
+  );
+  assert.match(plan, /call map_relationships/);
+  assert.match(plan, /cardinality/);
+  assert.match(plan, /unmatched-row count/);
+  assert.match(plan, /If it finds no key, plan a question instead of guessing/);
+
+  const review = reviewRequest(
+    "Bring Description from Items into the detail report by Item Code",
+    { reply: "", changes: [] },
+    "accuracy",
+  );
+  assert.match(review, /call map_relationships/);
+  assert.match(review, /many-to-many key/);
+  assert.match(review, /repeated lookup-side keys/);
+  assert.match(review, /key that needs cleaning/);
 });

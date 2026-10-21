@@ -357,7 +357,39 @@ test("whole columns like A:B are accepted, and a read of them is bounded", () =>
   });
 });
 
-test("after six calculations the agent is told to act or answer", async () => {
+test("an identical calculation is reused and the agent is told to answer", async () => {
+  let turn = 0;
+  let calculations = 0;
+  const run = await runAgent({
+    request: "x",
+    host: host({
+      calculate: async () => {
+        calculations += 1;
+        return [[1]];
+      },
+    }),
+    mask: new PersonalMask(),
+    model: async (messages) => {
+      turn += 1;
+      if (turn <= 2)
+        return {
+          content: "",
+          tool_calls: [call(`${turn}`, "calculate", { formula: "=1" })],
+        };
+      assert.match(String(messages.at(-1)?.content), /already ran/i);
+      return { content: "done", tool_calls: [] };
+    },
+  });
+  const results = run.messages
+    .filter((m) => m.role === "tool")
+    .map((m: any) => m.content);
+  assert.equal(calculations, 1);
+  assert.equal(results.filter((r) => /"result"/.test(r)).length, 2);
+  assert.match(results[1], /earlier result was reused/i);
+  assert.equal(run.reply, "done");
+});
+
+test("after six different calculations the agent is told to act or answer", async () => {
   let turn = 0;
   const run = await runAgent({
     request: "x",
@@ -369,7 +401,9 @@ test("after six calculations the agent is told to act or answer", async () => {
         return {
           content: "",
           tool_calls: Array.from({ length: 4 }, (_, i) =>
-            call(`${turn}-${i}`, "calculate", { formula: "=1" }),
+            call(`${turn}-${i}`, "calculate", {
+              formula: `=${(turn - 1) * 4 + i + 1}`,
+            }),
           ),
         };
       return { content: "done", tool_calls: [] };
@@ -380,6 +414,30 @@ test("after six calculations the agent is told to act or answer", async () => {
     .map((m: any) => m.content);
   assert.equal(results.filter((r) => /"result"/.test(r)).length, 6);
   assert.match(results[7], /already ran 6 calculations/);
+});
+
+test("a model that keeps repeating one calculation stops with a useful reply before the turn limit", async () => {
+  let calculations = 0;
+  let calls = 0;
+  const run = await runAgent({
+    request: "x",
+    host: host({
+      calculate: async () => {
+        calculations += 1;
+        return [[1]];
+      },
+    }),
+    mask: new PersonalMask(),
+    maxTurns: 8,
+    model: async () => ({
+      content: "",
+      tool_calls: [call(String(++calls), "calculate", { formula: "=1" })],
+    }),
+  });
+  assert.equal(calculations, 1);
+  assert.equal(run.turns, 4);
+  assert.equal(run.stoppedAtLimit, undefined);
+  assert.match(run.reply, /same calculations were requested repeatedly/i);
 });
 
 test("numbers come back with grouped text, and replies lose markdown marks", async () => {
@@ -605,12 +663,20 @@ test("answer sources list the ranges read and formulas computed, restored and wi
       ],
     },
   ];
-  assert.deepEqual(answerSources(messages, (text) => mask.unmask(text)), [
-    { kind: "range", sheet: "Data", address: "A1:J50" },
-    { kind: "formula", text: `=COUNTIF('Data'!J2:J520126,"0112005016")` },
-    { kind: "range", sheet: "Data", address: "A1:J520126", note: "anomalies" },
-    { kind: "check", text: "formula_audit" },
-  ]);
+  assert.deepEqual(
+    answerSources(messages, (text) => mask.unmask(text)),
+    [
+      { kind: "range", sheet: "Data", address: "A1:J50" },
+      { kind: "formula", text: `=COUNTIF('Data'!J2:J520126,"0112005016")` },
+      {
+        kind: "range",
+        sheet: "Data",
+        address: "A1:J520126",
+        note: "anomalies",
+      },
+      { kind: "check", text: "formula_audit" },
+    ],
+  );
 });
 
 test("an empty answer is asked for once, and never reaches the person as nothing", async () => {
@@ -625,7 +691,10 @@ test("an empty answer is asked for once, and never reaches the person as nothing
       asked.push(String((messages.at(-1) as any).content ?? ""));
       return turns === 1
         ? { content: "", tool_calls: [] }
-        : { content: "- Sparklines are not available; a line chart is.", tool_calls: [] };
+        : {
+            content: "- Sparklines are not available; a line chart is.",
+            tool_calls: [],
+          };
     },
   });
   assert.equal(run.reply, "- Sparklines are not available; a line chart is.");
@@ -654,8 +723,17 @@ test("map_relationships reads each range and returns the join, never the rows", 
           address,
           values:
             sheet === "Orders"
-              ? [["CustomerID", "Amount"], ["C1", 5.5], ["C2", 7.5], ["C1", 2.5]]
-              : [["CustomerID", "Region"], ["C1", "N"], ["C2", "S"]],
+              ? [
+                  ["CustomerID", "Amount"],
+                  ["C1", 5.5],
+                  ["C2", 7.5],
+                  ["C1", 2.5],
+                ]
+              : [
+                  ["CustomerID", "Region"],
+                  ["C1", "N"],
+                  ["C2", "S"],
+                ],
         };
       },
     }),
@@ -694,11 +772,17 @@ test("map_relationships reads each range and returns the join, never the rows", 
 
 test("get_workbook adds the relationship hint only when several sheets hold data", async () => {
   const hinted = withRelationshipHint({
-    sheets: [{ name: "A", rows: 10 }, { name: "B", rows: 5 }],
+    sheets: [
+      { name: "A", rows: 10 },
+      { name: "B", rows: 5 },
+    ],
   }) as any;
   assert.match(hinted.hint, /map_relationships/);
   const single = withRelationshipHint({
-    sheets: [{ name: "A", rows: 10 }, { name: "B", rows: 0 }],
+    sheets: [
+      { name: "A", rows: 10 },
+      { name: "B", rows: 0 },
+    ],
   }) as any;
   assert.equal(single.hint, undefined);
 });

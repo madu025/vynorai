@@ -117,7 +117,10 @@ export type ChartKind = (typeof CHART_KINDS)[number];
 /** Several sheets with data: tell the model once to map how they join before it answers across them. */
 export function withRelationshipHint(workbook: unknown): unknown {
   const sheets = (workbook as { sheets?: { rows?: number }[] } | null)?.sheets;
-  if (!Array.isArray(sheets) || sheets.filter((s) => (s.rows ?? 0) > 1).length < 2)
+  if (
+    !Array.isArray(sheets) ||
+    sheets.filter((s) => (s.rows ?? 0) > 1).length < 2
+  )
     return workbook;
   return {
     ...(workbook as object),
@@ -652,10 +655,14 @@ export async function runAgent(options: {
     { role: "user", content: userContent(mask.mask(options.request), meaning) },
   ];
   const changes: AgentRun["changes"] = [];
-  const counts = { calculate: 0 };
+  const counts = {
+    calculate: 0,
+    calculationResults: new Map<string, unknown>(),
+  };
   const maxTurns = options.maxTurns ?? AGENT_MAX_TURNS;
   let nudged = false;
   let askedForAnswer = false;
+  let repeatedCalculationNudges = 0;
   for (let turn = 1; turn <= maxTurns; turn += 1) {
     options.onPhase?.("planning");
     const answer = await model(messages);
@@ -702,6 +709,7 @@ export async function runAgent(options: {
       };
     }
     options.onPhase?.("executing");
+    let onlyRepeatedCalculations = calls.length > 0;
     for (const call of calls) {
       let content: string;
       try {
@@ -714,10 +722,17 @@ export async function runAgent(options: {
           throw new AgentToolError("The arguments are not a JSON object.");
         }
         options.onTool?.(call.function.name, args);
+        const calculationKey =
+          call.function.name === "calculate"
+            ? checkFormula(mask.unmask(String(args.formula ?? "")))
+            : undefined;
+        if (!calculationKey || !counts.calculationResults.has(calculationKey))
+          onlyRepeatedCalculations = false;
         content = JSON.stringify(
           await runTool(call, args, host, mask, changes, counts),
         );
       } catch (error) {
+        onlyRepeatedCalculations = false;
         content = JSON.stringify({
           error:
             error instanceof AgentToolError
@@ -730,6 +745,27 @@ export async function runAgent(options: {
         tool_call_id: call.id,
         content: clip(mask.mask(content)),
       });
+    }
+    if (onlyRepeatedCalculations) {
+      if (repeatedCalculationNudges < 2 && turn < maxTurns) {
+        repeatedCalculationNudges += 1;
+        messages.push({
+          role: "user",
+          content:
+            "[Report from the add-in, not from the person] Those exact calculations already ran and their earlier results were returned again. Do not calculate them again. Answer the person's question now from those results.",
+        });
+      } else {
+        options.onPhase?.("final");
+        return {
+          messages,
+          reply:
+            plainText(mask.unmask(answer.content || "")).trim() ||
+            "I could not finish because the same calculations were requested repeatedly. Nothing was changed.",
+          changes,
+          turns: turn,
+          phase: "final",
+        };
+      }
     }
     options.onPhase?.("verifying");
   }
@@ -794,7 +830,7 @@ async function runTool(
   host: AgentHost,
   mask: PersonalMask,
   changes: AgentRun["changes"],
-  counts: { calculate: number },
+  counts: { calculate: number; calculationResults: Map<string, unknown> },
 ): Promise<unknown> {
   const restore = (text: string) => mask.unmask(text);
   switch (call.function.name) {
@@ -829,22 +865,31 @@ async function runTool(
     }
     case "calculate": {
       // Each calculation is a model turn and a full pass over the data: enough is enough.
+      const formula = checkFormula(restore(String(args.formula ?? "")));
+      const earlier = counts.calculationResults.get(formula);
+      if (earlier !== undefined)
+        return {
+          ...(earlier as Record<string, unknown>),
+          note: "This exact calculation already ran. The earlier result was reused; answer from it instead of calculating again.",
+        };
       counts.calculate += 1;
       if (counts.calculate > CALC_PER_REQUEST)
         throw new AgentToolError(
           `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
         );
-      const formula = checkFormula(restore(String(args.formula ?? "")));
       const result = boundResult(await host.calculate(formula));
       // The model once read 1090404.455 as 1,090,404,455: give it the grouped text to copy.
-      return typeof result === "number"
-        ? {
-            result,
-            as_text: result.toLocaleString("en-US", {
-              maximumFractionDigits: 6,
-            }),
-          }
-        : { result };
+      const response =
+        typeof result === "number"
+          ? {
+              result,
+              as_text: result.toLocaleString("en-US", {
+                maximumFractionDigits: 6,
+              }),
+            }
+          : { result };
+      counts.calculationResults.set(formula, response);
+      return response;
     }
     case "analyze_columns": {
       // A full pass over up to ANALYZE_MAX_ROWS rows on the device: counted like a calculation.
@@ -855,7 +900,9 @@ async function runTool(
         );
       const kind = String(args.kind ?? "").trim() as AnalysisKind;
       if (!ANALYSIS_KINDS.includes(kind))
-        throw new AgentToolError(`kind must be one of ${ANALYSIS_KINDS.join(", ")}.`);
+        throw new AgentToolError(
+          `kind must be one of ${ANALYSIS_KINDS.join(", ")}.`,
+        );
       const sheet = checkSheetName(restore(String(args.sheet ?? "")));
       const box = parseA1(checkRange(args.address));
       if (box.lastColumn - box.column >= 30)
@@ -882,7 +929,9 @@ async function runTool(
         kind === "anomalies"
           ? headerRow.findIndex(
               (header) =>
-                String(header ?? "").trim().toLowerCase() ===
+                String(header ?? "")
+                  .trim()
+                  .toLowerCase() ===
                 restore(String((args.columns as unknown[])[0] ?? ""))
                   .trim()
                   .toLowerCase(),
@@ -907,13 +956,21 @@ async function runTool(
           `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
         );
       if (!Array.isArray(args.ranges))
-        throw new AgentToolError("ranges must be a list like [\"Orders!A1:F900\", \"Customers!A1:C40\"].");
+        throw new AgentToolError(
+          'ranges must be a list like ["Orders!A1:F900", "Customers!A1:C40"].',
+        );
       const tables: RelationTable[] = [];
       for (const entry of args.ranges.slice(0, RELATION_MAX_TABLES + 1)) {
         const text = restore(String(entry ?? "")).trim();
         const cut = text.lastIndexOf("!");
-        if (cut < 1) throw new AgentToolError(`"${text}" must look like Sheet!A1:F900.`);
-        const sheet = checkSheetName(text.slice(0, cut).replace(/^'(.*)'$/, "$1").replace(/''/g, "'"));
+        if (cut < 1)
+          throw new AgentToolError(`"${text}" must look like Sheet!A1:F900.`);
+        const sheet = checkSheetName(
+          text
+            .slice(0, cut)
+            .replace(/^'(.*)'$/, "$1")
+            .replace(/''/g, "'"),
+        );
         const box = parseA1(checkRange(text.slice(cut + 1)));
         const lastRow = Math.min(box.lastRow, box.row + RELATION_MAX_ROWS);
         const address = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${lastRow}`;
@@ -1026,7 +1083,8 @@ export function answerSources(
     }
   };
   for (const message of messages)
-    for (const call of (message.role === "assistant" && message.tool_calls) || []) {
+    for (const call of (message.role === "assistant" && message.tool_calls) ||
+      []) {
       let args: Record<string, unknown>;
       try {
         args = JSON.parse(call.function.arguments || "{}");

@@ -9,6 +9,7 @@
     "validate-manifests": "npx --yes office-addin-manifest@latest validate manifest.xml && npx --yes office-addin-manifest@latest validate manifest-word.xml && npx --yes office-addin-manifest@latest validate manifest-powerpoint.xml && npx --yes office-addin-manifest@latest validate manifest-outlook.xml"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
   }
 }

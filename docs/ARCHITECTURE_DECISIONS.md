@@ -55,6 +55,10 @@ anything about production environment values is marked "not verified".
 
 ## Context and plans
 
+- Credits and requests are two separate monthly limits, and a user is blocked by whichever runs out first
+  (`monthlyQuotaGuard` in `backend/src/services/monthlyQuota.ts`). A top-up (`creditTopup`) adds both: a paid pack
+  adds one plan allowance of each, and an admin "Add tokens" adds requests at the user's plan ratio
+  (`proportionalRequests`, at least 1), so adding credits alone never leaves a user stuck at the request cap.
 - Context limit per plan (`backend/src/services/modelRegistry.ts`): free and starter 32K, pro 128K,
   enterprise 256K tokens. Compaction triggers at 85% of the budget and drops about half of it.
 - Default optimization mode is "safe" (trim tool output, window, read dedupe, background summary).

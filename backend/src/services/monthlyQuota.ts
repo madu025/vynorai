@@ -320,26 +320,44 @@ export async function startPaidCycle(
   );
 }
 
-/** Add purchased or granted credits to the user's current cycle. */
+/**
+ * Requests that go with some credits at the plan's own ratio (a paid top-up pack is one plan
+ * allowance of each, so the ratio is monthlyRequests per monthlyTokens). At least 1 for any credit.
+ */
+export function proportionalRequests(planId: string, credits: number): number {
+  const plan = getPlan(planId);
+  if (!(credits > 0) || !(plan.monthlyTokens > 0)) return 0;
+  return Math.max(
+    1,
+    Math.round((credits * plan.monthlyRequests) / plan.monthlyTokens),
+  );
+}
+
+/**
+ * Add purchased or granted credits to the user's current cycle. `requests` is the request
+ * allowance that goes with them; when it is left out (an admin "Add tokens"), it follows the
+ * user's plan ratio so a user stopped at the request cap is not left blocked.
+ * Returns the requests added.
+ */
 export async function creditTopup(
   userId: string,
   credits: number,
-  requests: number,
-): Promise<void> {
+  requests?: number,
+): Promise<number> {
   const subscription = await getActiveSubscription<{ plan_name: string }>(
     userId,
   );
-  const usage = await getOrInitMonthlyUsage(
-    userId,
-    subscription?.plan_name || "free",
-  );
+  const planName = subscription?.plan_name || "free";
+  const usage = await getOrInitMonthlyUsage(userId, planName);
+  const addedRequests = requests ?? proportionalRequests(planName, credits);
   await dbRun(
     `UPDATE monthly_usage
      SET max_tokens = max_tokens + ?, bonus_tokens = bonus_tokens + ?,
          bonus_requests = bonus_requests + ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`,
-    [credits, credits, requests, usage.id],
+    [credits, credits, addedRequests, usage.id],
   );
+  return addedRequests;
 }
 
 /** Reverse a top-up (e.g. PayHere chargeback). Never drives balances negative. */

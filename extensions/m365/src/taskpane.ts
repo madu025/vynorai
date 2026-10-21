@@ -182,6 +182,7 @@ import {
   selectionBadges,
   suggestionsForSelection,
   type SmartMode,
+  type WorkspaceSchema,
   type WorkspaceSelection,
 } from "./smartWorkspace.js";
 
@@ -4082,7 +4083,10 @@ const contextSuggestionList = document.querySelector<HTMLElement>(
 );
 let selectionTimer: ReturnType<typeof setTimeout> | undefined;
 
-function renderWorkspaceContext(info: WorkspaceSelection | undefined) {
+function renderWorkspaceContext(
+  info: WorkspaceSelection | undefined,
+  schema?: WorkspaceSchema,
+) {
   if (!info) {
     show(workbookContext, false);
     show(contextSuggestions, false);
@@ -4091,14 +4095,21 @@ function renderWorkspaceContext(info: WorkspaceSelection | undefined) {
   const description = describeSelection(info);
   if (contextSelection) contextSelection.textContent = description;
   contextBadges?.replaceChildren(
-    ...selectionBadges(info).map((text) => {
+    ...selectionBadges(info, {
+      row: translate(language, "row_label", "row"),
+      rows: translate(language, "rows_label", "rows"),
+      column: translate(language, "column_label", "column"),
+      columns: translate(language, "columns_label", "columns"),
+      largeRange: translate(language, "large_range", "Large range"),
+      localPreview: translate(language, "local_preview", "Local preview"),
+    }).map((text) => {
       const badge = document.createElement("span");
       badge.className = "context-badge";
       badge.textContent = text;
       return badge;
     }),
   );
-  const suggestions = suggestionsForSelection(info);
+  const suggestions = suggestionsForSelection(info, schema);
   contextSuggestionList?.replaceChildren(
     ...suggestions.map((suggestion) => {
       const button = document.createElement("button");
@@ -4123,6 +4134,7 @@ function renderWorkspaceContext(info: WorkspaceSelection | undefined) {
         instruction.value = suggestion.instruction;
         instruction.dispatchEvent(new Event("input"));
         instruction.focus();
+        smartRun?.click();
       });
       return button;
     }),
@@ -4131,24 +4143,78 @@ function renderWorkspaceContext(info: WorkspaceSelection | undefined) {
   show(contextSuggestions, suggestions.length > 0);
 }
 
+/**
+ * Reads a small local-only sample solely to improve the suggestion list. The values are converted
+ * straight into aggregate schema facts and never added to chat history, diagnostics or an API call.
+ */
+async function readWorkspaceContext(): Promise<{
+  info: WorkspaceSelection;
+  schema?: WorkspaceSchema;
+}> {
+  return officeRuntime().run(async (context: any) => {
+    const range = context.workbook.getSelectedRange();
+    range.load(["address", "rowCount", "columnCount"]);
+    range.worksheet.load("name");
+    await context.sync();
+    const info: WorkspaceSelection = {
+      address: String(range.address),
+      rows: Number(range.rowCount),
+      columns: Number(range.columnCount),
+    };
+    let schema: WorkspaceSchema | undefined;
+    const sampleRows = Math.min(Math.max(info.rows, 0), 26);
+    const sampleColumns = Math.min(Math.max(info.columns, 0), 20);
+    if (sampleRows >= 2 && sampleColumns >= 1) {
+      try {
+        const sample = range
+          .getCell(0, 0)
+          .getResizedRange(sampleRows - 1, sampleColumns - 1);
+        sample.load("values");
+        await context.sync();
+        const values = (sample.values as unknown[][]).map((row) =>
+          row.map((cell) =>
+            typeof cell === "string" ||
+            typeof cell === "number" ||
+            typeof cell === "boolean" ||
+            cell === null
+              ? cell
+              : String(cell ?? ""),
+          ),
+        );
+        const summary = buildSchemaSummary({
+          workbookId: "local-workspace-context",
+          worksheetName: String(range.worksheet.name),
+          address: info.address,
+          values,
+        });
+        schema = {
+          hasMeasure: summary.columns.some(
+            (column) => column.roleHint === "measure",
+          ),
+          hasDate: summary.columns.some((column) => column.roleHint === "date"),
+          hasCategory: summary.columns.some(
+            (column) => column.roleHint === "category",
+          ),
+          hasText: summary.columns.some((column) => column.roleHint === "text"),
+          sampleRows: Math.max(0, values.length - summary.headerRowCount),
+        };
+      } catch (error) {
+        log.record("selection:context-schema", "info", describeError(error));
+      }
+    }
+    return { info, schema };
+  });
+}
+
 /** Shows which sheet and cells the next request will use; hidden when nothing can be read. */
 async function refreshSelectionChip() {
   if (!selectionChip || !selectionText) return;
   try {
-    const info = await officeRuntime().run(async (context: any) => {
-      const range = context.workbook.getSelectedRange();
-      range.load(["address", "rowCount", "columnCount"]);
-      await context.sync();
-      return {
-        address: String(range.address),
-        rows: Number(range.rowCount),
-        columns: Number(range.columnCount),
-      };
-    });
+    const { info, schema } = await readWorkspaceContext();
     const text = describeSelection(info);
     selectionText.textContent = text;
     show(selectionChip, text !== "");
-    renderWorkspaceContext(info);
+    renderWorkspaceContext(info, schema);
   } catch {
     show(selectionChip, false);
     renderWorkspaceContext(undefined);
@@ -4699,6 +4765,16 @@ smartRun?.addEventListener("click", () => {
   const request = instruction?.value.trim() ?? "";
   if (!request) return setStatus("Describe what you want first.");
   const mode = (runMode?.value || "smart") as SmartMode;
+  if (mode === "agent" && capabilities?.aiAnalysis === false) {
+    setStatus(
+      translate(
+        language,
+        "agent_unavailable",
+        "Agent workflow is not available for this account. Use local preview.",
+      ),
+    );
+    return;
+  }
   const path = chooseSmartPath(
     request,
     mode,

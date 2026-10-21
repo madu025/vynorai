@@ -9,8 +9,33 @@ export interface WorkspaceSelection {
   columns: number;
 }
 
+/** Local-only facts inferred from a bounded selection sample. No cell values are retained. */
+export interface WorkspaceSchema {
+  hasMeasure: boolean;
+  hasDate: boolean;
+  hasCategory: boolean;
+  hasText: boolean;
+  sampleRows: number;
+}
+
+export interface WorkspaceBadgeLabels {
+  row: string;
+  rows: string;
+  column: string;
+  columns: string;
+  largeRange: string;
+  localPreview: string;
+}
+
 export interface WorkspaceSuggestion {
-  id: "chart" | "pivot" | "dashboard" | "quality" | "formulas";
+  id:
+    | "chart"
+    | "pivot"
+    | "dashboard"
+    | "quality"
+    | "formulas"
+    | "forecast"
+    | "clean";
   label: string;
   instruction: string;
   reason: string;
@@ -37,9 +62,10 @@ export function chooseSmartPath(
     : "local";
 }
 
-/** Suggestions use only range dimensions; no workbook value is retained or sent. */
+/** Suggestions use range dimensions plus local aggregate schema facts; no cell value is retained or sent. */
 export function suggestionsForSelection(
   selection: WorkspaceSelection | undefined,
+  schema?: WorkspaceSchema,
 ): WorkspaceSuggestion[] {
   if (!selection?.address || selection.rows < 1 || selection.columns < 1)
     return [];
@@ -64,7 +90,20 @@ export function suggestionsForSelection(
         "Find blanks, duplicates and inconsistent values before reporting.",
     },
   ];
-  if (selection.columns >= 2)
+  const knowsSchema = Boolean(schema && schema.sampleRows > 0);
+  if (schema?.hasDate && schema.hasMeasure && selection.rows >= 5)
+    suggestions.push({
+      id: "forecast",
+      label: "Forecast the trend",
+      instruction:
+        "Create an advanced forecast with trend and confidence interval for the selected data.",
+      reason:
+        "The local sample contains both a date and a numeric measure. No sample values leave Excel.",
+    });
+  if (
+    (knowsSchema && schema?.hasCategory && schema.hasMeasure) ||
+    (!knowsSchema && selection.columns >= 2)
+  )
     suggestions.push({
       id: cells > 100_000 ? "pivot" : "chart",
       label: cells > 100_000 ? "Summarize large data" : "Create the best chart",
@@ -77,22 +116,44 @@ export function suggestionsForSelection(
           ? "A PivotTable lets Excel aggregate the full range efficiently."
           : "The selection has enough columns to compare a category and measure.",
     });
-  if (selection.rows >= 3 && selection.columns >= 3)
+  if (
+    (knowsSchema && schema?.hasCategory && schema.hasMeasure) ||
+    (!knowsSchema && selection.rows >= 3 && selection.columns >= 3)
+  )
     suggestions.push({
       id: "dashboard",
       label: "Build a dashboard",
       instruction: "Create a management dashboard from the selected data.",
+      reason: knowsSchema
+        ? "The local sample has a category and a measure for KPIs, a summary and a chart."
+        : "The range can support KPIs, a summary and a chart on one result sheet.",
+    });
+  if (knowsSchema && schema?.hasText && !schema.hasMeasure)
+    suggestions.push({
+      id: "clean",
+      label: "Clean text values",
+      instruction: "Clean and standardize text values in the selected data.",
       reason:
-        "The range can support KPIs, a summary and a chart on one result sheet.",
+        "The local sample has text fields but no numeric measure for a chart or forecast.",
     });
   return suggestions.slice(0, 3);
 }
 
-export function selectionBadges(selection: WorkspaceSelection): string[] {
+export function selectionBadges(
+  selection: WorkspaceSelection,
+  labels: WorkspaceBadgeLabels = {
+    row: "row",
+    rows: "rows",
+    column: "column",
+    columns: "columns",
+    largeRange: "Large range",
+    localPreview: "Local preview",
+  },
+): string[] {
   const cells = selection.rows * selection.columns;
   return [
-    `${selection.rows.toLocaleString("en-US")} rows`,
-    `${selection.columns.toLocaleString("en-US")} columns`,
-    cells > 100_000 ? "Large range" : "Local preview",
+    `${selection.rows.toLocaleString("en-US")} ${selection.rows === 1 ? labels.row : labels.rows}`,
+    `${selection.columns.toLocaleString("en-US")} ${selection.columns === 1 ? labels.column : labels.columns}`,
+    cells > 100_000 ? labels.largeRange : labels.localPreview,
   ];
 }

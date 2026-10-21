@@ -46,6 +46,37 @@ test("selection suggestions are bounded, shape-aware and contain preview instruc
   );
   assert.ok(small.every((item) => item.instruction && item.reason));
 
+  const schemaAware = suggestionsForSelection(
+    { address: "Data!A1:D20", rows: 20, columns: 4 },
+    {
+      hasMeasure: true,
+      hasDate: true,
+      hasCategory: true,
+      hasText: false,
+      sampleRows: 20,
+    },
+  );
+  assert.deepEqual(
+    schemaAware.map((item) => item.id),
+    ["quality", "forecast", "chart"],
+  );
+  assert.match(schemaAware[1]?.instruction ?? "", /confidence interval/i);
+
+  const textOnly = suggestionsForSelection(
+    { address: "Data!A1:B20", rows: 20, columns: 2 },
+    {
+      hasMeasure: false,
+      hasDate: false,
+      hasCategory: false,
+      hasText: true,
+      sampleRows: 20,
+    },
+  );
+  assert.deepEqual(
+    textOnly.map((item) => item.id),
+    ["quality", "clean"],
+  );
+
   const large = suggestionsForSelection({
     address: "Data!A1:J520126",
     rows: 520126,
@@ -67,5 +98,19 @@ test("selection badges disclose the range size and large-range fallback", () => 
       columns: 10,
     })[2],
     "Large range",
+  );
+  assert.deepEqual(
+    selectionBadges(
+      { address: "Data!A1", rows: 1, columns: 1 },
+      {
+        row: "පේළිය",
+        rows: "පේළි",
+        column: "තීරුව",
+        columns: "තීරු",
+        largeRange: "විශාල පරාසය",
+        localPreview: "දේශීය පෙරදසුන",
+      },
+    ),
+    ["1 පේළිය", "1 තීරුව", "දේශීය පෙරදසුන"],
   );
 });

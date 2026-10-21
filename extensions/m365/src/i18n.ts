@@ -30,7 +30,11 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     more_tools: "තවත් මෙවලම්",
     preview_impact: "පෙරදසුනේ බලපෑම",
     rows_label: "පේළි",
+    row_label: "පේළිය",
     columns_label: "තීරු",
+    column_label: "තීරුව",
+    large_range: "විශාල පරාසය",
+    local_preview: "දේශීය පෙරදසුන",
     changes_label: "වෙනස්කම්",
     warnings_label: "අවවාද",
     agent_timeline: "නියෝජිතයාගේ ප්‍රගතිය",
@@ -45,6 +49,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     suggestion_pivot: "විශාල දත්ත සාරාංශ කරන්න",
     suggestion_dashboard: "උපකරණ පුවරුවක් සාදන්න",
     suggestion_formulas: "සූත්‍ර පරීක්ෂා කරන්න",
+    suggestion_forecast: "ප්‍රවණතා අනාවැකියක් සාදන්න",
+    suggestion_clean: "පෙළ අගයන් පිරිසිදු කරන්න",
     suggestion_reason_quality:
       "වාර්තාවක් සෑදීමට පෙර හිස් අගයන්, අනුපිටපත් සහ නොගැළපෙන අගයන් සොයන්න.",
     suggestion_reason_chart:
@@ -55,6 +61,12 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
       "KPI, සාරාංශ සහ ප්‍රස්තාරයක් එක් ප්‍රතිඵල පත්‍රයක පෙන්විය හැක.",
     suggestion_reason_formulas:
       "සක්‍රිය කොටුව සහ අවට සූත්‍ර රටාව පරීක්ෂා කරන්න.",
+    suggestion_reason_forecast:
+      "දින සහ සංඛ්‍යාත්මක මිනුමක් ඇති බව මෙම උපාංගයේ sample එකෙන් හඳුනා ගන්නා ලදී.",
+    suggestion_reason_clean:
+      "ප්‍රස්තාරයකට හෝ අනාවැකියකට සංඛ්‍යාත්මක මිනුමක් නැති පෙළ තීරු හඳුනා ගන්නා ලදී.",
+    agent_unavailable:
+      "මෙම ගිණුමට Agent workflow ලබා ගත නොහැක. Local preview භාවිතා කරන්න.",
     outcomes_label: "සාදනු ලබන දෑ",
     adjust_preview: "පෙරදසුන සකසන්න",
     steps_aria: "පියවර",
@@ -186,7 +198,11 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     more_tools: "மேலும் கருவிகள்",
     preview_impact: "முன்னோட்டத் தாக்கம்",
     rows_label: "வரிசைகள்",
+    row_label: "வரிசை",
     columns_label: "நெடுவரிசைகள்",
+    column_label: "நெடுவரிசை",
+    large_range: "பெரிய வரம்பு",
+    local_preview: "உள்ளக முன்னோட்டம்",
     changes_label: "மாற்றங்கள்",
     warnings_label: "எச்சரிக்கைகள்",
     agent_timeline: "முகவர் முன்னேற்றம்",
@@ -201,6 +217,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     suggestion_pivot: "பெரிய தரவைச் சுருக்கு",
     suggestion_dashboard: "முகப்புப் பலகை உருவாக்கு",
     suggestion_formulas: "சூத்திரங்களைச் சரிபார்",
+    suggestion_forecast: "போக்கு முன்னறிவிப்பை உருவாக்கு",
+    suggestion_clean: "உரை மதிப்புகளைச் சுத்தப்படுத்து",
     suggestion_reason_quality:
       "அறிக்கைக்கு முன் வெற்றிடங்கள், நகல்கள் மற்றும் முரண்பாடுகளை கண்டறியும்.",
     suggestion_reason_chart:
@@ -210,6 +228,12 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
       "KPI, சுருக்கம் மற்றும் விளக்கப்படத்தை ஒரே முடிவுத் தாளில் காட்டலாம்.",
     suggestion_reason_formulas:
       "செயலில் உள்ள கலத்தையும் அருகிலுள்ள சூத்திர முறையையும் சரிபார்க்கும்.",
+    suggestion_reason_forecast:
+      "இந்தச் சாதனத்தில் உள்ள மாதிரியில் தேதி மற்றும் எண்ணியல் அளவு கண்டறியப்பட்டது.",
+    suggestion_reason_clean:
+      "விளக்கப்படம் அல்லது முன்னறிவிப்புக்கான எண்ணியல் அளவு இல்லாத உரை நெடுவரிசைகள் கண்டறியப்பட்டன.",
+    agent_unavailable:
+      "இந்தக் கணக்கிற்கு Agent செயல்முறை கிடைக்கவில்லை. உள்ளக முன்னோட்டத்தைப் பயன்படுத்தவும்.",
     outcomes_label: "உருவாக்கப்படுபவை",
     adjust_preview: "முன்னோட்டத்தைச் சரிசெய்",
     steps_aria: "படிகள்",

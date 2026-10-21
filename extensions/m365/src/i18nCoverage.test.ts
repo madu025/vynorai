@@ -137,6 +137,44 @@ test("preview impact and the agent approval timeline are visible structures", ()
     assert.match(html, new RegExp(`data-stage="${stage}"`));
 });
 
+test("contextual suggestions use the same safe Run flow and Agent unavailability is explicit", () => {
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
+  const contextRenderer = source.slice(
+    source.indexOf("function renderWorkspaceContext"),
+    source.indexOf("async function readWorkspaceContext"),
+  );
+  assert.match(
+    contextRenderer,
+    /instruction\.value = suggestion\.instruction;[\s\S]*smartRun\?\.click\(\)/,
+  );
+  assert.match(
+    source,
+    /mode === "agent" && capabilities\?\.aiAnalysis === false/,
+  );
+  assert.match(source, /"agent_unavailable"/);
+});
+
+test("context suggestions are based on a bounded local schema sample, not a placeholder", () => {
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /const sampleRows = Math\.min\(Math\.max\(info\.rows, 0\), 26\)/,
+  );
+  assert.match(
+    source,
+    /const sampleColumns = Math\.min\(Math\.max\(info\.columns, 0\), 20\)/,
+  );
+  assert.match(source, /buildSchemaSummary\(/);
+  assert.match(source, /workbookId: "local-workspace-context"/);
+  assert.match(source, /suggestionsForSelection\(info, schema\)/);
+});
+
 test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {
   assert.match(html, /\.message-body \{[^}]*white-space: pre-line/);
 });

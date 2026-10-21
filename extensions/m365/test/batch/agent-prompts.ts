@@ -870,7 +870,9 @@ const CASES: Case[] = [
   {
     id: "n-budget",
     text: "treat Requested Quantity as the budget and Issued Quantity as the actual: show actual vs budget by RTOM on a new sheet, biggest variance first",
-    check: (run) =>
+    // The outcome counts: the financial_model tool, or one live formula that adds Issued and
+    // Requested by RTOM (column B) and takes their difference.
+    check: (run, seen) =>
       need(
         action(run, "financial_model").some(
           (a) =>
@@ -878,7 +880,15 @@ const CASES: Case[] = [
             /!B\d/.test(a.categories) &&
             /!H\d/.test(a.actual) &&
             /!G\d/.test(a.budget),
-        ),
+        ) ||
+          formulas(run, seen).some(
+            (f) =>
+              /SUMIFS|GROUPBY/i.test(f) &&
+              /!B2:B/.test(f) &&
+              /!G2:G/.test(f) &&
+              /!H2:H/.test(f) &&
+              run.changes.some((c) => c.change.kind === "write_formula" && c.change.formula === f),
+          ),
         JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
       ),
   },

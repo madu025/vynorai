@@ -472,7 +472,7 @@ function persistConversation() {
   renderChatList();
 }
 
-/** The chat picker: a new chat, then the saved chats, newest first. */
+/** The chat picker holds prior conversations; starting a fresh chat has its own visible button. */
 function renderChatList() {
   const select = document.querySelector<HTMLSelectElement>(
     "#chat-history-select",
@@ -483,7 +483,7 @@ function renderChatList() {
   select.replaceChildren();
   const fresh = document.createElement("option");
   fresh.value = "";
-  fresh.textContent = translate(language, "new_chat_option", "New chat");
+  fresh.textContent = translate(language, "chat_history", "Chat history");
   select.appendChild(fresh);
   for (const entry of saved) {
     const option = document.createElement("option");
@@ -2607,9 +2607,7 @@ function renderInsights(result: LocalInsights) {
 
 /** The fixed starter chips are only a fallback; real suggestions come from the data and the request. */
 function hideGenericPills() {
-  const generic = document.querySelector<HTMLElement>(
-    ".pills[aria-label='Suggestions']",
-  );
+  const generic = document.querySelector<HTMLElement>("#starter-suggestions");
   if (generic) generic.hidden = true;
 }
 
@@ -4149,6 +4147,10 @@ function renderWorkspaceContext(
   show(workbookContext, description !== "");
   show(contextSuggestions, suggestions.length > 0);
   show(selectionGuidance, info.isBlank === true);
+  show(
+    document.querySelector<HTMLElement>("#starter-suggestions"),
+    !info.isBlank && suggestions.length === 0,
+  );
 }
 
 /**

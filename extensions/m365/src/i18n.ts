@@ -23,6 +23,7 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     adjust_preview: "පෙරදසුන සකසන්න",
     steps_aria: "පියවර",
     agent_plan: "සැලසුම",
+    selection_using: "භාවිතා කරන්නේ:",
     skip_to_request: "ඉල්ලීමට පිවිසෙන්න",
     email_report: "වාර්තාව ඊමේල් කරන්න",
     reviewed: "සමාලෝචනය කළා",

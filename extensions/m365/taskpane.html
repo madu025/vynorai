@@ -325,6 +325,7 @@
 
         <section class="composer" aria-label="Request a workbook change" data-i18n-aria-label="request_change">
           <label class="sr-only" for="instruction" data-i18n="instruction_label">Describe what to create</label>
+          <p id="selection-chip" class="muted" aria-live="polite" hidden><span data-i18n="selection_using">Using:</span> <span id="selection-text"></span></p>
           <div id="dup-fix" hidden><button id="dup-fix-btn" type="button" data-i18n="clean_first">Clean first, then run this</button></div>
           <textarea id="instruction"data-i18n-placeholder="placeholder" placeholder="Describe what you would like to create from the selected data"></textarea>
           <div class="composer-bar">

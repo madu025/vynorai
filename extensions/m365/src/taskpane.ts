@@ -11,6 +11,7 @@ import {
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
 import { describeReview, runTeam } from "./agentReview.js";
+import { describeSelection } from "./selectionChip.js";
 import {
   applyAgentChanges,
   createOfficeAgentHost,
@@ -4006,6 +4007,48 @@ languageButton?.addEventListener("click", (event) => {
 });
 refreshLanguage();
 
+const selectionChip = document.querySelector<HTMLElement>("#selection-chip");
+const selectionText = document.querySelector<HTMLElement>("#selection-text");
+let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Shows which sheet and cells the next request will use; hidden when nothing can be read. */
+async function refreshSelectionChip() {
+  if (!selectionChip || !selectionText) return;
+  try {
+    const info = await officeRuntime().run(async (context: any) => {
+      const range = context.workbook.getSelectedRange();
+      range.load(["address", "rowCount", "columnCount"]);
+      await context.sync();
+      return {
+        address: String(range.address),
+        rows: Number(range.rowCount),
+        columns: Number(range.columnCount),
+      };
+    });
+    const text = describeSelection(info);
+    selectionText.textContent = text;
+    show(selectionChip, text !== "");
+  } catch {
+    show(selectionChip, false);
+  }
+}
+
+/** Keeps the chip current while the person moves around the sheet (one refresh per pause). */
+function watchSelection() {
+  void refreshSelectionChip();
+  try {
+    office()?.context?.document?.addHandlerAsync?.(
+      office().EventType.DocumentSelectionChanged,
+      () => {
+        clearTimeout(selectionTimer);
+        selectionTimer = setTimeout(() => void refreshSelectionChip(), 250);
+      },
+    );
+  } catch (error) {
+    log.record("selection:watch", "info", describeError(error));
+  }
+}
+
 async function initialize() {
   localStorage.removeItem(LEGACY_SESSION_KEY);
   if (office()?.onReady) {
@@ -4038,6 +4081,7 @@ async function initialize() {
   }
   workbookPrefs = loadPreferences();
   renderPreferences();
+  watchSelection();
   if (restoreSession()) {
     restoreConversationHistory();
     void restoreResultGallery();

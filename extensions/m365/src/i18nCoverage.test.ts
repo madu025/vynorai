@@ -88,6 +88,19 @@ test("the pane's grids cannot be stretched past the pane by long unbroken text",
   assert.match(html, /main \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
 });
 
+test("the task pane keeps its compact macOS-style theme and readable overflow action", () => {
+  assert.match(
+    html,
+    /font: 13px\/1\.45 -apple-system, BlinkMacSystemFont, "SF Pro Text"/,
+  );
+  assert.match(html, /--surface-solid: #ffffff/);
+  assert.match(html, /@supports \(backdrop-filter: blur\(1px\)\)/);
+  assert.match(
+    html,
+    /id="more-pills"[^>]*data-i18n="more_suggestions">Show more<\/button>/,
+  );
+});
+
 test("the chat scrolls above a request box that never covers it", () => {
   assert.match(
     html,

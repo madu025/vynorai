@@ -252,6 +252,51 @@ test("text analysis is read-only and bounded before a result column can be stage
   assert.match(run.messages.at(-1)?.content ?? "", /positive/);
 });
 
+test("column analysis reads at most 5,000 rows on the device and returns a summary, not rows", async () => {
+  const asked: string[] = [];
+  let turn = 0;
+  const run = await runAgent({
+    request: "find unusual amounts",
+    host: host({
+      readRange: async (_sheet, address) => {
+        asked.push(address);
+        return {
+          address,
+          values: [
+            ["Region", "Amount"],
+            ...[100, 104, 98, 101, 99, 9000].map((amount) => ["West", amount]),
+          ],
+        };
+      },
+    }),
+    mask: new PersonalMask(),
+    model: async () => {
+      turn += 1;
+      return turn === 1
+        ? {
+            content: "",
+            tool_calls: [
+              call("a", "analyze_columns", {
+                kind: "anomalies",
+                sheet: "Data",
+                address: "B4:C520126",
+                columns: ["Amount"],
+              }),
+            ],
+          }
+        : { content: "Row 10 is unusual.", tool_calls: [] };
+    },
+  });
+  assert.deepEqual(asked, ["B4:C5004"]);
+  const result = JSON.parse(
+    String(run.messages.find((m) => m.role === "tool")?.content),
+  );
+  assert.equal(result.outliers, 1);
+  assert.equal(result.top[0].row, 10);
+  assert.match(result.note, /first 5,000 data rows/);
+  assert.equal(run.changes.length, 0);
+});
+
 test("reports the planner, execution and verification phases", async () => {
   const phases: string[] = [];
   let turn = 0;

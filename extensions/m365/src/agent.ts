@@ -9,6 +9,13 @@ import { PERSONAL_PATTERNS } from "./analysis.js";
 import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 import { describeRequestMeaning } from "./businessContext.js";
+import type { AnalystCell } from "./advancedAnalytics.js";
+import {
+  ANALYSIS_KINDS,
+  ANALYZE_MAX_ROWS,
+  type AnalysisKind,
+  runColumnAnalysis,
+} from "./analyzeColumns.js";
 
 export const AGENT_MAX_TURNS = 12;
 export const AGENT_MAX_CHANGES = 25;
@@ -806,6 +813,43 @@ async function runTool(
             }),
           }
         : { result };
+    }
+    case "analyze_columns": {
+      // A full pass over up to ANALYZE_MAX_ROWS rows on the device: counted like a calculation.
+      counts.calculate += 1;
+      if (counts.calculate > CALC_PER_REQUEST)
+        throw new AgentToolError(
+          `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
+        );
+      const kind = String(args.kind ?? "").trim() as AnalysisKind;
+      if (!ANALYSIS_KINDS.includes(kind))
+        throw new AgentToolError(`kind must be one of ${ANALYSIS_KINDS.join(", ")}.`);
+      const sheet = checkSheetName(restore(String(args.sheet ?? "")));
+      const box = parseA1(checkRange(args.address));
+      if (box.lastColumn - box.column >= 30)
+        throw new AgentToolError("Analyse at most 30 columns at once.");
+      const lastRow = Math.min(box.lastRow, box.row + ANALYZE_MAX_ROWS);
+      const address = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${lastRow}`;
+      const read = await host.readRange(sheet, address, false);
+      const [headerRow = [], ...rows] = read.values as AnalystCell[][];
+      const result = runColumnAnalysis(
+        kind,
+        headerRow.map((value) => String(value ?? "")),
+        rows,
+        {
+          columns: Array.isArray(args.columns)
+            ? args.columns.map((value) => restore(String(value ?? "")))
+            : [],
+          firstRow: box.row + 1,
+          k: typeof args.k === "number" ? args.k : undefined,
+        },
+      );
+      return lastRow < box.lastRow
+        ? {
+            ...result,
+            note: `Only the first ${ANALYZE_MAX_ROWS.toLocaleString("en-US")} data rows (${address}) were analysed; use calculate for exact totals over every row.`,
+          }
+        : result;
     }
     case "analyze_text_batch": {
       if (!host.analyzeTextBatch)

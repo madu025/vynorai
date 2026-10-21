@@ -157,13 +157,88 @@ test("every workbook-object tool checks its arguments and describes the change",
       { sheet: "Model", formula_cell: "B5", changing_cell: "B1", target: 0 },
       /until B5 = 0/,
     ],
+    [
+      "combine_tables",
+      {
+        mode: "join",
+        left_sheet: "Orders",
+        left_address: "A1:C101",
+        right_sheet: "Customers",
+        right_address: "A1:D51",
+        key: "Customer ID",
+        columns: ["Region"],
+        sheet: "Joined",
+      },
+      /Join 'Orders'!A1:C101 with 'Customers'!A1:D51 on Customer ID \(Region\) into 'Joined'!A1/,
+    ],
+    [
+      "combine_tables",
+      {
+        mode: "reconcile",
+        left_sheet: "Orders",
+        left_address: "A1:C101",
+        right_sheet: "Bank",
+        right_address: "A1:B201",
+        key: "Order ID",
+        right_key: "Ref",
+        amount: "Amount",
+        right_amount: "Value",
+        sheet: "Recon",
+        cell: "B2",
+      },
+      /Reconcile .* on Order ID \/ Ref, comparing Amount \/ Value into 'Recon'!B2/,
+    ],
+    [
+      "financial_model",
+      {
+        kind: "loan_schedule",
+        principal: 2500000,
+        annual_rate: 0.14,
+        years: 5,
+        sheet: "Loan",
+      },
+      /Loan schedule: 2,500,000 at 14% for 5 years, 12 payments a year, into 'Loan'!A1 as live formulas/,
+    ],
+    [
+      "financial_model",
+      {
+        kind: "ageing",
+        due_dates: "AR!D2:D500",
+        amounts: "AR!E2:E500",
+        customers: "AR!B2:B500",
+        sheet: "Ageing",
+      },
+      /Receivables ageing of 'AR'!E2:E500 by 'AR'!B2:B500 as of today/,
+    ],
+    [
+      "what_if",
+      {
+        mode: "scenarios",
+        model_sheet: "Model",
+        outputs: ["B5"],
+        scenarios: [
+          { name: "Base", inputs: { B1: 10 } },
+          { name: "High price", inputs: { B1: 12 } },
+        ],
+        sheet: "Scenarios",
+      },
+      /Compare 2 scenarios \(Base, High price\) on 'Model'!B5 into 'Scenarios'!A1 as values \(inputs are put back\)/,
+    ],
   ];
   for (const [tool, args, pattern] of cases) {
     const change = stage(tool, args);
     assert.equal(change.kind, "excel_action", tool);
     assert.match(describeChange(change), pattern, tool);
   }
-  assert.equal(Object.keys(ACTION_TOOLS).length, 17);
+  assert.equal(Object.keys(ACTION_TOOLS).length, 20);
+});
+
+test("every workbook-object tool is offered to the model by the backend", async () => {
+  const { AGENT_TOOL_NAMES } = await import(
+    "../../../backend/src/services/m365Agent.js"
+  );
+  for (const tool of Object.keys(ACTION_TOOLS))
+    assert.ok(AGENT_TOOL_NAMES.includes(tool), tool);
 });
 
 test("bad arguments come back as messages the model can act on", () => {
@@ -200,6 +275,28 @@ test("bad arguments come back as messages the model can act on", () => {
     ],
     ["sheet_action", { action: "tab_color", sheet: "S", value: "red" }],
     ["goal_seek", { sheet: "S", formula_cell: "B5", changing_cell: "B1" }],
+    [
+      "combine_tables",
+      {
+        mode: "merge_all",
+        left_sheet: "A",
+        left_address: "A1:B9",
+        right_sheet: "B",
+        right_address: "A1:B9",
+        sheet: "Out",
+      },
+    ],
+    [
+      "combine_tables",
+      {
+        mode: "join",
+        left_sheet: "A",
+        left_address: "A1:B9",
+        right_sheet: "B",
+        right_address: "A1:B9",
+        sheet: "Out",
+      },
+    ],
   ];
   for (const [tool, args] of bad)
     assert.throws(() => stage(tool, args), AgentToolError, tool);

@@ -110,6 +110,7 @@ const host = (seen: Seen): AgentHost => ({
       },
       { name: "Pivot", usedRange: "A3:B30", rows: 28, columns: 2 },
       { name: "Model", usedRange: "A1:B5", rows: 5, columns: 2 },
+      { name: "Items", usedRange: "A1:C41", rows: 41, columns: 3 },
     ],
     tables: [],
     data: {
@@ -147,6 +148,18 @@ const host = (seen: Seen): AgentHost => ({
               ],
             }
           : {}),
+      };
+    if (sheet === "Items")
+      return {
+        address: "A1:C6",
+        values: [
+          ["Item Code", "Description", "Unit Cost"],
+          ["IC-100", "Drop wire", 120],
+          ["IC-101", "ONT", 5400],
+          ["IC-102", "Splitter", 900],
+          ["IC-103", "Patch cord", 150],
+          ["IC-104", "Rosette", 80],
+        ],
       };
     const match = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(address);
     const top = match ? Number(match[2]) : 1;
@@ -779,6 +792,76 @@ const CASES: Case[] = [
             a.target === 0,
         ),
         JSON.stringify(run.changes.map((c) => c.change)),
+      ),
+  },
+  {
+    id: "n-join",
+    text: "bring the Description and Unit Cost from the Items sheet into the detail report by Item Code, on a new sheet",
+    check: (run) =>
+      need(
+        action(run, "combine_tables").some(
+          (a) =>
+            a.mode === "join" &&
+            a.right_sheet === "Items" &&
+            /item code/i.test(String(a.key)),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-reconcile",
+    text: "reconcile the Item Codes used in detail-report against the Items master list: which codes are missing from either side?",
+    check: (run) =>
+      need(
+        action(run, "combine_tables").some(
+          (a) => a.mode === "reconcile" && /item code/i.test(String(a.key)),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-outliers",
+    text: "are there any unusual Issued Quantity values in the detail report? tell me which rows",
+    check: (run, seen) =>
+      all(
+        need(
+          seen.some(
+            (s) => s.name === "analyze_columns" && s.args.kind === "anomalies",
+          ) || seen.some((s) => s.name === "calculate"),
+          seen.map((s) => s.name).join(" ; ").slice(0, 300),
+        ),
+        noChanges(run),
+      ),
+  },
+  {
+    id: "n-loan",
+    text: "make a loan amortization schedule for 2,500,000 at 14% a year over 5 years, monthly payments, on a new sheet",
+    check: (run) =>
+      need(
+        action(run, "financial_model").some(
+          (a) =>
+            a.kind === "loan_schedule" &&
+            a.principal === 2500000 &&
+            Math.abs(a.annual_rate - 0.14) < 1e-9 &&
+            a.years === 5,
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-scenarios",
+    text: "on the Model sheet compare profit in B5 for three price scenarios: 8, 10 and 12 in B1, put the table on a new sheet",
+    check: (run) =>
+      need(
+        action(run, "what_if").some(
+          (a) =>
+            a.model_sheet === "Model" &&
+            a.outputs.includes("B5") &&
+            (a.mode === "scenarios"
+              ? a.scenarios.length === 3
+              : a.input_cell === "B1" && a.values.length === 3),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
       ),
   },
   {

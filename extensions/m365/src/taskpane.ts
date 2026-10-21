@@ -4124,6 +4124,8 @@ function renderWorkspaceContext(
     forecast: "↗",
     clean: "✦",
   };
+  if (contextSuggestionList)
+    contextSuggestionList.dataset.count = String(suggestions.length);
   contextSuggestionList?.replaceChildren(
     ...suggestions.map((suggestion) => {
       const button = document.createElement("button");

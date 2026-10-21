@@ -88,19 +88,14 @@ test("the pane's grids cannot be stretched past the pane by long unbroken text",
   assert.match(html, /main \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
 });
 
-test("the task pane presents a compact product header and readable overflow action", () => {
+test("the pane avoids duplicating the Office title bar and keeps its app menu reachable", () => {
   assert.match(
     html,
     /font: 13px\/1\.45 -apple-system, BlinkMacSystemFont, "SF Pro Text"/,
   );
   assert.match(html, /--surface-solid: #ffffff/);
   assert.match(html, /@supports \(backdrop-filter: blur\(1px\)\)/);
-  assert.match(html, /class="brand" aria-label="VynorAI Excel"/);
-  assert.match(html, /data-i18n="product_title">VynorAI Excel/);
-  assert.match(
-    html,
-    /data-i18n="product_subtitle">Analyze, plan and apply safely/,
-  );
+  assert.match(html, /class="status-actions"><button id="menu-toggle"/);
   assert.match(
     html,
     /id="more-pills"[^>]*data-i18n="more_suggestions">Show more<\/button>/,
@@ -139,10 +134,14 @@ test("selection context and suggestions appear before the conversation", () => {
   assert.match(html, /id="use-sheet-data" class="ghost"/);
   assert.match(html, /id="starter-suggestions" class="suggestions"/);
   assert.match(html, /\.chat-bar \{ position: sticky; top: 0;/);
-  assert.match(html, /header\.topbar \{ position: relative;/);
+  assert.doesNotMatch(html, /<header class="topbar"/);
   assert.match(
     html,
     /\.smart-suggestion-list \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/,
+  );
+  assert.match(
+    html,
+    /\.smart-suggestion-list\[data-count="1"\] \{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
   );
   assert.match(
     html,
@@ -219,6 +218,10 @@ test("context suggestions are based on a bounded local schema sample, not a plac
   assert.match(
     source,
     /button\.dataset\.icon = suggestionIcons\[suggestion\.id\]/,
+  );
+  assert.match(
+    source,
+    /contextSuggestionList\.dataset\.count = String\(suggestions\.length\)/,
   );
 });
 

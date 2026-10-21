@@ -65,21 +65,17 @@
       .skip-link:focus { top: 8px; }
       main { min-height: 100vh; max-width: 440px; min-width: 0; margin: auto; padding: 10px 11px 15px; overflow-wrap: anywhere; background: radial-gradient(circle at 100% 0%, rgb(0 122 255 / 10%), transparent 34%), linear-gradient(160deg, rgb(255 255 255 / 45%), transparent 42%); }
       .workspace > *, .conversation, .welcome { min-width: 0; }
-      .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 40px; gap: 8px; }
-      .brand { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--ink); font-size: 16px; font-weight: 750; letter-spacing: -.28px; }
-      .brand-copy { display: grid; min-width: 0; gap: 0; }
-      .brand-subtitle { overflow: hidden; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
-      header.topbar { position: relative; z-index: 6; margin-bottom: 5px; }
-      main { padding-top: 7px; }
-      .brand-mark { display: grid; width: 28px; height: 28px; flex: 0 0 28px; place-items: center; border-radius: 9px; background: linear-gradient(145deg, #0a84ff, #5ac8fa); box-shadow: 0 3px 7px rgb(0 122 255 / 26%); color: white; font-size: 14px; }
-      .header-actions { display: flex; gap: 4px; }
+      main { padding-top: 10px; }
+      .status-actions { position: relative; margin-left: auto; }
       .icon-button { width: 32px; height: 32px; border: 1px solid transparent; border-radius: 50%; background: rgb(118 118 128 / 10%); font-size: 19px; line-height: 1; }
       .icon-button:hover { background: var(--surface-muted); }
-      #menu { position: absolute; right: 10px; top: 43px; z-index: 10; min-width: 210px; padding: 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-solid); box-shadow: var(--shadow); }
+      #menu { position: absolute; right: 0; top: 34px; z-index: 10; min-width: 210px; padding: 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-solid); box-shadow: var(--shadow); }
       #menu button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; text-align: left; }
       #menu button:hover:not(:disabled) { background: var(--surface-muted); }
       .menu-version { margin: 6px 10px 2px; color: var(--muted); font-size: 11px; }
-      #status { display: flex; align-items: center; gap: 7px; min-height: 32px; margin: 2px 0 11px; padding: 7px 10px; border: 1px solid rgb(60 60 67 / 8%); border-radius: 11px; background: linear-gradient(90deg, rgb(24 161 120 / 10%), rgb(0 122 255 / 5%)); color: var(--muted); font-size: 12px; }
+      #status { display: flex; align-items: center; gap: 7px; min-height: 32px; margin: 2px 0 11px; padding: 6px 8px 6px 10px; border: 1px solid rgb(60 60 67 / 8%); border-radius: 11px; background: linear-gradient(90deg, rgb(24 161 120 / 10%), rgb(0 122 255 / 5%)); color: var(--muted); font-size: 12px; }
+      #status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #status .icon-button { width: 26px; height: 26px; background: transparent; font-size: 17px; }
       #status[data-tone="busy"] { background: color-mix(in srgb, var(--brand) 9%, var(--surface)); color: var(--ink); }
       #status[data-tone="error"] { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); }
       #status[data-tone="success"] { background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success); }
@@ -104,7 +100,7 @@
       .welcome p { margin: 0; color: var(--muted); }
       .chat-bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 3px 0; background: linear-gradient(var(--bg) 82%, transparent); }
       .chat-bar .pill { min-height: 32px; padding: 5px 9px; border-radius: 10px; }
-      .chat-bar select { flex: 1 1 120px; min-width: 0; max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
+      .chat-bar select { flex: 1 1 0; min-width: 0; max-width: 100%; overflow: hidden; padding: 6px 24px 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
       #conversation-history { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; }
       #conversation-history > article { min-width: 0; overflow-wrap: anywhere; scroll-margin-bottom: 8px; }
       .message { max-width: 94%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 15px 15px 15px 5px; background: var(--surface); box-shadow: var(--control-shadow); color: var(--ink); }
@@ -128,6 +124,11 @@
       .context-suggestions { display: grid; gap: 8px; padding: 1px 1px 2px; }
       .context-suggestions h2 { margin: 0 2px; font-size: 14px; letter-spacing: -.12px; }
       .smart-suggestion-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+      .smart-suggestion-list[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+      .smart-suggestion-list[data-count="1"] .smart-suggestion { min-height: 78px; grid-template-columns: 28px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 9px; }
+      .smart-suggestion-list[data-count="1"] .smart-suggestion::before { grid-row: span 2; }
+      .smart-suggestion-list[data-count="1"] .smart-suggestion strong { align-self: end; }
+      .smart-suggestion-list[data-count="1"] .suggestion-reason { align-self: start; }
       .smart-suggestion { position: relative; display: grid; min-height: 112px; align-content: start; gap: 5px; width: 100%; padding: 11px 9px 10px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--control-shadow); color: var(--ink); text-align: left; transition: transform .16s ease, background .16s ease, box-shadow .16s ease; }
       .smart-suggestion::before { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: color-mix(in srgb, var(--brand) 12%, var(--surface)); color: var(--brand); content: attr(data-icon); font-size: 15px; line-height: 1; }
       .smart-suggestion::after { position: absolute; right: 9px; bottom: 8px; color: var(--brand); content: "›"; font-size: 18px; line-height: 1; }
@@ -226,14 +227,7 @@
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request">Skip to request</a>
     <main>
-      <header class="topbar">
-        <div class="brand" aria-label="VynorAI Excel">
-          <span class="brand-mark" aria-hidden="true">V</span>
-          <span class="brand-copy"><span data-i18n="product_title">VynorAI Excel</span><span class="brand-subtitle" data-i18n="product_subtitle">Analyze, plan and apply safely</span></span>
-        </div>
-        <div class="header-actions">
-          <button id="menu-toggle" class="icon-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More options">&#8943;</button>
-          <div id="menu" role="menu" hidden>
+      <div id="status" role="status" aria-live="polite" tabindex="-1" data-tone="idle"><span class="state-icon" aria-hidden="true"></span><span id="status-text">Loadingâ€¦</span><div class="status-actions"><button id="menu-toggle" class="icon-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More options">&#8943;</button><div id="menu" role="menu" hidden>
             <button data-dev id="toggle-diagnostics" type="button" role="menuitem" data-i18n="menu_show_diag">Show diagnostics</button>
             <button id="overview" type="button" role="menuitem" data-i18n="menu_overview">Workbook overview</button>
             <button id="language" type="button" role="menuitem" data-i18n="menu_language_button">Language: English</button>
@@ -244,10 +238,7 @@
             <button data-dev id="clear-diagnostics" type="button" role="menuitem" data-i18n="menu_clear">Clear diagnostics</button>
             <button id="sign-out" type="button" role="menuitem" disabled data-i18n="menu_signout">Sign out</button>
             <p class="menu-version" id="build-id">Build 20261021.02</p>
-          </div>
-        </div>
-      </header>
-      <p id="status" role="status" aria-live="polite" tabindex="-1" data-tone="idle"><span class="state-icon" aria-hidden="true"></span><span id="status-text">Loadingâ€¦</span></p>
+          </div></div></div>
 
       <section id="signin-card" aria-labelledby="signin-title">
         <h1 id="signin-title" data-i18n="welcome_title">Welcome to VynorAI</h1>

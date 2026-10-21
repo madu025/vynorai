@@ -11,7 +11,8 @@ Rules for Claude working in this repository.
 ## Working style
 
 - Own engineering end to end. When the user gives a goal or says to follow the recommendation, choose the best option, do the work, and report. Avoid repeated questions and option menus.
-- Ask before `git push`, extension publish, backend deploy, or any production change that was not explicitly requested.
+- `git push` to the session's working branch is automatic, but only when the work is fixed and verified: every relevant check in "Verification" below (and `node scripts/check-doc-links.mjs`) passed after the last change, and the working tree holds nothing unfinished. If any check fails or was not run, do not push; say what is missing. Never force-push, and never push to `main` or another branch without asking.
+- Ask before extension publish, backend deploy, or any production change that was not explicitly requested.
 - Never bypass a denied permission or a safety check. Never print or commit secrets (`.env`, API keys).
 - Exception, the testing-account key: the owner allows the key of the VynorAI testing account to be used for any test (E2E, benchmark, live audit), including when it was given in chat. It is kept in the git-ignored file `.env.e2e` at the root as `VYNORAI_E2E_API_KEY`; the test command loads it from there (for example `node --env-file=.env.e2e ...`) without the file being opened or echoed. It is still never committed and never written into a tracked file, a log or a report. This exception covers no other key.
 - Report results honestly: say what was verified (with evidence) and what was not. Do not claim something works without running it.

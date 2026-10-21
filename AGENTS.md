@@ -70,7 +70,10 @@ are expected. `CODEMAP.md` section 9 says which parts are VynorAI's own.
 - Reply to the user in Sinhala script, in simple language. Keep code, commands, paths, identifiers, error
   messages, commit messages and pull request text in English.
 - Own the engineering: given a goal, choose the best option, do it and report. Do not hand back option menus.
-- Ask before `git push`, publishing the extension, deploying the back end, or any change to production.
+- Push to your working branch automatically only when the change is fixed and verified: every relevant check in
+  "Verify before saying it works" passed after the last change. Otherwise do not push; say what is missing. Never
+  force-push, and never push to `main` or another branch without asking.
+- Ask before publishing the extension, deploying the back end, or any change to production.
 - Never bypass a denied permission or a safety check. Never print or commit secrets (`.env`, API keys).
 - Exception: the testing-account key in the git-ignored `.env.e2e` (`VYNORAI_E2E_API_KEY`) may be used for any test. It is never committed or written into a tracked file, a log or a report.
 - Report honestly: say what was verified, with the evidence, and what was not. Do not say something works

@@ -32,7 +32,14 @@ the request and sent to the agent as one per-request line), `extensions/m365/src
 "VynorAI Log" sheet: every apply and undo), `extensions/m365/src/privacyReceipt.ts` (what an agent request
 sent, masked values counted, unmasked e-mail/phone/NIC flagged), `extensions/m365/src/whatsappSummary.ts`
 (a report sheet's KPI cards and top rows as a message to paste) and the Office writers in
-`extensions/m365/src/officeSriLanka.ts` (log sheet append, "LK Holidays" sheet and name).
+`extensions/m365/src/officeSriLanka.ts` (log sheet append, "LK Holidays" sheet and name, payroll sheet).
+The payroll template is `extensions/m365/src/payroll.ts` (a "Payroll YYYY-MM" sheet: employee rows copied
+from a selected staff list or left blank, live formulas for gross pay, EPF 8%/12%, ETF 3%, APIT from the
+monthly band table, net pay and employer cost, plus a VAT and SSCL invoice helper; the request reader
+`isPayrollRequest` in English, Sinhala, Singlish and Tamil) with `extensions/m365/src/lkTaxRates.ts` (EPF,
+ETF, APIT, VAT and SSCL rates with their effective dates and sources, `reviewed` false until an accountant
+checks them). The task pane offers it from the request or the Workbook settings button; the
+`payroll-*` benchmark scenarios check it.
 
 VynorAI is a multi-tier AI coding platform: an IDE extension (VS Code, Antigravity, Cursor, Windsurf, JetBrains, CLI) backed by a metered cloud proxy. It provides cost-optimized frontier models (DeepSeek V4.1 Flash by default), Sri Lankan payments (PayHere, LKR), a zero-token deterministic Golden Vault engine, with request tiers picked by an in-process classifier. Background jobs (conversation compaction) run on DeepSeek Flash or, when configured, a GPU server (`backgroundLlm.ts`).
 

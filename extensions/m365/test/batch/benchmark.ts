@@ -19,6 +19,15 @@ import { createServerExcelPreviewPlan } from "../../../../backend/src/services/m
 import { interpretInstruction } from "../../src/intent.js";
 import { applyApprovedExcelPlan } from "../../src/officeExcel.js";
 import { detectBusinessKey } from "../../src/businessContext.js";
+import { responseLanguage } from "../../src/i18n.js";
+import { writePayrollSheet } from "../../src/officeSriLanka.js";
+import {
+  buildPayrollPlan,
+  employeesFromSelection,
+  isPayrollRequest,
+  mapPayrollColumns,
+  monthFromRequest,
+} from "../../src/payroll.js";
 import { DATASETS, type Dataset } from "./datasets500.js";
 import {
   cellText,
@@ -715,6 +724,182 @@ export async function runBenchmark(): Promise<ScenarioResult[]> {
         });
       }
     }
+  }
+  results.push(...(await runTemplateBenchmark()));
+  return results;
+}
+
+/**
+ * One-click templates (payroll.ts): a payroll request in English, Sinhala, Tamil or Singlish over
+ * the staff list builds the month's payroll sheet the way the task pane does, and a request about
+ * the data that is already there is never taken for one.
+ */
+const TEMPLATE_SCENARIOS: Array<{
+  id: string;
+  request: string;
+  payroll: boolean;
+  language: "en" | "si" | "ta";
+}> = [
+  {
+    id: "payroll-en",
+    request: "make the payroll for October 2026",
+    payroll: true,
+    language: "en",
+  },
+  {
+    id: "payroll-si",
+    request: "2026-10 වැටුප් ලේඛනය හදන්න",
+    payroll: true,
+    language: "si",
+  },
+  {
+    id: "payroll-ta",
+    request: "2026-10 சம்பளப் பட்டியல் தயாரி",
+    payroll: true,
+    language: "ta",
+  },
+  {
+    id: "payroll-singlish",
+    request: "October 2026 padi sheet ekak hadanna",
+    payroll: true,
+    language: "en",
+  },
+  {
+    id: "payroll-epf",
+    request: "calculate EPF and ETF for 2026-10",
+    payroll: true,
+    language: "en",
+  },
+  {
+    id: "not-payroll-chart",
+    request: "chart of Salary (LKR) by Department",
+    payroll: false,
+    language: "en",
+  },
+  {
+    id: "not-payroll-total",
+    request: "total Bonus by Location",
+    payroll: false,
+    language: "en",
+  },
+];
+
+const SCRIPT_OF = { si: /[\u0D80-\u0DFF]/, ta: /[\u0B80-\u0BFF]/ } as const;
+
+async function runTemplateBenchmark(): Promise<ScenarioResult[]> {
+  const dataset = DATASETS.find((entry) => entry.id === "hr")!;
+  const headers = dataset.columns.map((column) => column.name);
+  const values = [headers, ...dataset.rows].map((row) =>
+    row.map((cell) => (cell === null || cell === undefined ? "" : cell)),
+  );
+  const results: ScenarioResult[] = [];
+  for (const scenario of TEMPLATE_SCENARIOS) {
+    const checks: Check[] = [];
+    const recognized = isPayrollRequest(scenario.request);
+    checks.push(
+      check(
+        "understanding",
+        scenario.payroll
+          ? "the request is read as a payroll sheet"
+          : "a request about the data is not taken for a payroll sheet",
+        recognized === scenario.payroll,
+      ),
+    );
+    if (scenario.payroll) {
+      const book = gridWorkbook(
+        dataset.sheet,
+        values.map((row) => [...row]),
+      );
+      const before = snapshot(book.sheets.get(dataset.sheet));
+      const map = mapPayrollColumns(headers);
+      const employees = map ? employeesFromSelection(values.slice(1), map) : [];
+      const language = responseLanguage(scenario.request, "en");
+      const plan = buildPayrollPlan({
+        month: monthFromRequest(scenario.request, new Date(2026, 9, 21)),
+        employees,
+        language,
+      });
+      const written = await writePayrollSheet(book.runtime, plan);
+      const sheet = book.sheets.get(plan.sheet);
+      const cell = (row: number, col: number) =>
+        sheet?.cells.get(`${row - 1},${col - 1}`);
+      const bodyRows = Array.from(
+        { length: employees.length },
+        (_, index) => 5 + index,
+      );
+      checks.push(
+        check(
+          "understanding",
+          "the month comes from the request",
+          plan.sheet === "Payroll 2026-10",
+          plan.sheet,
+        ),
+        check(
+          "business meaning",
+          "every employee in the staff list is copied, salary as basic and bonus as another allowance",
+          employees.length ===
+            dataset.rows.filter((row) => String(row[5] ?? "").trim() !== "")
+              .length &&
+            map?.basic === headers.indexOf("Salary (LKR)") &&
+            map?.otherAllowances.includes(headers.indexOf("Bonus")) === true &&
+            map?.id === headers.indexOf("Employee ID"),
+          JSON.stringify(map),
+        ),
+        check(
+          "layout",
+          "the payroll sheet is added",
+          written.ok && Boolean(sheet),
+          written.ok ? "" : written.error,
+        ),
+        check(
+          "layout",
+          "every row has live EPF, APIT, net pay and employer cost formulas",
+          bodyRows.every((row) =>
+            [6, 7, 8, 10, 11, 12, 13].every((col) =>
+              String(cell(row, col)?.formula ?? "").startsWith("="),
+            ),
+          ),
+        ),
+        check(
+          "business meaning",
+          "EPF, ETF and APIT read the rate cells, not typed numbers",
+          bodyRows.every(
+            (row) =>
+              /\$P\$5/.test(String(cell(row, 7)?.formula)) &&
+              /\$O\$13:\$O\$18/.test(String(cell(row, 8)?.formula)) &&
+              /\$P\$7/.test(String(cell(row, 12)?.formula)),
+          ),
+        ),
+        check(
+          "safety",
+          "the staff list is not changed",
+          snapshot(book.sheets.get(dataset.sheet)) === before,
+        ),
+        check(
+          "safety",
+          "the sheet says the rates need an accountant's check",
+          plan.needsReview === false ||
+            /accountant|ගණකාධිකාරි|கணக்காளர/.test(String(cell(2, 1)?.value)),
+        ),
+      );
+      if (scenario.language !== "en")
+        checks.push(
+          check(
+            "language",
+            "the sheet's headings are in the request's language",
+            language === scenario.language &&
+              SCRIPT_OF[scenario.language].test(String(cell(4, 3)?.value)) &&
+              SCRIPT_OF[scenario.language].test(String(cell(1, 1)?.value)),
+          ),
+        );
+    }
+    results.push({
+      id: scenario.id,
+      dataset: dataset.id,
+      host: "desktop",
+      request: scenario.request,
+      checks,
+    });
   }
   return results;
 }

@@ -114,3 +114,70 @@ export function doneSentence(
       );
   return `${base}${already} ${source}`;
 }
+
+const rupees = (value: number) =>
+  `Rs ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** The question before a payroll sheet is added: what it holds and that the rates need a check. */
+export function payrollQuestion(
+  plan: {
+    sheet: string;
+    employees: number;
+    totals: { gross: number; apit: number; net: number };
+    needsReview: boolean;
+  },
+  copied: number,
+  language: Language,
+): string {
+  const { sheet, totals } = plan;
+  const what = copied
+    ? pick(
+        language,
+        `Add a "${sheet}" sheet for the ${copied} employees in the selection? Gross ${rupees(totals.gross)}, APIT ${rupees(totals.apit)}, net pay ${rupees(totals.net)}. Your list is copied, never changed.`,
+        `තෝරාගත් සේවකයින් ${copied} දෙනා සඳහා "${sheet}" පත්‍රිකාවක් එක් කරන්නද? දළ වැටුප ${rupees(totals.gross)}, APIT ${rupees(totals.apit)}, ශුද්ධ වැටුප ${rupees(totals.net)}. ඔබේ ලැයිස්තුව පිටපත් කරනු ලැබේ; එය කිසිසේත් වෙනස් නොකෙරේ.`,
+        `தேர்ந்தெடுத்த ${copied} ஊழியர்களுக்கு "${sheet}" தாளைச் சேர்க்கவா? மொத்தச் சம்பளம் ${rupees(totals.gross)}, APIT ${rupees(totals.apit)}, நிகரச் சம்பளம் ${rupees(totals.net)}. உங்கள் பட்டியல் நகலெடுக்கப்படும், மாற்றப்படாது.`,
+      )
+    : pick(
+        language,
+        `Add a "${sheet}" sheet with ${plan.employees} blank employee rows? Type each basic salary and allowances; EPF, ETF, APIT and net pay fill in by formula.`,
+        `හිස් සේවක පේළි ${plan.employees}ක් සහිත "${sheet}" පත්‍රිකාවක් එක් කරන්නද? එක් එක් සේවකයාගේ මූලික වැටුප සහ දීමනා ටයිප් කරන්න; EPF, ETF, APIT සහ ශුද්ධ වැටුප සූත්‍ර මගින් පිරේ.`,
+        `${plan.employees} வெற்று ஊழியர் வரிசைகளுடன் "${sheet}" தாளைச் சேர்க்கவா? ஒவ்வொரு ஊழியரின் அடிப்படைச் சம்பளத்தையும் கொடுப்பனவுகளையும் தட்டச்சு செய்யவும்; EPF, ETF, APIT, நிகரச் சம்பளம் சூத்திரங்களால் நிரம்பும்.`,
+      );
+  const review = plan.needsReview
+    ? pick(
+        language,
+        " The EPF, ETF and APIT rates have not been checked by an accountant yet.",
+        " EPF, ETF සහ APIT අනුපාත තවම ගණකාධිකාරිවරයෙකු පරීක්ෂා කර නැත.",
+        " EPF, ETF, APIT விகிதங்கள் இன்னும் ஒரு கணக்காளரால் சரிபார்க்கப்படவில்லை.",
+      )
+    : "";
+  return `${what}${review}`;
+}
+
+/** The status line after the payroll sheet was added, or why it was not. */
+export function payrollResult(
+  outcome: "created" | "exists" | "failed",
+  sheet: string,
+  language: Language,
+): string {
+  if (outcome === "exists")
+    return pick(
+      language,
+      `A "${sheet}" sheet already exists; nothing was changed.`,
+      `"${sheet}" පත්‍රිකාවක් දැනටමත් ඇත; කිසිවක් වෙනස් කළේ නැත.`,
+      `"${sheet}" தாள் ஏற்கனவே உள்ளது; எதுவும் மாற்றப்படவில்லை.`,
+    );
+  if (outcome === "failed")
+    return pick(
+      language,
+      "The payroll sheet could not be added. See Diagnostics.",
+      "වැටුප් පත්‍රිකාව එක් කළ නොහැකි විය. Diagnostics බලන්න.",
+      "சம்பளத் தாளைச் சேர்க்க முடியவில்லை. Diagnostics-ஐப் பார்க்கவும்.",
+    );
+  return pick(
+    language,
+    `Added the "${sheet}" sheet. Check the rates on the right with your accountant before you pay; delete the sheet to undo.`,
+    `"${sheet}" පත්‍රිකාව එක් කරන ලදී. ගෙවීමට පෙර දකුණු පස ඇති අනුපාත ඔබේ ගණකාධිකාරිවරයා සමඟ පරීක්ෂා කරන්න; අවලංගු කිරීමට පත්‍රිකාව මකන්න.`,
+    `"${sheet}" தாள் சேர்க்கப்பட்டது. செலுத்தும் முன் வலப்புற விகிதங்களை உங்கள் கணக்காளரிடம் சரிபார்க்கவும்; செயல்தவிர்க்கத் தாளை நீக்கவும்.`,
+  );
+}

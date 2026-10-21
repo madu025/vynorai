@@ -40,6 +40,8 @@ import {
 import {
   didYouMean,
   doneSentence,
+  payrollQuestion,
+  payrollResult,
   samplePreviewNote,
   usingRowsSummary,
   willBeCreatedOn,
@@ -161,7 +163,19 @@ import {
   isFormulaRepairRequest,
 } from "./formulaInspector.js";
 import { changeLogRows, type ChangeLogEntry } from "./changeLog.js";
-import { appendChangeLog, writeHolidaySheet } from "./officeSriLanka.js";
+import {
+  appendChangeLog,
+  writeHolidaySheet,
+  writePayrollSheet,
+} from "./officeSriLanka.js";
+import {
+  buildPayrollPlan,
+  employeesFromSelection,
+  isPayrollRequest,
+  mapPayrollColumns,
+  monthFromRequest,
+  type PayrollEmployee,
+} from "./payroll.js";
 import {
   describePreferences,
   learnFromRequest,
@@ -1666,6 +1680,17 @@ inspect?.addEventListener("click", async () => {
     renderConversation("user", instruction?.value?.trim() || instructionText);
     lastConversationRequest = instructionText;
     learnPreferences(instructionText);
+  }
+  // A request for a payroll sheet is a template, not a change to the selected data: it is asked
+  // about in the pane and, on a no, read like any other request.
+  const typed = instruction?.value || "";
+  if (
+    !skipAiOnce &&
+    (isPayrollRequest(typed) || isPayrollRequest(instructionText)) &&
+    (await offerPayroll(typed))
+  ) {
+    setPreviewCancelVisible(false);
+    return;
   }
   // "AI reads every request" (the person's own setting): the AI turns the request into plain steps first.
   // The steps it returns come back through here once, and are read by the built-in reader.
@@ -4299,6 +4324,11 @@ async function startAgent() {
   if (!request) return setStatus("Describe what you want first.");
   if (!config || !accessToken) return setStatus("Sign in first.");
   if (agentBusy) return;
+  // A payroll sheet is a local template: nothing is sent for it.
+  if (isPayrollRequest(request)) {
+    requestLanguage = responseLanguage(request, language);
+    if (await offerPayroll(request)) return;
+  }
   let agreed = false;
   try {
     agreed = localStorage.getItem(AGENT_CONSENT_KEY) === "1";
@@ -4700,6 +4730,84 @@ document
       `Added the "LK Holidays" sheet (${result.rows} fixed-date holidays). Add Poya days from the gazette; delete the sheet to undo.`,
     );
   });
+
+/**
+ * Offers a payroll sheet for the request's month (payroll.ts): employees are copied from the
+ * selection when it is an employee list with a basic salary column, else the sheet has blank
+ * rows. Returns false when the person says no, so the request is read as usual.
+ */
+async function offerPayroll(request: string): Promise<boolean> {
+  const words = textLanguage();
+  let employees: PayrollEmployee[] = [];
+  try {
+    const input = await inspectSelectedExcelRange(
+      officeRuntime(),
+      crypto.randomUUID(),
+    );
+    const layout = getCachedHeaderLayout(input);
+    const map = input.sample
+      ? null
+      : mapPayrollColumns(layout.headers.map(String));
+    if (map)
+      employees = employeesFromSelection(
+        input.values.slice(layout.headerRowCount),
+        map,
+      );
+  } catch {
+    // No usable selection: the sheet starts with blank rows.
+  }
+  const plan = buildPayrollPlan({
+    month: monthFromRequest(request, new Date()),
+    employees,
+    language: words,
+  });
+  log.record("payroll:offer", "pass", {
+    month: plan.sheet,
+    employees: employees.length,
+    review: plan.needsReview,
+  });
+  if (
+    !(await askInPane(
+      payrollQuestion(plan, employees.length, words),
+      localizeMessage(words, "Add"),
+    ))
+  )
+    return false;
+  const result = await writePayrollSheet(officeRuntime(), plan);
+  if (!result.ok) {
+    log.record("payroll:write", "fail", result.error);
+    const message = payrollResult(
+      result.error === "PAYROLL_SHEET_EXISTS" ? "exists" : "failed",
+      plan.sheet,
+      words,
+    );
+    renderConversation("error", message);
+    setStatus(message);
+    return true;
+  }
+  log.record("payroll:write", "pass", { sheet: plan.sheet });
+  await logChanges({
+    at: new Date(),
+    action: "applied",
+    request: request || "Add payroll sheet",
+    changes: [
+      {
+        change: `Payroll sheet with ${plan.employees} employee rows`,
+        sheet: plan.sheet,
+        status: "created",
+      },
+    ],
+    reference: plan.sheet,
+  });
+  const done = payrollResult("created", plan.sheet, words);
+  renderConversation("assistant", done);
+  setStatus(done);
+  return true;
+}
+
+document
+  .querySelector("#prefs-payroll")
+  ?.addEventListener("click", () => void offerPayroll(""));
 
 const whatsappNote = document.querySelector<HTMLElement>("#whatsapp-note");
 document

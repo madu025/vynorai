@@ -100,7 +100,8 @@
       .welcome { padding: 7px 5px 1px; }
       .welcome h1 { margin: 0 0 4px; font-size: 19px; line-height: 1.22; letter-spacing: -.35px; }
       .welcome p { margin: 0; color: var(--muted); }
-      .chat-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .chat-bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 3px 0; background: linear-gradient(var(--bg) 82%, transparent); }
+      .chat-bar .pill { min-height: 32px; padding: 5px 9px; border-radius: 10px; }
       .chat-bar select { flex: 1 1 120px; min-width: 0; max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
       #conversation-history { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; }
       #conversation-history > article { min-width: 0; overflow-wrap: anywhere; scroll-margin-bottom: 8px; }
@@ -128,6 +129,8 @@
       .suggestion-reason { color: var(--muted); font-size: 11px; font-weight: 400; }
       .composer { position: relative; flex: 0 0 auto; z-index: 4; padding: 9px; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); box-shadow: 0 -9px 24px rgb(29 29 31 / 10%); }
       .composer:focus-within { border-color: color-mix(in srgb, var(--brand) 64%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 19%, transparent), 0 -9px 24px rgb(29 29 31 / 10%); }
+      .selection-guidance { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 7px; padding: 7px 8px; border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--line)); border-radius: 11px; background: color-mix(in srgb, var(--warning) 10%, var(--surface)); color: var(--ink); font-size: 11px; }
+      .selection-guidance .ghost { flex: 0 0 auto; min-height: 29px; padding: 4px 8px; font-size: 11px; }
       textarea { display: block; width: 100%; min-height: 46px; border: 0; outline: 0; resize: vertical; background: transparent; color: inherit; }
       .composer-bar, .action-row, .apply-dock { display: flex; align-items: center; gap: 7px; }
       .composer-bar { justify-content: space-between; margin-top: 6px; }
@@ -216,6 +219,7 @@
       <header class="topbar">
         <div class="brand" hidden aria-label="VynorAI"><span class="brand-mark" aria-hidden="true">V</span>VynorAI</div>
         <div class="header-actions">
+          <button id="new-chat-quick" class="icon-button new-chat-action" type="button" aria-label="New chat" title="New chat">+</button>
           <button id="menu-toggle" class="icon-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More options">&#8943;</button>
           <div id="menu" role="menu" hidden>
             <button data-dev id="toggle-diagnostics" type="button" role="menuitem" data-i18n="menu_show_diag">Show diagnostics</button>
@@ -253,7 +257,7 @@
         </section>
         <section class="conversation" aria-label="VynorAI conversation" data-i18n-aria-label="conversation_label">
           <div class="chat-bar" id="chat-bar">
-            <button id="new-chat" class="pill" type="button" data-i18n="new_chat">+ New chat</button>
+            <button id="new-chat" class="pill new-chat-action" type="button" data-i18n="new_chat">+ New chat</button>
             <select id="chat-history-select" aria-label="Chat history" data-i18n-aria-label="chat_history" hidden></select>
             <button id="delete-chat" class="pill" type="button" data-i18n="delete_chat" hidden>Delete</button>
           </div>
@@ -382,6 +386,7 @@
         <section class="composer" aria-label="Request a workbook change" data-i18n-aria-label="request_change">
           <label class="sr-only" for="instruction" data-i18n="instruction_label">Describe what to create</label>
           <p id="selection-chip" class="muted" aria-live="polite" hidden><span data-i18n="selection_using">Using:</span> <span id="selection-text"></span></p>
+          <div id="selection-guidance" class="selection-guidance" hidden><span data-i18n="select_data_guide">This cell is empty. Select your table, or use the data already found on this sheet.</span><button id="use-sheet-data" class="ghost" type="button" data-i18n="use_sheet_data">Use sheet data</button></div>
           <div id="dup-fix" hidden><button id="dup-fix-btn" type="button" data-i18n="clean_first">Clean first, then run this</button></div>
           <textarea id="instruction"data-i18n-placeholder="placeholder" placeholder="Describe what you would like to create from the selected data"></textarea>
           <div class="composer-bar">

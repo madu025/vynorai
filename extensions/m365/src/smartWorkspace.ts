@@ -7,6 +7,8 @@ export interface WorkspaceSelection {
   address: string;
   rows: number;
   columns: number;
+  /** A local-only fact used to avoid suggesting work against an empty active cell. */
+  isBlank?: boolean;
 }
 
 /** Local-only facts inferred from a bounded selection sample. No cell values are retained. */
@@ -69,6 +71,7 @@ export function suggestionsForSelection(
 ): WorkspaceSuggestion[] {
   if (!selection?.address || selection.rows < 1 || selection.columns < 1)
     return [];
+  if (selection.isBlank) return [];
   if (selection.rows === 1 && selection.columns === 1)
     return [
       {

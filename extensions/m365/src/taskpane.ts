@@ -1604,7 +1604,9 @@ function startFreshChat() {
   instruction?.focus();
 }
 
-document.querySelector("#new-chat")?.addEventListener("click", startFreshChat);
+document
+  .querySelectorAll<HTMLButtonElement>(".new-chat-action")
+  .forEach((button) => button.addEventListener("click", startFreshChat));
 document
   .querySelector<HTMLSelectElement>("#chat-history-select")
   ?.addEventListener("change", (event) => {
@@ -4070,6 +4072,11 @@ refreshLanguage();
 
 const selectionChip = document.querySelector<HTMLElement>("#selection-chip");
 const selectionText = document.querySelector<HTMLElement>("#selection-text");
+const selectionGuidance = document.querySelector<HTMLElement>(
+  "#selection-guidance",
+);
+const useSheetData =
+  document.querySelector<HTMLButtonElement>("#use-sheet-data");
 const workbookContext =
   document.querySelector<HTMLElement>("#workbook-context");
 const contextSelection =
@@ -4141,6 +4148,7 @@ function renderWorkspaceContext(
   );
   show(workbookContext, description !== "");
   show(contextSuggestions, suggestions.length > 0);
+  show(selectionGuidance, info.isBlank === true);
 }
 
 /**
@@ -4161,6 +4169,11 @@ async function readWorkspaceContext(): Promise<{
       rows: Number(range.rowCount),
       columns: Number(range.columnCount),
     };
+    if (info.rows === 1 && info.columns === 1) {
+      range.load("values");
+      await context.sync();
+      info.isBlank = String(range.values?.[0]?.[0] ?? "").trim() === "";
+    }
     let schema: WorkspaceSchema | undefined;
     const sampleRows = Math.min(Math.max(info.rows, 0), 26);
     const sampleColumns = Math.min(Math.max(info.columns, 0), 20);
@@ -4217,9 +4230,43 @@ async function refreshSelectionChip() {
     renderWorkspaceContext(info, schema);
   } catch {
     show(selectionChip, false);
+    show(selectionGuidance, false);
     renderWorkspaceContext(undefined);
   }
 }
+
+/** A blank cell outside a table is common; selecting the used range is a reversible UI action only. */
+useSheetData?.addEventListener("click", async () => {
+  try {
+    await officeRuntime().run(async (context: any) => {
+      const selected = context.workbook.getSelectedRange();
+      const used = selected.worksheet.getUsedRange();
+      used.load(["address", "rowCount", "columnCount"]);
+      await context.sync();
+      if (Number(used.rowCount) < 2 || Number(used.columnCount) < 1)
+        throw new Error("Select a table or a data range first.");
+      used.select();
+      await context.sync();
+    });
+    await refreshSelectionChip();
+    setStatus(
+      translate(
+        language,
+        "sheet_data_selected",
+        "Sheet data selected. Review the selection, then describe what to create.",
+      ),
+    );
+  } catch (error) {
+    log.record("selection:use-sheet-data", "info", describeError(error));
+    setStatus(
+      translate(
+        language,
+        "sheet_data_missing",
+        "Excel could not find a data range on this sheet. Select your table and try again.",
+      ),
+    );
+  }
+});
 
 document
   .querySelector("#refresh-context")
@@ -4988,11 +5035,13 @@ agentUndo?.addEventListener("click", async () => {
   }
 });
 
-document.querySelector("#new-chat")?.addEventListener("click", () => {
-  agentHistory = [];
-  agentMask = new PersonalMask();
-  agentPending = undefined;
-  show(agentCard, false);
+document.querySelectorAll(".new-chat-action").forEach((button) => {
+  button.addEventListener("click", () => {
+    agentHistory = [];
+    agentMask = new PersonalMask();
+    agentPending = undefined;
+    show(agentCard, false);
+  });
 });
 
 // --- Workbook preferences, change log, Sri Lanka pack, WhatsApp summary ---------------------

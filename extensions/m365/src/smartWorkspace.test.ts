@@ -35,6 +35,15 @@ test("selection suggestions are bounded, shape-aware and contain preview instruc
     suggestionsForSelection({ address: "Data!B2", rows: 1, columns: 1 })[0]?.id,
     "formulas",
   );
+  assert.deepEqual(
+    suggestionsForSelection({
+      address: "Data!Q22",
+      rows: 1,
+      columns: 1,
+      isBlank: true,
+    }),
+    [],
+  );
   const small = suggestionsForSelection({
     address: "Data!A1:D20",
     rows: 20,

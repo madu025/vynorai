@@ -126,6 +126,13 @@ test("selection context and suggestions appear before the conversation", () => {
     area < context && context < suggestions && suggestions < conversation,
   );
   assert.match(html, /\.smart-suggestion-list \{[^}]*minmax\(0, 1fr\)/);
+  assert.match(
+    html,
+    /id="selection-guidance" class="selection-guidance" hidden/,
+  );
+  assert.match(html, /id="use-sheet-data" class="ghost"/);
+  assert.match(html, /id="new-chat-quick" class="icon-button new-chat-action"/);
+  assert.match(html, /\.chat-bar \{ position: sticky; top: 0;/);
 });
 
 test("Smart Run is the primary action and specialist controls remain available", () => {
@@ -186,6 +193,11 @@ test("context suggestions are based on a bounded local schema sample, not a plac
   assert.match(source, /buildSchemaSummary\(/);
   assert.match(source, /workbookId: "local-workspace-context"/);
   assert.match(source, /suggestionsForSelection\(info, schema\)/);
+  assert.match(
+    source,
+    /info\.isBlank = String\(range\.values\?\.\[0\]\?\.\[0\] \?\? ""\)\.trim\(\) === ""/,
+  );
+  assert.match(source, /selected\.worksheet\.getUsedRange\(\)/);
 });
 
 test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {

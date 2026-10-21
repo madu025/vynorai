@@ -12,6 +12,7 @@ import {
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
 import { describeReview, runTeam } from "./agentReview.js";
+import { retryTransient } from "./retryTransient.js";
 import { scrollToLatestMessage } from "./chatScroll.js";
 import { previewCells, previewTarget } from "./changePreview.js";
 import { describeSelection } from "./selectionChip.js";
@@ -4308,11 +4309,16 @@ async function agentModel(messages: AgentMessage[]) {
   if (agentStopped) throw new Error("stopped");
   // The last call carries the whole conversation: the privacy receipt is built from it.
   agentSentMessages = messages;
-  const response = await apiClient().agentExcel({
-    consent: true,
-    language: agentLanguage(),
-    messages,
-  });
+  // A busy service or a dropped connection gets up to two more tries; a refusal does not.
+  const response = await retryTransient(
+    () =>
+      apiClient().agentExcel({
+        consent: true,
+        language: agentLanguage(),
+        messages,
+      }),
+    { shouldStop: () => agentStopped },
+  );
   const reply = response?.reply;
   if (!reply || !Array.isArray(reply.tool_calls))
     throw new Error("agent-invalid");

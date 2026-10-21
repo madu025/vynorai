@@ -78,7 +78,9 @@ export function reviewRequest(
     ...listed,
     ...(more > 0 ? [`(and ${more} more)`] : []),
     ...(run.reply ? [`The other agent said: ${run.reply.slice(0, 600)}`] : []),
+    "The changes run in the listed order: a sheet, name or header that an earlier change creates exists for the later ones, so never report it as missing.",
     `Check them against the workbook. ${FOCUS_CHECKS[focus]} Report only problems in your focus. Do not stage any change yourself.`,
+    'Never list something that is correct (a result that matches, a range that is right) as a problem. If you find no real problem, reply exactly "VERDICT: OK" and nothing else.',
     'Reply with exactly one first line, "VERDICT: OK" or "VERDICT: FIX", then one line per problem starting with "- " (at most 5).',
   ].join("\n");
 }
@@ -111,12 +113,23 @@ export function revisionRequest(issues: readonly string[]): string {
 export function needsPlan(request: string): boolean {
   const text = String(request ?? "").trim();
   if (!text || text.startsWith("[Report from the add-in")) return false;
-  if (findUnhandledJobs(text, []).length) return true;
   const question =
     /\?\s*$/.test(text) ||
     /^(what|how (much|many)|which|who|why|when|where|is|are|does|do|did|can you tell|tell me)\b/i.test(
       text,
     );
+  // "Audit the formulas", "check the totals", "list the sheets": a request that only reads is
+  // answered in the reply, so a plan (which tends to invent a report sheet) is not needed. Any
+  // word that changes or writes something brings the planner back.
+  const readsOnly =
+    /^(please\s+)?(audit|check|review|explain|list|show|find|inspect|describe|summari[sz]e|analy[sz]e|compare|tell)\b/i.test(
+      text,
+    ) &&
+    !/\b(fix|correct|repair|add|create|make|build|put|write|insert|delete|remove|replace|rename|clean|sort|format|highlight|merge|copy|move|change|update|set|apply|new sheet|pivot|chart|and then|then)\b/i.test(
+      text,
+    );
+  if (readsOnly) return false;
+  if (findUnhandledJobs(text, []).length) return true;
   return !question;
 }
 

@@ -637,6 +637,7 @@ export async function runAgent(options: {
   const counts = { calculate: 0 };
   const maxTurns = options.maxTurns ?? AGENT_MAX_TURNS;
   let nudged = false;
+  let askedForAnswer = false;
   for (let turn = 1; turn <= maxTurns; turn += 1) {
     options.onPhase?.("planning");
     const answer = await model(messages);
@@ -661,10 +662,22 @@ export async function runAgent(options: {
         });
         continue;
       }
+      // An empty answer would leave the person with nothing: ask once, then say so plainly.
+      if (!answer.content?.trim() && !askedForAnswer && turn < maxTurns) {
+        askedForAnswer = true;
+        messages.push({
+          role: "user",
+          content:
+            "[Report from the add-in, not from the person] Your last answer was empty. Reply to the person now: a short bullet list of what you found or staged, or why you could not.",
+        });
+        continue;
+      }
       options.onPhase?.("final");
       return {
         messages,
-        reply: plainText(mask.unmask(answer.content || "")),
+        reply:
+          plainText(mask.unmask(answer.content || "")).trim() ||
+          "I did not answer this time and nothing was changed. Please try again or ask in other words.",
         changes,
         turns: turn,
         phase: "final",

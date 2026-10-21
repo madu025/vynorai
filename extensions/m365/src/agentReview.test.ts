@@ -318,12 +318,48 @@ test("one reviewer's problem is enough to correct the plan", async () => {
   );
 });
 
+test("reviewers are told the changes run in order, so a sheet an earlier change creates counts as existing", () => {
+  const text = reviewRequest(
+    "Summarize by region on a new sheet",
+    { changes: [], reply: "" },
+    "coverage",
+  );
+  assert.match(text, /run in the listed order/);
+  assert.match(text, /earlier change creates/);
+});
+
+test("reviewers list only real problems: a correct change is never a problem", () => {
+  const text = reviewRequest("x", { changes: [], reply: "" }, "accuracy");
+  assert.match(text, /Never list something that is correct/);
+  assert.match(text, /reply exactly "VERDICT: OK"/);
+});
+
 test("a question gets no planner; a change request does", () => {
   assert.equal(needsPlan("What is the total of Amount?"), false);
   assert.equal(needsPlan("how many rows are there"), false);
   assert.equal(needsPlan("Add a total under Amount"), true);
   assert.equal(needsPlan("Clean the data, pivot by region and chart it"), true);
   assert.equal(needsPlan("[Report from the add-in] applied"), false);
+});
+
+test("a read-only request (audit, check, explain, list) gets no planner, unless it also changes something", () => {
+  for (const text of [
+    "audit every formula in this workbook for errors and inconsistent formulas",
+    "Check the totals for mistakes",
+    "explain what the formula in K2 does",
+    "list the sheets that have hidden rows",
+    "Show me the largest 5 customers",
+    "find duplicate service IDs",
+  ])
+    assert.equal(needsPlan(text), false, text);
+  for (const text of [
+    "audit the formulas and fix the errors",
+    "check the totals and add a chart",
+    "show the top 5 customers on a new sheet",
+    "find duplicates and delete them",
+    "list the sheets and write them in column A",
+  ])
+    assert.equal(needsPlan(text), true, text);
 });
 
 test("the planner's steps are read strictly and passed as a note", () => {

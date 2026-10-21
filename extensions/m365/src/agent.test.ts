@@ -611,3 +611,33 @@ test("answer sources list the ranges read and formulas computed, restored and wi
     { kind: "check", text: "formula_audit" },
   ]);
 });
+
+test("an empty answer is asked for once, and never reaches the person as nothing", async () => {
+  let turns = 0;
+  const asked: string[] = [];
+  const run = await runAgent({
+    request: "add sparklines next to each total",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async (messages) => {
+      turns += 1;
+      asked.push(String((messages.at(-1) as any).content ?? ""));
+      return turns === 1
+        ? { content: "", tool_calls: [] }
+        : { content: "- Sparklines are not available; a line chart is.", tool_calls: [] };
+    },
+  });
+  assert.equal(run.reply, "- Sparklines are not available; a line chart is.");
+  assert.match(asked[1], /empty/i);
+  assert.equal(run.stoppedAtLimit, undefined);
+
+  // A model that stays silent gets a plain, honest line instead of an empty pane.
+  const silent = await runAgent({
+    request: "add sparklines next to each total",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async () => ({ content: "  ", tool_calls: [] }),
+  });
+  assert.match(silent.reply, /no answer|did not answer/i);
+  assert.equal(silent.changes.length, 0);
+});

@@ -12,6 +12,7 @@ import {
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
 import { describeReview, runTeam } from "./agentReview.js";
+import { scrollToLatestMessage } from "./chatScroll.js";
 import { previewCells, previewTarget } from "./changePreview.js";
 import { describeSelection } from "./selectionChip.js";
 import {
@@ -510,13 +511,18 @@ function showChat(messages: ConversationMessage[]) {
   resetWorkingState();
   renderConversationHistory();
   renderChatList();
-  window.requestAnimationFrame(() => window.scrollTo?.({ top: 0 }));
+  window.requestAnimationFrame(() => scrollToLatestMessage(document, window));
 }
 
 function renderConversationHistory() {
   const history = document.querySelector<HTMLElement>("#conversation-history");
   if (!history) return;
   history.replaceChildren();
+  // The "what would you like to do" welcome is for an empty chat; once there are messages it only
+  // pushes them down.
+  document
+    .querySelector<HTMLElement>("#welcome-state")
+    ?.toggleAttribute("hidden", conversationMessages.length > 0);
   conversationMessages.forEach((message, index) => {
     const item = document.createElement("article");
     item.className = `message ${message.kind}`;
@@ -586,6 +592,7 @@ function restoreConversationHistory() {
       }));
       renderConversationHistory();
       renderChatList();
+      window.requestAnimationFrame(() => scrollToLatestMessage(document, window));
       return;
     } catch {
       // fall back to nothing: a damaged history must never affect the add-in

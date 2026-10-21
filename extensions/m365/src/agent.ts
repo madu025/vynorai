@@ -5,6 +5,13 @@
  * Nothing here touches Office.js: `officeAgentHost.ts` is the Excel host and the headless tests use a
  * fake one. See docs/ARCHITECTURE_DECISIONS.md, "Excel agent".
  */
+import {
+  mapRelationships,
+  RELATION_MAX_ROWS,
+  RELATION_MAX_TABLES,
+  type KeyCell,
+  type RelationTable,
+} from "./relationships.js";
 import { PERSONAL_PATTERNS } from "./analysis.js";
 import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
@@ -106,6 +113,17 @@ export type StagedChange =
 
 export const CHART_KINDS = CHART_TYPE_NAMES;
 export type ChartKind = (typeof CHART_KINDS)[number];
+
+/** Several sheets with data: tell the model once to map how they join before it answers across them. */
+export function withRelationshipHint(workbook: unknown): unknown {
+  const sheets = (workbook as { sheets?: { rows?: number }[] } | null)?.sheets;
+  if (!Array.isArray(sheets) || sheets.filter((s) => (s.rows ?? 0) > 1).length < 2)
+    return workbook;
+  return {
+    ...(workbook as object),
+    hint: "This workbook has several sheets with data. If the request needs columns from more than one of them, call map_relationships on those ranges before you calculate or stage.",
+  };
+}
 
 export interface AgentHost {
   getWorkbook(): Promise<unknown>;
@@ -781,7 +799,7 @@ async function runTool(
   const restore = (text: string) => mask.unmask(text);
   switch (call.function.name) {
     case "get_workbook":
-      return host.getWorkbook();
+      return withRelationshipHint(await host.getWorkbook());
     case "read_range": {
       const sheet = checkSheetName(restore(String(args.sheet ?? "")));
       const { address, clipped } = clampReadAddress(checkRange(args.address));
@@ -880,6 +898,34 @@ async function runTool(
             }
           : {}),
       };
+    }
+    case "map_relationships": {
+      // Reads up to RELATION_MAX_TABLES ranges on the device: counted like a calculation.
+      counts.calculate += 1;
+      if (counts.calculate > CALC_PER_REQUEST)
+        throw new AgentToolError(
+          `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
+        );
+      if (!Array.isArray(args.ranges))
+        throw new AgentToolError("ranges must be a list like [\"Orders!A1:F900\", \"Customers!A1:C40\"].");
+      const tables: RelationTable[] = [];
+      for (const entry of args.ranges.slice(0, RELATION_MAX_TABLES + 1)) {
+        const text = restore(String(entry ?? "")).trim();
+        const cut = text.lastIndexOf("!");
+        if (cut < 1) throw new AgentToolError(`"${text}" must look like Sheet!A1:F900.`);
+        const sheet = checkSheetName(text.slice(0, cut).replace(/^'(.*)'$/, "$1").replace(/''/g, "'"));
+        const box = parseA1(checkRange(text.slice(cut + 1)));
+        const lastRow = Math.min(box.lastRow, box.row + RELATION_MAX_ROWS);
+        const address = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${lastRow}`;
+        const read = await host.readRange(sheet, address, false);
+        const [headerRow = [], ...rows] = read.values as KeyCell[][];
+        tables.push({
+          label: `${sheet}!${address}`,
+          headers: headerRow.map((value) => String(value ?? "")),
+          rows,
+        });
+      }
+      return mapRelationships(tables);
     }
     case "analyze_text_batch": {
       if (!host.analyzeTextBatch)
@@ -999,6 +1045,19 @@ export function answerSources(
             address: String(args.address ?? ""),
             note: String(args.kind ?? ""),
           });
+          break;
+        case "map_relationships":
+          for (const range of Array.isArray(args.ranges) ? args.ranges : []) {
+            const text = restore(String(range ?? ""));
+            const cut = text.lastIndexOf("!");
+            if (cut > 0)
+              add({
+                kind: "range",
+                sheet: text.slice(0, cut).replace(/^'(.*)'$/, "$1"),
+                address: text.slice(cut + 1),
+                note: "relationships",
+              });
+          }
           break;
         case "calculate":
           add({ kind: "formula", text: restore(String(args.formula ?? "")) });

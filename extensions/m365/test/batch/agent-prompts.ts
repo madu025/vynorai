@@ -812,6 +812,28 @@ const CASES: Case[] = [
       ),
   },
   {
+    id: "n-multi-question",
+    text: "which Items (by Description) have the highest total Issued Quantity in the detail report? give me the top 3",
+    check: (run, seen) =>
+      all(
+        need(
+          seen.some((s) => s.name === "map_relationships"),
+          seen.map((s) => s.name).join(" ; ").slice(0, 300),
+        ),
+        need(run.changes.length === 0, `staged ${kinds(run).join(",")}`),
+        need(run.reply.length > 0, "no reply"),
+      ),
+  },
+  {
+    id: "n-multi-nokey",
+    text: "add the supplier's phone number from the Items sheet to the detail report",
+    check: (run, seen) =>
+      need(
+        seen.some((s) => s.name === "map_relationships") || run.reply.length > 0,
+        seen.map((s) => s.name).join(" ; ").slice(0, 300),
+      ),
+  },
+  {
     id: "n-reconcile",
     text: "reconcile the Item Codes used in detail-report against the Items master list: which codes are missing from either side?",
     check: (run) =>
@@ -1025,6 +1047,8 @@ const EXPERT: Record<string, string> = {
   "n-outliers": "Statistics and forecasting",
   "p-month-summary": "Statistics and forecasting",
   "n-join": "Data preparation",
+  "n-multi-question": "Data preparation",
+  "n-multi-nokey": "Data preparation",
   "a-gap-column": "Data preparation",
   "n-insert-col": "Data preparation",
   "n-loan": "Financial modelling",

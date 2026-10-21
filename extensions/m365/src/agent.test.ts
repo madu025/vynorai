@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { withRelationshipHint } from "./agent.js";
 import { test } from "node:test";
 import {
   AgentToolError,
@@ -640,4 +641,64 @@ test("an empty answer is asked for once, and never reaches the person as nothing
   });
   assert.match(silent.reply, /no answer|did not answer/i);
   assert.equal(silent.changes.length, 0);
+});
+
+test("map_relationships reads each range and returns the join, never the rows", async () => {
+  const reads: string[] = [];
+  const run = await runAgent({
+    request: "total orders by customer region",
+    host: host({
+      readRange: async (sheet, address) => {
+        reads.push(`${sheet}!${address}`);
+        return {
+          address,
+          values:
+            sheet === "Orders"
+              ? [["CustomerID", "Amount"], ["C1", 5.5], ["C2", 7.5], ["C1", 2.5]]
+              : [["CustomerID", "Region"], ["C1", "N"], ["C2", "S"]],
+        };
+      },
+    }),
+    mask: new PersonalMask(),
+    model: (() => {
+      let turn = 0;
+      return async () => {
+        turn += 1;
+        return turn === 1
+          ? {
+              content: "",
+              tool_calls: [
+                call("a", "map_relationships", {
+                  ranges: ["Orders!A1:B4", "'Customers'!A1:B3"],
+                }),
+              ],
+            }
+          : { content: "- Joined on CustomerID.", tool_calls: [] };
+      };
+    })(),
+  });
+  assert.deepEqual(reads, ["Orders!A1:B4", "Customers!A1:B3"]);
+  const result = JSON.parse(
+    String(run.messages.find((m) => m.role === "tool")?.content),
+  );
+  assert.equal(result.links[0].from.column, "CustomerID");
+  assert.equal(result.links[0].cardinality, "many-to-one");
+  assert.equal(JSON.stringify(result).includes("5.5"), false);
+  assert.deepEqual(answerSources(run.messages, (t) => t)[0], {
+    kind: "range",
+    sheet: "Orders",
+    address: "A1:B4",
+    note: "relationships",
+  });
+});
+
+test("get_workbook adds the relationship hint only when several sheets hold data", async () => {
+  const hinted = withRelationshipHint({
+    sheets: [{ name: "A", rows: 10 }, { name: "B", rows: 5 }],
+  }) as any;
+  assert.match(hinted.hint, /map_relationships/);
+  const single = withRelationshipHint({
+    sheets: [{ name: "A", rows: 10 }, { name: "B", rows: 0 }],
+  }) as any;
+  assert.equal(single.hint, undefined);
 });

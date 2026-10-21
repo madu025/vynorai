@@ -172,7 +172,7 @@
     </style>
   </head>
   <body>
-    <a class="skip-link" href="#instruction">Skip to request</a>
+    <a class="skip-link" href="#instruction" data-i18n="skip_to_request">Skip to request</a>
     <main>
       <header class="topbar">
         <div class="brand" hidden aria-label="VynorAI"><span class="brand-mark" aria-hidden="true">V</span>VynorAI</div>
@@ -254,7 +254,7 @@
             <div id="result-gallery-list"></div>
           </section>
           <section id="email-card" class="card" hidden aria-labelledby="email-heading">
-            <div class="card-head"><h2 id="email-heading">Email report</h2><span class="badge">reviewed</span></div>
+            <div class="card-head"><h2 id="email-heading" data-i18n="email_report">Email report</h2><span class="badge" data-i18n="reviewed">reviewed</span></div>
             <p id="email-note">Choose the report format and review everything before sending.</p>
             <div class="email-form">
               <label for="email-to">Recipient email<input id="email-to" type="email" autocomplete="email" placeholder="recipient@example.com" /></label>
@@ -265,23 +265,23 @@
               <label for="email-subject">Subject<input id="email-subject" type="text" maxlength="200" placeholder="VynorAI Excel report" /></label>
               <div class="email-options">
                 <label for="email-format">Delivery format<select id="email-format">
-                  <option value="auto">Automatic fallback</option>
-                  <option value="xlsx">Excel workbook (.xlsx)</option>
-                  <option value="pdf">PDF report (.pdf)</option>
-                  <option value="csv">CSV report (.csv)</option>
-                  <option value="xlsx-pdf">Excel workbook + PDF</option>
-                  <option value="summary">Summary in email only</option>
+                  <option value="auto" data-i18n="fmt_auto">Automatic fallback</option>
+                  <option value="xlsx" data-i18n="fmt_xlsx">Excel workbook (.xlsx)</option>
+                  <option value="pdf" data-i18n="fmt_pdf">PDF report (.pdf)</option>
+                  <option value="csv" data-i18n="fmt_csv">CSV report (.csv)</option>
+                  <option value="xlsx-pdf" data-i18n="fmt_xlsx_pdf">Excel workbook + PDF</option>
+                  <option value="summary" data-i18n="fmt_summary">Summary in email only</option>
                 </select></label>
-                <label for="email-body-type">Body format<select id="email-body-type"><option value="HTML">HTML with details</option><option value="Text">Plain text</option></select></label>
-                <label for="email-delivery-mode">Delivery<select id="email-delivery-mode"><option value="send">Send now</option><option value="draft">Save Outlook draft</option></select></label>
+                <label for="email-body-type">Body format<select id="email-body-type"><option value="HTML" data-i18n="body_html">HTML with details</option><option value="Text" data-i18n="body_text">Plain text</option></select></label>
+                <label for="email-delivery-mode">Delivery<select id="email-delivery-mode"><option value="send" data-i18n="send_now">Send now</option><option value="draft" data-i18n="save_draft">Save Outlook draft</option></select></label>
               </div>
               <label for="email-body">Message<textarea id="email-body" maxlength="4000" placeholder="Please find the Excel report attached."></textarea></label>
-              <button id="email-ai-write" type="button">Write the message with AI</button>
-              <label class="email-check"><input id="email-include-chart" type="checkbox" checked /><span>Include report charts in the email body</span></label>
-              <button id="email-send" class="primary" type="button" disabled>Review and send report</button>
-              <button id="whatsapp-copy" type="button">Copy summary for WhatsApp</button>
+              <button id="email-ai-write" type="button" data-i18n="ai_message">Write the message with AI</button>
+              <label class="email-check"><input id="email-include-chart" type="checkbox" checked /><span data-i18n="include_charts">Include report charts in the email body</span></label>
+              <button id="email-send" class="primary" type="button" disabled data-i18n="review_send">Review and send report</button>
+              <button id="whatsapp-copy" type="button" data-i18n="copy_whatsapp">Copy summary for WhatsApp</button>
               <pre id="whatsapp-note" class="muted" hidden></pre>
-              <p id="email-draft-fallback" hidden><a id="email-draft-link" href="#" target="_blank" rel="noopener noreferrer">Open the draft in Outlook on the web</a> <span id="email-draft-note"></span></p>
+              <p id="email-draft-fallback" hidden><a id="email-draft-link" href="#" target="_blank" rel="noopener noreferrer" data-i18n="open_draft">Open the draft in Outlook on the web</a> <span id="email-draft-note"></span></p>
             </div>
           </section>
           <details data-dev><summary data-i18n="tech_details">Technical details</summary><pre id="preview">No preview yet.</pre></details>
@@ -295,42 +295,42 @@
           <div class="action-row"><button id="ai-send" class="primary" type="button" disabled data-i18n="consent_send">Send for AI analysis</button><button id="ai-cancel" class="ghost" type="button" data-i18n="consent_cancel">Cancel</button></div>
         </section>
         <section id="agent-card" class="card" hidden aria-labelledby="agent-heading">
-          <div class="card-head"><h2 id="agent-heading" tabindex="-1">Agent</h2><span class="badge" id="agent-badge">Working</span></div>
+          <div class="card-head"><h2 id="agent-heading" tabindex="-1" data-i18n="agent_title">Agent</h2><span class="badge" id="agent-badge">Working</span></div>
           <p id="agent-progress" class="muted" aria-live="polite"></p>
           <div id="agent-plan" hidden><strong data-i18n="agent_plan">Plan</strong><ol id="agent-plan-steps" class="details"></ol></div>
           <div id="agent-reply"></div>
           <div id="agent-sources" hidden><strong data-i18n="agent_sources">Sources</strong><ul id="agent-sources-list" class="details"></ul></div>
           <ol id="agent-changes" class="details" hidden></ol>
-          <p id="agent-note" class="muted" hidden>Nothing has changed yet. Review the changes, then approve.</p>
+          <p id="agent-note" class="muted" hidden data-i18n="agent_note">Nothing has changed yet. Review the changes, then approve.</p>
           <div class="apply-dock">
-            <button id="agent-approve" class="primary" type="button" hidden>Approve and apply</button>
-            <button id="agent-discard" class="ghost" type="button" hidden>Discard</button>
-            <button id="agent-undo" class="ghost" type="button" hidden>Undo</button>
-            <button id="agent-stop" class="ghost" type="button" hidden>Stop</button>
+            <button id="agent-approve" class="primary" type="button" hidden data-i18n="approve_apply">Approve and apply</button>
+            <button id="agent-discard" class="ghost" type="button" hidden data-i18n="discard">Discard</button>
+            <button id="agent-undo" class="ghost" type="button" hidden data-i18n="undo">Undo</button>
+            <button id="agent-stop" class="ghost" type="button" hidden data-i18n="stop">Stop</button>
           </div>
         </section>
         <div id="ai-result"></div>
         <details id="insights-card" class="card" hidden><summary><strong data-i18n="insights_title">Insights</strong></summary><p class="muted" data-i18n="insights_note">Calculated here in the task pane. Nothing is sent anywhere.</p><div id="insights-list"></div><div id="insights-actions" class="suggestions"></div></details>
-        <details id="prefs-card" class="card"><summary><strong>Workbook settings</strong></summary>
+        <details id="prefs-card" class="card"><summary><strong data-i18n="workbook_settings">Workbook settings</strong></summary>
           <p id="prefs-line" class="muted">Nothing remembered for this workbook yet.</p>
-          <p class="muted">Saved in this workbook, so everyone who opens it gets the same. Only these choices are stored, never cell values.</p>
-          <label for="prefs-currency">Currency when the data names none<select id="prefs-currency"><option value="">Not set</option><option value="LKR">LKR (Rs)</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="INR">INR</option><option value="AUD">AUD</option><option value="SGD">SGD</option><option value="AED">AED</option><option value="JPY">JPY</option></select></label>
-          <label for="prefs-number-style">Large amounts<select id="prefs-number-style"><option value="">As in the data</option><option value="lakh">Lakhs (12,34,567)</option><option value="million">Millions (Mn)</option><option value="plain">Plain (1,234,567)</option></select></label>
-          <label for="prefs-fiscal">Financial year starts<select id="prefs-fiscal"><option value="">Not set</option><option value="4">April (Sri Lanka)</option><option value="1">January</option><option value="7">July</option></select></label>
-          <label for="prefs-audience">Reports are usually for<select id="prefs-audience"><option value="">Decide from the request</option><option value="management">Management (one page)</option><option value="operational">Operations (full detail)</option></select></label>
-          <label class="email-check"><input id="prefs-changelog" type="checkbox" checked /><span>Record every change in a "VynorAI Log" sheet</span></label>
-          <button id="prefs-holidays" type="button">Add Sri Lanka holiday table</button>
-          <button id="prefs-forget" class="ghost" type="button">Forget these choices</button>
+          <p class="muted" data-i18n="prefs_note">Saved in this workbook, so everyone who opens it gets the same. Only these choices are stored, never cell values.</p>
+          <label for="prefs-currency">Currency when the data names none<select id="prefs-currency"><option value="" data-i18n="not_set">Not set</option><option value="LKR">LKR (Rs)</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="INR">INR</option><option value="AUD">AUD</option><option value="SGD">SGD</option><option value="AED">AED</option><option value="JPY">JPY</option></select></label>
+          <label for="prefs-number-style">Large amounts<select id="prefs-number-style"><option value="" data-i18n="as_in_data">As in the data</option><option value="lakh" data-i18n="style_lakhs">Lakhs (12,34,567)</option><option value="million" data-i18n="style_millions">Millions (Mn)</option><option value="plain" data-i18n="style_plain">Plain (1,234,567)</option></select></label>
+          <label for="prefs-fiscal">Financial year starts<select id="prefs-fiscal"><option value="" data-i18n="not_set">Not set</option><option value="4" data-i18n="fy_april">April (Sri Lanka)</option><option value="1" data-i18n="fy_january">January</option><option value="7" data-i18n="fy_july">July</option></select></label>
+          <label for="prefs-audience">Reports are usually for<select id="prefs-audience"><option value="" data-i18n="audience_auto">Decide from the request</option><option value="management" data-i18n="audience_mgmt">Management (one page)</option><option value="operational" data-i18n="audience_ops">Operations (full detail)</option></select></label>
+          <label class="email-check"><input id="prefs-changelog" type="checkbox" checked /><span data-i18n="log_changes">Record every change in a "VynorAI Log" sheet</span></label>
+          <button id="prefs-holidays" type="button" data-i18n="add_holidays">Add Sri Lanka holiday table</button>
+          <button id="prefs-forget" class="ghost" type="button" data-i18n="forget_choices">Forget these choices</button>
         </details>
 
         <section class="composer" aria-label="Request a workbook change" data-i18n-aria-label="request_change">
           <label class="sr-only" for="instruction" data-i18n="instruction_label">Describe what to create</label>
-          <div id="dup-fix" hidden><button id="dup-fix-btn" type="button">Clean first, then run this</button></div>
+          <div id="dup-fix" hidden><button id="dup-fix-btn" type="button" data-i18n="clean_first">Clean first, then run this</button></div>
           <textarea id="instruction"data-i18n-placeholder="placeholder" placeholder="Describe what you would like to create from the selected data"></textarea>
           <div class="composer-bar">
             <button id="analyze" class="ghost" type="button" disabled data-i18n="analyze">Analyze with AI</button>
-            <button id="script-plan" class="ghost" type="button" disabled>Plan steps with AI</button>
-            <button id="agent-run" class="primary" type="button" disabled hidden>Ask the agent</button>
+            <button id="script-plan" class="ghost" type="button" disabled data-i18n="plan_with_ai">Plan steps with AI</button>
+            <button id="agent-run" class="primary" type="button" disabled hidden data-i18n="ask_agent">Ask the agent</button>
             <button id="inspect" class="primary" type="button" disabled data-i18n="inspect">Inspect and preview</button>
             <button id="cancel-preview" class="ghost" type="button" hidden data-i18n="cancel_preview">Cancel</button>
           </div>
@@ -338,7 +338,7 @@
       </div>
 
       <section id="diagnostics-panel" class="card" data-dev hidden>
-        <h2>Diagnostics</h2><p id="diagnostics-summary" aria-live="polite"></p><pre id="diagnostics">No sign-in diagnostics yet.</pre>
+        <h2 data-i18n="diagnostics_title">Diagnostics</h2><p id="diagnostics-summary" aria-live="polite"></p><pre id="diagnostics">No sign-in diagnostics yet.</pre>
       </section>
     </main>
     <script>

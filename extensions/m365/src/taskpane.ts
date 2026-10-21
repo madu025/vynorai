@@ -177,6 +177,13 @@ import {
 } from "./privacyReceipt.js";
 import { currencyGuessFor } from "./businessContext.js";
 import { whatsappSummary } from "./whatsappSummary.js";
+import {
+  chooseSmartPath,
+  selectionBadges,
+  suggestionsForSelection,
+  type SmartMode,
+  type WorkspaceSelection,
+} from "./smartWorkspace.js";
 
 declare global {
   interface Window {
@@ -193,6 +200,8 @@ const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
+const smartRun = document.querySelector<HTMLButtonElement>("#smart-run");
+const runMode = document.querySelector<HTMLSelectElement>("#run-mode");
 const dupFix = document.querySelector<HTMLElement>("#dup-fix");
 const dupFixButton = document.querySelector<HTMLButtonElement>("#dup-fix-btn");
 let cleanFirstRequest = "";
@@ -594,7 +603,9 @@ function restoreConversationHistory() {
       }));
       renderConversationHistory();
       renderChatList();
-      window.requestAnimationFrame(() => scrollToLatestMessage(document, window));
+      window.requestAnimationFrame(() =>
+        scrollToLatestMessage(document, window),
+      );
       return;
     } catch {
       // fall back to nothing: a damaged history must never affect the add-in
@@ -1196,6 +1207,9 @@ function updateAuthenticationUi(signedIn: boolean) {
   const agentRun = document.querySelector<HTMLButtonElement>("#agent-run");
   if (agentRun)
     agentRun.disabled = !signedIn || capabilities?.aiAnalysis === false;
+  if (smartRun)
+    smartRun.disabled = !signedIn || capabilities?.excel.canInspect === false;
+  if (runMode) runMode.disabled = !signedIn;
   updateEmailUi(signedIn);
   document.body.dataset.auth = signedIn ? "in" : "out";
 }
@@ -3154,6 +3168,9 @@ function setupLayout() {
   const resultCard = document.querySelector<HTMLElement>("#result-card");
   const previewSummary =
     document.querySelector<HTMLElement>("#preview-summary");
+  const previewImpact = document.querySelector<HTMLElement>("#preview-impact");
+  const previewWarnings =
+    document.querySelector<HTMLElement>("#preview-warnings");
 
   const closeMenu = () => {
     if (menu) menu.hidden = true;
@@ -3239,10 +3256,37 @@ function setupLayout() {
       const from = currentRangeAddress ? ` (${currentRangeAddress})` : "";
       previewSummary.textContent =
         language === "si"
-          ? `පේළි ${rows}ක් සහ තීරු ${columnCount}ක් භාවිතා කරයි${from}. ඔබේ මූලාශ්‍ර දත්ත වෙනස් නොවේ.` +
-            (warnings.length ? ` ${warnings.join(" ")}` : "")
-          : `Using ${rows} rows and ${columnCount} columns${from}. Your source data stays unchanged.` +
-            (warnings.length ? ` ${warnings.join(" ")}` : "");
+          ? `පේළි ${rows}ක් සහ තීරු ${columnCount}ක් භාවිතා කරයි${from}. ඔබේ මූලාශ්‍ර දත්ත වෙනස් නොවේ.`
+          : `Using ${rows} rows and ${columnCount} columns${from}. Your source data stays unchanged.`;
+      if (previewImpact) {
+        const impact = [
+          [rows, translate(language, "rows_label", "Rows")],
+          [columnCount, translate(language, "columns_label", "Columns")],
+          [actions.length, translate(language, "changes_label", "Changes")],
+          [warnings.length, translate(language, "warnings_label", "Warnings")],
+        ];
+        previewImpact.replaceChildren(
+          ...impact.map(([value, text]) => {
+            const item = document.createElement("div");
+            item.className = "impact-item";
+            const strong = document.createElement("strong");
+            strong.textContent = Number(value).toLocaleString("en-US");
+            const span = document.createElement("span");
+            span.textContent = String(text);
+            item.append(strong, span);
+            return item;
+          }),
+        );
+        show(previewImpact, true);
+      }
+      previewWarnings?.replaceChildren(
+        ...warnings.map((warning) => {
+          const item = document.createElement("li");
+          item.textContent = String(warning);
+          return item;
+        }),
+      );
+      show(previewWarnings, warnings.length > 0);
       void sheets;
       void label;
     }
@@ -3670,6 +3714,11 @@ function renderResultGallery() {
       void revealExcelResult(officeRuntime(), result.targetSheet);
     });
     actions.appendChild(show);
+    const share = document.createElement("button");
+    share.type = "button";
+    share.textContent = translate(language, "email_report", "Email report");
+    share.addEventListener("click", () => prepareEmailComposer());
+    actions.appendChild(share);
     const refresh = document.createElement("button");
     refresh.type = "button";
     refresh.textContent = translate(language, "refresh_result", "Refresh");
@@ -4020,7 +4069,67 @@ refreshLanguage();
 
 const selectionChip = document.querySelector<HTMLElement>("#selection-chip");
 const selectionText = document.querySelector<HTMLElement>("#selection-text");
+const workbookContext =
+  document.querySelector<HTMLElement>("#workbook-context");
+const contextSelection =
+  document.querySelector<HTMLElement>("#context-selection");
+const contextBadges = document.querySelector<HTMLElement>("#context-badges");
+const contextSuggestions = document.querySelector<HTMLElement>(
+  "#context-suggestions",
+);
+const contextSuggestionList = document.querySelector<HTMLElement>(
+  "#context-suggestion-list",
+);
 let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+
+function renderWorkspaceContext(info: WorkspaceSelection | undefined) {
+  if (!info) {
+    show(workbookContext, false);
+    show(contextSuggestions, false);
+    return;
+  }
+  const description = describeSelection(info);
+  if (contextSelection) contextSelection.textContent = description;
+  contextBadges?.replaceChildren(
+    ...selectionBadges(info).map((text) => {
+      const badge = document.createElement("span");
+      badge.className = "context-badge";
+      badge.textContent = text;
+      return badge;
+    }),
+  );
+  const suggestions = suggestionsForSelection(info);
+  contextSuggestionList?.replaceChildren(
+    ...suggestions.map((suggestion) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "smart-suggestion";
+      const title = document.createElement("strong");
+      title.textContent = translate(
+        language,
+        `suggestion_${suggestion.id}`,
+        suggestion.label,
+      );
+      const reason = document.createElement("span");
+      reason.className = "suggestion-reason";
+      reason.textContent = translate(
+        language,
+        `suggestion_reason_${suggestion.id}`,
+        suggestion.reason,
+      );
+      button.append(title, reason);
+      button.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = suggestion.instruction;
+        instruction.dispatchEvent(new Event("input"));
+        instruction.focus();
+      });
+      return button;
+    }),
+  );
+  show(workbookContext, description !== "");
+  show(contextSuggestions, suggestions.length > 0);
+}
 
 /** Shows which sheet and cells the next request will use; hidden when nothing can be read. */
 async function refreshSelectionChip() {
@@ -4039,10 +4148,19 @@ async function refreshSelectionChip() {
     const text = describeSelection(info);
     selectionText.textContent = text;
     show(selectionChip, text !== "");
+    renderWorkspaceContext(info);
   } catch {
     show(selectionChip, false);
+    renderWorkspaceContext(undefined);
   }
 }
+
+document
+  .querySelector("#refresh-context")
+  ?.addEventListener("click", () => void refreshSelectionChip());
+document.querySelector("#context-overview")?.addEventListener("click", () => {
+  document.querySelector<HTMLButtonElement>("#overview")?.click();
+});
 
 /** Keeps the chip current while the person moves around the sheet (one refresh per pause). */
 function watchSelection() {
@@ -4192,6 +4310,32 @@ let agentSentMessages: AgentMessage[] = [];
 let agentLastRequest = "";
 /** Verification rounds after an apply (the agent may stage fixes once more). */
 let agentRounds = 0;
+let agentVerifying = false;
+
+const AGENT_STAGES = [
+  "inspect",
+  "plan",
+  "review",
+  "approval",
+  "apply",
+  "verify",
+] as const;
+
+function setAgentStage(stage: (typeof AGENT_STAGES)[number], complete = false) {
+  const current = AGENT_STAGES.indexOf(stage);
+  for (const item of document.querySelectorAll<HTMLElement>(
+    "#agent-timeline [data-stage]",
+  )) {
+    const index = AGENT_STAGES.indexOf(
+      item.dataset.stage as (typeof AGENT_STAGES)[number],
+    );
+    item.classList.toggle(
+      "done",
+      index < current || (complete && index === current),
+    );
+    item.classList.toggle("active", !complete && index === current);
+  }
+}
 
 const show = (element: HTMLElement | null, visible: boolean) => {
   if (element) element.hidden = !visible;
@@ -4293,6 +4437,10 @@ function renderAgentRun(run: AgentRun) {
     }
   }
   const pending = run.changes.length > 0;
+  setAgentStage(
+    pending ? "approval" : agentVerifying ? "verify" : "review",
+    !pending,
+  );
   show(agentChanges, pending);
   show(agentNote, pending);
   show(agentApprove, pending);
@@ -4376,6 +4524,8 @@ async function agentLoop(request: string) {
       mask: agentMask,
       facts: preferenceFacts(workbookPrefs),
       onPhase: (phase: AgentPhase) => {
+        if (agentVerifying) setAgentStage("verify");
+        else if (phase === "planning") setAgentStage("plan");
         if (agentBadge)
           agentBadge.textContent =
             phase === "planning"
@@ -4398,9 +4548,11 @@ async function agentLoop(request: string) {
       },
       onTeamPhase: (phase) => {
         if (phase === "plan") {
+          if (!agentVerifying) setAgentStage("plan");
           if (agentBadge) agentBadge.textContent = "Planning";
           setStatus("A planner agent is splitting the request into steps...");
         } else if (phase === "reviewing") {
+          if (!agentVerifying) setAgentStage("review");
           if (agentBadge) agentBadge.textContent = "Reviewing";
         } else if (phase === "revising") {
           if (agentBadge) agentBadge.textContent = "Correcting";
@@ -4515,6 +4667,8 @@ async function startAgent() {
     show(agentUndo, false);
   }
   agentRounds = 0;
+  agentVerifying = false;
+  setAgentStage("inspect");
   agentLastRequest = request;
   learnPreferences(request);
   agentUsage.prompt = 0;
@@ -4525,6 +4679,39 @@ async function startAgent() {
   setStatus("The agent is working. Nothing changes until you approve.");
   await agentLoop(request);
 }
+
+const RUN_MODE_KEY = "vynorai.m365.runMode";
+try {
+  const savedMode = localStorage.getItem(RUN_MODE_KEY);
+  if (runMode && ["smart", "local", "agent"].includes(savedMode ?? ""))
+    runMode.value = savedMode!;
+} catch {
+  // Smart remains the safe default when storage is unavailable.
+}
+runMode?.addEventListener("change", () => {
+  try {
+    localStorage.setItem(RUN_MODE_KEY, runMode.value);
+  } catch {
+    // The selected mode still applies to this session.
+  }
+});
+smartRun?.addEventListener("click", () => {
+  const request = instruction?.value.trim() ?? "";
+  if (!request) return setStatus("Describe what you want first.");
+  const mode = (runMode?.value || "smart") as SmartMode;
+  const path = chooseSmartPath(
+    request,
+    mode,
+    capabilities?.aiAnalysis !== false,
+  );
+  if (path === "agent") void startAgent();
+  else void inspect?.click();
+});
+instruction?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+  event.preventDefault();
+  smartRun?.click();
+});
 
 document
   .querySelector("#agent-run")
@@ -4576,6 +4763,7 @@ agentDiscard?.addEventListener("click", () => {
   show(agentApprove, false);
   show(agentDiscard, false);
   if (agentBadge) agentBadge.textContent = "Discarded";
+  setAgentStage("approval", true);
   setStatus("Discarded. Nothing was changed.");
 });
 
@@ -4587,6 +4775,7 @@ agentApprove?.addEventListener("click", async () => {
   show(agentApprove, false);
   show(agentDiscard, false);
   if (agentBadge) agentBadge.textContent = "Applying";
+  setAgentStage("apply");
   agentStopped = false;
   show(agentStop, true);
   setStatus("Applying the approved changes...");
@@ -4656,6 +4845,8 @@ agentApprove?.addEventListener("click", async () => {
   // The agent checks what was written once or twice and may stage fixes (they need approval again).
   if (agentRounds < 2) {
     agentRounds += 1;
+    agentVerifying = true;
+    setAgentStage("verify");
     if (agentBadge) agentBadge.textContent = "Verifying";
     setStatus("Verifying the applied result...");
     await agentLoop(
@@ -4667,6 +4858,7 @@ agentApprove?.addEventListener("click", async () => {
         })),
       ),
     );
+    agentVerifying = false;
   }
 });
 

@@ -111,11 +111,27 @@
       .pill { min-height: 46px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: left; font-size: 12px; line-height: 1.25; }
       .pill:hover { background: var(--surface-muted); }
       .pill.more { text-align: center; color: var(--muted); }
+      .context-card { display: grid; gap: 8px; border-color: color-mix(in srgb, var(--brand) 24%, var(--line)); }
+      .context-head, .context-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .context-head h2 { margin: 0; font-size: 14px; }
+      .context-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+      .context-badge { padding: 3px 7px; border-radius: 999px; background: var(--surface-muted); color: var(--muted); font-size: 11px; }
+      .context-suggestions { display: grid; gap: 6px; }
+      .context-suggestions h2 { margin: 0; font-size: 14px; }
+      .smart-suggestion-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+      .smart-suggestion { display: grid; gap: 2px; width: 100%; padding: 8px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-align: left; }
+      .smart-suggestion:hover { background: var(--surface-muted); }
+      .suggestion-reason { color: var(--muted); font-size: 11px; font-weight: 400; }
       .composer { position: relative; flex: 0 0 auto; z-index: 4; padding: 8px; border: 1.5px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 -7px 17px rgb(16 24 40 / 6%); }
       .composer:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent); }
       textarea { display: block; width: 100%; min-height: 46px; border: 0; outline: 0; resize: vertical; background: transparent; color: inherit; }
       .composer-bar, .action-row, .apply-dock { display: flex; align-items: center; gap: 7px; }
       .composer-bar { justify-content: space-between; margin-top: 6px; }
+      .mode-control { display: flex; min-width: 0; flex: 1; gap: 6px; }
+      .mode-control select { min-width: 0; flex: 1; padding: 6px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+      .more-tools { margin-top: 6px; color: var(--muted); font-size: 11px; }
+      .more-tools summary { cursor: pointer; }
+      .more-tools .action-row { margin-top: 6px; flex-wrap: wrap; }
       .primary, .ghost { min-height: 32px; padding: 6px 10px; border-radius: 8px; font-weight: 600; }
       .primary { border: 1px solid var(--brand); background: var(--brand); color: var(--on-brand); }
       .primary:hover:not(:disabled) { background: var(--brand-hover); border-color: var(--brand-hover); }
@@ -132,6 +148,11 @@
       .badge { padding: 2px 6px; border-radius: 999px; background: var(--surface-muted); color: var(--muted); font-size: 11px; font-weight: 600; }
       #preview-summary, .muted { color: var(--muted); }
       #preview-summary { margin: 0 0 9px; }
+      .impact-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin-bottom: 9px; }
+      .impact-item { min-width: 0; padding: 6px; border-radius: 8px; background: var(--surface-muted); text-align: center; }
+      .impact-item strong, .impact-item span { display: block; overflow-wrap: anywhere; }
+      .impact-item span { color: var(--muted); font-size: 10px; }
+      .preview-warnings { margin: 0 0 9px; padding: 7px 7px 7px 25px; border-radius: 8px; background: color-mix(in srgb, #f5a623 12%, var(--surface)); font-size: 11px; }
       .outcome { margin: 7px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-muted); }
       .outcome strong { display: block; font-size: 13px; }
       .outcome .where, .legend { margin-top: 2px; color: var(--muted); font-size: 12px; }
@@ -156,6 +177,10 @@
       .trace ol { margin: 5px 0 0; padding-left: 18px; font-size: 12px; }
       #steps { display: grid; gap: 4px; margin-top: 8px; }
       .step { display: flex; gap: 7px; align-items: center; font-size: 12px; }
+      .agent-timeline { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; margin: 7px 0; padding: 0; list-style: none; }
+      .agent-timeline li { padding: 5px 2px; border-bottom: 2px solid var(--line); color: var(--muted); font-size: 9px; text-align: center; }
+      .agent-timeline li.done { border-color: #14804a; color: #14804a; }
+      .agent-timeline li.active { border-color: var(--brand); color: var(--brand); font-weight: 700; }
       #change-note { margin: 10px 0 0; }
       .apply-dock { position: sticky; bottom: 0; z-index: 3; justify-content: space-between; margin: 10px -11px -11px; padding: 9px 11px; border-top: 1px solid var(--line); background: var(--surface); }
       .apply-dock .primary { flex: 1; }
@@ -175,7 +200,7 @@
       label.check { display: flex; gap: 7px; align-items: flex-start; margin: 10px 0; }
       .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--brand) 24%, transparent); border-top-color: var(--brand); border-radius: 50%; animation: spin .85s linear infinite; }
       @keyframes spin { to { transform: rotate(360deg); } }
-      @media (max-width: 340px) { main { padding-inline: 7px; } .suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tweaks { grid-template-columns: 1fr; } .composer-bar { align-items: flex-end; } }
+      @media (max-width: 340px) { main { padding-inline: 7px; } .suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tweaks, .impact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .composer-bar { align-items: flex-end; } .agent-timeline { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
       @media (min-width: 401px) { main { padding-inline: 14px; } .outcome { padding: 12px; } }
       @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
     </style>
@@ -211,6 +236,16 @@
 
       <div class="workspace">
         <div class="scroll-area" id="scroll-area">
+        <section id="workbook-context" class="card context-card" hidden aria-labelledby="workbook-context-heading">
+          <div class="context-head"><h2 id="workbook-context-heading" data-i18n="workbook_context">Workbook context</h2><button id="refresh-context" class="ghost" type="button" data-i18n="refresh_context">Refresh</button></div>
+          <p id="context-selection" class="muted"></p>
+          <div id="context-badges" class="context-badges" aria-live="polite"></div>
+          <div class="context-actions"><button id="context-overview" class="link" type="button" data-i18n="menu_overview">Workbook overview</button></div>
+        </section>
+        <section id="context-suggestions" class="context-suggestions" hidden aria-labelledby="context-suggestions-heading">
+          <h2 id="context-suggestions-heading" data-i18n="contextual_suggestions">Suggested for this selection</h2>
+          <div id="context-suggestion-list" class="smart-suggestion-list"></div>
+        </section>
         <section class="conversation" aria-label="VynorAI conversation" data-i18n-aria-label="conversation_label">
           <div class="chat-bar" id="chat-bar">
             <button id="new-chat" class="pill" type="button" data-i18n="new_chat">+ New chat</button>
@@ -236,6 +271,8 @@
         <section id="result-card" class="card" hidden aria-labelledby="preview-heading">
           <div class="card-head"><h2 id="preview-heading" tabindex="-1" data-i18n="preview_title">Preview</h2><span class="badge" data-i18n="preview_safe">No changes yet</span></div>
           <p id="preview-summary"></p>
+          <div id="preview-impact" class="impact-grid" hidden aria-label="Preview impact" data-i18n-aria-label="preview_impact"></div>
+          <ul id="preview-warnings" class="preview-warnings" hidden></ul>
           <div id="outcomes" aria-label="What will be created" data-i18n-aria-label="outcomes_label"></div>
           <div id="preview-tweaks" class="tweaks" hidden aria-label="Adjust preview" data-i18n-aria-label="adjust_preview">
             <label class="tweak" for="tweak-chart-type"><span data-i18n="tweak_chart">Chart type</span><select id="tweak-chart-type"></select></label>
@@ -307,6 +344,9 @@
         <section id="agent-card" class="card" hidden aria-labelledby="agent-heading">
           <div class="card-head"><h2 id="agent-heading" tabindex="-1" data-i18n="agent_title">Agent</h2><span class="badge" id="agent-badge">Working</span></div>
           <p id="agent-progress" class="muted" aria-live="polite"></p>
+          <ol id="agent-timeline" class="agent-timeline" aria-label="Agent progress" data-i18n-aria-label="agent_timeline">
+            <li data-stage="inspect" data-i18n="timeline_inspect">Inspect</li><li data-stage="plan" data-i18n="timeline_plan">Plan</li><li data-stage="review" data-i18n="timeline_review">Review</li><li data-stage="approval" data-i18n="timeline_approval">Approval</li><li data-stage="apply" data-i18n="timeline_apply">Apply</li><li data-stage="verify" data-i18n="timeline_verify">Verify</li>
+          </ol>
           <div id="agent-plan" hidden><strong data-i18n="agent_plan">Plan</strong><ol id="agent-plan-steps" class="details"></ol></div>
           <div id="agent-reply"></div>
           <div id="agent-sources" hidden><strong data-i18n="agent_sources">Sources</strong><ul id="agent-sources-list" class="details"></ul></div>
@@ -340,12 +380,15 @@
           <div id="dup-fix" hidden><button id="dup-fix-btn" type="button" data-i18n="clean_first">Clean first, then run this</button></div>
           <textarea id="instruction"data-i18n-placeholder="placeholder" placeholder="Describe what you would like to create from the selected data"></textarea>
           <div class="composer-bar">
-            <button id="analyze" class="ghost" type="button" disabled data-i18n="analyze">Analyze with AI</button>
-            <button id="script-plan" class="ghost" type="button" disabled data-i18n="plan_with_ai">Plan steps with AI</button>
-            <button id="agent-run" class="primary" type="button" disabled hidden data-i18n="ask_agent">Ask the agent</button>
-            <button id="inspect" class="primary" type="button" disabled data-i18n="inspect">Inspect and preview</button>
+            <div class="mode-control"><label class="sr-only" for="run-mode" data-i18n="run_mode">Run mode</label><select id="run-mode" aria-label="Run mode" data-i18n-aria-label="run_mode"><option value="smart" data-i18n="smart_mode">Smart</option><option value="local" data-i18n="local_mode">Local preview</option><option value="agent" data-i18n="agent_mode">Agent workflow</option></select><button id="smart-run" class="primary" type="button" disabled data-i18n="run">Run</button></div>
             <button id="cancel-preview" class="ghost" type="button" hidden data-i18n="cancel_preview">Cancel</button>
           </div>
+          <details class="more-tools"><summary data-i18n="more_tools">More tools</summary><div class="action-row">
+            <button id="analyze" class="ghost" type="button" disabled data-i18n="analyze">Analyze with AI</button>
+            <button id="script-plan" class="ghost" type="button" disabled data-i18n="plan_with_ai">Plan steps with AI</button>
+            <button id="agent-run" class="ghost" type="button" disabled hidden data-i18n="ask_agent">Ask the agent</button>
+            <button id="inspect" class="ghost" type="button" disabled data-i18n="inspect">Inspect and preview</button>
+          </div></details>
         </section>
       </div>
 

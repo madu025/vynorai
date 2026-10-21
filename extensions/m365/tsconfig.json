@@ -16,6 +16,7 @@
     "src/analysis.ts",
     "src/diagnostics.ts",
     "src/taskpane.ts",
+    "src/smartWorkspace.ts",
     "src/text.ts",
     "src/textAssist.ts"
   ]

@@ -76,3 +76,20 @@ test("the pane's grids cannot be stretched past the pane by long unbroken text",
   assert.match(html, /#conversation-history > article \{[^}]*overflow-wrap: anywhere/);
   assert.match(html, /main \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
 });
+
+test("the chat scrolls above a request box that never covers it", () => {
+  assert.match(html, /body\[data-auth="in"\] main \{[^}]*height: 100dvh[^}]*overflow: hidden/);
+  assert.match(html, /\.scroll-area \{[^}]*overflow-y: auto/);
+  assert.match(html, /\.composer \{ position: relative;/);
+  // Every card and the chat are inside the scroll area; the composer is outside it.
+  const area = html.indexOf('id="scroll-area"');
+  const composer = html.indexOf('<section class="composer"');
+  const conversation = html.indexOf('<section class="conversation"');
+  const agent = html.indexOf('id="agent-card"');
+  assert.ok(area > 0 && area < conversation && conversation < composer);
+  assert.ok(area < agent && agent < composer);
+});
+
+test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {
+  assert.match(html, /\.message-body \{[^}]*white-space: pre-line/);
+});

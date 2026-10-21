@@ -535,6 +535,7 @@ function renderConversationHistory() {
           ? translate(language, "conversation_attention", "Needs attention")
           : "VynorAI";
     const body = document.createElement("span");
+    body.className = "message-body";
     body.textContent = localizeMessage(language, message.text);
     item.append(label, body);
     if (message.kind === "user" && index === conversationMessages.length - 1) {
@@ -2645,7 +2646,7 @@ function useRecommendation(
 
 /** A chip is only useful if the person sees what happened: bring the request into view and preview it. */
 function showInstructionAndPreview() {
-  instruction?.scrollIntoView({ block: "center", behavior: "smooth" });
+  // The request box sits below the scrolling chat and is always in view: nothing to scroll.
   window.setTimeout(() => inspect?.click(), 50);
 }
 

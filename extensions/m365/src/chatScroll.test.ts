@@ -12,13 +12,18 @@ test("a chat with messages opens at its newest message", () => {
   assert.deepEqual(calls, [{ block: "end" }]);
 });
 
-test("an empty chat goes to the top", () => {
+test("an empty chat scrolls the chat area to the top", () => {
   const calls: unknown[] = [];
   scrollToLatestMessage(
-    { querySelector: () => ({ lastElementChild: null }) },
-    { scrollTo: (options) => calls.push(options) },
+    {
+      querySelector: (selector) =>
+        selector === "#scroll-area"
+          ? { scrollTo: (options: object) => calls.push(["area", options]) }
+          : { lastElementChild: null },
+    },
+    { scrollTo: (options) => calls.push(["window", options]) },
   );
-  assert.deepEqual(calls, [{ top: 0 }]);
+  assert.deepEqual(calls, [["area", { top: 0 }]]);
   scrollToLatestMessage({ querySelector: () => null }, { scrollTo: (o) => calls.push(o) });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 2, "without a chat area the window is the fallback");
 });

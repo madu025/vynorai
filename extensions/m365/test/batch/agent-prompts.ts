@@ -919,6 +919,20 @@ const CASES: Case[] = [
       ),
   },
   {
+    id: "a-reply-style",
+    text: "pivot of total Issued Quantity by RTOM and a column chart of it",
+    // The reply is only the key points: a short bullet list, not paragraphs that repeat the
+    // staged list or explain the method.
+    check: (run) => {
+      const lines = run.reply.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+      return all(
+        need(lines.length >= 1 && lines.length <= 6, `${lines.length} lines`),
+        need(lines.every((l) => /^[-•*]\s/.test(l)), `not bullets: ${lines.slice(0, 2).join(" | ").slice(0, 160)}`),
+        need(run.reply.length <= 650, `${run.reply.length} chars`),
+      );
+    },
+  },
+  {
     id: "n-protect",
     text: "protect the detail-report sheet",
     check: (run) =>

@@ -379,6 +379,50 @@ test("the team: planner, builder with the plan, two reviewers", async () => {
   );
 });
 
+test("the plan reaches onPlan before the builder starts, and only when there is one", async () => {
+  const order: string[] = [];
+  const base = scripted("VERDICT: OK").model;
+  const model = async (messages: AgentMessage[]) => {
+    const user = lastUser(messages);
+    if (/You are the planner/.test(user))
+      return {
+        content: "PLAN:\n1. Read the Data sheet\n2. Add a total under Amount",
+        tool_calls: [],
+      };
+    if (
+      !/You are the reviewer/.test(user) &&
+      messages[messages.length - 1].role === "user"
+    )
+      order.push("builder");
+    return base(messages);
+  };
+  let seen: string[] = [];
+  await runTeam({
+    request: "Add a total under Amount",
+    host,
+    model,
+    mask: new PersonalMask(),
+    onPlan: (steps: string[]) => {
+      seen = steps;
+      order.push("plan");
+    },
+  });
+  assert.deepEqual(seen, ["Read the Data sheet", "Add a total under Amount"]);
+  assert.deepEqual(order.slice(0, 2), ["plan", "builder"]);
+
+  let called = false;
+  await runTeam({
+    request: "What is in column B?",
+    host,
+    model: base,
+    mask: new PersonalMask(),
+    onPlan: () => {
+      called = true;
+    },
+  });
+  assert.equal(called, false);
+});
+
 test("a failed planner leaves the builder working as before", async () => {
   const base = scripted("VERDICT: OK").model;
   const model = async (messages: AgentMessage[]) => {

@@ -296,6 +296,8 @@ export async function runTeam(
     onTeamPhase?: (phase: "plan" | "reviewing" | "revising") => void;
     onHelperTool?: (name: string, args: Record<string, unknown>) => void;
     onReviewer?: (focus: ReviewFocus) => void;
+    /** The planner's steps, as soon as they exist and before the builder starts; not called without a plan. */
+    onPlan?: (steps: string[]) => void;
     /** Where the planner and reviewers read (defaults to the builder's host). */
     helperHost?: AgentHost;
   },
@@ -310,11 +312,13 @@ export async function runTeam(
   if (needsPlan(options.request)) {
     options.onTeamPhase?.("plan");
     plan = await makePlan({ ...helper, request: options.request });
+    if (plan.length) options.onPlan?.(plan);
   }
   const {
     onTeamPhase,
     onHelperTool: _helperTool,
     helperHost: _helperHost,
+    onPlan: _onPlan,
     onReviewer,
     ...builderOptions
   } = options;

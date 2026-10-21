@@ -4056,6 +4056,21 @@ async function initialize() {
 const AGENT_CONSENT_KEY = "vynorai.m365.agentConsent";
 const agentCard = document.querySelector<HTMLElement>("#agent-card");
 const agentProgress = document.querySelector<HTMLElement>("#agent-progress");
+const agentPlan = document.querySelector<HTMLElement>("#agent-plan");
+const agentPlanSteps = document.querySelector<HTMLElement>("#agent-plan-steps");
+
+/** Shows the planner's steps as a numbered list; no steps hides the list. */
+function showAgentPlan(steps: readonly string[]) {
+  if (!agentPlan || !agentPlanSteps) return;
+  agentPlanSteps.replaceChildren(
+    ...steps.map((step) => {
+      const item = document.createElement("li");
+      item.textContent = step;
+      return item;
+    }),
+  );
+  show(agentPlan, steps.length > 0);
+}
 const agentReply = document.querySelector<HTMLElement>("#agent-reply");
 const agentChanges = document.querySelector<HTMLOListElement>("#agent-changes");
 const agentNote = document.querySelector<HTMLElement>("#agent-note");
@@ -4189,6 +4204,7 @@ async function agentLoop(request: string) {
   show(agentStop, true);
   show(agentApprove, false);
   show(agentDiscard, false);
+  showAgentPlan([]);
   if (agentBadge) agentBadge.textContent = "Working";
   const readInput = agentInputReader();
   const host = createOfficeAgentHost(
@@ -4237,6 +4253,7 @@ async function agentLoop(request: string) {
           setStatus("Correcting the plan after the review...");
         }
       },
+      onPlan: showAgentPlan,
       onReviewer: (focus) =>
         setStatus(
           focus === "accuracy"

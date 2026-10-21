@@ -833,7 +833,17 @@ const CASES: Case[] = [
           ) || seen.some((s) => s.name === "calculate"),
           seen.map((s) => s.name).join(" ; ").slice(0, 300),
         ),
-        noChanges(run),
+        // A question is answered in the reply. The only change allowed is the add-in's own
+        // outlier step offered for the exact rows over a column too long to list.
+        need(
+          run.reply.length > 0 &&
+            run.changes.every(
+              (c) =>
+                c.change.kind === "vynor_step" &&
+                /outlier/i.test(c.change.instruction),
+            ),
+          `staged ${kinds(run).join(",")}`,
+        ),
       ),
   },
   {

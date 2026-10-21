@@ -93,3 +93,15 @@ test("the chat scrolls above a request box that never covers it", () => {
 test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {
   assert.match(html, /\.message-body \{[^}]*white-space: pre-line/);
 });
+
+test("every status message the pane sets has a Sinhala wording", async () => {
+  const { localizeMessage } = await import("./i18n.js");
+  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  const pattern = /setStatus\(\s*(?:"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/g;
+  const missing = new Set<string>();
+  for (const match of source.matchAll(pattern)) {
+    const text = (match[1] ?? match[2]).replace(/\$\{[^}]*\}/g, "1");
+    if (localizeMessage("si", text) === text) missing.add(text);
+  }
+  assert.deepEqual([...missing], []);
+});

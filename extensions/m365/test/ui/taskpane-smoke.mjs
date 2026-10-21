@@ -339,6 +339,13 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     path: path.join(artifactDirectory, `taskpane-${label}.png`),
     fullPage: true,
   });
+  await page.click("#menu-toggle");
+  await page.click("#advanced-workbook-options");
+  assert.equal(
+    await page.$eval("#prefs-card", (details) => details.open),
+    true,
+    "Advanced workbook options must open the saved workbook settings",
+  );
   await page.$eval("#prefs-card", (details) => {
     details.setAttribute("open", "");
     details.scrollIntoView({ block: "center" });

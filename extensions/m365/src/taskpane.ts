@@ -3161,6 +3161,10 @@ clearDiagnostics?.addEventListener("click", () => {
 function setupLayout() {
   const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle");
   const menu = document.querySelector<HTMLElement>("#menu");
+  const advancedWorkbookOptions = document.querySelector<HTMLButtonElement>(
+    "#advanced-workbook-options",
+  );
+  const prefsCard = document.querySelector<HTMLDetailsElement>("#prefs-card");
   const diagnosticsPanel =
     document.querySelector<HTMLElement>("#diagnostics-panel");
   const toggleDiagnostics = document.querySelector<HTMLButtonElement>(
@@ -3197,6 +3201,15 @@ function setupLayout() {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeMenu();
+  });
+  advancedWorkbookOptions?.addEventListener("click", () => {
+    if (!prefsCard) return;
+    prefsCard.open = true;
+    closeMenu();
+    prefsCard.scrollIntoView({ block: "start" });
+    window.setTimeout(() =>
+      prefsCard.querySelector<HTMLElement>("select")?.focus(),
+    );
   });
   toggleDiagnostics?.addEventListener("click", () => {
     if (!diagnosticsPanel) return;

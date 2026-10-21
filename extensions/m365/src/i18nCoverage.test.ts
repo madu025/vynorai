@@ -101,6 +101,10 @@ test("the pane avoids duplicating the Office title bar and keeps its app menu re
   );
   assert.match(html, /id="more-pills"/);
   assert.match(html, /data-i18n="more_suggestions"/);
+  assert.match(
+    html,
+    /id="advanced-workbook-options"[\s\S]*?data-i18n="menu_advanced_workbook_options"/,
+  );
 });
 
 test("the prompt starts the pane and the workspace flows below it", () => {

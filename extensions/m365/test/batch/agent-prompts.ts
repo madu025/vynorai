@@ -154,11 +154,11 @@ const host = (seen: Seen): AgentHost => ({
         address: "A1:C6",
         values: [
           ["Item Code", "Description", "Unit Cost"],
-          ["IC-100", "Drop wire", 120],
-          ["IC-101", "ONT", 5400],
-          ["IC-102", "Splitter", 900],
-          ["IC-103", "Patch cord", 150],
-          ["IC-104", "Rosette", 80],
+          ["OSPACC000", "Drop wire", 120],
+          ["OSPACC001", "ONT", 5400],
+          ["OSPACC002", "Splitter", 900],
+          ["OSPACC003", "Patch cord", 150],
+          ["OSPACC004", "Rosette", 80],
         ],
       };
     const match = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(address);

@@ -26,6 +26,18 @@ copy the generated `localhost.crt` and `localhost.key` into this directory, buil
 backend on port 3333, then run `npm run dev-server`. The dev server serves the task pane on port 3000 and proxies
 `/v1/*` to the backend, so the browser does not make a mixed-content HTTP request.
 
+## Browser pane smoke test
+
+Run `npm run test:ui` to build the pane and open it in a local headless Chrome instance. The test supplies a
+deterministic Office.js selection and local capability response, then checks the narrow task-pane layout, menu,
+selection refresh, enabled Run control, horizontal overflow and click reachability. It writes screenshots to the
+ignored `test-artifacts/` directory.
+
+The test uses the installed Chrome/Edge executable, or `M365_UI_CHROME_PATH` when a CI image keeps it elsewhere.
+It is a browser-layout regression test, not an Excel Web end-to-end test: it neither signs in to Microsoft nor
+writes to a workbook. Before a release, still open the add-in in Excel for the web and Excel Desktop and complete
+the manual preview, approval, apply, verification and undo smoke checks.
+
 No client secret belongs in this package. `manifest.xml` is development-only and must pass host/URL/permission review before tenant deployment.
 
 ## Production static host

@@ -16,6 +16,11 @@ import { PERSONAL_PATTERNS } from "./analysis.js";
 import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 import { describeRequestMeaning } from "./businessContext.js";
+import {
+  RUN_CODE_MAX_AREAS,
+  RUN_CODE_PER_REQUEST,
+  checkCode,
+} from "./codeSandbox.js";
 import type { AnalystCell } from "./advancedAnalytics.js";
 import {
   ANALYSIS_KINDS,
@@ -142,6 +147,17 @@ export interface AgentHost {
     feature: "sentiment" | "keywords" | "classification";
     texts: string[];
     categories?: string[];
+  }): Promise<unknown>;
+  /**
+   * Runs the agent's JavaScript over every cell of a range on the device, in a sandbox with no
+   * network (codeSandbox.ts). Read-only: it returns one JSON value.
+   */
+  runCode?(input: {
+    sheet: string;
+    /** One or more blocks over the same rows, side by side (B:B and H:H). */
+    areas: string[];
+    code: string;
+    hasHeaders: boolean;
   }): Promise<unknown>;
   /** Read-only details: names, tables, charts, pivots, hidden, merged, comments, rules, links. */
   getDetails?(what: string, sheet?: string, address?: string): Promise<unknown>;
@@ -657,6 +673,7 @@ export async function runAgent(options: {
   const changes: AgentRun["changes"] = [];
   const counts = {
     calculate: 0,
+    runCode: 0,
     calculationResults: new Map<string, unknown>(),
   };
   const maxTurns = options.maxTurns ?? AGENT_MAX_TURNS;
@@ -830,7 +847,11 @@ async function runTool(
   host: AgentHost,
   mask: PersonalMask,
   changes: AgentRun["changes"],
-  counts: { calculate: number; calculationResults: Map<string, unknown> },
+  counts: {
+    calculate: number;
+    runCode: number;
+    calculationResults: Map<string, unknown>;
+  },
 ): Promise<unknown> {
   const restore = (text: string) => mask.unmask(text);
   switch (call.function.name) {
@@ -983,6 +1004,39 @@ async function runTool(
         });
       }
       return mapRelationships(tables);
+    }
+    case "run_code": {
+      if (!host.runCode)
+        throw new AgentToolError("run_code is not available here.");
+      counts.runCode += 1;
+      if (counts.runCode > RUN_CODE_PER_REQUEST)
+        throw new AgentToolError(
+          `You already ran code ${RUN_CODE_PER_REQUEST} times for this request. Stage the changes now, or answer with what you have.`,
+        );
+      const sheet = checkSheetName(restore(String(args.sheet ?? "")));
+      const areas = String(args.address ?? "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map(checkRange);
+      if (!areas.length) throw new AgentToolError("Give the range to read.");
+      if (areas.length > RUN_CODE_MAX_AREAS)
+        throw new AgentToolError(
+          `Give at most ${RUN_CODE_MAX_AREAS} ranges, separated by commas.`,
+        );
+      let code: string;
+      try {
+        // Masked tokens ([p1]) in the code are the real values on the device.
+        code = checkCode(restore(String(args.code ?? "")));
+      } catch (error) {
+        throw new AgentToolError((error as Error).message);
+      }
+      return host.runCode({
+        sheet,
+        areas,
+        code,
+        hasHeaders: args.has_headers !== false,
+      });
     }
     case "analyze_text_batch": {
       if (!host.analyzeTextBatch)

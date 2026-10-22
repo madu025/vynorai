@@ -22,7 +22,13 @@ import {
   AGENT_SYSTEM_PROMPT,
   AGENT_TOOLS,
 } from "../../../../backend/src/services/m365Agent.js";
-import { fakeCalculator } from "./fakeExcel.js";
+import { FAKE_ROWS, fakeCalculator } from "./fakeExcel.js";
+import { NODE_PRELUDE, nodeSandboxWorker } from "./nodeSandbox.js";
+import {
+  runSandboxedCode,
+  splitHeaders,
+  workerSource,
+} from "../../src/codeSandbox.js";
 
 const KEY = process.env.VYNORAI_E2E_API_KEY || "";
 const BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
@@ -95,6 +101,25 @@ const topRtom = String(
   )[0][0],
 );
 /** A number as the reply may write it: 1,234,567 or 1234567. */
+/** Median Issued Quantity per RTOM, worked out here to check the run_code task. */
+const medians = (() => {
+  const byRtom = new Map<string, number[]>();
+  for (let index = 0; index < FAKE_ROWS; index += 1) {
+    const row = rows[index % rows.length];
+    const list = byRtom.get(String(row[1])) ?? [];
+    list.push(Number(row[7]));
+    byRtom.set(String(row[1]), list);
+  }
+  return [...byRtom].map(([rtom, values]) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
+    return { rtom, median };
+  });
+})();
 const numberIn = (reply: string, value: number) =>
   reply.replace(/,/g, "").includes(String(value));
 const host = (seen: Seen): AgentHost => ({
@@ -161,16 +186,67 @@ const host = (seen: Seen): AgentHost => ({
           ["OSPACC004", "Rosette", 80],
         ],
       };
-    const match = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(address);
+    // Like Excel: only the asked columns, and "" for cells past the data (K2 is empty here).
+    const match = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(address);
+    const column = (letters: string) =>
+      [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
     const top = match ? Number(match[2]) : 1;
-    const bottom = match ? Number(match[4]) : 1;
+    const bottom = match ? Number(match[4] ?? match[2]) : 1;
+    const first = match ? column(match[1]) : 0;
+    const last = match ? column(match[3] ?? match[1]) : HEADERS.length - 1;
     const all = [HEADERS, ...rows];
+    const values = all
+      .slice(top - 1, Math.min(bottom, all.length))
+      .map((row) =>
+        Array.from(
+          { length: last - first + 1 },
+          (_, index) => row[first + index] ?? "",
+        ),
+      );
     return {
       address,
-      values: all.slice(top - 1, Math.min(bottom, all.length)),
+      values,
+      // The data sheet holds values only, so its formulas read back as the values.
+      ...(withFormulas ? { formulas: values } : {}),
     };
   },
   calculate: async (formula) => calculate(formula),
+  // The same sandbox as the add-in, in a Node worker, over the same rows calculate sees
+  // (the 200 sample rows repeated to FAKE_ROWS, like fakeCalculator).
+  runCode: async ({ areas, code, hasHeaders }) => {
+    const parts = areas.map((area) => {
+      const match = /^([A-J])(\d*)(?::([A-J])(\d*))?$/.exec(area);
+      if (!match) throw new Error(`${area} is outside the data.`);
+      const first = match[1].charCodeAt(0) - 65;
+      const last = (match[3] ?? match[1]).charCodeAt(0) - 65;
+      const top = match[2] ? Number(match[2]) : 1;
+      const bottom = Math.min(
+        match[4] ? Number(match[4]) : FAKE_ROWS + 1,
+        FAKE_ROWS + 1,
+      );
+      return { first, last, top, bottom };
+    });
+    const { top, bottom } = parts[0];
+    if (parts.some((part) => part.top !== top || part.bottom !== bottom))
+      return { error: "The ranges must cover the same rows." };
+    const values: unknown[][] = [];
+    for (let row = top; row <= bottom; row += 1) {
+      const source = row === 1 ? HEADERS : rows[(row - 2) % rows.length];
+      values.push(
+        parts.flatMap((part) => source.slice(part.first, part.last + 1)),
+      );
+    }
+    const outcome = await runSandboxedCode(
+      { ...splitHeaders(values, hasHeaders), code },
+      { createWorker: nodeSandboxWorker, source: workerSource(NODE_PRELUDE) },
+    );
+    return outcome.ok
+      ? {
+          result: outcome.result,
+          rows_read: values.length - (hasHeaders ? 1 : 0),
+        }
+      : { error: outcome.error };
+  },
   getDetails: async (what) =>
     ({
       pivots: [
@@ -344,6 +420,24 @@ const CASES: Case[] = [
         usedCalc(seen),
         noChanges(run),
         need(run.reply.includes(topRtom), `reply lacks ${topRtom}`),
+      ),
+  },
+  {
+    id: "a-code-median",
+    text: "for each RTOM, what is the median issued quantity, and how many rows are more than twice that median?",
+    check: (run, seen) =>
+      all(
+        noChanges(run),
+        need(
+          seen.some((s) => s.name === "run_code" || s.name === "calculate"),
+          "no calculation",
+        ),
+        ...medians.map(({ rtom, median }) =>
+          need(
+            run.reply.includes(rtom) && numberIn(run.reply, median),
+            `reply lacks ${rtom} median ${median}`,
+          ),
+        ),
       ),
   },
   {
@@ -586,7 +680,8 @@ const CASES: Case[] = [
           (a) =>
             (a.action === "freeze_rows" && a.value === 1) ||
             // Freezing at A2 freezes exactly the first row.
-            (a.action === "freeze_at" && String(a.value).toUpperCase() === "A2"),
+            (a.action === "freeze_at" &&
+              String(a.value).toUpperCase() === "A2"),
         ),
         JSON.stringify(run.changes.map((c) => c.change)),
       ),
@@ -818,7 +913,10 @@ const CASES: Case[] = [
       all(
         need(
           seen.some((s) => s.name === "map_relationships"),
-          seen.map((s) => s.name).join(" ; ").slice(0, 300),
+          seen
+            .map((s) => s.name)
+            .join(" ; ")
+            .slice(0, 300),
         ),
         need(run.changes.length === 0, `staged ${kinds(run).join(",")}`),
         need(run.reply.length > 0, "no reply"),
@@ -829,8 +927,12 @@ const CASES: Case[] = [
     text: "add the supplier's phone number from the Items sheet to the detail report",
     check: (run, seen) =>
       need(
-        seen.some((s) => s.name === "map_relationships") || run.reply.length > 0,
-        seen.map((s) => s.name).join(" ; ").slice(0, 300),
+        seen.some((s) => s.name === "map_relationships") ||
+          run.reply.length > 0,
+        seen
+          .map((s) => s.name)
+          .join(" ; ")
+          .slice(0, 300),
       ),
   },
   {
@@ -853,7 +955,10 @@ const CASES: Case[] = [
           seen.some(
             (s) => s.name === "analyze_columns" && s.args.kind === "anomalies",
           ) || seen.some((s) => s.name === "calculate"),
-          seen.map((s) => s.name).join(" ; ").slice(0, 300),
+          seen
+            .map((s) => s.name)
+            .join(" ; ")
+            .slice(0, 300),
         ),
         // A question is answered in the reply. The only change allowed is the add-in's own
         // outlier step offered for the exact rows over a column too long to list.
@@ -919,7 +1024,10 @@ const CASES: Case[] = [
               /!B2:B/.test(f) &&
               /!G2:G/.test(f) &&
               /!H2:H/.test(f) &&
-              run.changes.some((c) => c.change.kind === "write_formula" && c.change.formula === f),
+              run.changes.some(
+                (c) =>
+                  c.change.kind === "write_formula" && c.change.formula === f,
+              ),
           ),
         JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
       ),
@@ -935,7 +1043,10 @@ const CASES: Case[] = [
               s.name === "get_details" &&
               /formula_(audit|check)/.test(String(s.args.what)),
           ),
-          seen.map((s) => s.name).join(" ; ").slice(0, 300),
+          seen
+            .map((s) => s.name)
+            .join(" ; ")
+            .slice(0, 300),
         ),
         noChanges(run),
       ),
@@ -946,10 +1057,16 @@ const CASES: Case[] = [
     // The reply is only the key points: a short bullet list, not paragraphs that repeat the
     // staged list or explain the method.
     check: (run) => {
-      const lines = run.reply.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+      const lines = run.reply
+        .split(/\n+/)
+        .map((l) => l.trim())
+        .filter(Boolean);
       return all(
         need(lines.length >= 1 && lines.length <= 6, `${lines.length} lines`),
-        need(lines.every((l) => /^[-•*]\s/.test(l)), `not bullets: ${lines.slice(0, 2).join(" | ").slice(0, 160)}`),
+        need(
+          lines.every((l) => /^[-•*]\s/.test(l)),
+          `not bullets: ${lines.slice(0, 2).join(" | ").slice(0, 160)}`,
+        ),
         need(run.reply.length <= 650, `${run.reply.length} chars`),
       );
     },
@@ -1100,7 +1217,7 @@ for (const item of CASES) {
           `    [planner] ${reviewed.plan?.length ? reviewed.plan.map((step, i) => `${i + 1}. ${step}`).join(" | ") : "no plan (question, or planner skipped)"}`,
         );
         console.log(
-          `    [builder] ${seen.length} tool call(s), ${reviewed.run.changes.length} staged change(s), ${reviewed.run.turns} turn(s)`,
+          `    [builder] ${seen.length} tool call(s) (${seen.map((s) => s.name).join(", ")}), ${reviewed.run.changes.length} staged change(s), ${reviewed.run.turns} turn(s)`,
         );
         for (const verdict of reviewed.reviewers ?? [])
           console.log(
@@ -1134,7 +1251,10 @@ for (const item of CASES) {
     verdict = `error ${(error as Error).message}`;
   }
   if (verdict === true) pass += 1;
-  const expert = byExpert.get(EXPERT[item.id] ?? "General") ?? { pass: 0, ran: 0 };
+  const expert = byExpert.get(EXPERT[item.id] ?? "General") ?? {
+    pass: 0,
+    ran: 0,
+  };
   expert.ran += 1;
   if (verdict === true) expert.pass += 1;
   byExpert.set(EXPERT[item.id] ?? "General", expert);
@@ -1152,7 +1272,9 @@ if (reviewOn)
   console.log(
     `review: ${reviews.planned} planned, ${reviews.ok} accepted, ${reviews.fix} asked for a fix, ${reviews.revised} corrected`,
   );
-for (const [expert, score] of [...byExpert].sort(([a], [b]) => a.localeCompare(b)))
+for (const [expert, score] of [...byExpert].sort(([a], [b]) =>
+  a.localeCompare(b),
+))
   console.log(`expert ${expert}: ${score.pass}/${score.ran}`);
 console.log(
   `agent-prompts: ${pass}/${ran} (model turns ${turns}, calls ${calls}; tokens in ${usage.prompt} (cached ${usage.cached}), out ${usage.completion})`,

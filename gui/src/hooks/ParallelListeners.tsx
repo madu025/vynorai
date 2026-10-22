@@ -38,6 +38,11 @@ import { setLocalStorage } from "../util/localStorage";
 import { migrateLocalStorage } from "../util/migrateLocalStorage";
 import { useWebviewListener } from "./useWebviewListener";
 
+// The first snapshot can take a few seconds (git state, branch lookup).
+export const WORKSPACE_SNAPSHOT_TIMEOUT_MS = 25_000;
+export const WORKSPACE_SNAPSHOT_RETRY_MS = 2_000;
+export const WORKSPACE_SNAPSHOT_ATTEMPTS = 5;
+
 function ParallelListeners() {
   const dispatch = useAppDispatch();
   const ideMessenger = useContext(IdeMessengerContext);
@@ -50,6 +55,8 @@ function ParallelListeners() {
     (store) => store.ui.reasoningSettings,
   );
   const hasDoneInitialConfigLoad = useRef(false);
+  // Set once any workspace snapshot arrived (answer or pushed update).
+  const hasWorkspaceSnapshot = useRef(false);
 
   // Load symbols for chat on any session change
   const sessionId = useAppSelector((state) => state.session.id);
@@ -128,19 +135,6 @@ function ParallelListeners() {
       }
     }
     void initialLoadConfig();
-    void ideMessenger
-      .request("workspace/getSnapshot", undefined)
-      .then((result) => {
-        if (result.status === "success") {
-          dispatch(setWorkspaceSnapshot(result.content));
-        } else {
-          dispatch(setWorkspaceError("Workspace information is unavailable."));
-        }
-      })
-      .catch(() => {
-        // Older cores and partial test hosts may not implement this protocol yet.
-        dispatch(setWorkspaceError("Workspace information is unavailable."));
-      });
     const interval = setInterval(() => {
       if (hasDoneInitialConfigLoad.current) {
         // Init to run on initial config load
@@ -157,6 +151,49 @@ function ParallelListeners() {
 
     return () => clearInterval(interval);
   }, [hasDoneInitialConfigLoad, ideMessenger, initialSessionId]);
+
+  // Load the workspace snapshot that the project chip and the agent's
+  // grounding use. The config load above retries every 2 s; this request used
+  // to be sent once with no timeout, so a lost or failed first answer left the
+  // chip on "Detecting workspace…" or "No workspace" until something else
+  // (folder change, window focus) pushed a snapshot. Without window focus
+  // events (no window manager, e.g. Xvfb) nothing ever did.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = async (attempt: number) => {
+      try {
+        const result = await ideMessenger.request(
+          "workspace/getSnapshot",
+          undefined,
+          WORKSPACE_SNAPSHOT_TIMEOUT_MS,
+        );
+        if (cancelled || hasWorkspaceSnapshot.current) return;
+        if (result.status === "success") {
+          hasWorkspaceSnapshot.current = true;
+          dispatch(setWorkspaceSnapshot(result.content));
+          return;
+        }
+      } catch {
+        // No answer in time, or an older core / partial test host that does
+        // not implement this protocol: retry below.
+      }
+      if (cancelled || hasWorkspaceSnapshot.current) return;
+      if (attempt >= WORKSPACE_SNAPSHOT_ATTEMPTS) {
+        dispatch(setWorkspaceError("Workspace information is unavailable."));
+        return;
+      }
+      timer = setTimeout(
+        () => void load(attempt + 1),
+        WORKSPACE_SNAPSHOT_RETRY_MS,
+      );
+    };
+    void load(1);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [dispatch, ideMessenger]);
 
   useWebviewListener(
     "configUpdate",
@@ -258,6 +295,7 @@ function ParallelListeners() {
   });
 
   useWebviewListener("workspace/statusUpdate", async (data) => {
+    hasWorkspaceSnapshot.current = true;
     dispatch(setWorkspaceSnapshot(data));
   });
 

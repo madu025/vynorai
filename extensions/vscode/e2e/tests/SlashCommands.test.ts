@@ -84,7 +84,8 @@ async function waitUntilLoaded(view: WebView) {
       throw new Error(`model still loading: ${modelText}`);
     }
     if (/Detecting workspace|No workspace/.test(text)) {
-      throw new Error("workspace still loading");
+      const chip = /(Detecting workspace|No workspace)[^\n]*/.exec(text)?.[0];
+      throw new Error(`workspace still loading: ${chip}`);
     }
   }, 90_000);
 }

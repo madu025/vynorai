@@ -49,7 +49,8 @@ describe("Edit Test", () => {
 
     await TestUtils.waitForSuccess(async () => {
       const editorText = await editor.getText();
-      return editorText.includes(llmResponse);
+      // waitForSuccess only retries on a throw; a returned false passes at once.
+      expect(editorText).to.include(llmResponse);
     });
   });
 

@@ -282,7 +282,8 @@ function toPlainPath(filepath: string): string {
     }
   }
   // Collapse "a/../b" so a rule cannot be dodged with ".." segments.
-  const slashed = plain.replace(/\\/g, "/");
+  // Off Windows, fileURLToPath keeps a slash before the drive ("/d:/x").
+  const slashed = plain.replace(/\\/g, "/").replace(/^\/(?=[a-z]:\/)/i, "");
   return path.posix.normalize(slashed).replace(/^\.\//, "");
 }
 

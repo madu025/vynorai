@@ -105,6 +105,9 @@ jobs:
           fi
 
       - name: Run tests
+        # jest and vitest take a few minutes; a hung run fails here instead of
+        # holding the runner for hours.
+        timeout-minutes: 20
         run: |
           cd core
           npm test

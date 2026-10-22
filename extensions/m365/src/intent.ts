@@ -1218,6 +1218,26 @@ function bracketHeaders(text: string, headers: string[]): string {
 
 export function normalizeInstruction(text: string): string {
   const table: Array<[RegExp, string]> = [
+    // "අනුපිටපත් ගනුදෙනු සොයන්න", "duplicate ganudenu hoyanna" and "நகல் பரிவர்த்தனைகளைக் கண்டுபிடி"
+    // all mean "find duplicate transactions": the verb comes last in Sinhala and Tamil.
+    [
+      /(?:අනුපිටපත්|anupitapath|duplicates?|நகல்\S*)\s+((?:\S+\s+){0,2}?)(?:සොයන්න|සොයා\s+දෙන්න|hoyanna|hoyala\s+denna|கண்டுபிடி\S*|தேடு\S*|காட்டு\S*)/gi,
+      "find duplicate $1",
+    ],
+    [/ගනුදෙනු|\bganudenu\b|பரிவர்த்தனை\S*/gi, "transactions"],
+    [/සොයන්න|සොයා\s+දෙන්න|\bhoyanna\b|கண்டுபிடி\S*/gi, "find"],
+    // Tamil: "Region வாரியாக மொத்த Net Amount வரைபடம்" means "total Net Amount by Region chart".
+    [/(\S+)\s+(?:வாரியாக|வாரியான|அடிப்படையில்)/gu, "by $1"],
+    [/மொத்த(?:ம்|த்தை|த்)?/gu, "total"],
+    [/சராசரி/gu, "average"],
+    [/வரைபட(?:ம்|த்தை)?|விளக்கப்பட(?:ம்|த்தை)?/gu, "chart"],
+    [/அட்டவணை\S*/gu, "table"],
+    [/சுத்தம்\s*செய்\S*|சுத்தப்படுத்து\S*/gu, "clean"],
+    [/நகல்\S*/gu, "duplicates"],
+    [/புதிய\s+(?:தாள்|sheet)\S*/gu, "new sheet"],
+    [/வரிசைப்படுத்து\S*/gu, "sort"],
+    [/விற்பனை\S*/gu, "Sales"],
+    [/உருவாக்கு\S*|தயாரி\S*/gu, ""],
     // "Sales walata Region anuwa total" means "total of Sales by Region".
     [
       /\b(\w+)\s+(?:walata|walin)\s+(\w+)\s+(?:anuwa|walin|walata)\s+(total|sum|average|count)(?:\s+ekak)?\b/gi,

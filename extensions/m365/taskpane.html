@@ -1381,11 +1381,6 @@
       .analysis-recommendation p {
         margin: 0 0 7px;
       }
-      #whatsapp-note {
-        padding: 10px;
-        border: 1px solid var(--line);
-        background: var(--surface-muted);
-      }
       #insights-card > summary,
       #prefs-card > summary {
         cursor: pointer;
@@ -1971,6 +1966,16 @@
           animation-iteration-count: 1 !important;
         }
       }
+      #share-card-img {
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--border, #dde1ea);
+        border-radius: 12px;
+      }
+      #share-paste {
+        width: 100%;
+        min-height: 44px;
+      }
     </style>
   </head>
   <body>
@@ -1982,7 +1987,7 @@
         <div class="brand-mark" aria-hidden="true">V</div>
         <div class="brand-copy">
           <strong>VynorAI Excel</strong>
-          <span data-i18n="tagline">Analyze, plan and apply safely</span>
+          <span data-i18n="brand_tagline">Analyze, plan and apply safely</span>
         </div>
       </header>
       <div
@@ -2319,8 +2324,8 @@
         </section>
         <div class="scroll-area" id="scroll-area">
           <section id="selection-change-warning" class="selection-warning" hidden>
-            <span data-i18n="selection_changed">Selection changed after preview.</span>
-            <button data-i18n="refresh_preview" id="refresh-preview-selection" type="button">Refresh preview</button>
+            <span data-i18n="selection_changed_preview">Selection changed after preview.</span>
+            <button id="refresh-preview-selection" type="button" data-i18n="refresh_preview">Refresh preview</button>
           </section>
           <section
             id="context-suggestions"
@@ -2415,7 +2420,7 @@
               <label class="tweak" for="tweak-top-n" hidden
                 ><span>Top-N</span
                 ><select id="tweak-top-n">
-                  <option data-i18n="all_items" value="">All items</option>
+                  <option value="" data-i18n="all_items">All items</option>
                   <option value="5">5</option>
                   <option value="10">10</option>
                   <option value="20">20</option>
@@ -2425,8 +2430,8 @@
               <label class="tweak" for="tweak-rank-direction" hidden
                 ><span>Sort order</span
                 ><select id="tweak-rank-direction">
-                  <option data-i18n="largest_first" value="top">Largest first</option>
-                  <option data-i18n="smallest_first" value="bottom">Smallest first</option>
+                  <option value="top" data-i18n="largest_first">Largest first</option>
+                  <option value="bottom" data-i18n="smallest_first">Smallest first</option>
                 </select></label
               >
               <label class="tweak tweak-check" for="tweak-data-labels" hidden
@@ -2464,9 +2469,9 @@
             <ul id="changed-list" class="details" hidden></ul>
             <div class="safety-summary" aria-label="Safety and approval">
               <strong data-i18n="safety_approval">Safety &amp; approval</strong>
-              <span data-i18n="privacy_protected">✓ Privacy protected</span>
-              <span data-i18n="data_preserved">✓ Original data preserved</span>
-              <span data-i18n="review_before_apply">✓ Review changes before apply</span>
+              <span data-i18n="trust_privacy">✓ Privacy protected</span>
+              <span data-i18n="trust_original">✓ Original data preserved</span>
+              <span data-i18n="trust_review">✓ Review changes before apply</span>
             </div>
             <div class="apply-options">
               <label class="compact-choice"
@@ -2523,7 +2528,7 @@
               </button>
             </div>
           </section>
-          <p data-i18n="verified_unchanged" id="verified-result-banner" class="verified-banner" data-workspace-panel="results" hidden>
+          <p id="verified-result-banner" class="verified-banner" data-workspace-panel="results" data-i18n="verified_unchanged" hidden>
             Verified. The original data is unchanged.
           </p>
           <section
@@ -2534,12 +2539,66 @@
               aria-labelledby="result-gallery-heading"
             >
               <div class="card-head">
-                <h2 data-i18n="results_hub" id="result-gallery-heading">
+                <h2 id="result-gallery-heading" data-i18n="results_hub">
                   Results Hub
                 </h2>
               </div>
               <div id="result-gallery-list"></div>
             </section>
+          <section
+            id="share-card"
+            class="card"
+            data-workspace-panel="share"
+            aria-labelledby="share-card-heading"
+          >
+            <div class="card-head">
+              <h2 id="share-card-heading" data-i18n="share_card_title">
+                Share as a picture
+              </h2>
+              <span class="badge" data-i18n="on_device">on this device</span>
+            </div>
+            <p id="share-card-note" data-i18n="share_card_note">
+              The card is built from your latest result, the selected cells or
+              cells you paste. Nothing leaves this device until you press Share.
+            </p>
+            <div class="email-options">
+              <button
+                type="button"
+                id="share-use-result"
+                data-i18n="share_use_result"
+              >
+                Latest result
+              </button>
+              <button
+                type="button"
+                id="share-use-selection"
+                data-i18n="share_use_selection"
+              >
+                Selected cells
+              </button>
+            </div>
+            <label for="share-paste"
+              ><span data-i18n="share_paste_label"
+                >Or paste cells copied from Excel</span
+              ><textarea
+                id="share-paste"
+                rows="2"
+                maxlength="60000"
+                placeholder="Ctrl+V"
+              ></textarea>
+            </label>
+            <img id="share-card-img" alt="" hidden />
+            <button
+              id="share-main"
+              class="primary"
+              type="button"
+              disabled
+              data-i18n="share_button"
+            >
+              Share
+            </button>
+            <p id="share-card-status" class="delivery-status" role="status"></p>
+          </section>
           <section
               id="email-card"
               class="card"
@@ -2548,7 +2607,7 @@
               aria-labelledby="email-heading"
             >
               <div class="card-head">
-                <h2 data-i18n="share_centre" id="email-heading">
+                <h2 id="email-heading" data-i18n="share_centre">
                   Share Centre
                 </h2>
                 <span class="badge" data-i18n="reviewed">reviewed</span>
@@ -2556,21 +2615,6 @@
               <p id="email-note">
                 Choose the report format and review everything before sending.
               </p>
-                            <div class="quick-share">
-                <p class="muted" data-i18n="share_optional">
-                  Sharing is optional. Copy a short summary, or send the report by email only if you need to.
-                </p>
-                <button
-                  id="whatsapp-copy"
-                  type="button"
-                  data-i18n="copy_whatsapp"
-                >
-                  Copy summary for WhatsApp
-                </button>
-                <pre id="whatsapp-note" class="muted" hidden></pre>
-              </div>
-              <details id="email-options">
-                <summary data-i18n="email_optional">Send by email (optional)</summary>
               <div class="email-form">
                 <label for="email-to"
                   >Recipient email<input
@@ -2692,7 +2736,6 @@
                   <span id="email-draft-note"></span>
                 </p>
               </div>
-            </details>
             </section>
             <details data-dev data-workspace-panel="results">
               <summary data-i18n="tech_details">Technical details</summary>
@@ -2763,7 +2806,7 @@
             >
               <li data-stage="inspect" data-i18n="timeline_inspect">Inspect</li>
               <li data-stage="plan" data-i18n="timeline_plan">Plan</li>
-              <li data-i18n="stage_preview" data-stage="preview">Preview</li>
+              <li data-stage="preview" data-i18n="timeline_preview">Preview</li>
               <li data-stage="review" data-i18n="timeline_review">Review</li>
               <li data-stage="approval" data-i18n="timeline_approval">
                 Approval
@@ -2917,6 +2960,9 @@
             <button id="prefs-holidays" type="button" data-i18n="add_holidays">
               Add Sri Lanka holiday table
             </button>
+            <button id="prefs-payroll" type="button" data-i18n="add_payroll">
+              Add payroll sheet (EPF, ETF, APIT)
+            </button>
             <button
               id="prefs-forget"
               class="ghost"
@@ -2933,9 +2979,9 @@
           role="tablist"
           aria-label="Workspace"
         >
-          <button data-i18n="tab_work" type="button" class="active" data-workspace-target="work" role="tab" aria-selected="true">Work</button>
-          <button data-i18n="tab_results" type="button" data-workspace-target="results" role="tab" aria-selected="false" disabled>Results</button>
-          <button data-i18n="tab_share" type="button" data-workspace-target="share" role="tab" aria-selected="false" disabled>Share</button>
+          <button type="button" class="active" data-workspace-target="work" role="tab" aria-selected="true" data-i18n="tab_work">Work</button>
+          <button type="button" data-workspace-target="results" role="tab" aria-selected="false" data-i18n="tab_results" disabled>Results</button>
+          <button type="button" data-workspace-target="share" role="tab" aria-selected="false" data-i18n="tab_share" disabled>Share</button>
         </nav>
       </div>
 

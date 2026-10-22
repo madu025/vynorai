@@ -264,9 +264,9 @@ export function inferCurrency(input: {
 export type Audience = "management" | "operational" | "general";
 
 const MANAGEMENT_WORDS =
-  /\b(management|manager|managers|executive|executives|exec|board|ceo|cfo|coo|gm|director|directors|leadership|head\s+office|summary|summari[sz]e|overview|high[- ]level|at\s+a\s+glance|kpis?|monthly\s+review|business\s+review|review\s+meeting|presentation|present|one[- ]page|snapshot|scorecard)\b|කළමනාකරණ|සාරාංශ|ප්‍රධානීන්|ඉදිරිපත්/gi;
+  /\b(management|manager|managers|executive|executives|exec|board|ceo|cfo|coo|gm|director|directors|leadership|head\s+office|summary|summari[sz]e|overview|high[- ]level|at\s+a\s+glance|kpis?|monthly\s+review|business\s+review|review\s+meeting|presentation|present|one[- ]page|snapshot|scorecard)\b|කළමනාකරණ|සාරාංශ|ප්‍රධානීන්|ඉදිරිපත්|\bkalamanakaran\w*|\bsaaransha\w*|நிர்வாக|மேலாண்மை|மேலாளர்|சுருக்க|கண்ணோட்ட/gi;
 const OPERATIONAL_WORDS =
-  /\b(operational|operations|ops|daily|day[- ]to[- ]day|team|staff|officers?|follow[- ]?up|track|tracking|monitor|monitoring|detail|detailed|details|drill[- ]?down|line[- ]by[- ]line|each|every|per\s+(?:item|customer|branch|site|job|order)|pending|backlog|action\s+list|work\s*list|to[- ]do)\b|දෛනික|විස්තර|සෑම|කණ්ඩායම/gi;
+  /\b(operational|operations|ops|daily|day[- ]to[- ]day|team|staff|officers?|follow[- ]?up|track|tracking|monitor|monitoring|detail|detailed|details|drill[- ]?down|line[- ]by[- ]line|each|every|per\s+(?:item|customer|branch|site|job|order)|pending|backlog|action\s+list|work\s*list|to[- ]do)\b|දෛනික|විස්තර|සෑම|කණ්ඩායම|\bdainika\w*|தினசரி|அன்றாட|விரிவான|விவர|ஒவ்வொரு|குழு|பின்தொடர/gi;
 
 /**
  * Who the result is for. A management request gets a short one-page view (the biggest

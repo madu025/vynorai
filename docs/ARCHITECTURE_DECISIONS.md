@@ -143,6 +143,13 @@ anything about production environment values is marked "not verified".
   validated before staged result columns are offered. Python is deliberately not executable in the
   first production release; any later Python feature requires an isolated, no-network, resource-limited
   sandbox with explicit approval and a result-only boundary.
+- Decided 2026-10-20 by the owner: the agent may run analysis code (`run_code`, `extensions/m365/src/codeSandbox.ts`).
+  It is JavaScript, not Python, and runs on the device in a Web Worker. Before the code runs, every network and code-loading API
+  (fetch, XMLHttpRequest, WebSocket, importScripts, Worker, indexedDB, caches...) is removed from the worker. The
+  code gets a copy of at most 2,500,000 cells, has 5 seconds, and returns one JSON value (cut at 6,000 characters).
+  That result is masked like any other tool result before it reaches the model. The cells never leave the
+  device. `run_code` is a read tool: it cannot write, so it needs no approval click, and anything it finds is
+  still written only through staged, approved changes. At most 4 runs per request.
 - Excel email delivery is a separate, explicit side effect. It uses a second OAuth consent for delegated Graph
   mail scopes only after the user reviews recipients, format, body, charts, attachment list and confirms Send.
   XLSX/PDF/CSV bytes and bounded result-sheet details are produced locally; raw report bytes never go through the

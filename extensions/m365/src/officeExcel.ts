@@ -73,6 +73,8 @@ export type ExcelActionStatus =
   | "skipped_unsupported";
 
 import { plannedSheetName } from "./outcome.js";
+import { responseLanguage, type Language } from "./i18n.js";
+import { workbookText } from "./workbookText.js";
 import {
   audienceWithPreference,
   withPreferredCurrency,
@@ -674,6 +676,34 @@ export function readExcelReportValues(
   });
 }
 
+/** Reads the values of the selected cells (bounded) for the share card; nothing is written. */
+export function readSelectedExcelValues(
+  maxRows = 200,
+  maxColumns = 30,
+): Promise<{ values: any[][]; sheet: string; truncated: boolean }> {
+  const runtime = (globalThis as any).Excel;
+  if (typeof runtime?.run !== "function")
+    return Promise.reject(new Error("EXCEL_API_UNAVAILABLE"));
+  return runtime.run(async (context: any) => {
+    const selected = context.workbook.getSelectedRange();
+    selected.load(["rowCount", "columnCount"]);
+    selected.worksheet.load("name");
+    await context.sync();
+    const rows = Math.min(maxRows, Number(selected.rowCount));
+    const columns = Math.min(maxColumns, Number(selected.columnCount));
+    const range = selected.getCell(0, 0).getResizedRange(rows - 1, columns - 1);
+    range.load("values");
+    await context.sync();
+    return {
+      values: (range.values ?? []) as any[][],
+      sheet: String(selected.worksheet.name),
+      truncated:
+        Number(selected.rowCount) > rows ||
+        Number(selected.columnCount) > columns,
+    };
+  });
+}
+
 /** Gets up to three report charts as base64 JPEG images for an HTML email body. */
 export function readExcelChartImages(
   sheetName: string,
@@ -1137,6 +1167,11 @@ export async function applyApprovedExcelPlan(
     /** Saved workbook preferences: currency when the data names none, lakh grouping, audience. */
     preferences?: WorkbookPreferences;
     requirements?: Record<string, string>;
+    /**
+     * Language of the titles, labels and notes written on the sheet. Without it, a request in
+     * Sinhala or Tamil script gets those words in that language and anything else gets English.
+     */
+    language?: Language;
     onAction?: (result: ExcelActionResult) => void;
     onProgress?: (completedRows: number, totalRows: number) => void;
   },
@@ -1151,6 +1186,9 @@ export async function applyApprovedExcelPlan(
     );
   if (!options?.expectedSourceFingerprint)
     throw new Error("The previewed source fingerprint is required");
+  const sheetLanguage =
+    options.language ?? responseLanguage(options.request ?? "", "en");
+  const words = workbookText(sheetLanguage);
   return runtime.run(async (context) => {
     if (
       (await sourceFingerprint(context, plan)) !==
@@ -1743,6 +1781,7 @@ export async function applyApprovedExcelPlan(
                 audience,
                 ...(target ? { target } : {}),
                 sourceLabel: `${quotedSheet}${localExcelAddress(plan.sourceAddress)}`,
+                language: sheetLanguage,
               });
               const notes = [...layout.notes];
               const writeBlocks = (blocks: DashboardBlock[]) => {
@@ -1857,9 +1896,7 @@ export async function applyApprovedExcelPlan(
                 pivot = undefined;
                 writeBlocks(layout.fallbackBreakdown);
                 await context.sync();
-                notes.push(
-                  `This Excel could not create a PivotTable here (${describePivotError(error)}), so the breakdown is a formula table; it still updates with the data.`,
-                );
+                notes.push(words.pivotFallback(describePivotError(error)));
               }
               const slicerSupported =
                 pivot &&
@@ -1883,14 +1920,10 @@ export async function applyApprovedExcelPlan(
                   slicer.height = 220;
                   await context.sync();
                 } catch {
-                  notes.push(
-                    `A ${category.column} slicer could not be added in this Excel; use the filter button on the PivotTable's row labels instead.`,
-                  );
+                  notes.push(words.slicerFailed(category.column));
                 }
               } else if (pivot) {
-                notes.push(
-                  `Slicers need Excel 2021 or Microsoft 365; use the filter button on the PivotTable's row labels to pick ${category.column} values.`,
-                );
+                notes.push(words.slicerNeedsVersion(category.column));
               }
               if (notes.length > layout.notes.length) {
                 const noteRange = sheet.getRangeByIndexes(6, 0, 1, 1);
@@ -1934,7 +1967,7 @@ export async function applyApprovedExcelPlan(
               "Columns",
             );
             chart.name = action.name;
-            chart.title.text = `${spec.valueColumn} distribution`;
+            chart.title.text = words.distribution(spec.valueColumn);
             chart.setPosition("F2");
             await context.sync();
           } else if (action.kind === "chart") {
@@ -1983,7 +2016,10 @@ export async function applyApprovedExcelPlan(
                 );
                 chart.name = action.name;
                 chart.setPosition("H3");
-                chart.title.text = `PivotTable result: ${spec.valueColumn} by ${spec.categoryColumn}`;
+                chart.title.text = words.pivotChart(
+                  spec.valueColumn,
+                  spec.categoryColumn,
+                );
                 if (spec.showDataLabels) {
                   try {
                     chart.dataLabels.showValue = true;
@@ -2080,8 +2116,11 @@ export async function applyApprovedExcelPlan(
                 chart.setPosition("H3");
                 chart.title.text =
                   spec.chartType === "histogram"
-                    ? `${spec.valueColumn} distribution`
-                    : `${[spec.valueColumn, ...(spec.extraValueColumns ?? [])].join(", ")} by ${spec.categoryColumn}`;
+                    ? words.distribution(spec.valueColumn)
+                    : words.chartBy(
+                        [spec.valueColumn, ...(spec.extraValueColumns ?? [])],
+                        spec.categoryColumn,
+                      );
                 if (spec.showDataLabels) {
                   try {
                     chart.dataLabels.showValue = true;
@@ -2103,7 +2142,9 @@ export async function applyApprovedExcelPlan(
                       spec.categoryColumn,
                     );
                     chart.axes.valueAxis.title.text =
-                      extras.length > 0 ? "Value" : String(spec.valueColumn);
+                      extras.length > 0
+                        ? words.valueAxis
+                        : String(spec.valueColumn);
                     chart.axes.valueAxis.numberFormat = "#,##0";
                   }
                 } catch {
@@ -2627,7 +2668,9 @@ export async function applyApprovedExcelPlan(
                     "Columns",
                   );
                   chart.name = action.name;
-                  chart.title.text = `${spec.value?.column ?? "Value"} forecast`;
+                  chart.title.text = words.forecast(
+                    spec.value?.column ?? words.valueAxis,
+                  );
                   chart.setPosition(plan.profile?.sample ? "G2" : "E2");
                   chart.series
                     .getItemAt(0)

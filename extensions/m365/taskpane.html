@@ -1065,6 +1065,17 @@
         gap: 5px;
         margin: 8px 0;
       }
+      /* A role name is one or two words: it keeps its letters together and the status wraps instead. */
+      .agent-activity-list > div strong {
+        flex: 0 0 auto;
+        overflow-wrap: normal;
+        word-break: normal;
+        white-space: nowrap;
+      }
+      .agent-activity-list > div .agent-role-status {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
       .agent-activity-list > div {
         display: flex;
         align-items: center;

@@ -125,3 +125,13 @@ test("buttons wrap at spaces only, so a Sinhala label never breaks letter by let
 test("an empty status strip is not drawn as a coloured bar", () => {
   assert.match(html, /\.delivery-status:empty \{\s*display: none;/);
 });
+
+test("a stored chat message keeps a whole reply, and a role name is not broken mid-word", () => {
+  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  const limit = Number(/const MAX_CONVERSATION_CHARS = (\d+);/.exec(source)?.[1]);
+  assert.ok(limit >= 1500, `chat message limit is ${limit}`);
+  assert.match(
+    html,
+    /\.agent-activity-list > div strong \{[^}]*white-space: nowrap/,
+  );
+});

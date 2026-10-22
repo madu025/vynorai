@@ -420,7 +420,8 @@ const SESSION_KEY = "vynorai.m365.excel.session.v2";
 const CONVERSATION_KEY_PREFIX = "vynorai.m365.excel.conversation.v1";
 const RESULTS_KEY_PREFIX = "vynorai.m365.excel.results.v1";
 const MAX_CONVERSATION_MESSAGES = 12;
-const MAX_CONVERSATION_CHARS = 300;
+/** A reply is at most five bullets; 300 once cut them mid-word. */
+const MAX_CONVERSATION_CHARS = 2000;
 const MAX_STORED_RESULTS = 40;
 
 type ConversationMessage = {

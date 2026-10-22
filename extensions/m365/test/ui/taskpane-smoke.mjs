@@ -255,6 +255,53 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
       !document.querySelector("#smart-run")?.hasAttribute("disabled"),
     { timeout: 8000 },
   );
+  const skipLinkState = await page.evaluate(() => {
+    const link = document.querySelector(".skip-link");
+    if (!link) return undefined;
+    const before = link.getBoundingClientRect();
+    link.focus();
+    const afterProgrammaticFocus = link.getBoundingClientRect();
+    link.blur();
+    return {
+      beforeTop: before.top,
+      afterProgrammaticFocusTop: afterProgrammaticFocus.top,
+    };
+  });
+  assert.ok(skipLinkState, "the accessibility skip link is missing");
+  assert.equal(
+    skipLinkState.beforeTop < 0,
+    true,
+    "the skip link must stay off-canvas in the signed-in pane",
+  );
+  assert.equal(
+    skipLinkState.afterProgrammaticFocusTop < 0,
+    true,
+    `restored Office focus must not show the skip link over the status bar: ${JSON.stringify(skipLinkState)}`,
+  );
+  await page.evaluate(() => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true }),
+    );
+    document.querySelector(".skip-link")?.focus();
+  });
+  const keyboardSkipLinkState = await page.evaluate(() => {
+    const link = document.querySelector(".skip-link");
+    return {
+      focused: document.activeElement === link,
+      top: link?.getBoundingClientRect().top ?? Number.NaN,
+    };
+  });
+  assert.equal(
+    keyboardSkipLinkState.focused,
+    true,
+    `Tab must reach the accessibility skip link: ${JSON.stringify(keyboardSkipLinkState)}`,
+  );
+  assert.equal(
+    keyboardSkipLinkState.top >= 0,
+    true,
+    "keyboard focus must reveal the skip link",
+  );
+  await page.evaluate(() => document.querySelector(".skip-link")?.blur());
   await page.waitForSelector('#context-suggestion-list[data-count="3"]', {
     timeout: 8000,
   });

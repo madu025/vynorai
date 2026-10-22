@@ -125,9 +125,9 @@
         background: var(--brand);
         color: var(--on-brand);
       }
-      /* Keep the accessibility shortcut hidden when Office restores focus after sign-in.
-         Keyboard users still get it immediately when they tab to it. */
-      .skip-link:focus-visible {
+      /* Office can restore focus programmatically after sign-in. The pane script marks the
+         link only when a real keyboard navigation event caused the focus. */
+      .skip-link[data-keyboard-focus="true"] {
         top: 8px;
       }
       main {

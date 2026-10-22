@@ -142,8 +142,10 @@ test("the prompt starts the pane and the workspace flows below it", () => {
 
 test("the skip link appears for keyboard focus without covering the signed-in pane", () => {
   assert.match(html, /\.skip-link\s*\{[^}]*top:\s*-48px/);
-  assert.match(html, /\.skip-link:focus-visible\s*\{[^}]*top:\s*8px/);
-  assert.doesNotMatch(html, /\.skip-link:focus\s*\{[^}]*top:\s*8px/);
+  assert.match(
+    html,
+    /\.skip-link\[data-keyboard-focus="true"\]\s*\{[^}]*top:\s*8px/,
+  );
 });
 
 test("selection context and suggestions appear before the conversation", () => {

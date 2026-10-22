@@ -196,6 +196,30 @@ declare global {
 const config = window.__VYNORAI_M365_CONFIG__;
 const status = document.querySelector<HTMLElement>("#status-text");
 const statusContainer = document.querySelector<HTMLElement>("#status");
+const skipLink = document.querySelector<HTMLAnchorElement>(".skip-link");
+let keyboardNavigationPending = false;
+document.addEventListener(
+  "keydown",
+  (event) => {
+    keyboardNavigationPending = event.key === "Tab";
+  },
+  true,
+);
+document.addEventListener(
+  "pointerdown",
+  () => {
+    keyboardNavigationPending = false;
+  },
+  true,
+);
+skipLink?.addEventListener("focus", () => {
+  const keyboardFocus = keyboardNavigationPending;
+  keyboardNavigationPending = false;
+  skipLink.dataset.keyboardFocus = keyboardFocus ? "true" : "false";
+});
+skipLink?.addEventListener("blur", () => {
+  delete skipLink.dataset.keyboardFocus;
+});
 const preview = document.querySelector<HTMLElement>("#preview");
 const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");

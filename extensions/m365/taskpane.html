@@ -950,6 +950,12 @@
         font-style: normal;
         font-weight: 600;
       }
+      /* While the agent team works or shows its plan, the starter cards step aside so the roles and the preview are in view. */
+      body:has(#agent-card:not([hidden])) #noticed,
+      body:has(#agent-card:not([hidden])) #context-suggestions,
+      body:has(#agent-card:not([hidden])) #starter-suggestions {
+        display: none;
+      }
 
       /* The plan and the sources are cards, not a bare list. */
       #agent-plan-steps,
@@ -2199,7 +2205,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261022.03</p>
+          <p class="menu-version" id="build-id">Build 20261022.04</p>
         </div>
       </div>
 

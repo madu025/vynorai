@@ -322,6 +322,20 @@ const EXACT: Record<string, string> = {
     "Agent පිළිතුරු දුන්නා. කිසිවක් වෙනස් කර නැත.",
   "The agent prepared changes. Nothing has changed yet: review them, then approve.":
     "Agent වෙනස්කම් සූදානම් කළා. තවමත් කිසිවක් වෙනස් වී නැත: ඒවා පරීක්ෂා කර අනුමත කරන්න.",
+  "Excel computed":
+    "Excel ගණනය කළා",
+  "one-to-one":
+    "එක-එක",
+  "one-to-many":
+    "එක-බොහෝ",
+  "many-to-one":
+    "බොහෝ-එක",
+  "many-to-many":
+    "බොහෝ-බොහෝ",
+  "Clean keys first":
+    "මුලින් යතුරු පිරිසිදු කරන්න",
+  "Keys are consistent":
+    "යතුරු ගැලපේ",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -338,6 +352,9 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^([\d,]+) unmatched rows$/, (n) => `ගැලපෙන්නේ නැති පේළි ${n}ක්`],
+  [/^([\d,]+) duplicate keys$/, (n) => `පුනරාවර්තන යතුරු ${n}ක්`],
+
   [/^Outlook draft created for (.+) and verified by Microsoft Graph\.$/, (who) => `Outlook කෙටුම්පත ${who} සඳහා සාදා Microsoft Graph මගින් තහවුරු කළා.`],
   [/^Report sent to (.+) and verified by Microsoft Graph\.$/, (who) => `වාර්තාව ${who} වෙත යවා Microsoft Graph මගින් තහවුරු කළා.`],
 

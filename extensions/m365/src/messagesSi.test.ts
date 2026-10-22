@@ -76,3 +76,11 @@ test("staged step lines and the before/after heading are Sinhala", () => {
   assert.match(si("Before and after (36 of 300 cells)"), /සෛල 300න් 36ක්/);
   assert.match(si("Excel computed =SUM(A:A)"), /Excel ගණනය කළා/);
 });
+
+test("the workbook map words are Sinhala", () => {
+  const si = (text: string) => localizeMessage("si", text);
+  assert.equal(si("many-to-many"), "බොහෝ-බොහෝ");
+  assert.match(si("40 duplicate keys"), /යතුරු 40ක්/);
+  assert.match(si("0 unmatched rows"), /පේළි 0ක්/);
+  assert.equal(si("Keys are consistent"), "යතුරු ගැලපේ");
+});

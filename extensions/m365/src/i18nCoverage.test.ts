@@ -140,3 +140,10 @@ test("a stored chat message keeps a whole reply, and a role name is not broken m
     /\.agent-activity-list > div strong \{[^}]*white-space: nowrap/,
   );
 });
+
+test("the plan and the sources are drawn as cards and a long formula is collapsed", () => {
+  assert.match(html, /#agent-plan-steps li,\s*#agent-sources-list li \{[^}]*border: 1px solid/);
+  assert.match(html, /#agent-plan-steps li::before \{\s*content: counter\(plan-step\)/);
+  const view = readFileSync(new URL("./taskpaneAgentView.ts", import.meta.url), "utf8");
+  assert.match(view, /createElement\("details"\)/);
+});

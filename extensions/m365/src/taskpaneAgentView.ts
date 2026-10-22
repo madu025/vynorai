@@ -120,10 +120,19 @@ export function showAgentSourcesView(options: {
     ...sources.map((source) => {
       const item = document.createElement("li");
       if (source.kind !== "range") {
-        item.textContent =
-          source.kind === "formula"
-            ? localize(`Excel computed ${source.text}`)
-            : localize(`Workbook check: ${source.text.replace(/_/g, " ")}`);
+        if (source.kind === "formula") {
+          // A long formula is one line of text in a card; the whole formula opens on demand.
+          const details = document.createElement("details");
+          const summary = document.createElement("summary");
+          summary.textContent = `${localize("Excel computed")}: ${source.text.length > 48 ? `${source.text.slice(0, 48)}…` : source.text}`;
+          const code = document.createElement("code");
+          code.textContent = source.text;
+          details.append(summary, code);
+          item.append(details);
+        } else
+          item.textContent = localize(
+            `Workbook check: ${source.text.replace(/_/g, " ")}`,
+          );
         return item;
       }
       const button = document.createElement("button");
@@ -182,7 +191,7 @@ export function showWorkbookMapView(
   };
   const line = document.createElement("div");
   line.className = "relationship-line";
-  line.textContent = `${link.cardinality} ->`;
+  line.textContent = `${localize(link.cardinality)} →`;
   const graph = document.createElement("div");
   graph.className = "relationship-graph";
   graph.append(node(link.from), line, node(link.to));
@@ -194,7 +203,7 @@ export function showWorkbookMapView(
     link.needsCleaning ? "Clean keys first" : "Keys are consistent",
   ]) {
     const badge = document.createElement("span");
-    badge.textContent = text;
+    badge.textContent = localize(text);
     facts.appendChild(badge);
   }
   content.append(graph, facts);

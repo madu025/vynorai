@@ -331,6 +331,20 @@ const EXACT: Record<string, string> = {
     "Agent பதிலளித்தது. எதுவும் மாற்றப்படவில்லை.",
   "The agent prepared changes. Nothing has changed yet: review them, then approve.":
     "Agent மாற்றங்களைத் தயாரித்தது. இன்னும் எதுவும் மாற்றப்படவில்லை: அவற்றை மதிப்பாய்வு செய்து ஒப்புதல் அளிக்கவும்.",
+  "Excel computed":
+    "Excel கணக்கிட்டது",
+  "one-to-one":
+    "ஒன்று-ஒன்று",
+  "one-to-many":
+    "ஒன்று-பல",
+  "many-to-one":
+    "பல-ஒன்று",
+  "many-to-many":
+    "பல-பல",
+  "Clean keys first":
+    "முதலில் விசைகளைச் சுத்தம் செய்யவும்",
+  "Keys are consistent":
+    "விசைகள் சீராக உள்ளன",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -347,6 +361,9 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^([\d,]+) unmatched rows$/, (n) => `பொருந்தாத வரிசைகள் ${n}`],
+  [/^([\d,]+) duplicate keys$/, (n) => `மீண்டும் வரும் விசைகள் ${n}`],
+
   [/^Outlook draft created for (.+) and verified by Microsoft Graph\.$/, (who) => `Outlook வரைவு ${who} க்காக உருவாக்கப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`],
   [/^Report sent to (.+) and verified by Microsoft Graph\.$/, (who) => `அறிக்கை ${who} க்கு அனுப்பப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`],
 

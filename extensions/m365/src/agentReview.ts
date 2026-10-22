@@ -138,7 +138,7 @@ export function planRequest(request: string): string {
   return [
     "[Report from the add-in: plan] You are the planner. Another agent will stage the changes; you only plan them. Nothing has been written yet.",
     `Request: ${request.slice(0, 1500)}`,
-    "Read the workbook where it helps (sheets, headers, where the data ends). For a cross-sheet lookup, join or reconciliation, call map_relationships on the source ranges before planning and put its key, cardinality, unmatched-row count, repeated-key status and cleaning warning in the relevant plan step. If it finds no key, plan a question instead of guessing. Do not stage any change yourself.",
+    "Read the workbook where it helps (sheets, headers, where the data ends). For a cross-sheet lookup, join or reconciliation, call map_relationships on the source ranges before planning and put its key, cardinality, unmatched-row count, repeated-key status and cleaning warning in the relevant plan step. If it finds no key, plan a question instead of guessing. Do not stage any change yourself. Plan only what the request asks for: do not add cleaning, trimming, formatting or any other step the person did not name.",
     `Reply with "PLAN:" on the first line, then the ordered steps, one per line, as "1. ..." (at most ${PLAN_MAX_STEPS}). Name the sheet, range or column in each step. If the request only asks a question, reply "PLAN: none".`,
   ].join("\n");
 }

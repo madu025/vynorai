@@ -902,10 +902,23 @@ export async function undoAgentChanges(
   undo: AgentUndo,
   undoStep: (rollback: unknown) => Promise<void>,
 ): Promise<void> {
-  for (const rollback of [...undo.steps].reverse()) await undoStep(rollback);
+  // One step that cannot be undone must not leave the others undone: every step runs, and the
+  // ones that failed are named in the error (the person sees "Undo did not finish").
+  const failures: string[] = [];
+  const attempt = async (label: string, run: () => Promise<void>) => {
+    try {
+      await run();
+    } catch (error) {
+      failures.push(`${label}: ${(error as Error)?.message ?? String(error)}`);
+    }
+  };
+  for (const rollback of [...undo.steps].reverse())
+    await attempt("step", () => undoStep(rollback));
   await runtime.run(async (context) => {
     for (const entry of [...(undo.journal ?? [])].reverse())
-      await undoJournalEntry(context, entry);
+      await attempt(`journal ${entry.type}`, () =>
+        undoJournalEntry(context, entry),
+      );
     const sheets = context.workbook.worksheets;
     const byKey = async (key: string) => {
       const sheet = sheets.getItemOrNullObject(key);
@@ -914,11 +927,12 @@ export async function undoAgentChanges(
       return sheet.isNullObject ? undefined : sheet;
     };
     // A Table that grew into a written column shrinks back first (an empty header is not allowed).
-    for (const size of [...(undo.tableSizes ?? [])].reverse()) {
+    for (const size of [...(undo.tableSizes ?? [])].reverse())
+      await attempt(`table ${size.name}`, async () => {
       const table = context.workbook.tables.getItemOrNullObject(size.name);
       table.load("isNullObject");
       await context.sync();
-      if (table.isNullObject) continue;
+      if (table.isNullObject) return;
       const columns = table.columns;
       columns.load("count");
       await context.sync();
@@ -929,15 +943,16 @@ export async function undoAgentChanges(
       )
         columns.getItemAt(index).delete();
       await context.sync();
-    }
-    for (const item of [...undo.restores].reverse()) {
+    });
+    for (const item of [...undo.restores].reverse())
+      await attempt(`restore ${item.sheet}!${item.address}`, async () => {
       const sheet = await byKey(item.sheet);
-      if (!sheet) continue;
+      if (!sheet) return;
       const range = sheet.getRange(item.address);
       if (!item.formulas) {
         range.clear("Contents");
         await context.sync();
-        continue;
+        return;
       }
       // Written back in parts: one request for 366k cells is too large for Excel on the web.
       const rows = item.formulas.length;
@@ -948,37 +963,44 @@ export async function undoAgentChanges(
           .getResizedRange(part.length - 1, part[0].length - 1).formulas = part;
         await context.sync();
       }
-    }
-    for (const item of [...undo.formats].reverse()) {
-      const sheet = await byKey(item.sheet);
-      if (!sheet) continue;
-      const range = sheet.getRange(item.address);
-      range.numberFormat = item.numberFormat;
-      range.setCellProperties(item.cells);
-    }
-    await context.sync();
-    for (const item of [...undo.backups].reverse()) {
-      const sheet = await byKey(item.sheet);
-      const backup = await byKey(item.backup);
-      if (!sheet || !backup) continue;
-      await restoreFromBackup(context, sheet, backup, item.address);
-      backup.delete();
-      await context.sync();
-    }
-    for (const item of [...(undo.charts ?? [])].reverse()) {
-      const sheet = await byKey(item.sheet);
-      if (!sheet) continue;
-      const chart = sheet.charts.getItemOrNullObject(item.name);
-      chart.load("isNullObject");
-      await context.sync();
-      if (!chart.isNullObject) chart.delete();
-    }
-    for (const key of [...undo.createdSheets].reverse()) {
-      const sheet = await byKey(key);
-      if (sheet) sheet.delete();
-    }
-    await context.sync();
+    });
+    for (const item of [...undo.formats].reverse())
+      await attempt(`format ${item.sheet}!${item.address}`, async () => {
+        const sheet = await byKey(item.sheet);
+        if (!sheet) return;
+        const range = sheet.getRange(item.address);
+        range.numberFormat = item.numberFormat;
+        range.setCellProperties(item.cells);
+        await context.sync();
+      });
+    for (const item of [...undo.backups].reverse())
+      await attempt(`backup ${item.sheet}!${item.address}`, async () => {
+        const sheet = await byKey(item.sheet);
+        const backup = await byKey(item.backup);
+        if (!sheet || !backup) return;
+        await restoreFromBackup(context, sheet, backup, item.address);
+        backup.delete();
+        await context.sync();
+      });
+    for (const item of [...(undo.charts ?? [])].reverse())
+      await attempt(`chart ${item.name}`, async () => {
+        const sheet = await byKey(item.sheet);
+        if (!sheet) return;
+        const chart = sheet.charts.getItemOrNullObject(item.name);
+        chart.load("isNullObject");
+        await context.sync();
+        if (!chart.isNullObject) chart.delete();
+        await context.sync();
+      });
+    for (const key of [...undo.createdSheets].reverse())
+      await attempt(`sheet ${key}`, async () => {
+        const sheet = await byKey(key);
+        if (sheet) sheet.delete();
+        await context.sync();
+      });
   });
+  if (failures.length)
+    throw new Error(`Undo could not finish ${failures.length} step(s): ${failures.join("; ").slice(0, 400)}`);
 }
 
 /** After the person keeps the result: the hidden backup copies are no longer needed. */

@@ -4849,6 +4849,8 @@ let agentPending: AgentRun | undefined;
 let agentLastUndo: AgentUndo | undefined;
 let agentBusy = false;
 let agentStopped = false;
+/** What the status line says after an apply; the read-back that follows must not overwrite it with "Nothing was changed". */
+let lastApplyStatus = "Applied. Undo puts everything back.";
 /** What the last model call sent (masked), for the privacy receipt. */
 let agentSentMessages: AgentMessage[] = [];
 /** The person's request of the current agent run, for the change log. */
@@ -5216,7 +5218,9 @@ async function agentLoop(request: string) {
     setStatus(
       run.changes.length
         ? "The agent prepared changes. Nothing has changed yet: review them, then approve."
-        : "The agent answered. Nothing was changed.",
+        : agentVerifying
+          ? lastApplyStatus
+          : "The agent answered. Nothing was changed.",
     );
   } catch (error) {
     if (agentProgress) agentProgress.textContent = "";
@@ -5485,11 +5489,10 @@ agentApprove?.addEventListener("click", async () => {
     })),
     reference: "agent",
   });
-  setStatus(
-    failed
-      ? "Partly applied. Undo puts everything back."
-      : "Applied. Undo puts everything back.",
-  );
+  lastApplyStatus = failed
+    ? "Partly applied. Undo puts everything back."
+    : "Applied. Undo puts everything back.";
+  setStatus(lastApplyStatus);
   // The agent checks what was written once or twice and may stage fixes (they need approval again).
   if (agentRounds < 2) {
     agentRounds += 1;

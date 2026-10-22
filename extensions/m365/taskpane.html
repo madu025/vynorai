@@ -1225,7 +1225,7 @@
         data-tone="idle"
       >
         <span class="state-icon" aria-hidden="true"></span
-        ><span id="status-text">Loadingâ€¦</span>
+        ><span id="status-text">Loading…</span>
         <div class="status-actions">
           <button
             id="menu-toggle"
@@ -2155,7 +2155,7 @@
               "Add-in startup failed. Update Excel or use Excel for the web.";
         });
         window.setTimeout(function () {
-          if (status && status.textContent === "Loadingâ€¦") {
+          if (status && status.textContent === "Loading…") {
             note("Task pane bundle did not initialize within five seconds.");
             status.textContent =
               "Add-in scripts did not start. Close and reopen the task pane.";

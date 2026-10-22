@@ -108,6 +108,11 @@ test("the pane avoids duplicating the Office title bar and keeps its app menu re
   assert.match(html, /id="prefs-card"[\s\S]*?hidden/);
 });
 
+test("visible loading text stays valid UTF-8 instead of mojibake", () => {
+  assert.doesNotMatch(html, /Loadingâ€¦|Ã.|Â./);
+  assert.match(html, /id="status-text">Loading…<\/span>/);
+});
+
 test("the prompt starts the pane and the workspace flows below it", () => {
   assert.match(
     html,

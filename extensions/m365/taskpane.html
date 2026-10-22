@@ -131,11 +131,12 @@
         top: 8px;
       }
       main {
+        width: 100%;
         min-height: 100vh;
-        max-width: 440px;
+        max-width: 720px;
         min-width: 0;
         margin: auto;
-        padding: 10px 11px 15px;
+        padding: 10px clamp(10px, 2.5vw, 20px) 15px;
         overflow-wrap: anywhere;
         background:
           radial-gradient(
@@ -293,6 +294,11 @@
       .workspace,
       #signin-card {
         display: none;
+      }
+      .workspace,
+      .scroll-area,
+      .composer {
+        width: 100%;
       }
       body[data-auth="in"] .workspace {
         display: flex;

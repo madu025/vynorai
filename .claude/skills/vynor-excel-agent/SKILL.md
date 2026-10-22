@@ -13,7 +13,8 @@ Code: `extensions/m365/src/` (reader `intent.ts`, plan `excel.ts`, writer `offic
 
 In `extensions/m365`:
 
-1. `npx tsx --test src/*.test.ts` (includes `parityBenchmark.test.ts`, which must stay 100%).
+1. `npx tsx --test src/*.test.ts` (only a few unit tests remain since main dropped most of them; the
+   benchmark in step 3 must stay 100%).
 2. `npx tsc --noEmit -p .`. Its `include` is an explicit list: files in `test/batch/` and newly added
    files are not type-checked unless you add them. Check new files with a temporary tsconfig that
    extends this one.

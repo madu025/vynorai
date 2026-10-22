@@ -1,9 +1,20 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { GitHubIntegrationProvider } from "./GitHubIntegrationProvider.js";
 import { MaintenanceSwarmEngine } from "./MaintenanceSwarmEngine.js";
 import type { MaintenanceIssue } from "./types.js";
 
 describe("GitHubIntegrationProvider", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // The provider falls back to these; a token in the test machine's
+  // environment must not make "no token" tests send real requests.
+  const clearEnvTokens = () => {
+    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubEnv("GH_TOKEN", "");
+  };
+
   describe("parseGitHubRemote", () => {
     it("should parse standard HTTPS GitHub URLs", () => {
       const result = GitHubIntegrationProvider.parseGitHubRemote(
@@ -50,6 +61,7 @@ describe("GitHubIntegrationProvider", () => {
     });
 
     it("should report unauthenticated when no token provided", () => {
+      clearEnvTokens();
       const provider = new GitHubIntegrationProvider({ token: "" });
       expect(provider.hasAuthentication()).toBe(false);
     });
@@ -128,6 +140,7 @@ describe("GitHubIntegrationProvider", () => {
     });
 
     it("should fail PR creation if unauthenticated", async () => {
+      clearEnvTokens();
       const provider = new GitHubIntegrationProvider({ token: "" });
       await expect(
         provider.createPullRequest({

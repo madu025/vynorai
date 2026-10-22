@@ -58,6 +58,24 @@ struct Foo {
 }
 `;
 
+/**
+ * The test config has the codebase provider and an embed model, so a new
+ * indexer starts indexing the workspace in the background as soon as its
+ * config loads. That run races the tests (duplicate rows) and can outlive the
+ * suite. Hold it back until init is done.
+ */
+async function createIndexer<T extends CodebaseIndexer>(
+  indexer: T,
+): Promise<T> {
+  // Spy at once: init loads the config before it can start the run.
+  const startup = jest
+    .spyOn(indexer as CodebaseIndexer, "refreshCodebaseIndex")
+    .mockImplementation(async () => {});
+  await indexer.initPromise;
+  startup.mockRestore();
+  return indexer;
+}
+
 // A subclass of CodebaseIndexer that adds a new CodebaseIndex
 class TestCodebaseIndexer extends CodebaseIndexer {
   protected async getIndexesToBuild(): Promise<CodebaseIndex[]> {
@@ -110,13 +128,14 @@ describe("CodebaseIndexer", () => {
     });
     execSync('git config user.name "Test"', { cwd: TEST_DIR_PATH });
 
-    codebaseIndexer = new TestCodebaseIndexer(
-      testConfigHandler,
-      testIde,
-      mockMessenger as any,
-      false,
+    codebaseIndexer = await createIndexer(
+      new TestCodebaseIndexer(
+        testConfigHandler,
+        testIde,
+        mockMessenger as any,
+        false,
+      ),
     );
-    await codebaseIndexer.initPromise;
     testIndex = new TestCodebaseIndex();
   });
 
@@ -452,12 +471,14 @@ describe("CodebaseIndexer", () => {
     let mockRefreshCodebaseIndex: jest.MockedFunction<any>;
     let mockGetWorkspaceDirs: jest.MockedFunction<any>;
 
-    beforeEach(() => {
-      testIndexer = new TestCodebaseIndexer(
-        testConfigHandler,
-        testIde,
-        mockMessenger as any,
-        false,
+    beforeEach(async () => {
+      testIndexer = await createIndexer(
+        new TestCodebaseIndexer(
+          testConfigHandler,
+          testIde,
+          mockMessenger as any,
+          false,
+        ),
       );
 
       // Mock the refreshCodebaseIndex method to avoid actual indexing
@@ -469,6 +490,9 @@ describe("CodebaseIndexer", () => {
       mockGetWorkspaceDirs = jest
         .spyOn(testIde, "getWorkspaceDirs")
         .mockResolvedValue(["/test/workspace"]);
+
+      // testIde is shared, so its spy may already hold calls from init.
+      mockGetWorkspaceDirs.mockClear();
     });
 
     afterEach(() => {
@@ -684,11 +708,13 @@ describe("CodebaseIndexer", () => {
       let mockIdeSettings: any;
 
       beforeEach(async () => {
-        indexer = new CodebaseIndexer(
-          testConfigHandler,
-          testIde,
-          mockMessenger as any,
-          false,
+        indexer = await createIndexer(
+          new CodebaseIndexer(
+            testConfigHandler,
+            testIde,
+            mockMessenger as any,
+            false,
+          ),
         );
 
         mockEmbeddingsModel = {
@@ -774,12 +800,14 @@ describe("CodebaseIndexer", () => {
     let testIndexer: TestCodebaseIndexer;
     let mockGetIndexesToBuild: jest.MockedFunction<any>;
 
-    beforeEach(() => {
-      testIndexer = new TestCodebaseIndexer(
-        testConfigHandler,
-        testIde,
-        mockMessenger as any,
-        false,
+    beforeEach(async () => {
+      testIndexer = await createIndexer(
+        new TestCodebaseIndexer(
+          testConfigHandler,
+          testIde,
+          mockMessenger as any,
+          false,
+        ),
       );
 
       // Mock getIndexesToBuild to control what indexes should be built

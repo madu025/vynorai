@@ -44,7 +44,16 @@ import {
   saveLanguage,
   type Language,
 } from "./i18n.js";
-import { previewSummarySi } from "./messagesSi.js";
+import {
+  didYouMean,
+  doneSentence,
+  payrollCard,
+  payrollQuestion,
+  payrollResult,
+  samplePreviewNote,
+  usingRowsSummary,
+  willBeCreatedOn,
+} from "./paneText.js";
 import {
   buildOutcomes,
   kindTitle,
@@ -106,6 +115,12 @@ import {
   type M365RequestTrace,
 } from "./api.js";
 import { askInPane } from "./confirmDialog.js";
+import {
+  agentConsentCard,
+  emailSendCard,
+  holidaysCard,
+  removeResultsCard,
+} from "./dialogCards.js";
 import {
   buildReportEmailRequest,
   reportEmailConsentMessage,
@@ -174,6 +189,7 @@ import {
   readExcelWorkbookBase64,
   readExcelPdfBase64,
   readExcelReportValues,
+  readSelectedExcelValues,
   readExcelChartImages,
   readLookupSheetInfo,
   listWorksheetNames,
@@ -188,7 +204,20 @@ import {
   isFormulaRepairRequest,
 } from "./formulaInspector.js";
 import { changeLogRows, type ChangeLogEntry } from "./changeLog.js";
-import { appendChangeLog, writeHolidaySheet } from "./officeSriLanka.js";
+import {
+  appendChangeLog,
+  writeHolidaySheet,
+  writePayrollSheet,
+} from "./officeSriLanka.js";
+import { holidaySheetRows } from "./sriLanka.js";
+import {
+  buildPayrollPlan,
+  employeesFromSelection,
+  isPayrollRequest,
+  mapPayrollColumns,
+  monthFromRequest,
+  type PayrollEmployee,
+} from "./payroll.js";
 import {
   describePreferences,
   learnFromRequest,
@@ -202,7 +231,17 @@ import {
   describePrivacyReceipt,
 } from "./privacyReceipt.js";
 import { currencyGuessFor } from "./businessContext.js";
-import { whatsappSummary } from "./whatsappSummary.js";
+import {
+  buildShareCard,
+  parsePastedCells,
+  type ShareCard,
+} from "./shareCard.js";
+import { canvasToBlob, drawShareCard } from "./shareCardCanvas.js";
+import {
+  browserShareEnv,
+  deliverShare,
+  shareOutcomeText,
+} from "./shareDelivery.js";
 import {
   chooseSmartPath,
   selectionBadges,
@@ -364,6 +403,13 @@ let lastCreated:
 let galleryPlanId = "";
 let galleryResults: ExcelActionResult[] = [];
 let language: Language = loadLanguage();
+/**
+ * The language of the request in progress: a request typed in Sinhala or Tamil script gets its
+ * messages, preview and the words written on the sheet in that language, whatever the pane shows.
+ * Labels and buttons keep the pane's language.
+ */
+let requestLanguage: Language | undefined;
+const textLanguage = (): Language => requestLanguage ?? language;
 let officePlatformLabel = "Excel";
 let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
@@ -574,6 +620,7 @@ function resetWorkingState() {
   if (outcomes) outcomes.textContent = "";
   if (apply) apply.disabled = true;
   if (instruction) instruction.value = "";
+  requestLanguage = undefined;
 }
 
 function showChat(messages: ConversationMessage[]) {
@@ -588,6 +635,7 @@ function renderConversationHistory() {
   renderConversationHistoryView({
     document,
     language,
+    textLanguage: textLanguage(),
     store: chatStore,
     messages: conversationMessages,
     instruction,
@@ -700,7 +748,7 @@ let lastStatus = "";
 const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
 function setStatus(message: string) {
   lastStatus = message;
-  if (status) status.textContent = localizeMessage(language, message);
+  if (status) status.textContent = localizeMessage(textLanguage(), message);
   const normalized = message.toLocaleLowerCase();
   const tone =
     /failed|error|could not|unavailable|missing|expired|rejected|invalid|no credits|blocked/.test(
@@ -1174,6 +1222,8 @@ emailSend?.addEventListener("click", async () => {
     !(await askInPane(
       `Deliver the reviewed report to ${to}? The selected format may include workbook data, report details and charts.`,
       "Send Excel report",
+      undefined,
+      emailSendCard(to, subject, textLanguage()),
     ))
   )
     return;
@@ -1497,11 +1547,7 @@ function suggestMissingColumn(message: string): string {
     .filter((header): header is string => Boolean(header));
   const unique = [...new Set(suggestions)];
   if (!unique.length) return message;
-  const hint =
-    language === "si"
-      ? ` ඔබ අදහස් කළේ ${unique.map((header) => `“${header}”`).join(", ")} ද?`
-      : ` Did you mean ${unique.map((header) => `"${header}"`).join(", ")} ?`;
-  return `${message}${hint}`;
+  return `${message}${didYouMean(unique, textLanguage())}`;
 }
 
 function handleApiError(step: string, error: unknown) {
@@ -1753,10 +1799,28 @@ inspect?.addEventListener("click", async () => {
   if (dupFix) dupFix.hidden = true;
   cleanFirstRequest = "";
   const instructionText = normalizeInstruction(instruction?.value || "");
+  if (instructionText)
+    requestLanguage = responseLanguage(instruction?.value || "", language);
   if (instructionText && instructionText !== lastConversationRequest) {
     renderConversation("user", instruction?.value?.trim() || instructionText);
     lastConversationRequest = instructionText;
     learnPreferences(instructionText);
+  }
+  // A request for a payroll sheet is a template, not a change to the selected data: it is asked
+  // about in the pane and, on a no, read like any other request.
+  // A request the person already said no to is not asked about again (tweaks and Refresh re-run it).
+  const typed = instruction?.value || "";
+  if (
+    !skipAiOnce &&
+    instructionText !== payrollDeclined &&
+    (isPayrollRequest(typed) || isPayrollRequest(instructionText))
+  ) {
+    if (await offerPayroll(typed)) {
+      previewController.finish(previewRun);
+      return;
+    }
+    payrollDeclined = instructionText;
+    if (stopIfStale()) return;
   }
   // "AI reads every request" (the person's own setting): the AI turns the request into plain steps first.
   // The steps it returns come back through here once, and are read by the built-in reader.
@@ -2346,6 +2410,7 @@ apply?.addEventListener("click", async () => {
             request:
               lastConversationRequest || instruction?.value?.trim() || "",
             preferences: workbookPrefs,
+            language: textLanguage(),
             onProgress: (completed, total) =>
               setStatus(`Writing result rows: ${completed}/${total}...`),
             onAction: (result) =>
@@ -2440,7 +2505,11 @@ apply?.addEventListener("click", async () => {
     previewFingerprint = "";
     lastDoneSentence = failed.length
       ? ""
-      : doneSentence(report.results, report.sourceUnchangedAfterApply);
+      : doneSentence(
+          report.results,
+          report.sourceUnchangedAfterApply,
+          textLanguage(),
+        );
     markChangeNote(failed.length ? "partial" : "applied");
     await logChanges({
       at: new Date(),
@@ -2552,14 +2621,22 @@ apply?.addEventListener("click", async () => {
                 `${entry.kind} failed: ${String(entry.error ?? "unknown error").slice(0, 240)}`,
             )
             .join(" ")}`
-        : doneSentence(report.results, report.sourceUnchangedAfterApply) +
+        : doneSentence(
+            report.results,
+            report.sourceUnchangedAfterApply,
+            textLanguage(),
+          ) +
             (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
             timing,
     );
     setStatus(
       failed.length
         ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`
-        : doneSentence(report.results, report.sourceUnchangedAfterApply) +
+        : doneSentence(
+            report.results,
+            report.sourceUnchangedAfterApply,
+            textLanguage(),
+          ) +
             (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
             auditWarning,
     );
@@ -3330,10 +3407,10 @@ function setupLayout() {
     if (previewSummary) {
       const columnCount = Number(parsed?.profile?.columnCount ?? 0);
       const from = currentRangeAddress ? ` (${currentRangeAddress})` : "";
-      previewSummary.textContent =
-        language === "si"
-          ? `පේළි ${rows}ක් සහ තීරු ${columnCount}ක් භාවිතා කරයි${from}. ඔබේ මූලාශ්‍ර දත්ත වෙනස් නොවේ.`
-          : `Using ${rows} rows and ${columnCount} columns${from}. Your source data stays unchanged.`;
+      previewSummary.textContent = usingRowsSummary(
+        { rows, columns: columnCount, from, warnings },
+        textLanguage(),
+      );
       if (previewImpact) {
         const impact = [
           [rows, translate(language, "rows_label", "Rows")],
@@ -3651,7 +3728,7 @@ function renderOutcomes(actions: any[]) {
     actions,
     lastRange.headers,
     lastRange.rows,
-    language,
+    textLanguage(),
   )) {
     const box = document.createElement("div");
     box.className = "outcome";
@@ -3659,10 +3736,7 @@ function renderOutcomes(actions: any[]) {
     title.textContent = outcome.title;
     const where = document.createElement("div");
     where.className = "where";
-    where.textContent =
-      language === "si"
-        ? `${outcome.where} පත්‍රිකාවේ සාදනු ඇත`
-        : `Will be created on sheet ${outcome.where}`;
+    where.textContent = willBeCreatedOn(outcome.where, textLanguage());
     box.appendChild(title);
     box.appendChild(where);
     if (outcome.chart) {
@@ -3709,10 +3783,11 @@ function renderOutcomes(actions: any[]) {
       if (lastSample) {
         const note = document.createElement("div");
         note.className = "legend";
-        note.textContent =
-          language === "si"
-            ? `නියැදි පෙරදසුනකි (පේළි ${lastSample.sampledRows.toLocaleString("en-US")} / ${lastSample.totalRows.toLocaleString("en-US")}). සැබෑ එකතු Excel විසින් සියලු පේළි මත ගණනය කරයි.`
-            : `Sample preview (${lastSample.sampledRows.toLocaleString("en-US")} of ${lastSample.totalRows.toLocaleString("en-US")} rows). Excel calculates the real totals over every row.`;
+        note.textContent = samplePreviewNote(
+          lastSample.sampledRows,
+          lastSample.totalRows,
+          textLanguage(),
+        );
         box.appendChild(note);
       }
     }
@@ -3986,37 +4061,8 @@ async function refreshSheetNames(container: HTMLElement, actions: any[]) {
       seen.set(name, resolved);
     }
     const label = labels[index];
-    if (label)
-      label.textContent =
-        language === "si"
-          ? `${resolved} පත්‍රිකාවේ සාදනු ඇත`
-          : `Will be created on sheet ${resolved}`;
+    if (label) label.textContent = willBeCreatedOn(resolved, textLanguage());
   });
-}
-
-/** A plain-language result line: what now exists and where, without internal object names. */
-function doneSentence(
-  results: Array<{ kind: string; targetSheet: string; status: string }>,
-  sourceUnchanged: boolean,
-): string {
-  const created = results.filter((entry) => entry.status === "created");
-  const exists = results.filter((entry) => entry.status === "exists");
-  const sheets = [...new Set(created.map((entry) => entry.targetSheet))];
-  const kinds = [
-    ...new Set(
-      created.map((entry) => kindTitle(entry.kind, language).toLowerCase()),
-    ),
-  ].join(", ");
-  if (language === "si") {
-    const base = created.length
-      ? `සම්පූර්ණයි. ${kinds} ${sheets.join(", ")} පත්‍රිකාවේ සාදන ලදී.`
-      : "අලුතින් කිසිවක් සාදා නැත.";
-    return `${base}${exists.length ? " සමහර අයිතම දැනටමත් තිබුණි." : ""} ${sourceUnchanged ? "ඔබේ මූලාශ්‍ර දත්ත වෙනස් වී නැත." : "මූලාශ්‍ර දත්ත පරීක්ෂා කරන්න."}`;
-  }
-  const base = created.length
-    ? `Done. ${kinds[0].toUpperCase()}${kinds.slice(1)} created on sheet ${sheets.join(", ")}.`
-    : "Nothing new was created.";
-  return `${base}${exists.length ? " Some items already existed." : ""} ${sourceUnchanged ? "Your original data was not changed." : "Please check your source data."}`;
 }
 
 async function replaceOlderResultSheets(keepSheet: string) {
@@ -4085,13 +4131,16 @@ function renderResultGallery() {
   );
   gallery.hidden = visible.length === 0;
   if (verifiedBanner) verifiedBanner.hidden = visible.length === 0;
+  // The safety note is for the first preview; once a result exists the person has seen it.
+  const safetySummary = document.querySelector<HTMLElement>(".safety-summary");
+  if (safetySummary) safetySummary.hidden = visible.length > 0;
   for (const result of visible) {
     const item = document.createElement("article");
     item.className = "result-item";
     const head = document.createElement("div");
     head.className = "result-item-head";
     const title = document.createElement("strong");
-    title.textContent = kindTitle(result.kind, language);
+    title.textContent = kindTitle(result.kind, textLanguage());
     const target = document.createElement("span");
     target.className = "verified-badge";
     target.textContent = `Verified · ${result.targetSheet}`;
@@ -4267,6 +4316,8 @@ rollbackButton?.addEventListener("click", async () => {
         "Remove the result sheets and Table this add-in created? Your original data is not touched.",
       ),
       localizeMessage(language, "Remove"),
+      undefined,
+      removeResultsCard(items, language),
     ))
   )
     return log.record("rollback:confirm", "skip", "user cancelled");
@@ -4398,6 +4449,8 @@ cleanupButton?.addEventListener("click", async () => {
     !(await askInPane(
       `Remove ${older.length} older VynorAI result sheet(s)? The latest result and your original data stay.`,
       "Remove",
+      undefined,
+      removeResultsCard({ sheets: older }, textLanguage(), lastRevealSheet),
     ))
   )
     return;
@@ -4474,6 +4527,8 @@ languageButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   language = nextLanguage(language);
   saveLanguage(language);
+  // Choosing a language in the pane is the person's answer for everything that follows.
+  requestLanguage = undefined;
   refreshLanguage();
 });
 refreshLanguage();
@@ -4797,11 +4852,9 @@ const show = (element: HTMLElement | null, visible: boolean) => {
   if (element) element.hidden = !visible;
 };
 
+// The request box is cleared when the agent starts, so the language is the one taken from the request.
 function agentLanguage(): "en" | "si" | "ta" {
-  return responseLanguage(instruction?.value || "", language) as
-    | "en"
-    | "si"
-    | "ta";
+  return textLanguage();
 }
 
 const agentToolLabel = agentToolLabelView;
@@ -5156,6 +5209,15 @@ async function startAgent() {
   if (!request) return setStatus("Describe what you want first.");
   if (!config || !accessToken) return setStatus("Sign in first.");
   if (agentBusy) return;
+  // A payroll sheet is a local template: nothing is sent for it.
+  if (
+    isPayrollRequest(request) &&
+    normalizeInstruction(request) !== payrollDeclined
+  ) {
+    requestLanguage = responseLanguage(request, language);
+    if (await offerPayroll(request)) return;
+    payrollDeclined = normalizeInstruction(request);
+  }
   let agreed = false;
   try {
     agreed = localStorage.getItem(AGENT_CONSENT_KEY) === "1";
@@ -5163,6 +5225,24 @@ async function startAgent() {
     agreed = false;
   }
   if (!agreed) {
+    // The card names what this request will really read: the selection's size and personal columns.
+    let facts: Parameters<typeof agentConsentCard>[0] = { request };
+    try {
+      const input = await inspectSelectedExcelRange(
+        officeRuntime(),
+        crypto.randomUUID(),
+      );
+      const layout = getCachedHeaderLayout(input);
+      facts = {
+        request,
+        rows: Math.max(0, input.values.length - layout.headerRowCount),
+        columns: layout.headers.length,
+        sheet: String(input.worksheetName ?? ""),
+        headers: layout.headers.map(String),
+      };
+    } catch {
+      // No usable selection: the card still names the request.
+    }
     agreed = await askInPane(
       localizeMessage(
         language,
@@ -5170,6 +5250,7 @@ async function startAgent() {
       ),
       localizeMessage(language, "Agree"),
       localizeMessage(language, "Cancel"),
+      agentConsentCard(facts, language),
     );
     if (!agreed) return setStatus("Nothing was sent.");
     try {
@@ -5190,6 +5271,7 @@ async function startAgent() {
   agentVerifying = false;
   setAgentStage("inspect");
   agentLastRequest = request;
+  requestLanguage = responseLanguage(request, language);
   learnPreferences(request);
   agentUsage.prompt = 0;
   agentUsage.cached = 0;
@@ -5324,6 +5406,7 @@ agentApprove?.addEventListener("click", async () => {
         supportsExcelApi,
         requirements: ACTION_REQUIREMENTS,
         preferences: workbookPrefs,
+        language: textLanguage,
       }),
       {
         onProgress: (index, total, label) => {
@@ -5585,6 +5668,12 @@ document
           `Add an "LK Holidays" sheet with the fixed-date holidays of ${year} and ${year + 1}? Poya days and festivals change every year: add them from the gazette. NETWORKDAYS(start, end, LK_Holidays) then skips them.`,
         ),
         localizeMessage(language, "Add"),
+        undefined,
+        holidaysCard(
+          [year, year + 1],
+          holidaySheetRows([year, year + 1]).rows.length,
+          language,
+        ),
       ))
     )
       return;
@@ -5616,43 +5705,209 @@ document
     );
   });
 
-const whatsappNote = document.querySelector<HTMLElement>("#whatsapp-note");
+/**
+ * Offers a payroll sheet for the request's month (payroll.ts): employees are copied from the
+ * selection when it is an employee list with a basic salary column, else the sheet has blank
+ * rows. Returns false when the person says no, so the request is read as usual.
+ */
+let payrollDeclined = "";
+let payrollOpen = false;
+
+async function offerPayroll(request: string): Promise<boolean> {
+  // A second click while the question is open does nothing.
+  if (payrollOpen) return true;
+  payrollOpen = true;
+  try {
+    return await askAndWritePayroll(request);
+  } finally {
+    payrollOpen = false;
+  }
+}
+
+async function askAndWritePayroll(request: string): Promise<boolean> {
+  const words = textLanguage();
+  let employees: PayrollEmployee[] = [];
+  let skipped: string[] = [];
+  try {
+    const input = await inspectSelectedExcelRange(
+      officeRuntime(),
+      crypto.randomUUID(),
+    );
+    const layout = getCachedHeaderLayout(input);
+    const map = input.sample
+      ? null
+      : mapPayrollColumns(layout.headers.map(String));
+    if (map) {
+      employees = employeesFromSelection(
+        input.values.slice(layout.headerRowCount),
+        map,
+      );
+      skipped = map.skipped.map((index) => String(layout.headers[index]));
+    }
+  } catch {
+    // No usable selection: the sheet starts with blank rows.
+  }
+  const plan = buildPayrollPlan({
+    month: monthFromRequest(request, new Date()),
+    employees,
+    language: words,
+  });
+  log.record("payroll:offer", "pass", {
+    month: plan.sheet,
+    employees: employees.length,
+    review: plan.needsReview,
+  });
+  if (
+    !(await askInPane(
+      payrollQuestion(plan, employees.length, words, skipped),
+      localizeMessage(words, "Add"),
+      undefined,
+      payrollCard(plan, employees.length, words, skipped),
+    ))
+  )
+    return false;
+  const result = await writePayrollSheet(officeRuntime(), plan);
+  if (!result.ok) {
+    log.record("payroll:write", "fail", result.error);
+    const message = payrollResult(
+      result.error === "PAYROLL_SHEET_EXISTS" ? "exists" : "failed",
+      plan.sheet,
+      words,
+    );
+    renderConversation("error", message);
+    setStatus(message);
+    return true;
+  }
+  log.record("payroll:write", "pass", { sheet: plan.sheet });
+  await logChanges({
+    at: new Date(),
+    action: "applied",
+    request: request || "Add payroll sheet",
+    changes: [
+      {
+        change: `Payroll sheet with ${plan.employees} employee rows`,
+        sheet: plan.sheet,
+        status: "created",
+      },
+    ],
+    reference: plan.sheet,
+  });
+  const done = payrollResult("created", plan.sheet, words);
+  renderConversation("assistant", done);
+  setStatus(done);
+  return true;
+}
+
 document
-  .querySelector("#whatsapp-copy")
+  .querySelector("#prefs-payroll")
+  ?.addEventListener("click", () => void offerPayroll(""));
+
+/* Share card: one Share button for the latest result, the selected cells or pasted cells. */
+const shareImage = document.querySelector<HTMLImageElement>("#share-card-img");
+const shareMain = document.querySelector<HTMLButtonElement>("#share-main");
+const shareStatus = document.querySelector<HTMLElement>("#share-card-status");
+const sharePaste = document.querySelector<HTMLTextAreaElement>("#share-paste");
+let shareState: { card: ShareCard; blob: Blob | null } | undefined;
+
+function setShareStatus(message: string) {
+  if (shareStatus) shareStatus.textContent = message;
+}
+
+async function showShareCard(
+  values: any[][],
+  sheet: string,
+  source: "sheet" | "pasted" | "selection",
+) {
+  const currency = workbookPrefs.currency
+    ? currencyGuessFor(workbookPrefs.currency, "preference")
+    : undefined;
+  const card = buildShareCard(values, {
+    sheet,
+    source,
+    language: textLanguage(),
+    ...(currency ? { symbol: currency.symbol } : {}),
+    ...(workbookPrefs.numberStyle ? { style: workbookPrefs.numberStyle } : {}),
+  });
+  if (card.kind === "empty") {
+    shareState = undefined;
+    if (shareImage) shareImage.hidden = true;
+    if (shareMain) shareMain.disabled = true;
+    return setShareStatus(
+      localizeMessage(
+        textLanguage(),
+        "No numbers found there. Pick or paste cells with a header row and a number column.",
+      ),
+    );
+  }
+  const canvas = drawShareCard(card);
+  shareState = { card, blob: await canvasToBlob(canvas) };
+  if (shareImage) {
+    shareImage.src = canvas.toDataURL("image/png");
+    shareImage.alt = card.title;
+    shareImage.hidden = false;
+  }
+  if (shareMain) shareMain.disabled = false;
+  setShareStatus("");
+}
+
+async function shareFromResult() {
+  const sheet = lastRevealSheet || currentSourceSheet;
+  if (!sheet)
+    return setShareStatus(
+      localizeMessage(textLanguage(), "Make a report first."),
+    );
+  try {
+    const report = await readExcelReportValues(sheet, 60, 30);
+    await showShareCard(report.values, sheet, "sheet");
+  } catch (error) {
+    log.record("share:card", "fail", describeError(error));
+    setShareStatus(
+      localizeMessage(
+        textLanguage(),
+        "The card could not be made. See Diagnostics.",
+      ),
+    );
+  }
+}
+
+document
+  .querySelector("#share-use-result")
+  ?.addEventListener("click", () => void shareFromResult());
+document
+  .querySelector("#share-use-selection")
   ?.addEventListener("click", async () => {
-    const sheet = lastRevealSheet || currentSourceSheet;
-    if (!sheet) return setStatus("Make a report first.");
     try {
-      const report = await readExcelReportValues(sheet, 60, 30);
-      const currency = workbookPrefs.currency
-        ? currencyGuessFor(workbookPrefs.currency, "preference")
-        : undefined;
-      const text = whatsappSummary(report.values, {
-        sheet,
-        ...(currency ? { symbol: currency.symbol } : {}),
-        ...(workbookPrefs.numberStyle
-          ? { style: workbookPrefs.numberStyle }
-          : {}),
-      });
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        const area = document.createElement("textarea");
-        area.value = text;
-        document.body.appendChild(area);
-        area.select();
-        document.execCommand("copy");
-        area.remove();
-      }
-      if (whatsappNote) {
-        whatsappNote.hidden = false;
-        whatsappNote.textContent = text;
-      }
-      setStatus("Copied. Paste it into WhatsApp; nothing was sent.");
+      const selected = await readSelectedExcelValues(60, 30);
+      await showShareCard(selected.values, selected.sheet, "selection");
     } catch (error) {
-      log.record("whatsapp:copy", "fail", describeError(error));
-      setStatus("The summary could not be made. See Diagnostics.");
+      log.record("share:card", "fail", describeError(error));
+      setShareStatus(
+        localizeMessage(
+          textLanguage(),
+          "The card could not be made. See Diagnostics.",
+        ),
+      );
     }
   });
+sharePaste?.addEventListener("input", () => {
+  const text = sharePaste.value;
+  if (text.trim()) void showShareCard(parsePastedCells(text), "", "pasted");
+});
+document
+  .querySelector('#workspace-nav [data-workspace-target="share"]')
+  ?.addEventListener("click", () => {
+    if (!shareState && (lastRevealSheet || currentSourceSheet))
+      void shareFromResult();
+  });
+shareMain?.addEventListener("click", async () => {
+  if (!shareState) return;
+  const outcome = await deliverShare(
+    shareState.blob,
+    shareState.card.message,
+    browserShareEnv(),
+  );
+  log.record("share:deliver", outcome === "failed" ? "fail" : "pass", outcome);
+  setShareStatus(shareOutcomeText(outcome, textLanguage()));
+});
 
 void initialize();

@@ -101,12 +101,16 @@
     }
   ],
   "systemMessage": "TEST_SYS_MSG",
+  "experimental": {
+    "modelRoles": {
+      "inlineEdit": "TEST LLM",
+      "applyCodeBlock": "TEST LLM"
+    }
+  },
   "tabAutocompleteModel": {
-    "title": "VynorAI Autocomplete",
-    "provider": "vynorai",
-    "model": "deepseek/deepseek-flash",
-    "apiBase": "https://vynor.lk/v1",
-    "apiKey": "${{ secrets.VYNORAI_API_KEY }}"
+    "title": "TEST LLM",
+    "provider": "test",
+    "model": "this field is not used"
   },
   "tabAutocompleteOptions": {
     "useCache": false

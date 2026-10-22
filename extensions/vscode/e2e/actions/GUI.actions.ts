@@ -18,7 +18,7 @@ export class GUIActions {
       await new Workbench().executeCommand("View: Move View");
       await (
         await InputBox.create(DEFAULT_TIMEOUT.MD)
-      ).selectQuickPick("Continue");
+      ).selectQuickPick("VynorAI");
       await (
         await InputBox.create(DEFAULT_TIMEOUT.MD)
       ).selectQuickPick("New Secondary Side Bar Entry");
@@ -42,14 +42,15 @@ export class GUIActions {
     for (let i = 0; i < iframes.length; i++) {
       const iframe = iframes[i];
       const src = await iframe.getAttribute("src");
-      if (src.includes("extensionId=Continue.continue")) {
+      // The webview src carries the extension id (publisher.name), VynorAI.vynorai.
+      if (/extensionId=vynorai\.vynorai/i.test(src)) {
         continueIFrame = iframe;
         break;
       }
     }
 
     if (!continueIFrame) {
-      throw new Error("Could not find Continue iframe");
+      throw new Error("Could not find the VynorAI webview iframe");
     }
 
     await driver.switchTo().frame(continueIFrame);

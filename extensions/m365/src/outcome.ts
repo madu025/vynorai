@@ -52,30 +52,58 @@ const MAX_POINTS = 12;
 const MAX_TABLE_ROWS = 4;
 const MAX_TABLE_COLUMNS = 5;
 
-const KIND_TITLES: Record<string, [string, string]> = {
-  unpivot: ["Unpivoted long table", "දිගු ආකෘති වගුව"],
-  chart: ["Chart", "ප්‍රස්තාරය"],
-  "pivot-table": ["PivotTable", "PivotTable"],
-  "named-range": ["Named range", "නම් කළ පරාසය"],
-  slicer: ["Slicer", "පෙරහන් පාලකය"],
-  table: ["Formatted table", "හැඩසවි කළ වගුව"],
-  "new-sheet": ["Result sheet", "ප්‍රතිඵල පත්‍රිකාව"],
-  clean: ["Cleaned copy of the data", "පිරිසිදු කළ දත්ත පිටපත"],
-  "add-column": ["Calculated column", "ගණනය කළ තීරුව"],
-  view: ["Filtered view", "පෙරහන් කළ දසුන"],
-  summary: ["Summary by group", "කණ්ඩායම් අනුව සාරාංශය"],
-  format: ["Presentable copy", "ඉදිරිපත් කිරීමට සුදුසු පිටපත"],
-  quality: ["Data quality report", "දත්ත ගුණාත්මක වාර්තාව"],
-  statistics: ["Statistics", "සංඛ්‍යාලේඛන"],
-  "lookup-columns": ["Lookup columns", "Lookup columns"],
-  "export-csv": ["CSV export", "CSV අපනයනය"],
-  "export-pdf": ["PDF export", "PDF අපනයනය"],
+export const KIND_TITLES: Record<string, [string, string, string]> = {
+  unpivot: ["Unpivoted long table", "දිගු ආකෘති වගුව", "நீண்ட வடிவ அட்டவணை"],
+  chart: ["Chart", "ප්‍රස්තාරය", "வரைபடம்"],
+  "pivot-table": ["PivotTable", "PivotTable", "PivotTable"],
+  "named-range": ["Named range", "නම් කළ පරාසය", "பெயரிடப்பட்ட வரம்பு"],
+  slicer: ["Slicer", "පෙරහන් පාලකය", "Slicer வடிகட்டி"],
+  table: ["Formatted table", "හැඩසවි කළ වගුව", "வடிவமைத்த அட்டவணை"],
+  "new-sheet": ["Result sheet", "ප්‍රතිඵල පත්‍රිකාව", "முடிவுத் தாள்"],
+  clean: [
+    "Cleaned copy of the data",
+    "පිරිසිදු කළ දත්ත පිටපත",
+    "சுத்தம் செய்த தரவு நகல்",
+  ],
+  "add-column": ["Calculated column", "ගණනය කළ තීරුව", "கணக்கிடப்பட்ட நிரல்"],
+  view: ["Filtered view", "පෙරහන් කළ දසුන", "வடிகட்டிய காட்சி"],
+  summary: [
+    "Summary by group",
+    "කණ්ඩායම් අනුව සාරාංශය",
+    "குழு வாரியான சுருக்கம்",
+  ],
+  format: [
+    "Presentable copy",
+    "ඉදිරිපත් කිරීමට සුදුසු පිටපත",
+    "முன்வைக்கத் தகுந்த நகல்",
+  ],
+  quality: [
+    "Data quality report",
+    "දත්ත ගුණාත්මක වාර්තාව",
+    "தரவுத் தர அறிக்கை",
+  ],
+  statistics: ["Statistics", "සංඛ්‍යාලේඛන", "புள்ளிவிபரங்கள்"],
+  "lookup-columns": ["Lookup columns", "Lookup columns", "Lookup columns"],
+  "export-csv": ["CSV export", "CSV අපනයනය", "CSV ஏற்றுமதி"],
+  "export-pdf": ["PDF export", "PDF අපනයනය", "PDF ஏற்றுமதி"],
 };
 
+/** The text of an [English, Sinhala, Tamil] triple for the language. */
+function pick(
+  triple: readonly [string, string, string],
+  language: OutcomeLanguage,
+): string {
+  return language === "si"
+    ? triple[1]
+    : language === "ta"
+      ? triple[2]
+      : triple[0];
+}
+
 export function kindTitle(kind: string, language: OutcomeLanguage): string {
-  const pair = KIND_TITLES[kind];
-  if (!pair) return kind;
-  return language === "si" ? pair[1] : pair[0];
+  const triple = KIND_TITLES[kind];
+  if (!triple) return kind;
+  return pick(triple, language);
 }
 
 function cell(value: unknown): string {
@@ -128,25 +156,61 @@ function numeric(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-const AGGREGATIONS: Record<string, [string, string]> = {
-  sum: ["Total", "එකතුව"],
-  average: ["Average", "සාමාන්‍යය"],
-  count: ["Count", "ගණන"],
-  min: ["Smallest", "කුඩාම"],
-  max: ["Largest", "විශාලම"],
+const AGGREGATIONS: Record<string, [string, string, string]> = {
+  sum: ["Total", "එකතුව", "மொத்தம்"],
+  average: ["Average", "සාමාන්‍යය", "சராசரி"],
+  count: ["Count", "ගණන", "எண்ணிக்கை"],
+  min: ["Smallest", "කුඩාම", "மிகச் சிறியது"],
+  max: ["Largest", "විශාලම", "மிகப் பெரியது"],
 };
 
-const CONDITIONAL: Record<string, [string, string]> = {
-  "date-range": ["highlight dates in range", "දින පරාසය උද්දීපනය"],
-  "text-contains": ["highlight matching text", "ගැළපෙන පෙළ උද්දීපනය"],
-  "custom-formula": ["custom numeric formula", "අභිරුචි සංඛ්‍යාත්මක සූත්‍රය"],
-  "top-n": ["highlight top values", "ඉහළම අගයන් උද්දීපනය"],
-  "bottom-n": ["highlight bottom values", "පහළම අගයන් උද්දීපනය"],
-  "data-bars": ["data bars", "දත්ත තීරු (data bars)"],
-  "color-scale": ["colour scale", "වර්ණ පරිමාණය"],
-  negative: ["highlight negative values", "සෘණ අගයන් උද්දීපනය"],
-  "icon-set": ["arrow icons (up, flat, down)", "ඊතල අයිකන (ඉහළ, සමාන, පහළ)"],
-  duplicates: ["highlight duplicates", "පුනරාවර්තන උද්දීපනය"],
+const CONDITIONAL: Record<string, [string, string, string]> = {
+  "date-range": [
+    "highlight dates in range",
+    "දින පරාසය උද්දීපනය",
+    "திகதி வரம்பைச் சிறப்பித்தல்",
+  ],
+  "text-contains": [
+    "highlight matching text",
+    "ගැළපෙන පෙළ උද්දීපනය",
+    "பொருந்தும் உரையைச் சிறப்பித்தல்",
+  ],
+  "custom-formula": [
+    "custom numeric formula",
+    "අභිරුචි සංඛ්‍යාත්මක සූත්‍රය",
+    "தனிப்பயன் எண் சூத்திரம்",
+  ],
+  "top-n": [
+    "highlight top values",
+    "ඉහළම අගයන් උද්දීපනය",
+    "உயர்ந்த மதிப்புகளைச் சிறப்பித்தல்",
+  ],
+  "bottom-n": [
+    "highlight bottom values",
+    "පහළම අගයන් උද්දීපනය",
+    "குறைந்த மதிப்புகளைச் சிறப்பித்தல்",
+  ],
+  "data-bars": [
+    "data bars",
+    "දත්ත තීරු (data bars)",
+    "தரவுப் பட்டைகள் (data bars)",
+  ],
+  "color-scale": ["colour scale", "වර්ණ පරිමාණය", "வண்ண அளவுகோல்"],
+  negative: [
+    "highlight negative values",
+    "සෘණ අගයන් උද්දීපනය",
+    "எதிர்மறை மதிப்புகளைச் சிறப்பித்தல்",
+  ],
+  "icon-set": [
+    "arrow icons (up, flat, down)",
+    "ඊතල අයිකන (ඉහළ, සමාන, පහළ)",
+    "அம்புக்குறி ஐகான்கள் (மேல், சமம், கீழ்)",
+  ],
+  duplicates: [
+    "highlight duplicates",
+    "පුනරාවර්තන උද්දීපනය",
+    "நகல்களைச் சிறப்பித்தல்",
+  ],
 };
 
 export function buildOutcomes(
@@ -159,12 +223,10 @@ export function buildOutcomes(
   rows: unknown[][],
   language: OutcomeLanguage = "en",
 ): OutcomeItem[] {
-  const si = language === "si";
-  const say = (en: string, sinhala: string) => (si ? sinhala : en);
-  const agg = (name: string | undefined) => {
-    const pair = AGGREGATIONS[name ?? "sum"] ?? AGGREGATIONS.sum;
-    return si ? pair[1] : pair[0];
-  };
+  const say = (en: string, sinhala: string, tamil: string) =>
+    pick([en, sinhala, tamil], language);
+  const agg = (name: string | undefined) =>
+    pick(AGGREGATIONS[name ?? "sum"] ?? AGGREGATIONS.sum, language);
   return actions.map((action) => {
     const spec = action.spec ?? {};
     const item: OutcomeItem = {
@@ -179,6 +241,7 @@ export function buildOutcomes(
         say(
           `Creates a ${column} slicer on a copied result table; source data stays unchanged. ExcelApi 1.10 or later is required.`,
           `${column} සඳහා පෙරහන් පාලකයක් නව copy table එකක සාදයි; මුල් දත්ත වෙනස් නොවේ. ExcelApi 1.10 හෝ පසු version එක අවශ්‍යයි.`,
+          `${column} க்கான Slicer ஒன்றை நகலெடுத்த முடிவு அட்டவணையில் உருவாக்கும்; மூலத் தரவு மாறாது. ExcelApi 1.10 அல்லது அதற்குப் பிந்திய பதிப்பு தேவை.`,
         ),
       );
       return item;
@@ -218,6 +281,7 @@ export function buildOutcomes(
         say(
           `Turns ${valueIndexes.length} value columns into long-format rows; source data stays unchanged.`,
           `Unpivot ${valueIndexes.length} value columns into long-format rows; source data stays unchanged.`,
+          `${valueIndexes.length} மதிப்பு நிரல்களை நீண்ட வடிவ வரிசைகளாக மாற்றும்; மூலத் தரவு மாறாது.`,
         ),
       );
       return item;
@@ -227,6 +291,7 @@ export function buildOutcomes(
         say(
           "Copies the selected data to a new VynorAI result sheet and downloads a sanitized CSV after confirmation. Source data stays unchanged.",
           "තෝරාගත් දත්ත නව VynorAI ප්‍රතිඵල පත්‍රයකට පිටපත් කර, තහවුරු කළ පසු ආරක්ෂිත CSV ගොනුවක් බාගත කරයි. මුල් දත්ත වෙනස් නොවේ.",
+          "தெரிந்தெடுத்த தரவை புதிய VynorAI முடிவுத் தாளுக்கு நகலெடுத்து, உறுதிப்படுத்திய பின் பாதுகாப்பான CSV கோப்பைப் பதிவிறக்கும். மூலத் தரவு மாறாது.",
         ),
       );
       return item;
@@ -236,6 +301,7 @@ export function buildOutcomes(
         say(
           "Copies the selected data to a new VynorAI result sheet and downloads a PDF of the workbook after confirmation. Source data stays unchanged.",
           "තෝරාගත් දත්ත නව VynorAI ප්‍රතිඵල පත්‍රයකට පිටපත් කර, තහවුරු කළ පසු workbook එකේ PDF එකක් බාගත කරයි. මුල් දත්ත වෙනස් නොවේ.",
+          "தெரிந்தெடுத்த தரவை புதிய VynorAI முடிவுத் தாளுக்கு நகலெடுத்து, உறுதிப்படுத்திய பின் workbook இன் PDF ஒன்றைப் பதிவிறக்கும். மூலத் தரவு மாறாது.",
         ),
       );
       return item;
@@ -265,15 +331,19 @@ export function buildOutcomes(
       };
       const names = item.chart.series.map((entry) => entry.name).join(", ");
       const by = headers[categoryIndex] ?? "";
-      item.title = si
-        ? `${kindTitle("chart", language)}: ${names} — ${by} අනුව`
-        : isHistogram
-          ? `Histogram preview: ${names}`
-          : `${item.chart.type[0].toUpperCase()}${item.chart.type.slice(1)} chart: ${names} by ${by}`;
+      item.title =
+        language === "si"
+          ? `${kindTitle("chart", language)}: ${names} — ${by} අනුව`
+          : language === "ta"
+            ? `${kindTitle("chart", language)}: ${names} — ${by} வாரியாக`
+            : isHistogram
+              ? `Histogram preview: ${names}`
+              : `${item.chart.type[0].toUpperCase()}${item.chart.type.slice(1)} chart: ${names} by ${by}`;
       item.details.push(
         say(
           `Compares ${names} for each ${by}.`,
           `${by} එක් එකක් සඳහා ${names} සසඳයි.`,
+          `ஒவ்வொரு ${by} க்கும் ${names} ஐ ஒப்பிடும்.`,
         ),
       );
       if (isHistogram)
@@ -285,6 +355,7 @@ export function buildOutcomes(
           say(
             "The first series uses columns; additional series use line overlays.",
             "මුල් series එක columns ලෙසත්, අමතර series line overlays ලෙසත් පෙන්වයි.",
+            "முதல் series columns ஆகவும், மற்ற series line overlays ஆகவும் காட்டப்படும்.",
           ),
         );
       if (spec.showDataLabels)
@@ -292,6 +363,7 @@ export function buildOutcomes(
           say(
             "Shows the value on each chart data point.",
             "සෑම chart data point එකකම අගය පෙන්වයි.",
+            "ஒவ்வொரு chart data point இலும் மதிப்பைக் காட்டும்.",
           ),
         );
       if (spec.pivotSourceName)
@@ -299,6 +371,7 @@ export function buildOutcomes(
           say(
             "Uses the created PivotTable result as the chart source; the original data stays unchanged.",
             "සාදන ලද PivotTable result එක chart source ලෙස භාවිතා කරයි; මුල් data එක වෙනස් නොවේ.",
+            "உருவாக்கிய PivotTable முடிவை chart source ஆகப் பயன்படுத்தும்; மூலத் தரவு மாறாது.",
           ),
         );
       const secondary = (spec.secondaryIndexes ?? []) as number[];
@@ -310,6 +383,7 @@ export function buildOutcomes(
           say(
             `${slowNames} is on a second axis on the right, because its numbers are on a very different scale.`,
             `${slowNames} දකුණු දෙවන අක්ෂයේ පෙන්වයි; එහි සංඛ්‍යා ඉතා වෙනස් පරිමාණයක ඇත.`,
+            `${slowNames} வலப்பக்க இரண்டாவது அச்சில் காட்டப்படும்; அதன் எண்கள் மிகவும் வேறுபட்ட அளவில் உள்ளன.`,
           ),
         );
       }
@@ -342,31 +416,40 @@ export function buildOutcomes(
           say(
             "The header row stays visible while you scroll.",
             "පහළට යන විට ශීර්ෂ පේළිය දිගටම පෙනේ.",
+            "கீழே உருட்டும்போதும் தலைப்பு வரிசை தெரிந்துகொண்டே இருக்கும்.",
           ),
         );
       if (spec.autofit)
         item.details.push(
-          say("Column widths fit their content.", "තීරු පළල අන්තර්ගතයට ගැළපේ."),
+          say(
+            "Column widths fit their content.",
+            "තීරු පළල අන්තර්ගතයට ගැළපේ.",
+            "நிரல் அகலங்கள் உள்ளடக்கத்துக்கு ஏற்ப அமையும்.",
+          ),
         );
       for (const entry of spec.columnFormats ?? [])
         item.details.push(
           say(
             `${entry.column}: number format ${entry.format}`,
             `${entry.column}: අංක ආකෘතිය ${entry.format}`,
+            `${entry.column}: எண் வடிவம் ${entry.format}`,
           ),
         );
       for (const entry of spec.conditional ?? []) {
-        const pair = CONDITIONAL[entry.rule] ?? [entry.rule, entry.rule];
+        const rule = pick(
+          CONDITIONAL[entry.rule] ?? [entry.rule, entry.rule, entry.rule],
+          language,
+        );
         item.details.push(
           entry.rule === "custom-formula"
-            ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.operator}${entry.value})`
+            ? `${entry.column}: ${rule} (${entry.operator}${entry.value})`
             : entry.rule === "top-n" || entry.rule === "bottom-n"
-              ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.n})`
+              ? `${entry.column}: ${rule} (${entry.n})`
               : entry.rule === "text-contains"
-                ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.text})`
+                ? `${entry.column}: ${rule} (${entry.text})`
                 : entry.rule === "date-range"
-                  ? `${entry.column}: ${si ? pair[1] : pair[0]} (${entry.startDate} to ${entry.endDate})`
-                  : `${entry.column}: ${si ? pair[1] : pair[0]}`,
+                  ? `${entry.column}: ${rule} (${entry.startDate} to ${entry.endDate})`
+                  : `${entry.column}: ${rule}`,
         );
         if (entry.rule === "data-bars" && entry.index < columns) {
           const max = Math.max(
@@ -383,6 +466,7 @@ export function buildOutcomes(
             say(
               `${entry.column}: drop-down list (${values})`,
               `${entry.column}: පතන ලැයිස්තුව (${values})`,
+              `${entry.column}: கீழிறங்கு பட்டியல் (${values})`,
             ),
           );
           if (entry.index < columns) table.dropdownColumns.push(entry.index);
@@ -391,6 +475,7 @@ export function buildOutcomes(
             say(
               `${entry.column}: only numbers from ${entry.min} to ${entry.max} are accepted`,
               `${entry.column}: ${entry.min} සිට ${entry.max} දක්වා සංඛ්‍යා පමණක් පිළිගනී`,
+              `${entry.column}: ${entry.min} முதல் ${entry.max} வரையான எண்கள் மட்டுமே ஏற்கப்படும்`,
             ),
           );
         } else if (entry.rule === "date") {
@@ -398,6 +483,7 @@ export function buildOutcomes(
             say(
               `${entry.column}: only dates are accepted`,
               `${entry.column}: දින වකවානු පමණක් පිළිගනී`,
+              `${entry.column}: திகதிகள் மட்டுமே ஏற்கப்படும்`,
             ),
           );
         } else if (entry.rule === "max-length") {
@@ -405,6 +491,7 @@ export function buildOutcomes(
             say(
               `${entry.column}: at most ${entry.max} characters`,
               `${entry.column}: උපරිම අකුරු ${entry.max}`,
+              `${entry.column}: அதிகபட்சம் ${entry.max} எழுத்துகள்`,
             ),
           );
         } else {
@@ -412,6 +499,7 @@ export function buildOutcomes(
             say(
               `${entry.column}: only numbers 0 or higher are accepted`,
               `${entry.column}: 0 හෝ ඊට වැඩි සංඛ්‍යා පමණක් පිළිගනී`,
+              `${entry.column}: 0 அல்லது அதற்கு மேற்பட்ட எண்கள் மட்டுமே ஏற்கப்படும்`,
             ),
           );
         }
@@ -421,6 +509,7 @@ export function buildOutcomes(
           say(
             `${spec.inputMessage.column}: input message “${spec.inputMessage.message}”`,
             `${spec.inputMessage.column}: input message “${spec.inputMessage.message}”`,
+            `${spec.inputMessage.column}: உள்ளீட்டுச் செய்தி (input message) “${spec.inputMessage.message}”`,
           ),
         );
       }
@@ -436,6 +525,7 @@ export function buildOutcomes(
           say(
             `${dependent.childColumn} depends on ${dependent.parentColumn} (${groups})`,
             `${dependent.parentColumn} අනුව ${dependent.childColumn} ලැයිස්තුව වෙනස් වේ (${groups})`,
+            `${dependent.parentColumn} க்கு ஏற்ப ${dependent.childColumn} பட்டியல் மாறும் (${groups})`,
           ),
         );
         if (!table.dropdownColumns.includes(dependent.childIndex))
@@ -446,34 +536,50 @@ export function buildOutcomes(
           say(
             "A total row is added under the data.",
             "දත්ත යටින් එකතු පේළියක් එක් කෙරේ.",
+            "தரவின் கீழே ஒரு மொத்த வரிசை சேர்க்கப்படும்.",
           ),
         );
     } else if (action.kind === "clean") {
       const operations = (spec.operations ?? []) as string[];
       const labels = operations.map((operation) => {
         if (operation === "text-to-number")
-          return say("numbers stored as text", "පාඨ ලෙස තිබූ සංඛ්‍යා");
+          return say(
+            "numbers stored as text",
+            "පාඨ ලෙස තිබූ සංඛ්‍යා",
+            "உரையாகச் சேமிக்கப்பட்ட எண்கள்",
+          );
         if (operation === "text-to-date")
-          return say("unambiguous ISO text dates", "නිවැරදි ISO පාඨ දින");
+          return say(
+            "unambiguous ISO text dates",
+            "නිවැරදි ISO පාඨ දින",
+            "தெளிவான ISO உரைத் திகதிகள்",
+          );
         if (operation === "fill-blanks")
           return say(
             `blank${spec.fillBlanksColumn ? ` in ${spec.fillBlanksColumn}` : ""} cells with ${String(spec.fillBlanks)}`,
             `හිස් තීරු ${String(spec.fillBlanks)} වලින්`,
+            `${spec.fillBlanksColumn ? `${spec.fillBlanksColumn} இலுள்ள ` : ""}வெற்றுக் கலங்கள் ${String(spec.fillBlanks)} ஆல் நிரப்பப்படும்`,
           );
         if (operation === "fuzzy-dedupe")
           return say(
             "near-duplicate rows (one-character tolerance)",
             "එක් අක්ෂරයක වෙනසක් ඇති ආසන්න duplicate පේළි",
+            "ஒரு எழுத்து மட்டும் வேறுபடும் கிட்டத்தட்ட ஒரே மாதிரியான வரிசைகள்",
           );
         if (operation === "dedupe")
-          return say("exact duplicate rows", "සමාන පුනරාවර්තන පේළි");
-        return say("extra spaces", "අමතර හිස් ඉඩ");
+          return say(
+            "exact duplicate rows",
+            "සමාන පුනරාවර්තන පේළි",
+            "முற்றிலும் ஒரே மாதிரியான நகல் வரிசைகள்",
+          );
+        return say("extra spaces", "අමතර හිස් ඉඩ", "மேலதிக இடைவெளிகள்");
       });
       if (labels.length)
         item.details.push(
           say(
             `Creates a cleaned copy: ${labels.join(", ")}.`,
             `පිරිසිදු පිටපතක් සාදයි: ${labels.join(", ")}.`,
+            `சுத்தம் செய்த நகலை உருவாக்கும்: ${labels.join(", ")}.`,
           ),
         );
       if (operations.includes("text-to-date"))
@@ -481,6 +587,7 @@ export function buildOutcomes(
           say(
             "Only YYYY-MM-DD dates convert; ambiguous dates remain text.",
             "YYYY-MM-DD දින පමණක් පරිවර්තනය වේ; සැක සහිත දින පාඨ ලෙස පවතී.",
+            "YYYY-MM-DD திகதிகள் மட்டுமே மாற்றப்படும்; தெளிவற்ற திகதிகள் உரையாகவே இருக்கும்.",
           ),
         );
     } else if (action.kind === "pivot-table") {
@@ -536,7 +643,7 @@ export function buildOutcomes(
         ]);
         if (aggregation !== "average")
           body.push([
-            say("Grand total", "මුළු එකතුව"),
+            say("Grand total", "මුළු එකතුව", "முழு மொத்தம்"),
             ...totals.map((value) => (share ? "100%" : format(value))),
           ]);
         const names = [spec.valuesColumn, ...(spec.extraValuesColumns ?? [])];
@@ -554,6 +661,7 @@ export function buildOutcomes(
             say(
               "Values are shown as a share of the grand total.",
               "අගයන් මුළු එකතුවේ කොටසක් ලෙස පෙන්වයි.",
+              "மதிப்புகள் முழு மொத்தத்தின் பங்காகக் காட்டப்படும்.",
             ),
           );
       }
@@ -562,6 +670,7 @@ export function buildOutcomes(
           say(
             "Summarizes your numbers by category in a PivotTable.",
             "ඔබේ සංඛ්‍යා කාණ්ඩ අනුව PivotTable එකක සාරාංශ කරයි.",
+            "உங்கள் எண்களை வகை வாரியாக PivotTable ஒன்றில் சுருக்கும்.",
           ),
         );
       else
@@ -579,6 +688,14 @@ export function buildOutcomes(
                 : "") +
               (spec.columnsColumn ? `, ${spec.columnsColumn} අනුව බෙදා` : "") +
               (spec.filterColumn ? `, ${spec.filterColumn} මත පෙරහන` : ""),
+            `ஒவ்வொரு ${spec.rowsColumn} க்கும் ${spec.valuesColumn} இன் ${agg(spec.aggregation)}` +
+              (spec.subRowsColumn
+                ? `, அதன் பின் ஒவ்வொன்றின் கீழும் ${spec.subRowsColumn}`
+                : "") +
+              (spec.columnsColumn
+                ? `, ${spec.columnsColumn} வாரியாகப் பிரித்து`
+                : "") +
+              (spec.filterColumn ? `, ${spec.filterColumn} மீது வடிகட்டி` : ""),
           ),
         );
     } else if (action.kind === "summary") {
@@ -589,12 +706,14 @@ export function buildOutcomes(
         say(
           `Groups by ${spec.groupColumn}: ${(spec.groups ?? []).slice(0, 6).join(", ")}. ${parts}`,
           `${spec.groupColumn} අනුව කණ්ඩායම්: ${(spec.groups ?? []).slice(0, 6).join(", ")}. ${parts}`,
+          `${spec.groupColumn} வாரியாகக் குழுக்கள்: ${(spec.groups ?? []).slice(0, 6).join(", ")}. ${parts}`,
         ),
       );
       item.details.push(
         say(
           "Uses live formulas, so it updates when your data changes.",
           "සජීවී සූත්‍ර භාවිතා කරයි; දත්ත වෙනස් වන විට යාවත්කාලීන වේ.",
+          "நேரடி சூத்திரங்களைப் பயன்படுத்துவதால், உங்கள் தரவு மாறும்போது இதுவும் புதுப்பிக்கப்படும்.",
         ),
       );
     } else if (action.kind === "split-column") {
@@ -621,6 +740,7 @@ export function buildOutcomes(
         say(
           `Splits ${spec.splitSourceColumn} into ${spec.splitFirstColumn} and ${spec.splitLastColumn}.`,
           `${spec.splitSourceColumn} ${spec.splitFirstColumn} සහ ${spec.splitLastColumn} ලෙස වෙන් කරයි.`,
+          `${spec.splitSourceColumn} ஐ ${spec.splitFirstColumn}, ${spec.splitLastColumn} எனப் பிரிக்கும்.`,
         ),
       );
     } else if (action.kind === "lookup-columns" && spec.lookupSheet) {
@@ -649,12 +769,14 @@ export function buildOutcomes(
         say(
           `Brings ${returnHeaders.join(", ")} from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}${methodDescription}.`,
           `"${spec.lookupSheet}" පත්‍රිකාවෙන් ${returnHeaders.join(", ")} ගෙන එයි — ${sourceKeys} සහ ${lookupKeys} ගැළපීමෙන්.`,
+          `"${spec.lookupSheet}" தாளில் இருந்து ${returnHeaders.join(", ")} ஐக் கொண்டுவரும் — ${sourceKeys} ஐ ${lookupKeys} உடன் பொருத்தி.`,
         ),
       );
       item.details.push(
         say(
           "Values will be live formulas on the new result sheet; source data remains unchanged.",
           "නව ප්‍රතිඵල පත්‍රිකාවේ සජීවී formulas භාවිතා වේ; මුල් දත්ත වෙනස් නොවේ.",
+          "புதிய முடிவுத் தாளில் மதிப்புகள் நேரடி formulas ஆக இருக்கும்; மூலத் தரவு மாறாது.",
         ),
       );
     } else if (action.kind === "add-column" && spec.lookupSheet) {
@@ -676,10 +798,15 @@ export function buildOutcomes(
         say(
           `Brings "${spec.lookupReturnHeader}" from sheet "${spec.lookupSheet}" by matching ${sourceKeys} with ${lookupKeys}${matchDescription}${methodDescription}.`,
           `"${spec.lookupSheet}" පත්‍රිකාවෙන් "${spec.lookupReturnHeader}" ගෙන එයි — ${spec.sourceKeyColumn} සහ ${spec.lookupKeyHeader} ගැළපීමෙන්.`,
+          `"${spec.lookupSheet}" தாளில் இருந்து "${spec.lookupReturnHeader}" ஐக் கொண்டுவரும் — ${sourceKeys} ஐ ${lookupKeys} உடன் பொருத்தி.`,
         ),
       );
       item.details.push(
-        say("Rows with no match stay blank.", "ගැළපීමක් නැති පේළි හිස්ව පවතී."),
+        say(
+          "Rows with no match stay blank.",
+          "ගැළපීමක් නැති පේළි හිස්ව පවතී.",
+          "பொருத்தம் இல்லாத வரிசைகள் வெறுமையாக இருக்கும்.",
+        ),
       );
     } else if (action.kind === "add-column") {
       const how =
@@ -932,6 +1059,7 @@ export function buildOutcomes(
         say(
           `New column "${spec.columnName}" = ${how}`,
           `නව තීරුව "${spec.columnName}" = ${how}`,
+          `புதிய நிரல் "${spec.columnName}" = ${how}`,
         ),
       );
     } else if (action.kind === "view") {
@@ -940,6 +1068,7 @@ export function buildOutcomes(
           say(
             `Sorted by ${spec.sort.column} (${spec.sort.direction === "desc" ? "largest first" : "smallest first"})`,
             `${spec.sort.column} අනුව පෙළගැස්වේ`,
+            `${spec.sort.column} படி வரிசைப்படுத்தப்படும் (${spec.sort.direction === "desc" ? "பெரியது முதலில்" : "சிறியது முதலில்"})`,
           ),
         );
       if (spec.thenSort)
@@ -947,6 +1076,7 @@ export function buildOutcomes(
           say(
             `Then by ${spec.thenSort.column} (${spec.thenSort.direction === "desc" ? "largest first" : "smallest first"}) when the first column ties`,
             `ඉන්පසු ${spec.thenSort.column} අනුව පෙළගැස්වේ`,
+            `முதல் நிரல் சமமாக இருந்தால், பின்னர் ${spec.thenSort.column} படி வரிசைப்படுத்தப்படும் (${spec.thenSort.direction === "desc" ? "பெரியது முதலில்" : "சிறியது முதலில்"})`,
           ),
         );
       if (spec.filter)
@@ -954,6 +1084,7 @@ export function buildOutcomes(
           say(
             `Only rows where ${spec.filter.column} ${spec.filter.operator} ${spec.filter.value}`,
             `${spec.filter.column} ${spec.filter.operator} ${spec.filter.value} වන පේළි පමණි`,
+            `${spec.filter.column} ${spec.filter.operator} ${spec.filter.value} ஆக உள்ள வரிசைகள் மட்டும்`,
           ),
         );
       if (spec.highlight)
@@ -964,6 +1095,10 @@ export function buildOutcomes(
               ? `Highlights the ${spec.highlight.rule === "top-n" ? "top" : "bottom"} ${spec.highlight.n ?? 1} in ${spec.highlight.column}`
               : `Highlights ${spec.highlight.rule} in ${spec.highlight.column}`,
             `${spec.highlight.column} හි ${spec.highlight.rule} උද්දීපනය`,
+            spec.highlight.rule === "top-n" ||
+              spec.highlight.rule === "bottom-n"
+              ? `${spec.highlight.column} இல் ${spec.highlight.rule === "top-n" ? "உயர்ந்த" : "குறைந்த"} ${spec.highlight.n ?? 1} மதிப்புகளைச் சிறப்பித்துக் காட்டும்`
+              : `${spec.highlight.column} இல் ${spec.highlight.rule} ஐச் சிறப்பித்துக் காட்டும்`,
           ),
         );
       if (spec.where)
@@ -971,6 +1106,7 @@ export function buildOutcomes(
           say(
             `Shows only the rows where ${spec.where}`,
             `${spec.where} සත්‍ය වන පේළි පමණක් පෙන්වයි`,
+            `${spec.where} உண்மையாகும் வரிசைகளை மட்டும் காட்டும்`,
           ),
         );
       if (spec.limit)
@@ -978,6 +1114,7 @@ export function buildOutcomes(
           say(
             `Shows only the first ${spec.limit} rows`,
             `පළමු පේළි ${spec.limit} පමණක් පෙන්වයි`,
+            `முதல் ${spec.limit} வரிசைகளை மட்டும் காட்டும்`,
           ),
         );
     } else if (action.kind === "clean") {
@@ -985,6 +1122,7 @@ export function buildOutcomes(
         say(
           `Cleans a copy: ${(spec.operations ?? []).join(", ")}`,
           `පිටපතක් පිරිසිදු කරයි: ${(spec.operations ?? []).join(", ")}`,
+          `நகலைச் சுத்தம் செய்யும்: ${(spec.operations ?? []).join(", ")}`,
         ),
       );
     } else if (action.kind === "dashboard" && spec.dashboard?.usage) {
@@ -1010,6 +1148,7 @@ export function buildOutcomes(
       item.title = say(
         `Usage dashboard: ${dashboard.values[0].column} by ${dashboard.category.column} and ${dashboard.usage.item.column}`,
         `භාවිත දත්ත පුවරුව: ${dashboard.category.column} සහ ${dashboard.usage.item.column} අනුව`,
+        `பயன்பாட்டுத் தரவுப் பலகை: ${dashboard.values[0].column} — ${dashboard.category.column}, ${dashboard.usage.item.column} வாரியாக`,
       );
       if (top) {
         const ranked = usage.topByUnit[top.label] ?? [];
@@ -1025,7 +1164,10 @@ export function buildOutcomes(
         };
       }
       item.table = {
-        headers: [say("KPI", "දර්ශකය"), say("Value", "අගය")],
+        headers: [
+          say("KPI", "දර්ශකය", "குறிகாட்டி"),
+          say("Value", "අගය", "மதிப்பு"),
+        ],
         rows: [
           [`${dashboard.category.column}s`, String(usage.entities)],
           [`${dashboard.usage.item.column}s`, String(usage.items)],
@@ -1043,6 +1185,7 @@ export function buildOutcomes(
         say(
           "One new result sheet: totals for each unit (never added together), a lookup of one id, the top ids with charts. Your original data is not changed.",
           "අලුත් ප්‍රතිඵල පත්‍රිකාවක්: එකක් එකක් අනුව එකතු (මිශ්‍ර නොකර), ID සෙවුමක්, ඉහළම ID සහ ප්‍රස්ථාර. ඔබේ මුල් දත්ත වෙනස් නොවේ.",
+          "ஒரு புதிய முடிவுத் தாள்: ஒவ்வொரு அலகுக்குமான மொத்தங்கள் (ஒன்றாகக் கூட்டப்படாது), ஒரு ID தேடல், முன்னணி ID கள் வரைபடங்களுடன். உங்கள் மூலத் தரவு மாறாது.",
         ),
       );
     } else if (action.kind === "dashboard" && spec.dashboard) {
@@ -1075,6 +1218,7 @@ export function buildOutcomes(
       item.title = say(
         `Dashboard: ${dashboard.values.map((entry) => entry.column).join(", ")} by ${dashboard.category.column}`,
         `දත්ත පුවරුව: ${dashboard.category.column} අනුව`,
+        `தரவுப் பலகை: ${dashboard.values.map((entry) => entry.column).join(", ")} — ${dashboard.category.column} வாரியாக`,
       );
       item.chart = {
         type: "column",
@@ -1085,16 +1229,22 @@ export function buildOutcomes(
         })),
       };
       item.table = {
-        headers: [say("KPI", "දර්ශකය"), say("Value", "අගය")],
+        headers: [
+          say("KPI", "දර්ශකය", "குறிகாட்டி"),
+          say("Value", "අගය", "மதிப்பு"),
+        ],
         rows: [
-          [say("Data rows", "දත්ත පේළි"), String(rows.length)],
+          [say("Data rows", "දත්ත පේළි", "தரவு வரிசைகள்"), String(rows.length)],
           ...dashboard.values.flatMap((entry) => {
             const numbers = rows.map((row) => numeric(row[entry.index]));
             const total = numbers.reduce((sum, value) => sum + value, 0);
             return [
-              [`${say("Total", "එකතුව")} ${entry.column}`, String(total)],
               [
-                `${say("Average", "සාමාන්‍යය")} ${entry.column}`,
+                `${say("Total", "එකතුව", "மொத்தம்")} ${entry.column}`,
+                String(total),
+              ],
+              [
+                `${say("Average", "සාමාන්‍යය", "சராசரி")} ${entry.column}`,
                 String(
                   numbers.length
                     ? Math.round((total / numbers.length) * 100) / 100
@@ -1111,6 +1261,7 @@ export function buildOutcomes(
         say(
           "One new result sheet with live KPI formulas, one chart per value column, and a PivotTable. Your original data is not changed.",
           "සජීවී KPI සූත්‍ර, අගය තීරුවකට ප්‍රස්ථාරයක් සහ PivotTable එකක් ඇති අලුත් ප්‍රතිඵල පත්‍රිකාවක්.",
+          "நேரடி KPI சூத்திரங்கள், ஒவ்வொரு மதிப்பு நிரலுக்கும் ஒரு வரைபடம், ஒரு PivotTable கொண்ட புதிய முடிவுத் தாள். உங்கள் மூலத் தரவு மாறாது.",
         ),
       );
     } else if (action.kind === "statistics" && spec.statistics) {
@@ -1137,6 +1288,7 @@ export function buildOutcomes(
           say(
             "Live formulas: they update when your data changes.",
             "සජීවී සූත්‍ර: දත්ත වෙනස් වන විට යාවත්කාලීන වේ.",
+            "நேரடி சூத்திரங்கள்: உங்கள் தரவு மாறும்போது புதுப்பிக்கப்படும்.",
           ),
         );
       } else if (stats.mode === "correlation") {
@@ -1170,6 +1322,7 @@ export function buildOutcomes(
             say(
               `A ${strength} ${result.r > 0 ? "positive" : "negative"} relationship`,
               `${strength === "strong" ? "ශක්තිමත්" : strength === "moderate" ? "මධ්‍යම" : "දුර්වල"} ${(result.r as number) > 0 ? "ධනාත්මක" : "ඍණාත්මක"} සම්බන්ධයක්`,
+              `${strength === "strong" ? "வலுவான" : strength === "moderate" ? "மிதமான" : "பலவீனமான"} ${(result.r as number) > 0 ? "நேர்மறை" : "எதிர்மறை"} தொடர்பு`,
             ),
           );
       } else if (stats.mode === "forecast") {
@@ -1190,6 +1343,7 @@ export function buildOutcomes(
           say(
             `A straight-line trend through ${known.length} values, extended ${periods} periods.`,
             `අගයන් ${known.length} හරහා සරල රේඛා ප්‍රවණතාවක්, කාල පරිච්ඡේද ${periods} දක්වා දිගු කර ඇත.`,
+            `${known.length} மதிப்புகளின் ஊடாக நேர்கோட்டுப் போக்கு, ${periods} காலப்பகுதிகள் வரை நீட்டிக்கப்பட்டுள்ளது.`,
           ),
         );
       } else if (stats.mode === "advanced-forecast") {
@@ -1221,6 +1375,7 @@ export function buildOutcomes(
           say(
             `Forecast with a seasonal index and approximate 95% interval; slope ${result.slope}.`,
             `සෘතුමය දර්ශකය සහ ආසන්න 95% පරාසය සහිත අනාවැකියක්; slope ${result.slope}.`,
+            `பருவகாலச் சுட்டெண் மற்றும் ஏறத்தாழ 95% இடைவெளியுடன் கூடிய முன்னறிவிப்பு; slope ${result.slope}.`,
           ),
         );
         if (result.warning) item.details.push(result.warning);
@@ -1257,6 +1412,7 @@ export function buildOutcomes(
           say(
             "Financial metrics are calculated in the result sheet from live source formulas.",
             "මූල්‍ය දර්ශක live source formulas වලින් report sheet එකේ ගණනය වේ.",
+            "நிதி அளவீடுகள் நேரடி source formulas இலிருந்து முடிவுத் தாளில் கணக்கிடப்படும்.",
           ),
         );
       } else if (stats.mode === "anomaly") {
@@ -1272,6 +1428,7 @@ export function buildOutcomes(
           say(
             "IQR screening only; an anomaly is not proof of fraud.",
             "මෙය IQR පරීක්ෂාවක් පමණි; anomaly එකක් වංචාවක් බවට සාක්ෂියක් නොවේ.",
+            "இது IQR சோதனை மட்டுமே; ஒரு anomaly மோசடிக்கான சான்று அல்ல.",
           ),
         );
       } else {
@@ -1286,6 +1443,7 @@ export function buildOutcomes(
         item.title = say(
           "Deterministic insight report",
           "නිශ්චිත අවබෝධතා වාර්තාව",
+          "விதிமுறை அடிப்படையிலான பகுப்பாய்வு அறிக்கை",
         );
         item.table = {
           headers: preview.headers,
@@ -1297,6 +1455,7 @@ export function buildOutcomes(
           say(
             "Writes live formulas for change, trend, IQR anomalies and contributors. Nothing is sent to AI.",
             "වෙනස, ප්‍රවණතාව, IQR අසාමාන්‍යතා සහ දායකයන් සඳහා සජීවී සූත්‍ර ලියයි. AI වෙත කිසිවක් නොයැවේ.",
+            "மாற்றம், போக்கு, IQR அசாதாரண மதிப்புகள், பங்களிப்பாளர்கள் ஆகியவற்றுக்கு நேரடி சூத்திரங்களை எழுதும். AI இற்கு எதுவும் அனுப்பப்படாது.",
           ),
         );
       }
@@ -1306,6 +1465,7 @@ export function buildOutcomes(
           say(
             "Audits formula cells, errors, references, inconsistent copied formulas, hard-coded numbers and possible direct circular references in a new report sheet.",
             "නව වාර්තා පත්‍රිකාවක සූත්‍ර කොටු, දෝෂ, යොමු, අසමාන පිටපත් කළ සූත්‍ර, සූත්‍ර තීරුවල hard-coded අංක සහ සෘජු වටකුරු යොමු පරීක්ෂා කරයි.",
+            "புதிய அறிக்கைத் தாளில் சூத்திரக் கலங்கள், பிழைகள், குறிப்புகள், ஒத்திசையாத நகலெடுத்த சூத்திரங்கள், hard-coded எண்கள், சாத்தியமான நேரடிச் சுற்றுக் குறிப்புகள் (circular references) ஆகியவற்றைச் சோதிக்கும்.",
           ),
         );
       if (spec.qualityMode === "repair")
@@ -1313,12 +1473,14 @@ export function buildOutcomes(
           say(
             "Creates a repaired copy for safe formula errors such as #DIV/0!; unresolved #REF! formulas remain unchanged for manual review.",
             "#DIV/0! වැනි ආරක්ෂිත සූත්‍ර දෝෂ සඳහා පිටපතක් සකසයි; විසඳිය නොහැකි #REF! සූත්‍ර අතින් පරීක්ෂා කිරීමට එසේම තබයි.",
+            "#DIV/0! போன்ற பாதுகாப்பாகத் திருத்தக்கூடிய சூத்திரப் பிழைகளுக்குத் திருத்திய நகலை உருவாக்கும்; தீர்க்க முடியாத #REF! சூத்திரங்கள் கைமுறைச் சரிபார்ப்புக்காக மாற்றமின்றி விடப்படும்.",
           ),
         );
       item.details.push(
         say(
           "Checks blanks, duplicates, mixed text and numbers, extra spaces and outliers.",
           "හිස් කොටු, පුනරාවර්තන, මිශ්‍ර පෙළ සහ අංක, අමතර ඉඩ සහ අසාමාන්‍ය අගයන් පරීක්ෂා කරයි.",
+          "வெற்றுக் கலங்கள், நகல்கள், கலந்த உரை மற்றும் எண்கள், மேலதிக இடைவெளிகள், அசாதாரண மதிப்புகள் ஆகியவற்றைச் சோதிக்கும்.",
         ),
       );
     } else if (action.kind === "table") {
@@ -1326,6 +1488,7 @@ export function buildOutcomes(
         say(
           "Your range becomes an Excel table with filter buttons.",
           "ඔබේ පරාසය පෙරහන් බොත්තම් සහිත Excel වගුවක් වේ.",
+          "உங்கள் வரம்பு வடிகட்டிப் பொத்தான்களுடன் கூடிய Excel அட்டவணையாக மாறும்.",
         ),
       );
     }
@@ -1333,6 +1496,7 @@ export function buildOutcomes(
       say(
         "Your original data is not changed.",
         "ඔබේ මූලාශ්‍ර දත්ත වෙනස් නොවේ.",
+        "உங்கள் மூலத் தரவு மாறாது.",
       ),
     );
     return item;

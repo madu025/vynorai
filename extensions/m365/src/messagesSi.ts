@@ -159,14 +159,14 @@ const EXACT: Record<string, string> = {
   statistics: "සංඛ්‍යාලේඛන",
   view: "පෙරහන් කළ දසුන",
   "lookup-columns": "Lookup columns",
-  "Create a report first.":
-    "මුලින්ම වාර්තාවක් සාදන්න.",
-  "Make a report first.":
-    "මුලින්ම වාර්තාවක් සාදන්න.",
-  "Nothing was sent to AI.":
-    "AI වෙත කිසිවක් යවා නැත.",
-  "Writing the message...":
-    "පණිවිඩය ලියමින්...",
+  "Create a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
+  "No numbers found there. Pick or paste cells with a header row and a number column.":
+    "එහි අංක කිසිවක් හමු වුණේ නැත. ශීර්ෂ පේළියක් සහ අංක තීරුවක් සහිත කොටු තෝරන්න හෝ අලවන්න.",
+  "The card could not be made. See Diagnostics.":
+    "කාඩ්පත සෑදිය නොහැකි විය. Diagnostics බලන්න.",
+  "Make a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
+  "Nothing was sent to AI.": "AI වෙත කිසිවක් යවා නැත.",
+  "Writing the message...": "පණිවිඩය ලියමින්...",
   "The message was written by AI. Read and edit it before you send the report.":
     "පණිවිඩය AI විසින් ලියන ලදී. වාර්තාව යැවීමට පෙර එය කියවා සංස්කරණය කරන්න.",
   "Enter a recipient and subject first.":
@@ -177,16 +177,13 @@ const EXACT: Record<string, string> = {
     "ඊමේල් යැවීමට Microsoft මෙම add-in එකට අවසර දුන්නේ නැත (ඔබේ සංවිධානයේ පරිපාලකයා අනුමත කළ යුතු විය හැක). කිසිවක් යවා නැත. වාර්තාව Outlook web හි කෙටුම්පතක් ලෙස විවෘත කිරීමට පහත සබැඳිය භාවිතා කරන්න.",
   "Code is ready to copy. Nothing was run or changed.":
     "කේතය පිටපත් කිරීමට සූදානම්. කිසිවක් ධාවනය කර හෝ වෙනස් කර නැත.",
-  "Nothing was changed.":
-    "කිසිවක් වෙනස් කර නැත.",
-  "Code copied.":
-    "කේතය පිටපත් කරන ලදී.",
+  "Nothing was changed.": "කිසිවක් වෙනස් කර නැත.",
+  "Code copied.": "කේතය පිටපත් කරන ලදී.",
   "Select the code and copy it with Ctrl+C.":
     "කේතය තෝරා Ctrl+C මගින් පිටපත් කරන්න.",
   "Asking the AI to read your request (only column names and types are sent)...":
     "ඔබේ ඉල්ලීම කියවන ලෙස AI ගෙන් ඉල්ලමින් (යවන්නේ තීරු නම් සහ වර්ග පමණි)...",
-  "Planning the steps...":
-    "පියවර සැලසුම් කරමින්...",
+  "Planning the steps...": "පියවර සැලසුම් කරමින්...",
   "The AI understood your request. Preparing the preview; nothing changes until you confirm.":
     "AI ඔබේ ඉල්ලීම තේරුම් ගත්තා. පෙරදසුන සූදානම් කරමින්; ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
   "Preview adjusted. Rechecking the plan...":
@@ -199,36 +196,26 @@ const EXACT: Record<string, string> = {
     "මෙම ප්‍රතිඵලය නැවුම් කිරීමට පෙර ඉල්ලීම නැවත ඇතුළත් කරන්න.",
   "Refreshing the preview. Nothing changes until you confirm.":
     "පෙරදසුන නැවුම් කරමින්. ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
-  "Planning the next step...":
-    "ඊළඟ පියවර සැලසුම් කරමින්...",
-  "Running the selected tool...":
-    "තෝරාගත් මෙවලම ධාවනය කරමින්...",
-  "Checking the tool result...":
-    "මෙවලමේ ප්‍රතිඵලය පරීක්ෂා කරමින්...",
+  "Planning the next step...": "ඊළඟ පියවර සැලසුම් කරමින්...",
+  "Running the selected tool...": "තෝරාගත් මෙවලම ධාවනය කරමින්...",
+  "Checking the tool result...": "මෙවලමේ ප්‍රතිඵලය පරීක්ෂා කරමින්...",
   "A planner agent is splitting the request into steps...":
     "සැලසුම්කරු agent ඉල්ලීම පියවර වලට බෙදමින්...",
   "Correcting the plan after the review...":
     "සමාලෝචනයෙන් පසු සැලසුම නිවැරදි කරමින්...",
-  "Stopped. Nothing was changed.":
-    "නවත්වන ලදී. කිසිවක් වෙනස් කර නැත.",
+  "Stopped. Nothing was changed.": "නවත්වන ලදී. කිසිවක් වෙනස් කර නැත.",
   "The agent could not finish. Nothing was changed.":
     "Agent එකට අවසන් කළ නොහැකි විය. කිසිවක් වෙනස් කර නැත.",
-  "Describe what you want first.":
-    "මුලින්ම ඔබට අවශ්‍ය දේ විස්තර කරන්න.",
-  "Sign in first.":
-    "මුලින්ම පිවිසෙන්න.",
+  "Describe what you want first.": "මුලින්ම ඔබට අවශ්‍ය දේ විස්තර කරන්න.",
+  "Sign in first.": "මුලින්ම පිවිසෙන්න.",
   "The agent is working. Nothing changes until you approve.":
     "Agent වැඩ කරමින්. ඔබ අනුමත කරන තුරු කිසිවක් වෙනස් නොවේ.",
-  "Discarded. Nothing was changed.":
-    "ඉවත දමන ලදී. කිසිවක් වෙනස් කර නැත.",
-  "Applying the approved changes...":
-    "අනුමත වෙනස්කම් යොදමින්...",
+  "Discarded. Nothing was changed.": "ඉවත දමන ලදී. කිසිවක් වෙනස් කර නැත.",
+  "Applying the approved changes...": "අනුමත වෙනස්කම් යොදමින්...",
   "Applying failed. See Diagnostics.":
     "යෙදීම අසාර්ථක විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
-  "Verifying the applied result...":
-    "යෙදූ ප්‍රතිඵලය තහවුරු කරමින්...",
-  "Undoing the agent's changes...":
-    "Agent ගේ වෙනස්කම් ආපසු හරවමින්...",
+  "Verifying the applied result...": "යෙදූ ප්‍රතිඵලය තහවුරු කරමින්...",
+  "Undoing the agent's changes...": "Agent ගේ වෙනස්කම් ආපසු හරවමින්...",
   "Undone. The workbook is back as it was.":
     "ආපසු හැරවිණි. වැඩපොත කලින් පරිදිම ය.",
   "Undo did not finish. See Diagnostics.":
@@ -239,6 +226,12 @@ const EXACT: Record<string, string> = {
     "පිටපත් කළා. WhatsApp වෙත paste කරන්න; කිසිවක් යවා නැත.",
   "The summary could not be made. See Diagnostics.":
     "සාරාංශය සෑදිය නොහැකි විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
+  "Refreshing the preview for the current selection...":
+    "වත්මන් තේරීම සඳහා පෙරදසුන යළි සාදමින්...",
+  "A reviewer agent is checking ranges, formulas and totals...":
+    "සමාලෝචන agent එකක් පරාස, සූත්‍ර සහ එකතු පරීක්ෂා කරමින්...",
+  "A reviewer agent is checking that every part is covered and nothing is overwritten...":
+    "සමාලෝචන agent එකක් සෑම කොටසක්ම ආවරණය වී ඇති බවත් කිසිවක් උඩින් ලියා නැති බවත් පරීක්ෂා කරමින්...",
 };
 
 type Template = [RegExp, (...groups: string[]) => string];
@@ -255,7 +248,8 @@ const TEMPLATES: Template[] = [
   ],
   [
     /^The message could not be written \((.*)\)\. Write it yourself or try again\.$/,
-    (why) => `පණිවිඩය ලිවිය නොහැකි විය (${why}). ඔබම ලියන්න, නැතහොත් නැවත උත්සාහ කරන්න.`,
+    (why) =>
+      `පණිවිඩය ලිවිය නොහැකි විය (${why}). ඔබම ලියන්න, නැතහොත් නැවත උත්සාහ කරන්න.`,
   ],
   [
     /^Added the "(.+)" sheet \((\d+) fixed-date holidays\)\. Add Poya days from the gazette; delete the sheet to undo\.$/,
@@ -328,3 +322,5 @@ export function previewSummarySi(parts: {
     (parts.warnings.length ? ` ${parts.warnings.join(" ")}` : "")
   );
 }
+
+export const SINHALA_MESSAGE_KEYS = Object.keys(EXACT);

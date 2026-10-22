@@ -8,6 +8,8 @@ import { localizeMessage, translate, type Language } from "./i18n.js";
 export interface ChatViewOptions {
   document: Document;
   language: Language;
+  /** The language of the request in progress, for message text; labels keep `language`. */
+  textLanguage?: Language;
   store: ChatStore;
   messages: readonly ChatMessage[];
   instruction: HTMLTextAreaElement | null;
@@ -84,7 +86,10 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
           : "VynorAI";
     const body = document.createElement("span");
     body.className = "message-body";
-    body.textContent = localizeMessage(language, message.text);
+    body.textContent = localizeMessage(
+      options.textLanguage ?? language,
+      message.text,
+    );
     item.append(label, body);
     if (message.kind === "user" && index === messages.length - 1) {
       const tools = document.createElement("div");

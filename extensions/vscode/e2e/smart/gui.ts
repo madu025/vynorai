@@ -17,8 +17,43 @@ function e2eApiKey() {
   return process.env.VYNORAI_E2E_API_KEY || process.env.VYNOR_E2E_API_KEY || "";
 }
 
+/** True once the window title names the folder (VS Code puts the root name there). */
+async function windowShowsFolder(dir: string, timeoutMs: number) {
+  const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
+  let title = "";
+  try {
+    await retry(async () => {
+      title = await VSBrowser.instance.driver.getTitle();
+      if (!title.includes(name)) throw new Error("folder not open yet");
+    }, timeoutMs);
+    return true;
+  } catch {
+    console.log(`Folder ${name} is not open; window title is "${title}".`);
+    return false;
+  }
+}
+
 export async function openWorkspace(dir: string) {
   await VSBrowser.instance.openResources(dir);
+  // openResources runs the VS Code CLI, which does not always reach the window
+  // the driver controls (seen on Linux CI under Xvfb). Then open the folder
+  // through File > Open Folder; settings.json turns on the simple dialog.
+  if (!(await windowShowsFolder(dir, 20_000))) {
+    await retry(async () => {
+      await new Workbench().executeCommand("File: Open Folder...");
+      // The simple dialog is a quick input: type the path, then accept it. The
+      // first Enter can only step into the folder, so accept again if it stays.
+      const input = await InputBox.create(10_000);
+      await input.setText(dir);
+      await input.confirm();
+      await sleep(1_500);
+      const still = await InputBox.create(2_000).catch(() => undefined);
+      if (still && (await still.isDisplayed().catch(() => false)))
+        await still.confirm();
+    }, 30_000);
+    if (!(await windowShowsFolder(dir, 60_000)))
+      throw new Error(`Could not open the folder ${dir}`);
+  }
   // Opening a folder can leave the command-palette input in a transient
   // non-interactable state on Windows. Clearing notifications is only test
   // hygiene, so do not fail the suite before sign-in if that cleanup command

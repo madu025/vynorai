@@ -53,7 +53,7 @@ describe("SwarmCommand", () => {
       input: "/swarm status",
       history: [],
       contextItems: [],
-      params: undefined,
+      params: { skipGitCheckForTesting: true }, // the fake folder is not a git repo
       addContextItem: vi.fn(),
       selectedCode: [],
       abortController,
@@ -91,7 +91,7 @@ describe("SwarmCommand", () => {
       input: "/swarm run",
       history: [],
       contextItems: [],
-      params: undefined,
+      params: { skipGitCheckForTesting: true }, // the fake folder is not a git repo
       addContextItem: vi.fn(),
       selectedCode: [],
       abortController,

@@ -426,9 +426,10 @@ describe("isRecommendedAgentModel", () => {
       expect(isRecommendedAgentModel("deepseek-reasoner")).toBe(true);
     });
 
-    it("should return false for non-reasoner DeepSeek models", () => {
-      expect(isRecommendedAgentModel("deepseek-chat")).toBe(false);
-      expect(isRecommendedAgentModel("deepseek-coder")).toBe(false);
+    // VynorAI runs its agent on DeepSeek, so every DeepSeek model is recommended.
+    it("should return true for non-reasoner DeepSeek models", () => {
+      expect(isRecommendedAgentModel("deepseek-chat")).toBe(true);
+      expect(isRecommendedAgentModel("deepseek-coder")).toBe(true);
     });
   });
 

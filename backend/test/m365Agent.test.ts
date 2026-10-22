@@ -53,6 +53,8 @@ test("one agent turn sends the fixed prompt and tools first, then the conversati
   assert.equal(reply.tool_calls[0].function.name, "get_workbook");
   assert.equal(seen.messages[0].content, AGENT_SYSTEM_PROMPT);
   assert.match(seen.messages[1].content, /Sinhala/);
+  // Words the agent writes on the sheet follow the person's language too.
+  assert.match(seen.messages[1].content, /chart titles .* in Sinhala/);
   assert.equal(seen.messages[2].role, "user");
   assert.equal(seen.tools, AGENT_TOOLS);
 });

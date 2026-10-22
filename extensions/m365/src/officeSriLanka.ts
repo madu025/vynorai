@@ -11,6 +11,8 @@ import {
   HOLIDAY_TABLE,
   holidaySheetRows,
 } from "./sriLanka.js";
+import type { PayrollPlan, PayrollStyle } from "./payroll.js";
+import { guardText } from "./textGuard.js";
 
 const columnLetter = (index: number) => String.fromCharCode(65 + index);
 
@@ -109,8 +111,148 @@ export async function writeHolidaySheet(
         "Sri Lanka holidays for NETWORKDAYS and WORKDAY",
       );
       sheet.getRange("A:C").format.autofitColumns?.();
-      await context.sync();
+      try {
+        await context.sync();
+      } catch (error) {
+        await removeHalfMade(context, HOLIDAY_SHEET, HOLIDAY_NAME);
+        throw error;
+      }
       return { ok: true as const, rows: plan.rows.length };
+    });
+  } catch (error) {
+    return { ok: false, error: String((error as Error)?.message ?? error) };
+  }
+}
+
+/** True when the host supports an ExcelApi requirement set; unknown hosts count as no. */
+function excelApiSupported(version: string): boolean {
+  const office = (globalThis as any).Office;
+  return Boolean(
+    office?.context?.requirements?.isSetSupported?.("ExcelApi", version),
+  );
+}
+
+/**
+ * After a failed batch, removes the sheet (and workbook name) this call added, so the person is
+ * never left with a half-made sheet. The sheet did not exist before, so whatever is there is ours.
+ */
+async function removeHalfMade(
+  context: any,
+  sheetName: string,
+  workbookName?: string,
+): Promise<void> {
+  try {
+    const sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
+    sheet.load("isNullObject");
+    const name = workbookName
+      ? context.workbook.names.getItemOrNullObject(workbookName)
+      : undefined;
+    name?.load("isNullObject");
+    await context.sync();
+    if (name && !name.isNullObject) name.delete();
+    if (!sheet.isNullObject) sheet.delete();
+    await context.sync();
+  } catch {
+    // The original error is the one the person needs to see.
+  }
+}
+
+const PAYROLL_STYLE: Record<PayrollStyle, (range: any) => void> = {
+  title: (range) => {
+    range.format.font.bold = true;
+    range.format.font.size = 14;
+  },
+  note: (range) => {
+    range.format.font.italic = true;
+    range.format.font.color = "#595959";
+  },
+  section: (range) => {
+    range.format.font.bold = true;
+  },
+  header: (range) => {
+    range.format.font.bold = true;
+    range.format.fill.color = "#DEEAF6";
+    range.format.wrapText = true;
+  },
+  body: () => {},
+  total: (range) => {
+    range.format.font.bold = true;
+    try {
+      range.format.borders.getItem("EdgeTop").style = "Continuous";
+    } catch {
+      // A host without borders keeps the bold line.
+    }
+  },
+  label: () => {},
+};
+
+/**
+ * Adds a payroll sheet from buildPayrollPlan (payroll.ts): formulas as formulas, every other cell
+ * as a value, so a name or ID that starts with "=" or holds leading zeros stays text. Refuses when
+ * a sheet of that name exists, so a month already worked on is never overwritten. The sheet is
+ * marked as a VynorAI result; deleting it undoes the whole change.
+ */
+export async function writePayrollSheet(
+  runtime: any,
+  plan: PayrollPlan,
+): Promise<{ ok: true; sheet: string } | { ok: false; error: string }> {
+  if (typeof runtime?.run !== "function")
+    return { ok: false, error: "EXCEL_API_UNAVAILABLE" };
+  try {
+    return await runtime.run(async (context: any) => {
+      const existing = context.workbook.worksheets.getItemOrNullObject(
+        plan.sheet,
+      );
+      existing.load("isNullObject");
+      await context.sync();
+      if (!existing.isNullObject)
+        return { ok: false as const, error: "PAYROLL_SHEET_EXISTS" };
+      const sheet = context.workbook.worksheets.add(plan.sheet);
+      // Older Excel has no sheet properties; the sheet is still a normal sheet the person can delete.
+      if (excelApiSupported("1.12"))
+        sheet.customProperties.add("vynorai", "result");
+      for (const block of plan.blocks) {
+        const range = sheet.getRangeByIndexes(
+          block.row - 1,
+          block.col - 1,
+          block.cells.length,
+          block.cells[0].length,
+        );
+        if (block.formats?.some(Boolean))
+          range.numberFormat = block.cells.map((row) =>
+            row.map((_, column) => block.formats?.[column] || "General"),
+          );
+        range.formulas = block.cells.map((row) =>
+          row.map((cell) => {
+            if (typeof cell === "object") return cell.f;
+            if (typeof cell !== "string") return cell;
+            const safe = guardText(cell);
+            return typeof safe === "string" && /^[=+\-@]/.test(safe)
+              ? `'${safe}`
+              : safe;
+          }),
+        );
+        PAYROLL_STYLE[block.style](range);
+      }
+      sheet.freezePanes?.freezeRows?.(4);
+      const height = Math.max(
+        ...plan.blocks.map((block) => block.row + block.cells.length - 1),
+      );
+      // Autofit from the header row down, so the long title and note do not widen column A.
+      sheet.getRangeByIndexes(3, 0, height - 3, 18).format.autofitColumns?.();
+      // Columns Q and R hold long notes and sources: a fixed width with wrapping.
+      const notes = sheet.getRangeByIndexes(0, 16, height, 2);
+      notes.format.columnWidth = 220;
+      notes.format.wrapText = true;
+      sheet.getRange("A1:A2").format.wrapText = false;
+      sheet.activate?.();
+      try {
+        await context.sync();
+      } catch (error) {
+        await removeHalfMade(context, plan.sheet);
+        throw error;
+      }
+      return { ok: true as const, sheet: plan.sheet };
     });
   } catch (error) {
     return { ok: false, error: String((error as Error)?.message ?? error) };

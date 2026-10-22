@@ -81,13 +81,20 @@ describe("instruction files beyond the project root", () => {
   it("never reads above the home folder or at the filesystem root", async () => {
     const { ancestorDirs } = await import("./loadInstructionFiles");
     const dirs = ancestorDirs(pathToFileURL(project).href);
-    const home = path.resolve(os.homedir());
     expect(dirs.length).toBeLessThanOrEqual(4);
     for (const dir of dirs) {
       expect(path.dirname(dir)).not.toBe(dir); // not a root
-      expect(dir === home || dir.startsWith(home + path.sep)).toBe(true);
     }
     expect(dirs.at(-1)).toBe(inner); // closest ancestor last
+
+    // The temp folder is inside home on Windows but not on Linux (/tmp), so
+    // check the home limit on a path under home. This is path math only.
+    const home = path.resolve(os.homedir());
+    const underHome = path.join(home, "work", "project");
+    expect(ancestorDirs(pathToFileURL(underHome).href)).toEqual([
+      home,
+      path.join(home, "work"),
+    ]);
   });
 
   it("ignores an empty local file", async () => {

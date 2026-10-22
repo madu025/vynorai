@@ -27,6 +27,7 @@ export interface OutcomeChart {
   type: string;
   categories: string[];
   series: Array<{ name: string; values: number[] }>;
+  showDataLabels?: boolean;
 }
 
 export interface OutcomeTable {
@@ -260,6 +261,7 @@ export function buildOutcomes(
           name: String(headers[index] ?? `Column ${index + 1}`),
           values: slice.map((row) => numeric(row[index])),
         })),
+        ...(spec.showDataLabels ? { showDataLabels: true } : {}),
       };
       const names = item.chart.series.map((entry) => entry.name).join(", ");
       const by = headers[categoryIndex] ?? "";

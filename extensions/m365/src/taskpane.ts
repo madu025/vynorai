@@ -355,6 +355,8 @@ let lastSample: { totalRows: number; sampledRows: number } | undefined;
 let applyStartedAt = 0;
 let pendingSpecs: ExcelColumnSpecs | undefined;
 let refreshPreviewSummary: (() => void) | undefined;
+let confirmedPreviewText = "";
+let confirmedPreviewSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
 let lastCreated:
   | { planId: string; sheets: string[]; tables: string[]; names: string[] }
@@ -560,6 +562,8 @@ function resetWorkingState() {
   currentPlan = undefined;
   previewFingerprint = "";
   previewSpecs = undefined;
+  confirmedPreviewText = "";
+  confirmedPreviewSpecs = undefined;
   lastAppliedSpecs = undefined;
   followUpAggregate = false;
   lastConversationRequest = "";
@@ -1718,6 +1722,8 @@ instruction?.addEventListener("input", () => {
   excludedKinds = new Set<string>();
   currentPlan = undefined;
   previewFingerprint = "";
+  confirmedPreviewText = "";
+  confirmedPreviewSpecs = undefined;
   lastConversationRequest = "";
   useBuiltInReader = false;
   if (dupFix) dupFix.hidden = true;
@@ -2200,6 +2206,7 @@ inspect?.addEventListener("click", async () => {
         : "server and local plans differ; apply is blocked",
     );
     if (!consistent) {
+      restoreConfirmedPreview();
       setStatus(
         "The server preview does not match the selection. See Diagnostics.",
       );
@@ -2221,6 +2228,10 @@ inspect?.addEventListener("click", async () => {
         null,
         2,
       );
+    confirmedPreviewText = preview?.textContent ?? "";
+    confirmedPreviewSpecs = previewSpecs
+      ? (JSON.parse(JSON.stringify(previewSpecs)) as ExcelColumnSpecs)
+      : undefined;
     // Keep the visible preview in sync with the plan before the next paint. The
     // MutationObserver below remains useful for external preview updates, but it
     // is asynchronous and could briefly leave a stale Column/Line chart visible
@@ -2260,6 +2271,7 @@ inspect?.addEventListener("click", async () => {
   } catch (error) {
     previewController.finish(previewRun);
     if (isStale()) return;
+    restoreConfirmedPreview();
     handleApiError("inspect", error);
   } finally {
     previewController.finish(previewRun);
@@ -3470,6 +3482,63 @@ function drawChart(chart: OutcomeChart): SVGElement {
       });
     });
   };
+  const drawStackedHorizontalBars = () => {
+    const rowHeight = (height - pad * 2) / Math.max(1, chart.categories.length);
+    chart.categories.forEach((_, at) => {
+      const total = Math.max(
+        1,
+        chart.series.reduce(
+          (sum, entry) => sum + Math.max(0, Number(entry.values[at] ?? 0)),
+          0,
+        ),
+      );
+      let offset = 0;
+      chart.series.forEach((entry, index) => {
+        const value = Math.max(0, Number(entry.values[at] ?? 0));
+        const segmentWidth = (value / total) * (width - pad * 2);
+        add("rect", {
+          x: String(pad + offset),
+          y: String(pad + rowHeight * at + rowHeight * 0.12),
+          width: String(Math.max(1, segmentWidth)),
+          height: String(Math.max(1, rowHeight * 0.76)),
+          fill: PALETTE[index % PALETTE.length],
+        });
+        offset += segmentWidth;
+      });
+    });
+  };
+  const drawHistogram = () => {
+    const values = chart.series[0]?.values ?? [];
+    if (!values.length) return;
+    const lower = Math.min(...values);
+    const upper = Math.max(...values);
+    const binCount = Math.max(
+      3,
+      Math.min(8, Math.ceil(Math.sqrt(values.length))),
+    );
+    const span = Math.max(1, upper - lower);
+    const counts = Array.from({ length: binCount }, () => 0);
+    values.forEach((value) => {
+      const bin = Math.min(
+        binCount - 1,
+        Math.floor(((value - lower) / span) * binCount),
+      );
+      counts[bin] += 1;
+    });
+    const peak = Math.max(1, ...counts);
+    counts.forEach((count, at) => {
+      const barWidth = ((width - pad * 2) / binCount) * 0.82;
+      const x = pad + ((width - pad * 2) / binCount) * at + barWidth * 0.1;
+      const top = height - pad - (count / peak) * (height - pad * 2);
+      add("rect", {
+        x: String(x),
+        y: String(top),
+        width: String(barWidth),
+        height: String(Math.max(1, height - pad - top)),
+        fill: PALETTE[0],
+      });
+    });
+  };
   if (type === "line") chart.series.forEach(drawLineSeries);
   else if (type === "area") {
     chart.series.forEach((entry, index) => {
@@ -3490,6 +3559,8 @@ function drawChart(chart: OutcomeChart): SVGElement {
     drawColumns(false, true);
     chart.series.slice(1).forEach(drawLineSeries);
   } else if (type === "stacked-column") drawColumns(true);
+  else if (type === "stacked-bar") drawStackedHorizontalBars();
+  else if (type === "histogram") drawHistogram();
   else if (type === "waterfall") {
     const series = chart.series[0];
     let running = 0;
@@ -3526,6 +3597,37 @@ function drawChart(chart: OutcomeChart): SVGElement {
       angle = nextAngle;
     });
   } else drawColumns(false);
+  if (chart.showDataLabels && type !== "pie" && type !== "histogram") {
+    chart.series.forEach((entry, index) =>
+      entry.values.forEach((value, at) => {
+        const text = add("text", {
+          x: String(
+            type === "bar" || type === "stacked-bar"
+              ? pad +
+                  Math.max(
+                    2,
+                    (Math.abs(value) / Math.max(1, max)) * (width - pad * 2),
+                  )
+              : pad + step * (at + 0.5),
+          ),
+          y: String(
+            type === "bar" || type === "stacked-bar"
+              ? pad +
+                  ((height - pad * 2) / Math.max(1, chart.categories.length)) *
+                    at +
+                  10
+              : Math.max(10, y(value) - 4),
+          ),
+          "text-anchor":
+            type === "bar" || type === "stacked-bar" ? "start" : "middle",
+          "font-size": "7",
+          fill: "#374151",
+        });
+        text.textContent = Number(value).toLocaleString("en-US");
+        void index;
+      }),
+    );
+  }
   chart.categories.forEach((name, at) => {
     const label = add("text", {
       x: String(pad + step * (at + 0.5)),
@@ -3676,6 +3778,15 @@ function renderPendingPreviewSpecs(specs: ExcelColumnSpecs) {
   refreshPreviewSummary?.();
 }
 
+function restoreConfirmedPreview() {
+  if (!preview || !confirmedPreviewText) return;
+  previewSpecs = confirmedPreviewSpecs
+    ? (JSON.parse(JSON.stringify(confirmedPreviewSpecs)) as ExcelColumnSpecs)
+    : undefined;
+  preview.textContent = confirmedPreviewText;
+  refreshPreviewSummary?.();
+}
+
 type TweakSelect = HTMLSelectElement | null;
 const tweakChartType =
   document.querySelector<HTMLSelectElement>("#tweak-chart-type");
@@ -3733,6 +3844,7 @@ function configurePreviewTweaks(actions: any[]) {
     ["histogram", "Histogram"],
     ["waterfall", "Waterfall"],
     ["stacked-column", "Stacked column"],
+    ["stacked-bar", "Stacked bar"],
   ].map(([value, label]) => ({ value, label }));
   setTweakOptions(tweakChartType, chartTypes, chart?.chartType ?? "column");
   setTweakOptions(
@@ -3772,7 +3884,9 @@ function configurePreviewTweaks(actions: any[]) {
 
 function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
   // Only a live, unapplied preview can be adjusted; never re-plan after an apply.
-  if (!currentPlan) return;
+  // currentPlan is intentionally cleared as soon as a re-plan starts. Do not
+  // reject a second tweak made while the first one is still being checked.
+  if (!previewSpecs || !preview || !previewFingerprint) return;
   const next: ExcelColumnSpecs = {
     ...previewSpecs,
     ...(previewSpecs?.chart ? { chart: { ...previewSpecs.chart } } : {}),

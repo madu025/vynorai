@@ -6,7 +6,7 @@
 import { isMoneyHeader } from "./businessContext.js";
 import { shortAmount, type NumberStyle } from "./sriLanka.js";
 
-type Cell = string | number | boolean | null | undefined;
+export type Cell = string | number | boolean | null | undefined;
 
 export interface WhatsAppSummaryOptions {
   sheet: string;
@@ -15,6 +15,8 @@ export interface WhatsAppSummaryOptions {
   style?: NumberStyle;
   /** Date shown under the title. */
   date?: Date;
+  /** Replaces the closing "From the sheet" line, for data that did not come from a sheet. */
+  footer?: string;
 }
 
 export const WHATSAPP_MAX = 1000;
@@ -45,13 +47,13 @@ const isScriptLabel = (cell: Cell, below: Cell) =>
 const COUNT_LABEL = /^(RECORDS|COUNT\b|වාර්තා ගණන|பதிவுகள்)|(ගණන|எண்ணிக்கை)$/i;
 
 /** WhatsApp formatting characters in cell text would change the message; they are removed. */
-const clean = (text: string) =>
+export const clean = (text: string) =>
   text
     .replace(/[*_~`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
-function figure(
+export function figure(
   label: string,
   value: Cell,
   options: WhatsAppSummaryOptions,
@@ -66,7 +68,7 @@ function figure(
     : amount;
 }
 
-const titleCase = (label: string) =>
+export const titleCase = (label: string) =>
   clean(label)
     .toLowerCase()
     .replace(
@@ -77,7 +79,7 @@ const titleCase = (label: string) =>
     .replace(/\bTo\b/g, "to");
 
 /** KPI cards: a row of capital labels with a value under each. */
-function findCards(
+export function findCards(
   values: Cell[][],
 ): { row: number; cards: Array<[string, Cell]> } | undefined {
   for (let r = 0; r < Math.min(values.length - 1, 12); r += 1) {
@@ -96,7 +98,7 @@ function findCards(
 }
 
 /** A breakdown: a header row, then rows of (name, number) up to a blank or a total row. */
-function findBreakdown(values: Cell[][], from: number) {
+export function findBreakdown(values: Cell[][], from: number) {
   for (let r = from; r < values.length - 2; r += 1) {
     for (let c = 0; c < Math.min(values[r].length - 1, 20); c += 1) {
       const header = values[r];
@@ -168,7 +170,10 @@ export function whatsappSummary(
       if (lines.length >= 12) break;
     }
   }
-  lines.push("", `From the "${clean(options.sheet)}" sheet (VynorAI)`);
+  lines.push(
+    "",
+    options.footer ?? `From the "${clean(options.sheet)}" sheet (VynorAI)`,
+  );
   let text = lines.join("\n");
   if (text.length > WHATSAPP_MAX) text = `${text.slice(0, WHATSAPP_MAX - 2)}…`;
   return text;

@@ -160,6 +160,10 @@ const EXACT: Record<string, string> = {
   view: "පෙරහන් කළ දසුන",
   "lookup-columns": "Lookup columns",
   "Create a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
+  "No numbers found there. Pick or paste cells with a header row and a number column.":
+    "එහි අංක කිසිවක් හමු වුණේ නැත. ශීර්ෂ පේළියක් සහ අංක තීරුවක් සහිත කොටු තෝරන්න හෝ අලවන්න.",
+  "The card could not be made. See Diagnostics.":
+    "කාඩ්පත සෑදිය නොහැකි විය. Diagnostics බලන්න.",
   "Make a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
   "Nothing was sent to AI.": "AI වෙත කිසිවක් යවා නැත.",
   "Writing the message...": "පණිවිඩය ලියමින්...",

@@ -165,6 +165,10 @@ const EXACT: Record<string, string> = {
   view: "வடிகட்டிய காட்சி",
   "lookup-columns": "Lookup columns",
   "Create a report first.": "முதலில் ஓர் அறிக்கையை உருவாக்கவும்.",
+  "No numbers found there. Pick or paste cells with a header row and a number column.":
+    "அங்கு எண்கள் எதுவும் இல்லை. தலைப்பு வரிசையும் எண் நெடுவரிசையும் உள்ள கலங்களைத் தேர்ந்தெடுக்கவும் அல்லது ஒட்டவும்.",
+  "The card could not be made. See Diagnostics.":
+    "அட்டையை உருவாக்க முடியவில்லை. Diagnostics-ஐப் பாருங்கள்.",
   "Make a report first.": "முதலில் ஓர் அறிக்கையை உருவாக்கவும்.",
   "Nothing was sent to AI.": "AI-க்கு எதுவும் அனுப்பப்படவில்லை.",
   "Writing the message...": "செய்தியை எழுதுகிறது...",

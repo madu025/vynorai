@@ -676,6 +676,34 @@ export function readExcelReportValues(
   });
 }
 
+/** Reads the values of the selected cells (bounded) for the share card; nothing is written. */
+export function readSelectedExcelValues(
+  maxRows = 200,
+  maxColumns = 30,
+): Promise<{ values: any[][]; sheet: string; truncated: boolean }> {
+  const runtime = (globalThis as any).Excel;
+  if (typeof runtime?.run !== "function")
+    return Promise.reject(new Error("EXCEL_API_UNAVAILABLE"));
+  return runtime.run(async (context: any) => {
+    const selected = context.workbook.getSelectedRange();
+    selected.load(["rowCount", "columnCount"]);
+    selected.worksheet.load("name");
+    await context.sync();
+    const rows = Math.min(maxRows, Number(selected.rowCount));
+    const columns = Math.min(maxColumns, Number(selected.columnCount));
+    const range = selected.getCell(0, 0).getResizedRange(rows - 1, columns - 1);
+    range.load("values");
+    await context.sync();
+    return {
+      values: (range.values ?? []) as any[][],
+      sheet: String(selected.worksheet.name),
+      truncated:
+        Number(selected.rowCount) > rows ||
+        Number(selected.columnCount) > columns,
+    };
+  });
+}
+
 /** Gets up to three report charts as base64 JPEG images for an HTML email body. */
 export function readExcelChartImages(
   sheetName: string,

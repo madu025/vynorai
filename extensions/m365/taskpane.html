@@ -1381,11 +1381,6 @@
       .analysis-recommendation p {
         margin: 0 0 7px;
       }
-      #whatsapp-note {
-        padding: 10px;
-        border: 1px solid var(--line);
-        background: var(--surface-muted);
-      }
       #insights-card > summary,
       #prefs-card > summary {
         cursor: pointer;
@@ -1971,6 +1966,16 @@
           animation-iteration-count: 1 !important;
         }
       }
+      #share-card-img {
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--border, #dde1ea);
+        border-radius: 12px;
+      }
+      #share-paste {
+        width: 100%;
+        min-height: 44px;
+      }
     </style>
   </head>
   <body>
@@ -2541,6 +2546,60 @@
               <div id="result-gallery-list"></div>
             </section>
           <section
+            id="share-card"
+            class="card"
+            data-workspace-panel="share"
+            aria-labelledby="share-card-heading"
+          >
+            <div class="card-head">
+              <h2 id="share-card-heading" data-i18n="share_card_title">
+                Share as a picture
+              </h2>
+              <span class="badge" data-i18n="on_device">on this device</span>
+            </div>
+            <p id="share-card-note" data-i18n="share_card_note">
+              The card is built from your latest result, the selected cells or
+              cells you paste. Nothing leaves this device until you press Share.
+            </p>
+            <div class="email-options">
+              <button
+                type="button"
+                id="share-use-result"
+                data-i18n="share_use_result"
+              >
+                Latest result
+              </button>
+              <button
+                type="button"
+                id="share-use-selection"
+                data-i18n="share_use_selection"
+              >
+                Selected cells
+              </button>
+            </div>
+            <label for="share-paste"
+              ><span data-i18n="share_paste_label"
+                >Or paste cells copied from Excel</span
+              ><textarea
+                id="share-paste"
+                rows="2"
+                maxlength="60000"
+                placeholder="Ctrl+V"
+              ></textarea>
+            </label>
+            <img id="share-card-img" alt="" hidden />
+            <button
+              id="share-main"
+              class="primary"
+              type="button"
+              disabled
+              data-i18n="share_button"
+            >
+              Share
+            </button>
+            <p id="share-card-status" class="delivery-status" role="status"></p>
+          </section>
+          <section
               id="email-card"
               class="card"
               data-workspace-panel="share"
@@ -2665,14 +2724,6 @@
                 <p id="email-delivery-status" class="delivery-status" role="status">
                   Not sent yet · approval required
                 </p>
-                <button
-                  id="whatsapp-copy"
-                  type="button"
-                  data-i18n="copy_whatsapp"
-                >
-                  Copy summary for WhatsApp
-                </button>
-                <pre id="whatsapp-note" class="muted" hidden></pre>
                 <p id="email-draft-fallback" hidden>
                   <a
                     id="email-draft-link"

@@ -37,7 +37,11 @@ settings: currency, lakh or million style, financial year start, audience, chang
 the request and sent to the agent as one per-request line), `extensions/m365/src/changeLog.ts` (rows of the
 "VynorAI Log" sheet: every apply and undo), `extensions/m365/src/privacyReceipt.ts` (what an agent request
 sent, masked values counted, unmasked e-mail/phone/NIC flagged), `extensions/m365/src/whatsappSummary.ts`
-(a report sheet's KPI cards and top rows as a message to paste) and the Office writers in
+(a report sheet's KPI cards and top rows as a message to paste), the Share tab's one-button share:
+`extensions/m365/src/shareCard.ts` (pure: pasted Excel cells to a grid, and a result sheet, selection or paste to
+a card with tiles, bars, headline and message in en/si/ta), `extensions/m365/src/shareCardCanvas.ts` (draws the
+card as a PNG), `extensions/m365/src/shareDelivery.ts` (phone share sheet, else clipboard image plus text for
+WhatsApp Web or Desktop; nothing is sent automatically), `readSelectedExcelValues` in `officeExcel.ts`, and the Office writers in
 `extensions/m365/src/officeSriLanka.ts` (log sheet append, "LK Holidays" sheet and name, payroll sheet).
 The payroll template is `extensions/m365/src/payroll.ts` (a "Payroll YYYY-MM" sheet: employee rows copied
 from a selected staff list or left blank, live formulas for gross pay, EPF 8%/12%, ETF 3%, APIT from the

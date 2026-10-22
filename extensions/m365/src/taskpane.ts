@@ -189,6 +189,7 @@ import {
   readExcelWorkbookBase64,
   readExcelPdfBase64,
   readExcelReportValues,
+  readSelectedExcelValues,
   readExcelChartImages,
   readLookupSheetInfo,
   listWorksheetNames,
@@ -230,7 +231,17 @@ import {
   describePrivacyReceipt,
 } from "./privacyReceipt.js";
 import { currencyGuessFor } from "./businessContext.js";
-import { whatsappSummary } from "./whatsappSummary.js";
+import {
+  buildShareCard,
+  parsePastedCells,
+  type ShareCard,
+} from "./shareCard.js";
+import { canvasToBlob, drawShareCard } from "./shareCardCanvas.js";
+import {
+  browserShareEnv,
+  deliverShare,
+  shareOutcomeText,
+} from "./shareDelivery.js";
 import {
   chooseSmartPath,
   selectionBadges,
@@ -5788,43 +5799,112 @@ document
   .querySelector("#prefs-payroll")
   ?.addEventListener("click", () => void offerPayroll(""));
 
-const whatsappNote = document.querySelector<HTMLElement>("#whatsapp-note");
+/* Share card: one Share button for the latest result, the selected cells or pasted cells. */
+const shareImage = document.querySelector<HTMLImageElement>("#share-card-img");
+const shareMain = document.querySelector<HTMLButtonElement>("#share-main");
+const shareStatus = document.querySelector<HTMLElement>("#share-card-status");
+const sharePaste = document.querySelector<HTMLTextAreaElement>("#share-paste");
+let shareState: { card: ShareCard; blob: Blob | null } | undefined;
+
+function setShareStatus(message: string) {
+  if (shareStatus) shareStatus.textContent = message;
+}
+
+async function showShareCard(
+  values: any[][],
+  sheet: string,
+  source: "sheet" | "pasted" | "selection",
+) {
+  const currency = workbookPrefs.currency
+    ? currencyGuessFor(workbookPrefs.currency, "preference")
+    : undefined;
+  const card = buildShareCard(values, {
+    sheet,
+    source,
+    language: textLanguage(),
+    ...(currency ? { symbol: currency.symbol } : {}),
+    ...(workbookPrefs.numberStyle ? { style: workbookPrefs.numberStyle } : {}),
+  });
+  if (card.kind === "empty") {
+    shareState = undefined;
+    if (shareImage) shareImage.hidden = true;
+    if (shareMain) shareMain.disabled = true;
+    return setShareStatus(
+      localizeMessage(
+        textLanguage(),
+        "No numbers found there. Pick or paste cells with a header row and a number column.",
+      ),
+    );
+  }
+  const canvas = drawShareCard(card);
+  shareState = { card, blob: await canvasToBlob(canvas) };
+  if (shareImage) {
+    shareImage.src = canvas.toDataURL("image/png");
+    shareImage.alt = card.title;
+    shareImage.hidden = false;
+  }
+  if (shareMain) shareMain.disabled = false;
+  setShareStatus("");
+}
+
+async function shareFromResult() {
+  const sheet = lastRevealSheet || currentSourceSheet;
+  if (!sheet)
+    return setShareStatus(
+      localizeMessage(textLanguage(), "Make a report first."),
+    );
+  try {
+    const report = await readExcelReportValues(sheet, 60, 30);
+    await showShareCard(report.values, sheet, "sheet");
+  } catch (error) {
+    log.record("share:card", "fail", describeError(error));
+    setShareStatus(
+      localizeMessage(
+        textLanguage(),
+        "The card could not be made. See Diagnostics.",
+      ),
+    );
+  }
+}
+
 document
-  .querySelector("#whatsapp-copy")
+  .querySelector("#share-use-result")
+  ?.addEventListener("click", () => void shareFromResult());
+document
+  .querySelector("#share-use-selection")
   ?.addEventListener("click", async () => {
-    const sheet = lastRevealSheet || currentSourceSheet;
-    if (!sheet) return setStatus("Make a report first.");
     try {
-      const report = await readExcelReportValues(sheet, 60, 30);
-      const currency = workbookPrefs.currency
-        ? currencyGuessFor(workbookPrefs.currency, "preference")
-        : undefined;
-      const text = whatsappSummary(report.values, {
-        sheet,
-        ...(currency ? { symbol: currency.symbol } : {}),
-        ...(workbookPrefs.numberStyle
-          ? { style: workbookPrefs.numberStyle }
-          : {}),
-      });
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        const area = document.createElement("textarea");
-        area.value = text;
-        document.body.appendChild(area);
-        area.select();
-        document.execCommand("copy");
-        area.remove();
-      }
-      if (whatsappNote) {
-        whatsappNote.hidden = false;
-        whatsappNote.textContent = text;
-      }
-      setStatus("Copied. Paste it into WhatsApp; nothing was sent.");
+      const selected = await readSelectedExcelValues(60, 30);
+      await showShareCard(selected.values, selected.sheet, "selection");
     } catch (error) {
-      log.record("whatsapp:copy", "fail", describeError(error));
-      setStatus("The summary could not be made. See Diagnostics.");
+      log.record("share:card", "fail", describeError(error));
+      setShareStatus(
+        localizeMessage(
+          textLanguage(),
+          "The card could not be made. See Diagnostics.",
+        ),
+      );
     }
   });
+sharePaste?.addEventListener("input", () => {
+  const text = sharePaste.value;
+  if (text.trim()) void showShareCard(parsePastedCells(text), "", "pasted");
+});
+document
+  .querySelector('#workspace-nav [data-workspace-target="share"]')
+  ?.addEventListener("click", () => {
+    if (!shareState && (lastRevealSheet || currentSourceSheet))
+      void shareFromResult();
+  });
+shareMain?.addEventListener("click", async () => {
+  if (!shareState) return;
+  const outcome = await deliverShare(
+    shareState.blob,
+    shareState.card.message,
+    browserShareEnv(),
+  );
+  log.record("share:deliver", outcome === "failed" ? "fail" : "pass", outcome);
+  setShareStatus(shareOutcomeText(outcome, textLanguage()));
+});
 
 void initialize();

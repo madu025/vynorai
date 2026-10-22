@@ -313,10 +313,29 @@ const EXACT: Record<string, string> = {
     "Agent (முன்னோட்டம்): அணைந்துள்ளது (இயக்க கிளிக் செய்யவும்)",
 };
 
+/** The second half of a team sentence from describeReview. */
+function tail(rest: string): string {
+  if (rest === "worked on this.") return "இதில் பணியாற்றினர்.";
+  if (rest === "checked the plan: no problems found.") return "திட்டத்தைச் சரிபார்த்தனர்: சிக்கல்கள் இல்லை.";
+  const corrected = /^checked the plan and found (\d+) problem\(s\); the plan was corrected\.$/.exec(rest);
+  if (corrected) return ((n) => `திட்டத்தைச் சரிபார்த்து ${n} சிக்கல்கள் கண்டறிந்து, திட்டம் திருத்தப்பட்டது.`)(corrected[1]);
+  const found = /^checked the plan and found: (.+)$/.exec(rest);
+  if (found) return ((what) => `திட்டத்தைச் சரிபார்த்து கண்டறிந்தது: ${what}`)(found[1]);
+  return rest;
+}
+
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
-  [/^Team: (.+)$/, (what) => `குழு: ${what}`],
+  [/^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/, (n, c) => `சுமார் ${n} டோக்கன்கள் பயன்படுத்தப்பட்டன (உள்ளீட்டில் ${c}% cache இலிருந்து).`],
+  [/^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/, (a, b, rest) => `திட்டமிடுபவர் (${a} படிகள்), உருவாக்குபவர் மற்றும் ${b} மதிப்பாய்வாளர்கள் ${tail(rest)}`],
+  [/^(\d+) agents (.+)$/, (n, rest) => `${n} agents ${tail(rest)}`],
+  [
+    /^Sent to the AI: ([\d,]+) characters(?:; (\d+) personal value\(s\) replaced with tokens, and put back only here|(; no personal values found to replace))\.(.*)$/,
+    (chars, n, none, rest) => ((chars, how, rest) => `AI க்கு அனுப்பியது: ${chars} எழுத்துகள்${how === "none" ? "; மாற்ற வேண்டிய தனிப்பட்ட மதிப்புகள் இல்லை" : `; ${how} தனிப்பட்ட மதிப்புகள் tokens ஆக மாற்றப்பட்டு, இங்கு மட்டுமே திரும்ப வைக்கப்படும்`}.${rest}`)(chars, none ? "none" : n, rest),
+  ],
+
+  [/^Team: (.+)$/, (what) => `குழு: ${localizeMessageTa(what)}`],
 
   [/^(\d+) staged change\(s\)$/, (n) => `${n} தயார் செய்யப்பட்ட மாற்றங்கள்`],
   [/^(\d+) plan step\(s\)$/, (n) => `${n} திட்டப் படிகள்`],

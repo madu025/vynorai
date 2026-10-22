@@ -304,10 +304,29 @@ const EXACT: Record<string, string> = {
     "Agent (පෙරදසුන): අක්‍රීයයි (සක්‍රීය කිරීමට ක්ලික් කරන්න)",
 };
 
+/** The second half of a team sentence from describeReview. */
+function tail(rest: string): string {
+  if (rest === "worked on this.") return "මේ සඳහා වැඩ කළා.";
+  if (rest === "checked the plan: no problems found.") return "සැලසුම පරීක්ෂා කළා: ගැටලු නැත.";
+  const corrected = /^checked the plan and found (\d+) problem\(s\); the plan was corrected\.$/.exec(rest);
+  if (corrected) return ((n) => `සැලසුම පරීක්ෂා කර ගැටලු ${n}ක් හමු වී, සැලසුම නිවැරදි කළා.`)(corrected[1]);
+  const found = /^checked the plan and found: (.+)$/.exec(rest);
+  if (found) return ((what) => `සැලසුම පරීක්ෂා කර හමු වූයේ: ${what}`)(found[1]);
+  return rest;
+}
+
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
-  [/^Team: (.+)$/, (what) => `කණ්ඩායම: ${what}`],
+  [/^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/, (n, c) => `ටෝකන් ආසන්න වශයෙන් ${n}ක් භාවිතා විය (ආදානයෙන් ${c}% ක් cache එකෙන්).`],
+  [/^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/, (a, b, rest) => `සැලසුම්කරු (පියවර ${a}), සාදන්නා සහ සමාලෝචකයන් ${b} දෙනා ${tail(rest)}`],
+  [/^(\d+) agents (.+)$/, (n, rest) => `agents ${n} දෙනා ${tail(rest)}`],
+  [
+    /^Sent to the AI: ([\d,]+) characters(?:; (\d+) personal value\(s\) replaced with tokens, and put back only here|(; no personal values found to replace))\.(.*)$/,
+    (chars, n, none, rest) => ((chars, how, rest) => `AI වෙත යැවූ: අක්ෂර ${chars}ක්${how === "none" ? "; ප්‍රතිස්ථාපනය කළ යුතු පෞද්ගලික අගයන් නොමැත" : `; පෞද්ගලික අගයන් ${how}ක් tokens වලින් ප්‍රතිස්ථාපනය කර, නැවත දමන්නේ මෙහි පමණි`}.${rest}`)(chars, none ? "none" : n, rest),
+  ],
+
+  [/^Team: (.+)$/, (what) => `කණ්ඩායම: ${localizeMessageSi(what)}`],
 
   [/^(\d+) staged change\(s\)$/, (n) => `සූදානම් කළ වෙනස්කම් ${n}ක්`],
   [/^(\d+) plan step\(s\)$/, (n) => `සැලසුම් පියවර ${n}ක්`],

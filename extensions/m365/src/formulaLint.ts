@@ -46,7 +46,21 @@ function rangeStartRows(text: string): number[] {
  * first data row and every total comes out short.
  */
 export function lintFormula(formula: string): string[] {
+  return scan(formula).issues;
+}
+
+/**
+ * The same mistake, repaired: field_headers 1 becomes 0 and 3 becomes 2 (no header row in the
+ * ranges; 2 still shows generated headers). A model that was told once and repeated it does not
+ * keep the person's first data row out of the totals.
+ */
+export function repairFormula(formula: string): string {
+  return scan(formula).repaired;
+}
+
+function scan(formula: string): { issues: string[]; repaired: string } {
   const issues: string[] = [];
+  let repaired = formula;
   const pattern = /\b(GROUPBY|PIVOTBY)\s*\(/gi;
   for (
     let match = pattern.exec(formula);
@@ -63,12 +77,37 @@ export function lintFormula(formula: string): string[] {
       .slice(0, headersIndex)
       .filter((arg) => !/^\s*\w+\s*$/.test(arg));
     const starts = rangeStartRows(dataArgs.join(","));
-    if (starts.length && Math.min(...starts) >= 2)
+    if (starts.length && Math.min(...starts) >= 2) {
+      const open = match.index + match[0].length - 1;
+      const fixed = args.map((arg, index) =>
+        index === headersIndex ? arg.replace(/[13]/, headers === "1" ? "0" : "2") : arg,
+      );
+      repaired =
+        repaired.slice(0, open + 1) +
+        fixed.join(",") +
+        repaired.slice(open + 1 + args.join(",").length);
       issues.push(
         `${name} says its ranges start with a header row (field_headers ${headers}), but they start at row ${Math.min(...starts)}, below the header, so the first data row is dropped and the totals come out short. Use 0, or include the header row in every range.`,
       );
+    }
   }
-  return issues;
+  return { issues, repaired };
+}
+
+/** Repairs the staged formulas in place; returns how many changed. */
+export function repairChanges(
+  changes: readonly { change: StagedChange }[],
+): number {
+  let count = 0;
+  for (const { change } of changes) {
+    if (change.kind !== "write_formula") continue;
+    const fixed = repairFormula(change.formula);
+    if (fixed !== change.formula) {
+      change.formula = fixed;
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /** Problems found in the staged formulas, each with the cell it is in. */

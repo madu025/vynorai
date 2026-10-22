@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StagedChange } from "./agent.js";
-import { lintChanges, lintFormula } from "./formulaLint.js";
+import { lintChanges, lintFormula, repairChanges, repairFormula } from "./formulaLint.js";
 
 test("GROUPBY with field_headers 1 on ranges below the header is flagged", () => {
   const formula = "=GROUPBY(TRIM('Orders'!D2:D301),'Orders'!J2:J301,SUM,1,0)";
@@ -57,4 +57,44 @@ test("lintChanges names the cell and ignores other changes", () => {
   const issues = lintChanges(changes);
   assert.equal(issues.length, 1);
   assert.match(issues[0], /^'Region Summary'!A2:/);
+});
+
+test("the mistake is repaired: 1 becomes 0 and 3 becomes 2, the rest of the formula is untouched", () => {
+  const formula =
+    "=GROUPBY(TRIM(Orders!D2:D301),HSTACK(Orders!J2:J301,Orders!K2:K301),HSTACK(SUM,SUM),1,0)";
+  const fixed = repairFormula(formula);
+  assert.equal(
+    fixed,
+    "=GROUPBY(TRIM(Orders!D2:D301),HSTACK(Orders!J2:J301,Orders!K2:K301),HSTACK(SUM,SUM),0,0)",
+  );
+  assert.deepEqual(lintFormula(fixed), []);
+  assert.equal(
+    repairFormula("=PIVOTBY(A2:A9,C2:C9,B2:B9,SUM,3)"),
+    "=PIVOTBY(A2:A9,C2:C9,B2:B9,SUM,2)",
+  );
+  // A correct formula is returned as it was.
+  assert.equal(repairFormula("=GROUPBY(A1:A9,B1:B9,SUM,1)"), "=GROUPBY(A1:A9,B1:B9,SUM,1)");
+});
+
+test("repairChanges fixes staged formulas in place and counts them", () => {
+  const changes = [
+    {
+      change: {
+        kind: "write_formula",
+        sheet: "S",
+        cell: "A1",
+        formula: "=GROUPBY(A2:A9,B2:B9,SUM,1,0)",
+      } as StagedChange,
+    },
+    {
+      change: {
+        kind: "write_formula",
+        sheet: "S",
+        cell: "A9",
+        formula: "=SUM(A2:A9)",
+      } as StagedChange,
+    },
+  ];
+  assert.equal(repairChanges(changes), 1);
+  assert.equal(lintChanges(changes).length, 0);
 });

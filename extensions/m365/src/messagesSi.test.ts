@@ -48,3 +48,22 @@ test("the preview summary is built in Sinhala from structured parts", () => {
   assert.match(text, /හැඩසවි කිරීම/);
   assert.match(text, /දත්ත පේළි 5ක්/);
 });
+
+test("the team, usage and privacy lines are Sinhala, with the inner label too", () => {
+  const si = (text: string) => localizeMessage("si", text);
+  assert.match(si("Team: Looking at the workbook"), /කණ්ඩායම: වැඩපොත බලමින්/);
+  assert.match(si("Used about 12,345 tokens (80% of the input from cache)."), /ටෝකන් ආසන්න වශයෙන් 12,345ක්/);
+  assert.match(
+    si("Planner (3 steps), builder and 2 reviewer(s) checked the plan: no problems found."),
+    /සැලසුම්කරු \(පියවර 3\).*ගැටලු නැත/,
+  );
+  assert.match(si("3 agents worked on this."), /agents 3 දෙනා මේ සඳහා වැඩ කළා/);
+  assert.match(
+    si("Sent to the AI: 1,200 characters; 2 personal value(s) replaced with tokens, and put back only here."),
+    /අක්ෂර 1,200ක්; පෞද්ගලික අගයන් 2ක්/,
+  );
+  assert.match(
+    si("Sent to the AI: 90 characters; no personal values found to replace."),
+    /අක්ෂර 90ක්.*නොමැත/,
+  );
+});

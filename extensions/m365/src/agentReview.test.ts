@@ -524,3 +524,35 @@ test("the accuracy reviewer is told to run the formulas and compare totals", () 
   assert.match(text, /run every staged formula through calculate/);
   assert.match(text, /compare it with the sum of the summary/);
 });
+
+test("a revision that repeats the known GROUPBY header mistake is repaired, not shown to the person", async () => {
+  const bad = "=GROUPBY(TRIM(Data!A2:A11),Data!C2:C11,SUM,1,0)";
+  const model = async (messages: AgentMessage[]) => {
+    const user = lastUser(messages);
+    const last = messages[messages.length - 1];
+    if (last.role !== "user") return { content: "Done.", tool_calls: [] };
+    return {
+      content: "",
+      tool_calls: [
+        call(/A reviewer checked/.test(user) ? "w2" : "w1", "write_formula", {
+          sheet: "Data",
+          cell: "F1",
+          formula: bad,
+        }),
+      ],
+    };
+  };
+  const { run, mask } = await planned(model);
+  const result = await reviewAndRevise({
+    request: "Add a total under Amount",
+    run,
+    host,
+    model,
+    mask,
+  });
+  assert.equal(result.revised, true);
+  assert.equal(
+    (result.run.changes[0].change as any).formula,
+    "=GROUPBY(TRIM(Data!A2:A11),Data!C2:C11,SUM,0,0)",
+  );
+});

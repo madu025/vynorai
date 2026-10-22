@@ -4499,8 +4499,11 @@ overviewButton?.addEventListener("click", async () => {
   }
 });
 
+/** Buttons whose text the code writes (toggles) redraw themselves when the language changes. */
+const languageHooks: Array<() => void> = [];
 function refreshLanguage() {
   applyLanguage(document, language);
+  for (const hook of languageHooks) hook();
   renderConversationHistory();
   renderResultGallery();
   const previewNode = document.querySelector<HTMLElement>("#preview");
@@ -4521,6 +4524,7 @@ const showAiFirst = () => {
       : localizeMessage(language, "AI reads every request: OFF (click to turn on)");
 };
 showAiFirst();
+languageHooks.push(showAiFirst);
 aiFirstButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   setAiFirst(!aiFirstOn());
@@ -5199,6 +5203,7 @@ async function agentLoop(request: string) {
         describePrivacyReceipt(receipt),
       ]
         .filter(Boolean)
+        .map((part) => localizeMessage(language, part))
         .join(" ");
     const leaks =
       receipt.leaks.emails + receipt.leaks.phones + receipt.leaks.nic;
@@ -5215,6 +5220,7 @@ async function agentLoop(request: string) {
   } catch (error) {
     if (agentProgress) agentProgress.textContent = "";
     if (agentStopped) {
+      resetAgentRolesView(document);
       if (agentBadge)
         agentBadge.textContent = localizeMessage(language, "Stopped");
       setStatus("Stopped. Nothing was changed.");
@@ -5373,6 +5379,7 @@ function showAgentToggle() {
       ? localizeMessage(language, "Agent (preview): ON (click to turn off)")
       : localizeMessage(language, "Agent (preview): OFF (click to turn on)");
 }
+languageHooks.push(showAgentToggle);
 document.querySelector("#agent-toggle")?.addEventListener("click", () => {
   try {
     localStorage.setItem(AGENT_ON_KEY, agentOn() ? "0" : "1");

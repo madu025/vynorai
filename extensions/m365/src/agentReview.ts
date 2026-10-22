@@ -18,7 +18,7 @@ import {
   type AgentRun,
   type PersonalMask,
 } from "./agent.js";
-import { lintChanges } from "./formulaLint.js";
+import { lintChanges, repairChanges } from "./formulaLint.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 
 /** The reviewer only reads and calculates; it never needs many turns. */
@@ -277,13 +277,17 @@ export async function reviewAndRevise(options: {
       onTool: options.onTool,
     });
     // A revision that stages nothing keeps the first plan, with the review shown to the person.
-    if (!revision.changes.length)
+    if (!revision.changes.length) {
+      repairChanges(run.changes);
       return {
         run: { ...run, messages: revision.messages },
         review,
         reviewers,
         revised: false,
       };
+    }
+    // The builder was told about a known formula mistake; if it repeated it, fix it here.
+    repairChanges(revision.changes);
     return {
       run: {
         ...revision,
@@ -296,6 +300,7 @@ export async function reviewAndRevise(options: {
     };
   } catch (error) {
     if (isStop(error)) throw error;
+    repairChanges(run.changes);
     return { run, review, reviewers, revised: false };
   }
 }

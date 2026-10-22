@@ -349,7 +349,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   });
   assert.equal(
     await page.$eval(
-      "#context-selection",
+      "#selection-text",
       (element) => element.textContent?.includes("Orders") ?? false,
     ),
     true,
@@ -373,6 +373,11 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     await page.$eval(".brand-bar", (element) => element.getClientRects().length > 0),
     true,
     "the premium workspace brand header must remain visible",
+  );
+  assert.equal(
+    await page.$("#workbook-context"),
+    null,
+    "the workbook context card must stay out of the main work surface",
   );
   assert.equal(
     await page.evaluate(() => {
@@ -411,14 +416,12 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   await page.click("#menu-toggle");
   for (const selector of [
     "#menu-toggle",
-    "#refresh-context",
     ".smart-suggestion",
     "#instruction",
     "#smart-run",
   ]) {
     await assertReachable(page, selector);
   }
-  await page.click("#refresh-context");
   await page.waitForSelector('#context-suggestion-list[data-count="3"]');
   if (viewport.width <= 360) {
     assert.equal(

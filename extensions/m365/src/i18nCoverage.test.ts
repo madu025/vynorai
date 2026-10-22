@@ -116,3 +116,8 @@ test("every status message the pane sets has a Sinhala wording", async () => {
   }
   assert.deepEqual([...missing], []);
 });
+
+test("buttons wrap at spaces only, so a Sinhala label never breaks letter by letter", () => {
+  assert.match(html, /\.apply-dock \{\s*flex-wrap: wrap;/);
+  assert.match(html, /\n\s*button \{\s*min-width: 0;\s*overflow-wrap: normal;\s*word-break: normal;/);
+});

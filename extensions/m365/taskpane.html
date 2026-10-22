@@ -1156,8 +1156,18 @@
         border-top: 1px solid var(--line);
         background: var(--surface);
       }
+      .apply-dock {
+        flex-wrap: wrap;
+      }
       .apply-dock .primary {
-        flex: 1;
+        flex: 1 1 150px;
+      }
+      /* The page breaks long words anywhere to stop overflow; a button label must wrap only at
+         spaces, or a Sinhala label breaks letter by letter in a narrow pane. */
+      button {
+        min-width: 0;
+        overflow-wrap: normal;
+        word-break: normal;
       }
       .safety-summary {
         display: grid;

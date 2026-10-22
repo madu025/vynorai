@@ -268,11 +268,47 @@ const EXACT: Record<string, string> = {
     "නැවත කියවීම අවසන්",
   "Looking at the workbook":
     "වැඩපොත බලමින්",
+  "Working":
+    "වැඩ කරමින්",
+  "Planning":
+    "සැලසුම් කරමින්",
+  "Executing":
+    "ක්‍රියාත්මක කරමින්",
+  "Verifying":
+    "තහවුරු කරමින්",
+  "Final answer":
+    "අවසාන පිළිතුර",
+  "Reviewing":
+    "සමාලෝචනය කරමින්",
+  "Correcting":
+    "නිවැරදි කරමින්",
+  "Discarded":
+    "ඉවත දමන ලදී",
+  "Applying":
+    "යොදමින්",
+  "Undone":
+    "ආපසු හරවන ලදී",
+  "Stopped":
+    "නවත්වන ලදී",
+  "Waiting for approval":
+    "අනුමැතිය බලාපොරොත්තුවෙන්",
+  "Inspecting the selected data and preparing a safe plan.":
+    "තෝරාගත් දත්ත පරීක්ෂා කර ආරක්ෂිත සැලසුමක් සූදානම් කරමින්.",
+  "AI reads every request: ON (click to turn off)":
+    "AI සෑම ඉල්ලීමක්ම කියවයි: සක්‍රීයයි (අක්‍රීය කිරීමට ක්ලික් කරන්න)",
+  "AI reads every request: OFF (click to turn on)":
+    "AI සෑම ඉල්ලීමක්ම කියවයි: අක්‍රීයයි (සක්‍රීය කිරීමට ක්ලික් කරන්න)",
+  "Agent (preview): ON (click to turn off)":
+    "Agent (පෙරදසුන): සක්‍රීයයි (අක්‍රීය කිරීමට ක්ලික් කරන්න)",
+  "Agent (preview): OFF (click to turn on)":
+    "Agent (පෙරදසුන): අක්‍රීයයි (සක්‍රීය කිරීමට ක්ලික් කරන්න)",
 };
 
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^Team: (.+)$/, (what) => `කණ්ඩායම: ${what}`],
+
   [/^(\d+) staged change\(s\)$/, (n) => `සූදානම් කළ වෙනස්කම් ${n}ක්`],
   [/^(\d+) plan step\(s\)$/, (n) => `සැලසුම් පියවර ${n}ක්`],
   [/^(\d+) issue\(s\) found$/, (n) => `ගැටලු ${n}ක් හමු විය`],

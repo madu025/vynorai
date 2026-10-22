@@ -642,6 +642,26 @@ export interface AgentRun {
 }
 
 /**
+ * A plain question ("are there outliers?", "which rows ...?") is answered in the reply: nothing may
+ * be staged for it. Any word that asks for a change or a new sheet lifts this.
+ */
+export function isReadOnlyQuestion(request: string): boolean {
+  const text = String(request ?? "").trim();
+  if (!text) return false;
+  const question =
+    /\?\s*$/.test(text) ||
+    /^(what|which|who|why|when|where|how (much|many|big|large)|is|are|does|do|did|any|can you tell|tell me)\b/i.test(
+      text,
+    );
+  return (
+    question &&
+    !/\b(fix|correct|repair|add|create|make|build|put|write|insert|delete|remove|replace|rename|clean|sort|format|highlight|merge|copy|move|change|update|set|apply|sheet|report|pivot|chart|dashboard|sparkline|freeze|protect|hide|unhide|join|combine|bring|reconcile|split|fill|save|export|share|email)\b/i.test(
+      text,
+    )
+  );
+}
+
+/**
  * Runs the model until it answers without tool calls. Returns the conversation (to continue later),
  * the reply with personal data restored, and the staged changes (nothing is applied here).
  */
@@ -658,6 +678,7 @@ export async function runAgent(options: {
   facts?: string;
 }): Promise<AgentRun> {
   const { host, model, mask } = options;
+  const readOnlyQuestion = isReadOnlyQuestion(options.request);
   // After an apply the add-in's own report comes back as the request; it is not the person's words.
   const fromPerson = !options.request.startsWith("[Report from the add-in");
   // A target or audience read locally from the request goes after it (the prefix stays fixed).
@@ -746,7 +767,17 @@ export async function runAgent(options: {
         if (!calculationKey || !counts.calculationResults.has(calculationKey))
           onlyRepeatedCalculations = false;
         content = JSON.stringify(
-          await runTool(call, args, host, mask, changes, counts),
+          await (async () => {
+            const before = changes.length;
+            const result = await runTool(call, args, host, mask, changes, counts);
+            if (readOnlyQuestion && changes.length > before) {
+              changes.length = before;
+              throw new AgentToolError(
+                "This is a question: answer it in your reply from what you read or calculated. Stage nothing unless the person asks for a change, a report or a sheet.",
+              );
+            }
+            return result;
+          })(),
         );
       } catch (error) {
         onlyRepeatedCalculations = false;

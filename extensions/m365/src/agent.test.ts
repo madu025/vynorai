@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { withRelationshipHint } from "./agent.js";
+import { isReadOnlyQuestion, withRelationshipHint } from "./agent.js";
 import { test } from "node:test";
 import {
   AgentToolError,
@@ -701,4 +701,35 @@ test("get_workbook adds the relationship hint only when several sheets hold data
     sheets: [{ name: "A", rows: 10 }, { name: "B", rows: 0 }],
   }) as any;
   assert.equal(single.hint, undefined);
+});
+
+test("a plain question stages nothing, but a request for a sheet still can", async () => {
+  assert.equal(isReadOnlyQuestion("are there any unusual Amount values?"), true);
+  assert.equal(isReadOnlyQuestion("which rows have no customer"), true);
+  assert.equal(isReadOnlyQuestion("can you add a Total column?"), false);
+  assert.equal(isReadOnlyQuestion("which items sold most? put it on a new sheet"), false);
+  assert.equal(isReadOnlyQuestion("sort by amount"), false);
+
+  let turn = 0;
+  const run = await runAgent({
+    request: "are there any unusual Amount values?",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async () => {
+      turn += 1;
+      return turn === 1
+        ? {
+            content: "",
+            tool_calls: [
+              call("a", "vynor_step", { instruction: "pivot of Amount" }),
+            ],
+          }
+        : { content: "- No outliers.", tool_calls: [] };
+    },
+  });
+  assert.equal(run.changes.length, 0);
+  assert.match(
+    String(run.messages.find((m) => m.role === "tool")?.content),
+    /This is a question/,
+  );
 });

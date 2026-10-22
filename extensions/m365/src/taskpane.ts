@@ -4517,8 +4517,8 @@ const aiFirstButton = document.querySelector<HTMLButtonElement>("#ai-first");
 const showAiFirst = () => {
   if (aiFirstButton)
     aiFirstButton.textContent = aiFirstOn()
-      ? "AI reads every request: ON (click to turn off)"
-      : "AI reads every request: OFF (click to turn on)";
+      ? localizeMessage(language, "AI reads every request: ON (click to turn off)")
+      : localizeMessage(language, "AI reads every request: OFF (click to turn on)");
 };
 showAiFirst();
 aiFirstButton?.addEventListener("click", (event) => {
@@ -4930,11 +4930,16 @@ function renderAgentRun(run: AgentRun) {
     setAgentRoleView(document, "relationships", "done", "key evidence found");
   if (agentReply) {
     agentReply.textContent = "";
+    // The reply itself is shown once, in the chat; this card keeps only the limit notice.
     for (const line of (
-      run.reply ||
-      (run.stoppedAtLimit
-        ? "The agent stopped at its step limit. Try a smaller request."
-        : "")
+      run.reply
+        ? ""
+        : run.stoppedAtLimit
+          ? localizeMessage(
+              language,
+              "The agent stopped at its step limit. Try a smaller request.",
+            )
+          : ""
     ).split(/\n+/)) {
       if (!line.trim()) continue;
       const p = document.createElement("p");
@@ -4960,11 +4965,14 @@ function renderAgentRun(run: AgentRun) {
   show(agentApprove, pending);
   show(agentDiscard, pending);
   if (agentBadge)
-    agentBadge.textContent = pending
-      ? "Waiting for approval"
-      : run.phase === "verifying"
-        ? "Verifying"
-        : "Done";
+    agentBadge.textContent = localizeMessage(
+      language,
+      pending
+        ? "Waiting for approval"
+        : run.phase === "verifying"
+          ? "Verifying"
+          : "Done",
+    );
 }
 
 async function agentModel(messages: AgentMessage[]) {
@@ -5029,10 +5037,12 @@ async function agentLoop(request: string) {
     showWorkbookMapView(document, undefined);
     resetAgentRolesView(document);
   }
-  if (agentBadge) agentBadge.textContent = "Working";
+  if (agentBadge) agentBadge.textContent = localizeMessage(language, "Working");
   if (agentProgress)
-    agentProgress.textContent =
-      "Inspecting the selected data and preparing a safe plan.";
+    agentProgress.textContent = localizeMessage(
+      language,
+      "Inspecting the selected data and preparing a safe plan.",
+    );
   window.requestAnimationFrame(() =>
     agentCard?.scrollIntoView?.({ block: "start", behavior: "smooth" }),
   );
@@ -5056,14 +5066,16 @@ async function agentLoop(request: string) {
         else if (phase === "planning") setAgentStage("plan");
         else if (phase === "executing") setAgentStage("preview");
         if (agentBadge)
-          agentBadge.textContent =
+          agentBadge.textContent = localizeMessage(
+            language,
             phase === "planning"
               ? "Planning"
               : phase === "executing"
                 ? "Executing"
                 : phase === "verifying"
                   ? "Verifying"
-                  : "Final answer";
+                  : "Final answer",
+          );
         if (phase === "planning") setStatus("Planning the next step...");
         else if (phase === "executing")
           setStatus("Running the selected tool...");
@@ -5080,22 +5092,23 @@ async function agentLoop(request: string) {
             "checking keys",
           );
         else setAgentRoleView(document, "builder", "active", label);
-        if (agentProgress) agentProgress.textContent = label;
+        if (agentProgress)
+          agentProgress.textContent = localizeMessage(language, label);
         log.record(`agent:tool:${name}`, "info", label.slice(0, 120));
       },
       onTeamPhase: (phase) => {
         if (phase === "plan") {
           setAgentRoleView(document, "planner", "active", "building plan");
           if (!agentVerifying) setAgentStage("plan");
-          if (agentBadge) agentBadge.textContent = "Planning";
+          if (agentBadge) agentBadge.textContent = localizeMessage(language, "Planning");
           setStatus("A planner agent is splitting the request into steps...");
         } else if (phase === "reviewing") {
           setAgentRoleView(document, "planner", "done", "plan ready");
           setAgentRoleView(document, "builder", "done", "preview staged");
           if (!agentVerifying) setAgentStage("review");
-          if (agentBadge) agentBadge.textContent = "Reviewing";
+          if (agentBadge) agentBadge.textContent = localizeMessage(language, "Reviewing");
         } else if (phase === "revising") {
-          if (agentBadge) agentBadge.textContent = "Correcting";
+          if (agentBadge) agentBadge.textContent = localizeMessage(language, "Correcting");
           setStatus("Correcting the plan after the review...");
         }
       },
@@ -5133,7 +5146,8 @@ async function agentLoop(request: string) {
             "active",
             "checking keys",
           );
-        if (agentProgress) agentProgress.textContent = `Team: ${label}`;
+        if (agentProgress)
+          agentProgress.textContent = localizeMessage(language, `Team: ${label}`);
         log.record(`agent:team:${name}`, "info", label.slice(0, 120));
       },
     });
@@ -5200,7 +5214,11 @@ async function agentLoop(request: string) {
     );
   } catch (error) {
     if (agentProgress) agentProgress.textContent = "";
-    if (agentStopped) setStatus("Stopped. Nothing was changed.");
+    if (agentStopped) {
+      if (agentBadge)
+        agentBadge.textContent = localizeMessage(language, "Stopped");
+      setStatus("Stopped. Nothing was changed.");
+    }
     else if (error instanceof M365ApiError) handleApiError("agent", error);
     else {
       log.record("agent:run", "fail", describeError(error));
@@ -5352,8 +5370,8 @@ function showAgentToggle() {
   const toggle = document.querySelector<HTMLElement>("#agent-toggle");
   if (toggle)
     toggle.textContent = on
-      ? "Agent (preview): ON (click to turn off)"
-      : "Agent (preview): OFF (click to turn on)";
+      ? localizeMessage(language, "Agent (preview): ON (click to turn off)")
+      : localizeMessage(language, "Agent (preview): OFF (click to turn on)");
 }
 document.querySelector("#agent-toggle")?.addEventListener("click", () => {
   try {
@@ -5382,7 +5400,7 @@ agentDiscard?.addEventListener("click", () => {
   show(agentNote, false);
   show(agentApprove, false);
   show(agentDiscard, false);
-  if (agentBadge) agentBadge.textContent = "Discarded";
+  if (agentBadge) agentBadge.textContent = localizeMessage(language, "Discarded");
   setAgentStage("approval", true);
   setStatus("Discarded. Nothing was changed.");
 });
@@ -5394,7 +5412,7 @@ agentApprove?.addEventListener("click", async () => {
   agentBusy = true;
   show(agentApprove, false);
   show(agentDiscard, false);
-  if (agentBadge) agentBadge.textContent = "Applying";
+  if (agentBadge) agentBadge.textContent = localizeMessage(language, "Applying");
   setAgentStage("apply");
   setAgentRoleView(document, "verification", "pending", "waiting for apply");
   agentStopped = false;
@@ -5475,7 +5493,7 @@ agentApprove?.addEventListener("click", async () => {
       "active",
       "reading results back",
     );
-    if (agentBadge) agentBadge.textContent = "Verifying";
+    if (agentBadge) agentBadge.textContent = localizeMessage(language, "Verifying");
     setStatus("Verifying the applied result...");
     await agentLoop(
       appliedReport(
@@ -5523,7 +5541,7 @@ agentUndo?.addEventListener("click", async () => {
           "[Report from the add-in] The person undid all applied changes.",
       },
     ];
-    if (agentBadge) agentBadge.textContent = "Undone";
+    if (agentBadge) agentBadge.textContent = localizeMessage(language, "Undone");
     log.record("agent:undo", "pass");
     await logChanges({
       at: new Date(),

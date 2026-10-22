@@ -277,11 +277,47 @@ const EXACT: Record<string, string> = {
     "மீண்டும் வாசிப்பு முடிந்தது",
   "Looking at the workbook":
     "பணிப்புத்தகத்தைப் பார்க்கிறது",
+  "Working":
+    "செயல்படுகிறது",
+  "Planning":
+    "திட்டமிடுகிறது",
+  "Executing":
+    "செயல்படுத்துகிறது",
+  "Verifying":
+    "சரிபார்க்கிறது",
+  "Final answer":
+    "இறுதிப் பதில்",
+  "Reviewing":
+    "மதிப்பாய்வு செய்கிறது",
+  "Correcting":
+    "திருத்துகிறது",
+  "Discarded":
+    "நிராகரிக்கப்பட்டது",
+  "Applying":
+    "பயன்படுத்துகிறது",
+  "Undone":
+    "செயல்தவிர்க்கப்பட்டது",
+  "Stopped":
+    "நிறுத்தப்பட்டது",
+  "Waiting for approval":
+    "ஒப்புதலுக்காகக் காத்திருக்கிறது",
+  "Inspecting the selected data and preparing a safe plan.":
+    "தேர்ந்தெடுத்த தரவைச் சரிபார்த்து பாதுகாப்பான திட்டத்தைத் தயாரிக்கிறது.",
+  "AI reads every request: ON (click to turn off)":
+    "AI ஒவ்வொரு கோரிக்கையையும் படிக்கிறது: இயக்கத்தில் (அணைக்க கிளிக் செய்யவும்)",
+  "AI reads every request: OFF (click to turn on)":
+    "AI ஒவ்வொரு கோரிக்கையையும் படிக்கிறது: அணைந்துள்ளது (இயக்க கிளிக் செய்யவும்)",
+  "Agent (preview): ON (click to turn off)":
+    "Agent (முன்னோட்டம்): இயக்கத்தில் (அணைக்க கிளிக் செய்யவும்)",
+  "Agent (preview): OFF (click to turn on)":
+    "Agent (முன்னோட்டம்): அணைந்துள்ளது (இயக்க கிளிக் செய்யவும்)",
 };
 
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^Team: (.+)$/, (what) => `குழு: ${what}`],
+
   [/^(\d+) staged change\(s\)$/, (n) => `${n} தயார் செய்யப்பட்ட மாற்றங்கள்`],
   [/^(\d+) plan step\(s\)$/, (n) => `${n} திட்டப் படிகள்`],
   [/^(\d+) issue\(s\) found$/, (n) => `${n} சிக்கல்கள் கண்டறியப்பட்டன`],

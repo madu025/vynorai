@@ -2556,6 +2556,21 @@
               <p id="email-note">
                 Choose the report format and review everything before sending.
               </p>
+                            <div class="quick-share">
+                <p class="muted" data-i18n="share_optional">
+                  Sharing is optional. Copy a short summary, or send the report by email only if you need to.
+                </p>
+                <button
+                  id="whatsapp-copy"
+                  type="button"
+                  data-i18n="copy_whatsapp"
+                >
+                  Copy summary for WhatsApp
+                </button>
+                <pre id="whatsapp-note" class="muted" hidden></pre>
+              </div>
+              <details id="email-options">
+                <summary data-i18n="email_optional">Send by email (optional)</summary>
               <div class="email-form">
                 <label for="email-to"
                   >Recipient email<input
@@ -2665,14 +2680,6 @@
                 <p id="email-delivery-status" class="delivery-status" role="status">
                   Not sent yet · approval required
                 </p>
-                <button
-                  id="whatsapp-copy"
-                  type="button"
-                  data-i18n="copy_whatsapp"
-                >
-                  Copy summary for WhatsApp
-                </button>
-                <pre id="whatsapp-note" class="muted" hidden></pre>
                 <p id="email-draft-fallback" hidden>
                   <a
                     id="email-draft-link"
@@ -2685,6 +2692,7 @@
                   <span id="email-draft-note"></span>
                 </p>
               </div>
+            </details>
             </section>
             <details data-dev data-workspace-panel="results">
               <summary data-i18n="tech_details">Technical details</summary>

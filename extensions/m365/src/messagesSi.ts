@@ -239,11 +239,61 @@ const EXACT: Record<string, string> = {
     "පිටපත් කළා. WhatsApp වෙත paste කරන්න; කිසිවක් යවා නැත.",
   "The summary could not be made. See Diagnostics.":
     "සාරාංශය සෑදිය නොහැකි විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
+  "Refreshing the preview for the current selection...":
+    "වත්මන් තේරීම සඳහා පෙරදසුන නැවුම් කරමින්...",
+  "A reviewer agent is checking ranges, formulas and totals...":
+    "සමාලෝචක agent පරාස, සූත්‍ර සහ එකතු පරීක්ෂා කරමින්...",
+  "A reviewer agent is checking that every part is covered and nothing is overwritten...":
+    "සමාලෝචක agent සෑම කොටසක්ම ආවරණය වී ඇති බවත් කිසිවක් උඩින් නොලියවෙන බවත් පරීක්ෂා කරමින්...",
+  "Not sent yet · approval required":
+    "තවම යවා නැත · අනුමැතිය අවශ්‍යයි",
+  "Size calculated after approval":
+    "ප්‍රමාණය අනුමැතියෙන් පසු ගණනය කෙරේ",
+  "pending":
+    "පොරොත්තුවේ",
+  "active":
+    "සිදුවෙමින්",
+  "done":
+    "අවසන්",
+  "key evidence found":
+    "ප්‍රධාන සාක්ෂි හමු විය",
+  "checking keys":
+    "යතුරු පරීක්ෂා කරමින්",
+  "building plan":
+    "සැලසුම සාදමින්",
+  "plan ready":
+    "සැලසුම සූදානම්",
+  "preview staged":
+    "පෙරදසුන සූදානම්",
+  "checking calculations":
+    "ගණනය පරීක්ෂා කරමින්",
+  "checks completed":
+    "පරීක්ෂා අවසන්",
+  "checking write safety":
+    "ලිවීමේ ආරක්ෂාව පරීක්ෂා කරමින්",
+  "checks passed":
+    "පරීක්ෂා සමත් විය",
+  "waiting for apply":
+    "යෙදීම බලාපොරොත්තුවෙන්",
+  "reading results back":
+    "ප්‍රතිඵල නැවත කියවමින්",
+  "read-back completed":
+    "නැවත කියවීම අවසන්",
+  "Looking at the workbook":
+    "වැඩපොත බලමින්",
 };
 
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^(\d+) staged change\(s\)$/, (n) => `සූදානම් කළ වෙනස්කම් ${n}ක්`],
+  [/^(\d+) plan step\(s\)$/, (n) => `සැලසුම් පියවර ${n}ක්`],
+  [/^(\d+) issue\(s\) found$/, (n) => `ගැටලු ${n}ක් හමු විය`],
+  [/^Reading (.+)$/, (what) => `කියවමින්: ${what}`],
+  [/^Calculating (.+)$/, (what) => `ගණනය කරමින්: ${what}`],
+  [/^Checking a step: (.+)$/, (what) => `පියවරක් පරීක්ෂා කරමින්: ${what}`],
+  [/^Preparing a change \((.+)\)$/, (what) => `වෙනසක් සූදානම් කරමින් (${what})`],
+
   [
     /^Removed (\d+) (?:older )?(?:VynorAI )?(?:result )?sheet\(s\)\.$/,
     (n) => `පත්‍රිකා ${n}ක් ඉවත් කරන ලදී.`,

@@ -20,6 +20,12 @@ export type AgentRole =
   | "safety"
   | "verification";
 
+let localize: (text: string) => string = (text) => text;
+/** The pane hands over its language once; role statuses are written here as plain English. */
+export function setAgentViewLocalizer(fn: (text: string) => string): void {
+  localize = fn;
+}
+
 export function setAgentRoleView(
   document: Document,
   role: AgentRole,
@@ -32,7 +38,7 @@ export function setAgentRoleView(
   if (!row) return;
   row.dataset.state = state;
   const status = row.querySelector<HTMLElement>(".agent-role-status");
-  if (status) status.textContent = evidence || state;
+  if (status) status.textContent = localize(evidence || state);
 }
 
 export function resetAgentRolesView(document: Document): void {
@@ -41,7 +47,7 @@ export function resetAgentRolesView(document: Document): void {
   )) {
     row.dataset.state = "pending";
     const status = row.querySelector<HTMLElement>(".agent-role-status");
-    if (status) status.textContent = "pending";
+    if (status) status.textContent = localize("pending");
   }
 }
 

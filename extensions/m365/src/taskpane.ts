@@ -71,6 +71,7 @@ import {
   showAgentSourcesView,
   relationshipEvidence,
   resetAgentRolesView,
+  setAgentViewLocalizer,
   setAgentRoleView,
   showWorkbookMapView,
   type AgentStage,
@@ -364,6 +365,7 @@ let lastCreated:
 let galleryPlanId = "";
 let galleryResults: ExcelActionResult[] = [];
 let language: Language = loadLanguage();
+setAgentViewLocalizer((text) => localizeMessage(language, text));
 let officePlatformLabel = "Excel";
 let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
@@ -821,13 +823,19 @@ function updateEmailUi(signedIn = Boolean(accessToken)) {
 function prepareEmailComposer(recipient = "", openShare = true) {
   if (emailDeliveryStatus) {
     emailDeliveryStatus.className = "delivery-status";
-    emailDeliveryStatus.textContent = "Not sent yet · approval required";
+    emailDeliveryStatus.textContent = localizeMessage(
+      language,
+      "Not sent yet · approval required",
+    );
   }
   if (emailReportName)
     emailReportName.textContent =
       lastRevealSheet || currentSourceSheet || "Workbook report";
   if (emailAttachmentSize)
-    emailAttachmentSize.textContent = "Size calculated after approval";
+    emailAttachmentSize.textContent = localizeMessage(
+      language,
+      "Size calculated after approval",
+    );
   updateEmailUi();
   workspaceNavigation.refresh();
   if (openShare) workspaceNavigation.activate("share");

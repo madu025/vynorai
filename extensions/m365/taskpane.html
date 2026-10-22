@@ -1982,7 +1982,7 @@
         <div class="brand-mark" aria-hidden="true">V</div>
         <div class="brand-copy">
           <strong>VynorAI Excel</strong>
-          <span>Analyze, plan and apply safely</span>
+          <span data-i18n="tagline">Analyze, plan and apply safely</span>
         </div>
       </header>
       <div
@@ -2319,8 +2319,8 @@
         </section>
         <div class="scroll-area" id="scroll-area">
           <section id="selection-change-warning" class="selection-warning" hidden>
-            <span>Selection changed after preview.</span>
-            <button id="refresh-preview-selection" type="button">Refresh preview</button>
+            <span data-i18n="selection_changed">Selection changed after preview.</span>
+            <button data-i18n="refresh_preview" id="refresh-preview-selection" type="button">Refresh preview</button>
           </section>
           <section
             id="context-suggestions"
@@ -2415,7 +2415,7 @@
               <label class="tweak" for="tweak-top-n" hidden
                 ><span>Top-N</span
                 ><select id="tweak-top-n">
-                  <option value="">All items</option>
+                  <option data-i18n="all_items" value="">All items</option>
                   <option value="5">5</option>
                   <option value="10">10</option>
                   <option value="20">20</option>
@@ -2425,8 +2425,8 @@
               <label class="tweak" for="tweak-rank-direction" hidden
                 ><span>Sort order</span
                 ><select id="tweak-rank-direction">
-                  <option value="top">Largest first</option>
-                  <option value="bottom">Smallest first</option>
+                  <option data-i18n="largest_first" value="top">Largest first</option>
+                  <option data-i18n="smallest_first" value="bottom">Smallest first</option>
                 </select></label
               >
               <label class="tweak tweak-check" for="tweak-data-labels" hidden
@@ -2463,10 +2463,10 @@
             </p>
             <ul id="changed-list" class="details" hidden></ul>
             <div class="safety-summary" aria-label="Safety and approval">
-              <strong>Safety &amp; approval</strong>
-              <span>✓ Privacy protected</span>
-              <span>✓ Original data preserved</span>
-              <span>✓ Review changes before apply</span>
+              <strong data-i18n="safety_approval">Safety &amp; approval</strong>
+              <span data-i18n="privacy_protected">✓ Privacy protected</span>
+              <span data-i18n="data_preserved">✓ Original data preserved</span>
+              <span data-i18n="review_before_apply">✓ Review changes before apply</span>
             </div>
             <div class="apply-options">
               <label class="compact-choice"
@@ -2523,7 +2523,7 @@
               </button>
             </div>
           </section>
-          <p id="verified-result-banner" class="verified-banner" data-workspace-panel="results" hidden>
+          <p data-i18n="verified_unchanged" id="verified-result-banner" class="verified-banner" data-workspace-panel="results" hidden>
             Verified. The original data is unchanged.
           </p>
           <section
@@ -2534,7 +2534,7 @@
               aria-labelledby="result-gallery-heading"
             >
               <div class="card-head">
-                <h2 id="result-gallery-heading">
+                <h2 data-i18n="results_hub" id="result-gallery-heading">
                   Results Hub
                 </h2>
               </div>
@@ -2548,7 +2548,7 @@
               aria-labelledby="email-heading"
             >
               <div class="card-head">
-                <h2 id="email-heading">
+                <h2 data-i18n="share_centre" id="email-heading">
                   Share Centre
                 </h2>
                 <span class="badge" data-i18n="reviewed">reviewed</span>
@@ -2755,7 +2755,7 @@
             >
               <li data-stage="inspect" data-i18n="timeline_inspect">Inspect</li>
               <li data-stage="plan" data-i18n="timeline_plan">Plan</li>
-              <li data-stage="preview">Preview</li>
+              <li data-i18n="stage_preview" data-stage="preview">Preview</li>
               <li data-stage="review" data-i18n="timeline_review">Review</li>
               <li data-stage="approval" data-i18n="timeline_approval">
                 Approval
@@ -2764,12 +2764,12 @@
               <li data-stage="verify" data-i18n="timeline_verify">Verify</li>
             </ol>
             <div id="agent-activity-list" class="agent-activity-list">
-              <div data-agent-role="planner"><strong>Planner</strong><span class="agent-role-status">pending</span></div>
-              <div data-agent-role="relationships"><strong>Relationship mapper</strong><span class="agent-role-status">pending</span></div>
-              <div data-agent-role="builder"><strong>Builder</strong><span class="agent-role-status">pending</span></div>
-              <div data-agent-role="accuracy"><strong>Accuracy reviewer</strong><span class="agent-role-status">pending</span></div>
-              <div data-agent-role="safety"><strong>Safety reviewer</strong><span class="agent-role-status">pending</span></div>
-              <div data-agent-role="verification"><strong>Verification</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="planner"><strong data-i18n="role_planner">Planner</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="relationships"><strong data-i18n="role_relationships">Relationship mapper</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="builder"><strong data-i18n="role_builder">Builder</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="accuracy"><strong data-i18n="role_accuracy">Accuracy reviewer</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="safety"><strong data-i18n="role_safety">Safety reviewer</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="verification"><strong data-i18n="role_verification">Verification</strong><span class="agent-role-status">pending</span></div>
             </div>
             <div id="agent-plan" hidden>
               <strong data-i18n="agent_plan">Plan</strong>
@@ -2781,7 +2781,7 @@
               <ul id="agent-sources-list" class="details"></ul>
             </div>
             <section id="workbook-map" class="workbook-map" hidden>
-              <h3>Workbook Map</h3>
+              <h3 data-i18n="workbook_map">Workbook Map</h3>
               <div id="workbook-map-content"></div>
             </section>
             <ol id="agent-changes" class="details" hidden></ol>
@@ -2925,9 +2925,9 @@
           role="tablist"
           aria-label="Workspace"
         >
-          <button type="button" class="active" data-workspace-target="work" role="tab" aria-selected="true">Work</button>
-          <button type="button" data-workspace-target="results" role="tab" aria-selected="false" disabled>Results</button>
-          <button type="button" data-workspace-target="share" role="tab" aria-selected="false" disabled>Share</button>
+          <button data-i18n="tab_work" type="button" class="active" data-workspace-target="work" role="tab" aria-selected="true">Work</button>
+          <button data-i18n="tab_results" type="button" data-workspace-target="results" role="tab" aria-selected="false" disabled>Results</button>
+          <button data-i18n="tab_share" type="button" data-workspace-target="share" role="tab" aria-selected="false" disabled>Share</button>
         </nav>
       </div>
 

@@ -3386,7 +3386,9 @@ function drawChart(chart: OutcomeChart): SVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   const all = chart.series.flatMap((entry) => entry.values);
+  const min = Math.min(0, ...all);
   const max = Math.max(1, ...all);
+  const range = Math.max(1, max - min);
   const count = Math.max(1, chart.categories.length);
   const step = (width - pad * 2) / count;
   const add = (name: string, attrs: Record<string, string>) => {
@@ -3396,40 +3398,134 @@ function drawChart(chart: OutcomeChart): SVGElement {
     svg.appendChild(node);
     return node;
   };
+  const y = (value: number) =>
+    height - pad - ((value - min) / range) * (height - pad * 2);
   add("line", {
     x1: String(pad),
-    y1: String(height - pad),
+    y1: String(y(0)),
     x2: String(width - pad),
-    y2: String(height - pad),
+    y2: String(y(0)),
     stroke: "#9aa5b5",
   });
-  const y = (value: number) =>
-    height - pad - (value / max) * (height - pad * 2);
-  chart.series.forEach((entry, index) => {
-    const color = PALETTE[index % PALETTE.length];
-    if (chart.type === "line") {
+
+  const type = String(chart.type || "column").toLowerCase();
+  const drawLineSeries = (
+    entry: OutcomeChart["series"][number],
+    index: number,
+  ) => {
+    const points = entry.values
+      .map((value, at) => `${pad + step * (at + 0.5)},${y(value)}`)
+      .join(" ");
+    add("polyline", {
+      points,
+      fill: "none",
+      stroke: PALETTE[index % PALETTE.length],
+      "stroke-width": "2",
+    });
+  };
+  const drawColumns = (stacked: boolean, firstOnly = false) => {
+    chart.categories.forEach((_, at) => {
+      let stack = 0;
+      chart.series.forEach((entry, index) => {
+        if (firstOnly && index > 0) return;
+        const value = Number(entry.values[at] ?? 0);
+        const start = stacked ? stack : 0;
+        const end = start + value;
+        stack = stacked ? end : stack;
+        add("rect", {
+          x: String(
+            stacked
+              ? pad + step * at + step * 0.1
+              : pad +
+                  step * at +
+                  step * 0.1 +
+                  ((step * 0.8) / chart.series.length) * index,
+          ),
+          y: String(y(Math.max(start, end))),
+          width: String(
+            stacked ? step * 0.8 : (step * 0.8) / chart.series.length,
+          ),
+          height: String(Math.max(1, Math.abs(y(end) - y(start)))),
+          fill: PALETTE[index % PALETTE.length],
+        });
+      });
+    });
+  };
+  const drawHorizontalBars = () => {
+    const series = chart.series[0];
+    if (!series) return;
+    const rowHeight = (height - pad * 2) / Math.max(1, series.values.length);
+    const horizontalMax = Math.max(
+      1,
+      ...series.values.map((value) => Math.abs(value)),
+    );
+    series.values.forEach((value, at) => {
+      const bar = (Math.abs(value) / horizontalMax) * (width - pad * 2);
+      add("rect", {
+        x: String(value < 0 ? pad + (width - pad * 2) - bar : pad),
+        y: String(pad + rowHeight * at + rowHeight * 0.12),
+        width: String(Math.max(1, bar)),
+        height: String(Math.max(1, rowHeight * 0.76)),
+        fill: PALETTE[0],
+      });
+    });
+  };
+  if (type === "line") chart.series.forEach(drawLineSeries);
+  else if (type === "area") {
+    chart.series.forEach((entry, index) => {
       const points = entry.values
         .map((value, at) => `${pad + step * (at + 0.5)},${y(value)}`)
         .join(" ");
-      add("polyline", {
-        points,
-        fill: "none",
-        stroke: color,
-        "stroke-width": "2",
+      const first = `${pad + step * 0.5},${y(0)}`;
+      const last = `${pad + step * (entry.values.length - 0.5)},${y(0)}`;
+      add("polygon", {
+        points: `${first} ${points} ${last}`,
+        fill: PALETTE[index % PALETTE.length],
+        opacity: "0.2",
       });
-    } else {
-      const barWidth = (step * 0.8) / chart.series.length;
-      entry.values.forEach((value, at) =>
-        add("rect", {
-          x: String(pad + step * at + step * 0.1 + barWidth * index),
-          y: String(y(value)),
-          width: String(barWidth),
-          height: String(height - pad - y(value)),
-          fill: color,
-        }),
-      );
-    }
-  });
+      drawLineSeries(entry, index);
+    });
+  } else if (type === "bar") drawHorizontalBars();
+  else if (type === "combo") {
+    drawColumns(false, true);
+    chart.series.slice(1).forEach(drawLineSeries);
+  } else if (type === "stacked-column") drawColumns(true);
+  else if (type === "waterfall") {
+    const series = chart.series[0];
+    let running = 0;
+    series?.values.forEach((value, at) => {
+      const next = running + Number(value || 0);
+      add("rect", {
+        x: String(pad + step * at + step * 0.1),
+        y: String(y(Math.max(running, next))),
+        width: String(step * 0.8),
+        height: String(Math.max(1, Math.abs(y(next) - y(running)))),
+        fill: next >= running ? "#2e8b57" : "#c94c4c",
+      });
+      running = next;
+    });
+  } else if (type === "pie") {
+    const series = chart.series[0];
+    const values = series?.values.map((value) => Math.max(0, value)) ?? [];
+    const total = values.reduce((sum, value) => sum + value, 0) || 1;
+    const cx = width / 2;
+    const cy = (height - 6) / 2;
+    const radius = Math.min(cx - pad, cy - pad / 2);
+    let angle = -Math.PI / 2;
+    values.forEach((value, index) => {
+      const nextAngle = angle + (value / total) * Math.PI * 2;
+      const largeArc = nextAngle - angle > Math.PI ? 1 : 0;
+      const startX = cx + radius * Math.cos(angle);
+      const startY = cy + radius * Math.sin(angle);
+      const endX = cx + radius * Math.cos(nextAngle);
+      const endY = cy + radius * Math.sin(nextAngle);
+      add("path", {
+        d: `M ${cx} ${cy} L ${startX} ${startY} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`,
+        fill: PALETTE[index % PALETTE.length],
+      });
+      angle = nextAngle;
+    });
+  } else drawColumns(false);
   chart.categories.forEach((name, at) => {
     const label = add("text", {
       x: String(pad + step * (at + 0.5)),
@@ -3531,6 +3627,53 @@ function renderOutcomes(actions: any[]) {
     container.appendChild(box);
   }
   void refreshSheetNames(container, actions);
+}
+
+/**
+ * Keep the visible, unconfirmed preview aligned with a tweak while the same
+ * request is being checked again by the local and server planners. This never
+ * changes the workbook and the apply button remains disabled until that check
+ * succeeds.
+ */
+function renderPendingPreviewSpecs(specs: ExcelColumnSpecs) {
+  if (!preview) return;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(preview.textContent || "");
+  } catch {
+    return;
+  }
+  if (!Array.isArray(parsed?.actions)) return;
+  const actions = parsed.actions.map((action: any) => {
+    if (action.kind === "chart" && specs.chart)
+      return {
+        ...action,
+        spec: {
+          ...(action.spec ?? {}),
+          categoryIndex: specs.chart.category,
+          valueIndex: specs.chart.value,
+          chartType: specs.chart.chartType,
+          ...(specs.chart.showDataLabels
+            ? { showDataLabels: true }
+            : { showDataLabels: undefined }),
+        },
+      };
+    if (action.kind === "pivot-table" && specs.pivot)
+      return {
+        ...action,
+        spec: {
+          ...(action.spec ?? {}),
+          rows: specs.pivot.rows,
+          values: specs.pivot.values,
+          aggregation: specs.pivot.aggregation,
+          topN: specs.pivot.topN,
+          lowest: specs.pivot.lowest,
+        },
+      };
+    return action;
+  });
+  preview.textContent = JSON.stringify({ ...parsed, actions }, null, 2);
+  refreshPreviewSummary?.();
 }
 
 type TweakSelect = HTMLSelectElement | null;
@@ -3637,8 +3780,11 @@ function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
     ...(previewSpecs?.summary ? { summary: { ...previewSpecs.summary } } : {}),
     ...(previewSpecs?.format ? { format: { ...previewSpecs.format } } : {}),
   };
+  previewSpecs = next;
   update(next);
   pendingSpecs = next;
+  if (apply) apply.disabled = true;
+  renderPendingPreviewSpecs(next);
   setStatus("Preview adjusted. Rechecking the plan...");
   void inspect?.click();
 }

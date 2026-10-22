@@ -364,6 +364,34 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     path: path.join(artifactDirectory, `taskpane-${label}-settings.png`),
     fullPage: true,
   });
+  // Agent runs reveal their progress card before the first model response. Exercise that narrow
+  // visual state independently of the network/model path.
+  await page.$eval("#agent-card", (card) => {
+    document.querySelector("#prefs-card").setAttribute("hidden", "");
+    card.removeAttribute("hidden");
+    card.querySelector("#agent-badge").textContent = "Planning";
+    card.querySelector("#agent-progress").textContent =
+      "Inspecting the selected data and preparing a safe plan.";
+    card.querySelector("#agent-stop").removeAttribute("hidden");
+    card.querySelector('[data-stage="inspect"]').classList.add("done");
+    card.querySelector('[data-stage="plan"]').classList.add("active");
+    card.scrollIntoView({ block: "start" });
+  });
+  await assertReachable(page, "#agent-card");
+  await assertReachable(page, "#agent-stop");
+  assert.equal(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <=
+        document.documentElement.clientWidth,
+    ),
+    true,
+    "the active agent progress card has horizontal overflow",
+  );
+  await page.screenshot({
+    path: path.join(artifactDirectory, `taskpane-${label}-agent.png`),
+    fullPage: true,
+  });
   assert.deepEqual(
     consoleErrors,
     [],

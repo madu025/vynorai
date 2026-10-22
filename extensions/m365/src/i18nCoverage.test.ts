@@ -105,6 +105,7 @@ test("the pane avoids duplicating the Office title bar and keeps its app menu re
     html,
     /id="advanced-workbook-options"[\s\S]*?data-i18n="menu_advanced_workbook_options"/,
   );
+  assert.match(html, /id="prefs-card"[\s\S]*?hidden/);
 });
 
 test("the prompt starts the pane and the workspace flows below it", () => {
@@ -160,7 +161,10 @@ test("selection context and suggestions appear before the conversation", () => {
 
 test("narrow controls and workbook settings stack without overlap", () => {
   assert.match(html, /#menu\s*\{[^}]*flex:\s*1 0 100%[^}]*width:\s*100%/);
-  assert.match(html, /\.chat-bar select\s*\{[^}]*flex-basis:\s*150px/);
+  assert.match(
+    html,
+    /@media \(max-width: 360px\)\s*\{[\s\S]*?\.chat-bar select\s*\{\s*order:\s*3[\s\S]*?flex:\s*1 0 100%/,
+  );
   assert.match(
     html,
     /#prefs-card > label:not\(\.email-check\)\s*\{[^}]*display:\s*grid/,
@@ -261,6 +265,21 @@ test("the agent workflow stays visibly staged rather than claiming an automatic 
     /\.agent-timeline li\.done::before\s*\{[^}]*content:\s*"✓"/,
   );
   assert.match(html, /id="agent-approve"[\s\S]*?class="primary"[\s\S]*?hidden/);
+});
+
+test("agent progress is shown without pulling the conversation over contextual cards", () => {
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /show\(agentCard, true\);/);
+  assert.match(source, /prefsCard\.hidden = false;/);
+  assert.match(
+    source,
+    /agentCard\?\.scrollIntoView\?\.\(\{ block: "start", behavior: "smooth" \}\)/,
+  );
+  assert.match(source, /renderConversation\("user", request, false\)/);
+  assert.match(source, /renderConversation\("assistant", run\.reply, false\)/);
 });
 
 test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {

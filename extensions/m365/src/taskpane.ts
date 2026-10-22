@@ -705,6 +705,7 @@ function setStatus(message: string) {
 function renderConversation(
   kind: "user" | "assistant" | "error",
   text: string,
+  follow = true,
 ) {
   if (!text) return;
   conversationMessages.push({
@@ -714,12 +715,14 @@ function renderConversation(
   conversationMessages = conversationMessages.slice(-MAX_CONVERSATION_MESSAGES);
   renderConversationHistory();
   persistConversation();
-  // Keep the newest message in view above the composer, like a chat.
-  window.requestAnimationFrame(() => {
-    document
-      .querySelector<HTMLElement>("#conversation-history")
-      ?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
-  });
+  // Normal chat follows the newest reply. Agent work keeps its dedicated progress card in view
+  // so contextual suggestions are never left half-clipped above the conversation.
+  if (follow)
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>("#conversation-history")
+        ?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
+    });
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;
@@ -3204,6 +3207,7 @@ function setupLayout() {
   });
   advancedWorkbookOptions?.addEventListener("click", () => {
     if (!prefsCard) return;
+    prefsCard.hidden = false;
     prefsCard.open = true;
     closeMenu();
     prefsCard.scrollIntoView({ block: "start" });
@@ -4642,12 +4646,22 @@ function agentInputReader() {
 async function agentLoop(request: string) {
   agentBusy = true;
   agentStopped = false;
+  show(agentCard, true);
   show(agentStop, true);
   show(agentApprove, false);
   show(agentDiscard, false);
+  if (agentReply) agentReply.textContent = "";
+  if (agentChanges) agentChanges.textContent = "";
+  show(agentChanges, false);
   showAgentPlan([]);
   showAgentSources([]);
   if (agentBadge) agentBadge.textContent = "Working";
+  if (agentProgress)
+    agentProgress.textContent =
+      "Inspecting the selected data and preparing a safe plan.";
+  window.requestAnimationFrame(() =>
+    agentCard?.scrollIntoView?.({ block: "start", behavior: "smooth" }),
+  );
   const readInput = agentInputReader();
   const host = createOfficeAgentHost(
     officeRuntime(),
@@ -4732,7 +4746,7 @@ async function agentLoop(request: string) {
       agentCard?.scrollIntoView?.({ block: "end", behavior: "smooth" }),
     );
     void showChangePreviews(run, host);
-    if (run.reply) renderConversation("assistant", run.reply);
+    if (run.reply) renderConversation("assistant", run.reply, false);
     showAgentSources(
       answerSources(run.messages, (text) => agentMask.unmask(text)),
     );
@@ -4814,7 +4828,7 @@ async function startAgent() {
   agentUsage.prompt = 0;
   agentUsage.cached = 0;
   agentUsage.completion = 0;
-  renderConversation("user", request);
+  renderConversation("user", request, false);
   if (instruction) instruction.value = "";
   setStatus("The agent is working. Nothing changes until you approve.");
   await agentLoop(request);

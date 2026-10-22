@@ -4131,6 +4131,9 @@ function renderResultGallery() {
   );
   gallery.hidden = visible.length === 0;
   if (verifiedBanner) verifiedBanner.hidden = visible.length === 0;
+  // The safety note is for the first preview; once a result exists the person has seen it.
+  const safetySummary = document.querySelector<HTMLElement>(".safety-summary");
+  if (safetySummary) safetySummary.hidden = visible.length > 0;
   for (const result of visible) {
     const item = document.createElement("article");
     item.className = "result-item";

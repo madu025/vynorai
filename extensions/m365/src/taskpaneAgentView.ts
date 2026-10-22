@@ -1,8 +1,10 @@
-import type { AnswerSource } from "./agent.js";
+import type { AgentMessage, AnswerSource } from "./agent.js";
+import type { RelationLink } from "./relationships.js";
 
 export const AGENT_STAGES = [
   "inspect",
   "plan",
+  "preview",
   "review",
   "approval",
   "apply",
@@ -10,6 +12,38 @@ export const AGENT_STAGES = [
 ] as const;
 
 export type AgentStage = (typeof AGENT_STAGES)[number];
+export type AgentRole =
+  | "planner"
+  | "relationships"
+  | "builder"
+  | "accuracy"
+  | "safety"
+  | "verification";
+
+export function setAgentRoleView(
+  document: Document,
+  role: AgentRole,
+  state: "pending" | "active" | "done",
+  evidence?: string,
+): void {
+  const row = document.querySelector<HTMLElement>(
+    `#agent-activity-list [data-agent-role="${role}"]`,
+  );
+  if (!row) return;
+  row.dataset.state = state;
+  const status = row.querySelector<HTMLElement>(".agent-role-status");
+  if (status) status.textContent = evidence || state;
+}
+
+export function resetAgentRolesView(document: Document): void {
+  for (const row of document.querySelectorAll<HTMLElement>(
+    "#agent-activity-list [data-agent-role]",
+  )) {
+    row.dataset.state = "pending";
+    const status = row.querySelector<HTMLElement>(".agent-role-status");
+    if (status) status.textContent = "pending";
+  }
+}
 
 export function setAgentStageView(
   document: Document,
@@ -96,4 +130,64 @@ export function showAgentSourcesView(options: {
     }),
   );
   card.hidden = sources.length === 0;
+}
+
+export function relationshipEvidence(
+  messages: readonly AgentMessage[],
+): RelationLink | undefined {
+  const calls = new Set<string>();
+  for (const message of messages)
+    if (message.role === "assistant")
+      for (const call of message.tool_calls ?? [])
+        if (call.function.name === "map_relationships") calls.add(call.id);
+  for (const message of messages) {
+    if (message.role !== "tool" || !calls.has(message.tool_call_id)) continue;
+    try {
+      const value = JSON.parse(message.content) as { links?: RelationLink[] };
+      if (Array.isArray(value.links) && value.links[0]) return value.links[0];
+    } catch {
+      // A clipped or malformed result is not relationship evidence.
+    }
+  }
+  return undefined;
+}
+
+export function showWorkbookMapView(
+  document: Document,
+  link: RelationLink | undefined,
+): void {
+  const card = document.querySelector<HTMLElement>("#workbook-map");
+  const content = document.querySelector<HTMLElement>("#workbook-map-content");
+  if (!card || !content) return;
+  content.replaceChildren();
+  card.hidden = !link;
+  if (!link) return;
+  const node = (side: RelationLink["from"]) => {
+    const box = document.createElement("div");
+    box.className = "relationship-node";
+    const table = document.createElement("strong");
+    table.textContent = side.table.split("!")[0];
+    const column = document.createElement("span");
+    column.textContent = side.column;
+    box.append(table, column);
+    return box;
+  };
+  const line = document.createElement("div");
+  line.className = "relationship-line";
+  line.textContent = `${link.cardinality} ->`;
+  const graph = document.createElement("div");
+  graph.className = "relationship-graph";
+  graph.append(node(link.from), line, node(link.to));
+  const facts = document.createElement("div");
+  facts.className = "relationship-facts";
+  for (const text of [
+    `${link.fromRowsWithoutPartner.toLocaleString("en-US")} unmatched rows`,
+    `${(link.from.duplicateKeys + link.to.duplicateKeys).toLocaleString("en-US")} duplicate keys`,
+    link.needsCleaning ? "Clean keys first" : "Keys are consistent",
+  ]) {
+    const badge = document.createElement("span");
+    badge.textContent = text;
+    facts.appendChild(badge);
+  }
+  content.append(graph, facts);
 }

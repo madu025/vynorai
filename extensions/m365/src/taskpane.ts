@@ -69,10 +69,15 @@ import {
   setAgentStageView,
   showAgentPlanView,
   showAgentSourcesView,
+  relationshipEvidence,
+  resetAgentRolesView,
+  setAgentRoleView,
+  showWorkbookMapView,
   type AgentStage,
 } from "./taskpaneAgentView.js";
 import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
 import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
+import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
 import {
   aiFirstOn,
   memoryKey,
@@ -264,6 +269,19 @@ const consentCheck =
 const consentSend = document.querySelector<HTMLButtonElement>("#ai-send");
 const consentCancel = document.querySelector<HTMLButtonElement>("#ai-cancel");
 const analysisOutput = document.querySelector<HTMLElement>("#ai-result");
+const workspaceNavigation = createWorkspaceNavigation(document, (view) => {
+  setStatus(
+    view === "share"
+      ? "Create and verify a report before sharing it."
+      : "Create a preview or report first.",
+  );
+});
+function clearAnalysisOutput() {
+  if (!analysisOutput) return;
+  analysisOutput.textContent = "";
+  analysisOutput.dataset.workspacePanel = "work";
+  workspaceNavigation.refresh();
+}
 const apply = document.querySelector<HTMLButtonElement>("#apply");
 const emailCard = document.querySelector<HTMLElement>("#email-card");
 const emailTo = document.querySelector<HTMLInputElement>("#email-to");
@@ -290,6 +308,14 @@ const emailSend = document.querySelector<HTMLButtonElement>("#email-send");
 const emailAiWrite =
   document.querySelector<HTMLButtonElement>("#email-ai-write");
 const emailNote = document.querySelector<HTMLElement>("#email-note");
+const emailDeliveryStatus = document.querySelector<HTMLElement>(
+  "#email-delivery-status",
+);
+const emailReportName =
+  document.querySelector<HTMLElement>("#email-report-name");
+const emailAttachmentSize = document.querySelector<HTMLElement>(
+  "#email-attachment-size",
+);
 const selfTest = document.querySelector<HTMLButtonElement>("#self-test");
 const copyDiagnostics =
   document.querySelector<HTMLButtonElement>("#copy-diagnostics");
@@ -312,6 +338,8 @@ let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
 let lastRevealSheet = "";
 let currentSourceSheet = "";
 let currentRangeAddress = "";
+let latestSelectionAddress = "";
+let previewSelectionAddress = "";
 let lastDoneSentence = "";
 let previewSpecs: ExcelColumnSpecs | undefined;
 let followUpAggregate = false;
@@ -333,6 +361,7 @@ let lastCreated:
 let galleryPlanId = "";
 let galleryResults: ExcelActionResult[] = [];
 let language: Language = loadLanguage();
+let officePlatformLabel = "Excel";
 let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
@@ -784,7 +813,19 @@ function updateEmailUi(signedIn = Boolean(accessToken)) {
   );
 }
 
-function prepareEmailComposer(recipient = "") {
+function prepareEmailComposer(recipient = "", openShare = true) {
+  if (emailDeliveryStatus) {
+    emailDeliveryStatus.className = "delivery-status";
+    emailDeliveryStatus.textContent = "Not sent yet · approval required";
+  }
+  if (emailReportName)
+    emailReportName.textContent =
+      lastRevealSheet || currentSourceSheet || "Workbook report";
+  if (emailAttachmentSize)
+    emailAttachmentSize.textContent = "Size calculated after approval";
+  updateEmailUi();
+  workspaceNavigation.refresh();
+  if (openShare) workspaceNavigation.activate("share");
   prepareShareComposer(
     {
       card: emailCard,
@@ -799,7 +840,6 @@ function prepareEmailComposer(recipient = "") {
       reportSheet: lastRevealSheet || currentSourceSheet || "Workbook",
     },
   );
-  updateEmailUi();
 }
 
 function createOAuthAttemptStorage() {
@@ -1147,6 +1187,21 @@ emailSend?.addEventListener("click", async () => {
         })),
       }),
     );
+    if (emailReportName) {
+      const names = (prepared.request.attachments ?? []).map(
+        (attachment) => attachment.name,
+      );
+      emailReportName.textContent = names.join(", ") || "Summary in email";
+    }
+    if (emailAttachmentSize) {
+      const bytes = (prepared.request.attachments ?? []).reduce(
+        (total, attachment) => total + attachment.bytes,
+        0,
+      );
+      emailAttachmentSize.textContent = bytes
+        ? `${(bytes / 1024 / 1024).toFixed(2)} MB`
+        : "No attachment";
+    }
     const requiresLargePermission =
       (prepared.request.attachments ?? []).some(
         (attachment) => attachment.bytes >= MAX_DIRECT_ATTACHMENT_BYTES,
@@ -1186,6 +1241,13 @@ emailSend?.addEventListener("click", async () => {
         ? `Outlook draft created for ${to} and verified by Microsoft Graph.`
         : `Report sent to ${to} and verified by Microsoft Graph.`,
     );
+    if (emailDeliveryStatus) {
+      emailDeliveryStatus.className = "delivery-status sent";
+      emailDeliveryStatus.textContent =
+        deliveryMode === "draft"
+          ? "Draft created · verified by Microsoft Graph"
+          : "Sent · verified by Microsoft Graph";
+    }
   } catch (error) {
     log.record("email:send", "fail", emailErrorMessage(error));
     if (isGraphConsentFailure(error)) {
@@ -1194,6 +1256,10 @@ emailSend?.addEventListener("click", async () => {
         "Microsoft did not give this add-in permission to send mail (your organization's administrator may need to approve it). Nothing was sent. Use the link below to open the report as a draft in Outlook on the web.",
       );
     } else setStatus(emailErrorMessage(error));
+    if (emailDeliveryStatus) {
+      emailDeliveryStatus.className = "delivery-status failed";
+      emailDeliveryStatus.textContent = "Not sent · review the error and retry";
+    }
   } finally {
     emailSending = false;
     updateEmailUi();
@@ -1322,7 +1388,7 @@ function signOutOfMicrosoft() {
   capabilities = undefined;
   currentPlan = undefined;
   previewFingerprint = "";
-  if (analysisOutput) analysisOutput.textContent = "";
+  clearAnalysisOutput();
   if (consentPanel) consentPanel.hidden = true;
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -2141,6 +2207,8 @@ inspect?.addEventListener("click", async () => {
     currentPlan = plan;
     previewController.finish(previewRun);
     previewFingerprint = localPreview.sourceFingerprint;
+    previewSelectionAddress = latestSelectionAddress;
+    show(selectionChangeWarning, false);
     if (preview)
       preview.textContent = JSON.stringify(
         {
@@ -2343,8 +2411,10 @@ apply?.addEventListener("click", async () => {
     galleryResults = report.results;
     persistResultGallery();
     renderResultGallery();
-    prepareEmailComposer();
+    prepareEmailComposer("", false);
     updateEmailUi();
+    workspaceNavigation.refresh();
+    workspaceNavigation.activate("results");
     if (rollbackButton)
       rollbackButton.hidden =
         lastCreated.sheets.length + lastCreated.tables.length === 0;
@@ -2668,7 +2738,9 @@ function resetAnalysisConsent() {
 function renderAnalysis(result: AnalysisResult) {
   if (!analysisOutput) return;
   const output = analysisOutput;
+  output.dataset.workspacePanel = "results";
   output.textContent = "";
+  output.classList.add("analysis-card");
   const add = (tag: string, text: string, parent: HTMLElement = output) => {
     const element = document.createElement(tag);
     element.textContent = text; // model text is data, never markup
@@ -2676,29 +2748,50 @@ function renderAnalysis(result: AnalysisResult) {
     return element;
   };
   const percent = (value: number) => `${Math.round(value * 100)}%`;
-  add("p", result.summary);
+  add("h3", localizeMessage(language, "Analysis"));
+  add("p", result.summary).className = "analysis-summary";
   if (result.columns.length) {
-    add("h3", localizeMessage(language, "Columns"));
+    const section = document.createElement("section");
+    section.className = "analysis-section";
+    output.appendChild(section);
+    add("h3", localizeMessage(language, "Columns"), section);
     for (const column of result.columns)
       add(
         "p",
         `${column.name}: ${column.inferredType}, ${column.role} (${percent(column.confidence)}) - ${column.reason}`,
+        section,
       );
   }
   if (result.dataQuality.length) {
-    add("h3", localizeMessage(language, "Data quality"));
+    const section = document.createElement("section");
+    section.className = "analysis-section";
+    output.appendChild(section);
+    add("h3", localizeMessage(language, "Data quality"), section);
     for (const issue of result.dataQuality)
       add(
         "p",
         `[${issue.severity}] ${issue.message} (${percent(issue.confidence)})`,
+        section,
       );
   }
-  add("h3", localizeMessage(language, "Recommendations"));
+  const recommendationSection = document.createElement("section");
+  recommendationSection.className = "analysis-section";
+  output.appendChild(recommendationSection);
+  add(
+    "h3",
+    localizeMessage(language, "Recommendations"),
+    recommendationSection,
+  );
   if (!result.recommendations.length)
-    add("p", localizeMessage(language, "No safe recommendation was found."));
+    add(
+      "p",
+      localizeMessage(language, "No safe recommendation was found."),
+      recommendationSection,
+    );
   for (const recommendation of result.recommendations) {
     const item = document.createElement("div");
-    output.appendChild(item);
+    item.className = "analysis-recommendation";
+    recommendationSection.appendChild(item);
     add(
       "p",
       `${recommendation.title} - ${recommendation.kind}${recommendation.chartType ? ` (${recommendation.chartType})` : ""}, ${percent(recommendation.confidence)} - ${recommendation.reason}`,
@@ -2724,6 +2817,8 @@ function renderAnalysis(result: AnalysisResult) {
     );
     item.appendChild(use);
   }
+  workspaceNavigation.refresh();
+  workspaceNavigation.activate("results");
 }
 
 let scriptMode = false;
@@ -2745,22 +2840,36 @@ function renderScript(result: {
 }) {
   if (!analysisOutput) return;
   const output = analysisOutput;
+  output.dataset.workspacePanel = "work";
   output.textContent = "";
-  const add = (tag: string, text: string, parent: HTMLElement = output) => {
-    const element = document.createElement(tag);
-    element.textContent = text;
-    parent.appendChild(element);
-    return element;
-  };
-  add("h3", result.title);
-  result.steps.forEach((step, index) =>
-    add("p", `${index + 1}. ${step.instruction} - ${step.reason}`),
-  );
+  output.classList.add("analysis-card");
+  const title = document.createElement("h3");
+  title.textContent = result.title;
+  const list = document.createElement("ol");
+  list.className = "analysis-step-list";
+  result.steps.forEach((step, index) => {
+    const item = document.createElement("li");
+    item.className = "analysis-step";
+    const number = document.createElement("span");
+    number.className = "analysis-step-number";
+    number.textContent = String(index + 1);
+    const body = document.createElement("div");
+    const instructionText = document.createElement("strong");
+    instructionText.textContent = step.instruction;
+    const reason = document.createElement("span");
+    reason.textContent = step.reason;
+    body.append(instructionText, reason);
+    item.append(number, body);
+    list.appendChild(item);
+  });
+  output.append(title, list);
   const use = document.createElement("button");
   use.type = "button";
   use.textContent = localizeMessage(language, "Use these steps");
   use.addEventListener("click", () => useSteps(result));
   output.appendChild(use);
+  workspaceNavigation.refresh();
+  workspaceNavigation.activate("work");
 }
 
 /** The steps become the instruction and go through the normal preview; nothing changes until Confirm. */
@@ -2798,7 +2907,7 @@ async function startConsent() {
   if (!config || !accessToken)
     return setStatus("Sign in before analyzing Excel data.");
   resetAnalysisConsent();
-  if (analysisOutput) analysisOutput.textContent = "";
+  clearAnalysisOutput();
   try {
     const input = await log.step(
       "analysis:read-selection",
@@ -3242,6 +3351,8 @@ function setupLayout() {
     renderOutcomes(actions);
     configurePreviewTweaks(actions);
     resultCard.hidden = false;
+    workspaceNavigation.refresh();
+    workspaceNavigation.activate("results");
   };
   if (preview)
     new MutationObserver(renderSummary).observe(preview, {
@@ -3423,6 +3534,13 @@ const tweakAggregation =
 const tweakCategory =
   document.querySelector<HTMLSelectElement>("#tweak-category");
 const tweakValue = document.querySelector<HTMLSelectElement>("#tweak-value");
+const tweakTopN = document.querySelector<HTMLSelectElement>("#tweak-top-n");
+const tweakRankDirection = document.querySelector<HTMLSelectElement>(
+  "#tweak-rank-direction",
+);
+const tweakDataLabels =
+  document.querySelector<HTMLInputElement>("#tweak-data-labels");
+const tweakTotals = document.querySelector<HTMLInputElement>("#tweak-totals");
 
 function setTweakOptions(
   select: TweakSelect,
@@ -3446,7 +3564,8 @@ function configurePreviewTweaks(actions: any[]) {
   if (!panel || !lastRange) return;
   const hasChart = actions.some((action) => action.kind === "chart");
   const hasPivot = actions.some((action) => action.kind === "pivot-table");
-  panel.hidden = !hasChart && !hasPivot;
+  const supportsTotals = Boolean(previewSpecs?.summary || previewSpecs?.format);
+  panel.hidden = !hasChart && !hasPivot && !supportsTotals;
   if (panel.hidden) return;
   const columns = lastRange.headers.map((header, index) => ({
     value: String(index),
@@ -3478,6 +3597,27 @@ function configurePreviewTweaks(actions: any[]) {
   setTweakOptions(tweakValue, columns, chart?.value ?? pivot?.values ?? 0);
   if (tweakChartType) tweakChartType.closest("label")!.hidden = !hasChart;
   if (tweakAggregation) tweakAggregation.closest("label")!.hidden = !hasPivot;
+  if (tweakCategory)
+    tweakCategory.closest("label")!.hidden = !hasChart && !hasPivot;
+  if (tweakValue) tweakValue.closest("label")!.hidden = !hasChart && !hasPivot;
+  if (tweakTopN) {
+    tweakTopN.closest("label")!.hidden = !hasPivot;
+    tweakTopN.value = pivot?.topN ? String(pivot.topN) : "";
+  }
+  if (tweakRankDirection) {
+    tweakRankDirection.closest("label")!.hidden = !hasPivot;
+    tweakRankDirection.value = pivot?.lowest ? "bottom" : "top";
+  }
+  if (tweakDataLabels) {
+    tweakDataLabels.closest("label")!.hidden = !hasChart;
+    tweakDataLabels.checked = chart?.showDataLabels === true;
+  }
+  if (tweakTotals) {
+    tweakTotals.closest("label")!.hidden = !supportsTotals;
+    tweakTotals.checked = Boolean(
+      previewSpecs?.summary?.total || previewSpecs?.format?.totalRow,
+    );
+  }
 }
 
 function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
@@ -3487,6 +3627,8 @@ function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
     ...previewSpecs,
     ...(previewSpecs?.chart ? { chart: { ...previewSpecs.chart } } : {}),
     ...(previewSpecs?.pivot ? { pivot: { ...previewSpecs.pivot } } : {}),
+    ...(previewSpecs?.summary ? { summary: { ...previewSpecs.summary } } : {}),
+    ...(previewSpecs?.format ? { format: { ...previewSpecs.format } } : {}),
   };
   update(next);
   pendingSpecs = next;
@@ -3528,6 +3670,34 @@ tweakValue?.addEventListener("change", (event) => {
     const column = Number(tweakValue.value);
     if (specs.chart) specs.chart.value = column;
     else if (specs.pivot) specs.pivot.values = column;
+  });
+});
+tweakTopN?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (!specs.pivot) return;
+    const value = Number(tweakTopN.value);
+    if (Number.isInteger(value) && value > 0) specs.pivot.topN = value;
+    else delete specs.pivot.topN;
+  });
+});
+tweakRankDirection?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (specs.pivot) specs.pivot.lowest = tweakRankDirection.value === "bottom";
+  });
+});
+tweakDataLabels?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (specs.chart) specs.chart.showDataLabels = tweakDataLabels.checked;
+  });
+});
+tweakTotals?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (specs.summary) specs.summary.total = tweakTotals.checked;
+    if (specs.format) specs.format.totalRow = tweakTotals.checked;
   });
 });
 
@@ -3638,12 +3808,16 @@ async function replaceOlderResultSheets(keepSheet: string) {
 function renderResultGallery() {
   const gallery = document.querySelector<HTMLElement>("#result-gallery");
   const list = document.querySelector<HTMLElement>("#result-gallery-list");
+  const verifiedBanner = document.querySelector<HTMLElement>(
+    "#verified-result-banner",
+  );
   if (!gallery || !list) return;
   list.replaceChildren();
   const visible = galleryResults.filter(
     (result) => result.status === "created" || result.status === "exists",
   );
   gallery.hidden = visible.length === 0;
+  if (verifiedBanner) verifiedBanner.hidden = visible.length === 0;
   for (const result of visible) {
     const item = document.createElement("article");
     item.className = "result-item";
@@ -3652,7 +3826,8 @@ function renderResultGallery() {
     const title = document.createElement("strong");
     title.textContent = kindTitle(result.kind, language);
     const target = document.createElement("span");
-    target.textContent = result.targetSheet;
+    target.className = "verified-badge";
+    target.textContent = `Verified · ${result.targetSheet}`;
     head.append(title, target);
     const actions = document.createElement("div");
     actions.className = "result-item-actions";
@@ -3663,6 +3838,26 @@ function renderResultGallery() {
       void revealExcelResult(officeRuntime(), result.targetSheet);
     });
     actions.appendChild(show);
+    const evidence = document.createElement("details");
+    evidence.className = "result-evidence";
+    const evidenceSummary = document.createElement("summary");
+    evidenceSummary.textContent = "Show evidence";
+    const evidenceList = document.createElement("ul");
+    const evidenceLines = [
+      `Result read back from sheet ${result.targetSheet}`,
+      currentRangeAddress
+        ? `Source: ${currentRangeAddress}`
+        : "Source recorded in the applied plan",
+      `${kindTitle(result.kind, language)} completed with status ${result.status}`,
+      ...(result.notes ?? []),
+      ...(result.warnings ?? []).map((warning) => `Warning: ${warning}`),
+    ];
+    for (const line of evidenceLines) {
+      const row = document.createElement("li");
+      row.textContent = line;
+      evidenceList.appendChild(row);
+    }
+    evidence.append(evidenceSummary, evidenceList);
     const share = document.createElement("button");
     share.type = "button";
     share.textContent = translate(language, "email_report", "Email report");
@@ -3751,7 +3946,7 @@ function renderResultGallery() {
       void replaceOlderResultSheets(result.targetSheet);
     });
     actions.appendChild(replace);
-    item.append(head, actions);
+    item.append(head, actions, evidence);
     list.appendChild(item);
   }
 }
@@ -4029,6 +4224,9 @@ const contextSuggestions = document.querySelector<HTMLElement>(
 const contextSuggestionList = document.querySelector<HTMLElement>(
   "#context-suggestion-list",
 );
+const selectionChangeWarning = document.querySelector<HTMLElement>(
+  "#selection-change-warning",
+);
 let selectionTimer: ReturnType<typeof setTimeout> | undefined;
 
 function renderWorkspaceContext(
@@ -4046,7 +4244,7 @@ function renderWorkspaceContext(
   }
   const description = describeSelection(info);
   if (contextSelection) contextSelection.textContent = description;
-  contextBadges?.replaceChildren(
+  const badgeLabels = [
     ...selectionBadges(info, {
       row: translate(language, "row_label", "row"),
       rows: translate(language, "rows_label", "rows"),
@@ -4054,9 +4252,14 @@ function renderWorkspaceContext(
       columns: translate(language, "columns_label", "columns"),
       largeRange: translate(language, "large_range", "Large range"),
       localPreview: translate(language, "local_preview", "Local preview"),
-    }).map((text) => {
+    }),
+    officePlatformLabel,
+    "Original data preserved",
+  ];
+  contextBadges?.replaceChildren(
+    ...badgeLabels.map((text) => {
       const badge = document.createElement("span");
-      badge.className = "context-badge";
+      badge.className = `context-badge${text === "Original data preserved" ? " safe" : ""}`;
       badge.textContent = text;
       return badge;
     }),
@@ -4092,7 +4295,34 @@ function renderWorkspaceContext(
         `suggestion_reason_${suggestion.id}`,
         suggestion.reason,
       );
-      button.append(title, reason);
+      const relevantRoles: Record<string, string[]> = {
+        chart: ["category", "measure"],
+        pivot: ["category", "measure"],
+        dashboard: ["date", "category", "measure"],
+        forecast: ["date", "measure"],
+        clean: ["text", "category"],
+      };
+      const sources = (schema?.columns ?? [])
+        .filter(
+          (column) =>
+            !relevantRoles[suggestion.id] ||
+            relevantRoles[suggestion.id].includes(column.role),
+        )
+        .slice(0, 4)
+        .map((column) => column.name);
+      const expectedOutputs: Record<string, string> = {
+        chart: "Chart result",
+        pivot: "PivotTable",
+        dashboard: "Dashboard sheet",
+        quality: "Quality report",
+        formulas: "Formula audit",
+        forecast: "Forecast report",
+        clean: "Clean result sheet",
+      };
+      const meta = document.createElement("span");
+      meta.className = "suggestion-meta";
+      meta.textContent = `${schema?.sampleRows ? 93 : 78}% · ${sources.length ? sources.join(", ") : description} · ${expectedOutputs[suggestion.id]}`;
+      button.append(title, reason, meta);
       button.addEventListener("click", () => {
         if (!instruction) return;
         instruction.value = suggestion.instruction;
@@ -4130,14 +4360,33 @@ async function refreshSelectionChip() {
   try {
     const { info, schema } = await readWorkspaceContext();
     const text = describeSelection(info);
+    latestSelectionAddress = info.address;
     selectionText.textContent = text;
     show(selectionChip, text !== "");
     renderWorkspaceContext(info, schema);
+    const changedAfterPreview = Boolean(
+      currentPlan &&
+        previewSelectionAddress &&
+        info.address !== previewSelectionAddress,
+    );
+    show(selectionChangeWarning, changedAfterPreview);
+    if (changedAfterPreview && apply) apply.disabled = true;
   } catch {
     show(selectionChip, false);
     renderWorkspaceContext(undefined);
   }
 }
+
+document
+  .querySelector("#refresh-preview-selection")
+  ?.addEventListener("click", () => {
+    currentPlan = undefined;
+    previewFingerprint = "";
+    previewSelectionAddress = "";
+    show(selectionChangeWarning, false);
+    setStatus("Refreshing the preview for the current selection...");
+    void inspect?.click();
+  });
 
 document
   .querySelector("#refresh-context")
@@ -4166,7 +4415,7 @@ async function initialize() {
   localStorage.removeItem(LEGACY_SESSION_KEY);
   if (office()?.onReady) {
     try {
-      await log.step(
+      const ready = await log.step(
         "office:ready",
         () => office().onReady(),
         (info: any) => ({
@@ -4174,6 +4423,15 @@ async function initialize() {
           platform: info?.platform,
         }),
       );
+      const platform = String((ready as any)?.platform ?? "");
+      officePlatformLabel =
+        platform === "OfficeOnline"
+          ? "Excel Web"
+          : platform === "Mac"
+            ? "Excel Mac"
+            : platform === "PC"
+              ? "Excel Desktop"
+              : "Excel";
     } catch {
       // Recorded; the self-test shows which host functions are missing.
     }
@@ -4328,6 +4586,16 @@ async function showChangePreviews(run: AgentRun, host: AgentHost) {
 
 function renderAgentRun(run: AgentRun) {
   show(agentCard, true);
+  const relationship = relationshipEvidence(run.messages);
+  showWorkbookMapView(document, relationship);
+  setAgentRoleView(
+    document,
+    "builder",
+    "done",
+    `${run.changes.length} staged change(s)`,
+  );
+  if (relationship)
+    setAgentRoleView(document, "relationships", "done", "key evidence found");
   if (agentReply) {
     agentReply.textContent = "";
     for (const line of (
@@ -4425,6 +4693,10 @@ async function agentLoop(request: string) {
   show(agentChanges, false);
   showAgentPlan([]);
   showAgentSources([]);
+  if (!agentVerifying) {
+    showWorkbookMapView(document, undefined);
+    resetAgentRolesView(document);
+  }
   if (agentBadge) agentBadge.textContent = "Working";
   if (agentProgress)
     agentProgress.textContent =
@@ -4450,6 +4722,7 @@ async function agentLoop(request: string) {
       onPhase: (phase: AgentPhase) => {
         if (agentVerifying) setAgentStage("verify");
         else if (phase === "planning") setAgentStage("plan");
+        else if (phase === "executing") setAgentStage("preview");
         if (agentBadge)
           agentBadge.textContent =
             phase === "planning"
@@ -4467,15 +4740,26 @@ async function agentLoop(request: string) {
       },
       onTool: (name, args) => {
         const label = agentToolLabel(name, args);
+        if (name === "map_relationships")
+          setAgentRoleView(
+            document,
+            "relationships",
+            "active",
+            "checking keys",
+          );
+        else setAgentRoleView(document, "builder", "active", label);
         if (agentProgress) agentProgress.textContent = label;
         log.record(`agent:tool:${name}`, "info", label.slice(0, 120));
       },
       onTeamPhase: (phase) => {
         if (phase === "plan") {
+          setAgentRoleView(document, "planner", "active", "building plan");
           if (!agentVerifying) setAgentStage("plan");
           if (agentBadge) agentBadge.textContent = "Planning";
           setStatus("A planner agent is splitting the request into steps...");
         } else if (phase === "reviewing") {
+          setAgentRoleView(document, "planner", "done", "plan ready");
+          setAgentRoleView(document, "builder", "done", "preview staged");
           if (!agentVerifying) setAgentStage("review");
           if (agentBadge) agentBadge.textContent = "Reviewing";
         } else if (phase === "revising") {
@@ -4484,14 +4768,39 @@ async function agentLoop(request: string) {
         }
       },
       onPlan: showAgentPlan,
-      onReviewer: (focus) =>
-        setStatus(
-          focus === "accuracy"
-            ? "A reviewer agent is checking ranges, formulas and totals..."
-            : "A reviewer agent is checking that every part is covered and nothing is overwritten...",
-        ),
+      onReviewer: (focus) => {
+        if (focus === "accuracy") {
+          setAgentRoleView(
+            document,
+            "accuracy",
+            "active",
+            "checking calculations",
+          );
+          setStatus(
+            "A reviewer agent is checking ranges, formulas and totals...",
+          );
+        } else {
+          setAgentRoleView(document, "accuracy", "done", "checks completed");
+          setAgentRoleView(
+            document,
+            "safety",
+            "active",
+            "checking write safety",
+          );
+          setStatus(
+            "A reviewer agent is checking that every part is covered and nothing is overwritten...",
+          );
+        }
+      },
       onHelperTool: (name, args) => {
         const label = agentToolLabel(name, args);
+        if (name === "map_relationships")
+          setAgentRoleView(
+            document,
+            "relationships",
+            "active",
+            "checking keys",
+          );
         if (agentProgress) agentProgress.textContent = `Team: ${label}`;
         log.record(`agent:team:${name}`, "info", label.slice(0, 120));
       },
@@ -4510,6 +4819,22 @@ async function agentLoop(request: string) {
         planSteps: reviewed.plan?.length ?? 0,
         revised: reviewed.revised,
       });
+    if (reviewed.plan?.length)
+      setAgentRoleView(
+        document,
+        "planner",
+        "done",
+        `${reviewed.plan.length} plan step(s)`,
+      );
+    for (const reviewer of reviewed.reviewers ?? [])
+      setAgentRoleView(
+        document,
+        reviewer.focus === "accuracy" ? "accuracy" : "safety",
+        "done",
+        reviewer.ok
+          ? "checks passed"
+          : `${reviewer.issues.length} issue(s) found`,
+      );
     renderAgentRun(run);
     // The answer and the changes to approve are below the chat: bring them into view above the box.
     window.requestAnimationFrame(() =>
@@ -4710,6 +5035,7 @@ agentApprove?.addEventListener("click", async () => {
   show(agentDiscard, false);
   if (agentBadge) agentBadge.textContent = "Applying";
   setAgentStage("apply");
+  setAgentRoleView(document, "verification", "pending", "waiting for apply");
   agentStopped = false;
   show(agentStop, true);
   setStatus("Applying the approved changes...");
@@ -4781,6 +5107,12 @@ agentApprove?.addEventListener("click", async () => {
     agentRounds += 1;
     agentVerifying = true;
     setAgentStage("verify");
+    setAgentRoleView(
+      document,
+      "verification",
+      "active",
+      "reading results back",
+    );
     if (agentBadge) agentBadge.textContent = "Verifying";
     setStatus("Verifying the applied result...");
     await agentLoop(
@@ -4792,6 +5124,7 @@ agentApprove?.addEventListener("click", async () => {
         })),
       ),
     );
+    setAgentRoleView(document, "verification", "done", "read-back completed");
     agentVerifying = false;
   }
 });

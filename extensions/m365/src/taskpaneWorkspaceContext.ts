@@ -74,6 +74,10 @@ export async function readWorkspaceContext(
           ),
           hasText: summary.columns.some((column) => column.roleHint === "text"),
           sampleRows: Math.max(0, values.length - summary.headerRowCount),
+          columns: summary.columns.map((column) => ({
+            name: column.name,
+            role: column.roleHint,
+          })),
         };
       } catch (error) {
         onSchemaError?.(error);

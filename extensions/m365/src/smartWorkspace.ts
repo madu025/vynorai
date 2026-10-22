@@ -18,6 +18,7 @@ export interface WorkspaceSchema {
   hasCategory: boolean;
   hasText: boolean;
   sampleRows: number;
+  columns?: Array<{ name: string; role: string }>;
 }
 
 export interface WorkspaceBadgeLabels {

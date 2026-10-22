@@ -41,6 +41,15 @@ const chromePath = chromeCandidates.find(
   (candidate) => candidate && existsSync(candidate),
 );
 
+async function assertNoMojibake(page, state) {
+  const visibleText = await page.evaluate(() => document.body.innerText);
+  assert.equal(
+    /(?:â[-¿]|Ã[-¿]|Â[-¿]|�)/u.test(visibleText),
+    false,
+    `${state} contains incorrectly decoded UTF-8 text`,
+  );
+}
+
 if (!chromePath) {
   throw new Error(
     "No Chrome or Edge executable found. Set M365_UI_CHROME_PATH for the pane smoke test.",
@@ -217,7 +226,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
-  page.on("pageerror", (error) => consoleErrors.push(error.message));
+  page.on("pageerror", (error) => consoleErrors.push(error.stack || error.message));
   await page.setViewport(viewport);
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem(
@@ -249,12 +258,24 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     void request.abort();
   });
   await page.goto(`${baseUrl}/taskpane.html`, { waitUntil: "networkidle0" });
-  await page.waitForFunction(
-    () =>
-      document.body.dataset.auth === "in" &&
-      !document.querySelector("#smart-run")?.hasAttribute("disabled"),
-    { timeout: 8000 },
-  );
+  try {
+    await page.waitForFunction(
+      () =>
+        document.body.dataset.auth === "in" &&
+        !document.querySelector("#smart-run")?.hasAttribute("disabled"),
+      { timeout: 8000 },
+    );
+  } catch (error) {
+    const state = await page.evaluate(() => ({
+      auth: document.body.dataset.auth,
+      status: document.querySelector("#status-text")?.textContent,
+      smartDisabled: document.querySelector("#smart-run")?.hasAttribute("disabled"),
+    }));
+    throw new Error(
+      `taskpane initialization failed: ${JSON.stringify(state)}; ${consoleErrors.join(" | ")}`,
+      { cause: error },
+    );
+  }
   const idleStatus = await page.$eval("#status", (element) => ({
     mode: element.dataset.mode,
     statusTextVisible:
@@ -349,6 +370,11 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "a new signed-in pane should keep chat history controls out of the first-use path",
   );
   assert.equal(
+    await page.$eval(".brand-bar", (element) => element.getClientRects().length > 0),
+    true,
+    "the premium workspace brand header must remain visible",
+  );
+  assert.equal(
     await page.evaluate(() => {
       const composer = document
         .querySelector(".composer")
@@ -403,6 +429,15 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
       true,
       "compact panes must show contextual suggestions in one column",
     );
+  } else if (viewport.width >= 500) {
+    assert.equal(
+      await page.$eval("#context-suggestion-list", (element) => {
+        const columns = getComputedStyle(element).gridTemplateColumns.trim();
+        return columns.split(/\s+/).length === 3;
+      }),
+      true,
+      "wide panes must auto-place the three contextual suggestions in one row",
+    );
   }
   await page.$eval("#scroll-area", (area) => {
     area.scrollTop = 0;
@@ -411,6 +446,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     path: path.join(artifactDirectory, `taskpane-${label}.png`),
     fullPage: true,
   });
+  await assertNoMojibake(page, `${label} home`);
   await page.click("#menu-toggle");
   await page.click("#advanced-workbook-options");
   assert.equal(
@@ -447,6 +483,10 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     card.querySelector("#agent-stop").removeAttribute("hidden");
     card.querySelector('[data-stage="inspect"]').classList.add("done");
     card.querySelector('[data-stage="plan"]').classList.add("active");
+    const map = card.querySelector("#workbook-map");
+    map.removeAttribute("hidden");
+    map.querySelector("#workbook-map-content").innerHTML =
+      '<div class="relationship-graph"><div class="relationship-node"><strong>Orders</strong><span>Item Code</span></div><div class="relationship-line">many-to-one -&gt;</div><div class="relationship-node"><strong>Items</strong><span>Item Code</span></div></div><div class="relationship-facts"><span>12 unmatched rows</span><span>2 duplicate keys</span><span>Clean keys first</span></div>';
     card.scrollIntoView({ block: "start" });
   });
   await assertReachable(page, "#agent-card");
@@ -462,6 +502,130 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   );
   await page.screenshot({
     path: path.join(artifactDirectory, `taskpane-${label}-agent.png`),
+    fullPage: true,
+  });
+  await assertNoMojibake(page, `${label} agent`);
+  // Preview, result, insight and share cards used to be nested inside one another. Keep these
+  // representative post-action states in the visual smoke so sticky controls cannot cover them.
+  await page.evaluate(() => {
+    document.querySelector("#agent-card").setAttribute("hidden", "");
+    const result = document.querySelector("#result-card");
+    result.removeAttribute("hidden");
+    document.querySelector("#preview-summary").textContent =
+      "Using 300 rows and 11 columns. Your source data stays unchanged.";
+    const impact = document.querySelector("#preview-impact");
+    impact.removeAttribute("hidden");
+    impact.innerHTML = [
+      ["300", "Rows"],
+      ["11", "Columns"],
+      ["2", "Changes"],
+      ["0", "Warnings"],
+    ]
+      .map(([value, name]) => `<div class="impact-item"><strong>${value}</strong><span>${name}</span></div>`)
+      .join("");
+    document.querySelector("#outcomes").innerHTML =
+      '<div class="outcome"><strong>Sales dashboard</strong><div class="where">Will be created on a new sheet</div><p>Column chart of Net Amount by Category with totals.</p></div>';
+    const tweaks = document.querySelector("#preview-tweaks");
+    tweaks.removeAttribute("hidden");
+    for (const label of tweaks.querySelectorAll("label"))
+      label.removeAttribute("hidden");
+    document.querySelector("#tweak-chart-type").innerHTML =
+      '<option>Column</option><option>Line</option>';
+    document.querySelector("#tweak-aggregation").innerHTML =
+      '<option>Sum</option><option>Average</option>';
+    document.querySelector("#tweak-category").innerHTML =
+      '<option>Category</option>';
+    document.querySelector("#tweak-value").innerHTML =
+      '<option>Net Amount</option>';
+    const apply = document.querySelector("#apply");
+    apply.removeAttribute("disabled");
+    result.scrollIntoView({ block: "start" });
+  });
+  await page.waitForFunction(
+    () => !document.querySelector('[data-workspace-target="results"]')?.disabled,
+  );
+  await page.click('[data-workspace-target="results"]');
+  assert.equal(
+    await page.$eval(".composer", (element) => element.getClientRects().length),
+    0,
+    "the request composer must not consume space in the Results view",
+  );
+  assert.equal(
+    await page.$eval('[data-workspace-target="results"]', (button) =>
+      button.getAttribute("aria-selected"),
+    ),
+    "true",
+    "the Results tab must expose its selected state",
+  );
+  await assertReachable(page, "#result-card");
+  await assertReachable(page, "#apply");
+  await page.screenshot({
+    path: path.join(artifactDirectory, `taskpane-${label}-preview.png`),
+    fullPage: true,
+  });
+  await assertNoMojibake(page, `${label} preview`);
+  await page.evaluate(() => {
+    document.querySelector("#result-card").setAttribute("hidden", "");
+    const gallery = document.querySelector("#result-gallery");
+    gallery.removeAttribute("hidden");
+    document.querySelector("#verified-result-banner").removeAttribute("hidden");
+    document.querySelector("#result-gallery-list").innerHTML =
+      '<article class="result-item"><div class="result-item-head"><strong>Chart</strong><span class="verified-badge">Verified · Net Amount by Category</span></div><div class="result-item-actions"><button>Show result</button><button>Email report</button><button>Refresh</button><button>Undo</button></div><details class="result-evidence"><summary>Show evidence</summary><ul><li>Source: Orders!A1:K301</li><li>Result read back from Excel</li></ul></details></article>';
+    const analysis = document.querySelector("#ai-result");
+    analysis.dataset.workspacePanel = "results";
+    analysis.className = "analysis-card";
+    analysis.innerHTML =
+      '<h3>Best chart for the sales data</h3><ol class="analysis-step-list"><li class="analysis-step"><span class="analysis-step-number">1</span><div><strong>Column chart of Net Amount by Category</strong><span>Compares four clear groups using the primary measure.</span></div></li></ol><button>Use these steps</button>';
+    const insights = document.querySelector("#insights-card");
+    insights.removeAttribute("hidden");
+    insights.setAttribute("open", "");
+    document.querySelector("#insights-list").innerHTML =
+      '<p><strong>Net Amount:</strong> Total 7,461,955; average 25,308.</p><p><strong>Trend:</strong> The later half is stronger.</p>';
+    gallery.scrollIntoView({ block: "start" });
+  });
+  await assertReachable(page, "#result-gallery");
+  await assertReachable(page, "#ai-result");
+  await assertReachable(page, "#insights-card");
+  await page.screenshot({
+    path: path.join(artifactDirectory, `taskpane-${label}-results.png`),
+    fullPage: true,
+  });
+  await assertNoMojibake(page, `${label} results`);
+  await page.evaluate(() => {
+    document.querySelector("#result-gallery").setAttribute("hidden", "");
+    document.querySelector("#ai-result").textContent = "";
+    document.querySelector("#insights-card").setAttribute("hidden", "");
+    const email = document.querySelector("#email-card");
+    email.removeAttribute("hidden");
+    document.querySelector("#email-to").value = "recipient@example.com";
+    document.querySelector("#email-subject").value = "Sales dashboard";
+    document.querySelector("#email-body").value =
+      "Please find the reviewed Excel report attached.";
+    const note = document.querySelector("#whatsapp-note");
+    note.removeAttribute("hidden");
+    note.textContent = "Sales dashboard\nTotal Net Amount: 7,461,955";
+    email.scrollIntoView({ block: "start" });
+  });
+  await page.waitForFunction(
+    () => !document.querySelector('[data-workspace-target="share"]')?.disabled,
+  );
+  await page.click('[data-workspace-target="share"]');
+  assert.equal(
+    await page.$eval(".composer", (element) => element.getClientRects().length),
+    0,
+    "the request composer must not consume space in the Share view",
+  );
+  assert.equal(
+    await page.$eval('[data-workspace-target="share"]', (button) =>
+      button.getAttribute("aria-selected"),
+    ),
+    "true",
+    "the Share tab must expose its selected state",
+  );
+  await assertReachable(page, "#email-card");
+  await assertReachable(page, "#whatsapp-copy");
+  await page.screenshot({
+    path: path.join(artifactDirectory, `taskpane-${label}-share.png`),
     fullPage: true,
   });
   assert.deepEqual(

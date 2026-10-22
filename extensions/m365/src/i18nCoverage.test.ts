@@ -121,3 +121,7 @@ test("buttons wrap at spaces only, so a Sinhala label never breaks letter by let
   assert.match(html, /\.apply-dock \{\s*flex-wrap: wrap;/);
   assert.match(html, /\n\s*button \{\s*min-width: 0;\s*overflow-wrap: normal;\s*word-break: normal;/);
 });
+
+test("an empty status strip is not drawn as a coloured bar", () => {
+  assert.match(html, /\.delivery-status:empty \{\s*display: none;/);
+});

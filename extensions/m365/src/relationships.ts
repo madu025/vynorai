@@ -15,11 +15,25 @@ export interface RelationTable {
   rows: KeyCell[][];
 }
 
-export type Cardinality = "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
+export type Cardinality =
+  | "one-to-one"
+  | "one-to-many"
+  | "many-to-one"
+  | "many-to-many";
 
 export interface RelationLink {
-  from: { table: string; column: string; distinct: number; duplicateKeys: number };
-  to: { table: string; column: string; distinct: number; duplicateKeys: number };
+  from: {
+    table: string;
+    column: string;
+    distinct: number;
+    duplicateKeys: number;
+  };
+  to: {
+    table: string;
+    column: string;
+    distinct: number;
+    duplicateKeys: number;
+  };
   cardinality: Cardinality;
   /** Share of the `from` rows whose key exists in `to` (0..1). */
   fromRowsMatched: number;
@@ -33,9 +47,10 @@ export interface RelationLink {
   advice: string[];
 }
 
-export const RELATION_MAX_TABLES = 6;
+/** Keep the relationship scan bounded while supporting the supported ten-sheet analyst fixture. */
+export const RELATION_MAX_TABLES = 10;
 export const RELATION_MAX_ROWS = 20_000;
-const MAX_LINKS = 10;
+const MAX_LINKS = 24;
 const MIN_SHARED = 2;
 const MIN_OVERLAP = 0.5;
 
@@ -58,7 +73,11 @@ function looksLikeKey(values: KeyCell[], header: string): boolean {
     (v) => typeof v === "number" && !Number.isInteger(v),
   ).length;
   if (fractional / present.length > 0.2) return false;
-  if (/amount|total|price|cost|qty|quantity|revenue|salary|balance|rate|percent|%/i.test(header))
+  if (
+    /amount|total|price|cost|qty|quantity|revenue|salary|balance|rate|percent|%/i.test(
+      header,
+    )
+  )
     return false;
   return true;
 }
@@ -118,7 +137,8 @@ function linkFor(a: Profile, b: Profile): RelationLink | undefined {
     looseShared > exactShared ? a.loose.size : a.counts.size,
     looseShared > exactShared ? b.loose.size : b.counts.size,
   );
-  if (best < MIN_SHARED || smaller === 0 || best / smaller < MIN_OVERLAP) return undefined;
+  if (best < MIN_SHARED || smaller === 0 || best / smaller < MIN_OVERLAP)
+    return undefined;
   const useLoose = looseShared > exactShared;
   const nameMatch = nameKey(a.header) === nameKey(b.header);
   const ca = useLoose ? a.loose : a.counts;
@@ -173,7 +193,9 @@ function linkFor(a: Profile, b: Profile): RelationLink | undefined {
       duplicateKeys: toDup,
     },
     cardinality: cardinalityValue,
-    fromRowsMatched: from.rows ? Math.round((matchedRows / from.rows) * 1000) / 1000 : 0,
+    fromRowsMatched: from.rows
+      ? Math.round((matchedRows / from.rows) * 1000) / 1000
+      : 0,
     fromRowsWithoutPartner: withoutPartner,
     toKeysUsed: toCounts.size
       ? Math.round((shared(fromCounts, toCounts) / toCounts.size) * 1000) / 1000
@@ -190,7 +212,9 @@ export function mapRelationships(tables: RelationTable[]): {
   note?: string;
 } {
   if (tables.length < 2)
-    throw new AgentToolError("Give at least two ranges, each with its header row.");
+    throw new AgentToolError(
+      "Give at least two ranges, each with its header row.",
+    );
   if (tables.length > RELATION_MAX_TABLES)
     throw new AgentToolError(`Give at most ${RELATION_MAX_TABLES} ranges.`);
   const profiles = tables.map(profile);
@@ -207,9 +231,15 @@ export function mapRelationships(tables: RelationTable[]): {
     (x, y) =>
       Number(y.nameMatch) - Number(x.nameMatch) ||
       y.fromRowsMatched - x.fromRowsMatched ||
-      x.from.duplicateKeys + x.to.duplicateKeys - (y.from.duplicateKeys + y.to.duplicateKeys),
+      x.from.duplicateKeys +
+        x.to.duplicateKeys -
+        (y.from.duplicateKeys + y.to.duplicateKeys),
   );
   const kept = links.slice(0, MAX_LINKS);
+  const note =
+    links.length > MAX_LINKS
+      ? `Found ${links.length} candidate relationships; showing the ${MAX_LINKS} strongest matches. Ask for a specific pair to inspect the remaining candidates.`
+      : undefined;
   return {
     links: kept,
     tables: tables.map((table) => ({
@@ -221,6 +251,8 @@ export function mapRelationships(tables: RelationTable[]): {
       ? {
           note: "No shared key was found. Ask the person which columns relate; do not guess a join.",
         }
-      : {}),
+      : note
+        ? { note }
+        : {}),
   };
 }

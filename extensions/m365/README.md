@@ -72,7 +72,7 @@ WebView from using an earlier bundle without modifying tracked HTML on the VPS.
   a running page. Nothing is downloaded or re-added.
 - **Manifest changes** (new host, permission, domain, icon, `SourceLocation`) are rare and are the only thing that needs a
   re-upload. Before uploading, run `npm run validate-manifests` in `extensions/m365` (Microsoft's validator, needs internet);
-  `src/manifest.test.ts` checks the same structure offline. Bump `<Version>` in every manifest you change, or the admin
+  Bump `<Version>` in every manifest you change, or the admin
   center will not see an update. Keep the manifest minimal and never put a cache-busting `?v=` in `SourceLocation`.
 - **Distribution:** sideloading is for development only. For real users deploy once through Microsoft 365 admin center
   (Integrated apps, Centralized Deployment) so the manifest is pushed to assigned users or groups and later manifest

@@ -12,7 +12,7 @@ export interface Reading {
 }
 
 const WHOLE_TABLE_REQUEST =
-  /\b(?:one[- ]page|executive|management|overview|kpi|scorecard|target|board|boss|summary|report)\b/i;
+  /\b(?:one[- ]page|executive|management|overview|kpi|scorecard|target|board|boss|summary|report|dashboard)\b/i;
 
 const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

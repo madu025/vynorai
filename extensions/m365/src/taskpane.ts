@@ -58,7 +58,29 @@ import {
   looksLikeQuestion,
 } from "./intent.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
-import { weakReading } from "./readerConfidence.js";
+import { chooseInstructionRoute } from "./taskpaneRouting.js";
+import { createPreviewController } from "./taskpanePreviewControl.js";
+import {
+  renderChatListView,
+  renderConversationHistoryView,
+} from "./taskpaneChatView.js";
+import {
+  agentToolLabel as agentToolLabelView,
+  setAgentStageView,
+  showAgentPlanView,
+  showAgentSourcesView,
+  type AgentStage,
+} from "./taskpaneAgentView.js";
+import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
+import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
+import {
+  aiFirstOn,
+  memoryKey,
+  readMemory,
+  recallSteps,
+  rememberSteps,
+  setAiFirst,
+} from "./taskpaneAiMode.js";
 import { describeUnknownColumns, findUnknownColumns } from "./unknownColumn.js";
 import { cleanFirstInstruction, describeNearDuplicates } from "./valueCheck.js";
 import { describeIntegrityIssues } from "./integrity.js";
@@ -89,7 +111,6 @@ import {
   activeMessages,
   deleteChat,
   emptyChatStore,
-  historyList,
   openChat,
   parseChatStore,
   saveActiveChat,
@@ -280,8 +301,6 @@ const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
 let capabilities: M365Capabilities | undefined;
 let currentPlan: any;
-let previewGeneration = 0;
-let previewAbortController: AbortController | undefined;
 let cachedHeaderLayout:
   | {
       key: string;
@@ -337,18 +356,11 @@ const newChatId = () =>
     globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now()}-${Math.random()}`
   ).slice(0, 36);
 
-function setPreviewCancelVisible(visible: boolean) {
+const previewController = createPreviewController((visible) => {
   if (!cancelPreviewButton) return;
   cancelPreviewButton.hidden = !visible;
   cancelPreviewButton.disabled = !visible;
-}
-
-function cancelPreview() {
-  previewGeneration += 1;
-  previewAbortController?.abort();
-  previewAbortController = undefined;
-  setPreviewCancelVisible(false);
-}
+});
 
 function getCachedHeaderLayout(
   input: Parameters<typeof getExcelHeaderLayout>[0],
@@ -498,41 +510,23 @@ function persistConversation() {
 
 /** The chat picker holds prior conversations; starting a fresh chat has its own visible button. */
 function renderChatList() {
-  const select = document.querySelector<HTMLSelectElement>(
-    "#chat-history-select",
-  );
-  const remove = document.querySelector<HTMLButtonElement>("#delete-chat");
-  if (!select) return;
-  const saved = historyList(chatStore);
-  select.replaceChildren();
-  const fresh = document.createElement("option");
-  fresh.value = "";
-  fresh.textContent = translate(language, "chat_history", "Chat history");
-  select.appendChild(fresh);
-  for (const entry of saved) {
-    const option = document.createElement("option");
-    option.value = entry.id;
-    option.textContent = `${entry.title || "…"} · ${new Date(entry.updatedAt).toLocaleDateString()}`;
-    select.appendChild(option);
-  }
-  select.value = saved.some((entry) => entry.id === chatStore.activeId)
-    ? chatStore.activeId
-    : "";
-  select.hidden = saved.length === 0;
-  const hasChat = saved.length > 0 || conversationMessages.length > 0;
-  document
-    .querySelector<HTMLElement>("#chat-bar")
-    ?.toggleAttribute("hidden", !hasChat);
-  document
-    .querySelector<HTMLElement>("#new-chat")
-    ?.toggleAttribute("hidden", !hasChat);
-  if (remove)
-    remove.hidden = !saved.some((entry) => entry.id === chatStore.activeId);
+  renderChatListView({
+    document,
+    language,
+    store: chatStore,
+    messages: conversationMessages,
+    instruction,
+    contextSuggestionsVisible: Boolean(
+      contextSuggestions && !contextSuggestions.hidden,
+    ),
+    contextSuggestionCount: contextSuggestionList?.children.length ?? 0,
+    setStatus,
+  });
 }
 
 /** A different chat starts clean: no preview, no follow-up memory from the one before. */
 function resetWorkingState() {
-  cancelPreview();
+  previewController.cancel();
   currentPlan = undefined;
   previewFingerprint = "";
   previewSpecs = undefined;
@@ -557,66 +551,17 @@ function showChat(messages: ConversationMessage[]) {
 }
 
 function renderConversationHistory() {
-  const history = document.querySelector<HTMLElement>("#conversation-history");
-  if (!history) return;
-  history.replaceChildren();
-  // The "what would you like to do" welcome is for an empty chat; once there are messages it only
-  // pushes them down.
-  document
-    .querySelector<HTMLElement>("#welcome-state")
-    ?.toggleAttribute("hidden", conversationMessages.length > 0);
-  const starter = document.querySelector<HTMLElement>("#starter-suggestions");
-  const hasContextSuggestions = Boolean(
-    contextSuggestions &&
-      !contextSuggestions.hidden &&
-      (contextSuggestionList?.children.length ?? 0) > 0,
-  );
-  starter?.toggleAttribute(
-    "hidden",
-    conversationMessages.length > 0 || hasContextSuggestions,
-  );
-  conversationMessages.forEach((message, index) => {
-    const item = document.createElement("article");
-    item.className = `message ${message.kind}`;
-    const label = document.createElement("span");
-    label.className = "message-label";
-    label.textContent =
-      message.kind === "user"
-        ? translate(language, "conversation_you", "You")
-        : message.kind === "error"
-          ? translate(language, "conversation_attention", "Needs attention")
-          : "VynorAI";
-    const body = document.createElement("span");
-    body.className = "message-body";
-    body.textContent = localizeMessage(language, message.text);
-    item.append(label, body);
-    if (message.kind === "user" && index === conversationMessages.length - 1) {
-      const tools = document.createElement("div");
-      tools.className = "message-tools";
-      const edit = document.createElement("button");
-      edit.type = "button";
-      edit.className = "edit-request";
-      edit.textContent = translate(language, "edit_request", "Edit request");
-      edit.setAttribute(
-        "aria-label",
-        translate(language, "edit_request", "Edit request"),
-      );
-      edit.addEventListener("click", () => {
-        if (!instruction) return;
-        instruction.value = message.text;
-        instruction.focus();
-        instruction.setSelectionRange(
-          instruction.value.length,
-          instruction.value.length,
-        );
-        setStatus(
-          translate(language, "edit_ready", "Ready to edit your last request."),
-        );
-      });
-      tools.append(edit);
-      item.append(tools);
-    }
-    history.appendChild(item);
+  renderConversationHistoryView({
+    document,
+    language,
+    store: chatStore,
+    messages: conversationMessages,
+    instruction,
+    contextSuggestionsVisible: Boolean(
+      contextSuggestions && !contextSuggestions.hidden,
+    ),
+    contextSuggestionCount: contextSuggestionList?.children.length ?? 0,
+    setStatus,
   });
 }
 
@@ -821,33 +766,40 @@ function hasWorkbookReportForEmail(): boolean {
 }
 
 function updateEmailUi(signedIn = Boolean(accessToken)) {
-  const configured = Boolean(config?.graphScopes?.length);
-  const available = signedIn && hasWorkbookReportForEmail();
-  if (emailCard) emailCard.hidden = !available;
-  if (emailNote && available) {
-    emailNote.textContent = configured
-      ? "Choose XLSX, PDF, CSV, summary or automatic fallback. Charts and bounded report details stay local until you approve Send."
-      : "Email is not configured for this deployment. An administrator must add the Microsoft Graph Mail.Send delegated permission to runtime-config.js.";
-  }
-  if (emailSend) {
-    emailSend.disabled =
-      !available ||
-      !configured ||
-      emailSending ||
-      !emailTo?.value.trim() ||
-      !emailSubject?.value.trim();
-  }
+  updateShareView(
+    {
+      card: emailCard,
+      note: emailNote,
+      to: emailTo,
+      subject: emailSubject,
+      body: emailBody,
+      send: emailSend,
+    },
+    {
+      signedIn,
+      hasReport: hasWorkbookReportForEmail(),
+      configured: Boolean(config?.graphScopes?.length),
+      sending: emailSending,
+    },
+  );
 }
 
 function prepareEmailComposer(recipient = "") {
-  if (emailTo && recipient && !emailTo.value) emailTo.value = recipient;
-  if (emailSubject && !emailSubject.value)
-    emailSubject.value = `VynorAI Excel report - ${lastRevealSheet || currentSourceSheet || "Workbook"}`;
-  if (emailBody && !emailBody.value)
-    emailBody.value = "Please find the approved VynorAI Excel report attached.";
+  prepareShareComposer(
+    {
+      card: emailCard,
+      note: emailNote,
+      to: emailTo,
+      subject: emailSubject,
+      body: emailBody,
+      send: emailSend,
+    },
+    {
+      recipient,
+      reportSheet: lastRevealSheet || currentSourceSheet || "Workbook",
+    },
+  );
   updateEmailUi();
-  emailCard?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  emailTo?.focus();
 }
 
 function createOAuthAttemptStorage() {
@@ -1364,7 +1316,7 @@ function restoreSession(): boolean {
 }
 
 function signOutOfMicrosoft() {
-  cancelPreview();
+  previewController.cancel();
   cachedHeaderLayout = undefined;
   accessToken = "";
   capabilities = undefined;
@@ -1686,15 +1638,15 @@ document.querySelector("#delete-chat")?.addEventListener("click", async () => {
 });
 
 cancelPreviewButton?.addEventListener("click", () => {
-  if (!previewAbortController) return;
-  cancelPreview();
+  if (!previewController.hasActiveRun()) return;
+  previewController.cancel();
   log.record("preview:cancel", "pass", "cancelled by user");
   setStatus("Preview cancelled. Nothing has changed in your workbook.");
   updateAuthenticationUi(Boolean(accessToken));
 });
 
 instruction?.addEventListener("input", () => {
-  cancelPreview();
+  previewController.cancel();
   pendingSpecs = undefined;
   excludedKinds = new Set<string>();
   currentPlan = undefined;
@@ -1716,13 +1668,8 @@ dupFixButton?.addEventListener("click", () => {
 inspect?.addEventListener("click", async () => {
   if (!config || !accessToken)
     return setStatus("Sign in before inspecting Excel data.");
-  cancelPreview();
-  const generation = previewGeneration;
-  const abortController = new AbortController();
-  previewAbortController = abortController;
-  setPreviewCancelVisible(true);
-  const isStale = () =>
-    generation !== previewGeneration || abortController.signal.aborted;
+  const previewRun = previewController.start();
+  const { abortController, isStale } = previewRun;
   const stopIfStale = () => {
     if (!isStale()) return false;
     log.record("preview:stale", "skip", "superseded by a newer instruction");
@@ -1749,7 +1696,7 @@ inspect?.addEventListener("click", async () => {
   const stepsFromAi = skipAiOnce;
   skipAiOnce = false;
   if (aiTurn) {
-    setPreviewCancelVisible(false);
+    previewController.finish(previewRun);
     scriptMode = true;
     autoAi = true;
     void startConsent();
@@ -2099,19 +2046,17 @@ inspect?.addEventListener("click", async () => {
     log.record("instruction:actions", "pass", { actions });
     // The built-in reader may have understood only part of the request (it ignores a column the person named,
     // or none of the words match a column): the AI should read it, after the person agrees to send the summary.
-    const weak =
-      !stepsFromAi &&
-      !useBuiltInReader &&
-      !excludedKinds.size &&
-      capabilities?.aiAnalysis !== false
-        ? weakReading(instructionText, layout.headers.map(String), {
-            actions,
-            specs,
-            problems: interpreted.problems,
-          })
-        : undefined;
-    if (weak) {
-      log.record("instruction:weak-reading", "fail", weak);
+    const route = chooseInstructionRoute({
+      instructionText,
+      headers: layout.headers.map(String),
+      reading: { actions, specs, problems: interpreted.problems },
+      stepsFromAi,
+      useBuiltInReader,
+      excludedKinds,
+      aiAnalysisEnabled: capabilities?.aiAnalysis !== false,
+    });
+    if (route.kind === "ai") {
+      log.record("instruction:weak-reading", "fail", route.reason);
       scriptMode = true;
       void startConsent();
       renderConversation(
@@ -2194,10 +2139,7 @@ inspect?.addEventListener("click", async () => {
       return;
     }
     currentPlan = plan;
-    if (previewAbortController === abortController) {
-      previewAbortController = undefined;
-      setPreviewCancelVisible(false);
-    }
+    previewController.finish(previewRun);
     previewFingerprint = localPreview.sourceFingerprint;
     if (preview)
       preview.textContent = JSON.stringify(
@@ -2242,17 +2184,11 @@ inspect?.addEventListener("click", async () => {
     // "Review as you go" off: apply straight away, like Copilot's edit mode.
     if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
   } catch (error) {
-    if (previewAbortController === abortController) {
-      previewAbortController = undefined;
-      setPreviewCancelVisible(false);
-    }
+    previewController.finish(previewRun);
     if (isStale()) return;
     handleApiError("inspect", error);
   } finally {
-    if (previewAbortController === abortController) {
-      previewAbortController = undefined;
-      setPreviewCancelVisible(false);
-    }
+    previewController.finish(previewRun);
   }
 });
 
@@ -2795,66 +2731,12 @@ let scriptMode = false;
 let autoAi = false;
 /** The steps the AI returned run through the reader once without asking the AI again. */
 let skipAiOnce = false;
-const AI_FIRST_KEY = "vynorai.m365.aiReadsEveryRequest";
-
-function aiFirstOn(): boolean {
-  try {
-    return localStorage.getItem(AI_FIRST_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function setAiFirst(on: boolean) {
-  try {
-    if (on) localStorage.setItem(AI_FIRST_KEY, "1");
-    else localStorage.removeItem(AI_FIRST_KEY);
-  } catch {
-    // Without storage the setting simply stays off.
-  }
-}
 
 /**
  * What the AI understood is remembered on this device (request text + column names -> the plain steps),
  * so the same request next time needs no AI call. Only sentences are stored, never cell values.
  */
-const MEMORY_KEY = "vynorai.m365.interpretMemory";
-const MEMORY_LIMIT = 50;
 let pendingMemoryKey = "";
-type Memory = Record<string, { steps: string[]; at: number }>;
-
-function memoryKey(text: string, names: string[]): string {
-  return `${text.toLowerCase().replace(/\s+/g, " ").trim()}|${names.join("\u0001")}`;
-}
-
-function readMemory(): Memory {
-  try {
-    return JSON.parse(localStorage.getItem(MEMORY_KEY) || "{}") as Memory;
-  } catch {
-    return {};
-  }
-}
-
-function rememberSteps(key: string, steps: string[]) {
-  if (!key) return;
-  try {
-    const memory = readMemory();
-    memory[key] = { steps, at: Date.now() };
-    const kept = Object.entries(memory)
-      .sort((a, b) => b[1].at - a[1].at)
-      .slice(0, MEMORY_LIMIT);
-    localStorage.setItem(MEMORY_KEY, JSON.stringify(Object.fromEntries(kept)));
-  } catch {
-    // Private window or blocked storage: the AI is simply asked again next time.
-  }
-}
-
-function recallSteps(key: string): string[] | undefined {
-  const found = readMemory()[key];
-  return Array.isArray(found?.steps) && found.steps.length
-    ? found.steps.filter((step) => typeof step === "string")
-    : undefined;
-}
 
 /** Steps from the AI planner: plain sentences only; running them goes through the normal preview and approval. */
 function renderScript(result: {
@@ -4243,64 +4125,9 @@ async function readWorkspaceContext(): Promise<{
   info: WorkspaceSelection;
   schema?: WorkspaceSchema;
 }> {
-  return officeRuntime().run(async (context: any) => {
-    const range = context.workbook.getSelectedRange();
-    range.load(["address", "rowCount", "columnCount"]);
-    range.worksheet.load("name");
-    await context.sync();
-    const info: WorkspaceSelection = {
-      address: String(range.address),
-      rows: Number(range.rowCount),
-      columns: Number(range.columnCount),
-    };
-    if (info.rows === 1 && info.columns === 1) {
-      range.load("values");
-      await context.sync();
-      info.isBlank = String(range.values?.[0]?.[0] ?? "").trim() === "";
-    }
-    let schema: WorkspaceSchema | undefined;
-    const sampleRows = Math.min(Math.max(info.rows, 0), 26);
-    const sampleColumns = Math.min(Math.max(info.columns, 0), 20);
-    if (sampleRows >= 2 && sampleColumns >= 1) {
-      try {
-        const sample = range
-          .getCell(0, 0)
-          .getResizedRange(sampleRows - 1, sampleColumns - 1);
-        sample.load("values");
-        await context.sync();
-        const values = (sample.values as unknown[][]).map((row) =>
-          row.map((cell) =>
-            typeof cell === "string" ||
-            typeof cell === "number" ||
-            typeof cell === "boolean" ||
-            cell === null
-              ? cell
-              : String(cell ?? ""),
-          ),
-        );
-        const summary = buildSchemaSummary({
-          workbookId: "local-workspace-context",
-          worksheetName: String(range.worksheet.name),
-          address: info.address,
-          values,
-        });
-        schema = {
-          hasMeasure: summary.columns.some(
-            (column) => column.roleHint === "measure",
-          ),
-          hasDate: summary.columns.some((column) => column.roleHint === "date"),
-          hasCategory: summary.columns.some(
-            (column) => column.roleHint === "category",
-          ),
-          hasText: summary.columns.some((column) => column.roleHint === "text"),
-          sampleRows: Math.max(0, values.length - summary.headerRowCount),
-        };
-      } catch (error) {
-        log.record("selection:context-schema", "info", describeError(error));
-      }
-    }
-    return { info, schema };
-  });
+  return readWorkspaceContextView(officeRuntime(), (error) =>
+    log.record("selection:context-schema", "info", describeError(error)),
+  );
 }
 
 /** Shows which sheet and cells the next request will use; hidden when nothing can be read. */
@@ -4428,62 +4255,26 @@ async function initialize() {
 const AGENT_CONSENT_KEY = "vynorai.m365.agentConsent";
 const agentCard = document.querySelector<HTMLElement>("#agent-card");
 const agentProgress = document.querySelector<HTMLElement>("#agent-progress");
-const agentPlan = document.querySelector<HTMLElement>("#agent-plan");
-const agentPlanSteps = document.querySelector<HTMLElement>("#agent-plan-steps");
 
 /** Shows the planner's steps as a numbered list; no steps hides the list. */
 function showAgentPlan(steps: readonly string[]) {
-  if (!agentPlan || !agentPlanSteps) return;
-  agentPlanSteps.replaceChildren(
-    ...steps.map((step) => {
-      const item = document.createElement("li");
-      item.textContent = step;
-      return item;
-    }),
-  );
-  show(agentPlan, steps.length > 0);
+  showAgentPlanView(document, steps);
 }
-
-const agentSources = document.querySelector<HTMLElement>("#agent-sources");
-const agentSourcesList = document.querySelector<HTMLElement>(
-  "#agent-sources-list",
-);
 
 /** Where the answer came from; a range is a button that selects it in the workbook. */
 function showAgentSources(sources: readonly AnswerSource[]) {
-  if (!agentSources || !agentSourcesList) return;
-  agentSourcesList.replaceChildren(
-    ...sources.map((source) => {
-      const item = document.createElement("li");
-      if (source.kind !== "range") {
-        item.textContent =
-          source.kind === "formula"
-            ? `Excel computed ${source.text}`
-            : `Workbook check: ${source.text.replace(/_/g, " ")}`;
-        return item;
-      }
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "link";
-      button.textContent = `'${source.sheet}'!${source.address}${source.note ? ` (${source.note.replace(/_/g, " ")})` : ""}`;
-      button.addEventListener("click", () => {
-        void officeRuntime()
-          ?.run(async (context: any) => {
-            context.workbook.worksheets
-              .getItem(source.sheet)
-              .getRange(source.address)
-              .select();
-            await context.sync();
-          })
-          .catch((error: unknown) =>
-            log.record("agent:source", "fail", describeError(error)),
-          );
+  showAgentSourcesView({
+    document,
+    sources,
+    selectRange: async (sheet, address) => {
+      await officeRuntime()?.run(async (context: any) => {
+        context.workbook.worksheets.getItem(sheet).getRange(address).select();
+        await context.sync();
       });
-      item.append(button);
-      return item;
-    }),
-  );
-  show(agentSources, sources.length > 0);
+    },
+    recordError: (error) =>
+      log.record("agent:source", "fail", describeError(error)),
+  });
 }
 const agentReply = document.querySelector<HTMLElement>("#agent-reply");
 const agentChanges = document.querySelector<HTMLOListElement>("#agent-changes");
@@ -4509,29 +4300,8 @@ let agentLastRequest = "";
 let agentRounds = 0;
 let agentVerifying = false;
 
-const AGENT_STAGES = [
-  "inspect",
-  "plan",
-  "review",
-  "approval",
-  "apply",
-  "verify",
-] as const;
-
-function setAgentStage(stage: (typeof AGENT_STAGES)[number], complete = false) {
-  const current = AGENT_STAGES.indexOf(stage);
-  for (const item of document.querySelectorAll<HTMLElement>(
-    "#agent-timeline [data-stage]",
-  )) {
-    const index = AGENT_STAGES.indexOf(
-      item.dataset.stage as (typeof AGENT_STAGES)[number],
-    );
-    item.classList.toggle(
-      "done",
-      index < current || (complete && index === current),
-    );
-    item.classList.toggle("active", !complete && index === current);
-  }
+function setAgentStage(stage: AgentStage, complete = false) {
+  setAgentStageView(document, stage, complete);
 }
 
 const show = (element: HTMLElement | null, visible: boolean) => {
@@ -4545,20 +4315,7 @@ function agentLanguage(): "en" | "si" | "ta" {
     | "ta";
 }
 
-function agentToolLabel(name: string, args: Record<string, unknown>): string {
-  switch (name) {
-    case "get_workbook":
-      return "Looking at the workbook";
-    case "read_range":
-      return `Reading ${String(args.sheet ?? "")}!${String(args.address ?? "")}`;
-    case "calculate":
-      return `Calculating ${String(args.formula ?? "").slice(0, 80)}`;
-    case "vynor_step":
-      return `Checking a step: ${String(args.instruction ?? "").slice(0, 80)}`;
-    default:
-      return `Preparing a change (${name})`;
-  }
-}
+const agentToolLabel = agentToolLabelView;
 
 /**
  * Under each staged write, a small table of the cells it will overwrite (before, after). The

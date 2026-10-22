@@ -150,3 +150,7 @@ anything about production environment values is marked "not verified".
   resumable Outlook upload session when `Mail.ReadWrite` is separately configured; Microsoft tenant/message limits
   remain explicit, never silently bypassed. Unsupported Excel host APIs return a fallback/error, and auto-send is
   not allowed.
+- The device relationship mapper accepts at most ten sheet-qualified ranges and 20,000 rows per range. It keeps
+  relationship output bounded, reports when candidate links were truncated, and never invents a join when a key
+  is absent. The existing package contracts remain source-only until the separate backend/add-in build contexts can
+  consume one shared package without changing the production deployment boundary.

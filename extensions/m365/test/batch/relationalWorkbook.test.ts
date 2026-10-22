@@ -48,6 +48,29 @@ test("the fixture exposes usable many-to-one relationships and deliberate unmatc
   assert.ok((byColumn("Product ID")?.fromRowsWithoutPartner ?? 0) > 0);
 });
 
+test("all ten fixture sheets can be mapped in one bounded relationship scan", () => {
+  const result = mapRelationships(tables.map(asRelationTable));
+  assert.equal(result.tables.length, 10);
+  assert.ok(
+    result.links.some(
+      (link) =>
+        link.from.column === "Customer ID" || link.to.column === "Customer ID",
+    ),
+  );
+  assert.ok(
+    result.links.some(
+      (link) =>
+        link.from.column === "Product ID" || link.to.column === "Product ID",
+    ),
+  );
+  assert.ok(
+    result.links.some(
+      (link) =>
+        link.from.column === "Order ID" || link.to.column === "Order ID",
+    ),
+  );
+});
+
 test("feedback and order lines relate back to the transactional master data", () => {
   const orderLines = tables.find((sheet) => sheet.name === "OrderLines")!;
   const orders = tables.find((sheet) => sheet.name === "Orders")!;

@@ -954,7 +954,7 @@ const CASES: Case[] = [
         need(
           seen.some(
             (s) => s.name === "analyze_columns" && s.args.kind === "anomalies",
-          ) || seen.some((s) => s.name === "calculate"),
+          ) || seen.some((s) => s.name === "calculate" || s.name === "run_code"),
           seen
             .map((s) => s.name)
             .join(" ; ")

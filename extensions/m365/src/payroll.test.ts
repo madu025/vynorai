@@ -10,6 +10,7 @@ import {
   type ApitBand,
 } from "./lkTaxRates.js";
 import {
+  amount,
   buildPayrollPlan,
   columnName,
   employeesFromSelection,
@@ -756,6 +757,7 @@ test("mapPayrollColumns sorts columns into EPF allowances, other allowances and 
     epfAllowances: [3],
     otherAllowances: [4, 5],
     otherDeductions: [7, 8],
+    skipped: [],
   });
   // OT Hours (6) is in no list.
   const all = [
@@ -824,6 +826,7 @@ test("employeesFromSelection parses Sri Lankan amount styles 'Rs. 45,000.00' and
     epfAllowances: [],
     otherAllowances: [],
     otherDeductions: [],
+    skipped: [],
   };
   const employees = employeesFromSelection(
     [
@@ -901,4 +904,143 @@ test("ratesOn for a month before 2024 gives the VAT of that month (15%)", () => 
   assert.equal(ratesOn("2023-06-01").vat.value, 0.15);
   assert.equal(ratesCover("2022-06-01"), false);
   assert.equal(ratesCover("2023-01-01"), true);
+});
+
+// ---------------------------------------------------------------------------------------------
+// 11. Code-review fixes: requests, months, amounts, columns and total rows.
+// ---------------------------------------------------------------------------------------------
+
+test("isPayrollRequest leaves work on an existing payroll to the agent", () => {
+  for (const text of [
+    "sort the payroll by name",
+    "what is the total payroll cost?",
+    "fix the formula in my payroll sheet",
+    "add an EPF column",
+    "highlight payroll rows over 100,000",
+    "how much EPF did we pay?",
+  ])
+    assert.equal(isPayrollRequest(text), false, text);
+  for (const text of [
+    "make a payroll for October",
+    "payroll",
+    "October payroll",
+    "prepare payslips for the staff",
+    "calculate salaries for this month",
+    "can you create a salary sheet?",
+    "වැටුප් ලේඛනයක් හදන්න",
+    "சம்பளப் பட்டியல் உருவாக்கு",
+  ])
+    assert.equal(isPayrollRequest(text), true, text);
+});
+
+test("monthFromRequest reads May at the start, month/year, Sinhala and Tamil months, and the year end", () => {
+  const october = new Date(2026, 9, 21);
+  const month = (text: string, today = october) =>
+    payrollMonth(monthFromRequest(text, today));
+  assert.equal(month("May payroll"), "2026-05");
+  assert.equal(month("payroll 10/2026"), "2026-10");
+  assert.equal(month("ඔක්තෝබර් මාසයේ වැටුප් ලේඛනය"), "2026-10");
+  assert.equal(month("மார்ச் சம்பளப் பட்டியல்"), "2026-03");
+  assert.equal(month("மே 2027 சம்பளப் பட்டியல்"), "2027-05");
+  // Tamil "மே" inside a longer word is not May.
+  assert.equal(month("மேலதிக நேரம்"), "2026-10");
+  assert.equal(month("payroll for January", new Date(2026, 11, 5)), "2027-01");
+  assert.equal(month("payroll for December", new Date(2027, 0, 5)), "2026-12");
+  assert.equal(month("payroll for March"), "2026-03");
+});
+
+test("amount reads /=, a trailing currency and brackets as minus", () => {
+  assert.equal(amount("45,000/="), 45_000);
+  assert.equal(amount("45,000 LKR"), 45_000);
+  assert.equal(amount("45,000.50 Rs."), 45_000.5);
+  assert.equal(amount("(5,000)"), -5_000);
+  assert.equal(amount("n/a"), 0);
+  assert.equal(amount(""), 0);
+});
+
+test("mapPayrollColumns: no gross as basic, no totals, bonus left out, the sheet's own headers", () => {
+  assert.equal(mapPayrollColumns(["Name", "Gross Salary"]), null);
+  const map = mapPayrollColumns([
+    "EPF No",
+    "Employee No",
+    "Name with initials",
+    "Basic Salary",
+    "Transport Allowance",
+    "Meal Allowance",
+    "Total Allowances",
+    "Bonus",
+    "EPF Deduction",
+    "Total Deductions",
+    "Loan",
+  ])!;
+  assert.equal(map.id, 1);
+  assert.equal(map.name, 2);
+  assert.deepEqual(map.otherAllowances, [4, 5]);
+  assert.deepEqual(map.skipped, [7]);
+  assert.deepEqual(map.otherDeductions, [10]);
+  // "Employee notes" is not an employee number.
+  assert.equal(mapPayrollColumns(["Employee Notes", "Basic"])?.id, undefined);
+  // A sheet this add-in made reads back with its EPF-liable allowances in place.
+  for (const language of ["si", "ta"] as const) {
+    const plan = buildPayrollPlan({ month: new Date(2026, 9, 1), language });
+    const headers = plan.blocks.find((block) => block.style === "header")!
+      .cells[0] as string[];
+    const again = mapPayrollColumns(headers)!;
+    assert.equal(again.basic, 2, language);
+    assert.deepEqual(again.epfAllowances, [3], language);
+    assert.ok(again.otherAllowances.includes(4), language);
+  }
+});
+
+test("employeesFromSelection skips total rows and rows with no ID or name", () => {
+  const map = mapPayrollColumns(["Emp No", "Name", "Basic"])!;
+  const employees = employeesFromSelection(
+    [
+      ["E1", "Nimal", 50_000],
+      ["", "", 20_000],
+      ["Total", "", 70_000],
+      ["", "Grand total", 70_000],
+      ["", "Kamala", 40_000],
+    ],
+    map,
+  );
+  assert.deepEqual(
+    employees.map((employee) => employee.name),
+    ["Nimal", "Kamala"],
+  );
+});
+
+test("the SSCL row explains the 2.5/97.5 pass-on", () => {
+  for (const language of ["en", "si", "ta"] as const) {
+    const plan = buildPayrollPlan({ month: new Date(2026, 9, 1), language });
+    const text = JSON.stringify(plan.blocks);
+    assert.match(text, /2\.5\/97\.5/, language);
+  }
+});
+
+test("a payroll write that fails leaves no half-made sheet", async () => {
+  const { gridWorkbook } = await import("../test/batch/gridWorkbook.js");
+  const { writePayrollSheet } = await import("./officeSriLanka.js");
+  const book = gridWorkbook("Staff", [["Name"], ["a"]]);
+  let syncs = 0;
+  const failing = {
+    run: <T>(callback: (context: any) => Promise<T>) =>
+      book.runtime.run((context: any) =>
+        callback({
+          ...context,
+          sync: async () => {
+            syncs += 1;
+            // The first sync checks for the sheet; the second writes it and fails.
+            if (syncs === 2) throw new Error("GeneralException");
+            await context.sync();
+          },
+        }),
+      ),
+  };
+  const plan = buildPayrollPlan({ month: new Date(2026, 9, 1) });
+  const result = await writePayrollSheet(failing, plan);
+  assert.deepEqual(result, { ok: false, error: "GeneralException" });
+  assert.equal(book.sheets.has(plan.sheet), false);
+  // The same plan writes cleanly afterwards.
+  assert.equal((await writePayrollSheet(book.runtime, plan)).ok, true);
 });

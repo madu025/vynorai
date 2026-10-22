@@ -128,6 +128,8 @@ export function payrollQuestion(
   },
   copied: number,
   language: Language,
+  /** Bonus or incentive headers that were not copied. */
+  skipped: string[] = [],
 ): string {
   const { sheet, totals } = plan;
   const what = copied
@@ -151,7 +153,16 @@ export function payrollQuestion(
         " EPF, ETF, APIT விகிதங்கள் இன்னும் ஒரு கணக்காளரால் சரிபார்க்கப்படவில்லை.",
       )
     : "";
-  return `${what}${review}`;
+  const list = skipped.join(", ");
+  const bonus = skipped.length
+    ? pick(
+        language,
+        ` ${list} is not copied: a bonus is taxed with APIT Table 2, not the monthly table, so add it with your accountant.`,
+        ` ${list} පිටපත් කළේ නැත: ප්‍රසාද දීමනාවකට APIT බදු ගණනය කරන්නේ මාසික වගුවෙන් නොව Table 2 මගිනි, එබැවින් ඔබේ ගණකාධිකාරිවරයා සමඟ එය එක් කරන්න.`,
+        ` ${list} நகலெடுக்கப்படவில்லை: போனஸுக்கான APIT மாதாந்த அட்டவணையால் அல்ல, Table 2 மூலம் கணக்கிடப்படுகிறது; எனவே உங்கள் கணக்காளருடன் அதைச் சேர்க்கவும்.`,
+      )
+    : "";
+  return `${what}${bonus}${review}`;
 }
 
 /** The status line after the payroll sheet was added, or why it was not. */

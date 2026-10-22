@@ -782,6 +782,30 @@ const TEMPLATE_SCENARIOS: Array<{
     payroll: false,
     language: "en",
   },
+  {
+    id: "not-payroll-sort",
+    request: "sort the payroll by name",
+    payroll: false,
+    language: "en",
+  },
+  {
+    id: "not-payroll-question",
+    request: "what is the total payroll cost?",
+    payroll: false,
+    language: "en",
+  },
+  {
+    id: "not-payroll-column",
+    request: "add an EPF column",
+    payroll: false,
+    language: "en",
+  },
+  {
+    id: "not-payroll-fix",
+    request: "fix the formula in my payroll sheet",
+    payroll: false,
+    language: "en",
+  },
 ];
 
 const SCRIPT_OF = { si: /[\u0D80-\u0DFF]/, ta: /[\u0B80-\u0BFF]/ } as const;
@@ -836,12 +860,13 @@ async function runTemplateBenchmark(): Promise<ScenarioResult[]> {
         ),
         check(
           "business meaning",
-          "every employee in the staff list is copied, salary as basic and bonus as another allowance",
+          "every employee in the staff list is copied, salary as basic, and the bonus left for APIT Table 2",
           employees.length ===
             dataset.rows.filter((row) => String(row[5] ?? "").trim() !== "")
               .length &&
             map?.basic === headers.indexOf("Salary (LKR)") &&
-            map?.otherAllowances.includes(headers.indexOf("Bonus")) === true &&
+            map?.skipped.includes(headers.indexOf("Bonus")) === true &&
+            !map?.otherAllowances.includes(headers.indexOf("Bonus")) &&
             map?.id === headers.indexOf("Employee ID"),
           JSON.stringify(map),
         ),

@@ -5674,6 +5674,7 @@ async function offerPayroll(request: string): Promise<boolean> {
 async function askAndWritePayroll(request: string): Promise<boolean> {
   const words = textLanguage();
   let employees: PayrollEmployee[] = [];
+  let skipped: string[] = [];
   try {
     const input = await inspectSelectedExcelRange(
       officeRuntime(),
@@ -5683,11 +5684,13 @@ async function askAndWritePayroll(request: string): Promise<boolean> {
     const map = input.sample
       ? null
       : mapPayrollColumns(layout.headers.map(String));
-    if (map)
+    if (map) {
       employees = employeesFromSelection(
         input.values.slice(layout.headerRowCount),
         map,
       );
+      skipped = map.skipped.map((index) => String(layout.headers[index]));
+    }
   } catch {
     // No usable selection: the sheet starts with blank rows.
   }
@@ -5703,7 +5706,7 @@ async function askAndWritePayroll(request: string): Promise<boolean> {
   });
   if (
     !(await askInPane(
-      payrollQuestion(plan, employees.length, words),
+      payrollQuestion(plan, employees.length, words, skipped),
       localizeMessage(words, "Add"),
     ))
   )

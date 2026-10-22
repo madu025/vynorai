@@ -111,11 +111,49 @@ export async function writeHolidaySheet(
         "Sri Lanka holidays for NETWORKDAYS and WORKDAY",
       );
       sheet.getRange("A:C").format.autofitColumns?.();
-      await context.sync();
+      try {
+        await context.sync();
+      } catch (error) {
+        await removeHalfMade(context, HOLIDAY_SHEET, HOLIDAY_NAME);
+        throw error;
+      }
       return { ok: true as const, rows: plan.rows.length };
     });
   } catch (error) {
     return { ok: false, error: String((error as Error)?.message ?? error) };
+  }
+}
+
+/** True when the host supports an ExcelApi requirement set; unknown hosts count as no. */
+function excelApiSupported(version: string): boolean {
+  const office = (globalThis as any).Office;
+  return Boolean(
+    office?.context?.requirements?.isSetSupported?.("ExcelApi", version),
+  );
+}
+
+/**
+ * After a failed batch, removes the sheet (and workbook name) this call added, so the person is
+ * never left with a half-made sheet. The sheet did not exist before, so whatever is there is ours.
+ */
+async function removeHalfMade(
+  context: any,
+  sheetName: string,
+  workbookName?: string,
+): Promise<void> {
+  try {
+    const sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
+    sheet.load("isNullObject");
+    const name = workbookName
+      ? context.workbook.names.getItemOrNullObject(workbookName)
+      : undefined;
+    name?.load("isNullObject");
+    await context.sync();
+    if (name && !name.isNullObject) name.delete();
+    if (!sheet.isNullObject) sheet.delete();
+    await context.sync();
+  } catch {
+    // The original error is the one the person needs to see.
   }
 }
 
@@ -170,11 +208,9 @@ export async function writePayrollSheet(
       if (!existing.isNullObject)
         return { ok: false as const, error: "PAYROLL_SHEET_EXISTS" };
       const sheet = context.workbook.worksheets.add(plan.sheet);
-      try {
+      // Older Excel has no sheet properties; the sheet is still a normal sheet the person can delete.
+      if (excelApiSupported("1.12"))
         sheet.customProperties.add("vynorai", "result");
-      } catch {
-        // Older Excel: the sheet is still a normal sheet the person can delete.
-      }
       for (const block of plan.blocks) {
         const range = sheet.getRangeByIndexes(
           block.row - 1,
@@ -202,10 +238,20 @@ export async function writePayrollSheet(
       const height = Math.max(
         ...plan.blocks.map((block) => block.row + block.cells.length - 1),
       );
-      sheet.getRangeByIndexes(0, 0, height, 18).format.autofitColumns?.();
+      // Autofit from the header row down, so the long title and note do not widen column A.
+      sheet.getRangeByIndexes(3, 0, height - 3, 18).format.autofitColumns?.();
+      // Columns Q and R hold long notes and sources: a fixed width with wrapping.
+      const notes = sheet.getRangeByIndexes(0, 16, height, 2);
+      notes.format.columnWidth = 220;
+      notes.format.wrapText = true;
       sheet.getRange("A1:A2").format.wrapText = false;
       sheet.activate?.();
-      await context.sync();
+      try {
+        await context.sync();
+      } catch (error) {
+        await removeHalfMade(context, plan.sheet);
+        throw error;
+      }
       return { ok: true as const, sheet: plan.sheet };
     });
   } catch (error) {

@@ -519,6 +519,13 @@ function renderChatList() {
     ? chatStore.activeId
     : "";
   select.hidden = saved.length === 0;
+  const hasChat = saved.length > 0 || conversationMessages.length > 0;
+  document
+    .querySelector<HTMLElement>("#chat-bar")
+    ?.toggleAttribute("hidden", !hasChat);
+  document
+    .querySelector<HTMLElement>("#new-chat")
+    ?.toggleAttribute("hidden", !hasChat);
   if (remove)
     remove.hidden = !saved.some((entry) => entry.id === chatStore.activeId);
 }
@@ -558,6 +565,16 @@ function renderConversationHistory() {
   document
     .querySelector<HTMLElement>("#welcome-state")
     ?.toggleAttribute("hidden", conversationMessages.length > 0);
+  const starter = document.querySelector<HTMLElement>("#starter-suggestions");
+  const hasContextSuggestions = Boolean(
+    contextSuggestions &&
+      !contextSuggestions.hidden &&
+      (contextSuggestionList?.children.length ?? 0) > 0,
+  );
+  starter?.toggleAttribute(
+    "hidden",
+    conversationMessages.length > 0 || hasContextSuggestions,
+  );
   conversationMessages.forEach((message, index) => {
     const item = document.createElement("article");
     item.className = `message ${message.kind}`;
@@ -701,6 +718,7 @@ function signInDialogMessage(code: unknown): string {
 }
 
 let lastStatus = "";
+const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
 function setStatus(message: string) {
   lastStatus = message;
   if (status) status.textContent = localizeMessage(language, message);
@@ -722,6 +740,13 @@ function setStatus(message: string) {
   if (statusContainer) {
     statusContainer.dataset.tone = tone;
     statusContainer.setAttribute("aria-busy", String(tone === "busy"));
+    // The signed-in landing message is not useful once the pane is ready. Keep the
+    // overflow menu reachable, but collapse the status copy so it does not consume
+    // the first-use workspace.
+    statusContainer.dataset.mode =
+      accessToken && message === SIGNED_IN_IDLE_STATUS
+        ? "signed-in-idle"
+        : "message";
   }
 }
 
@@ -1608,7 +1633,7 @@ signIn?.addEventListener("click", async () => {
     updateAuthenticationUi(true);
     recordTokenSummary("oauth:token-claims");
     void refreshCapabilities("oauth");
-    setStatus("Signed in. Select data and inspect it.");
+    setStatus(SIGNED_IN_IDLE_STATUS);
   } catch (error) {
     log.record("oauth:sign-in", "fail", describeError(error));
     setStatus((error as Error).message);
@@ -4136,6 +4161,10 @@ function renderWorkspaceContext(
   if (!info) {
     show(workbookContext, false);
     show(contextSuggestions, false);
+    show(
+      document.querySelector<HTMLElement>("#starter-suggestions"),
+      conversationMessages.length === 0,
+    );
     return;
   }
   const description = describeSelection(info);
@@ -4202,7 +4231,7 @@ function renderWorkspaceContext(
   show(selectionGuidance, info.isBlank === true);
   show(
     document.querySelector<HTMLElement>("#starter-suggestions"),
-    !info.isBlank && suggestions.length === 0,
+    conversationMessages.length === 0 && suggestions.length === 0,
   );
 }
 
@@ -4385,7 +4414,7 @@ async function initialize() {
     updateAuthenticationUi(true);
     recordTokenSummary("session:restore");
     void refreshCapabilities("restore");
-    return setStatus("Signed in. Select data and inspect it.");
+    return setStatus(SIGNED_IN_IDLE_STATUS);
   }
   log.record("session:restore", "info", "no unexpired session");
   updateAuthenticationUi(false);

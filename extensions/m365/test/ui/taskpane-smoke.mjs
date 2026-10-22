@@ -255,6 +255,27 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
       !document.querySelector("#smart-run")?.hasAttribute("disabled"),
     { timeout: 8000 },
   );
+  const idleStatus = await page.$eval("#status", (element) => ({
+    mode: element.dataset.mode,
+    statusTextVisible:
+      (element.querySelector("#status-text"))?.getClientRects().length > 0,
+    menuVisible: (element.querySelector("#menu-toggle"))?.getClientRects().length > 0,
+  }));
+  assert.equal(
+    idleStatus.mode,
+    "signed-in-idle",
+    "the signed-in landing status should collapse after authentication",
+  );
+  assert.equal(
+    idleStatus.statusTextVisible,
+    false,
+    "the signed-in landing message should not consume pane space",
+  );
+  assert.equal(
+    idleStatus.menuVisible,
+    true,
+    "the app menu must remain reachable when the idle status collapses",
+  );
   const skipLinkState = await page.evaluate(() => {
     const link = document.querySelector(".skip-link");
     if (!link) return undefined;
@@ -323,6 +344,11 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "the pane has horizontal overflow",
   );
   assert.equal(
+    await page.$eval("#chat-bar", (element) => element.hidden),
+    true,
+    "a new signed-in pane should keep chat history controls out of the first-use path",
+  );
+  assert.equal(
     await page.evaluate(() => {
       const composer = document
         .querySelector(".composer")
@@ -361,7 +387,6 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "#menu-toggle",
     "#refresh-context",
     ".smart-suggestion",
-    "#new-chat",
     "#instruction",
     "#smart-run",
   ]) {

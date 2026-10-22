@@ -48,6 +48,12 @@ report formulas/evidence). Versioned request, plan, result, capability and verif
 `packages/m365-contracts/src/index.ts`; server capability policy is in
 `backend/src/services/m365Diagnostics.ts`.
 
+The deterministic relational workbook fixture and gateway smoke test are in
+`extensions/m365/test/batch/relationalWorkbook.ts`, `make-relational-workbook.ts`,
+`relationalWorkbook.test.ts` and `relational-agent-smoke.ts`; they generate ten
+related sheets with at least 3,000 data rows per sheet without sending the full
+workbook to the model.
+
 ### 1.1 Request pipeline (`/v1/chat/completions`)
 
 ```mermaid

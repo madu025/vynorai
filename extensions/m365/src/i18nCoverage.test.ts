@@ -140,6 +140,48 @@ test("the prompt starts the pane and the workspace flows below it", () => {
   assert.ok(area < agent);
 });
 
+test("the first-use path keeps Copilot-style quick actions beside the request", () => {
+  const composer = html.indexOf('class="composer"', html.indexOf("<body"));
+  const quickStart = html.indexOf('id="starter-suggestions"');
+  const area = html.indexOf('id="scroll-area"');
+  assert.ok(composer > 0 && composer < quickStart && quickStart < area);
+  assert.match(
+    html,
+    /id="starter-suggestions"[\s\S]*?class="suggestions quick-start"/,
+  );
+  for (const key of ["quick_organize", "quick_summary", "quick_insights"]) {
+    assert.match(html, new RegExp(`data-i18n="${key}"`));
+  }
+  assert.match(
+    html,
+    /\.quick-start\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/,
+  );
+  assert.match(
+    html,
+    /data-instruction="Clean and organize the selected data\."/,
+  );
+  assert.match(html, /class="chat-bar" id="chat-bar" hidden/);
+  assert.match(
+    readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8"),
+    /const hasChat = saved\.length > 0 \|\| conversationMessages\.length > 0/,
+  );
+});
+
+test("the signed-in idle status collapses without removing the app menu", () => {
+  assert.match(
+    html,
+    /#status\[data-mode="signed-in-idle"\][\s\S]*?min-height:\s*26px/,
+  );
+  assert.match(
+    html,
+    /#status\[data-mode="signed-in-idle"\]\s+#status-text|#status\[data-mode="signed-in-idle"\] #status-text/,
+  );
+  assert.match(
+    readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8"),
+    /const SIGNED_IN_IDLE_STATUS = "Signed in\. Select data and inspect it\."[\s\S]*?dataset\.mode =\s*\n?\s*accessToken && message === SIGNED_IN_IDLE_STATUS/,
+  );
+});
+
 test("the skip link appears for keyboard focus without covering the signed-in pane", () => {
   assert.match(html, /\.skip-link\s*\{[^}]*top:\s*-48px/);
   assert.match(

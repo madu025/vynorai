@@ -239,6 +239,20 @@
         background: color-mix(in srgb, var(--success) 10%, var(--surface));
         color: var(--success);
       }
+      #status[data-mode="signed-in-idle"] {
+        min-height: 26px;
+        margin-bottom: 6px;
+        padding: 0;
+        border-color: transparent;
+        background: transparent;
+      }
+      #status[data-mode="signed-in-idle"] #status-text,
+      #status[data-mode="signed-in-idle"] .state-icon {
+        display: none;
+      }
+      #status[data-mode="signed-in-idle"] .status-actions {
+        margin-left: auto;
+      }
       .state-icon {
         width: 7px;
         height: 7px;
@@ -425,6 +439,20 @@
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 7px;
+      }
+      .quick-start {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+        padding: 1px 0 2px;
+      }
+      .quick-start .pill {
+        min-height: 43px;
+        border-radius: 13px;
+        text-align: left;
+      }
+      .quick-start .pill.more {
+        min-height: 32px;
+        text-align: center;
       }
       .pill {
         min-height: 48px;
@@ -1446,6 +1474,99 @@
             </div>
           </details>
         </section>
+        <section
+          id="starter-suggestions"
+          class="suggestions quick-start"
+          aria-label="Suggestions"
+          data-i18n-aria-label="suggestions_label"
+        >
+          <button
+            class="pill"
+            type="button"
+            data-instruction="Clean and organize the selected data."
+            data-i18n="quick_organize"
+          >
+            Organize the data in this workbook
+          </button>
+          <button
+            class="pill"
+            type="button"
+            data-instruction="Summarize this workbook and show the key totals."
+            data-i18n="quick_summary"
+          >
+            Create a summary of this workbook
+          </button>
+          <button
+            class="pill"
+            type="button"
+            data-instruction="Analyze this workbook and find data insights."
+            data-i18n="quick_insights"
+          >
+            Analyze this workbook and find data insights
+          </button>
+          <button
+            id="more-pills"
+            class="pill more"
+            type="button"
+            data-i18n="more_suggestions"
+          >
+            Show more
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Create a chart."
+            data-i18n="pill_chart"
+          >
+            Create a chart
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Create a PivotTable."
+            data-i18n="pill_pivot"
+          >
+            Create a PivotTable
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Format it with data bars."
+            data-i18n="pill_table"
+          >
+            Format data
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Create a new result sheet."
+            data-i18n="pill_sheet"
+          >
+            Create a result sheet
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Clean the data."
+            data-i18n="pill_clean"
+          >
+            Clean the data
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Inspect selected formulas and formula errors."
+            data-i18n="pill_formulas"
+          >
+            Inspect formulas and errors
+          </button>
+        </section>
         <div class="scroll-area" id="scroll-area">
           <section
             id="workbook-context"
@@ -1505,7 +1626,7 @@
             aria-label="VynorAI conversation"
             data-i18n-aria-label="conversation_label"
           >
-            <div class="chat-bar" id="chat-bar">
+            <div class="chat-bar" id="chat-bar" hidden>
               <button
                 id="new-chat"
                 class="pill new-chat-action"
@@ -1544,72 +1665,6 @@
               aria-live="polite"
               aria-relevant="additions text"
             ></div>
-            <div
-              id="starter-suggestions"
-              class="suggestions"
-              aria-label="Suggestions"
-              data-i18n-aria-label="suggestions_label"
-            >
-              <button
-                class="pill"
-                type="button"
-                data-instruction="Create a chart."
-                data-i18n="pill_chart"
-              >
-                Create a chart
-              </button>
-              <button
-                class="pill"
-                type="button"
-                data-instruction="Create a PivotTable."
-                data-i18n="pill_pivot"
-              >
-                Create a PivotTable
-              </button>
-              <button
-                class="pill"
-                type="button"
-                data-instruction="Format it with data bars."
-                data-i18n="pill_table"
-              >
-                Format data
-              </button>
-              <button
-                id="more-pills"
-                class="pill more"
-                type="button"
-                data-i18n="more_suggestions"
-              >
-                Show more
-              </button>
-              <button
-                class="pill extra"
-                hidden
-                type="button"
-                data-instruction="Create a new result sheet."
-                data-i18n="pill_sheet"
-              >
-                Create a result sheet
-              </button>
-              <button
-                class="pill extra"
-                hidden
-                type="button"
-                data-instruction="Clean the data."
-                data-i18n="pill_clean"
-              >
-                Clean the data
-              </button>
-              <button
-                class="pill extra"
-                hidden
-                type="button"
-                data-instruction="Inspect selected formulas and formula errors."
-                data-i18n="pill_formulas"
-              >
-                Inspect formulas and errors
-              </button>
-            </div>
           </section>
 
           <section

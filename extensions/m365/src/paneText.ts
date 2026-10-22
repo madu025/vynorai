@@ -2,6 +2,7 @@
  * Sentences the task pane builds around a request (preview line, "will be created on", the done
  * line), in English, Sinhala or Tamil. Pure, so each language is tested without a browser.
  */
+import type { PaneCard } from "./confirmDialog.js";
 import type { Language } from "./i18n.js";
 import { kindTitle } from "./outcome.js";
 
@@ -118,6 +119,9 @@ export function doneSentence(
 const rupees = (value: number) =>
   `Rs ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/** Whole rupees for a card tile, with no currency prefix so the figure fits. */
+const tileRupees = (value: number) => Math.round(value).toLocaleString("en-US");
+
 /** The question before a payroll sheet is added: what it holds and that the rates need a check. */
 export function payrollQuestion(
   plan: {
@@ -163,6 +167,82 @@ export function payrollQuestion(
       )
     : "";
   return `${what}${bonus}${review}`;
+}
+
+/** The payroll question as a card: three figures and short tags instead of a sentence. */
+export function payrollCard(
+  plan: {
+    sheet: string;
+    employees: number;
+    totals: { gross: number; apit: number; net: number };
+    needsReview: boolean;
+  },
+  copied: number,
+  language: Language,
+  skipped: string[] = [],
+): PaneCard {
+  const tags: PaneCard["tags"] = [
+    {
+      text: copied
+        ? pick(
+            language,
+            `${copied} employees copied`,
+            `සේවකයින් ${copied}ක් පිටපත් කළා`,
+            `${copied} ஊழியர்கள் நகலெடுக்கப்பட்டனர்`,
+          )
+        : pick(
+            language,
+            `${plan.employees} blank rows`,
+            `හිස් පේළි ${plan.employees}ක්`,
+            `${plan.employees} வெற்று வரிசைகள்`,
+          ),
+    },
+    {
+      text: pick(
+        language,
+        "Live formulas",
+        "සජීවී සූත්‍ර",
+        "நேரடி சூத்திரங்கள்",
+      ),
+    },
+  ];
+  if (skipped.length)
+    tags.push({
+      text: pick(
+        language,
+        `${skipped.join(", ")} not copied (APIT Table 2)`,
+        `${skipped.join(", ")} පිටපත් කළේ නැත (APIT Table 2)`,
+        `${skipped.join(", ")} நகலெடுக்கப்படவில்லை (APIT Table 2)`,
+      ),
+      warn: true,
+    });
+  if (plan.needsReview)
+    tags.push({
+      text: pick(
+        language,
+        "Rates unchecked",
+        "අනුපාත පරීක්ෂා කර නැත",
+        "விகிதங்கள் சரிபார்க்கப்படவில்லை",
+      ),
+      warn: true,
+    });
+  return {
+    title: plan.sheet,
+    tiles: copied
+      ? [
+          {
+            label: pick(language, "Gross", "දළ වැටුප", "மொத்தச் சம்பளம்"),
+            value: tileRupees(plan.totals.gross),
+          },
+          { label: "APIT", value: tileRupees(plan.totals.apit), warn: true },
+          {
+            label: pick(language, "Net pay", "ශුද්ධ වැටුප", "நிகரச் சம்பளம்"),
+            value: tileRupees(plan.totals.net),
+          },
+        ]
+      : [],
+    tags,
+  };
 }
 
 /** The status line after the payroll sheet was added, or why it was not. */

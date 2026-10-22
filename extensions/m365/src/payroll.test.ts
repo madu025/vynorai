@@ -1044,3 +1044,41 @@ test("a payroll write that fails leaves no half-made sheet", async () => {
   // The same plan writes cleanly afterwards.
   assert.equal((await writePayrollSheet(book.runtime, plan)).ok, true);
 });
+
+test("the payroll question is also offered as a short card", async () => {
+  const { payrollCard } = await import("./paneText.js");
+  const employees = [
+    {
+      id: "E1",
+      name: "Nimal",
+      basic: 85_000,
+      epfAllowances: 10_000,
+      otherAllowances: 0,
+      otherDeductions: 0,
+    },
+  ];
+  for (const language of ["en", "si", "ta"] as const) {
+    const plan = buildPayrollPlan({
+      month: new Date(2026, 9, 1),
+      employees,
+      language,
+    });
+    const card = payrollCard(plan, 1, language, ["Bonus"]);
+    assert.equal(card.title, "Payroll 2026-10");
+    assert.equal(card.tiles.length, 3);
+    assert.ok(
+      card.tags.some((tag) => /Bonus/.test(tag.text)),
+      language,
+    );
+    assert.ok(
+      card.tags.some((tag) => tag.warn),
+      language,
+    );
+  }
+  const blank = payrollCard(
+    buildPayrollPlan({ month: new Date(2026, 9, 1) }),
+    0,
+    "en",
+  );
+  assert.equal(blank.tiles.length, 0);
+});

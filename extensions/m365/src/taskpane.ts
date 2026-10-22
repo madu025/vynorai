@@ -47,6 +47,7 @@ import {
 import {
   didYouMean,
   doneSentence,
+  payrollCard,
   payrollQuestion,
   payrollResult,
   samplePreviewNote,
@@ -5708,6 +5709,8 @@ async function askAndWritePayroll(request: string): Promise<boolean> {
     !(await askInPane(
       payrollQuestion(plan, employees.length, words, skipped),
       localizeMessage(words, "Add"),
+      undefined,
+      payrollCard(plan, employees.length, words, skipped),
     ))
   )
     return false;

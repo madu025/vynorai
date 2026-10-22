@@ -108,14 +108,19 @@ test("a chat message keeps its line breaks, so a reply can be a bullet list", ()
 test("every status message the pane sets has a Sinhala wording", async () => {
   const { localizeMessage } = await import("./i18n.js");
   const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
-  const pattern = /setStatus\(\s*(?:"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/g;
   const missing = new Set<string>();
-  for (const match of source.matchAll(pattern)) {
-    const text = (match[1] ?? match[2]).replace(/\$\{[^}]*\}/g, "1");
-    if (localizeMessage("si", text) === text) missing.add(text);
+  // Every sentence passed to setStatus, including both sides of a ternary.
+  for (const call of source.matchAll(/setStatus\(([^;]*?)\);/gs)) {
+    for (const match of call[1].matchAll(/"((?:[^"\\]|\\.)+)"|`((?:[^`\\]|\\.)+)`/g)) {
+      const text = (match[1] ?? match[2]).replace(/\$\{[^}]*\}/g, "1");
+      // A fragment that ends in a space is joined to another sentence before it is shown.
+      if (!/[A-Za-z]+ [A-Za-z]+/.test(text) || text.length < 12 || text.endsWith(" ")) continue;
+      if (localizeMessage("si", text) === text) missing.add(text);
+    }
   }
   assert.deepEqual([...missing], []);
 });
+
 
 test("buttons wrap at spaces only, so a Sinhala label never breaks letter by letter", () => {
   assert.match(html, /\.apply-dock \{\s*flex-wrap: wrap;/);

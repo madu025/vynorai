@@ -4904,7 +4904,10 @@ async function showChangePreviews(run: AgentRun, host: AgentHost) {
     if (!cells.length) continue;
     const details = document.createElement("details");
     const summary = document.createElement("summary");
-    summary.textContent = `Before and after (${cells.length}${target.total > cells.length ? ` of ${target.total.toLocaleString("en-US")}` : ""} cells)`;
+    summary.textContent = localizeMessage(
+      language,
+      `Before and after (${cells.length}${target.total > cells.length ? ` of ${target.total.toLocaleString("en-US")}` : ""} cells)`,
+    );
     details.append(summary);
     const table = document.createElement("table");
     table.className = "change-preview";
@@ -4958,7 +4961,7 @@ function renderAgentRun(run: AgentRun) {
     agentChanges.textContent = "";
     for (const item of run.changes) {
       const li = document.createElement("li");
-      li.textContent = describeChange(item.change);
+      li.textContent = localizeMessage(language, describeChange(item.change));
       agentChanges.appendChild(li);
     }
   }

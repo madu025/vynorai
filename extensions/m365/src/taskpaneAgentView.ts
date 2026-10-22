@@ -122,8 +122,8 @@ export function showAgentSourcesView(options: {
       if (source.kind !== "range") {
         item.textContent =
           source.kind === "formula"
-            ? `Excel computed ${source.text}`
-            : `Workbook check: ${source.text.replace(/_/g, " ")}`;
+            ? localize(`Excel computed ${source.text}`)
+            : localize(`Workbook check: ${source.text.replace(/_/g, " ")}`);
         return item;
       }
       const button = document.createElement("button");

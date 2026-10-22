@@ -302,6 +302,26 @@ const EXACT: Record<string, string> = {
     "Agent (පෙරදසුන): සක්‍රීයයි (අක්‍රීය කිරීමට ක්ලික් කරන්න)",
   "Agent (preview): OFF (click to turn on)":
     "Agent (පෙරදසුන): අක්‍රීයයි (සක්‍රීය කිරීමට ක්ලික් කරන්න)",
+  "Agent workflow is not available for this account. Use local preview.":
+    "මෙම ගිණුම සඳහා Agent කාර්ය ප්‍රවාහය නොමැත. දේශීය පෙරදසුන භාවිතා කරන්න.",
+  "Create a preview or report first.":
+    "මුලින්ම පෙරදසුනක් හෝ වාර්තාවක් සාදන්න.",
+  "Create and verify a report before sharing it.":
+    "බෙදාගැනීමට පෙර වාර්තාවක් සාදා තහවුරු කරන්න.",
+  "Creating and verifying the Outlook draft...":
+    "Outlook කෙටුම්පත සාදා තහවුරු කරමින්...",
+  "New chat. Select your data and describe what you want.":
+    "අලුත් සංවාදය. ඔබේ දත්ත තෝරා ඔබට අවශ්‍ය දේ විස්තර කරන්න.",
+  "Requesting Microsoft draft and large-attachment permission...":
+    "Microsoft කෙටුම්පත් සහ විශාල ඇමුණුම් අවසරය ඉල්ලමින්...",
+  "Requesting Microsoft email permission...":
+    "Microsoft ඊමේල් අවසරය ඉල්ලමින්...",
+  "Sending and verifying the approved report...":
+    "අනුමත වාර්තාව යවා තහවුරු කරමින්...",
+  "The agent answered. Nothing was changed.":
+    "Agent පිළිතුරු දුන්නා. කිසිවක් වෙනස් කර නැත.",
+  "The agent prepared changes. Nothing has changed yet: review them, then approve.":
+    "Agent වෙනස්කම් සූදානම් කළා. තවමත් කිසිවක් වෙනස් වී නැත: ඒවා පරීක්ෂා කර අනුමත කරන්න.",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -318,6 +338,19 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^Outlook draft created for (.+) and verified by Microsoft Graph\.$/, (who) => `Outlook කෙටුම්පත ${who} සඳහා සාදා Microsoft Graph මගින් තහවුරු කළා.`],
+  [/^Report sent to (.+) and verified by Microsoft Graph\.$/, (who) => `වාර්තාව ${who} වෙත යවා Microsoft Graph මගින් තහවුරු කළා.`],
+
+  [/^Excel computed (.+)$/, (what) => `Excel ගණනය කළා: ${what}`],
+  [/^Workbook check: (.+)$/, (what) => `වැඩපොත පරීක්ෂාව: ${what}`],
+  [/^Before and after \((\d+)(?: of ([\d,]+))? cells\)$/, (n, total) => total ? `පෙර සහ පසු (සෛල ${total}න් ${n}ක්)` : `පෙර සහ පසු (සෛල ${n}ක්)`],
+  [/^Fill ('.+?'![A-Z]+\d+:[A-Z]+\d+) with: (.+)$/s, (range, rest) => `${range} පුරවන්න: ${rest}`],
+  [/^Write in ('.+?'![A-Z]+\d+): (.+)$/s, (cell, rest) => `${cell} හි ලියන්න: ${rest}`],
+  [/^Write (\d+) x (\d+) values from ('.+?'![A-Z]+\d+)$/, (r, c, at) => `${at} සිට අගයන් ${r} x ${c} ලියන්න`],
+  [/^Add a new sheet "(.+)"$/, (name) => `අලුත් පත්‍රිකාවක් එක් කරන්න: "${name}"`],
+  [/^Add a (\w[\w-]*) chart of (.+)$/, (type, what) => `${type} ප්‍රස්තාරයක් එක් කරන්න: ${what}`],
+  [/^Sort ('.+?'![A-Z]+\d+:[A-Z]+\d+) by (.+?) (ascending|descending) \(edits the data; undo restores it\)$/, (range, col, dir) => `${range} ${col} අනුව ${dir === "ascending" ? "ආරෝහණව" : "අවරෝහණව"} පෙළගස්වන්න (දත්ත වෙනස් වේ; ආපසු හැරවීමෙන් නැවත ලැබේ)`],
+
   [/^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/, (n, c) => `ටෝකන් ආසන්න වශයෙන් ${n}ක් භාවිතා විය (ආදානයෙන් ${c}% ක් cache එකෙන්).`],
   [/^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/, (a, b, rest) => `සැලසුම්කරු (පියවර ${a}), සාදන්නා සහ සමාලෝචකයන් ${b} දෙනා ${tail(rest)}`],
   [/^(\d+) agents (.+)$/, (n, rest) => `agents ${n} දෙනා ${tail(rest)}`],

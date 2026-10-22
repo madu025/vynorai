@@ -67,3 +67,12 @@ test("the team, usage and privacy lines are Sinhala, with the inner label too", 
     /අක්ෂර 90ක්.*නොමැත/,
   );
 });
+
+test("staged step lines and the before/after heading are Sinhala", () => {
+  const si = (text: string) => localizeMessage("si", text);
+  assert.match(si("Fill 'Orders'!L2:L301 with: =G2*H2 (header \"Total\")"), /'Orders'!L2:L301 පුරවන්න: =G2\*H2/);
+  assert.match(si("Write in 'S'!A1: =SUM(B:B)"), /'S'!A1 හි ලියන්න/);
+  assert.match(si("Add a new sheet \"Summary\""), /අලුත් පත්‍රිකාවක්/);
+  assert.match(si("Before and after (36 of 300 cells)"), /සෛල 300න් 36ක්/);
+  assert.match(si("Excel computed =SUM(A:A)"), /Excel ගණනය කළා/);
+});

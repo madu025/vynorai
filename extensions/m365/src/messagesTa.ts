@@ -311,6 +311,26 @@ const EXACT: Record<string, string> = {
     "Agent (முன்னோட்டம்): இயக்கத்தில் (அணைக்க கிளிக் செய்யவும்)",
   "Agent (preview): OFF (click to turn on)":
     "Agent (முன்னோட்டம்): அணைந்துள்ளது (இயக்க கிளிக் செய்யவும்)",
+  "Agent workflow is not available for this account. Use local preview.":
+    "இந்தக் கணக்கிற்கு Agent பணிப்பாய்வு கிடைக்கவில்லை. உள்ளூர் முன்னோட்டத்தைப் பயன்படுத்தவும்.",
+  "Create a preview or report first.":
+    "முதலில் முன்னோட்டம் அல்லது அறிக்கையை உருவாக்கவும்.",
+  "Create and verify a report before sharing it.":
+    "பகிர்வதற்கு முன் அறிக்கையை உருவாக்கிச் சரிபார்க்கவும்.",
+  "Creating and verifying the Outlook draft...":
+    "Outlook வரைவை உருவாக்கிச் சரிபார்க்கிறது...",
+  "New chat. Select your data and describe what you want.":
+    "புதிய உரையாடல். உங்கள் தரவைத் தேர்ந்தெடுத்து தேவையானதை விவரிக்கவும்.",
+  "Requesting Microsoft draft and large-attachment permission...":
+    "Microsoft வரைவு மற்றும் பெரிய இணைப்பு அனுமதியைக் கோருகிறது...",
+  "Requesting Microsoft email permission...":
+    "Microsoft மின்னஞ்சல் அனுமதியைக் கோருகிறது...",
+  "Sending and verifying the approved report...":
+    "அங்கீகரிக்கப்பட்ட அறிக்கையை அனுப்பிச் சரிபார்க்கிறது...",
+  "The agent answered. Nothing was changed.":
+    "Agent பதிலளித்தது. எதுவும் மாற்றப்படவில்லை.",
+  "The agent prepared changes. Nothing has changed yet: review them, then approve.":
+    "Agent மாற்றங்களைத் தயாரித்தது. இன்னும் எதுவும் மாற்றப்படவில்லை: அவற்றை மதிப்பாய்வு செய்து ஒப்புதல் அளிக்கவும்.",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -327,6 +347,19 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^Outlook draft created for (.+) and verified by Microsoft Graph\.$/, (who) => `Outlook வரைவு ${who} க்காக உருவாக்கப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`],
+  [/^Report sent to (.+) and verified by Microsoft Graph\.$/, (who) => `அறிக்கை ${who} க்கு அனுப்பப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`],
+
+  [/^Excel computed (.+)$/, (what) => `Excel கணக்கிட்டது: ${what}`],
+  [/^Workbook check: (.+)$/, (what) => `பணிப்புத்தக சரிபார்ப்பு: ${what}`],
+  [/^Before and after \((\d+)(?: of ([\d,]+))? cells\)$/, (n, total) => total ? `முன் மற்றும் பின் (${total} கலங்களில் ${n})` : `முன் மற்றும் பின் (${n} கலங்கள்)`],
+  [/^Fill ('.+?'![A-Z]+\d+:[A-Z]+\d+) with: (.+)$/s, (range, rest) => `${range} நிரப்பு: ${rest}`],
+  [/^Write in ('.+?'![A-Z]+\d+): (.+)$/s, (cell, rest) => `${cell} இல் எழுது: ${rest}`],
+  [/^Write (\d+) x (\d+) values from ('.+?'![A-Z]+\d+)$/, (r, c, at) => `${at} இலிருந்து ${r} x ${c} மதிப்புகளை எழுது`],
+  [/^Add a new sheet "(.+)"$/, (name) => `புதிய தாளைச் சேர்: "${name}"`],
+  [/^Add a (\w[\w-]*) chart of (.+)$/, (type, what) => `${type} வரைபடத்தைச் சேர்: ${what}`],
+  [/^Sort ('.+?'![A-Z]+\d+:[A-Z]+\d+) by (.+?) (ascending|descending) \(edits the data; undo restores it\)$/, (range, col, dir) => `${range} ஐ ${col} படி ${dir === "ascending" ? "ஏறுவரிசையில்" : "இறங்குவரிசையில்"} வரிசைப்படுத்து (தரவு மாறும்; செயல்தவிர்த்தால் மீளும்)`],
+
   [/^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/, (n, c) => `சுமார் ${n} டோக்கன்கள் பயன்படுத்தப்பட்டன (உள்ளீட்டில் ${c}% cache இலிருந்து).`],
   [/^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/, (a, b, rest) => `திட்டமிடுபவர் (${a} படிகள்), உருவாக்குபவர் மற்றும் ${b} மதிப்பாய்வாளர்கள் ${tail(rest)}`],
   [/^(\d+) agents (.+)$/, (n, rest) => `${n} agents ${tail(rest)}`],

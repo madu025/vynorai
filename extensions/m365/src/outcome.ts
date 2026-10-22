@@ -450,19 +450,13 @@ export function buildOutcomes(
       const operations = (spec.operations ?? []) as string[];
       const labels = operations.map((operation) => {
         if (operation === "text-to-number")
-          return say(
-            "numbers stored as text",
-            "à¶´à·à¶¨ à¶½à·™à·ƒ à¶­à·’à¶¶à·– à·ƒà¶‚à¶›à·Šâ€à¶ºà·",
-          );
+          return say("numbers stored as text", "පාඨ ලෙස තිබූ සංඛ්‍යා");
         if (operation === "text-to-date")
-          return say(
-            "unambiguous ISO text dates",
-            "à¶±à·’à·€à·à¶»à¶¯à·’ ISO à¶´à·à¶¨ à¶¯à·’à¶±",
-          );
+          return say("unambiguous ISO text dates", "නිවැරදි ISO පාඨ දින");
         if (operation === "fill-blanks")
           return say(
             `blank${spec.fillBlanksColumn ? ` in ${spec.fillBlanksColumn}` : ""} cells with ${String(spec.fillBlanks)}`,
-            `à·„à·’à·ƒà·Š à¶­à·“à¶»à·” ${String(spec.fillBlanks)} à·€à¶½à·’à¶±à·Š`,
+            `හිස් තීරු ${String(spec.fillBlanks)} වලින්`,
           );
         if (operation === "fuzzy-dedupe")
           return say(
@@ -470,10 +464,7 @@ export function buildOutcomes(
             "එක් අක්ෂරයක වෙනසක් ඇති ආසන්න duplicate පේළි",
           );
         if (operation === "dedupe")
-          return say(
-            "exact duplicate rows",
-            "à·ƒà¶¸à·à¶± à¶´à·”à¶±à¶»à·à·€à¶»à·Šà¶­à¶± à¶´à·šà·…à·’",
-          );
+          return say("exact duplicate rows", "සමාන පුනරාවර්තන පේළි");
         return say("extra spaces", "අමතර හිස් ඉඩ");
       });
       if (labels.length)

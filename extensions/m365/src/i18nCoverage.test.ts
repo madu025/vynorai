@@ -109,8 +109,19 @@ test("the pane avoids duplicating the Office title bar and keeps its app menu re
 });
 
 test("visible loading text stays valid UTF-8 instead of mojibake", () => {
-  assert.doesNotMatch(html, /Loadingâ€¦|Ã.|Â./);
+  assert.doesNotMatch(html, /Loading\u00e2\u2026|\u00c3.|\u00c2./);
   assert.match(html, /id="status-text">Loading…<\/span>/);
+});
+
+test("localized outcome messages stay valid UTF-8", () => {
+  const outcome = readFileSync(
+    new URL("./outcome.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    outcome,
+    /\u00e0[\u00b6\u00b7]|\u00e2\u20ac|\u00c3|\u00c2/,
+  );
 });
 
 test("the prompt starts the pane and the workspace flows below it", () => {

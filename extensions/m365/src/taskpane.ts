@@ -4328,6 +4328,10 @@ function renderWorkspaceContext(
         instruction.value = suggestion.instruction;
         instruction.dispatchEvent(new Event("input"));
         instruction.focus();
+        // This suggestion was produced from the local schema, so it already has a deterministic
+        // intent. Do not send the person through the AI-consent gate just because the generated
+        // wording says "recommend" or "best" and names no individual column.
+        skipAiOnce = true;
         smartRun?.click();
       });
       return button;

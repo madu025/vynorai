@@ -366,8 +366,18 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   );
   assert.equal(
     await page.$eval("#chat-bar", (element) => element.hidden),
+    false,
+    "a new signed-in pane should keep New chat controls visible",
+  );
+  assert.equal(
+    await page.$eval("#new-chat", (element) => element.hidden),
+    false,
+    "New chat must be available before the first request",
+  );
+  assert.equal(
+    await page.$eval("#chat-history-select", (element) => element.hidden),
     true,
-    "a new signed-in pane should keep chat history controls out of the first-use path",
+    "empty workbooks should hide only the empty history picker",
   );
   assert.equal(
     await page.$eval(".brand-bar", (element) => element.getClientRects().length > 0),

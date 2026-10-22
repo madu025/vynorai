@@ -40,13 +40,10 @@ export function renderChatListView(options: ChatViewOptions): void {
     ? store.activeId
     : "";
   select.hidden = saved.length === 0;
-  const hasChat = saved.length > 0 || messages.length > 0;
-  document
-    .querySelector<HTMLElement>("#chat-bar")
-    ?.toggleAttribute("hidden", !hasChat);
-  document
-    .querySelector<HTMLElement>("#new-chat")
-    ?.toggleAttribute("hidden", !hasChat);
+  // Chat controls are a top-level workspace affordance. Keep New chat visible even for a
+  // brand-new workbook; history and delete remain conditional on saved conversations.
+  document.querySelector<HTMLElement>("#chat-bar")?.removeAttribute("hidden");
+  document.querySelector<HTMLElement>("#new-chat")?.removeAttribute("hidden");
   if (remove)
     remove.hidden = !saved.some((entry) => entry.id === store.activeId);
 }

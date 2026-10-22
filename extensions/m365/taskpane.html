@@ -1667,6 +1667,23 @@
         container-type: inline-size;
         gap: 10px;
       }
+      .workspace > .chat-bar {
+        position: relative;
+        top: auto;
+        z-index: 3;
+        min-height: 48px;
+        padding: 6px;
+        border: 1px solid rgb(67 91 122 / 15%);
+        border-radius: 15px;
+        background: rgb(255 255 255 / 78%);
+        box-shadow: 0 5px 15px rgb(31 52 76 / 5%);
+        backdrop-filter: blur(16px) saturate(140%);
+      }
+      .workspace > .chat-bar .new-chat-action {
+        background: linear-gradient(145deg, #e4f3ff, #e8f0ff);
+        color: var(--brand);
+        font-weight: 700;
+      }
       .scroll-area {
         gap: 14px;
         padding: 3px 1px 12px;
@@ -1896,6 +1913,9 @@
         .context-card {
           grid-template-columns: minmax(0, 1fr) auto;
         }
+        .workspace > .chat-bar select {
+          flex: 1 1 190px;
+        }
         #context-selection,
         .context-badges {
           grid-column: 1;
@@ -2078,6 +2098,31 @@
       </section>
 
       <div class="workspace">
+        <div class="chat-bar" id="chat-bar" aria-label="Chat controls">
+          <button
+            id="new-chat"
+            class="pill new-chat-action"
+            type="button"
+            data-i18n="new_chat"
+          >
+            + New chat
+          </button>
+          <select
+            id="chat-history-select"
+            aria-label="Chat history"
+            data-i18n-aria-label="chat_history"
+            hidden
+          ></select>
+          <button
+            id="delete-chat"
+            class="pill"
+            type="button"
+            data-i18n="delete_chat"
+            hidden
+          >
+            Delete
+          </button>
+        </div>
         <section
           class="composer"
           aria-label="Request a workbook change"
@@ -2301,31 +2346,6 @@
             aria-label="VynorAI conversation"
             data-i18n-aria-label="conversation_label"
           >
-            <div class="chat-bar" id="chat-bar" hidden>
-              <button
-                id="new-chat"
-                class="pill new-chat-action"
-                type="button"
-                data-i18n="new_chat"
-              >
-                + New chat
-              </button>
-              <select
-                id="chat-history-select"
-                aria-label="Chat history"
-                data-i18n-aria-label="chat_history"
-                hidden
-              ></select>
-              <button
-                id="delete-chat"
-                class="pill"
-                type="button"
-                data-i18n="delete_chat"
-                hidden
-              >
-                Delete
-              </button>
-            </div>
             <div class="welcome" id="welcome-state">
               <h1 data-i18n="hero">
                 What would you like to do with your data?

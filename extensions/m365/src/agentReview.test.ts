@@ -14,6 +14,7 @@ import {
   parsePlan,
   parseReview,
   planFacts,
+  planRequest,
   reviewAndRevise,
   reviewRequest,
   revisionRequest,
@@ -318,12 +319,48 @@ test("one reviewer's problem is enough to correct the plan", async () => {
   );
 });
 
+test("reviewers are told the changes run in order, so a sheet an earlier change creates counts as existing", () => {
+  const text = reviewRequest(
+    "Summarize by region on a new sheet",
+    { changes: [], reply: "" },
+    "coverage",
+  );
+  assert.match(text, /run in the listed order/);
+  assert.match(text, /earlier change creates/);
+});
+
+test("reviewers list only real problems: a correct change is never a problem", () => {
+  const text = reviewRequest("x", { changes: [], reply: "" }, "accuracy");
+  assert.match(text, /Never list something that is correct/);
+  assert.match(text, /reply exactly "VERDICT: OK"/);
+});
+
 test("a question gets no planner; a change request does", () => {
   assert.equal(needsPlan("What is the total of Amount?"), false);
   assert.equal(needsPlan("how many rows are there"), false);
   assert.equal(needsPlan("Add a total under Amount"), true);
   assert.equal(needsPlan("Clean the data, pivot by region and chart it"), true);
   assert.equal(needsPlan("[Report from the add-in] applied"), false);
+});
+
+test("a read-only request (audit, check, explain, list) gets no planner, unless it also changes something", () => {
+  for (const text of [
+    "audit every formula in this workbook for errors and inconsistent formulas",
+    "Check the totals for mistakes",
+    "explain what the formula in K2 does",
+    "list the sheets that have hidden rows",
+    "Show me the largest 5 customers",
+    "find duplicate service IDs",
+  ])
+    assert.equal(needsPlan(text), false, text);
+  for (const text of [
+    "audit the formulas and fix the errors",
+    "check the totals and add a chart",
+    "show the top 5 customers on a new sheet",
+    "find duplicates and delete them",
+    "list the sheets and write them in column A",
+  ])
+    assert.equal(needsPlan(text), true, text);
 });
 
 test("the planner's steps are read strictly and passed as a note", () => {
@@ -377,6 +414,50 @@ test("the team: planner, builder with the plan, two reviewers", async () => {
     describeReview(result),
     /Planner \(1 step\), builder and 2 reviewer\(s\) checked the plan: no problems found/,
   );
+});
+
+test("the plan reaches onPlan before the builder starts, and only when there is one", async () => {
+  const order: string[] = [];
+  const base = scripted("VERDICT: OK").model;
+  const model = async (messages: AgentMessage[]) => {
+    const user = lastUser(messages);
+    if (/You are the planner/.test(user))
+      return {
+        content: "PLAN:\n1. Read the Data sheet\n2. Add a total under Amount",
+        tool_calls: [],
+      };
+    if (
+      !/You are the reviewer/.test(user) &&
+      messages[messages.length - 1].role === "user"
+    )
+      order.push("builder");
+    return base(messages);
+  };
+  let seen: string[] = [];
+  await runTeam({
+    request: "Add a total under Amount",
+    host,
+    model,
+    mask: new PersonalMask(),
+    onPlan: (steps: string[]) => {
+      seen = steps;
+      order.push("plan");
+    },
+  });
+  assert.deepEqual(seen, ["Read the Data sheet", "Add a total under Amount"]);
+  assert.deepEqual(order.slice(0, 2), ["plan", "builder"]);
+
+  let called = false;
+  await runTeam({
+    request: "What is in column B?",
+    host,
+    model: base,
+    mask: new PersonalMask(),
+    onPlan: () => {
+      called = true;
+    },
+  });
+  assert.equal(called, false);
 });
 
 test("a failed planner leaves the builder working as before", async () => {
@@ -443,4 +524,24 @@ test("the accuracy reviewer is told to run the formulas and compare totals", () 
   const text = reviewRequest("Summary by region", { reply: "", changes: [] });
   assert.match(text, /run every staged formula through calculate/);
   assert.match(text, /compare it with the sum of the summary/);
+});
+
+test("the planner maps cross-sheet relationships and the accuracy reviewer verifies the join", () => {
+  const plan = planRequest(
+    "Bring Description from Items into the detail report by Item Code",
+  );
+  assert.match(plan, /call map_relationships/);
+  assert.match(plan, /cardinality/);
+  assert.match(plan, /unmatched-row count/);
+  assert.match(plan, /If it finds no key, plan a question instead of guessing/);
+
+  const review = reviewRequest(
+    "Bring Description from Items into the detail report by Item Code",
+    { reply: "", changes: [] },
+    "accuracy",
+  );
+  assert.match(review, /call map_relationships/);
+  assert.match(review, /many-to-many key/);
+  assert.match(review, /repeated lookup-side keys/);
+  assert.match(review, /key that needs cleaning/);
 });

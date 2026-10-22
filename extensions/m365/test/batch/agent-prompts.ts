@@ -135,6 +135,7 @@ const host = (seen: Seen): AgentHost => ({
       },
       { name: "Pivot", usedRange: "A3:B30", rows: 28, columns: 2 },
       { name: "Model", usedRange: "A1:B5", rows: 5, columns: 2 },
+      { name: "Items", usedRange: "A1:C41", rows: 41, columns: 3 },
     ],
     tables: [],
     data: {
@@ -172,6 +173,18 @@ const host = (seen: Seen): AgentHost => ({
               ],
             }
           : {}),
+      };
+    if (sheet === "Items")
+      return {
+        address: "A1:C6",
+        values: [
+          ["Item Code", "Description", "Unit Cost"],
+          ["OSPACC000", "Drop wire", 120],
+          ["OSPACC001", "ONT", 5400],
+          ["OSPACC002", "Splitter", 900],
+          ["OSPACC003", "Patch cord", 150],
+          ["OSPACC004", "Rosette", 80],
+        ],
       };
     // Like Excel: only the asked columns, and "" for cells past the data (K2 is empty here).
     const match = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(address);
@@ -508,9 +521,9 @@ const CASES: Case[] = [
       return need(
         Boolean(
           format &&
-            format.bold === true &&
-            format.fill &&
-            /^A1:J1$/i.test(format.address),
+          format.bold === true &&
+          format.fill &&
+          /^A1:J1$/i.test(format.address),
         ),
         JSON.stringify(format ?? kinds(run)),
       );
@@ -664,7 +677,11 @@ const CASES: Case[] = [
     check: (run) =>
       need(
         action(run, "sheet_action").some(
-          (a) => a.action === "freeze_rows" && a.value === 1,
+          (a) =>
+            (a.action === "freeze_rows" && a.value === 1) ||
+            // Freezing at A2 freezes exactly the first row.
+            (a.action === "freeze_at" &&
+              String(a.value).toUpperCase() === "A2"),
         ),
         JSON.stringify(run.changes.map((c) => c.change)),
       ),
@@ -876,6 +893,185 @@ const CASES: Case[] = [
       ),
   },
   {
+    id: "n-join",
+    text: "bring the Description and Unit Cost from the Items sheet into the detail report by Item Code, on a new sheet",
+    check: (run) =>
+      need(
+        action(run, "combine_tables").some(
+          (a) =>
+            a.mode === "join" &&
+            a.right_sheet === "Items" &&
+            /item code/i.test(String(a.key)),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-multi-question",
+    text: "which Items (by Description) have the highest total Issued Quantity in the detail report? give me the top 3",
+    check: (run, seen) =>
+      all(
+        need(
+          seen.some((s) => s.name === "map_relationships"),
+          seen
+            .map((s) => s.name)
+            .join(" ; ")
+            .slice(0, 300),
+        ),
+        need(run.changes.length === 0, `staged ${kinds(run).join(",")}`),
+        need(run.reply.length > 0, "no reply"),
+      ),
+  },
+  {
+    id: "n-multi-nokey",
+    text: "add the supplier's phone number from the Items sheet to the detail report",
+    check: (run, seen) =>
+      need(
+        seen.some((s) => s.name === "map_relationships") ||
+          run.reply.length > 0,
+        seen
+          .map((s) => s.name)
+          .join(" ; ")
+          .slice(0, 300),
+      ),
+  },
+  {
+    id: "n-reconcile",
+    text: "reconcile the Item Codes used in detail-report against the Items master list: which codes are missing from either side?",
+    check: (run) =>
+      need(
+        action(run, "combine_tables").some(
+          (a) => a.mode === "reconcile" && /item code/i.test(String(a.key)),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-outliers",
+    text: "are there any unusual Issued Quantity values in the detail report? tell me which rows",
+    check: (run, seen) =>
+      all(
+        need(
+          seen.some(
+            (s) => s.name === "analyze_columns" && s.args.kind === "anomalies",
+          ) || seen.some((s) => s.name === "calculate"),
+          seen
+            .map((s) => s.name)
+            .join(" ; ")
+            .slice(0, 300),
+        ),
+        // A question is answered in the reply. The only change allowed is the add-in's own
+        // outlier step offered for the exact rows over a column too long to list.
+        need(
+          run.reply.length > 0 &&
+            run.changes.every(
+              (c) =>
+                c.change.kind === "vynor_step" &&
+                /outlier/i.test(c.change.instruction),
+            ),
+          `staged ${kinds(run).join(",")}`,
+        ),
+      ),
+  },
+  {
+    id: "n-loan",
+    text: "make a loan amortization schedule for 2,500,000 at 14% a year over 5 years, monthly payments, on a new sheet",
+    check: (run) =>
+      need(
+        action(run, "financial_model").some(
+          (a) =>
+            a.kind === "loan_schedule" &&
+            a.principal === 2500000 &&
+            Math.abs(a.annual_rate - 0.14) < 1e-9 &&
+            a.years === 5,
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-scenarios",
+    text: "on the Model sheet compare profit in B5 for three price scenarios: 8, 10 and 12 in B1, put the table on a new sheet",
+    check: (run) =>
+      need(
+        action(run, "what_if").some(
+          (a) =>
+            a.model_sheet === "Model" &&
+            a.outputs.includes("B5") &&
+            (a.mode === "scenarios"
+              ? a.scenarios.length === 3
+              : a.input_cell === "B1" && a.values.length === 3),
+        ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-budget",
+    text: "treat Requested Quantity as the budget and Issued Quantity as the actual: show actual vs budget by RTOM on a new sheet, biggest variance first",
+    // The outcome counts: the financial_model tool, or one live formula that adds Issued and
+    // Requested by RTOM (column B) and takes their difference.
+    check: (run, seen) =>
+      need(
+        action(run, "financial_model").some(
+          (a) =>
+            a.kind === "budget_variance" &&
+            /!B\d/.test(a.categories) &&
+            /!H\d/.test(a.actual) &&
+            /!G\d/.test(a.budget),
+        ) ||
+          formulas(run, seen).some(
+            (f) =>
+              /SUMIFS|GROUPBY/i.test(f) &&
+              /!B2:B/.test(f) &&
+              /!G2:G/.test(f) &&
+              /!H2:H/.test(f) &&
+              run.changes.some(
+                (c) =>
+                  c.change.kind === "write_formula" && c.change.formula === f,
+              ),
+          ),
+        JSON.stringify(run.changes.map((c) => c.change)).slice(0, 300),
+      ),
+  },
+  {
+    id: "n-audit",
+    text: "audit every formula in this workbook for errors and inconsistent formulas",
+    check: (run, seen) =>
+      all(
+        need(
+          seen.some(
+            (s) =>
+              s.name === "get_details" &&
+              /formula_(audit|check)/.test(String(s.args.what)),
+          ),
+          seen
+            .map((s) => s.name)
+            .join(" ; ")
+            .slice(0, 300),
+        ),
+        noChanges(run),
+      ),
+  },
+  {
+    id: "a-reply-style",
+    text: "pivot of total Issued Quantity by RTOM and a column chart of it",
+    // The reply is only the key points: a short bullet list, not paragraphs that repeat the
+    // staged list or explain the method.
+    check: (run) => {
+      const lines = run.reply
+        .split(/\n+/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      return all(
+        need(lines.length >= 1 && lines.length <= 6, `${lines.length} lines`),
+        need(
+          lines.every((l) => /^[-•*]\s/.test(l)),
+          `not bullets: ${lines.slice(0, 2).join(" | ").slice(0, 160)}`,
+        ),
+        need(run.reply.length <= 650, `${run.reply.length} chars`),
+      );
+    },
+  },
+  {
     id: "n-protect",
     text: "protect the detail-report sheet",
     check: (run) =>
@@ -950,6 +1146,45 @@ const CASES: Case[] = [
   },
 ];
 
+/** Which kind of Excel expert each task stands for; the summary scores each kind. */
+const EXPERT: Record<string, string> = {
+  "a-pivot-chart": "BI and dashboards",
+  "n-pivot-pct": "BI and dashboards",
+  "n-chart-edit": "BI and dashboards",
+  "n-table": "BI and dashboards",
+  "a-share-rtom": "BI and dashboards",
+  "a-lea-summary": "BI and dashboards",
+  "n-dupes-inplace": "Data cleaning",
+  "n-replace": "Data cleaning",
+  "p-clean-inplace": "Data cleaning",
+  "n-delete-inplace": "Data cleaning",
+  "a-delete-rows": "Data cleaning",
+  "a-month-trend": "Statistics and forecasting",
+  "p-regression": "Statistics and forecasting",
+  "n-outliers": "Statistics and forecasting",
+  "p-month-summary": "Statistics and forecasting",
+  "n-join": "Data preparation",
+  "n-multi-question": "Data preparation",
+  "n-multi-nokey": "Data preparation",
+  "a-gap-column": "Data preparation",
+  "n-insert-col": "Data preparation",
+  "n-loan": "Financial modelling",
+  "n-budget": "FP&A and budgets",
+  "p-why": "FP&A and budgets",
+  "n-reconcile": "Accounting and reconciliation",
+  "n-goal-seek": "What-if",
+  "n-scenarios": "What-if",
+  "p-formula-check": "Formula audit",
+  "n-audit": "Formula audit",
+  "a-explain": "Formula audit",
+  "n-print": "Reporting and automation",
+  "n-protect": "Reporting and automation",
+  "n-freeze": "Reporting and automation",
+  "a-email": "Reporting and automation",
+  "a-web": "Reporting and automation",
+};
+const byExpert = new Map<string, { pass: number; ran: number }>();
+
 let pass = 0;
 let ran = 0;
 let turns = 0;
@@ -1016,6 +1251,13 @@ for (const item of CASES) {
     verdict = `error ${(error as Error).message}`;
   }
   if (verdict === true) pass += 1;
+  const expert = byExpert.get(EXPERT[item.id] ?? "General") ?? {
+    pass: 0,
+    ran: 0,
+  };
+  expert.ran += 1;
+  if (verdict === true) expert.pass += 1;
+  byExpert.set(EXPERT[item.id] ?? "General", expert);
   console.log(
     `${verdict === true ? "PASS" : "FAIL"} ${item.id}${verdict === true ? "" : `: ${verdict}`}`,
   );
@@ -1030,6 +1272,10 @@ if (reviewOn)
   console.log(
     `review: ${reviews.planned} planned, ${reviews.ok} accepted, ${reviews.fix} asked for a fix, ${reviews.revised} corrected`,
   );
+for (const [expert, score] of [...byExpert].sort(([a], [b]) =>
+  a.localeCompare(b),
+))
+  console.log(`expert ${expert}: ${score.pass}/${score.ran}`);
 console.log(
   `agent-prompts: ${pass}/${ran} (model turns ${turns}, calls ${calls}; tokens in ${usage.prompt} (cached ${usage.cached}), out ${usage.completion})`,
 );

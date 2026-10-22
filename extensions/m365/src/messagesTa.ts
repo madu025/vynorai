@@ -164,11 +164,103 @@ const EXACT: Record<string, string> = {
   statistics: "புள்ளிவிவரங்கள்",
   view: "வடிகட்டிய காட்சி",
   "lookup-columns": "Lookup columns",
+  "Create a report first.": "முதலில் ஓர் அறிக்கையை உருவாக்கவும்.",
+  "Make a report first.": "முதலில் ஓர் அறிக்கையை உருவாக்கவும்.",
+  "Nothing was sent to AI.": "AI-க்கு எதுவும் அனுப்பப்படவில்லை.",
+  "Writing the message...": "செய்தியை எழுதுகிறது...",
+  "The message was written by AI. Read and edit it before you send the report.":
+    "இந்தச் செய்தியை AI எழுதியது. அறிக்கையை அனுப்பும் முன் அதைப் படித்துத் திருத்தவும்.",
+  "Enter a recipient and subject first.":
+    "முதலில் பெறுநரையும் தலைப்பையும் உள்ளிடவும்.",
+  "Preparing the approved report variants...":
+    "ஒப்புதல் பெற்ற அறிக்கைப் பதிப்புகளைத் தயாரிக்கிறது...",
+  "Microsoft did not give this add-in permission to send mail (your organization's administrator may need to approve it). Nothing was sent. Use the link below to open the report as a draft in Outlook on the web.":
+    "மின்னஞ்சல் அனுப்ப Microsoft இந்த add-in-க்கு அனுமதி வழங்கவில்லை (உங்கள் நிறுவனத்தின் நிர்வாகி அதை அங்கீகரிக்க வேண்டியிருக்கலாம்). எதுவும் அனுப்பப்படவில்லை. அறிக்கையை Outlook web-இல் வரைவாகத் திறக்கக் கீழே உள்ள இணைப்பைப் பயன்படுத்தவும்.",
+  "Code is ready to copy. Nothing was run or changed.":
+    "குறியீடு நகலெடுக்கத் தயார். எதுவும் இயக்கப்படவில்லை, மாற்றப்படவில்லை.",
+  "Nothing was changed.": "எதுவும் மாற்றப்படவில்லை.",
+  "Code copied.": "குறியீடு நகலெடுக்கப்பட்டது.",
+  "Select the code and copy it with Ctrl+C.":
+    "குறியீட்டைத் தேர்ந்தெடுத்து Ctrl+C மூலம் நகலெடுக்கவும்.",
+  "Asking the AI to read your request (only column names and types are sent)...":
+    "உங்கள் கோரிக்கையைப் படிக்குமாறு AI-யிடம் கேட்கிறது (நெடுவரிசைப் பெயர்களும் வகைகளும் மட்டுமே அனுப்பப்படும்)...",
+  "Planning the steps...": "படிகளைத் திட்டமிடுகிறது...",
+  "The AI understood your request. Preparing the preview; nothing changes until you confirm.":
+    "AI உங்கள் கோரிக்கையைப் புரிந்துகொண்டது. முன்னோட்டத்தைத் தயாரிக்கிறது; நீங்கள் உறுதிசெய்யும் வரை எதுவும் மாறாது.",
+  "Preview adjusted. Rechecking the plan...":
+    "முன்னோட்டம் சரிசெய்யப்பட்டது. திட்டத்தை மீண்டும் சரிபார்க்கிறது...",
+  "No older VynorAI result sheets found.":
+    "பழைய VynorAI முடிவுத் தாள்கள் எதுவும் கிடைக்கவில்லை.",
+  "There are no older VynorAI result sheets.":
+    "பழைய VynorAI முடிவுத் தாள்கள் எதுவும் இல்லை.",
+  "Enter the request again before refreshing this result.":
+    "இந்த முடிவைப் புதுப்பிக்கும் முன் கோரிக்கையை மீண்டும் உள்ளிடவும்.",
+  "Refreshing the preview. Nothing changes until you confirm.":
+    "முன்னோட்டத்தைப் புதுப்பிக்கிறது. நீங்கள் உறுதிசெய்யும் வரை எதுவும் மாறாது.",
+  "Planning the next step...": "அடுத்த படியைத் திட்டமிடுகிறது...",
+  "Running the selected tool...": "தேர்ந்தெடுத்த கருவியை இயக்குகிறது...",
+  "Checking the tool result...": "கருவியின் முடிவைச் சரிபார்க்கிறது...",
+  "A planner agent is splitting the request into steps...":
+    "திட்டமிடும் agent கோரிக்கையைப் படிகளாகப் பிரிக்கிறது...",
+  "Correcting the plan after the review...":
+    "மதிப்பாய்வுக்குப் பின் திட்டத்தைத் திருத்துகிறது...",
+  "Stopped. Nothing was changed.": "நிறுத்தப்பட்டது. எதுவும் மாற்றப்படவில்லை.",
+  "The agent could not finish. Nothing was changed.":
+    "Agent-ஆல் முடிக்க முடியவில்லை. எதுவும் மாற்றப்படவில்லை.",
+  "Describe what you want first.":
+    "முதலில் உங்களுக்கு என்ன வேண்டும் என்று விவரிக்கவும்.",
+  "Sign in first.": "முதலில் உள்நுழையவும்.",
+  "The agent is working. Nothing changes until you approve.":
+    "Agent வேலை செய்கிறது. நீங்கள் ஒப்புதல் அளிக்கும் வரை எதுவும் மாறாது.",
+  "Discarded. Nothing was changed.":
+    "நிராகரிக்கப்பட்டது. எதுவும் மாற்றப்படவில்லை.",
+  "Applying the approved changes...":
+    "ஒப்புதல் பெற்ற மாற்றங்களைப் பயன்படுத்துகிறது...",
+  "Applying failed. See Diagnostics.":
+    "பயன்படுத்துவது தோல்வியடைந்தது. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
+  "Verifying the applied result...":
+    "பயன்படுத்திய முடிவை உறுதிப்படுத்துகிறது...",
+  "Undoing the agent's changes...": "Agent செய்த மாற்றங்களை மீளமைக்கிறது...",
+  "Undone. The workbook is back as it was.":
+    "மீளமைக்கப்பட்டது. பணிப்புத்தகம் முன்பு இருந்தபடியே உள்ளது.",
+  "Undo did not finish. See Diagnostics.":
+    "மீளமைப்பு முடியவில்லை. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
+  "Forgot the saved choices for this workbook.":
+    "இந்தப் பணிப்புத்தகத்திற்குச் சேமித்த தேர்வுகள் மறக்கப்பட்டன.",
+  "Copied. Paste it into WhatsApp; nothing was sent.":
+    "நகலெடுக்கப்பட்டது. அதை WhatsApp-இல் paste செய்யவும்; எதுவும் அனுப்பப்படவில்லை.",
+  "The summary could not be made. See Diagnostics.":
+    "சுருக்கத்தை உருவாக்க முடியவில்லை. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
+  "Refreshing the preview for the current selection...":
+    "தற்போதைய தேர்வுக்கான முன்னோட்டத்தைப் புதுப்பிக்கிறது...",
+  "A reviewer agent is checking ranges, formulas and totals...":
+    "ஒரு மதிப்பாய்வு agent வரம்புகள், சூத்திரங்கள் மற்றும் மொத்தங்களைச் சரிபார்க்கிறது...",
+  "A reviewer agent is checking that every part is covered and nothing is overwritten...":
+    "ஒரு மதிப்பாய்வு agent ஒவ்வொரு பகுதியும் உள்ளடக்கப்பட்டுள்ளதா, எதுவும் மேலெழுதப்படவில்லையா என்று சரிபார்க்கிறது...",
 };
 
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [
+    /^Removed (\d+) (?:older )?(?:VynorAI )?(?:result )?sheet\(s\)\.$/,
+    (n) => `${n} தாள்கள் நீக்கப்பட்டன.`,
+  ],
+  [
+    /^Removed (\d+) sheet\(s\), (\d+) named range\(s\), and converted (\d+) table\(s\) back to a range\.$/,
+    (s, n, t) =>
+      `${s} தாள்களும் ${n} பெயரிடப்பட்ட வரம்புகளும் நீக்கப்பட்டு, ${t} அட்டவணைகள் மீண்டும் சாதாரண வரம்பாக மாற்றப்பட்டன.`,
+  ],
+  [
+    /^The message could not be written \((.*)\)\. Write it yourself or try again\.$/,
+    (why) =>
+      `செய்தியை எழுத முடியவில்லை (${why}). நீங்களே எழுதுங்கள், அல்லது மீண்டும் முயற்சிக்கவும்.`,
+  ],
+  [
+    /^Added the "(.+)" sheet \((\d+) fixed-date holidays\)\. Add Poya days from the gazette; delete the sheet to undo\.$/,
+    (name, n) =>
+      `"${name}" தாள் சேர்க்கப்பட்டது (நிலையான தேதி கொண்ட ${n} விடுமுறைகள்). போயா நாட்களை வர்த்தமானியிலிருந்து சேர்க்கவும்; மீளமைக்க அந்தத் தாளை நீக்கவும்.`,
+  ],
   [
     /^(\d+) formula cell\(s\), (\d+) error cell\(s\), (\d+) possible direct circular reference\(s\), (\d+) inconsistent formula\(s\), (\d+) hard-coded numeric cell\(s\)\.$/,
     (formulas, errors, circular, inconsistent, hardCoded) =>

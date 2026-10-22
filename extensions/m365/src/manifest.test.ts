@@ -82,3 +82,23 @@ test("the Excel manifest keeps the one stable task pane address", () => {
   assert.equal(addresses.size, 1);
   assert.match(xml, /<Permissions>ReadWriteDocument<\/Permissions>/);
 });
+
+test("published M365 pages use a per-publish asset ID without changing the installed manifest", () => {
+  for (const page of ["taskpane.html", "text.html"]) {
+    const html = read(page);
+    assert.match(html, /build-id\.js\?open=/);
+    assert.match(html, /window\.__VYNOR_M365_BUILD_ID__ \|\| "dev"/);
+    assert.match(html, /runtime-config\.js\?v=" \+ suffix/);
+    assert.match(html, /dist\/(?:taskpane|text)\.bundle\.js\?v=" \+ suffix/);
+  }
+  const publish = fs.readFileSync(
+    new URL("../../deploy/publish-m365.sh", root),
+    "utf8",
+  );
+  assert.match(publish, /BUILD_ID=\$\{VYNOR_M365_BUILD_ID:-\$\(git/);
+  assert.match(publish, /build-id\.js\.new/);
+  assert.match(publish, /build-id\.js"/);
+  assert.doesNotMatch(publish, /taskpane\.html\.new/);
+  assert.match(publish, /remote revision \$REMOTE_COMMIT does not match local/);
+  assert.match(publish, /The manifest was not changed/);
+});

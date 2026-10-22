@@ -5,6 +5,13 @@
  * Nothing here touches Office.js: `officeAgentHost.ts` is the Excel host and the headless tests use a
  * fake one. See docs/ARCHITECTURE_DECISIONS.md, "Excel agent".
  */
+import {
+  mapRelationships,
+  RELATION_MAX_ROWS,
+  RELATION_MAX_TABLES,
+  type KeyCell,
+  type RelationTable,
+} from "./relationships.js";
 import { PERSONAL_PATTERNS } from "./analysis.js";
 import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
@@ -14,6 +21,13 @@ import {
   RUN_CODE_PER_REQUEST,
   checkCode,
 } from "./codeSandbox.js";
+import type { AnalystCell } from "./advancedAnalytics.js";
+import {
+  ANALYSIS_KINDS,
+  ANALYZE_MAX_ROWS,
+  type AnalysisKind,
+  runColumnAnalysis,
+} from "./analyzeColumns.js";
 
 export const AGENT_MAX_TURNS = 12;
 export const AGENT_MAX_CHANGES = 25;
@@ -104,6 +118,20 @@ export type StagedChange =
 
 export const CHART_KINDS = CHART_TYPE_NAMES;
 export type ChartKind = (typeof CHART_KINDS)[number];
+
+/** Several sheets with data: tell the model once to map how they join before it answers across them. */
+export function withRelationshipHint(workbook: unknown): unknown {
+  const sheets = (workbook as { sheets?: { rows?: number }[] } | null)?.sheets;
+  if (
+    !Array.isArray(sheets) ||
+    sheets.filter((s) => (s.rows ?? 0) > 1).length < 2
+  )
+    return workbook;
+  return {
+    ...(workbook as object),
+    hint: "This workbook has several sheets with data. If the request needs columns from more than one of them, call map_relationships on those ranges before you calculate or stage.",
+  };
+}
 
 export interface AgentHost {
   getWorkbook(): Promise<unknown>;
@@ -580,6 +608,7 @@ export const DETAILS = [
   "protection",
   "page_setup",
   "formula_check",
+  "formula_audit",
 ];
 
 const clip = (text: string) =>
@@ -642,9 +671,15 @@ export async function runAgent(options: {
     { role: "user", content: userContent(mask.mask(options.request), meaning) },
   ];
   const changes: AgentRun["changes"] = [];
-  const counts = { calculate: 0, runCode: 0 };
+  const counts = {
+    calculate: 0,
+    runCode: 0,
+    calculationResults: new Map<string, unknown>(),
+  };
   const maxTurns = options.maxTurns ?? AGENT_MAX_TURNS;
   let nudged = false;
+  let askedForAnswer = false;
+  let repeatedCalculationNudges = 0;
   for (let turn = 1; turn <= maxTurns; turn += 1) {
     options.onPhase?.("planning");
     const answer = await model(messages);
@@ -669,16 +704,29 @@ export async function runAgent(options: {
         });
         continue;
       }
+      // An empty answer would leave the person with nothing: ask once, then say so plainly.
+      if (!answer.content?.trim() && !askedForAnswer && turn < maxTurns) {
+        askedForAnswer = true;
+        messages.push({
+          role: "user",
+          content:
+            "[Report from the add-in, not from the person] Your last answer was empty. Reply to the person now: a short bullet list of what you found or staged, or why you could not.",
+        });
+        continue;
+      }
       options.onPhase?.("final");
       return {
         messages,
-        reply: plainText(mask.unmask(answer.content || "")),
+        reply:
+          plainText(mask.unmask(answer.content || "")).trim() ||
+          "I did not answer this time and nothing was changed. Please try again or ask in other words.",
         changes,
         turns: turn,
         phase: "final",
       };
     }
     options.onPhase?.("executing");
+    let onlyRepeatedCalculations = calls.length > 0;
     for (const call of calls) {
       let content: string;
       try {
@@ -691,10 +739,17 @@ export async function runAgent(options: {
           throw new AgentToolError("The arguments are not a JSON object.");
         }
         options.onTool?.(call.function.name, args);
+        const calculationKey =
+          call.function.name === "calculate"
+            ? checkFormula(mask.unmask(String(args.formula ?? "")))
+            : undefined;
+        if (!calculationKey || !counts.calculationResults.has(calculationKey))
+          onlyRepeatedCalculations = false;
         content = JSON.stringify(
           await runTool(call, args, host, mask, changes, counts),
         );
       } catch (error) {
+        onlyRepeatedCalculations = false;
         content = JSON.stringify({
           error:
             error instanceof AgentToolError
@@ -707,6 +762,27 @@ export async function runAgent(options: {
         tool_call_id: call.id,
         content: clip(mask.mask(content)),
       });
+    }
+    if (onlyRepeatedCalculations) {
+      if (repeatedCalculationNudges < 2 && turn < maxTurns) {
+        repeatedCalculationNudges += 1;
+        messages.push({
+          role: "user",
+          content:
+            "[Report from the add-in, not from the person] Those exact calculations already ran and their earlier results were returned again. Do not calculate them again. Answer the person's question now from those results.",
+        });
+      } else {
+        options.onPhase?.("final");
+        return {
+          messages,
+          reply:
+            plainText(mask.unmask(answer.content || "")).trim() ||
+            "I could not finish because the same calculations were requested repeatedly. Nothing was changed.",
+          changes,
+          turns: turn,
+          phase: "final",
+        };
+      }
     }
     options.onPhase?.("verifying");
   }
@@ -771,12 +847,16 @@ async function runTool(
   host: AgentHost,
   mask: PersonalMask,
   changes: AgentRun["changes"],
-  counts: { calculate: number; runCode: number },
+  counts: {
+    calculate: number;
+    runCode: number;
+    calculationResults: Map<string, unknown>;
+  },
 ): Promise<unknown> {
   const restore = (text: string) => mask.unmask(text);
   switch (call.function.name) {
     case "get_workbook":
-      return host.getWorkbook();
+      return withRelationshipHint(await host.getWorkbook());
     case "read_range": {
       const sheet = checkSheetName(restore(String(args.sheet ?? "")));
       const { address, clipped } = clampReadAddress(checkRange(args.address));
@@ -806,22 +886,124 @@ async function runTool(
     }
     case "calculate": {
       // Each calculation is a model turn and a full pass over the data: enough is enough.
+      const formula = checkFormula(restore(String(args.formula ?? "")));
+      const earlier = counts.calculationResults.get(formula);
+      if (earlier !== undefined)
+        return {
+          ...(earlier as Record<string, unknown>),
+          note: "This exact calculation already ran. The earlier result was reused; answer from it instead of calculating again.",
+        };
       counts.calculate += 1;
       if (counts.calculate > CALC_PER_REQUEST)
         throw new AgentToolError(
           `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
         );
-      const formula = checkFormula(restore(String(args.formula ?? "")));
       const result = boundResult(await host.calculate(formula));
       // The model once read 1090404.455 as 1,090,404,455: give it the grouped text to copy.
-      return typeof result === "number"
-        ? {
-            result,
-            as_text: result.toLocaleString("en-US", {
-              maximumFractionDigits: 6,
-            }),
-          }
-        : { result };
+      const response =
+        typeof result === "number"
+          ? {
+              result,
+              as_text: result.toLocaleString("en-US", {
+                maximumFractionDigits: 6,
+              }),
+            }
+          : { result };
+      counts.calculationResults.set(formula, response);
+      return response;
+    }
+    case "analyze_columns": {
+      // A full pass over up to ANALYZE_MAX_ROWS rows on the device: counted like a calculation.
+      counts.calculate += 1;
+      if (counts.calculate > CALC_PER_REQUEST)
+        throw new AgentToolError(
+          `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
+        );
+      const kind = String(args.kind ?? "").trim() as AnalysisKind;
+      if (!ANALYSIS_KINDS.includes(kind))
+        throw new AgentToolError(
+          `kind must be one of ${ANALYSIS_KINDS.join(", ")}.`,
+        );
+      const sheet = checkSheetName(restore(String(args.sheet ?? "")));
+      const box = parseA1(checkRange(args.address));
+      if (box.lastColumn - box.column >= 30)
+        throw new AgentToolError("Analyse at most 30 columns at once.");
+      const lastRow = Math.min(box.lastRow, box.row + ANALYZE_MAX_ROWS);
+      const address = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${lastRow}`;
+      const read = await host.readRange(sheet, address, false);
+      const [headerRow = [], ...rows] = read.values as AnalystCell[][];
+      const result = runColumnAnalysis(
+        kind,
+        headerRow.map((value) => String(value ?? "")),
+        rows,
+        {
+          columns: Array.isArray(args.columns)
+            ? args.columns.map((value) => restore(String(value ?? "")))
+            : [],
+          firstRow: box.row + 1,
+          k: typeof args.k === "number" ? args.k : undefined,
+        },
+      );
+      if (lastRow >= box.lastRow) return result;
+      // Outliers over every row: one formula calculate can run to get the exact sheet rows.
+      const outlierColumn =
+        kind === "anomalies"
+          ? headerRow.findIndex(
+              (header) =>
+                String(header ?? "")
+                  .trim()
+                  .toLowerCase() ===
+                restore(String((args.columns as unknown[])[0] ?? ""))
+                  .trim()
+                  .toLowerCase(),
+            )
+          : -1;
+      const letter = columnLetters(box.column + outlierColumn);
+      return {
+        ...result,
+        note: `Only the first ${ANALYZE_MAX_ROWS.toLocaleString("en-US")} data rows (${address}) were analysed; use calculate for exact results over every row.`,
+        ...(outlierColumn >= 0
+          ? {
+              exact_formula: `=LET(v,'${sheet.replace(/'/g, "''")}'!${letter}${box.row + 1}:${letter}${box.lastRow},q1,QUARTILE.INC(v,1),q3,QUARTILE.INC(v,3),i,q3-q1,FILTER(HSTACK(ROW(v),v),(v<q1-1.5*i)+(v>q3+1.5*i),"None"))`,
+            }
+          : {}),
+      };
+    }
+    case "map_relationships": {
+      // Reads up to RELATION_MAX_TABLES ranges on the device: counted like a calculation.
+      counts.calculate += 1;
+      if (counts.calculate > CALC_PER_REQUEST)
+        throw new AgentToolError(
+          `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
+        );
+      if (!Array.isArray(args.ranges))
+        throw new AgentToolError(
+          'ranges must be a list like ["Orders!A1:F900", "Customers!A1:C40"].',
+        );
+      const tables: RelationTable[] = [];
+      for (const entry of args.ranges.slice(0, RELATION_MAX_TABLES + 1)) {
+        const text = restore(String(entry ?? "")).trim();
+        const cut = text.lastIndexOf("!");
+        if (cut < 1)
+          throw new AgentToolError(`"${text}" must look like Sheet!A1:F900.`);
+        const sheet = checkSheetName(
+          text
+            .slice(0, cut)
+            .replace(/^'(.*)'$/, "$1")
+            .replace(/''/g, "'"),
+        );
+        const box = parseA1(checkRange(text.slice(cut + 1)));
+        const lastRow = Math.min(box.lastRow, box.row + RELATION_MAX_ROWS);
+        const address = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${lastRow}`;
+        const read = await host.readRange(sheet, address, false);
+        const [headerRow = [], ...rows] = read.values as KeyCell[][];
+        tables.push({
+          label: `${sheet}!${address}`,
+          headers: headerRow.map((value) => String(value ?? "")),
+          rows,
+        });
+      }
+      return mapRelationships(tables);
     }
     case "run_code": {
       if (!host.runCode)
@@ -929,6 +1111,76 @@ async function runTool(
       };
     }
   }
+}
+
+export type AnswerSource =
+  | { kind: "range"; sheet: string; address: string; note?: string }
+  | { kind: "formula"; text: string }
+  | { kind: "check"; text: string };
+
+/**
+ * Where an answer came from, taken from the tool calls themselves (not from the model's words):
+ * ranges read or analysed, formulas Excel computed and workbook checks, first use first, no
+ * repeats, at most 10. `restore` puts personal data back for the person's own view.
+ */
+export function answerSources(
+  messages: AgentMessage[],
+  restore: (text: string) => string,
+): AnswerSource[] {
+  const sources: AnswerSource[] = [];
+  const seen = new Set<string>();
+  const add = (source: AnswerSource) => {
+    const key = JSON.stringify(source);
+    if (!seen.has(key) && sources.length < 10) {
+      seen.add(key);
+      sources.push(source);
+    }
+  };
+  for (const message of messages)
+    for (const call of (message.role === "assistant" && message.tool_calls) ||
+      []) {
+      let args: Record<string, unknown>;
+      try {
+        args = JSON.parse(call.function.arguments || "{}");
+      } catch {
+        continue;
+      }
+      const sheet = restore(String(args.sheet ?? ""));
+      switch (call.function.name) {
+        case "read_range":
+          add({ kind: "range", sheet, address: String(args.address ?? "") });
+          break;
+        case "analyze_columns":
+          add({
+            kind: "range",
+            sheet,
+            address: String(args.address ?? ""),
+            note: String(args.kind ?? ""),
+          });
+          break;
+        case "map_relationships":
+          for (const range of Array.isArray(args.ranges) ? args.ranges : []) {
+            const text = restore(String(range ?? ""));
+            const cut = text.lastIndexOf("!");
+            if (cut > 0)
+              add({
+                kind: "range",
+                sheet: text.slice(0, cut).replace(/^'(.*)'$/, "$1"),
+                address: text.slice(cut + 1),
+                note: "relationships",
+              });
+          }
+          break;
+        case "calculate":
+          add({ kind: "formula", text: restore(String(args.formula ?? "")) });
+          break;
+        case "get_details":
+          if (/^formula_(check|audit)$/.test(String(args.what)))
+            add({ kind: "check", text: String(args.what) });
+          break;
+      }
+    }
+  return sources;
 }
 
 /** The pane shows plain text: markdown marks (bold, code, headings) are removed. */

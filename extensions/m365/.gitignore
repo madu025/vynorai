@@ -2,3 +2,4 @@ runtime-config.js
 dist/
 localhost.crt
 localhost.key
+test-artifacts/

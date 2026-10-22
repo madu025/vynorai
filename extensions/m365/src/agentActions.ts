@@ -12,6 +12,14 @@ import {
   checkRange,
   checkSheetName,
 } from "./agent.js";
+import { COMBINE_MODES } from "./combineSheets.js";
+import {
+  FINANCIAL_KINDS,
+  type FinancialSpec,
+  financialCells,
+  qualifiedRange,
+} from "./financialBuilders.js";
+import { type Scenario, type WhatIfArgs, checkWhatIf } from "./whatIf.js";
 
 export type ActionArgs = Record<string, unknown>;
 interface ActionDef {
@@ -881,6 +889,114 @@ export const ACTION_TOOLS: Record<string, ActionDef> = {
     },
     describe: (args) =>
       `Goal seek: change '${args.sheet}'!${args.changing_cell} until ${args.formula_cell} = ${args.target}`,
+  },
+  combine_tables: {
+    check(args, restore) {
+      const mode = oneOf(args.mode, COMBINE_MODES, "mode");
+      const header = (value: unknown) => {
+        const name = restore(String(value ?? "")).trim();
+        return name ? name.slice(0, 255) : undefined;
+      };
+      const key = header(args.key);
+      if (mode !== "append" && !key)
+        throw new AgentToolError(
+          `${mode} needs key: the header of the column both tables share.`,
+        );
+      const columns = Array.isArray(args.columns)
+        ? args.columns.slice(0, 30).map(header).filter(Boolean)
+        : undefined;
+      return clean({
+        mode,
+        left_sheet: checkSheetName(restore(String(args.left_sheet ?? ""))),
+        left_address: checkRange(args.left_address),
+        right_sheet: checkSheetName(restore(String(args.right_sheet ?? ""))),
+        right_address: checkRange(args.right_address),
+        key,
+        right_key: header(args.right_key),
+        columns: columns?.length ? columns : undefined,
+        amount: mode === "reconcile" ? header(args.amount) : undefined,
+        right_amount: mode === "reconcile" ? header(args.right_amount) : undefined,
+        sheet: checkSheetName(restore(String(args.sheet ?? ""))),
+        cell: args.cell ? checkCell(args.cell) : "A1",
+      });
+    },
+    describe: (args) => {
+      const left = `'${args.left_sheet}'!${args.left_address}`;
+      const right = `'${args.right_sheet}'!${args.right_address}`;
+      const on = args.right_key ? `${args.key} / ${args.right_key}` : args.key;
+      const into = `into '${args.sheet}'!${args.cell} as live formulas`;
+      if (args.mode === "append")
+        return `Append ${right} under ${left} (columns matched by header) ${into}`;
+      if (args.mode === "join")
+        return `Join ${left} with ${right} on ${on}${Array.isArray(args.columns) ? ` (${args.columns.join(", ")})` : ""} ${into}`;
+      const amounts = args.amount
+        ? `, comparing ${args.right_amount ? `${args.amount} / ${args.right_amount}` : args.amount}`
+        : "";
+      return `Reconcile ${left} with ${right} on ${on}${amounts} ${into}`;
+    },
+  },
+  financial_model: {
+    check(args, restore) {
+      const kind = oneOf(args.kind, FINANCIAL_KINDS, "kind");
+      const range = (key: string) =>
+        args[key] ? qualifiedRange(restore(String(args[key])), key) : undefined;
+      const checked = clean({
+        kind,
+        sheet: checkSheetName(restore(String(args.sheet ?? ""))),
+        cell: args.cell ? checkCell(args.cell) : "A1",
+        principal: optionalNumber(args.principal, "principal", 0, 1e13),
+        annual_rate: optionalNumber(args.annual_rate, "annual_rate", 0, 1),
+        years: optionalNumber(args.years, "years", 0, 50),
+        payments_per_year: optionalNumber(args.payments_per_year, "payments_per_year", 1, 365),
+        rate: optionalNumber(args.rate, "rate", -0.99, 10),
+        cash_flows: range("cash_flows"),
+        dates: range("dates"),
+        categories: range("categories"),
+        actual: range("actual"),
+        budget: range("budget"),
+        due_dates: range("due_dates"),
+        amounts: range("amounts"),
+        customers: range("customers"),
+        as_of: args.as_of ? String(args.as_of).trim() : undefined,
+      });
+      // Builds the model once now, so a missing or mismatched input is reported before staging.
+      financialCells(checked as unknown as FinancialSpec);
+      return checked;
+    },
+    describe: (args) => {
+      const into = `into '${args.sheet}'!${args.cell} as live formulas`;
+      const amount = (value: unknown) => Number(value).toLocaleString("en-US");
+      switch (args.kind) {
+        case "loan_schedule":
+          return `Loan schedule: ${amount(args.principal)} at ${Math.round(Number(args.annual_rate) * 10000) / 100}% for ${args.years} years, ${args.payments_per_year ?? 12} payments a year, ${into}`;
+        case "npv_irr":
+          return `${args.dates ? "XNPV and XIRR" : "NPV, IRR"} and payback of ${args.cash_flows} at ${Math.round(Number(args.rate) * 10000) / 100}% ${into}`;
+        case "budget_variance":
+          return `Budget against actual by ${args.categories}: ${args.actual} vs ${args.budget} ${into}`;
+        default:
+          return `Receivables ageing of ${args.amounts}${args.customers ? ` by ${args.customers}` : ""} as of ${args.as_of ?? "today"} (0-30, 31-60, 61-90, over 90 days) ${into}`;
+      }
+    },
+  },
+  what_if: {
+    check(args, restore) {
+      return {
+        ...checkWhatIf(args),
+        model_sheet: checkSheetName(restore(String(args.model_sheet ?? ""))),
+        sheet: checkSheetName(restore(String(args.sheet ?? ""))),
+        cell: args.cell ? checkCell(args.cell) : "A1",
+      };
+    },
+    describe: (raw) => {
+      const args = raw as unknown as WhatIfArgs & Record<string, string>;
+      const outputs = `'${args.model_sheet}'!${args.outputs.join(", ")}`;
+      const into = `into '${args.sheet}'!${args.cell} as values (inputs are put back)`;
+      if (args.mode === "scenarios")
+        return `Compare ${args.scenarios!.length} scenarios (${args.scenarios!.map((s: Scenario) => s.name).join(", ")}) on ${outputs} ${into}`;
+      return args.second_input_cell
+        ? `Two-input data table of ${outputs}: ${args.input_cell} x ${args.second_input_cell} (${args.values!.length} x ${args.second_values!.length}) ${into}`
+        : `Data table of ${outputs} for ${args.values!.length} values of ${args.input_cell} ${into}`;
+    },
   },
 };
 

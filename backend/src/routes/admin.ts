@@ -718,19 +718,20 @@ adminRouter.post(
     if (!user) return res.status(404).json({ error: "User not found" });
 
     // Credited to the current cycle only, and preserved across plan changes.
-    await creditTopup(userId, amt, 0);
+    const requests = await creditTopup(userId, amt);
 
     await logSecurityEvent({
       eventType: "ADMIN_TOKEN_TOPUP",
       severity: "INFO",
       actor: "ADMIN",
       target: user.email,
-      details: `Admin added +${amt.toLocaleString()} tokens to ${user.email}`,
+      details: `Admin added +${amt.toLocaleString()} tokens and +${requests.toLocaleString()} requests to ${user.email}`,
     });
 
     res.json({
       ok: true,
-      message: `Added +${amt.toLocaleString()} tokens to ${user.email}`,
+      message: `Added +${amt.toLocaleString()} tokens and +${requests.toLocaleString()} requests to ${user.email}`,
+      requests,
     });
   },
 );

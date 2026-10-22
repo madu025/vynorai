@@ -8,335 +8,2936 @@
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #f7f8fa;
-        --surface: #ffffff;
-        --surface-muted: #f2f4f7;
-        --ink: #172033;
-        --muted: #526173;
-        --line: #d9dee7;
-        --brand: #1956a6;
-        --brand-hover: #124782;
+        --bg: #f5f5f7;
+        --surface: rgb(255 255 255 / 84%);
+        --surface-solid: #ffffff;
+        --surface-muted: #f0f1f5;
+        --ink: #1d1d1f;
+        --muted: #6e6e73;
+        --line: rgb(60 60 67 / 18%);
+        --brand: #007aff;
+        --brand-hover: #0071e3;
         --on-brand: #ffffff;
         --success: #12715b;
         --warning: #8a5600;
         --danger: #b42318;
-        --focus: #155eef;
-        --shadow: 0 8px 24px rgb(16 24 40 / 12%);
+        --focus: #007aff;
+        --shadow: 0 12px 30px rgb(29 29 31 / 12%);
+        --control-shadow: 0 1px 2px rgb(0 0 0 / 8%);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #111827;
-          --surface: #192235;
-          --surface-muted: #202c40;
-          --ink: #f3f6fb;
-          --muted: #b3c0d3;
-          --line: #34435a;
-          --brand: #82b5ff;
-          --brand-hover: #a4c9ff;
-          --on-brand: #0c2748;
-          --success: #6ce0c0;
-          --warning: #f6c66b;
-          --danger: #ffa7a0;
-          --focus: #9cc2ff;
-          --shadow: 0 8px 24px rgb(0 0 0 / 35%);
+          --bg: #171719;
+          --surface: rgb(44 44 46 / 88%);
+          --surface-solid: #2c2c2e;
+          --surface-muted: #3a3a3c;
+          --ink: #f5f5f7;
+          --muted: #aeaeb2;
+          --line: rgb(235 235 245 / 18%);
+          --brand: #0a84ff;
+          --brand-hover: #409cff;
+          --on-brand: #ffffff;
+          --success: #30d158;
+          --warning: #ffd60a;
+          --danger: #ff6961;
+          --focus: #0a84ff;
+          --shadow: 0 14px 34px rgb(0 0 0 / 34%);
+          --control-shadow: 0 1px 2px rgb(0 0 0 / 26%);
         }
       }
       @media (forced-colors: active) {
-        :root { --line: CanvasText; --focus: Highlight; --shadow: none; }
-        .primary, .state-icon, .spinner { forced-color-adjust: none; }
+        :root {
+          --line: CanvasText;
+          --focus: Highlight;
+          --shadow: none;
+        }
+        .primary,
+        .state-icon,
+        .spinner {
+          forced-color-adjust: none;
+        }
       }
-      * { box-sizing: border-box; }
-      html, body { min-height: 100%; margin: 0; background: var(--bg); }
-      body { color: var(--ink); font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
-      body:not([data-dev]) [data-dev] { display: none !important; }
-      [hidden] { display: none !important; }
-      button, input, select, textarea { font: inherit; }
-      button { color: inherit; cursor: pointer; }
-      button:disabled { cursor: not-allowed; opacity: .52; }
-      button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
-        outline: 3px solid var(--focus); outline-offset: 2px;
+      * {
+        box-sizing: border-box;
       }
-      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-      .skip-link { position: absolute; left: 8px; top: -48px; z-index: 20; padding: 8px 10px; border-radius: 8px; background: var(--brand); color: var(--on-brand); }
-      .skip-link:focus { top: 8px; }
-      main { min-height: 100vh; max-width: 440px; margin: auto; padding: 8px 10px 14px; }
-      .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 38px; gap: 8px; }
-      .brand { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 700; letter-spacing: .1px; }
-      header.topbar { position: absolute; top: 4px; right: 6px; z-index: 6; }
-      main { padding-top: 6px; }
-      .brand-mark { display: grid; width: 21px; height: 21px; place-items: center; border-radius: 6px; background: linear-gradient(135deg, #155eef, #65b2ff); color: white; font-size: 12px; }
-      .header-actions { display: flex; gap: 2px; }
-      .icon-button { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; font-size: 19px; line-height: 1; }
-      .icon-button:hover { background: var(--surface-muted); }
-      #menu { position: absolute; right: 10px; top: 43px; z-index: 10; min-width: 210px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
-      #menu button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; text-align: left; }
-      #menu button:hover:not(:disabled) { background: var(--surface-muted); }
-      .menu-version { margin: 6px 10px 2px; color: var(--muted); font-size: 11px; }
-      #status { display: flex; align-items: center; gap: 7px; min-height: 28px; margin: 2px 0 8px; padding: 5px 8px; border-radius: 8px; color: var(--muted); font-size: 12px; }
-      #status[data-tone="busy"] { background: color-mix(in srgb, var(--brand) 9%, var(--surface)); color: var(--ink); }
-      #status[data-tone="error"] { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); }
-      #status[data-tone="success"] { background: color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success); }
-      .state-icon { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
-      #status[data-tone="busy"] .state-icon { animation: pulse 1s ease-in-out infinite; }
-      @keyframes pulse { 50% { opacity: .35; transform: scale(1.35); } }
-      #signin-card, .card { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
-      #signin-card { margin-top: 28px; padding: 26px 18px; text-align: center; }
-      #signin-card h1 { margin: 0 0 6px; font-size: 20px; }
-      #signin-card p { margin: 0 0 18px; color: var(--muted); }
-      .workspace, #signin-card { display: none; }
-      body[data-auth="in"] .workspace { display: flex; flex-direction: column; gap: 10px; }
-      body[data-auth="out"] #signin-card { display: block; }
-      .conversation { display: grid; gap: 8px; }
-      .welcome { padding: 4px 2px 0; }
-      .welcome h1 { margin: 0 0 3px; font-size: 18px; line-height: 1.25; }
-      .welcome p { margin: 0; color: var(--muted); }
-      .chat-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-      .chat-bar select { flex: 1 1 120px; min-width: 0; max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
-      #conversation-history { display: grid; gap: 7px; }
-      #conversation-history > article { scroll-margin-bottom: calc(var(--composer-h, 96px) + 14px); }
-      .message { max-width: 94%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
-      .message.user { justify-self: end; border-color: color-mix(in srgb, var(--brand) 36%, var(--line)); background: color-mix(in srgb, var(--brand) 8%, var(--surface)); }
-      .message.error { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
-      .message-label { display: block; margin-bottom: 2px; color: var(--muted); font-size: 11px; font-weight: 600; }
-      .message-tools { display: flex; justify-content: flex-end; margin-top: 5px; }
-      .edit-request { padding: 2px 0; border: 0; background: transparent; color: var(--brand); font-size: 11px; text-decoration: underline; cursor: pointer; }
-      .edit-request:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 3px; }
-      .suggestions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-      .pill { min-height: 46px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: left; font-size: 12px; line-height: 1.25; }
-      .pill:hover { background: var(--surface-muted); }
-      .pill.more { text-align: center; color: var(--muted); }
-      .composer { position: sticky; bottom: 0; z-index: 4; padding: 8px; border: 1.5px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 -7px 17px rgb(16 24 40 / 6%); }
-      .composer:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent); }
-      textarea { display: block; width: 100%; min-height: 46px; border: 0; outline: 0; resize: vertical; background: transparent; color: inherit; }
-      .composer-bar, .action-row, .apply-dock { display: flex; align-items: center; gap: 7px; }
-      .composer-bar { justify-content: space-between; margin-top: 6px; }
-      .primary, .ghost { min-height: 32px; padding: 6px 10px; border-radius: 8px; font-weight: 600; }
-      .primary { border: 1px solid var(--brand); background: var(--brand); color: var(--on-brand); }
-      .primary:hover:not(:disabled) { background: var(--brand-hover); border-color: var(--brand-hover); }
-      .ghost { border: 1px solid var(--line); background: transparent; }
-      .ghost:hover:not(:disabled) { background: var(--surface-muted); }
-      .compact-choice { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 12px; }
-      .card { padding: 11px; }
-      .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-      .card h2 { margin: 0; font-size: 15px; }
-      .badge { padding: 2px 6px; border-radius: 999px; background: var(--surface-muted); color: var(--muted); font-size: 11px; font-weight: 600; }
-      #preview-summary, .muted { color: var(--muted); }
-      #preview-summary { margin: 0 0 9px; }
-      .outcome { margin: 7px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-muted); }
-      .outcome strong { display: block; font-size: 13px; }
-      .outcome .where, .legend { margin-top: 2px; color: var(--muted); font-size: 12px; }
-      .outcome svg { display: block; width: 100%; height: auto; margin-top: 7px; }
-      .outcome table { width: 100%; margin-top: 7px; border-collapse: collapse; font-size: 11px; }
-      .outcome th, .outcome td { padding: 3px 5px; border: 1px solid var(--line); text-align: left; }
-      .outcome th { background: var(--brand); color: var(--on-brand); }
-      .details { margin: 7px 0 0; padding-left: 18px; }
-      .details li { margin: 2px 0; }
-      #result-gallery-list { display: grid; gap: 7px; }
-      .result-item { display: grid; gap: 5px; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-muted); }
-      .result-item-head { display: flex; justify-content: space-between; gap: 7px; align-items: baseline; }
-      .result-item-head strong { font-size: 12px; }
-      .result-item-head span { color: var(--muted); font-size: 11px; }
-      .result-item-actions { display: flex; gap: 5px; flex-wrap: wrap; }
-      .result-item-actions button { min-height: 27px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; background: transparent; font-size: 11px; }
-      .tweaks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
-      .tweak { display: grid; gap: 3px; color: var(--muted); font-size: 11px; font-weight: 600; }
-      .tweak select { min-width: 0; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
-      .trace { margin-top: 9px; }
-      .trace summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-      .trace ol { margin: 5px 0 0; padding-left: 18px; font-size: 12px; }
-      #steps { display: grid; gap: 4px; margin-top: 8px; }
-      .step { display: flex; gap: 7px; align-items: center; font-size: 12px; }
-      #change-note { margin: 10px 0 0; }
-      .apply-dock { position: sticky; bottom: var(--composer-h, 96px); z-index: 3; justify-content: space-between; margin: 10px -11px -11px; padding: 9px 11px; border-top: 1px solid var(--line); background: var(--surface); }
-      .apply-dock .primary { flex: 1; }
-      .apply-options { display: grid; gap: 5px; margin-top: 9px; font-size: 12px; color: var(--muted); }
-      .email-form { display: grid; gap: 7px; }
-      .email-form label { display: grid; gap: 3px; color: var(--muted); font-size: 11px; font-weight: 600; }
-      .email-form input, .email-form select, .email-form textarea { width: 100%; min-height: 32px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
-      .email-form textarea { min-height: 58px; resize: vertical; }
-      .email-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-      .email-check { display: flex !important; grid-template-columns: auto 1fr; gap: 6px !important; align-items: center; }
-      #email-note { margin: 0 0 8px; color: var(--muted); font-size: 11px; }
-      #ai-result:empty { display: none; }
-      #ai-result > div { margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-      #ai-result h3 { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
-      #insights-card > summary { cursor: pointer; }
-      pre { max-height: 260px; margin: 8px 0 0; padding: 9px; overflow: auto; border-radius: 8px; background: var(--surface-muted); white-space: pre-wrap; font-size: 11px; }
-      label.check { display: flex; gap: 7px; align-items: flex-start; margin: 10px 0; }
-      .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--brand) 24%, transparent); border-top-color: var(--brand); border-radius: 50%; animation: spin .85s linear infinite; }
-      @keyframes spin { to { transform: rotate(360deg); } }
-      @media (max-width: 340px) { main { padding-inline: 7px; } .suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tweaks { grid-template-columns: 1fr; } .composer-bar { align-items: flex-end; } }
-      @media (min-width: 401px) { main { padding-inline: 14px; } .outcome { padding: 12px; } }
-      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+        background: var(--bg);
+      }
+      body {
+        color: var(--ink);
+        font:
+          13px/1.45 -apple-system,
+          BlinkMacSystemFont,
+          "SF Pro Text",
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      body:not([data-dev]) [data-dev] {
+        display: none !important;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+      button {
+        color: inherit;
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.52;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 2px;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .skip-link {
+        position: absolute;
+        left: 8px;
+        top: -48px;
+        z-index: 20;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: var(--brand);
+        color: var(--on-brand);
+      }
+      /* Office can restore focus programmatically after sign-in. The pane script marks the
+         link only when a real keyboard navigation event caused the focus. */
+      .skip-link[data-keyboard-focus="true"] {
+        top: 8px;
+      }
+      main {
+        width: 100%;
+        min-height: 100vh;
+        max-width: 720px;
+        min-width: 0;
+        margin: auto;
+        padding: 10px clamp(10px, 2.5vw, 20px) 15px;
+        overflow-wrap: anywhere;
+        background:
+          radial-gradient(
+            circle at 100% 0%,
+            rgb(0 122 255 / 10%),
+            transparent 34%
+          ),
+          linear-gradient(160deg, rgb(255 255 255 / 45%), transparent 42%);
+      }
+      .workspace > *,
+      .conversation,
+      .welcome {
+        min-width: 0;
+      }
+      main {
+        padding-top: 10px;
+      }
+      .status-actions {
+        margin-left: auto;
+      }
+      .icon-button {
+        width: 32px;
+        height: 32px;
+        border: 1px solid transparent;
+        border-radius: 50%;
+        background: rgb(118 118 128 / 10%);
+        font-size: 19px;
+        line-height: 1;
+      }
+      .icon-button:hover {
+        background: var(--surface-muted);
+      }
+      #menu {
+        flex: 1 0 100%;
+        width: 100%;
+        margin-top: 2px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface-solid);
+        box-shadow: var(--control-shadow);
+      }
+      #menu button {
+        display: block;
+        width: 100%;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        text-align: left;
+      }
+      #menu button:hover:not(:disabled) {
+        background: var(--surface-muted);
+      }
+      .menu-version {
+        margin: 6px 10px 2px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      #status {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+        min-height: 32px;
+        margin: 2px 0 11px;
+        padding: 6px 8px 6px 10px;
+        border: 1px solid rgb(60 60 67 / 8%);
+        border-radius: 11px;
+        background: linear-gradient(
+          90deg,
+          rgb(24 161 120 / 10%),
+          rgb(0 122 255 / 5%)
+        );
+        color: var(--muted);
+        font-size: 12px;
+      }
+      #status-text {
+        flex: 1 1 120px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #status .icon-button {
+        width: 26px;
+        height: 26px;
+        background: transparent;
+        font-size: 17px;
+      }
+      #status[data-tone="busy"] {
+        background: color-mix(in srgb, var(--brand) 9%, var(--surface));
+        color: var(--ink);
+      }
+      #status[data-tone="error"] {
+        background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+        color: var(--danger);
+      }
+      #status[data-tone="success"] {
+        background: color-mix(in srgb, var(--success) 10%, var(--surface));
+        color: var(--success);
+      }
+      #status[data-mode="signed-in-idle"] {
+        min-height: 26px;
+        margin-bottom: 6px;
+        padding: 0;
+        border-color: transparent;
+        background: transparent;
+      }
+      #status[data-mode="signed-in-idle"] #status-text,
+      #status[data-mode="signed-in-idle"] .state-icon {
+        display: none;
+      }
+      #status[data-mode="signed-in-idle"] .status-actions {
+        margin-left: auto;
+      }
+      .state-icon {
+        width: 7px;
+        height: 7px;
+        flex: 0 0 7px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+      }
+      #status[data-tone="busy"] .state-icon {
+        animation: pulse 1s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+          transform: scale(1.35);
+        }
+      }
+      #signin-card,
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--surface);
+        box-shadow: var(--control-shadow);
+      }
+      #signin-card {
+        margin-top: 28px;
+        padding: 26px 18px;
+        text-align: center;
+      }
+      #signin-card h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+      #signin-card p {
+        margin: 0 0 18px;
+        color: var(--muted);
+      }
+      .workspace,
+      #signin-card {
+        display: none;
+      }
+      .workspace,
+      .scroll-area,
+      .composer {
+        width: 100%;
+      }
+      body[data-auth="in"] .workspace {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      /* The request starts at the top; chat, reports and insights flow below it in one scroll area. */
+      body[data-auth="in"] main {
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .scroll-area {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 1px 1px 10px;
+        overscroll-behavior: contain;
+      }
+      .scroll-area > * {
+        flex: 0 0 auto;
+      }
+      body[data-workspace-view="work"] [data-workspace-panel="results"],
+      body[data-workspace-view="work"] [data-workspace-panel="share"],
+      body[data-workspace-view="results"] [data-workspace-panel="work"],
+      body[data-workspace-view="results"] [data-workspace-panel="share"],
+      body[data-workspace-view="share"] [data-workspace-panel="work"],
+      body[data-workspace-view="share"] [data-workspace-panel="results"] {
+        display: none !important;
+      }
+      body[data-workspace-view="results"] .composer,
+      body[data-workspace-view="share"] .composer,
+      body[data-workspace-view="results"] #starter-suggestions,
+      body[data-workspace-view="share"] #starter-suggestions {
+        display: none !important;
+      }
+      .message-body {
+        display: block;
+        white-space: pre-line;
+      }
+      body[data-auth="out"] #signin-card {
+        display: block;
+      }
+      .conversation {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+      }
+      .welcome {
+        padding: 7px 2px 1px;
+      }
+      .welcome h1 {
+        margin: 0 0 4px;
+        font-size: 19px;
+        line-height: 1.22;
+        letter-spacing: -0.35px;
+      }
+      .welcome p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .chat-bar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        padding: 3px 0;
+        background: linear-gradient(var(--bg) 82%, transparent);
+      }
+      .chat-bar .pill {
+        min-height: 32px;
+        padding: 5px 9px;
+        border-radius: 10px;
+      }
+      .chat-bar select {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 6px 24px 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--ink);
+        font: inherit;
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #conversation-history {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 7px;
+        min-width: 0;
+      }
+      #conversation-history > article {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        scroll-margin-bottom: 8px;
+      }
+      .message {
+        max-width: 94%;
+        padding: 9px 11px;
+        border: 1px solid var(--line);
+        border-radius: 15px 15px 15px 5px;
+        background: var(--surface);
+        box-shadow: var(--control-shadow);
+        color: var(--ink);
+      }
+      .message.user {
+        justify-self: end;
+        border-color: color-mix(in srgb, var(--brand) 34%, var(--line));
+        border-radius: 15px 15px 5px 15px;
+        background: color-mix(in srgb, var(--brand) 10%, var(--surface));
+      }
+      .message.error {
+        border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+      }
+      .message-label {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .message-tools {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 5px;
+      }
+      .edit-request {
+        padding: 2px 0;
+        border: 0;
+        background: transparent;
+        color: var(--brand);
+        font-size: 11px;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .edit-request:focus-visible {
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+        border-radius: 3px;
+      }
+      .suggestions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+      }
+      .quick-start {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+        padding: 1px 0 2px;
+      }
+      .quick-start .pill {
+        min-height: 43px;
+        border-radius: 13px;
+        text-align: left;
+      }
+      .quick-start .pill.more {
+        min-height: 32px;
+        text-align: center;
+      }
+      .pill {
+        min-height: 48px;
+        padding: 8px 9px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: var(--control-shadow);
+        text-align: left;
+        font-size: 12px;
+        line-height: 1.25;
+        transition:
+          transform 0.16s ease,
+          background 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+      .pill:hover:not(:disabled) {
+        background: var(--surface-muted);
+        box-shadow: 0 4px 10px rgb(29 29 31 / 10%);
+        transform: translateY(-1px);
+      }
+      .pill.more {
+        text-align: center;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .selection-warning {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid color-mix(in srgb, #f5a623 45%, var(--line));
+        border-radius: 11px;
+        background: color-mix(in srgb, #f5a623 11%, var(--surface));
+        color: var(--warning);
+        font-size: 11px;
+      }
+      .selection-warning button {
+        flex: 0 0 auto;
+        padding: 5px 8px;
+        border: 1px solid currentColor;
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+      }
+      .context-card {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px 8px;
+        padding: 7px 9px;
+        border-radius: 12px;
+        border-color: color-mix(in srgb, var(--brand) 27%, var(--line));
+        background: linear-gradient(
+          145deg,
+          color-mix(in srgb, var(--brand) 7%, var(--surface)),
+          var(--surface)
+        );
+      }
+      .context-head,
+      .context-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .context-head h2 {
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: -0.1px;
+      }
+      .context-head .ghost {
+        min-height: 29px;
+        padding: 4px 9px;
+        font-size: 11px;
+      }
+      #context-selection {
+        flex: 1 1 180px;
+        min-width: 0;
+        margin: 0;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .context-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        flex: 0 1 auto;
+      }
+      .context-actions {
+        flex: 0 0 auto;
+        margin-left: auto;
+      }
+      .context-badge {
+        padding: 3px 7px;
+        border-radius: 999px;
+        background: var(--surface-muted);
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .context-suggestions {
+        display: grid;
+        gap: 8px;
+        padding: 1px 1px 2px;
+      }
+      .context-suggestions h2 {
+        margin: 0 2px;
+        font-size: 14px;
+        letter-spacing: -0.12px;
+      }
+      .smart-suggestion-list {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+      }
+      .smart-suggestion-list[data-count="1"] {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .smart-suggestion-list[data-count="1"] .smart-suggestion {
+        min-height: 78px;
+        grid-template-columns: 28px minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        column-gap: 9px;
+      }
+      .smart-suggestion-list[data-count="1"] .smart-suggestion::before {
+        grid-row: span 2;
+      }
+      .smart-suggestion-list[data-count="1"] .smart-suggestion strong {
+        align-self: end;
+      }
+      .smart-suggestion-list[data-count="1"] .suggestion-reason {
+        align-self: start;
+      }
+      .smart-suggestion {
+        position: relative;
+        display: grid;
+        min-height: 112px;
+        align-content: start;
+        gap: 5px;
+        width: 100%;
+        padding: 11px 9px 10px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: var(--control-shadow);
+        color: var(--ink);
+        text-align: left;
+        transition:
+          transform 0.16s ease,
+          background 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+      .smart-suggestion::before {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border-radius: 9px;
+        background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+        color: var(--brand);
+        content: attr(data-icon);
+        font-size: 15px;
+        line-height: 1;
+      }
+      .smart-suggestion::after {
+        position: absolute;
+        right: 9px;
+        bottom: 8px;
+        color: var(--brand);
+        content: "›";
+        font-size: 18px;
+        line-height: 1;
+      }
+      .smart-suggestion strong {
+        padding-right: 8px;
+        font-size: 12px;
+        line-height: 1.22;
+      }
+      .smart-suggestion:hover:not(:disabled) {
+        background: var(--surface-muted);
+        box-shadow: 0 5px 13px rgb(29 29 31 / 11%);
+        transform: translateY(-1px);
+      }
+      .suggestion-reason {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 400;
+      }
+      .suggestion-meta {
+        display: block;
+        grid-column: 1 / -1;
+        width: 100%;
+        margin-top: auto;
+        padding-top: 6px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.3;
+      }
+      .composer {
+        position: relative;
+        flex: 0 0 auto;
+        z-index: 4;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: color-mix(
+          in srgb,
+          var(--surface) 94%,
+          var(--surface-solid)
+        );
+        box-shadow: 0 7px 20px rgb(29 29 31 / 9%);
+      }
+      .composer:focus-within {
+        border-color: color-mix(in srgb, var(--brand) 64%, var(--line));
+        box-shadow:
+          0 0 0 3px color-mix(in srgb, var(--brand) 19%, transparent),
+          0 7px 20px rgb(29 29 31 / 9%);
+      }
+      textarea {
+        display: block;
+        width: 100%;
+        min-height: 50px;
+        border: 0;
+        outline: 0;
+        resize: vertical;
+        background: transparent;
+        color: inherit;
+      }
+      .composer-bar,
+      .action-row,
+      .apply-dock {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .composer-bar {
+        justify-content: space-between;
+        margin-top: 6px;
+      }
+      .mode-control {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        gap: 6px;
+      }
+      .mode-control select {
+        min-width: 0;
+        flex: 1;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface-solid);
+        color: var(--ink);
+      }
+      .more-tools {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .more-tools summary {
+        cursor: pointer;
+      }
+      .more-tools .action-row {
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+      .primary,
+      .ghost {
+        min-height: 33px;
+        padding: 6px 11px;
+        border-radius: 10px;
+        font-weight: 600;
+        letter-spacing: -0.05px;
+      }
+      .primary {
+        border: 1px solid var(--brand);
+        background: linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--brand) 90%, white),
+          var(--brand)
+        );
+        box-shadow: 0 2px 5px color-mix(in srgb, var(--brand) 28%, transparent);
+        color: var(--on-brand);
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--brand-hover);
+        border-color: var(--brand-hover);
+      }
+      .ghost {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        box-shadow: var(--control-shadow);
+      }
+      #agent-card {
+        scroll-margin-top: 8px;
+        scroll-margin-bottom: 8px;
+      }
+      .change-preview {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 4px;
+        font-size: 12px;
+      }
+      .change-preview th,
+      .change-preview td {
+        border: 1px solid var(--line);
+        padding: 2px 6px;
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
+      .link {
+        border: 0;
+        background: none;
+        padding: 0;
+        color: var(--brand);
+        text-decoration: underline;
+        cursor: pointer;
+        font: inherit;
+        text-align: left;
+      }
+      .ghost:hover:not(:disabled) {
+        background: var(--surface-muted);
+      }
+      .compact-choice {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .card {
+        padding: 12px;
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .card h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+      .badge {
+        padding: 3px 7px;
+        border-radius: 999px;
+        background: var(--surface-muted);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      #preview-summary,
+      .muted {
+        color: var(--muted);
+      }
+      #preview-summary {
+        margin: 0 0 9px;
+      }
+      .impact-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+        margin-bottom: 9px;
+      }
+      .impact-item {
+        min-width: 0;
+        padding: 6px;
+        border-radius: 8px;
+        background: var(--surface-muted);
+        text-align: center;
+      }
+      .impact-item strong,
+      .impact-item span {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .impact-item span {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .preview-warnings {
+        margin: 0 0 9px;
+        padding: 7px 7px 7px 25px;
+        border-radius: 8px;
+        background: color-mix(in srgb, #f5a623 12%, var(--surface));
+        font-size: 11px;
+      }
+      .outcome {
+        margin: 7px 0;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface-muted);
+      }
+      .outcome strong {
+        display: block;
+        font-size: 13px;
+      }
+      .outcome .where,
+      .legend {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .outcome svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin-top: 7px;
+      }
+      .outcome table {
+        width: 100%;
+        margin-top: 7px;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      .outcome th,
+      .outcome td {
+        padding: 3px 5px;
+        border: 1px solid var(--line);
+        text-align: left;
+      }
+      .outcome th {
+        background: var(--brand);
+        color: var(--on-brand);
+      }
+      .details {
+        margin: 7px 0 0;
+        padding-left: 18px;
+      }
+      .details li {
+        margin: 2px 0;
+      }
+      #result-gallery-list {
+        display: grid;
+        gap: 7px;
+      }
+      .result-item {
+        display: grid;
+        gap: 5px;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface-muted);
+      }
+      .result-item-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 7px;
+        align-items: baseline;
+      }
+      .result-item-head strong {
+        font-size: 12px;
+      }
+      .result-item-head span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .result-item-actions {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .result-item-actions button {
+        min-height: 27px;
+        padding: 4px 8px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: transparent;
+        font-size: 11px;
+      }
+      .tweaks {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        margin-top: 10px;
+        padding-top: 9px;
+        border-top: 1px solid var(--line);
+      }
+      .tweak {
+        display: grid;
+        gap: 3px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .tweak select {
+        min-width: 0;
+        padding: 5px 6px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--ink);
+      }
+      .tweak-check {
+        display: flex;
+        min-height: 32px;
+        align-items: center;
+        grid-template-columns: auto 1fr;
+        padding: 5px 7px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+      .trace {
+        margin-top: 9px;
+      }
+      .trace summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .trace ol {
+        margin: 5px 0 0;
+        padding-left: 18px;
+        font-size: 12px;
+      }
+      #steps {
+        display: grid;
+        gap: 4px;
+        margin-top: 8px;
+      }
+      .step {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        font-size: 12px;
+      }
+      .agent-timeline {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 3px;
+        margin: 9px 0;
+        padding: 0;
+        list-style: none;
+      }
+      .agent-timeline li {
+        position: relative;
+        padding: 22px 2px 6px;
+        border-bottom: 2px solid var(--line);
+        color: var(--muted);
+        font-size: 9px;
+        text-align: center;
+      }
+      .agent-timeline li::before {
+        position: absolute;
+        top: 2px;
+        left: 50%;
+        display: grid;
+        width: 17px;
+        height: 17px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        background: var(--surface-solid);
+        color: var(--muted);
+        content: counter(list-item);
+        font-size: 9px;
+        transform: translateX(-50%);
+      }
+      .agent-timeline li.done {
+        border-color: #14804a;
+        color: #14804a;
+      }
+      .agent-timeline li.done::before {
+        border-color: #14804a;
+        background: #14804a;
+        color: white;
+        content: "✓";
+      }
+      .agent-timeline li.active {
+        border-color: var(--brand);
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .agent-timeline li.active::before {
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent);
+        color: var(--brand);
+      }
+      .agent-activity-list {
+        display: grid;
+        gap: 5px;
+        margin: 8px 0;
+      }
+      .agent-activity-list > div {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 8px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface-muted);
+        font-size: 11px;
+      }
+      .context-badge.safe {
+        background: color-mix(in srgb, var(--success) 11%, var(--surface));
+        color: var(--success);
+      }
+      .agent-role-status {
+        color: var(--muted);
+        text-align: right;
+      }
+      .agent-activity-list > div[data-state="active"] {
+        border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+      }
+      .agent-activity-list > div[data-state="active"] .agent-role-status {
+        color: var(--brand);
+      }
+      .agent-activity-list > div[data-state="done"] .agent-role-status {
+        color: var(--success);
+      }
+      .workbook-map {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+      .workbook-map h3 {
+        margin: 0 0 7px;
+        font-size: 13px;
+      }
+      .relationship-graph {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 7px;
+        align-items: center;
+      }
+      .relationship-node {
+        min-width: 0;
+        padding: 8px;
+        border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--line));
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--brand) 7%, var(--surface));
+      }
+      .relationship-node strong,
+      .relationship-node span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .relationship-node span,
+      .relationship-line {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .relationship-line {
+        text-align: center;
+      }
+      .relationship-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 7px;
+      }
+      .relationship-facts span {
+        padding: 4px 7px;
+        border-radius: 999px;
+        background: var(--surface-muted);
+        color: var(--warning);
+        font-size: 10px;
+      }
+      #change-note {
+        margin: 10px 0 0;
+      }
+      .apply-dock {
+        position: sticky;
+        bottom: 0;
+        z-index: 3;
+        justify-content: space-between;
+        margin: 10px -11px -11px;
+        padding: 9px 11px;
+        border-top: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .apply-dock .primary {
+        flex: 1;
+      }
+      .safety-summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+        margin-top: 9px;
+        padding: 8px;
+        border: 1px solid color-mix(in srgb, var(--success) 24%, var(--line));
+        border-radius: 9px;
+        background: color-mix(in srgb, var(--success) 7%, var(--surface));
+      }
+      .safety-summary strong {
+        grid-column: 1 / -1;
+        font-size: 11px;
+      }
+      .safety-summary span {
+        color: var(--success);
+        font-size: 10px;
+      }
+      .apply-options {
+        display: grid;
+        gap: 5px;
+        margin-top: 9px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .email-form {
+        display: grid;
+        gap: 7px;
+      }
+      .email-form label {
+        display: grid;
+        gap: 3px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .email-form input,
+      .email-form select,
+      .email-form textarea {
+        width: 100%;
+        min-height: 32px;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--ink);
+      }
+      .email-form textarea {
+        min-height: 58px;
+        resize: vertical;
+      }
+      .email-options {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+      }
+      .email-check {
+        display: flex !important;
+        grid-template-columns: auto 1fr;
+        gap: 6px !important;
+        align-items: center;
+      }
+      #email-note {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .delivery-status {
+        margin: 0;
+        padding: 7px 9px;
+        border-radius: 8px;
+        background: color-mix(in srgb, #f5a623 12%, var(--surface));
+        color: var(--warning);
+        font-size: 11px;
+      }
+      .delivery-status.sent {
+        background: color-mix(in srgb, var(--success) 10%, var(--surface));
+        color: var(--success);
+      }
+      .delivery-status.failed {
+        background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+        color: var(--danger);
+      }
+      .attachment-summary {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 9px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface-muted);
+        font-size: 11px;
+      }
+      .attachment-summary span {
+        color: var(--muted);
+        text-align: right;
+      }
+      #ai-result:empty {
+        display: none;
+      }
+      .workspace-nav {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 2px;
+        padding: 5px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: var(--control-shadow);
+      }
+      .workspace-nav button {
+        min-width: 0;
+        padding: 7px 5px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .workspace-nav button.active {
+        background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+        color: var(--brand);
+      }
+      .workspace-nav button:disabled {
+        opacity: 0.38;
+      }
+      #ai-result.analysis-card {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: var(--control-shadow);
+      }
+      #ai-result h3 {
+        margin: 0 0 8px;
+        color: var(--ink);
+        font-size: 15px;
+      }
+      .analysis-summary {
+        margin: 0 0 10px;
+        color: var(--muted);
+      }
+      .analysis-section {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+      .analysis-section h3 {
+        font-size: 12px !important;
+      }
+      .analysis-step-list {
+        display: grid;
+        gap: 7px;
+        margin: 0 0 10px;
+        padding: 0;
+        list-style: none;
+      }
+      .analysis-step {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+        padding: 8px;
+        border-radius: 10px;
+        background: var(--surface-muted);
+      }
+      .analysis-step-number {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+        color: var(--brand);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .analysis-step strong,
+      .analysis-step span {
+        display: block;
+      }
+      .analysis-step span {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .result-evidence {
+        margin-top: 2px;
+        padding: 7px;
+        border-radius: 8px;
+        background: var(--surface-muted);
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .result-evidence ul {
+        margin: 5px 0 0;
+        padding-left: 17px;
+      }
+      .verified-badge {
+        color: var(--success) !important;
+        font-weight: 700;
+      }
+      .verified-banner {
+        margin: 0;
+        padding: 9px 11px;
+        border: 1px solid color-mix(in srgb, var(--success) 32%, var(--line));
+        border-radius: 11px;
+        background: color-mix(in srgb, var(--success) 10%, var(--surface));
+        color: var(--success);
+        font-weight: 700;
+      }
+      .analysis-recommendation {
+        margin-top: 7px;
+        padding: 9px;
+        border-radius: 10px;
+        background: var(--surface-muted);
+      }
+      .analysis-recommendation p {
+        margin: 0 0 7px;
+      }
+      #whatsapp-note {
+        padding: 10px;
+        border: 1px solid var(--line);
+        background: var(--surface-muted);
+      }
+      #insights-card > summary,
+      #prefs-card > summary {
+        cursor: pointer;
+      }
+      #insights-card[open] > summary,
+      #prefs-card[open] > summary {
+        margin-bottom: 10px;
+      }
+      #insights-list {
+        display: grid;
+        gap: 7px;
+      }
+      #insights-list p {
+        margin: 0;
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface-muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      #insights-list strong {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--ink);
+      }
+      #insights-actions {
+        margin-top: 9px;
+      }
+      #prefs-card > label:not(.email-check) {
+        display: grid;
+        gap: 4px;
+        margin-top: 9px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      #prefs-card > label:not(.email-check) select {
+        width: 100%;
+        min-height: 32px;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-solid);
+        color: var(--ink);
+      }
+      #prefs-card > button {
+        margin-top: 9px;
+      }
+      pre {
+        max-height: 260px;
+        margin: 8px 0 0;
+        padding: 9px;
+        overflow: auto;
+        border-radius: 8px;
+        background: var(--surface-muted);
+        white-space: pre-wrap;
+        font-size: 11px;
+      }
+      label.check {
+        display: flex;
+        gap: 7px;
+        align-items: flex-start;
+        margin: 10px 0;
+      }
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid color-mix(in srgb, var(--brand) 24%, transparent);
+        border-top-color: var(--brand);
+        border-radius: 50%;
+        animation: spin 0.85s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @supports (backdrop-filter: blur(1px)) {
+        #signin-card,
+        .card,
+        .composer,
+        .message,
+        .pill,
+        .smart-suggestion {
+          backdrop-filter: saturate(150%) blur(18px);
+        }
+      }
+      @media (max-width: 360px) {
+        main {
+          padding-inline: 7px;
+        }
+        .suggestions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .smart-suggestion-list {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .smart-suggestion,
+        .smart-suggestion-list[data-count="1"] .smart-suggestion {
+          min-height: 78px;
+          grid-template-columns: 28px minmax(0, 1fr);
+          grid-template-rows: auto auto;
+          column-gap: 9px;
+        }
+        .smart-suggestion::before,
+        .smart-suggestion-list[data-count="1"] .smart-suggestion::before {
+          grid-row: span 2;
+        }
+        .smart-suggestion strong,
+        .smart-suggestion-list[data-count="1"] .smart-suggestion strong {
+          align-self: end;
+        }
+        .suggestion-reason,
+        .smart-suggestion-list[data-count="1"] .suggestion-reason {
+          align-self: start;
+        }
+        .chat-bar {
+          align-items: stretch;
+        }
+        .chat-bar select {
+          order: 3;
+          flex: 1 0 100%;
+        }
+        .tweaks,
+        .impact-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .suggestion-meta {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .safety-summary {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .safety-summary strong {
+          grid-column: auto;
+        }
+        .composer-bar {
+          align-items: flex-end;
+        }
+        .agent-timeline {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 401px) {
+        main {
+          padding-inline: 14px;
+        }
+        .outcome {
+          padding: 12px;
+        }
+      }
+      /* Premium responsive workspace. Excel owns the task-pane width; the add-in adapts to every
+         width it receives and never assumes a desktop-sized pane. */
+      main {
+        --pane-gutter: clamp(8px, 2.7vw, 20px);
+        --card-radius: clamp(16px, 4vw, 22px);
+        max-width: 760px;
+        padding: 8px var(--pane-gutter) 12px;
+        background:
+          radial-gradient(circle at 92% 5%, rgb(40 145 255 / 16%), transparent 28%),
+          radial-gradient(circle at 8% 30%, rgb(41 205 178 / 8%), transparent 30%),
+          linear-gradient(180deg, #f9fbff 0%, #f4f6fa 48%, #f8f9fb 100%);
+      }
+      .brand-bar {
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        min-height: 54px;
+        padding: 5px 3px 8px;
+      }
+      .brand-mark {
+        position: relative;
+        display: grid;
+        width: 38px;
+        height: 38px;
+        place-items: center;
+        overflow: hidden;
+        border-radius: 12px;
+        background: linear-gradient(145deg, #15c7b4 0%, #0789f7 58%, #2356db 100%);
+        box-shadow: 0 8px 20px rgb(0 122 255 / 24%);
+        color: white;
+        font-size: 19px;
+        font-weight: 800;
+        letter-spacing: -1px;
+      }
+      .brand-mark::after {
+        position: absolute;
+        inset: 2px 5px auto auto;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: rgb(255 255 255 / 28%);
+        content: "";
+      }
+      .brand-copy {
+        min-width: 0;
+      }
+      .brand-copy strong,
+      .brand-copy span {
+        display: block;
+      }
+      .brand-copy strong {
+        font-size: 16px;
+        line-height: 1.2;
+        letter-spacing: -0.35px;
+      }
+      .brand-copy span {
+        margin-top: 1px;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 10.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #status {
+        min-height: 34px;
+        margin-bottom: 4px;
+        padding: 6px 7px 6px 10px;
+        border: 1px solid color-mix(in srgb, var(--success) 20%, var(--line));
+        border-radius: 13px;
+        background: color-mix(in srgb, #e6faf4 84%, white);
+        box-shadow: 0 1px 2px rgb(14 30 50 / 4%);
+      }
+      #status-text {
+        overflow: hidden;
+        font-size: 11px;
+        font-weight: 550;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #status .icon-button {
+        width: 27px;
+        height: 27px;
+        background: transparent;
+        font-size: 18px;
+      }
+      #status[data-mode="signed-in-idle"] {
+        position: relative;
+        min-height: 0;
+        height: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+      #status[data-mode="signed-in-idle"] .status-actions {
+        position: absolute;
+        right: 1px;
+        bottom: 12px;
+        z-index: 4;
+        margin: 0;
+      }
+      #status[data-mode="signed-in-idle"] #menu {
+        position: absolute;
+        top: 5px;
+        right: 0;
+        z-index: 10;
+        width: min(100%, 310px);
+      }
+      #status[data-mode="signed-in-idle"]:has(#menu:not([hidden])) {
+        height: auto;
+        min-height: 0;
+        padding-top: 5px;
+      }
+      #status[data-mode="signed-in-idle"]:has(#menu:not([hidden])) #menu {
+        position: relative;
+        top: auto;
+        right: auto;
+        width: 100%;
+        margin: 0;
+      }
+      body[data-auth="in"] .workspace {
+        container-type: inline-size;
+        gap: 10px;
+      }
+      .workspace > .chat-bar {
+        position: relative;
+        top: auto;
+        z-index: 3;
+        min-height: 48px;
+        padding: 6px;
+        border: 1px solid rgb(67 91 122 / 15%);
+        border-radius: 15px;
+        background: rgb(255 255 255 / 78%);
+        box-shadow: 0 5px 15px rgb(31 52 76 / 5%);
+        backdrop-filter: blur(16px) saturate(140%);
+      }
+      .workspace > .chat-bar .new-chat-action {
+        background: linear-gradient(145deg, #e4f3ff, #e8f0ff);
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .scroll-area {
+        gap: 14px;
+        padding: 3px 1px 12px;
+        scrollbar-color: rgb(100 116 139 / 45%) transparent;
+        scrollbar-width: thin;
+      }
+      #signin-card,
+      .card,
+      .composer,
+      #ai-result.analysis-card {
+        border-color: rgb(83 105 134 / 16%);
+        border-radius: var(--card-radius);
+        background: rgb(255 255 255 / 92%);
+        box-shadow:
+          0 1px 2px rgb(15 23 42 / 5%),
+          0 10px 28px rgb(31 52 76 / 7%);
+      }
+      .composer {
+        padding: clamp(12px, 3.5vw, 18px);
+        border-color: rgb(49 112 225 / 18%);
+        box-shadow:
+          0 1px 2px rgb(15 23 42 / 5%),
+          0 14px 34px rgb(33 84 156 / 10%);
+      }
+      .composer textarea {
+        min-height: 58px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      #selection-chip {
+        margin: 0 0 5px;
+        overflow: hidden;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mode-control select,
+      .email-form input,
+      .email-form select,
+      .email-form textarea,
+      .tweak select {
+        border-color: rgb(74 98 128 / 20%);
+        background: rgb(250 252 255 / 92%);
+        box-shadow: inset 0 1px 1px rgb(15 23 42 / 3%);
+      }
+      .primary {
+        min-height: 36px;
+        border: 0;
+        background: linear-gradient(145deg, #1394ff 0%, #0878f5 62%, #1262df 100%);
+        box-shadow: 0 6px 14px rgb(0 122 255 / 24%);
+      }
+      .primary:hover:not(:disabled) {
+        filter: brightness(1.04);
+        transform: translateY(-1px);
+      }
+      .context-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px 10px;
+        padding: clamp(12px, 3.4vw, 17px);
+        border: 1px solid rgb(45 128 255 / 30%);
+        border-radius: var(--card-radius);
+        background:
+          radial-gradient(circle at 100% 0%, rgb(0 122 255 / 10%), transparent 40%),
+          linear-gradient(145deg, rgb(245 251 255 / 98%), rgb(255 255 255 / 94%));
+        box-shadow:
+          inset 0 1px 0 rgb(255 255 255 / 80%),
+          0 10px 26px rgb(18 84 160 / 8%);
+      }
+      .context-head {
+        grid-column: 1 / -1;
+      }
+      .context-head h2 {
+        font-size: 14px;
+        letter-spacing: -0.25px;
+      }
+      #context-selection {
+        grid-column: 1 / -1;
+        font-size: 12px;
+      }
+      .context-badges {
+        grid-column: 1 / -1;
+      }
+      .context-badge {
+        padding: 4px 8px;
+        background: rgb(235 242 250 / 88%);
+        font-size: 10px;
+      }
+      .context-actions {
+        grid-column: 1 / -1;
+        width: 100%;
+        margin: 0;
+      }
+      .context-actions a {
+        color: var(--brand);
+        font-weight: 600;
+      }
+      .context-suggestions {
+        gap: 10px;
+      }
+      .context-suggestions h2 {
+        margin: 0 3px;
+        font-size: 15px;
+        letter-spacing: -0.25px;
+      }
+      .smart-suggestion-list {
+        grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+        gap: 9px;
+      }
+      .smart-suggestion,
+      .smart-suggestion-list[data-count="1"] .smart-suggestion {
+        min-height: 132px;
+        padding: 13px 12px 11px;
+        border-color: rgb(66 92 124 / 15%);
+        border-radius: 17px;
+        background:
+          linear-gradient(150deg, rgb(255 255 255 / 98%), rgb(247 250 255 / 92%));
+        box-shadow:
+          0 1px 2px rgb(15 23 42 / 4%),
+          0 8px 20px rgb(31 52 76 / 6%);
+      }
+      .smart-suggestion::before,
+      .smart-suggestion-list[data-count="1"] .smart-suggestion::before {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: linear-gradient(145deg, #e2f4ff, #edf0ff);
+        box-shadow: inset 0 0 0 1px rgb(0 122 255 / 8%);
+      }
+      .smart-suggestion strong {
+        font-size: 12.5px;
+      }
+      .suggestion-meta {
+        opacity: 0.82;
+      }
+      .card {
+        padding: clamp(13px, 3.6vw, 18px);
+      }
+      .card h2,
+      #ai-result h3 {
+        font-size: 16px;
+        letter-spacing: -0.3px;
+      }
+      .impact-grid {
+        gap: 7px;
+      }
+      .impact-item {
+        padding: 9px 5px;
+        border: 1px solid rgb(77 100 128 / 8%);
+        border-radius: 11px;
+        background: linear-gradient(160deg, #f5f8fc, #eef3f9);
+      }
+      .impact-item strong {
+        font-size: 15px;
+      }
+      .outcome,
+      .result-item,
+      .analysis-step,
+      #insights-list p {
+        border-color: rgb(75 98 128 / 14%);
+        border-radius: 13px;
+        background: linear-gradient(145deg, #f6f9fd, #f0f4f9);
+      }
+      .outcome {
+        padding: 13px;
+      }
+      .safety-summary {
+        border-radius: 13px;
+        background: linear-gradient(145deg, #effbf7, #f5fcfa);
+      }
+      .agent-timeline li::before {
+        box-shadow: 0 0 0 4px rgb(0 122 255 / 9%);
+      }
+      .agent-roles li {
+        min-height: 38px;
+        padding: 8px 10px;
+        border-radius: 11px;
+        background: #f4f7fb;
+      }
+      .relationship-node {
+        border-radius: 13px;
+        background: linear-gradient(150deg, #eef7ff, #f7fbff);
+      }
+      .workspace-nav {
+        z-index: 5;
+        padding: 5px;
+        border-color: rgb(67 91 122 / 16%);
+        border-radius: 17px;
+        background: rgb(255 255 255 / 90%);
+        box-shadow: 0 8px 22px rgb(31 52 76 / 9%);
+        backdrop-filter: blur(18px) saturate(160%);
+      }
+      .workspace-nav button {
+        min-height: 35px;
+        border-radius: 12px;
+      }
+      .workspace-nav button.active {
+        background: linear-gradient(145deg, #e4f3ff, #e8f0ff);
+        box-shadow: inset 0 0 0 1px rgb(0 122 255 / 8%);
+      }
+      @container (max-width: 350px) {
+        .smart-suggestion-list {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .smart-suggestion,
+        .smart-suggestion-list[data-count="1"] .smart-suggestion {
+          min-height: 96px;
+          grid-template-columns: 32px minmax(0, 1fr);
+          grid-template-rows: auto auto auto;
+          column-gap: 10px;
+        }
+        .smart-suggestion::before,
+        .smart-suggestion-list[data-count="1"] .smart-suggestion::before {
+          grid-row: span 2;
+        }
+        .smart-suggestion strong {
+          align-self: end;
+        }
+        .suggestion-reason {
+          align-self: start;
+        }
+        .suggestion-meta {
+          grid-column: 1 / -1;
+        }
+      }
+      @container (min-width: 460px) {
+        .context-card {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .workspace > .chat-bar select {
+          flex: 1 1 190px;
+        }
+        #context-selection,
+        .context-badges {
+          grid-column: 1;
+        }
+        .context-actions {
+          grid-column: 2;
+          grid-row: 2 / span 2;
+          align-self: center;
+          width: auto;
+        }
+        .tweaks,
+        .email-options {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+        #result-gallery-list {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        main {
+          background:
+            radial-gradient(circle at 92% 5%, rgb(10 132 255 / 18%), transparent 30%),
+            linear-gradient(180deg, #17191d, #111317);
+        }
+        #status {
+          background: color-mix(in srgb, var(--success) 10%, var(--surface-solid));
+        }
+        #signin-card,
+        .card,
+        .composer,
+        #ai-result.analysis-card,
+        .workspace-nav,
+        .smart-suggestion {
+          background: rgb(38 40 45 / 94%);
+        }
+        .context-card {
+          background: linear-gradient(145deg, rgb(22 48 72 / 96%), rgb(39 41 47 / 96%));
+        }
+        .outcome,
+        .result-item,
+        .analysis-step,
+        #insights-list p,
+        .agent-roles li {
+          background: #30333a;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
     </style>
   </head>
   <body>
-    <a class="skip-link" href="#instruction">Skip to request</a>
+    <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
+      >Skip to request</a
+    >
     <main>
-      <header class="topbar">
-        <div class="brand" hidden aria-label="VynorAI"><span class="brand-mark" aria-hidden="true">V</span>VynorAI</div>
-        <div class="header-actions">
-          <button id="menu-toggle" class="icon-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More options">&#8943;</button>
-          <div id="menu" role="menu" hidden>
-            <button data-dev id="toggle-diagnostics" type="button" role="menuitem" data-i18n="menu_show_diag">Show diagnostics</button>
-            <button id="overview" type="button" role="menuitem" data-i18n="menu_overview">Workbook overview</button>
-            <button id="language" type="button" role="menuitem" data-i18n="menu_language_button">Language: English</button>
-            <button id="ai-first" type="button" role="menuitem">AI reads every request: OFF (click to turn on)</button>
-            <button id="agent-toggle" type="button" role="menuitem">Agent (preview): OFF (click to turn on)</button>
-            <button data-dev id="self-test" type="button" role="menuitem" data-i18n="menu_selftest">Run self-test</button>
-            <button data-dev id="copy-diagnostics" type="button" role="menuitem" data-i18n="menu_copy">Copy diagnostics</button>
-            <button data-dev id="clear-diagnostics" type="button" role="menuitem" data-i18n="menu_clear">Clear diagnostics</button>
-            <button id="sign-out" type="button" role="menuitem" disabled data-i18n="menu_signout">Sign out</button>
-            <p class="menu-version" id="build-id">Build 20261020.23</p>
-          </div>
+      <header class="brand-bar" aria-label="VynorAI Excel">
+        <div class="brand-mark" aria-hidden="true">V</div>
+        <div class="brand-copy">
+          <strong>VynorAI Excel</strong>
+          <span data-i18n="brand_tagline">Analyze, plan and apply safely</span>
         </div>
       </header>
-      <p id="status" role="status" aria-live="polite" tabindex="-1" data-tone="idle"><span class="state-icon" aria-hidden="true"></span><span id="status-text">Loadingâ€¦</span></p>
+      <div
+        id="status"
+        role="status"
+        aria-live="polite"
+        tabindex="-1"
+        data-tone="idle"
+      >
+        <span class="state-icon" aria-hidden="true"></span
+        ><span id="status-text">Loading…</span>
+        <div class="status-actions">
+          <button
+            id="menu-toggle"
+            class="icon-button"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-label="More options"
+          >
+            &#8943;
+          </button>
+        </div>
+        <div id="menu" role="menu" hidden>
+          <button
+            data-dev
+            id="toggle-diagnostics"
+            type="button"
+            role="menuitem"
+            data-i18n="menu_show_diag"
+          >
+            Show diagnostics
+          </button>
+          <button
+            id="overview"
+            type="button"
+            role="menuitem"
+            data-i18n="menu_overview"
+          >
+            Workbook overview
+          </button>
+          <button
+            id="advanced-workbook-options"
+            type="button"
+            role="menuitem"
+            data-i18n="menu_advanced_workbook_options"
+          >
+            Advanced workbook options
+          </button>
+          <button
+            id="language"
+            type="button"
+            role="menuitem"
+            data-i18n="menu_language_button"
+          >
+            Language: English
+          </button>
+          <button id="ai-first" type="button" role="menuitem">
+            AI reads every request: OFF (click to turn on)
+          </button>
+          <button id="agent-toggle" type="button" role="menuitem">
+            Agent (preview): OFF (click to turn on)
+          </button>
+          <button
+            data-dev
+            id="self-test"
+            type="button"
+            role="menuitem"
+            data-i18n="menu_selftest"
+          >
+            Run self-test
+          </button>
+          <button
+            data-dev
+            id="copy-diagnostics"
+            type="button"
+            role="menuitem"
+            data-i18n="menu_copy"
+          >
+            Copy diagnostics
+          </button>
+          <button
+            data-dev
+            id="clear-diagnostics"
+            type="button"
+            role="menuitem"
+            data-i18n="menu_clear"
+          >
+            Clear diagnostics
+          </button>
+          <button
+            id="sign-out"
+            type="button"
+            role="menuitem"
+            disabled
+            data-i18n="menu_signout"
+          >
+            Sign out
+          </button>
+          <p class="menu-version" id="build-id">Build 20261021.02</p>
+        </div>
+      </div>
 
       <section id="signin-card" aria-labelledby="signin-title">
         <h1 id="signin-title" data-i18n="welcome_title">Welcome to VynorAI</h1>
-        <p data-i18n="welcome_body">Sign in with your work account to analyze and build from your selected data.</p>
-        <button id="sign-in" class="primary" type="button" data-i18n="signin">Sign in with Microsoft</button>
+        <p data-i18n="welcome_body">
+          Sign in with your work account to analyze and build from your selected
+          data.
+        </p>
+        <button id="sign-in" class="primary" type="button" data-i18n="signin">
+          Sign in with Microsoft
+        </button>
       </section>
 
       <div class="workspace">
-        <section class="conversation" aria-label="VynorAI conversation" data-i18n-aria-label="conversation_label">
-          <div class="chat-bar" id="chat-bar">
-            <button id="new-chat" class="pill" type="button" data-i18n="new_chat">+ New chat</button>
-            <select id="chat-history-select" aria-label="Chat history" data-i18n-aria-label="chat_history" hidden></select>
-            <button id="delete-chat" class="pill" type="button" data-i18n="delete_chat" hidden>Delete</button>
+        <div class="chat-bar" id="chat-bar" aria-label="Chat controls">
+          <button
+            id="new-chat"
+            class="pill new-chat-action"
+            type="button"
+            data-i18n="new_chat"
+          >
+            + New chat
+          </button>
+          <select
+            id="chat-history-select"
+            aria-label="Chat history"
+            data-i18n-aria-label="chat_history"
+            hidden
+          ></select>
+          <button
+            id="delete-chat"
+            class="pill"
+            type="button"
+            data-i18n="delete_chat"
+            hidden
+          >
+            Delete
+          </button>
+        </div>
+        <section
+          class="composer"
+          aria-label="Request a workbook change"
+          data-i18n-aria-label="request_change"
+        >
+          <label class="sr-only" for="instruction" data-i18n="instruction_label"
+            >Describe what to create</label
+          >
+          <p id="selection-chip" class="muted" aria-live="polite" hidden>
+            <span data-i18n="selection_using">Using:</span>
+            <span id="selection-text"></span>
+          </p>
+          <div id="dup-fix" hidden>
+            <button id="dup-fix-btn" type="button" data-i18n="clean_first">
+              Clean first, then run this
+            </button>
           </div>
-          <div class="welcome" id="welcome-state">
-            <h1 data-i18n="hero">What would you like to do with your data?</h1>
-            <p data-i18n="hero_hint">VynorAI finds your table automatically and previews a new result sheet before changes are made.</p>
+          <textarea
+            id="instruction"
+            data-i18n-placeholder="placeholder"
+            placeholder="Describe what you would like to create from the selected data"
+          ></textarea>
+          <div class="composer-bar">
+            <div class="mode-control">
+              <label class="sr-only" for="run-mode" data-i18n="run_mode"
+                >Run mode</label
+              ><select
+                id="run-mode"
+                aria-label="Run mode"
+                data-i18n-aria-label="run_mode"
+              >
+                <option value="smart" data-i18n="smart_mode">Smart</option>
+                <option value="local" data-i18n="local_mode">
+                  Local preview
+                </option>
+                <option value="agent" data-i18n="agent_mode">
+                  Agent workflow
+                </option></select
+              ><button
+                id="smart-run"
+                class="primary"
+                type="button"
+                disabled
+                data-i18n="run"
+              >
+                Run
+              </button>
+            </div>
+            <button
+              id="cancel-preview"
+              class="ghost"
+              type="button"
+              hidden
+              data-i18n="cancel_preview"
+            >
+              Cancel
+            </button>
           </div>
-          <div id="conversation-history" aria-live="polite" aria-relevant="additions text"></div>
-          <div class="suggestions" aria-label="Suggestions" data-i18n-aria-label="suggestions_label">
-            <button class="pill" type="button" data-instruction="Create a chart." data-i18n="pill_chart">Create a chart</button>
-            <button class="pill" type="button" data-instruction="Create a PivotTable." data-i18n="pill_pivot">Create a PivotTable</button>
-            <button class="pill" type="button" data-instruction="Format it with data bars." data-i18n="pill_table">Format data</button>
-            <button id="more-pills" class="pill more" type="button" data-i18n="more_suggestions">Moreâ€¦</button>
-            <button class="pill extra" hidden type="button" data-instruction="Create a new result sheet." data-i18n="pill_sheet">Create a result sheet</button>
-            <button class="pill extra" hidden type="button" data-instruction="Clean the data." data-i18n="pill_clean">Clean the data</button>
-            <button class="pill extra" hidden type="button" data-instruction="Inspect selected formulas and formula errors." data-i18n="pill_formulas">Inspect formulas and errors</button>
-          </div>
+          <details class="more-tools">
+            <summary data-i18n="more_tools">More tools</summary>
+            <div class="action-row">
+              <button
+                id="analyze"
+                class="ghost"
+                type="button"
+                disabled
+                data-i18n="analyze"
+              >
+                Analyze with AI
+              </button>
+              <button
+                id="script-plan"
+                class="ghost"
+                type="button"
+                disabled
+                data-i18n="plan_with_ai"
+              >
+                Plan steps with AI
+              </button>
+              <button
+                id="agent-run"
+                class="ghost"
+                type="button"
+                disabled
+                hidden
+                data-i18n="ask_agent"
+              >
+                Ask the agent
+              </button>
+              <button
+                id="inspect"
+                class="ghost"
+                type="button"
+                disabled
+                data-i18n="inspect"
+              >
+                Inspect and preview
+              </button>
+            </div>
+          </details>
         </section>
-
-        <section id="result-card" class="card" hidden aria-labelledby="preview-heading">
-          <div class="card-head"><h2 id="preview-heading" tabindex="-1" data-i18n="preview_title">Preview</h2><span class="badge" data-i18n="preview_safe">No changes yet</span></div>
-          <p id="preview-summary"></p>
-          <div id="outcomes" aria-label="What will be created" data-i18n-aria-label="outcomes_label"></div>
-          <div id="preview-tweaks" class="tweaks" hidden aria-label="Adjust preview" data-i18n-aria-label="adjust_preview">
-            <label class="tweak" for="tweak-chart-type"><span data-i18n="tweak_chart">Chart type</span><select id="tweak-chart-type"></select></label>
-            <label class="tweak" for="tweak-aggregation"><span data-i18n="tweak_aggregation">Summarize by</span><select id="tweak-aggregation"></select></label>
-            <label class="tweak" for="tweak-category"><span data-i18n="tweak_category">Category</span><select id="tweak-category"></select></label>
-            <label class="tweak" for="tweak-value"><span data-i18n="tweak_value">Value</span><select id="tweak-value"></select></label>
-          </div>
-          <details id="plan-trace" class="trace" hidden><summary><span data-i18n="reasoned">Reasoned in</span> <span id="trace-n"></span> <span data-i18n="steps_label">steps</span></summary><ol id="trace-list"></ol></details>
-          <div id="steps" aria-label="Steps" data-i18n-aria-label="steps_aria"></div>
-          <p class="muted" id="change-note" tabindex="-1" data-i18n="nothing_changed">Nothing has changed in your workbook yet.</p>
-          <ul id="changed-list" class="details" hidden></ul>
-          <div class="apply-options">
-            <label class="compact-choice"><input id="review-toggle" type="checkbox" checked /><span data-i18n="review_toggle">Review as you go</span></label>
-            <label class="compact-choice"><input id="replace-toggle" type="checkbox" /><span data-i18n="replace_toggle">Replace older VynorAI result sheets after applying</span></label>
-          </div>
-          <div class="apply-dock">
-            <button id="apply" class="primary" type="button" disabled data-i18n="apply">Confirm and apply</button>
-            <button id="show-result" class="ghost" type="button" hidden data-i18n="show_result">Show result</button>
-            <button id="rollback" class="ghost" type="button" hidden data-i18n="undo">Undo</button>
-          </div>
-          <div class="action-row">
-            <button id="cleanup" class="ghost" type="button" hidden data-i18n="cleanup">Remove older results</button>
-          </div>
-          <section id="result-gallery" class="card" hidden aria-labelledby="result-gallery-heading">
-            <div class="card-head"><h2 id="result-gallery-heading" data-i18n="outcomes_label">Results</h2></div>
-            <div id="result-gallery-list"></div>
+        <section
+          id="starter-suggestions"
+          class="suggestions quick-start"
+          aria-label="Suggestions"
+          data-i18n-aria-label="suggestions_label"
+        >
+          <button
+            class="pill"
+            type="button"
+            data-instruction="Clean and organize the selected data."
+            data-i18n="quick_organize"
+          >
+            Organize the data in this workbook
+          </button>
+          <button
+            class="pill"
+            type="button"
+            data-instruction="Summarize this workbook and show the key totals."
+            data-i18n="quick_summary"
+          >
+            Create a summary of this workbook
+          </button>
+          <button
+            class="pill"
+            type="button"
+            data-instruction="Analyze this workbook and find data insights."
+            data-i18n="quick_insights"
+          >
+            Analyze this workbook and find data insights
+          </button>
+          <button
+            id="more-pills"
+            class="pill more"
+            type="button"
+            data-i18n="more_suggestions"
+          >
+            Show more
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Create a chart."
+            data-i18n="pill_chart"
+          >
+            Create a chart
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Create a PivotTable."
+            data-i18n="pill_pivot"
+          >
+            Create a PivotTable
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Format it with data bars."
+            data-i18n="pill_table"
+          >
+            Format data
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Create a new result sheet."
+            data-i18n="pill_sheet"
+          >
+            Create a result sheet
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Clean the data."
+            data-i18n="pill_clean"
+          >
+            Clean the data
+          </button>
+          <button
+            class="pill extra"
+            hidden
+            type="button"
+            data-instruction="Inspect selected formulas and formula errors."
+            data-i18n="pill_formulas"
+          >
+            Inspect formulas and errors
+          </button>
+        </section>
+        <div class="scroll-area" id="scroll-area">
+          <section id="selection-change-warning" class="selection-warning" hidden>
+            <span data-i18n="selection_changed_preview">Selection changed after preview.</span>
+            <button id="refresh-preview-selection" type="button" data-i18n="refresh_preview">Refresh preview</button>
           </section>
-          <section id="email-card" class="card" hidden aria-labelledby="email-heading">
-            <div class="card-head"><h2 id="email-heading">Email report</h2><span class="badge">reviewed</span></div>
-            <p id="email-note">Choose the report format and review everything before sending.</p>
-            <div class="email-form">
-              <label for="email-to">Recipient email<input id="email-to" type="email" autocomplete="email" placeholder="recipient@example.com" /></label>
-              <div class="email-options">
-                <label for="email-cc">CC<input id="email-cc" type="text" placeholder="optional" /></label>
-                <label for="email-bcc">BCC<input id="email-bcc" type="text" placeholder="optional" /></label>
-              </div>
-              <label for="email-subject">Subject<input id="email-subject" type="text" maxlength="200" placeholder="VynorAI Excel report" /></label>
-              <div class="email-options">
-                <label for="email-format">Delivery format<select id="email-format">
-                  <option value="auto">Automatic fallback</option>
-                  <option value="xlsx">Excel workbook (.xlsx)</option>
-                  <option value="pdf">PDF report (.pdf)</option>
-                  <option value="csv">CSV report (.csv)</option>
-                  <option value="xlsx-pdf">Excel workbook + PDF</option>
-                  <option value="summary">Summary in email only</option>
-                </select></label>
-                <label for="email-body-type">Body format<select id="email-body-type"><option value="HTML">HTML with details</option><option value="Text">Plain text</option></select></label>
-                <label for="email-delivery-mode">Delivery<select id="email-delivery-mode"><option value="send">Send now</option><option value="draft">Save Outlook draft</option></select></label>
-              </div>
-              <label for="email-body">Message<textarea id="email-body" maxlength="4000" placeholder="Please find the Excel report attached."></textarea></label>
-              <button id="email-ai-write" type="button">Write the message with AI</button>
-              <label class="email-check"><input id="email-include-chart" type="checkbox" checked /><span>Include report charts in the email body</span></label>
-              <button id="email-send" class="primary" type="button" disabled>Review and send report</button>
-              <button id="whatsapp-copy" type="button">Copy summary for WhatsApp</button>
-              <pre id="whatsapp-note" class="muted" hidden></pre>
-              <p id="email-draft-fallback" hidden><a id="email-draft-link" href="#" target="_blank" rel="noopener noreferrer">Open the draft in Outlook on the web</a> <span id="email-draft-note"></span></p>
+          <section
+            id="context-suggestions"
+            class="context-suggestions"
+            data-workspace-panel="work"
+            hidden
+            aria-labelledby="context-suggestions-heading"
+          >
+            <h2
+              id="context-suggestions-heading"
+              data-i18n="contextual_suggestions"
+            >
+              Suggested for this selection
+            </h2>
+            <div
+              id="context-suggestion-list"
+              class="smart-suggestion-list"
+            ></div>
+          </section>
+          <section
+            class="conversation"
+            data-workspace-panel="work"
+            aria-label="VynorAI conversation"
+            data-i18n-aria-label="conversation_label"
+          >
+            <div class="welcome" id="welcome-state">
+              <h1 data-i18n="hero">
+                What would you like to do with your data?
+              </h1>
+              <p data-i18n="hero_hint">
+                VynorAI finds your table automatically and previews a new result
+                sheet before changes are made.
+              </p>
+            </div>
+            <div
+              id="conversation-history"
+              aria-live="polite"
+              aria-relevant="additions text"
+            ></div>
+          </section>
+
+          <section
+            id="result-card"
+            class="card"
+            data-workspace-panel="results"
+            hidden
+            aria-labelledby="preview-heading"
+          >
+            <div class="card-head">
+              <h2 id="preview-heading" tabindex="-1" data-i18n="preview_title">
+                Preview
+              </h2>
+              <span class="badge" data-i18n="preview_safe">No changes yet</span>
+            </div>
+            <p id="preview-summary"></p>
+            <div
+              id="preview-impact"
+              class="impact-grid"
+              hidden
+              aria-label="Preview impact"
+              data-i18n-aria-label="preview_impact"
+            ></div>
+            <ul id="preview-warnings" class="preview-warnings" hidden></ul>
+            <div
+              id="outcomes"
+              aria-label="What will be created"
+              data-i18n-aria-label="outcomes_label"
+            ></div>
+            <div
+              id="preview-tweaks"
+              class="tweaks"
+              hidden
+              aria-label="Adjust preview"
+              data-i18n-aria-label="adjust_preview"
+            >
+              <label class="tweak" for="tweak-chart-type"
+                ><span data-i18n="tweak_chart">Chart type</span
+                ><select id="tweak-chart-type"></select
+              ></label>
+              <label class="tweak" for="tweak-aggregation"
+                ><span data-i18n="tweak_aggregation">Summarize by</span
+                ><select id="tweak-aggregation"></select
+              ></label>
+              <label class="tweak" for="tweak-category"
+                ><span data-i18n="tweak_category">Category</span
+                ><select id="tweak-category"></select
+              ></label>
+              <label class="tweak" for="tweak-value"
+                ><span data-i18n="tweak_value">Value</span
+                ><select id="tweak-value"></select
+              ></label>
+              <label class="tweak" for="tweak-top-n" hidden
+                ><span>Top-N</span
+                ><select id="tweak-top-n">
+                  <option value="" data-i18n="all_items">All items</option>
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select></label
+              >
+              <label class="tweak" for="tweak-rank-direction" hidden
+                ><span>Sort order</span
+                ><select id="tweak-rank-direction">
+                  <option value="top" data-i18n="largest_first">Largest first</option>
+                  <option value="bottom" data-i18n="smallest_first">Smallest first</option>
+                </select></label
+              >
+              <label class="tweak tweak-check" for="tweak-data-labels" hidden
+                ><input id="tweak-data-labels" type="checkbox" /><span
+                  >Show data labels</span
+                ></label
+              >
+              <label class="tweak tweak-check" for="tweak-totals" hidden
+                ><input id="tweak-totals" type="checkbox" /><span
+                  >Include totals</span
+                ></label
+              >
+            </div>
+            <details id="plan-trace" class="trace" hidden>
+              <summary>
+                <span data-i18n="reasoned">Reasoned in</span>
+                <span id="trace-n"></span>
+                <span data-i18n="steps_label">steps</span>
+              </summary>
+              <ol id="trace-list"></ol>
+            </details>
+            <div
+              id="steps"
+              aria-label="Steps"
+              data-i18n-aria-label="steps_aria"
+            ></div>
+            <p
+              class="muted"
+              id="change-note"
+              tabindex="-1"
+              data-i18n="nothing_changed"
+            >
+              Nothing has changed in your workbook yet.
+            </p>
+            <ul id="changed-list" class="details" hidden></ul>
+            <div class="safety-summary" aria-label="Safety and approval">
+              <strong data-i18n="safety_approval">Safety &amp; approval</strong>
+              <span data-i18n="trust_privacy">✓ Privacy protected</span>
+              <span data-i18n="trust_original">✓ Original data preserved</span>
+              <span data-i18n="trust_review">✓ Review changes before apply</span>
+            </div>
+            <div class="apply-options">
+              <label class="compact-choice"
+                ><input id="review-toggle" type="checkbox" checked /><span
+                  data-i18n="review_toggle"
+                  >Review as you go</span
+                ></label
+              >
+              <label class="compact-choice"
+                ><input id="replace-toggle" type="checkbox" /><span
+                  data-i18n="replace_toggle"
+                  >Replace older VynorAI result sheets after applying</span
+                ></label
+              >
+            </div>
+            <div class="apply-dock">
+              <button
+                id="apply"
+                class="primary"
+                type="button"
+                disabled
+                data-i18n="apply"
+              >
+                Confirm and apply
+              </button>
+              <button
+                id="show-result"
+                class="ghost"
+                type="button"
+                hidden
+                data-i18n="show_result"
+              >
+                Show result
+              </button>
+              <button
+                id="rollback"
+                class="ghost"
+                type="button"
+                hidden
+                data-i18n="undo"
+              >
+                Undo
+              </button>
+            </div>
+            <div class="action-row">
+              <button
+                id="cleanup"
+                class="ghost"
+                type="button"
+                hidden
+                data-i18n="cleanup"
+              >
+                Remove older results
+              </button>
             </div>
           </section>
-          <details data-dev><summary data-i18n="tech_details">Technical details</summary><pre id="preview">No preview yet.</pre></details>
-        </section>
+          <p id="verified-result-banner" class="verified-banner" data-workspace-panel="results" data-i18n="verified_unchanged" hidden>
+            Verified. The original data is unchanged.
+          </p>
+          <section
+              id="result-gallery"
+              class="card"
+              data-workspace-panel="results"
+              hidden
+              aria-labelledby="result-gallery-heading"
+            >
+              <div class="card-head">
+                <h2 id="result-gallery-heading" data-i18n="results_hub">
+                  Results Hub
+                </h2>
+              </div>
+              <div id="result-gallery-list"></div>
+            </section>
+          <section
+              id="email-card"
+              class="card"
+              data-workspace-panel="share"
+              hidden
+              aria-labelledby="email-heading"
+            >
+              <div class="card-head">
+                <h2 id="email-heading" data-i18n="share_centre">
+                  Share Centre
+                </h2>
+                <span class="badge" data-i18n="reviewed">reviewed</span>
+              </div>
+              <p id="email-note">
+                Choose the report format and review everything before sending.
+              </p>
+              <div class="email-form">
+                <label for="email-to"
+                  >Recipient email<input
+                    id="email-to"
+                    type="email"
+                    autocomplete="email"
+                    placeholder="recipient@example.com"
+                /></label>
+                <div class="email-options">
+                  <label for="email-cc"
+                    >CC<input id="email-cc" type="text" placeholder="optional"
+                  /></label>
+                  <label for="email-bcc"
+                    >BCC<input
+                      id="email-bcc"
+                      type="text"
+                      placeholder="optional"
+                  /></label>
+                </div>
+                <label for="email-subject"
+                  >Subject<input
+                    id="email-subject"
+                    type="text"
+                    maxlength="200"
+                    placeholder="VynorAI Excel report"
+                /></label>
+                <div class="email-options">
+                  <label for="email-format"
+                    >Delivery format<select id="email-format">
+                      <option value="auto" data-i18n="fmt_auto">
+                        Automatic fallback
+                      </option>
+                      <option value="xlsx" data-i18n="fmt_xlsx">
+                        Excel workbook (.xlsx)
+                      </option>
+                      <option value="pdf" data-i18n="fmt_pdf">
+                        PDF report (.pdf)
+                      </option>
+                      <option value="csv" data-i18n="fmt_csv">
+                        CSV report (.csv)
+                      </option>
+                      <option value="xlsx-pdf" data-i18n="fmt_xlsx_pdf">
+                        Excel workbook + PDF
+                      </option>
+                      <option value="summary" data-i18n="fmt_summary">
+                        Summary in email only
+                      </option>
+                    </select></label
+                  >
+                  <label for="email-body-type"
+                    >Body format<select id="email-body-type">
+                      <option value="HTML" data-i18n="body_html">
+                        HTML with details
+                      </option>
+                      <option value="Text" data-i18n="body_text">
+                        Plain text
+                      </option>
+                    </select></label
+                  >
+                  <label for="email-delivery-mode"
+                    >Delivery<select id="email-delivery-mode">
+                      <option value="send" data-i18n="send_now">
+                        Send now
+                      </option>
+                      <option value="draft" data-i18n="save_draft">
+                        Save Outlook draft
+                      </option>
+                    </select></label
+                  >
+                </div>
+                <div id="email-attachment-summary" class="attachment-summary">
+                  <strong id="email-report-name">Workbook report</strong>
+                  <span id="email-attachment-size">Size calculated after approval</span>
+                </div>
+                <label for="email-body"
+                  >Message<textarea
+                    id="email-body"
+                    maxlength="4000"
+                    placeholder="Please find the Excel report attached."
+                  ></textarea>
+                </label>
+                <button
+                  id="email-ai-write"
+                  type="button"
+                  data-i18n="ai_message"
+                >
+                  Write the message with AI
+                </button>
+                <label class="email-check"
+                  ><input
+                    id="email-include-chart"
+                    type="checkbox"
+                    checked
+                  /><span data-i18n="include_charts"
+                    >Include report charts in the email body</span
+                  ></label
+                >
+                <button
+                  id="email-send"
+                  class="primary"
+                  type="button"
+                  disabled
+                  data-i18n="review_send"
+                >
+                  Review and send report
+                </button>
+                <p id="email-delivery-status" class="delivery-status" role="status">
+                  Not sent yet · approval required
+                </p>
+                <button
+                  id="whatsapp-copy"
+                  type="button"
+                  data-i18n="copy_whatsapp"
+                >
+                  Copy summary for WhatsApp
+                </button>
+                <pre id="whatsapp-note" class="muted" hidden></pre>
+                <p id="email-draft-fallback" hidden>
+                  <a
+                    id="email-draft-link"
+                    href="#"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-i18n="open_draft"
+                    >Open the draft in Outlook on the web</a
+                  >
+                  <span id="email-draft-note"></span>
+                </p>
+              </div>
+            </section>
+            <details data-dev data-workspace-panel="results">
+              <summary data-i18n="tech_details">Technical details</summary>
+              <pre id="preview">No preview yet.</pre>
+            </details>
 
-        <section id="ai-consent" class="card" hidden>
-          <div class="card-head"><h2 data-i18n="consent_title">Before AI analysis</h2></div>
-          <p data-i18n="consent_body">Only the summary below leaves this workbook: column names, data types, row and blank counts, number and date ranges and the share of repeated values. No cell values, rows, names, e-mail addresses or IDs. Nothing in the workbook changes.</p>
-          <details><summary data-i18n="consent_show">Show the exact data that will be sent</summary><pre id="ai-summary"></pre></details>
-          <label class="check"><input id="ai-consent-check" type="checkbox" /><span data-i18n="consent_agree">I agree to send this summary to the VynorAI analysis service.</span></label>
-          <div class="action-row"><button id="ai-send" class="primary" type="button" disabled data-i18n="consent_send">Send for AI analysis</button><button id="ai-cancel" class="ghost" type="button" data-i18n="consent_cancel">Cancel</button></div>
-        </section>
-        <section id="agent-card" class="card" hidden aria-labelledby="agent-heading">
-          <div class="card-head"><h2 id="agent-heading" tabindex="-1">Agent</h2><span class="badge" id="agent-badge">Working</span></div>
-          <p id="agent-progress" class="muted" aria-live="polite"></p>
-          <div id="agent-reply"></div>
-          <ol id="agent-changes" class="details" hidden></ol>
-          <p id="agent-note" class="muted" hidden>Nothing has changed yet. Review the changes, then approve.</p>
-          <div class="apply-dock">
-            <button id="agent-approve" class="primary" type="button" hidden>Approve and apply</button>
-            <button id="agent-discard" class="ghost" type="button" hidden>Discard</button>
-            <button id="agent-undo" class="ghost" type="button" hidden>Undo</button>
-            <button id="agent-stop" class="ghost" type="button" hidden>Stop</button>
-          </div>
-        </section>
-        <div id="ai-result"></div>
-        <details id="insights-card" class="card" hidden><summary><strong data-i18n="insights_title">Insights</strong></summary><p class="muted" data-i18n="insights_note">Calculated here in the task pane. Nothing is sent anywhere.</p><div id="insights-list"></div><div id="insights-actions" class="suggestions"></div></details>
-        <details id="prefs-card" class="card"><summary><strong>Workbook settings</strong></summary>
-          <p id="prefs-line" class="muted">Nothing remembered for this workbook yet.</p>
-          <p class="muted">Saved in this workbook, so everyone who opens it gets the same. Only these choices are stored, never cell values.</p>
-          <label for="prefs-currency">Currency when the data names none<select id="prefs-currency"><option value="">Not set</option><option value="LKR">LKR (Rs)</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="INR">INR</option><option value="AUD">AUD</option><option value="SGD">SGD</option><option value="AED">AED</option><option value="JPY">JPY</option></select></label>
-          <label for="prefs-number-style">Large amounts<select id="prefs-number-style"><option value="">As in the data</option><option value="lakh">Lakhs (12,34,567)</option><option value="million">Millions (Mn)</option><option value="plain">Plain (1,234,567)</option></select></label>
-          <label for="prefs-fiscal">Financial year starts<select id="prefs-fiscal"><option value="">Not set</option><option value="4">April (Sri Lanka)</option><option value="1">January</option><option value="7">July</option></select></label>
-          <label for="prefs-audience">Reports are usually for<select id="prefs-audience"><option value="">Decide from the request</option><option value="management">Management (one page)</option><option value="operational">Operations (full detail)</option></select></label>
-          <label class="email-check"><input id="prefs-changelog" type="checkbox" checked /><span>Record every change in a "VynorAI Log" sheet</span></label>
-          <button id="prefs-holidays" type="button">Add Sri Lanka holiday table</button>
-          <button id="prefs-payroll" type="button">Add payroll sheet (EPF, ETF, APIT)</button>
-          <button id="prefs-forget" class="ghost" type="button">Forget these choices</button>
-        </details>
-
-        <section class="composer" aria-label="Request a workbook change" data-i18n-aria-label="request_change">
-          <label class="sr-only" for="instruction" data-i18n="instruction_label">Describe what to create</label>
-          <div id="dup-fix" hidden><button id="dup-fix-btn" type="button">Clean first, then run this</button></div>
-          <textarea id="instruction"data-i18n-placeholder="placeholder" placeholder="Describe what you would like to create from the selected data"></textarea>
-          <div class="composer-bar">
-            <button id="analyze" class="ghost" type="button" disabled data-i18n="analyze">Analyze with AI</button>
-            <button id="script-plan" class="ghost" type="button" disabled>Plan steps with AI</button>
-            <button id="agent-run" class="primary" type="button" disabled hidden>Ask the agent</button>
-            <button id="inspect" class="primary" type="button" disabled data-i18n="inspect">Inspect and preview</button>
-            <button id="cancel-preview" class="ghost" type="button" hidden data-i18n="cancel_preview">Cancel</button>
-          </div>
-        </section>
+          <section id="ai-consent" class="card" data-workspace-panel="work" hidden>
+            <div class="card-head">
+              <h2 data-i18n="consent_title">Before AI analysis</h2>
+            </div>
+            <p data-i18n="consent_body">
+              Only the summary below leaves this workbook: column names, data
+              types, row and blank counts, number and date ranges and the share
+              of repeated values. No cell values, rows, names, e-mail addresses
+              or IDs. Nothing in the workbook changes.
+            </p>
+            <details>
+              <summary data-i18n="consent_show">
+                Show the exact data that will be sent
+              </summary>
+              <pre id="ai-summary"></pre>
+            </details>
+            <label class="check"
+              ><input id="ai-consent-check" type="checkbox" /><span
+                data-i18n="consent_agree"
+                >I agree to send this summary to the VynorAI analysis
+                service.</span
+              ></label
+            >
+            <div class="action-row">
+              <button
+                id="ai-send"
+                class="primary"
+                type="button"
+                disabled
+                data-i18n="consent_send"
+              >
+                Send for AI analysis</button
+              ><button
+                id="ai-cancel"
+                class="ghost"
+                type="button"
+                data-i18n="consent_cancel"
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+          <section
+            id="agent-card"
+            class="card"
+            data-workspace-panel="work"
+            hidden
+            aria-labelledby="agent-heading"
+          >
+            <div class="card-head">
+              <h2 id="agent-heading" tabindex="-1" data-i18n="agent_title">
+                Agent
+              </h2>
+              <span class="badge" id="agent-badge">Working</span>
+            </div>
+            <p id="agent-progress" class="muted" aria-live="polite"></p>
+            <ol
+              id="agent-timeline"
+              class="agent-timeline"
+              aria-label="Agent progress"
+              data-i18n-aria-label="agent_timeline"
+            >
+              <li data-stage="inspect" data-i18n="timeline_inspect">Inspect</li>
+              <li data-stage="plan" data-i18n="timeline_plan">Plan</li>
+              <li data-stage="preview" data-i18n="timeline_preview">Preview</li>
+              <li data-stage="review" data-i18n="timeline_review">Review</li>
+              <li data-stage="approval" data-i18n="timeline_approval">
+                Approval
+              </li>
+              <li data-stage="apply" data-i18n="timeline_apply">Apply</li>
+              <li data-stage="verify" data-i18n="timeline_verify">Verify</li>
+            </ol>
+            <div id="agent-activity-list" class="agent-activity-list">
+              <div data-agent-role="planner"><strong data-i18n="role_planner">Planner</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="relationships"><strong data-i18n="role_relationships">Relationship mapper</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="builder"><strong data-i18n="role_builder">Builder</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="accuracy"><strong data-i18n="role_accuracy">Accuracy reviewer</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="safety"><strong data-i18n="role_safety">Safety reviewer</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="verification"><strong data-i18n="role_verification">Verification</strong><span class="agent-role-status">pending</span></div>
+            </div>
+            <div id="agent-plan" hidden>
+              <strong data-i18n="agent_plan">Plan</strong>
+              <ol id="agent-plan-steps" class="details"></ol>
+            </div>
+            <div id="agent-reply"></div>
+            <div id="agent-sources" hidden>
+              <strong data-i18n="agent_sources">Sources</strong>
+              <ul id="agent-sources-list" class="details"></ul>
+            </div>
+            <section id="workbook-map" class="workbook-map" hidden>
+              <h3 data-i18n="workbook_map">Workbook Map</h3>
+              <div id="workbook-map-content"></div>
+            </section>
+            <ol id="agent-changes" class="details" hidden></ol>
+            <p id="agent-note" class="muted" hidden data-i18n="agent_note">
+              Nothing has changed yet. Review the changes, then approve.
+            </p>
+            <div class="apply-dock">
+              <button
+                id="agent-approve"
+                class="primary"
+                type="button"
+                hidden
+                data-i18n="approve_apply"
+              >
+                Approve and apply
+              </button>
+              <button
+                id="agent-discard"
+                class="ghost"
+                type="button"
+                hidden
+                data-i18n="discard"
+              >
+                Discard
+              </button>
+              <button
+                id="agent-undo"
+                class="ghost"
+                type="button"
+                hidden
+                data-i18n="undo"
+              >
+                Undo
+              </button>
+              <button
+                id="agent-stop"
+                class="ghost"
+                type="button"
+                hidden
+                data-i18n="stop"
+              >
+                Stop
+              </button>
+            </div>
+          </section>
+          <div id="ai-result" data-workspace-panel="work"></div>
+          <details id="insights-card" class="card" data-workspace-panel="results" hidden>
+            <summary>
+              <strong data-i18n="insights_title">Insights</strong>
+            </summary>
+            <p class="muted" data-i18n="insights_note">
+              Calculated here in the task pane. Nothing is sent anywhere.
+            </p>
+            <div id="insights-list"></div>
+            <div id="insights-actions" class="suggestions"></div>
+          </details>
+          <details id="prefs-card" class="card" data-workspace-panel="work" hidden>
+            <summary>
+              <strong data-i18n="workbook_settings">Workbook settings</strong>
+            </summary>
+            <p id="prefs-line" class="muted">
+              Nothing remembered for this workbook yet.
+            </p>
+            <p class="muted" data-i18n="prefs_note">
+              Saved in this workbook, so everyone who opens it gets the same.
+              Only these choices are stored, never cell values.
+            </p>
+            <label for="prefs-currency"
+              >Currency when the data names none<select id="prefs-currency">
+                <option value="" data-i18n="not_set">Not set</option>
+                <option value="LKR">LKR (Rs)</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="INR">INR</option>
+                <option value="AUD">AUD</option>
+                <option value="SGD">SGD</option>
+                <option value="AED">AED</option>
+                <option value="JPY">JPY</option>
+              </select></label
+            >
+            <label for="prefs-number-style"
+              >Large amounts<select id="prefs-number-style">
+                <option value="" data-i18n="as_in_data">As in the data</option>
+                <option value="lakh" data-i18n="style_lakhs">
+                  Lakhs (12,34,567)
+                </option>
+                <option value="million" data-i18n="style_millions">
+                  Millions (Mn)
+                </option>
+                <option value="plain" data-i18n="style_plain">
+                  Plain (1,234,567)
+                </option>
+              </select></label
+            >
+            <label for="prefs-fiscal"
+              >Financial year starts<select id="prefs-fiscal">
+                <option value="" data-i18n="not_set">Not set</option>
+                <option value="4" data-i18n="fy_april">
+                  April (Sri Lanka)
+                </option>
+                <option value="1" data-i18n="fy_january">January</option>
+                <option value="7" data-i18n="fy_july">July</option>
+              </select></label
+            >
+            <label for="prefs-audience"
+              >Reports are usually for<select id="prefs-audience">
+                <option value="" data-i18n="audience_auto">
+                  Decide from the request
+                </option>
+                <option value="management" data-i18n="audience_mgmt">
+                  Management (one page)
+                </option>
+                <option value="operational" data-i18n="audience_ops">
+                  Operations (full detail)
+                </option>
+              </select></label
+            >
+            <label class="email-check"
+              ><input id="prefs-changelog" type="checkbox" checked /><span
+                data-i18n="log_changes"
+                >Record every change in a "VynorAI Log" sheet</span
+              ></label
+            >
+            <button id="prefs-holidays" type="button" data-i18n="add_holidays">
+              Add Sri Lanka holiday table
+            </button>
+            <button id="prefs-payroll" type="button" data-i18n="add_payroll">
+              Add payroll sheet (EPF, ETF, APIT)
+            </button>
+            <button
+              id="prefs-forget"
+              class="ghost"
+              type="button"
+              data-i18n="forget_choices"
+            >
+              Forget these choices
+            </button>
+          </details>
+        </div>
+        <nav
+          id="workspace-nav"
+          class="workspace-nav"
+          role="tablist"
+          aria-label="Workspace"
+        >
+          <button type="button" class="active" data-workspace-target="work" role="tab" aria-selected="true" data-i18n="tab_work">Work</button>
+          <button type="button" data-workspace-target="results" role="tab" aria-selected="false" data-i18n="tab_results" disabled>Results</button>
+          <button type="button" data-workspace-target="share" role="tab" aria-selected="false" data-i18n="tab_share" disabled>Share</button>
+        </nav>
       </div>
 
       <section id="diagnostics-panel" class="card" data-dev hidden>
-        <h2>Diagnostics</h2><p id="diagnostics-summary" aria-live="polite"></p><pre id="diagnostics">No sign-in diagnostics yet.</pre>
+        <h2 data-i18n="diagnostics_title">Diagnostics</h2>
+        <p id="diagnostics-summary" aria-live="polite"></p>
+        <pre id="diagnostics">No sign-in diagnostics yet.</pre>
       </section>
     </main>
     <script>
@@ -344,26 +2945,71 @@
         var status = document.getElementById("status-text");
         var diagnostics = document.getElementById("diagnostics");
         function note(message) {
-          if (window.__VYNORAI_DIAG_NOTE__) return window.__VYNORAI_DIAG_NOTE__(message);
+          if (window.__VYNORAI_DIAG_NOTE__)
+            return window.__VYNORAI_DIAG_NOTE__(message);
           if (!diagnostics) return;
-          var prior = diagnostics.textContent === "No sign-in diagnostics yet." ? "" : diagnostics.textContent + "\n";
-          diagnostics.textContent = prior + new Date().toISOString() + " " + message;
+          var prior =
+            diagnostics.textContent === "No sign-in diagnostics yet."
+              ? ""
+              : diagnostics.textContent + "\n";
+          diagnostics.textContent =
+            prior + new Date().toISOString() + " " + message;
         }
         window.addEventListener("error", function (event) {
-          if (event.message === "Script error.") { note("Non-fatal external script event reported by the Excel WebView."); return; }
-          if (event.message) { note("Startup error: " + event.message); if (status) status.textContent = "Add-in startup failed: " + event.message; }
+          if (event.message === "Script error.") {
+            note(
+              "Non-fatal external script event reported by the Excel WebView.",
+            );
+            return;
+          }
+          if (event.message) {
+            note("Startup error: " + event.message);
+            if (status)
+              status.textContent = "Add-in startup failed: " + event.message;
+          }
         });
         window.addEventListener("unhandledrejection", function (event) {
-          note("Unhandled startup rejection: " + (event.reason && event.reason.message ? event.reason.message : "unknown"));
-          if (status) status.textContent = "Add-in startup failed. Update Excel or use Excel for the web.";
+          note(
+            "Unhandled startup rejection: " +
+              (event.reason && event.reason.message
+                ? event.reason.message
+                : "unknown"),
+          );
+          if (status)
+            status.textContent =
+              "Add-in startup failed. Update Excel or use Excel for the web.";
         });
         window.setTimeout(function () {
-          if (status && status.textContent === "Loadingâ€¦") { note("Task pane bundle did not initialize within five seconds."); status.textContent = "Add-in scripts did not start. Close and reopen the task pane."; }
+          if (status && status.textContent === "Loading…") {
+            note("Task pane bundle did not initialize within five seconds.");
+            status.textContent =
+              "Add-in scripts did not start. Close and reopen the task pane.";
+          }
         }, 5000);
       })();
     </script>
-    <script nomodule>document.getElementById("status-text").textContent = "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";</script>
-    <script src="./runtime-config.js?v=20261016.46"></script>
-    <script src="./dist/taskpane.bundle.js?v=20261016.46"></script>
+    <script nomodule>
+      document.getElementById("status-text").textContent =
+        "This Excel version needs a current Microsoft Edge WebView2 update. Use Excel for the web to continue now.";
+    </script>
+    <script>
+      (function () {
+        var openingId = Date.now().toString(36);
+        function add(src, done) {
+          var script = document.createElement("script");
+          script.src = src;
+          script.onload = done;
+          script.onerror = done;
+          document.body.appendChild(script);
+        }
+        add("./build-id.js?open=" + openingId, function () {
+          var buildId = window.__VYNOR_M365_BUILD_ID__ || "dev";
+          var suffix = encodeURIComponent(buildId);
+          add("./runtime-config.js?v=" + suffix, function () {
+            add("./dist/taskpane.bundle.js?v=" + suffix, function () {});
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

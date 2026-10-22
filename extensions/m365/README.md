@@ -26,6 +26,18 @@ copy the generated `localhost.crt` and `localhost.key` into this directory, buil
 backend on port 3333, then run `npm run dev-server`. The dev server serves the task pane on port 3000 and proxies
 `/v1/*` to the backend, so the browser does not make a mixed-content HTTP request.
 
+## Browser pane smoke test
+
+Run `npm run test:ui` to build the pane and open it in a local headless Chrome instance. The test supplies a
+deterministic Office.js selection and local capability response, then checks the narrow task-pane layout, menu,
+selection refresh, enabled Run control, horizontal overflow and click reachability. It writes screenshots to the
+ignored `test-artifacts/` directory.
+
+The test uses the installed Chrome/Edge executable, or `M365_UI_CHROME_PATH` when a CI image keeps it elsewhere.
+It is a browser-layout regression test, not an Excel Web end-to-end test: it neither signs in to Microsoft nor
+writes to a workbook. Before a release, still open the add-in in Excel for the web and Excel Desktop and complete
+the manual preview, approval, apply, verification and undo smoke checks.
+
 No client secret belongs in this package. `manifest.xml` is development-only and must pass host/URL/permission review before tenant deployment.
 
 ## Production static host
@@ -51,13 +63,16 @@ to its logs. Small messages use direct send; larger attachments use a resumable 
 
 An Office add-in is a manifest plus a web app. Only the manifest is installed; everything the user sees
 (`taskpane.html`, `dist/taskpane.bundle.js`, `runtime-config.js`) is loaded from `https://vynor.lk/m365/` every time the
-task pane opens, and Caddy serves it with `Cache-Control: no-store`.
+task pane opens. Caddy serves it with `Cache-Control: no-store`, and each opening cache-busts the tiny generated
+`build-id.js` before using its value in the runtime-config and bundle URLs. Both safeguards prevent a reopened Excel
+WebView from using an earlier bundle without modifying tracked HTML on the VPS.
 
 - **UI, logic, backend and styling changes:** publish the static files (see `deploy/publish-m365.sh`). Users get them the
-  next time they open the task pane. Nothing is downloaded or re-added.
+  next time they open the task pane; an already open pane must be closed and opened again because Office does not hot-reload
+  a running page. Nothing is downloaded or re-added.
 - **Manifest changes** (new host, permission, domain, icon, `SourceLocation`) are rare and are the only thing that needs a
   re-upload. Before uploading, run `npm run validate-manifests` in `extensions/m365` (Microsoft's validator, needs internet);
-  `src/manifest.test.ts` checks the same structure offline. Bump `<Version>` in every manifest you change, or the admin
+  Bump `<Version>` in every manifest you change, or the admin
   center will not see an update. Keep the manifest minimal and never put a cache-busting `?v=` in `SourceLocation`.
 - **Distribution:** sideloading is for development only. For real users deploy once through Microsoft 365 admin center
   (Integrated apps, Centralized Deployment) so the manifest is pushed to assigned users or groups and later manifest

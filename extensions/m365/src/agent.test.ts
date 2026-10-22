@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { withRelationshipHint } from "./agent.js";
 import { test } from "node:test";
 import {
   AgentToolError,
@@ -10,6 +11,7 @@ import {
   runAgent,
   coveredKinds,
   appliedReport,
+  answerSources,
   userContent,
   stageChange,
   type AgentHost,
@@ -252,6 +254,56 @@ test("text analysis is read-only and bounded before a result column can be stage
   assert.match(run.messages.at(-1)?.content ?? "", /positive/);
 });
 
+test("column analysis reads at most 5,000 rows on the device and returns a summary, not rows", async () => {
+  const asked: string[] = [];
+  let turn = 0;
+  const run = await runAgent({
+    request: "find unusual amounts",
+    host: host({
+      readRange: async (_sheet, address) => {
+        asked.push(address);
+        return {
+          address,
+          values: [
+            ["Region", "Amount"],
+            ...[100, 104, 98, 101, 99, 9000].map((amount) => ["West", amount]),
+          ],
+        };
+      },
+    }),
+    mask: new PersonalMask(),
+    model: async () => {
+      turn += 1;
+      return turn === 1
+        ? {
+            content: "",
+            tool_calls: [
+              call("a", "analyze_columns", {
+                kind: "anomalies",
+                sheet: "Data",
+                address: "B4:C520126",
+                columns: ["Amount"],
+              }),
+            ],
+          }
+        : { content: "Row 10 is unusual.", tool_calls: [] };
+    },
+  });
+  assert.deepEqual(asked, ["B4:C5004"]);
+  const result = JSON.parse(
+    String(run.messages.find((m) => m.role === "tool")?.content),
+  );
+  assert.equal(result.outliers, 1);
+  assert.equal(result.top[0].row, 10);
+  assert.match(result.note, /first 5,000 data rows/);
+  // For the rows past the sample, the result hands over one exact formula over every row.
+  assert.equal(
+    result.exact_formula,
+    "=LET(v,'Data'!C5:C520126,q1,QUARTILE.INC(v,1),q3,QUARTILE.INC(v,3),i,q3-q1,FILTER(HSTACK(ROW(v),v),(v<q1-1.5*i)+(v>q3+1.5*i),\"None\"))",
+  );
+  assert.equal(run.changes.length, 0);
+});
+
 test("reports the planner, execution and verification phases", async () => {
   const phases: string[] = [];
   let turn = 0;
@@ -305,7 +357,39 @@ test("whole columns like A:B are accepted, and a read of them is bounded", () =>
   });
 });
 
-test("after six calculations the agent is told to act or answer", async () => {
+test("an identical calculation is reused and the agent is told to answer", async () => {
+  let turn = 0;
+  let calculations = 0;
+  const run = await runAgent({
+    request: "x",
+    host: host({
+      calculate: async () => {
+        calculations += 1;
+        return [[1]];
+      },
+    }),
+    mask: new PersonalMask(),
+    model: async (messages) => {
+      turn += 1;
+      if (turn <= 2)
+        return {
+          content: "",
+          tool_calls: [call(`${turn}`, "calculate", { formula: "=1" })],
+        };
+      assert.match(String(messages.at(-1)?.content), /already ran/i);
+      return { content: "done", tool_calls: [] };
+    },
+  });
+  const results = run.messages
+    .filter((m) => m.role === "tool")
+    .map((m: any) => m.content);
+  assert.equal(calculations, 1);
+  assert.equal(results.filter((r) => /"result"/.test(r)).length, 2);
+  assert.match(results[1], /earlier result was reused/i);
+  assert.equal(run.reply, "done");
+});
+
+test("after six different calculations the agent is told to act or answer", async () => {
   let turn = 0;
   const run = await runAgent({
     request: "x",
@@ -317,7 +401,9 @@ test("after six calculations the agent is told to act or answer", async () => {
         return {
           content: "",
           tool_calls: Array.from({ length: 4 }, (_, i) =>
-            call(`${turn}-${i}`, "calculate", { formula: "=1" }),
+            call(`${turn}-${i}`, "calculate", {
+              formula: `=${(turn - 1) * 4 + i + 1}`,
+            }),
           ),
         };
       return { content: "done", tool_calls: [] };
@@ -328,6 +414,30 @@ test("after six calculations the agent is told to act or answer", async () => {
     .map((m: any) => m.content);
   assert.equal(results.filter((r) => /"result"/.test(r)).length, 6);
   assert.match(results[7], /already ran 6 calculations/);
+});
+
+test("a model that keeps repeating one calculation stops with a useful reply before the turn limit", async () => {
+  let calculations = 0;
+  let calls = 0;
+  const run = await runAgent({
+    request: "x",
+    host: host({
+      calculate: async () => {
+        calculations += 1;
+        return [[1]];
+      },
+    }),
+    mask: new PersonalMask(),
+    maxTurns: 8,
+    model: async () => ({
+      content: "",
+      tool_calls: [call(String(++calls), "calculate", { formula: "=1" })],
+    }),
+  });
+  assert.equal(calculations, 1);
+  assert.equal(run.turns, 4);
+  assert.equal(run.stoppedAtLimit, undefined);
+  assert.match(run.reply, /same calculations were requested repeatedly/i);
 });
 
 test("numbers come back with grouped text, and replies lose markdown marks", async () => {
@@ -520,6 +630,161 @@ test("a long request with the add-in's note still fits the backend's 4000-charac
   assert.equal(content.length, 4000);
   assert.ok(content.endsWith(`\n\n${note}`));
   assert.equal(userContent("y".repeat(5000), "").length, 4000);
+});
+
+test("answer sources list the ranges read and formulas computed, restored and without repeats", () => {
+  const mask = new PersonalMask();
+  const token = mask.mask("0112005016");
+  const messages: AgentMessage[] = [
+    { role: "user", content: "how many?" },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        call("1", "get_workbook", {}),
+        call("2", "read_range", { sheet: "Data", address: "A1:J50" }),
+        call("3", "calculate", {
+          formula: `=COUNTIF('Data'!J2:J520126,"${token}")`,
+        }),
+      ],
+    },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        call("4", "read_range", { sheet: "Data", address: "A1:J50" }),
+        call("5", "analyze_columns", {
+          kind: "anomalies",
+          sheet: "Data",
+          address: "A1:J520126",
+          columns: ["Qty"],
+        }),
+        call("6", "get_details", { what: "formula_audit" }),
+      ],
+    },
+  ];
+  assert.deepEqual(
+    answerSources(messages, (text) => mask.unmask(text)),
+    [
+      { kind: "range", sheet: "Data", address: "A1:J50" },
+      { kind: "formula", text: `=COUNTIF('Data'!J2:J520126,"0112005016")` },
+      {
+        kind: "range",
+        sheet: "Data",
+        address: "A1:J520126",
+        note: "anomalies",
+      },
+      { kind: "check", text: "formula_audit" },
+    ],
+  );
+});
+
+test("an empty answer is asked for once, and never reaches the person as nothing", async () => {
+  let turns = 0;
+  const asked: string[] = [];
+  const run = await runAgent({
+    request: "add sparklines next to each total",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async (messages) => {
+      turns += 1;
+      asked.push(String((messages.at(-1) as any).content ?? ""));
+      return turns === 1
+        ? { content: "", tool_calls: [] }
+        : {
+            content: "- Sparklines are not available; a line chart is.",
+            tool_calls: [],
+          };
+    },
+  });
+  assert.equal(run.reply, "- Sparklines are not available; a line chart is.");
+  assert.match(asked[1], /empty/i);
+  assert.equal(run.stoppedAtLimit, undefined);
+
+  // A model that stays silent gets a plain, honest line instead of an empty pane.
+  const silent = await runAgent({
+    request: "add sparklines next to each total",
+    host: host(),
+    mask: new PersonalMask(),
+    model: async () => ({ content: "  ", tool_calls: [] }),
+  });
+  assert.match(silent.reply, /no answer|did not answer/i);
+  assert.equal(silent.changes.length, 0);
+});
+
+test("map_relationships reads each range and returns the join, never the rows", async () => {
+  const reads: string[] = [];
+  const run = await runAgent({
+    request: "total orders by customer region",
+    host: host({
+      readRange: async (sheet, address) => {
+        reads.push(`${sheet}!${address}`);
+        return {
+          address,
+          values:
+            sheet === "Orders"
+              ? [
+                  ["CustomerID", "Amount"],
+                  ["C1", 5.5],
+                  ["C2", 7.5],
+                  ["C1", 2.5],
+                ]
+              : [
+                  ["CustomerID", "Region"],
+                  ["C1", "N"],
+                  ["C2", "S"],
+                ],
+        };
+      },
+    }),
+    mask: new PersonalMask(),
+    model: (() => {
+      let turn = 0;
+      return async () => {
+        turn += 1;
+        return turn === 1
+          ? {
+              content: "",
+              tool_calls: [
+                call("a", "map_relationships", {
+                  ranges: ["Orders!A1:B4", "'Customers'!A1:B3"],
+                }),
+              ],
+            }
+          : { content: "- Joined on CustomerID.", tool_calls: [] };
+      };
+    })(),
+  });
+  assert.deepEqual(reads, ["Orders!A1:B4", "Customers!A1:B3"]);
+  const result = JSON.parse(
+    String(run.messages.find((m) => m.role === "tool")?.content),
+  );
+  assert.equal(result.links[0].from.column, "CustomerID");
+  assert.equal(result.links[0].cardinality, "many-to-one");
+  assert.equal(JSON.stringify(result).includes("5.5"), false);
+  assert.deepEqual(answerSources(run.messages, (t) => t)[0], {
+    kind: "range",
+    sheet: "Orders",
+    address: "A1:B4",
+    note: "relationships",
+  });
+});
+
+test("get_workbook adds the relationship hint only when several sheets hold data", async () => {
+  const hinted = withRelationshipHint({
+    sheets: [
+      { name: "A", rows: 10 },
+      { name: "B", rows: 5 },
+    ],
+  }) as any;
+  assert.match(hinted.hint, /map_relationships/);
+  const single = withRelationshipHint({
+    sheets: [
+      { name: "A", rows: 10 },
+      { name: "B", rows: 0 },
+    ],
+  }) as any;
+  assert.equal(single.hint, undefined);
 });
 
 test("run_code: the host runs the restored code; the result goes back masked; limit of 4", async () => {

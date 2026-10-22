@@ -6,7 +6,10 @@
  * undo. The few actions Excel cannot undo say so in their description.
  */
 import { parseA1 } from "./agent.js";
-import { inspectFormulas } from "./formulaInspector.js";
+import { combineCells } from "./combineSheets.js";
+import { financialCells } from "./financialBuilders.js";
+import { whatIfRuns, whatIfTable } from "./whatIf.js";
+import { auditWorkbook, inspectFormulas } from "./formulaInspector.js";
 
 export type JournalEntry =
   | { type: "backup"; sheetId: string; backupId: string }
@@ -108,6 +111,29 @@ export async function runExcelAction(
     sheet.load("id");
     await context.sync();
     return String(sheet.id);
+  };
+  /** Writes a cell plan from args.cell (backup first unless this apply made the sheet). */
+  const writeCellPlan = async (
+    cells: { row: number; column: number; value: string | number }[],
+  ) => {
+    if (!ours) await run.backup(sheetName!);
+    const anchor = parseA1(args.cell);
+    const written = cells.map((cell) => {
+      const range = sheet.getCell(
+        anchor.row - 1 + cell.row,
+        anchor.column + cell.column,
+      );
+      range.formulas = [[cell.value]];
+      return range;
+    });
+    await context.sync();
+    // Read back: a blocked spill or a formula error is reported, not hidden.
+    for (const range of written) range.load(["values", "address"]);
+    await context.sync();
+    const problems = written
+      .filter((range) => /^#/.test(String(range.values[0][0])))
+      .map((range) => `${range.address} shows ${range.values[0][0]}`);
+    return { cells: cells.length, problems };
   };
 
   switch (tool) {
@@ -1363,6 +1389,98 @@ export async function runExcelAction(
       return { changed };
     }
 
+    case "combine_tables": {
+      const headers = async (sheetName: string, address: string) => {
+        const row = run.sheet(sheetName).getRange(address).getRow(0);
+        row.load("values");
+        await context.sync();
+        return (row.values[0] as unknown[]).map((value) => String(value));
+      };
+      const cells = combineCells({
+        mode: args.mode,
+        left: {
+          sheet: args.left_sheet,
+          address: args.left_address,
+          headers: await headers(args.left_sheet, args.left_address),
+        },
+        right: {
+          sheet: args.right_sheet,
+          address: args.right_address,
+          headers: await headers(args.right_sheet, args.right_address),
+        },
+        key: args.key,
+        rightKey: args.right_key,
+        columns: args.columns,
+        amount: args.amount,
+        rightAmount: args.right_amount,
+      });
+      return writeCellPlan(
+        cells.map((cell) => ({ ...cell, value: cell.formula })),
+      );
+    }
+
+    case "financial_model":
+      return writeCellPlan(financialCells(args));
+
+    case "what_if": {
+      const model = run.sheet(args.model_sheet);
+      const runs = whatIfRuns(args);
+      const inputCells = [...new Set(runs.flatMap((set) => Object.keys(set)))];
+      const inputs = inputCells.map((cell) => model.getRange(cell));
+      const outputs = (args.outputs as string[]).map((cell) =>
+        model.getRange(cell),
+      );
+      for (const range of inputs) range.load("formulas");
+      for (const range of outputs) range.load("formulas");
+      await context.sync();
+      const missing = outputs.findIndex(
+        (range) => !String(range.formulas[0][0]).startsWith("="),
+      );
+      if (missing >= 0)
+        throw new Error(`${args.outputs[missing]} holds no formula`);
+      // The label of each output: the text in the cell to its left, else its address.
+      const labels = await Promise.all(
+        (args.outputs as string[]).map(async (cell) => {
+          const { column, row } = parseA1(cell);
+          if (column === 0) return cell;
+          const left = model.getCell(row - 1, column - 1);
+          left.load("values");
+          await context.sync();
+          const text = String(left.values[0][0] ?? "").trim();
+          return text && Number.isNaN(Number(text)) ? text : cell;
+        }),
+      );
+      const original = inputs.map((range) => range.formulas);
+      const results: (number | string)[][] = [];
+      try {
+        for (const set of runs) {
+          for (const [cell, value] of Object.entries(set))
+            model.getRange(cell).values = [[value]];
+          for (const range of outputs) range.load("values");
+          await context.sync();
+          results.push(outputs.map((range) => range.values[0][0]));
+        }
+      } finally {
+        // The model's inputs always go back, whatever happened.
+        inputs.forEach((range, i) => (range.formulas = original[i]));
+        await context.sync();
+      }
+      const table = whatIfTable(args, results, labels);
+      return writeCellPlan(
+        table.flatMap((cells, row) =>
+          cells.map((value, column) => ({
+            row,
+            column,
+            // Names and labels are text, never formulas: "=x" or "-10% price" stay as typed.
+            value:
+              typeof value === "string" && /^[=+\-@]/.test(value)
+                ? `'${value}`
+                : value,
+          })),
+        ),
+      );
+    }
+
     case "goal_seek": {
       const changing = sheet.getRange(args.changing_cell);
       const result = sheet.getRange(args.formula_cell);
@@ -2020,6 +2138,41 @@ export async function readDetails(
             inconsistent: item.inconsistentFormula || undefined,
           })),
       };
+    }
+    case "formula_audit": {
+      // Every visible sheet, up to 20 sheets of at most 20,000 used cells each.
+      sheets.load("items/name,items/visibility");
+      await context.sync();
+      const visible = sheets.items.filter(
+        (item: any) => item.visibility === "Visible",
+      );
+      const skipped: string[] = visible
+        .slice(20)
+        .map((item: any) => `${item.name} (over the 20-sheet limit)`);
+      const reports = [];
+      for (const item of visible.slice(0, 20)) {
+        const used = item.getUsedRangeOrNullObject(true);
+        used.load(["isNullObject", "address", "cellCount"]);
+        await context.sync();
+        if (used.isNullObject) continue;
+        if (Number(used.cellCount) > 20_000) {
+          skipped.push(
+            `${item.name} (${Number(used.cellCount).toLocaleString("en-US")} cells; use formula_check with an address)`,
+          );
+          continue;
+        }
+        used.load(["formulas", "values"]);
+        await context.sync();
+        reports.push(
+          inspectFormulas({
+            worksheetName: String(item.name),
+            address: strip(used.address)!,
+            formulas: used.formulas,
+            values: used.values,
+          }),
+        );
+      }
+      return auditWorkbook(reports, skipped);
     }
     case "merged": {
       const range = address

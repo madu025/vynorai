@@ -159,11 +159,99 @@ const EXACT: Record<string, string> = {
   statistics: "සංඛ්‍යාලේඛන",
   view: "පෙරහන් කළ දසුන",
   "lookup-columns": "Lookup columns",
+  "Create a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
+  "Make a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
+  "Nothing was sent to AI.": "AI වෙත කිසිවක් යවා නැත.",
+  "Writing the message...": "පණිවිඩය ලියමින්...",
+  "The message was written by AI. Read and edit it before you send the report.":
+    "පණිවිඩය AI විසින් ලියන ලදී. වාර්තාව යැවීමට පෙර එය කියවා සංස්කරණය කරන්න.",
+  "Enter a recipient and subject first.":
+    "මුලින්ම ලබන්නා සහ විෂය ඇතුළත් කරන්න.",
+  "Preparing the approved report variants...":
+    "අනුමත වාර්තා අනුවාද සූදානම් කරමින්...",
+  "Microsoft did not give this add-in permission to send mail (your organization's administrator may need to approve it). Nothing was sent. Use the link below to open the report as a draft in Outlook on the web.":
+    "ඊමේල් යැවීමට Microsoft මෙම add-in එකට අවසර දුන්නේ නැත (ඔබේ සංවිධානයේ පරිපාලකයා අනුමත කළ යුතු විය හැක). කිසිවක් යවා නැත. වාර්තාව Outlook web හි කෙටුම්පතක් ලෙස විවෘත කිරීමට පහත සබැඳිය භාවිතා කරන්න.",
+  "Code is ready to copy. Nothing was run or changed.":
+    "කේතය පිටපත් කිරීමට සූදානම්. කිසිවක් ධාවනය කර හෝ වෙනස් කර නැත.",
+  "Nothing was changed.": "කිසිවක් වෙනස් කර නැත.",
+  "Code copied.": "කේතය පිටපත් කරන ලදී.",
+  "Select the code and copy it with Ctrl+C.":
+    "කේතය තෝරා Ctrl+C මගින් පිටපත් කරන්න.",
+  "Asking the AI to read your request (only column names and types are sent)...":
+    "ඔබේ ඉල්ලීම කියවන ලෙස AI ගෙන් ඉල්ලමින් (යවන්නේ තීරු නම් සහ වර්ග පමණි)...",
+  "Planning the steps...": "පියවර සැලසුම් කරමින්...",
+  "The AI understood your request. Preparing the preview; nothing changes until you confirm.":
+    "AI ඔබේ ඉල්ලීම තේරුම් ගත්තා. පෙරදසුන සූදානම් කරමින්; ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
+  "Preview adjusted. Rechecking the plan...":
+    "පෙරදසුන සකස් කළා. සැලසුම නැවත පරීක්ෂා කරමින්...",
+  "No older VynorAI result sheets found.":
+    "පැරණි VynorAI ප්‍රතිඵල පත්‍රිකා හමු නොවීය.",
+  "There are no older VynorAI result sheets.":
+    "පැරණි VynorAI ප්‍රතිඵල පත්‍රිකා නැත.",
+  "Enter the request again before refreshing this result.":
+    "මෙම ප්‍රතිඵලය නැවුම් කිරීමට පෙර ඉල්ලීම නැවත ඇතුළත් කරන්න.",
+  "Refreshing the preview. Nothing changes until you confirm.":
+    "පෙරදසුන නැවුම් කරමින්. ඔබ තහවුරු කරන තුරු කිසිවක් වෙනස් නොවේ.",
+  "Planning the next step...": "ඊළඟ පියවර සැලසුම් කරමින්...",
+  "Running the selected tool...": "තෝරාගත් මෙවලම ධාවනය කරමින්...",
+  "Checking the tool result...": "මෙවලමේ ප්‍රතිඵලය පරීක්ෂා කරමින්...",
+  "A planner agent is splitting the request into steps...":
+    "සැලසුම්කරු agent ඉල්ලීම පියවර වලට බෙදමින්...",
+  "Correcting the plan after the review...":
+    "සමාලෝචනයෙන් පසු සැලසුම නිවැරදි කරමින්...",
+  "Stopped. Nothing was changed.": "නවත්වන ලදී. කිසිවක් වෙනස් කර නැත.",
+  "The agent could not finish. Nothing was changed.":
+    "Agent එකට අවසන් කළ නොහැකි විය. කිසිවක් වෙනස් කර නැත.",
+  "Describe what you want first.": "මුලින්ම ඔබට අවශ්‍ය දේ විස්තර කරන්න.",
+  "Sign in first.": "මුලින්ම පිවිසෙන්න.",
+  "The agent is working. Nothing changes until you approve.":
+    "Agent වැඩ කරමින්. ඔබ අනුමත කරන තුරු කිසිවක් වෙනස් නොවේ.",
+  "Discarded. Nothing was changed.": "ඉවත දමන ලදී. කිසිවක් වෙනස් කර නැත.",
+  "Applying the approved changes...": "අනුමත වෙනස්කම් යොදමින්...",
+  "Applying failed. See Diagnostics.":
+    "යෙදීම අසාර්ථක විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
+  "Verifying the applied result...": "යෙදූ ප්‍රතිඵලය තහවුරු කරමින්...",
+  "Undoing the agent's changes...": "Agent ගේ වෙනස්කම් ආපසු හරවමින්...",
+  "Undone. The workbook is back as it was.":
+    "ආපසු හැරවිණි. වැඩපොත කලින් පරිදිම ය.",
+  "Undo did not finish. See Diagnostics.":
+    "ආපසු හැරවීම අවසන් නොවීය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
+  "Forgot the saved choices for this workbook.":
+    "මෙම වැඩපොතේ සුරකින ලද තේරීම් අමතක කරන ලදී.",
+  "Copied. Paste it into WhatsApp; nothing was sent.":
+    "පිටපත් කළා. WhatsApp වෙත paste කරන්න; කිසිවක් යවා නැත.",
+  "The summary could not be made. See Diagnostics.":
+    "සාරාංශය සෑදිය නොහැකි විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
+  "Refreshing the preview for the current selection...":
+    "වත්මන් තේරීම සඳහා පෙරදසුන යළි සාදමින්...",
+  "A reviewer agent is checking ranges, formulas and totals...":
+    "සමාලෝචන agent එකක් පරාස, සූත්‍ර සහ එකතු පරීක්ෂා කරමින්...",
+  "A reviewer agent is checking that every part is covered and nothing is overwritten...":
+    "සමාලෝචන agent එකක් සෑම කොටසක්ම ආවරණය වී ඇති බවත් කිසිවක් උඩින් ලියා නැති බවත් පරීක්ෂා කරමින්...",
 };
 
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [
+    /^Removed (\d+) (?:older )?(?:VynorAI )?(?:result )?sheet\(s\)\.$/,
+    (n) => `පත්‍රිකා ${n}ක් ඉවත් කරන ලදී.`,
+  ],
+  [
+    /^Removed (\d+) sheet\(s\), (\d+) named range\(s\), and converted (\d+) table\(s\) back to a range\.$/,
+    (s, n, t) =>
+      `පත්‍රිකා ${s}ක්, නම් කළ පරාස ${n}ක් ඉවත් කර, වගු ${t}ක් නැවත සාමාන්‍ය පරාසයක් බවට හරවන ලදී.`,
+  ],
+  [
+    /^The message could not be written \((.*)\)\. Write it yourself or try again\.$/,
+    (why) =>
+      `පණිවිඩය ලිවිය නොහැකි විය (${why}). ඔබම ලියන්න, නැතහොත් නැවත උත්සාහ කරන්න.`,
+  ],
+  [
+    /^Added the "(.+)" sheet \((\d+) fixed-date holidays\)\. Add Poya days from the gazette; delete the sheet to undo\.$/,
+    (name, n) =>
+      `"${name}" පත්‍රිකාව එක් කරන ලදී (ස්ථාවර දිනයන් ඇති නිවාඩු ${n}ක්). පොහොය දින ගැසට් පත්‍රයෙන් එක් කරන්න; ආපසු හැරවීමට පත්‍රිකාව මකන්න.`,
+  ],
   [
     /^(\d+) formula cell\(s\), (\d+) error cell\(s\), (\d+) possible direct circular reference\(s\), (\d+) inconsistent formula\(s\), (\d+) hard-coded numeric cell\(s\)\.$/,
     (formulas, errors, circular, inconsistent, hardCoded) =>

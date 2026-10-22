@@ -1,14 +1,21 @@
 import {
   PersonalMask,
+  answerSources,
   appliedReport,
   describeChange,
   runAgent,
+  type AgentHost,
   type AgentMessage,
+  type AnswerSource,
   type AgentPhase,
   type AgentRun,
 } from "./agent.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
 import { describeReview, runTeam } from "./agentReview.js";
+import { retryTransient } from "./retryTransient.js";
+import { scrollToLatestMessage } from "./chatScroll.js";
+import { previewCells, previewTarget } from "./changePreview.js";
+import { describeSelection } from "./selectionChip.js";
 import {
   applyAgentChanges,
   createOfficeAgentHost,
@@ -59,7 +66,34 @@ import {
   looksLikeQuestion,
 } from "./intent.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
-import { weakReading } from "./readerConfidence.js";
+import { chooseInstructionRoute } from "./taskpaneRouting.js";
+import { createPreviewController } from "./taskpanePreviewControl.js";
+import {
+  renderChatListView,
+  renderConversationHistoryView,
+} from "./taskpaneChatView.js";
+import {
+  agentToolLabel as agentToolLabelView,
+  setAgentStageView,
+  showAgentPlanView,
+  showAgentSourcesView,
+  relationshipEvidence,
+  resetAgentRolesView,
+  setAgentRoleView,
+  showWorkbookMapView,
+  type AgentStage,
+} from "./taskpaneAgentView.js";
+import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
+import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
+import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
+import {
+  aiFirstOn,
+  memoryKey,
+  readMemory,
+  recallSteps,
+  rememberSteps,
+  setAiFirst,
+} from "./taskpaneAiMode.js";
 import { describeUnknownColumns, findUnknownColumns } from "./unknownColumn.js";
 import { cleanFirstInstruction, describeNearDuplicates } from "./valueCheck.js";
 import { describeIntegrityIssues } from "./integrity.js";
@@ -90,7 +124,6 @@ import {
   activeMessages,
   deleteChat,
   emptyChatStore,
-  historyList,
   openChat,
   parseChatStore,
   saveActiveChat,
@@ -190,6 +223,14 @@ import {
 } from "./privacyReceipt.js";
 import { currencyGuessFor } from "./businessContext.js";
 import { whatsappSummary } from "./whatsappSummary.js";
+import {
+  chooseSmartPath,
+  selectionBadges,
+  suggestionsForSelection,
+  type SmartMode,
+  type WorkspaceSchema,
+  type WorkspaceSelection,
+} from "./smartWorkspace.js";
 
 declare global {
   interface Window {
@@ -201,11 +242,37 @@ declare global {
 const config = window.__VYNORAI_M365_CONFIG__;
 const status = document.querySelector<HTMLElement>("#status-text");
 const statusContainer = document.querySelector<HTMLElement>("#status");
+const skipLink = document.querySelector<HTMLAnchorElement>(".skip-link");
+let keyboardNavigationPending = false;
+document.addEventListener(
+  "keydown",
+  (event) => {
+    keyboardNavigationPending = event.key === "Tab";
+  },
+  true,
+);
+document.addEventListener(
+  "pointerdown",
+  () => {
+    keyboardNavigationPending = false;
+  },
+  true,
+);
+skipLink?.addEventListener("focus", () => {
+  const keyboardFocus = keyboardNavigationPending;
+  keyboardNavigationPending = false;
+  skipLink.dataset.keyboardFocus = keyboardFocus ? "true" : "false";
+});
+skipLink?.addEventListener("blur", () => {
+  delete skipLink.dataset.keyboardFocus;
+});
 const preview = document.querySelector<HTMLElement>("#preview");
 const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
+const smartRun = document.querySelector<HTMLButtonElement>("#smart-run");
+const runMode = document.querySelector<HTMLSelectElement>("#run-mode");
 const dupFix = document.querySelector<HTMLElement>("#dup-fix");
 const dupFixButton = document.querySelector<HTMLButtonElement>("#dup-fix-btn");
 let cleanFirstRequest = "";
@@ -222,6 +289,19 @@ const consentCheck =
 const consentSend = document.querySelector<HTMLButtonElement>("#ai-send");
 const consentCancel = document.querySelector<HTMLButtonElement>("#ai-cancel");
 const analysisOutput = document.querySelector<HTMLElement>("#ai-result");
+const workspaceNavigation = createWorkspaceNavigation(document, (view) => {
+  setStatus(
+    view === "share"
+      ? "Create and verify a report before sharing it."
+      : "Create a preview or report first.",
+  );
+});
+function clearAnalysisOutput() {
+  if (!analysisOutput) return;
+  analysisOutput.textContent = "";
+  analysisOutput.dataset.workspacePanel = "work";
+  workspaceNavigation.refresh();
+}
 const apply = document.querySelector<HTMLButtonElement>("#apply");
 const emailCard = document.querySelector<HTMLElement>("#email-card");
 const emailTo = document.querySelector<HTMLInputElement>("#email-to");
@@ -248,6 +328,14 @@ const emailSend = document.querySelector<HTMLButtonElement>("#email-send");
 const emailAiWrite =
   document.querySelector<HTMLButtonElement>("#email-ai-write");
 const emailNote = document.querySelector<HTMLElement>("#email-note");
+const emailDeliveryStatus = document.querySelector<HTMLElement>(
+  "#email-delivery-status",
+);
+const emailReportName =
+  document.querySelector<HTMLElement>("#email-report-name");
+const emailAttachmentSize = document.querySelector<HTMLElement>(
+  "#email-attachment-size",
+);
 const selfTest = document.querySelector<HTMLButtonElement>("#self-test");
 const copyDiagnostics =
   document.querySelector<HTMLButtonElement>("#copy-diagnostics");
@@ -259,8 +347,6 @@ const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
 let capabilities: M365Capabilities | undefined;
 let currentPlan: any;
-let previewGeneration = 0;
-let previewAbortController: AbortController | undefined;
 let cachedHeaderLayout:
   | {
       key: string;
@@ -272,6 +358,8 @@ let lastRange: { headers: string[]; rows: unknown[][] } | undefined;
 let lastRevealSheet = "";
 let currentSourceSheet = "";
 let currentRangeAddress = "";
+let latestSelectionAddress = "";
+let previewSelectionAddress = "";
 let lastDoneSentence = "";
 let previewSpecs: ExcelColumnSpecs | undefined;
 let followUpAggregate = false;
@@ -286,6 +374,9 @@ let previewReadyAt = 0;
 let lastSample: { totalRows: number; sampledRows: number } | undefined;
 let applyStartedAt = 0;
 let pendingSpecs: ExcelColumnSpecs | undefined;
+let refreshPreviewSummary: (() => void) | undefined;
+let confirmedPreviewText = "";
+let confirmedPreviewSpecs: ExcelColumnSpecs | undefined;
 let excludedKinds = new Set<string>();
 let lastCreated:
   | { planId: string; sheets: string[]; tables: string[]; names: string[] }
@@ -300,6 +391,7 @@ let language: Language = loadLanguage();
  */
 let requestLanguage: Language | undefined;
 const textLanguage = (): Language => requestLanguage ?? language;
+let officePlatformLabel = "Excel";
 let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
@@ -323,18 +415,11 @@ const newChatId = () =>
     globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now()}-${Math.random()}`
   ).slice(0, 36);
 
-function setPreviewCancelVisible(visible: boolean) {
+const previewController = createPreviewController((visible) => {
   if (!cancelPreviewButton) return;
   cancelPreviewButton.hidden = !visible;
   cancelPreviewButton.disabled = !visible;
-}
-
-function cancelPreview() {
-  previewGeneration += 1;
-  previewAbortController?.abort();
-  previewAbortController = undefined;
-  setPreviewCancelVisible(false);
-}
+});
 
 function getCachedHeaderLayout(
   input: Parameters<typeof getExcelHeaderLayout>[0],
@@ -482,39 +567,30 @@ function persistConversation() {
   renderChatList();
 }
 
-/** The chat picker: a new chat, then the saved chats, newest first. */
+/** The chat picker holds prior conversations; starting a fresh chat has its own visible button. */
 function renderChatList() {
-  const select = document.querySelector<HTMLSelectElement>(
-    "#chat-history-select",
-  );
-  const remove = document.querySelector<HTMLButtonElement>("#delete-chat");
-  if (!select) return;
-  const saved = historyList(chatStore);
-  select.replaceChildren();
-  const fresh = document.createElement("option");
-  fresh.value = "";
-  fresh.textContent = translate(language, "new_chat_option", "New chat");
-  select.appendChild(fresh);
-  for (const entry of saved) {
-    const option = document.createElement("option");
-    option.value = entry.id;
-    option.textContent = `${entry.title || "…"} · ${new Date(entry.updatedAt).toLocaleDateString()}`;
-    select.appendChild(option);
-  }
-  select.value = saved.some((entry) => entry.id === chatStore.activeId)
-    ? chatStore.activeId
-    : "";
-  select.hidden = saved.length === 0;
-  if (remove)
-    remove.hidden = !saved.some((entry) => entry.id === chatStore.activeId);
+  renderChatListView({
+    document,
+    language,
+    store: chatStore,
+    messages: conversationMessages,
+    instruction,
+    contextSuggestionsVisible: Boolean(
+      contextSuggestions && !contextSuggestions.hidden,
+    ),
+    contextSuggestionCount: contextSuggestionList?.children.length ?? 0,
+    setStatus,
+  });
 }
 
 /** A different chat starts clean: no preview, no follow-up memory from the one before. */
 function resetWorkingState() {
-  cancelPreview();
+  previewController.cancel();
   currentPlan = undefined;
   previewFingerprint = "";
   previewSpecs = undefined;
+  confirmedPreviewText = "";
+  confirmedPreviewSpecs = undefined;
   lastAppliedSpecs = undefined;
   followUpAggregate = false;
   lastConversationRequest = "";
@@ -533,54 +609,22 @@ function showChat(messages: ConversationMessage[]) {
   resetWorkingState();
   renderConversationHistory();
   renderChatList();
-  window.requestAnimationFrame(() => window.scrollTo?.({ top: 0 }));
+  window.requestAnimationFrame(() => scrollToLatestMessage(document, window));
 }
 
 function renderConversationHistory() {
-  const history = document.querySelector<HTMLElement>("#conversation-history");
-  if (!history) return;
-  history.replaceChildren();
-  conversationMessages.forEach((message, index) => {
-    const item = document.createElement("article");
-    item.className = `message ${message.kind}`;
-    const label = document.createElement("span");
-    label.className = "message-label";
-    label.textContent =
-      message.kind === "user"
-        ? translate(language, "conversation_you", "You")
-        : message.kind === "error"
-          ? translate(language, "conversation_attention", "Needs attention")
-          : "VynorAI";
-    const body = document.createElement("span");
-    body.textContent = localizeMessage(textLanguage(), message.text);
-    item.append(label, body);
-    if (message.kind === "user" && index === conversationMessages.length - 1) {
-      const tools = document.createElement("div");
-      tools.className = "message-tools";
-      const edit = document.createElement("button");
-      edit.type = "button";
-      edit.className = "edit-request";
-      edit.textContent = translate(language, "edit_request", "Edit request");
-      edit.setAttribute(
-        "aria-label",
-        translate(language, "edit_request", "Edit request"),
-      );
-      edit.addEventListener("click", () => {
-        if (!instruction) return;
-        instruction.value = message.text;
-        instruction.focus();
-        instruction.setSelectionRange(
-          instruction.value.length,
-          instruction.value.length,
-        );
-        setStatus(
-          translate(language, "edit_ready", "Ready to edit your last request."),
-        );
-      });
-      tools.append(edit);
-      item.append(tools);
-    }
-    history.appendChild(item);
+  renderConversationHistoryView({
+    document,
+    language,
+    textLanguage: textLanguage(),
+    store: chatStore,
+    messages: conversationMessages,
+    instruction,
+    contextSuggestionsVisible: Boolean(
+      contextSuggestions && !contextSuggestions.hidden,
+    ),
+    contextSuggestionCount: contextSuggestionList?.children.length ?? 0,
+    setStatus,
   });
 }
 
@@ -609,6 +653,9 @@ function restoreConversationHistory() {
       }));
       renderConversationHistory();
       renderChatList();
+      window.requestAnimationFrame(() =>
+        scrollToLatestMessage(document, window),
+      );
       return;
     } catch {
       // fall back to nothing: a damaged history must never affect the add-in
@@ -679,6 +726,7 @@ function signInDialogMessage(code: unknown): string {
 }
 
 let lastStatus = "";
+const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
 function setStatus(message: string) {
   lastStatus = message;
   if (status) status.textContent = localizeMessage(textLanguage(), message);
@@ -700,6 +748,13 @@ function setStatus(message: string) {
   if (statusContainer) {
     statusContainer.dataset.tone = tone;
     statusContainer.setAttribute("aria-busy", String(tone === "busy"));
+    // The signed-in landing message is not useful once the pane is ready. Keep the
+    // overflow menu reachable, but collapse the status copy so it does not consume
+    // the first-use workspace.
+    statusContainer.dataset.mode =
+      accessToken && message === SIGNED_IN_IDLE_STATUS
+        ? "signed-in-idle"
+        : "message";
   }
 }
 
@@ -707,6 +762,7 @@ function setStatus(message: string) {
 function renderConversation(
   kind: "user" | "assistant" | "error",
   text: string,
+  follow = true,
 ) {
   if (!text) return;
   conversationMessages.push({
@@ -716,12 +772,14 @@ function renderConversation(
   conversationMessages = conversationMessages.slice(-MAX_CONVERSATION_MESSAGES);
   renderConversationHistory();
   persistConversation();
-  // Keep the newest message in view above the composer, like a chat.
-  window.requestAnimationFrame(() => {
-    document
-      .querySelector<HTMLElement>("#conversation-history")
-      ?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
-  });
+  // Normal chat follows the newest reply. Agent work keeps its dedicated progress card in view
+  // so contextual suggestions are never left half-clipped above the conversation.
+  if (follow)
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>("#conversation-history")
+        ?.lastElementChild?.scrollIntoView?.({ block: "nearest" });
+    });
 }
 function officeRuntime(): any {
   return (globalThis as any).Excel;
@@ -771,33 +829,51 @@ function hasWorkbookReportForEmail(): boolean {
 }
 
 function updateEmailUi(signedIn = Boolean(accessToken)) {
-  const configured = Boolean(config?.graphScopes?.length);
-  const available = signedIn && hasWorkbookReportForEmail();
-  if (emailCard) emailCard.hidden = !available;
-  if (emailNote && available) {
-    emailNote.textContent = configured
-      ? "Choose XLSX, PDF, CSV, summary or automatic fallback. Charts and bounded report details stay local until you approve Send."
-      : "Email is not configured for this deployment. An administrator must add the Microsoft Graph Mail.Send delegated permission to runtime-config.js.";
-  }
-  if (emailSend) {
-    emailSend.disabled =
-      !available ||
-      !configured ||
-      emailSending ||
-      !emailTo?.value.trim() ||
-      !emailSubject?.value.trim();
-  }
+  updateShareView(
+    {
+      card: emailCard,
+      note: emailNote,
+      to: emailTo,
+      subject: emailSubject,
+      body: emailBody,
+      send: emailSend,
+    },
+    {
+      signedIn,
+      hasReport: hasWorkbookReportForEmail(),
+      configured: Boolean(config?.graphScopes?.length),
+      sending: emailSending,
+    },
+  );
 }
 
-function prepareEmailComposer(recipient = "") {
-  if (emailTo && recipient && !emailTo.value) emailTo.value = recipient;
-  if (emailSubject && !emailSubject.value)
-    emailSubject.value = `VynorAI Excel report - ${lastRevealSheet || currentSourceSheet || "Workbook"}`;
-  if (emailBody && !emailBody.value)
-    emailBody.value = "Please find the approved VynorAI Excel report attached.";
+function prepareEmailComposer(recipient = "", openShare = true) {
+  if (emailDeliveryStatus) {
+    emailDeliveryStatus.className = "delivery-status";
+    emailDeliveryStatus.textContent = "Not sent yet · approval required";
+  }
+  if (emailReportName)
+    emailReportName.textContent =
+      lastRevealSheet || currentSourceSheet || "Workbook report";
+  if (emailAttachmentSize)
+    emailAttachmentSize.textContent = "Size calculated after approval";
   updateEmailUi();
-  emailCard?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  emailTo?.focus();
+  workspaceNavigation.refresh();
+  if (openShare) workspaceNavigation.activate("share");
+  prepareShareComposer(
+    {
+      card: emailCard,
+      note: emailNote,
+      to: emailTo,
+      subject: emailSubject,
+      body: emailBody,
+      send: emailSend,
+    },
+    {
+      recipient,
+      reportSheet: lastRevealSheet || currentSourceSheet || "Workbook",
+    },
+  );
 }
 
 function createOAuthAttemptStorage() {
@@ -1145,6 +1221,21 @@ emailSend?.addEventListener("click", async () => {
         })),
       }),
     );
+    if (emailReportName) {
+      const names = (prepared.request.attachments ?? []).map(
+        (attachment) => attachment.name,
+      );
+      emailReportName.textContent = names.join(", ") || "Summary in email";
+    }
+    if (emailAttachmentSize) {
+      const bytes = (prepared.request.attachments ?? []).reduce(
+        (total, attachment) => total + attachment.bytes,
+        0,
+      );
+      emailAttachmentSize.textContent = bytes
+        ? `${(bytes / 1024 / 1024).toFixed(2)} MB`
+        : "No attachment";
+    }
     const requiresLargePermission =
       (prepared.request.attachments ?? []).some(
         (attachment) => attachment.bytes >= MAX_DIRECT_ATTACHMENT_BYTES,
@@ -1184,6 +1275,13 @@ emailSend?.addEventListener("click", async () => {
         ? `Outlook draft created for ${to} and verified by Microsoft Graph.`
         : `Report sent to ${to} and verified by Microsoft Graph.`,
     );
+    if (emailDeliveryStatus) {
+      emailDeliveryStatus.className = "delivery-status sent";
+      emailDeliveryStatus.textContent =
+        deliveryMode === "draft"
+          ? "Draft created · verified by Microsoft Graph"
+          : "Sent · verified by Microsoft Graph";
+    }
   } catch (error) {
     log.record("email:send", "fail", emailErrorMessage(error));
     if (isGraphConsentFailure(error)) {
@@ -1192,6 +1290,10 @@ emailSend?.addEventListener("click", async () => {
         "Microsoft did not give this add-in permission to send mail (your organization's administrator may need to approve it). Nothing was sent. Use the link below to open the report as a draft in Outlook on the web.",
       );
     } else setStatus(emailErrorMessage(error));
+    if (emailDeliveryStatus) {
+      emailDeliveryStatus.className = "delivery-status failed";
+      emailDeliveryStatus.textContent = "Not sent · review the error and retry";
+    }
   } finally {
     emailSending = false;
     updateEmailUi();
@@ -1210,6 +1312,9 @@ function updateAuthenticationUi(signedIn: boolean) {
   const agentRun = document.querySelector<HTMLButtonElement>("#agent-run");
   if (agentRun)
     agentRun.disabled = !signedIn || capabilities?.aiAnalysis === false;
+  if (smartRun)
+    smartRun.disabled = !signedIn || capabilities?.excel.canInspect === false;
+  if (runMode) runMode.disabled = !signedIn;
   updateEmailUi(signedIn);
   document.body.dataset.auth = signedIn ? "in" : "out";
 }
@@ -1311,13 +1416,13 @@ function restoreSession(): boolean {
 }
 
 function signOutOfMicrosoft() {
-  cancelPreview();
+  previewController.cancel();
   cachedHeaderLayout = undefined;
   accessToken = "";
   capabilities = undefined;
   currentPlan = undefined;
   previewFingerprint = "";
-  if (analysisOutput) analysisOutput.textContent = "";
+  clearAnalysisOutput();
   if (consentPanel) consentPanel.hidden = true;
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -1576,7 +1681,7 @@ signIn?.addEventListener("click", async () => {
     updateAuthenticationUi(true);
     recordTokenSummary("oauth:token-claims");
     void refreshCapabilities("oauth");
-    setStatus("Signed in. Select data and inspect it.");
+    setStatus(SIGNED_IN_IDLE_STATUS);
   } catch (error) {
     log.record("oauth:sign-in", "fail", describeError(error));
     setStatus((error as Error).message);
@@ -1599,7 +1704,9 @@ function startFreshChat() {
   instruction?.focus();
 }
 
-document.querySelector("#new-chat")?.addEventListener("click", startFreshChat);
+document
+  .querySelectorAll<HTMLButtonElement>(".new-chat-action")
+  .forEach((button) => button.addEventListener("click", startFreshChat));
 document
   .querySelector<HTMLSelectElement>("#chat-history-select")
   ?.addEventListener("change", (event) => {
@@ -1627,19 +1734,21 @@ document.querySelector("#delete-chat")?.addEventListener("click", async () => {
 });
 
 cancelPreviewButton?.addEventListener("click", () => {
-  if (!previewAbortController) return;
-  cancelPreview();
+  if (!previewController.hasActiveRun()) return;
+  previewController.cancel();
   log.record("preview:cancel", "pass", "cancelled by user");
   setStatus("Preview cancelled. Nothing has changed in your workbook.");
   updateAuthenticationUi(Boolean(accessToken));
 });
 
 instruction?.addEventListener("input", () => {
-  cancelPreview();
+  previewController.cancel();
   pendingSpecs = undefined;
   excludedKinds = new Set<string>();
   currentPlan = undefined;
   previewFingerprint = "";
+  confirmedPreviewText = "";
+  confirmedPreviewSpecs = undefined;
   lastConversationRequest = "";
   useBuiltInReader = false;
   if (dupFix) dupFix.hidden = true;
@@ -1657,13 +1766,8 @@ dupFixButton?.addEventListener("click", () => {
 inspect?.addEventListener("click", async () => {
   if (!config || !accessToken)
     return setStatus("Sign in before inspecting Excel data.");
-  cancelPreview();
-  const generation = previewGeneration;
-  const abortController = new AbortController();
-  previewAbortController = abortController;
-  setPreviewCancelVisible(true);
-  const isStale = () =>
-    generation !== previewGeneration || abortController.signal.aborted;
+  const previewRun = previewController.start();
+  const { abortController, isStale } = previewRun;
   const stopIfStale = () => {
     if (!isStale()) return false;
     log.record("preview:stale", "skip", "superseded by a newer instruction");
@@ -1683,14 +1787,19 @@ inspect?.addEventListener("click", async () => {
   }
   // A request for a payroll sheet is a template, not a change to the selected data: it is asked
   // about in the pane and, on a no, read like any other request.
+  // A request the person already said no to is not asked about again (tweaks and Refresh re-run it).
   const typed = instruction?.value || "";
   if (
     !skipAiOnce &&
-    (isPayrollRequest(typed) || isPayrollRequest(instructionText)) &&
-    (await offerPayroll(typed))
+    instructionText !== payrollDeclined &&
+    (isPayrollRequest(typed) || isPayrollRequest(instructionText))
   ) {
-    setPreviewCancelVisible(false);
-    return;
+    if (await offerPayroll(typed)) {
+      previewController.finish(previewRun);
+      return;
+    }
+    payrollDeclined = instructionText;
+    if (stopIfStale()) return;
   }
   // "AI reads every request" (the person's own setting): the AI turns the request into plain steps first.
   // The steps it returns come back through here once, and are read by the built-in reader.
@@ -1703,7 +1812,7 @@ inspect?.addEventListener("click", async () => {
   const stepsFromAi = skipAiOnce;
   skipAiOnce = false;
   if (aiTurn) {
-    setPreviewCancelVisible(false);
+    previewController.finish(previewRun);
     scriptMode = true;
     autoAi = true;
     void startConsent();
@@ -2053,19 +2162,17 @@ inspect?.addEventListener("click", async () => {
     log.record("instruction:actions", "pass", { actions });
     // The built-in reader may have understood only part of the request (it ignores a column the person named,
     // or none of the words match a column): the AI should read it, after the person agrees to send the summary.
-    const weak =
-      !stepsFromAi &&
-      !useBuiltInReader &&
-      !excludedKinds.size &&
-      capabilities?.aiAnalysis !== false
-        ? weakReading(instructionText, layout.headers.map(String), {
-            actions,
-            specs,
-            problems: interpreted.problems,
-          })
-        : undefined;
-    if (weak) {
-      log.record("instruction:weak-reading", "fail", weak);
+    const route = chooseInstructionRoute({
+      instructionText,
+      headers: layout.headers.map(String),
+      reading: { actions, specs, problems: interpreted.problems },
+      stepsFromAi,
+      useBuiltInReader,
+      excludedKinds,
+      aiAnalysisEnabled: capabilities?.aiAnalysis !== false,
+    });
+    if (route.kind === "ai") {
+      log.record("instruction:weak-reading", "fail", route.reason);
       scriptMode = true;
       void startConsent();
       renderConversation(
@@ -2142,17 +2249,17 @@ inspect?.addEventListener("click", async () => {
         : "server and local plans differ; apply is blocked",
     );
     if (!consistent) {
+      restoreConfirmedPreview();
       setStatus(
         "The server preview does not match the selection. See Diagnostics.",
       );
       return;
     }
     currentPlan = plan;
-    if (previewAbortController === abortController) {
-      previewAbortController = undefined;
-      setPreviewCancelVisible(false);
-    }
+    previewController.finish(previewRun);
     previewFingerprint = localPreview.sourceFingerprint;
+    previewSelectionAddress = latestSelectionAddress;
+    show(selectionChangeWarning, false);
     if (preview)
       preview.textContent = JSON.stringify(
         {
@@ -2164,6 +2271,15 @@ inspect?.addEventListener("click", async () => {
         null,
         2,
       );
+    confirmedPreviewText = preview?.textContent ?? "";
+    confirmedPreviewSpecs = previewSpecs
+      ? (JSON.parse(JSON.stringify(previewSpecs)) as ExcelColumnSpecs)
+      : undefined;
+    // Keep the visible preview in sync with the plan before the next paint. The
+    // MutationObserver below remains useful for external preview updates, but it
+    // is asynchronous and could briefly leave a stale Column/Line chart visible
+    // after a tweak has already been accepted by the planner.
+    refreshPreviewSummary?.();
     if (apply) apply.disabled = false;
     renderSteps(wanted, plan.actions);
     if (rollbackButton) rollbackButton.hidden = true;
@@ -2196,17 +2312,12 @@ inspect?.addEventListener("click", async () => {
     // "Review as you go" off: apply straight away, like Copilot's edit mode.
     if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
   } catch (error) {
-    if (previewAbortController === abortController) {
-      previewAbortController = undefined;
-      setPreviewCancelVisible(false);
-    }
+    previewController.finish(previewRun);
     if (isStale()) return;
+    restoreConfirmedPreview();
     handleApiError("inspect", error);
   } finally {
-    if (previewAbortController === abortController) {
-      previewAbortController = undefined;
-      setPreviewCancelVisible(false);
-    }
+    previewController.finish(previewRun);
   }
 });
 
@@ -2362,8 +2473,10 @@ apply?.addEventListener("click", async () => {
     galleryResults = report.results;
     persistResultGallery();
     renderResultGallery();
-    prepareEmailComposer();
+    prepareEmailComposer("", false);
     updateEmailUi();
+    workspaceNavigation.refresh();
+    workspaceNavigation.activate("results");
     if (rollbackButton)
       rollbackButton.hidden =
         lastCreated.sheets.length + lastCreated.tables.length === 0;
@@ -2626,9 +2739,7 @@ function renderInsights(result: LocalInsights) {
 
 /** The fixed starter chips are only a fallback; real suggestions come from the data and the request. */
 function hideGenericPills() {
-  const generic = document.querySelector<HTMLElement>(
-    ".pills[aria-label='Suggestions']",
-  );
+  const generic = document.querySelector<HTMLElement>("#starter-suggestions");
   if (generic) generic.hidden = true;
 }
 
@@ -2683,7 +2794,7 @@ function useRecommendation(
 
 /** A chip is only useful if the person sees what happened: bring the request into view and preview it. */
 function showInstructionAndPreview() {
-  instruction?.scrollIntoView({ block: "center", behavior: "smooth" });
+  // The request box sits below the scrolling chat and is always in view: nothing to scroll.
   window.setTimeout(() => inspect?.click(), 50);
 }
 
@@ -2701,7 +2812,9 @@ function resetAnalysisConsent() {
 function renderAnalysis(result: AnalysisResult) {
   if (!analysisOutput) return;
   const output = analysisOutput;
+  output.dataset.workspacePanel = "results";
   output.textContent = "";
+  output.classList.add("analysis-card");
   const add = (tag: string, text: string, parent: HTMLElement = output) => {
     const element = document.createElement(tag);
     element.textContent = text; // model text is data, never markup
@@ -2709,29 +2822,50 @@ function renderAnalysis(result: AnalysisResult) {
     return element;
   };
   const percent = (value: number) => `${Math.round(value * 100)}%`;
-  add("p", result.summary);
+  add("h3", localizeMessage(language, "Analysis"));
+  add("p", result.summary).className = "analysis-summary";
   if (result.columns.length) {
-    add("h3", localizeMessage(language, "Columns"));
+    const section = document.createElement("section");
+    section.className = "analysis-section";
+    output.appendChild(section);
+    add("h3", localizeMessage(language, "Columns"), section);
     for (const column of result.columns)
       add(
         "p",
         `${column.name}: ${column.inferredType}, ${column.role} (${percent(column.confidence)}) - ${column.reason}`,
+        section,
       );
   }
   if (result.dataQuality.length) {
-    add("h3", localizeMessage(language, "Data quality"));
+    const section = document.createElement("section");
+    section.className = "analysis-section";
+    output.appendChild(section);
+    add("h3", localizeMessage(language, "Data quality"), section);
     for (const issue of result.dataQuality)
       add(
         "p",
         `[${issue.severity}] ${issue.message} (${percent(issue.confidence)})`,
+        section,
       );
   }
-  add("h3", localizeMessage(language, "Recommendations"));
+  const recommendationSection = document.createElement("section");
+  recommendationSection.className = "analysis-section";
+  output.appendChild(recommendationSection);
+  add(
+    "h3",
+    localizeMessage(language, "Recommendations"),
+    recommendationSection,
+  );
   if (!result.recommendations.length)
-    add("p", localizeMessage(language, "No safe recommendation was found."));
+    add(
+      "p",
+      localizeMessage(language, "No safe recommendation was found."),
+      recommendationSection,
+    );
   for (const recommendation of result.recommendations) {
     const item = document.createElement("div");
-    output.appendChild(item);
+    item.className = "analysis-recommendation";
+    recommendationSection.appendChild(item);
     add(
       "p",
       `${recommendation.title} - ${recommendation.kind}${recommendation.chartType ? ` (${recommendation.chartType})` : ""}, ${percent(recommendation.confidence)} - ${recommendation.reason}`,
@@ -2757,6 +2891,8 @@ function renderAnalysis(result: AnalysisResult) {
     );
     item.appendChild(use);
   }
+  workspaceNavigation.refresh();
+  workspaceNavigation.activate("results");
 }
 
 let scriptMode = false;
@@ -2764,66 +2900,12 @@ let scriptMode = false;
 let autoAi = false;
 /** The steps the AI returned run through the reader once without asking the AI again. */
 let skipAiOnce = false;
-const AI_FIRST_KEY = "vynorai.m365.aiReadsEveryRequest";
-
-function aiFirstOn(): boolean {
-  try {
-    return localStorage.getItem(AI_FIRST_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function setAiFirst(on: boolean) {
-  try {
-    if (on) localStorage.setItem(AI_FIRST_KEY, "1");
-    else localStorage.removeItem(AI_FIRST_KEY);
-  } catch {
-    // Without storage the setting simply stays off.
-  }
-}
 
 /**
  * What the AI understood is remembered on this device (request text + column names -> the plain steps),
  * so the same request next time needs no AI call. Only sentences are stored, never cell values.
  */
-const MEMORY_KEY = "vynorai.m365.interpretMemory";
-const MEMORY_LIMIT = 50;
 let pendingMemoryKey = "";
-type Memory = Record<string, { steps: string[]; at: number }>;
-
-function memoryKey(text: string, names: string[]): string {
-  return `${text.toLowerCase().replace(/\s+/g, " ").trim()}|${names.join("\u0001")}`;
-}
-
-function readMemory(): Memory {
-  try {
-    return JSON.parse(localStorage.getItem(MEMORY_KEY) || "{}") as Memory;
-  } catch {
-    return {};
-  }
-}
-
-function rememberSteps(key: string, steps: string[]) {
-  if (!key) return;
-  try {
-    const memory = readMemory();
-    memory[key] = { steps, at: Date.now() };
-    const kept = Object.entries(memory)
-      .sort((a, b) => b[1].at - a[1].at)
-      .slice(0, MEMORY_LIMIT);
-    localStorage.setItem(MEMORY_KEY, JSON.stringify(Object.fromEntries(kept)));
-  } catch {
-    // Private window or blocked storage: the AI is simply asked again next time.
-  }
-}
-
-function recallSteps(key: string): string[] | undefined {
-  const found = readMemory()[key];
-  return Array.isArray(found?.steps) && found.steps.length
-    ? found.steps.filter((step) => typeof step === "string")
-    : undefined;
-}
 
 /** Steps from the AI planner: plain sentences only; running them goes through the normal preview and approval. */
 function renderScript(result: {
@@ -2832,22 +2914,36 @@ function renderScript(result: {
 }) {
   if (!analysisOutput) return;
   const output = analysisOutput;
+  output.dataset.workspacePanel = "work";
   output.textContent = "";
-  const add = (tag: string, text: string, parent: HTMLElement = output) => {
-    const element = document.createElement(tag);
-    element.textContent = text;
-    parent.appendChild(element);
-    return element;
-  };
-  add("h3", result.title);
-  result.steps.forEach((step, index) =>
-    add("p", `${index + 1}. ${step.instruction} - ${step.reason}`),
-  );
+  output.classList.add("analysis-card");
+  const title = document.createElement("h3");
+  title.textContent = result.title;
+  const list = document.createElement("ol");
+  list.className = "analysis-step-list";
+  result.steps.forEach((step, index) => {
+    const item = document.createElement("li");
+    item.className = "analysis-step";
+    const number = document.createElement("span");
+    number.className = "analysis-step-number";
+    number.textContent = String(index + 1);
+    const body = document.createElement("div");
+    const instructionText = document.createElement("strong");
+    instructionText.textContent = step.instruction;
+    const reason = document.createElement("span");
+    reason.textContent = step.reason;
+    body.append(instructionText, reason);
+    item.append(number, body);
+    list.appendChild(item);
+  });
+  output.append(title, list);
   const use = document.createElement("button");
   use.type = "button";
   use.textContent = localizeMessage(language, "Use these steps");
   use.addEventListener("click", () => useSteps(result));
   output.appendChild(use);
+  workspaceNavigation.refresh();
+  workspaceNavigation.activate("work");
 }
 
 /** The steps become the instruction and go through the normal preview; nothing changes until Confirm. */
@@ -2885,7 +2981,7 @@ async function startConsent() {
   if (!config || !accessToken)
     return setStatus("Sign in before analyzing Excel data.");
   resetAnalysisConsent();
-  if (analysisOutput) analysisOutput.textContent = "";
+  clearAnalysisOutput();
   try {
     const input = await log.step(
       "analysis:read-selection",
@@ -3182,6 +3278,10 @@ clearDiagnostics?.addEventListener("click", () => {
 function setupLayout() {
   const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle");
   const menu = document.querySelector<HTMLElement>("#menu");
+  const advancedWorkbookOptions = document.querySelector<HTMLButtonElement>(
+    "#advanced-workbook-options",
+  );
+  const prefsCard = document.querySelector<HTMLDetailsElement>("#prefs-card");
   const diagnosticsPanel =
     document.querySelector<HTMLElement>("#diagnostics-panel");
   const toggleDiagnostics = document.querySelector<HTMLButtonElement>(
@@ -3190,6 +3290,9 @@ function setupLayout() {
   const resultCard = document.querySelector<HTMLElement>("#result-card");
   const previewSummary =
     document.querySelector<HTMLElement>("#preview-summary");
+  const previewImpact = document.querySelector<HTMLElement>("#preview-impact");
+  const previewWarnings =
+    document.querySelector<HTMLElement>("#preview-warnings");
 
   const closeMenu = () => {
     if (menu) menu.hidden = true;
@@ -3209,12 +3312,22 @@ function setupLayout() {
     if (
       menu &&
       !menu.hidden &&
-      !(event.target as HTMLElement).closest("header")
+      !(event.target as HTMLElement).closest("#status")
     )
       closeMenu();
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeMenu();
+  });
+  advancedWorkbookOptions?.addEventListener("click", () => {
+    if (!prefsCard) return;
+    prefsCard.hidden = false;
+    prefsCard.open = true;
+    closeMenu();
+    prefsCard.scrollIntoView({ block: "start" });
+    window.setTimeout(() =>
+      prefsCard.querySelector<HTMLElement>("select")?.focus(),
+    );
   });
   toggleDiagnostics?.addEventListener("click", () => {
     if (!diagnosticsPanel) return;
@@ -3277,13 +3390,45 @@ function setupLayout() {
         { rows, columns: columnCount, from, warnings },
         textLanguage(),
       );
+      if (previewImpact) {
+        const impact = [
+          [rows, translate(language, "rows_label", "Rows")],
+          [columnCount, translate(language, "columns_label", "Columns")],
+          [actions.length, translate(language, "changes_label", "Changes")],
+          [warnings.length, translate(language, "warnings_label", "Warnings")],
+        ];
+        previewImpact.replaceChildren(
+          ...impact.map(([value, text]) => {
+            const item = document.createElement("div");
+            item.className = "impact-item";
+            const strong = document.createElement("strong");
+            strong.textContent = Number(value).toLocaleString("en-US");
+            const span = document.createElement("span");
+            span.textContent = String(text);
+            item.append(strong, span);
+            return item;
+          }),
+        );
+        show(previewImpact, true);
+      }
+      previewWarnings?.replaceChildren(
+        ...warnings.map((warning) => {
+          const item = document.createElement("li");
+          item.textContent = String(warning);
+          return item;
+        }),
+      );
+      show(previewWarnings, warnings.length > 0);
       void sheets;
       void label;
     }
     renderOutcomes(actions);
     configurePreviewTweaks(actions);
     resultCard.hidden = false;
+    workspaceNavigation.refresh();
+    workspaceNavigation.activate("results");
   };
+  refreshPreviewSummary = renderSummary;
   if (preview)
     new MutationObserver(renderSummary).observe(preview, {
       childList: true,
@@ -3309,7 +3454,9 @@ function drawChart(chart: OutcomeChart): SVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   const all = chart.series.flatMap((entry) => entry.values);
+  const min = Math.min(0, ...all);
   const max = Math.max(1, ...all);
+  const range = Math.max(1, max - min);
   const count = Math.max(1, chart.categories.length);
   const step = (width - pad * 2) / count;
   const add = (name: string, attrs: Record<string, string>) => {
@@ -3319,40 +3466,224 @@ function drawChart(chart: OutcomeChart): SVGElement {
     svg.appendChild(node);
     return node;
   };
+  const y = (value: number) =>
+    height - pad - ((value - min) / range) * (height - pad * 2);
   add("line", {
     x1: String(pad),
-    y1: String(height - pad),
+    y1: String(y(0)),
     x2: String(width - pad),
-    y2: String(height - pad),
+    y2: String(y(0)),
     stroke: "#9aa5b5",
   });
-  const y = (value: number) =>
-    height - pad - (value / max) * (height - pad * 2);
-  chart.series.forEach((entry, index) => {
-    const color = PALETTE[index % PALETTE.length];
-    if (chart.type === "line") {
+
+  const type = String(chart.type || "column").toLowerCase();
+  const drawLineSeries = (
+    entry: OutcomeChart["series"][number],
+    index: number,
+  ) => {
+    const points = entry.values
+      .map((value, at) => `${pad + step * (at + 0.5)},${y(value)}`)
+      .join(" ");
+    add("polyline", {
+      points,
+      fill: "none",
+      stroke: PALETTE[index % PALETTE.length],
+      "stroke-width": "2",
+    });
+  };
+  const drawColumns = (stacked: boolean, firstOnly = false) => {
+    chart.categories.forEach((_, at) => {
+      let stack = 0;
+      chart.series.forEach((entry, index) => {
+        if (firstOnly && index > 0) return;
+        const value = Number(entry.values[at] ?? 0);
+        const start = stacked ? stack : 0;
+        const end = start + value;
+        stack = stacked ? end : stack;
+        add("rect", {
+          x: String(
+            stacked
+              ? pad + step * at + step * 0.1
+              : pad +
+                  step * at +
+                  step * 0.1 +
+                  ((step * 0.8) / chart.series.length) * index,
+          ),
+          y: String(y(Math.max(start, end))),
+          width: String(
+            stacked ? step * 0.8 : (step * 0.8) / chart.series.length,
+          ),
+          height: String(Math.max(1, Math.abs(y(end) - y(start)))),
+          fill: PALETTE[index % PALETTE.length],
+        });
+      });
+    });
+  };
+  const drawHorizontalBars = () => {
+    const series = chart.series[0];
+    if (!series) return;
+    const rowHeight = (height - pad * 2) / Math.max(1, series.values.length);
+    const horizontalMax = Math.max(
+      1,
+      ...series.values.map((value) => Math.abs(value)),
+    );
+    series.values.forEach((value, at) => {
+      const bar = (Math.abs(value) / horizontalMax) * (width - pad * 2);
+      add("rect", {
+        x: String(value < 0 ? pad + (width - pad * 2) - bar : pad),
+        y: String(pad + rowHeight * at + rowHeight * 0.12),
+        width: String(Math.max(1, bar)),
+        height: String(Math.max(1, rowHeight * 0.76)),
+        fill: PALETTE[0],
+      });
+    });
+  };
+  const drawStackedHorizontalBars = () => {
+    const rowHeight = (height - pad * 2) / Math.max(1, chart.categories.length);
+    chart.categories.forEach((_, at) => {
+      const total = Math.max(
+        1,
+        chart.series.reduce(
+          (sum, entry) => sum + Math.max(0, Number(entry.values[at] ?? 0)),
+          0,
+        ),
+      );
+      let offset = 0;
+      chart.series.forEach((entry, index) => {
+        const value = Math.max(0, Number(entry.values[at] ?? 0));
+        const segmentWidth = (value / total) * (width - pad * 2);
+        add("rect", {
+          x: String(pad + offset),
+          y: String(pad + rowHeight * at + rowHeight * 0.12),
+          width: String(Math.max(1, segmentWidth)),
+          height: String(Math.max(1, rowHeight * 0.76)),
+          fill: PALETTE[index % PALETTE.length],
+        });
+        offset += segmentWidth;
+      });
+    });
+  };
+  const drawHistogram = () => {
+    const values = chart.series[0]?.values ?? [];
+    if (!values.length) return;
+    const lower = Math.min(...values);
+    const upper = Math.max(...values);
+    const binCount = Math.max(
+      3,
+      Math.min(8, Math.ceil(Math.sqrt(values.length))),
+    );
+    const span = Math.max(1, upper - lower);
+    const counts = Array.from({ length: binCount }, () => 0);
+    values.forEach((value) => {
+      const bin = Math.min(
+        binCount - 1,
+        Math.floor(((value - lower) / span) * binCount),
+      );
+      counts[bin] += 1;
+    });
+    const peak = Math.max(1, ...counts);
+    counts.forEach((count, at) => {
+      const barWidth = ((width - pad * 2) / binCount) * 0.82;
+      const x = pad + ((width - pad * 2) / binCount) * at + barWidth * 0.1;
+      const top = height - pad - (count / peak) * (height - pad * 2);
+      add("rect", {
+        x: String(x),
+        y: String(top),
+        width: String(barWidth),
+        height: String(Math.max(1, height - pad - top)),
+        fill: PALETTE[0],
+      });
+    });
+  };
+  if (type === "line") chart.series.forEach(drawLineSeries);
+  else if (type === "area") {
+    chart.series.forEach((entry, index) => {
       const points = entry.values
         .map((value, at) => `${pad + step * (at + 0.5)},${y(value)}`)
         .join(" ");
-      add("polyline", {
-        points,
-        fill: "none",
-        stroke: color,
-        "stroke-width": "2",
+      const first = `${pad + step * 0.5},${y(0)}`;
+      const last = `${pad + step * (entry.values.length - 0.5)},${y(0)}`;
+      add("polygon", {
+        points: `${first} ${points} ${last}`,
+        fill: PALETTE[index % PALETTE.length],
+        opacity: "0.2",
       });
-    } else {
-      const barWidth = (step * 0.8) / chart.series.length;
-      entry.values.forEach((value, at) =>
-        add("rect", {
-          x: String(pad + step * at + step * 0.1 + barWidth * index),
-          y: String(y(value)),
-          width: String(barWidth),
-          height: String(height - pad - y(value)),
-          fill: color,
-        }),
-      );
-    }
-  });
+      drawLineSeries(entry, index);
+    });
+  } else if (type === "bar") drawHorizontalBars();
+  else if (type === "combo") {
+    drawColumns(false, true);
+    chart.series.slice(1).forEach(drawLineSeries);
+  } else if (type === "stacked-column") drawColumns(true);
+  else if (type === "stacked-bar") drawStackedHorizontalBars();
+  else if (type === "histogram") drawHistogram();
+  else if (type === "waterfall") {
+    const series = chart.series[0];
+    let running = 0;
+    series?.values.forEach((value, at) => {
+      const next = running + Number(value || 0);
+      add("rect", {
+        x: String(pad + step * at + step * 0.1),
+        y: String(y(Math.max(running, next))),
+        width: String(step * 0.8),
+        height: String(Math.max(1, Math.abs(y(next) - y(running)))),
+        fill: next >= running ? "#2e8b57" : "#c94c4c",
+      });
+      running = next;
+    });
+  } else if (type === "pie") {
+    const series = chart.series[0];
+    const values = series?.values.map((value) => Math.max(0, value)) ?? [];
+    const total = values.reduce((sum, value) => sum + value, 0) || 1;
+    const cx = width / 2;
+    const cy = (height - 6) / 2;
+    const radius = Math.min(cx - pad, cy - pad / 2);
+    let angle = -Math.PI / 2;
+    values.forEach((value, index) => {
+      const nextAngle = angle + (value / total) * Math.PI * 2;
+      const largeArc = nextAngle - angle > Math.PI ? 1 : 0;
+      const startX = cx + radius * Math.cos(angle);
+      const startY = cy + radius * Math.sin(angle);
+      const endX = cx + radius * Math.cos(nextAngle);
+      const endY = cy + radius * Math.sin(nextAngle);
+      add("path", {
+        d: `M ${cx} ${cy} L ${startX} ${startY} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`,
+        fill: PALETTE[index % PALETTE.length],
+      });
+      angle = nextAngle;
+    });
+  } else drawColumns(false);
+  if (chart.showDataLabels && type !== "pie" && type !== "histogram") {
+    chart.series.forEach((entry, index) =>
+      entry.values.forEach((value, at) => {
+        const text = add("text", {
+          x: String(
+            type === "bar" || type === "stacked-bar"
+              ? pad +
+                  Math.max(
+                    2,
+                    (Math.abs(value) / Math.max(1, max)) * (width - pad * 2),
+                  )
+              : pad + step * (at + 0.5),
+          ),
+          y: String(
+            type === "bar" || type === "stacked-bar"
+              ? pad +
+                  ((height - pad * 2) / Math.max(1, chart.categories.length)) *
+                    at +
+                  10
+              : Math.max(10, y(value) - 4),
+          ),
+          "text-anchor":
+            type === "bar" || type === "stacked-bar" ? "start" : "middle",
+          "font-size": "7",
+          fill: "#374151",
+        });
+        text.textContent = Number(value).toLocaleString("en-US");
+        void index;
+      }),
+    );
+  }
   chart.categories.forEach((name, at) => {
     const label = add("text", {
       x: String(pad + step * (at + 0.5)),
@@ -3454,6 +3785,62 @@ function renderOutcomes(actions: any[]) {
   void refreshSheetNames(container, actions);
 }
 
+/**
+ * Keep the visible, unconfirmed preview aligned with a tweak while the same
+ * request is being checked again by the local and server planners. This never
+ * changes the workbook and the apply button remains disabled until that check
+ * succeeds.
+ */
+function renderPendingPreviewSpecs(specs: ExcelColumnSpecs) {
+  if (!preview) return;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(preview.textContent || "");
+  } catch {
+    return;
+  }
+  if (!Array.isArray(parsed?.actions)) return;
+  const actions = parsed.actions.map((action: any) => {
+    if (action.kind === "chart" && specs.chart)
+      return {
+        ...action,
+        spec: {
+          ...(action.spec ?? {}),
+          categoryIndex: specs.chart.category,
+          valueIndex: specs.chart.value,
+          chartType: specs.chart.chartType,
+          ...(specs.chart.showDataLabels
+            ? { showDataLabels: true }
+            : { showDataLabels: undefined }),
+        },
+      };
+    if (action.kind === "pivot-table" && specs.pivot)
+      return {
+        ...action,
+        spec: {
+          ...(action.spec ?? {}),
+          rows: specs.pivot.rows,
+          values: specs.pivot.values,
+          aggregation: specs.pivot.aggregation,
+          topN: specs.pivot.topN,
+          lowest: specs.pivot.lowest,
+        },
+      };
+    return action;
+  });
+  preview.textContent = JSON.stringify({ ...parsed, actions }, null, 2);
+  refreshPreviewSummary?.();
+}
+
+function restoreConfirmedPreview() {
+  if (!preview || !confirmedPreviewText) return;
+  previewSpecs = confirmedPreviewSpecs
+    ? (JSON.parse(JSON.stringify(confirmedPreviewSpecs)) as ExcelColumnSpecs)
+    : undefined;
+  preview.textContent = confirmedPreviewText;
+  refreshPreviewSummary?.();
+}
+
 type TweakSelect = HTMLSelectElement | null;
 const tweakChartType =
   document.querySelector<HTMLSelectElement>("#tweak-chart-type");
@@ -3462,6 +3849,13 @@ const tweakAggregation =
 const tweakCategory =
   document.querySelector<HTMLSelectElement>("#tweak-category");
 const tweakValue = document.querySelector<HTMLSelectElement>("#tweak-value");
+const tweakTopN = document.querySelector<HTMLSelectElement>("#tweak-top-n");
+const tweakRankDirection = document.querySelector<HTMLSelectElement>(
+  "#tweak-rank-direction",
+);
+const tweakDataLabels =
+  document.querySelector<HTMLInputElement>("#tweak-data-labels");
+const tweakTotals = document.querySelector<HTMLInputElement>("#tweak-totals");
 
 function setTweakOptions(
   select: TweakSelect,
@@ -3485,7 +3879,8 @@ function configurePreviewTweaks(actions: any[]) {
   if (!panel || !lastRange) return;
   const hasChart = actions.some((action) => action.kind === "chart");
   const hasPivot = actions.some((action) => action.kind === "pivot-table");
-  panel.hidden = !hasChart && !hasPivot;
+  const supportsTotals = Boolean(previewSpecs?.summary || previewSpecs?.format);
+  panel.hidden = !hasChart && !hasPivot && !supportsTotals;
   if (panel.hidden) return;
   const columns = lastRange.headers.map((header, index) => ({
     value: String(index),
@@ -3503,6 +3898,7 @@ function configurePreviewTweaks(actions: any[]) {
     ["histogram", "Histogram"],
     ["waterfall", "Waterfall"],
     ["stacked-column", "Stacked column"],
+    ["stacked-bar", "Stacked bar"],
   ].map(([value, label]) => ({ value, label }));
   setTweakOptions(tweakChartType, chartTypes, chart?.chartType ?? "column");
   setTweakOptions(
@@ -3517,18 +3913,46 @@ function configurePreviewTweaks(actions: any[]) {
   setTweakOptions(tweakValue, columns, chart?.value ?? pivot?.values ?? 0);
   if (tweakChartType) tweakChartType.closest("label")!.hidden = !hasChart;
   if (tweakAggregation) tweakAggregation.closest("label")!.hidden = !hasPivot;
+  if (tweakCategory)
+    tweakCategory.closest("label")!.hidden = !hasChart && !hasPivot;
+  if (tweakValue) tweakValue.closest("label")!.hidden = !hasChart && !hasPivot;
+  if (tweakTopN) {
+    tweakTopN.closest("label")!.hidden = !hasPivot;
+    tweakTopN.value = pivot?.topN ? String(pivot.topN) : "";
+  }
+  if (tweakRankDirection) {
+    tweakRankDirection.closest("label")!.hidden = !hasPivot;
+    tweakRankDirection.value = pivot?.lowest ? "bottom" : "top";
+  }
+  if (tweakDataLabels) {
+    tweakDataLabels.closest("label")!.hidden = !hasChart;
+    tweakDataLabels.checked = chart?.showDataLabels === true;
+  }
+  if (tweakTotals) {
+    tweakTotals.closest("label")!.hidden = !supportsTotals;
+    tweakTotals.checked = Boolean(
+      previewSpecs?.summary?.total || previewSpecs?.format?.totalRow,
+    );
+  }
 }
 
 function replanWithTweak(update: (specs: ExcelColumnSpecs) => void) {
   // Only a live, unapplied preview can be adjusted; never re-plan after an apply.
-  if (!currentPlan) return;
+  // currentPlan is intentionally cleared as soon as a re-plan starts. Do not
+  // reject a second tweak made while the first one is still being checked.
+  if (!previewSpecs || !preview || !previewFingerprint) return;
   const next: ExcelColumnSpecs = {
     ...previewSpecs,
     ...(previewSpecs?.chart ? { chart: { ...previewSpecs.chart } } : {}),
     ...(previewSpecs?.pivot ? { pivot: { ...previewSpecs.pivot } } : {}),
+    ...(previewSpecs?.summary ? { summary: { ...previewSpecs.summary } } : {}),
+    ...(previewSpecs?.format ? { format: { ...previewSpecs.format } } : {}),
   };
+  previewSpecs = next;
   update(next);
   pendingSpecs = next;
+  if (apply) apply.disabled = true;
+  renderPendingPreviewSpecs(next);
   setStatus("Preview adjusted. Rechecking the plan...");
   void inspect?.click();
 }
@@ -3567,6 +3991,34 @@ tweakValue?.addEventListener("change", (event) => {
     const column = Number(tweakValue.value);
     if (specs.chart) specs.chart.value = column;
     else if (specs.pivot) specs.pivot.values = column;
+  });
+});
+tweakTopN?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (!specs.pivot) return;
+    const value = Number(tweakTopN.value);
+    if (Number.isInteger(value) && value > 0) specs.pivot.topN = value;
+    else delete specs.pivot.topN;
+  });
+});
+tweakRankDirection?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (specs.pivot) specs.pivot.lowest = tweakRankDirection.value === "bottom";
+  });
+});
+tweakDataLabels?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (specs.chart) specs.chart.showDataLabels = tweakDataLabels.checked;
+  });
+});
+tweakTotals?.addEventListener("change", (event) => {
+  if (!event.isTrusted) return;
+  replanWithTweak((specs) => {
+    if (specs.summary) specs.summary.total = tweakTotals.checked;
+    if (specs.format) specs.format.totalRow = tweakTotals.checked;
   });
 });
 
@@ -3648,12 +4100,16 @@ async function replaceOlderResultSheets(keepSheet: string) {
 function renderResultGallery() {
   const gallery = document.querySelector<HTMLElement>("#result-gallery");
   const list = document.querySelector<HTMLElement>("#result-gallery-list");
+  const verifiedBanner = document.querySelector<HTMLElement>(
+    "#verified-result-banner",
+  );
   if (!gallery || !list) return;
   list.replaceChildren();
   const visible = galleryResults.filter(
     (result) => result.status === "created" || result.status === "exists",
   );
   gallery.hidden = visible.length === 0;
+  if (verifiedBanner) verifiedBanner.hidden = visible.length === 0;
   for (const result of visible) {
     const item = document.createElement("article");
     item.className = "result-item";
@@ -3662,7 +4118,8 @@ function renderResultGallery() {
     const title = document.createElement("strong");
     title.textContent = kindTitle(result.kind, textLanguage());
     const target = document.createElement("span");
-    target.textContent = result.targetSheet;
+    target.className = "verified-badge";
+    target.textContent = `Verified · ${result.targetSheet}`;
     head.append(title, target);
     const actions = document.createElement("div");
     actions.className = "result-item-actions";
@@ -3673,6 +4130,31 @@ function renderResultGallery() {
       void revealExcelResult(officeRuntime(), result.targetSheet);
     });
     actions.appendChild(show);
+    const evidence = document.createElement("details");
+    evidence.className = "result-evidence";
+    const evidenceSummary = document.createElement("summary");
+    evidenceSummary.textContent = "Show evidence";
+    const evidenceList = document.createElement("ul");
+    const evidenceLines = [
+      `Result read back from sheet ${result.targetSheet}`,
+      currentRangeAddress
+        ? `Source: ${currentRangeAddress}`
+        : "Source recorded in the applied plan",
+      `${kindTitle(result.kind, language)} completed with status ${result.status}`,
+      ...(result.notes ?? []),
+      ...(result.warnings ?? []).map((warning) => `Warning: ${warning}`),
+    ];
+    for (const line of evidenceLines) {
+      const row = document.createElement("li");
+      row.textContent = line;
+      evidenceList.appendChild(row);
+    }
+    evidence.append(evidenceSummary, evidenceList);
+    const share = document.createElement("button");
+    share.type = "button";
+    share.textContent = translate(language, "email_report", "Email report");
+    share.addEventListener("click", () => prepareEmailComposer());
+    actions.appendChild(share);
     const refresh = document.createElement("button");
     refresh.type = "button";
     refresh.textContent = translate(language, "refresh_result", "Refresh");
@@ -3756,7 +4238,7 @@ function renderResultGallery() {
       void replaceOlderResultSheets(result.targetSheet);
     });
     actions.appendChild(replace);
-    item.append(head, actions);
+    item.append(head, actions, evidence);
     list.appendChild(item);
   }
 }
@@ -4023,11 +4505,215 @@ languageButton?.addEventListener("click", (event) => {
 });
 refreshLanguage();
 
+const selectionChip = document.querySelector<HTMLElement>("#selection-chip");
+const selectionText = document.querySelector<HTMLElement>("#selection-text");
+const workbookContext =
+  document.querySelector<HTMLElement>("#workbook-context");
+const contextSelection =
+  document.querySelector<HTMLElement>("#context-selection");
+const contextBadges = document.querySelector<HTMLElement>("#context-badges");
+const contextSuggestions = document.querySelector<HTMLElement>(
+  "#context-suggestions",
+);
+const contextSuggestionList = document.querySelector<HTMLElement>(
+  "#context-suggestion-list",
+);
+const selectionChangeWarning = document.querySelector<HTMLElement>(
+  "#selection-change-warning",
+);
+let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+
+function renderWorkspaceContext(
+  info: WorkspaceSelection | undefined,
+  schema?: WorkspaceSchema,
+) {
+  if (!info) {
+    show(workbookContext, false);
+    show(contextSuggestions, false);
+    show(
+      document.querySelector<HTMLElement>("#starter-suggestions"),
+      conversationMessages.length === 0,
+    );
+    return;
+  }
+  const description = describeSelection(info);
+  if (contextSelection) contextSelection.textContent = description;
+  const badgeLabels = [
+    ...selectionBadges(info, {
+      row: translate(language, "row_label", "row"),
+      rows: translate(language, "rows_label", "rows"),
+      column: translate(language, "column_label", "column"),
+      columns: translate(language, "columns_label", "columns"),
+      largeRange: translate(language, "large_range", "Large range"),
+      localPreview: translate(language, "local_preview", "Local preview"),
+    }),
+    officePlatformLabel,
+    "Original data preserved",
+  ];
+  contextBadges?.replaceChildren(
+    ...badgeLabels.map((text) => {
+      const badge = document.createElement("span");
+      badge.className = `context-badge${text === "Original data preserved" ? " safe" : ""}`;
+      badge.textContent = text;
+      return badge;
+    }),
+  );
+  const suggestions = suggestionsForSelection(info, schema);
+  const suggestionIcons: Record<string, string> = {
+    chart: "▥",
+    pivot: "▦",
+    dashboard: "◫",
+    quality: "✓",
+    formulas: "ƒ",
+    forecast: "↗",
+    clean: "✦",
+  };
+  if (contextSuggestionList)
+    contextSuggestionList.dataset.count = String(suggestions.length);
+  contextSuggestionList?.replaceChildren(
+    ...suggestions.map((suggestion) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "smart-suggestion";
+      button.dataset.icon = suggestionIcons[suggestion.id] ?? "•";
+      const title = document.createElement("strong");
+      title.textContent = translate(
+        language,
+        `suggestion_${suggestion.id}`,
+        suggestion.label,
+      );
+      const reason = document.createElement("span");
+      reason.className = "suggestion-reason";
+      reason.textContent = translate(
+        language,
+        `suggestion_reason_${suggestion.id}`,
+        suggestion.reason,
+      );
+      const relevantRoles: Record<string, string[]> = {
+        chart: ["category", "measure"],
+        pivot: ["category", "measure"],
+        dashboard: ["date", "category", "measure"],
+        forecast: ["date", "measure"],
+        clean: ["text", "category"],
+      };
+      const sources = (schema?.columns ?? [])
+        .filter(
+          (column) =>
+            !relevantRoles[suggestion.id] ||
+            relevantRoles[suggestion.id].includes(column.role),
+        )
+        .slice(0, 4)
+        .map((column) => column.name);
+      const expectedOutputs: Record<string, string> = {
+        chart: "Chart result",
+        pivot: "PivotTable",
+        dashboard: "Dashboard sheet",
+        quality: "Quality report",
+        formulas: "Formula audit",
+        forecast: "Forecast report",
+        clean: "Clean result sheet",
+      };
+      const meta = document.createElement("span");
+      meta.className = "suggestion-meta";
+      meta.textContent = `${schema?.sampleRows ? 93 : 78}% · ${sources.length ? sources.join(", ") : description} · ${expectedOutputs[suggestion.id]}`;
+      button.append(title, reason, meta);
+      button.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = suggestion.instruction;
+        instruction.dispatchEvent(new Event("input"));
+        instruction.focus();
+        // This suggestion was produced from the local schema, so it already has a deterministic
+        // intent. Do not send the person through the AI-consent gate just because the generated
+        // wording says "recommend" or "best" and names no individual column.
+        skipAiOnce = true;
+        smartRun?.click();
+      });
+      return button;
+    }),
+  );
+  show(workbookContext, description !== "");
+  show(contextSuggestions, suggestions.length > 0);
+  show(
+    document.querySelector<HTMLElement>("#starter-suggestions"),
+    conversationMessages.length === 0 && suggestions.length === 0,
+  );
+}
+
+/**
+ * Reads a small local-only sample solely to improve the suggestion list. The values are converted
+ * straight into aggregate schema facts and never added to chat history, diagnostics or an API call.
+ */
+async function readWorkspaceContext(): Promise<{
+  info: WorkspaceSelection;
+  schema?: WorkspaceSchema;
+}> {
+  return readWorkspaceContextView(officeRuntime(), (error) =>
+    log.record("selection:context-schema", "info", describeError(error)),
+  );
+}
+
+/** Shows which sheet and cells the next request will use; hidden when nothing can be read. */
+async function refreshSelectionChip() {
+  if (!selectionChip || !selectionText) return;
+  try {
+    const { info, schema } = await readWorkspaceContext();
+    const text = describeSelection(info);
+    latestSelectionAddress = info.address;
+    selectionText.textContent = text;
+    show(selectionChip, text !== "");
+    renderWorkspaceContext(info, schema);
+    const changedAfterPreview = Boolean(
+      currentPlan &&
+      previewSelectionAddress &&
+      info.address !== previewSelectionAddress,
+    );
+    show(selectionChangeWarning, changedAfterPreview);
+    if (changedAfterPreview && apply) apply.disabled = true;
+  } catch {
+    show(selectionChip, false);
+    renderWorkspaceContext(undefined);
+  }
+}
+
+document
+  .querySelector("#refresh-preview-selection")
+  ?.addEventListener("click", () => {
+    currentPlan = undefined;
+    previewFingerprint = "";
+    previewSelectionAddress = "";
+    show(selectionChangeWarning, false);
+    setStatus("Refreshing the preview for the current selection...");
+    void inspect?.click();
+  });
+
+document
+  .querySelector("#refresh-context")
+  ?.addEventListener("click", () => void refreshSelectionChip());
+document.querySelector("#context-overview")?.addEventListener("click", () => {
+  document.querySelector<HTMLButtonElement>("#overview")?.click();
+});
+
+/** Keeps the chip current while the person moves around the sheet (one refresh per pause). */
+function watchSelection() {
+  void refreshSelectionChip();
+  try {
+    office()?.context?.document?.addHandlerAsync?.(
+      office().EventType.DocumentSelectionChanged,
+      () => {
+        clearTimeout(selectionTimer);
+        selectionTimer = setTimeout(() => void refreshSelectionChip(), 250);
+      },
+    );
+  } catch (error) {
+    log.record("selection:watch", "info", describeError(error));
+  }
+}
+
 async function initialize() {
   localStorage.removeItem(LEGACY_SESSION_KEY);
   if (office()?.onReady) {
     try {
-      await log.step(
+      const ready = await log.step(
         "office:ready",
         () => office().onReady(),
         (info: any) => ({
@@ -4035,6 +4721,15 @@ async function initialize() {
           platform: info?.platform,
         }),
       );
+      const platform = String((ready as any)?.platform ?? "");
+      officePlatformLabel =
+        platform === "OfficeOnline"
+          ? "Excel Web"
+          : platform === "Mac"
+            ? "Excel Mac"
+            : platform === "PC"
+              ? "Excel Desktop"
+              : "Excel";
     } catch {
       // Recorded; the self-test shows which host functions are missing.
     }
@@ -4055,13 +4750,14 @@ async function initialize() {
   }
   workbookPrefs = loadPreferences();
   renderPreferences();
+  watchSelection();
   if (restoreSession()) {
     restoreConversationHistory();
     void restoreResultGallery();
     updateAuthenticationUi(true);
     recordTokenSummary("session:restore");
     void refreshCapabilities("restore");
-    return setStatus("Signed in. Select data and inspect it.");
+    return setStatus(SIGNED_IN_IDLE_STATUS);
   }
   log.record("session:restore", "info", "no unexpired session");
   updateAuthenticationUi(false);
@@ -4075,6 +4771,27 @@ async function initialize() {
 const AGENT_CONSENT_KEY = "vynorai.m365.agentConsent";
 const agentCard = document.querySelector<HTMLElement>("#agent-card");
 const agentProgress = document.querySelector<HTMLElement>("#agent-progress");
+
+/** Shows the planner's steps as a numbered list; no steps hides the list. */
+function showAgentPlan(steps: readonly string[]) {
+  showAgentPlanView(document, steps);
+}
+
+/** Where the answer came from; a range is a button that selects it in the workbook. */
+function showAgentSources(sources: readonly AnswerSource[]) {
+  showAgentSourcesView({
+    document,
+    sources,
+    selectRange: async (sheet, address) => {
+      await officeRuntime()?.run(async (context: any) => {
+        context.workbook.worksheets.getItem(sheet).getRange(address).select();
+        await context.sync();
+      });
+    },
+    recordError: (error) =>
+      log.record("agent:source", "fail", describeError(error)),
+  });
+}
 const agentReply = document.querySelector<HTMLElement>("#agent-reply");
 const agentChanges = document.querySelector<HTMLOListElement>("#agent-changes");
 const agentNote = document.querySelector<HTMLElement>("#agent-note");
@@ -4097,6 +4814,11 @@ let agentSentMessages: AgentMessage[] = [];
 let agentLastRequest = "";
 /** Verification rounds after an apply (the agent may stage fixes once more). */
 let agentRounds = 0;
+let agentVerifying = false;
+
+function setAgentStage(stage: AgentStage, complete = false) {
+  setAgentStageView(document, stage, complete);
+}
 
 const show = (element: HTMLElement | null, visible: boolean) => {
   if (element) element.hidden = !visible;
@@ -4107,25 +4829,69 @@ function agentLanguage(): "en" | "si" | "ta" {
   return textLanguage();
 }
 
-function agentToolLabel(name: string, args: Record<string, unknown>): string {
-  switch (name) {
-    case "get_workbook":
-      return "Looking at the workbook";
-    case "read_range":
-      return `Reading ${String(args.sheet ?? "")}!${String(args.address ?? "")}`;
-    case "calculate":
-      return `Calculating ${String(args.formula ?? "").slice(0, 80)}`;
-    case "run_code":
-      return `Running analysis code on ${String(args.sheet ?? "")}!${String(args.address ?? "")} (on this device, no network)`;
-    case "vynor_step":
-      return `Checking a step: ${String(args.instruction ?? "").slice(0, 80)}`;
-    default:
-      return `Preparing a change (${name})`;
+const agentToolLabel = agentToolLabelView;
+
+/**
+ * Under each staged write, a small table of the cells it will overwrite (before, after). The
+ * cells are read now, so they are what approval would replace; a read that fails shows
+ * "(not read)" and the change itself is unaffected.
+ */
+async function showChangePreviews(run: AgentRun, host: AgentHost) {
+  if (!agentChanges) return;
+  const created = new Set(
+    run.changes.flatMap((item) =>
+      item.change.kind === "create_sheet" ? [item.change.name] : [],
+    ),
+  );
+  const items = [...agentChanges.children] as HTMLElement[];
+  for (const [index, item] of run.changes.entries()) {
+    const target = previewTarget(item.change, created);
+    const li = items[index];
+    if (!target || !li) continue;
+    let current: unknown[][] | undefined;
+    if (!target.newSheet) {
+      try {
+        current = (await host.readRange(target.sheet, target.address, false))
+          .values as unknown[][];
+      } catch {
+        current = undefined;
+      }
+    }
+    const cells = previewCells(item.change, current, target.newSheet);
+    if (!cells.length) continue;
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `Before and after (${cells.length}${target.total > cells.length ? ` of ${target.total.toLocaleString("en-US")}` : ""} cells)`;
+    details.append(summary);
+    const table = document.createElement("table");
+    table.className = "change-preview";
+    const head = table.createTHead().insertRow();
+    for (const label of ["Cell", "Now", "After approval"])
+      head.insertCell().textContent = label;
+    const body = table.createTBody();
+    for (const cell of cells) {
+      const row = body.insertRow();
+      row.insertCell().textContent = cell.cell;
+      row.insertCell().textContent = cell.before;
+      row.insertCell().textContent = cell.after;
+    }
+    details.append(table);
+    li.append(details);
   }
 }
 
 function renderAgentRun(run: AgentRun) {
   show(agentCard, true);
+  const relationship = relationshipEvidence(run.messages);
+  showWorkbookMapView(document, relationship);
+  setAgentRoleView(
+    document,
+    "builder",
+    "done",
+    `${run.changes.length} staged change(s)`,
+  );
+  if (relationship)
+    setAgentRoleView(document, "relationships", "done", "key evidence found");
   if (agentReply) {
     agentReply.textContent = "";
     for (const line of (
@@ -4149,6 +4915,10 @@ function renderAgentRun(run: AgentRun) {
     }
   }
   const pending = run.changes.length > 0;
+  setAgentStage(
+    pending ? "approval" : agentVerifying ? "verify" : "review",
+    !pending,
+  );
   show(agentChanges, pending);
   show(agentNote, pending);
   show(agentApprove, pending);
@@ -4165,11 +4935,16 @@ async function agentModel(messages: AgentMessage[]) {
   if (agentStopped) throw new Error("stopped");
   // The last call carries the whole conversation: the privacy receipt is built from it.
   agentSentMessages = messages;
-  const response = await apiClient().agentExcel({
-    consent: true,
-    language: agentLanguage(),
-    messages,
-  });
+  // A busy service or a dropped connection gets up to two more tries; a refusal does not.
+  const response = await retryTransient(
+    () =>
+      apiClient().agentExcel({
+        consent: true,
+        language: agentLanguage(),
+        messages,
+      }),
+    { shouldStop: () => agentStopped },
+  );
   const reply = response?.reply;
   if (!reply || !Array.isArray(reply.tool_calls))
     throw new Error("agent-invalid");
@@ -4205,10 +4980,26 @@ function agentInputReader() {
 async function agentLoop(request: string) {
   agentBusy = true;
   agentStopped = false;
+  show(agentCard, true);
   show(agentStop, true);
   show(agentApprove, false);
   show(agentDiscard, false);
+  if (agentReply) agentReply.textContent = "";
+  if (agentChanges) agentChanges.textContent = "";
+  show(agentChanges, false);
+  showAgentPlan([]);
+  showAgentSources([]);
+  if (!agentVerifying) {
+    showWorkbookMapView(document, undefined);
+    resetAgentRolesView(document);
+  }
   if (agentBadge) agentBadge.textContent = "Working";
+  if (agentProgress)
+    agentProgress.textContent =
+      "Inspecting the selected data and preparing a safe plan.";
+  window.requestAnimationFrame(() =>
+    agentCard?.scrollIntoView?.({ block: "start", behavior: "smooth" }),
+  );
   const readInput = agentInputReader();
   const host = createOfficeAgentHost(
     officeRuntime(),
@@ -4225,6 +5016,9 @@ async function agentLoop(request: string) {
       mask: agentMask,
       facts: preferenceFacts(workbookPrefs),
       onPhase: (phase: AgentPhase) => {
+        if (agentVerifying) setAgentStage("verify");
+        else if (phase === "planning") setAgentStage("plan");
+        else if (phase === "executing") setAgentStage("preview");
         if (agentBadge)
           agentBadge.textContent =
             phase === "planning"
@@ -4242,28 +5036,67 @@ async function agentLoop(request: string) {
       },
       onTool: (name, args) => {
         const label = agentToolLabel(name, args);
+        if (name === "map_relationships")
+          setAgentRoleView(
+            document,
+            "relationships",
+            "active",
+            "checking keys",
+          );
+        else setAgentRoleView(document, "builder", "active", label);
         if (agentProgress) agentProgress.textContent = label;
         log.record(`agent:tool:${name}`, "info", label.slice(0, 120));
       },
       onTeamPhase: (phase) => {
         if (phase === "plan") {
+          setAgentRoleView(document, "planner", "active", "building plan");
+          if (!agentVerifying) setAgentStage("plan");
           if (agentBadge) agentBadge.textContent = "Planning";
           setStatus("A planner agent is splitting the request into steps...");
         } else if (phase === "reviewing") {
+          setAgentRoleView(document, "planner", "done", "plan ready");
+          setAgentRoleView(document, "builder", "done", "preview staged");
+          if (!agentVerifying) setAgentStage("review");
           if (agentBadge) agentBadge.textContent = "Reviewing";
         } else if (phase === "revising") {
           if (agentBadge) agentBadge.textContent = "Correcting";
           setStatus("Correcting the plan after the review...");
         }
       },
-      onReviewer: (focus) =>
-        setStatus(
-          focus === "accuracy"
-            ? "A reviewer agent is checking ranges, formulas and totals..."
-            : "A reviewer agent is checking that every part is covered and nothing is overwritten...",
-        ),
+      onPlan: showAgentPlan,
+      onReviewer: (focus) => {
+        if (focus === "accuracy") {
+          setAgentRoleView(
+            document,
+            "accuracy",
+            "active",
+            "checking calculations",
+          );
+          setStatus(
+            "A reviewer agent is checking ranges, formulas and totals...",
+          );
+        } else {
+          setAgentRoleView(document, "accuracy", "done", "checks completed");
+          setAgentRoleView(
+            document,
+            "safety",
+            "active",
+            "checking write safety",
+          );
+          setStatus(
+            "A reviewer agent is checking that every part is covered and nothing is overwritten...",
+          );
+        }
+      },
       onHelperTool: (name, args) => {
         const label = agentToolLabel(name, args);
+        if (name === "map_relationships")
+          setAgentRoleView(
+            document,
+            "relationships",
+            "active",
+            "checking keys",
+          );
         if (agentProgress) agentProgress.textContent = `Team: ${label}`;
         log.record(`agent:team:${name}`, "info", label.slice(0, 120));
       },
@@ -4282,8 +5115,32 @@ async function agentLoop(request: string) {
         planSteps: reviewed.plan?.length ?? 0,
         revised: reviewed.revised,
       });
+    if (reviewed.plan?.length)
+      setAgentRoleView(
+        document,
+        "planner",
+        "done",
+        `${reviewed.plan.length} plan step(s)`,
+      );
+    for (const reviewer of reviewed.reviewers ?? [])
+      setAgentRoleView(
+        document,
+        reviewer.focus === "accuracy" ? "accuracy" : "safety",
+        "done",
+        reviewer.ok
+          ? "checks passed"
+          : `${reviewer.issues.length} issue(s) found`,
+      );
     renderAgentRun(run);
-    if (run.reply) renderConversation("assistant", run.reply);
+    // The answer and the changes to approve are below the chat: bring them into view above the box.
+    window.requestAnimationFrame(() =>
+      agentCard?.scrollIntoView?.({ block: "end", behavior: "smooth" }),
+    );
+    void showChangePreviews(run, host);
+    if (run.reply) renderConversation("assistant", run.reply, false);
+    showAgentSources(
+      answerSources(run.messages, (text) => agentMask.unmask(text)),
+    );
     const receipt = buildPrivacyReceipt(agentSentMessages);
     if (agentProgress)
       agentProgress.textContent = [
@@ -4325,9 +5182,13 @@ async function startAgent() {
   if (!config || !accessToken) return setStatus("Sign in first.");
   if (agentBusy) return;
   // A payroll sheet is a local template: nothing is sent for it.
-  if (isPayrollRequest(request)) {
+  if (
+    isPayrollRequest(request) &&
+    normalizeInstruction(request) !== payrollDeclined
+  ) {
     requestLanguage = responseLanguage(request, language);
     if (await offerPayroll(request)) return;
+    payrollDeclined = normalizeInstruction(request);
   }
   let agreed = false;
   try {
@@ -4360,17 +5221,62 @@ async function startAgent() {
     show(agentUndo, false);
   }
   agentRounds = 0;
+  agentVerifying = false;
+  setAgentStage("inspect");
   agentLastRequest = request;
   requestLanguage = responseLanguage(request, language);
   learnPreferences(request);
   agentUsage.prompt = 0;
   agentUsage.cached = 0;
   agentUsage.completion = 0;
-  renderConversation("user", request);
+  renderConversation("user", request, false);
   if (instruction) instruction.value = "";
   setStatus("The agent is working. Nothing changes until you approve.");
   await agentLoop(request);
 }
+
+const RUN_MODE_KEY = "vynorai.m365.runMode";
+try {
+  const savedMode = localStorage.getItem(RUN_MODE_KEY);
+  if (runMode && ["smart", "local", "agent"].includes(savedMode ?? ""))
+    runMode.value = savedMode!;
+} catch {
+  // Smart remains the safe default when storage is unavailable.
+}
+runMode?.addEventListener("change", () => {
+  try {
+    localStorage.setItem(RUN_MODE_KEY, runMode.value);
+  } catch {
+    // The selected mode still applies to this session.
+  }
+});
+smartRun?.addEventListener("click", () => {
+  const request = instruction?.value.trim() ?? "";
+  if (!request) return setStatus("Describe what you want first.");
+  const mode = (runMode?.value || "smart") as SmartMode;
+  if (mode === "agent" && capabilities?.aiAnalysis === false) {
+    setStatus(
+      translate(
+        language,
+        "agent_unavailable",
+        "Agent workflow is not available for this account. Use local preview.",
+      ),
+    );
+    return;
+  }
+  const path = chooseSmartPath(
+    request,
+    mode,
+    capabilities?.aiAnalysis !== false,
+  );
+  if (path === "agent") void startAgent();
+  else void inspect?.click();
+});
+instruction?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+  event.preventDefault();
+  smartRun?.click();
+});
 
 document
   .querySelector("#agent-run")
@@ -4422,6 +5328,7 @@ agentDiscard?.addEventListener("click", () => {
   show(agentApprove, false);
   show(agentDiscard, false);
   if (agentBadge) agentBadge.textContent = "Discarded";
+  setAgentStage("approval", true);
   setStatus("Discarded. Nothing was changed.");
 });
 
@@ -4433,6 +5340,8 @@ agentApprove?.addEventListener("click", async () => {
   show(agentApprove, false);
   show(agentDiscard, false);
   if (agentBadge) agentBadge.textContent = "Applying";
+  setAgentStage("apply");
+  setAgentRoleView(document, "verification", "pending", "waiting for apply");
   agentStopped = false;
   show(agentStop, true);
   setStatus("Applying the approved changes...");
@@ -4503,6 +5412,14 @@ agentApprove?.addEventListener("click", async () => {
   // The agent checks what was written once or twice and may stage fixes (they need approval again).
   if (agentRounds < 2) {
     agentRounds += 1;
+    agentVerifying = true;
+    setAgentStage("verify");
+    setAgentRoleView(
+      document,
+      "verification",
+      "active",
+      "reading results back",
+    );
     if (agentBadge) agentBadge.textContent = "Verifying";
     setStatus("Verifying the applied result...");
     await agentLoop(
@@ -4514,6 +5431,8 @@ agentApprove?.addEventListener("click", async () => {
         })),
       ),
     );
+    setAgentRoleView(document, "verification", "done", "read-back completed");
+    agentVerifying = false;
   }
 });
 
@@ -4567,11 +5486,13 @@ agentUndo?.addEventListener("click", async () => {
   }
 });
 
-document.querySelector("#new-chat")?.addEventListener("click", () => {
-  agentHistory = [];
-  agentMask = new PersonalMask();
-  agentPending = undefined;
-  show(agentCard, false);
+document.querySelectorAll(".new-chat-action").forEach((button) => {
+  button.addEventListener("click", () => {
+    agentHistory = [];
+    agentMask = new PersonalMask();
+    agentPending = undefined;
+    show(agentCard, false);
+  });
 });
 
 // --- Workbook preferences, change log, Sri Lanka pack, WhatsApp summary ---------------------
@@ -4736,7 +5657,21 @@ document
  * selection when it is an employee list with a basic salary column, else the sheet has blank
  * rows. Returns false when the person says no, so the request is read as usual.
  */
+let payrollDeclined = "";
+let payrollOpen = false;
+
 async function offerPayroll(request: string): Promise<boolean> {
+  // A second click while the question is open does nothing.
+  if (payrollOpen) return true;
+  payrollOpen = true;
+  try {
+    return await askAndWritePayroll(request);
+  } finally {
+    payrollOpen = false;
+  }
+}
+
+async function askAndWritePayroll(request: string): Promise<boolean> {
   const words = textLanguage();
   let employees: PayrollEmployee[] = [];
   try {

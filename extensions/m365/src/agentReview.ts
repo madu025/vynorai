@@ -36,7 +36,7 @@ export const REVIEW_FOCUSES: readonly ReviewFocus[] = ["accuracy", "coverage"];
 
 const FOCUS_CHECKS: Record<ReviewFocus, string> = {
   accuracy:
-    "Your focus is accuracy: read the ranges and calculate where it helps. Look for wrong or shifted ranges, formulas that give errors or wrong totals, wrong column references, and number formats that do not fit the data. Do not trust the other agent's numbers: run every staged formula through calculate and report any error value (#VALUE!, #N/A, #REF!) as a problem. For a summary table, calculate the sum of its value column over the source rows and compare it with the sum of the summary's own totals; if they differ, report both numbers as a problem. Dates stored as text make EOMONTH and TEXT fail: DATE(YEAR(x),MONTH(x),1) works on both.",
+    "Your focus is accuracy: read the ranges and calculate where it helps. Look for wrong or shifted ranges, formulas that give errors or wrong totals, wrong column references, and number formats that do not fit the data. Do not trust the other agent's numbers: run every staged formula through calculate and report any error value (#VALUE!, #N/A, #REF!) as a problem. For a summary table, calculate the sum of its value column over the source rows and compare it with the sum of the summary's own totals; if they differ, report both numbers as a problem. For a cross-sheet lookup, join or reconciliation, call map_relationships on the source ranges and report a wrong key, many-to-many key, unmatched rows that were ignored, repeated lookup-side keys, or a key that needs cleaning. Dates stored as text make EOMONTH and TEXT fail: DATE(YEAR(x),MONTH(x),1) works on both.",
   coverage:
     "Your focus is coverage and safety: check that every part of the request is covered, nothing would overwrite existing data or headers, new cells sit next to the data they belong to, and labels and sheet names are clear.",
 };
@@ -78,7 +78,9 @@ export function reviewRequest(
     ...listed,
     ...(more > 0 ? [`(and ${more} more)`] : []),
     ...(run.reply ? [`The other agent said: ${run.reply.slice(0, 600)}`] : []),
+    "The changes run in the listed order: a sheet, name or header that an earlier change creates exists for the later ones, so never report it as missing.",
     `Check them against the workbook. ${FOCUS_CHECKS[focus]} Report only problems in your focus. Do not stage any change yourself.`,
+    'Never list something that is correct (a result that matches, a range that is right) as a problem. If you find no real problem, reply exactly "VERDICT: OK" and nothing else.',
     'Reply with exactly one first line, "VERDICT: OK" or "VERDICT: FIX", then one line per problem starting with "- " (at most 5).',
   ].join("\n");
 }
@@ -111,12 +113,23 @@ export function revisionRequest(issues: readonly string[]): string {
 export function needsPlan(request: string): boolean {
   const text = String(request ?? "").trim();
   if (!text || text.startsWith("[Report from the add-in")) return false;
-  if (findUnhandledJobs(text, []).length) return true;
   const question =
     /\?\s*$/.test(text) ||
     /^(what|how (much|many)|which|who|why|when|where|is|are|does|do|did|can you tell|tell me)\b/i.test(
       text,
     );
+  // "Audit the formulas", "check the totals", "list the sheets": a request that only reads is
+  // answered in the reply, so a plan (which tends to invent a report sheet) is not needed. Any
+  // word that changes or writes something brings the planner back.
+  const readsOnly =
+    /^(please\s+)?(audit|check|review|explain|list|show|find|inspect|describe|summari[sz]e|analy[sz]e|compare|tell)\b/i.test(
+      text,
+    ) &&
+    !/\b(fix|correct|repair|add|create|make|build|put|write|insert|delete|remove|replace|rename|clean|sort|format|highlight|merge|copy|move|change|update|set|apply|new sheet|pivot|chart|and then|then)\b/i.test(
+      text,
+    );
+  if (readsOnly) return false;
+  if (findUnhandledJobs(text, []).length) return true;
   return !question;
 }
 
@@ -125,7 +138,7 @@ export function planRequest(request: string): string {
   return [
     "[Report from the add-in: plan] You are the planner. Another agent will stage the changes; you only plan them. Nothing has been written yet.",
     `Request: ${request.slice(0, 1500)}`,
-    "Read the workbook where it helps (sheets, headers, where the data ends). Do not stage any change yourself.",
+    "Read the workbook where it helps (sheets, headers, where the data ends). For a cross-sheet lookup, join or reconciliation, call map_relationships on the source ranges before planning and put its key, cardinality, unmatched-row count, repeated-key status and cleaning warning in the relevant plan step. If it finds no key, plan a question instead of guessing. Do not stage any change yourself.",
     `Reply with "PLAN:" on the first line, then the ordered steps, one per line, as "1. ..." (at most ${PLAN_MAX_STEPS}). Name the sheet, range or column in each step. If the request only asks a question, reply "PLAN: none".`,
   ].join("\n");
 }
@@ -296,6 +309,8 @@ export async function runTeam(
     onTeamPhase?: (phase: "plan" | "reviewing" | "revising") => void;
     onHelperTool?: (name: string, args: Record<string, unknown>) => void;
     onReviewer?: (focus: ReviewFocus) => void;
+    /** The planner's steps, as soon as they exist and before the builder starts; not called without a plan. */
+    onPlan?: (steps: string[]) => void;
     /** Where the planner and reviewers read (defaults to the builder's host). */
     helperHost?: AgentHost;
   },
@@ -310,11 +325,13 @@ export async function runTeam(
   if (needsPlan(options.request)) {
     options.onTeamPhase?.("plan");
     plan = await makePlan({ ...helper, request: options.request });
+    if (plan.length) options.onPlan?.(plan);
   }
   const {
     onTeamPhase,
     onHelperTool: _helperTool,
     helperHost: _helperHost,
+    onPlan: _onPlan,
     onReviewer,
     ...builderOptions
   } = options;

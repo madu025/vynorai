@@ -6,7 +6,7 @@ import type { PaneCard } from "./confirmDialog.js";
 import type { Language } from "./i18n.js";
 import { kindTitle } from "./outcome.js";
 
-const pick = (language: Language, en: string, si: string, ta: string) =>
+export const pick = (language: Language, en: string, si: string, ta: string) =>
   language === "si" ? si : language === "ta" ? ta : en;
 
 /** " Did you mean "Region"?" after a column the reader could not find. */

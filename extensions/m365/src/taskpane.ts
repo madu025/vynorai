@@ -116,6 +116,12 @@ import {
 } from "./api.js";
 import { askInPane } from "./confirmDialog.js";
 import {
+  agentConsentCard,
+  emailSendCard,
+  holidaysCard,
+  removeResultsCard,
+} from "./dialogCards.js";
+import {
   buildReportEmailRequest,
   reportEmailConsentMessage,
   reportSummaryText as buildReportSummaryText,
@@ -202,6 +208,7 @@ import {
   writeHolidaySheet,
   writePayrollSheet,
 } from "./officeSriLanka.js";
+import { holidaySheetRows } from "./sriLanka.js";
 import {
   buildPayrollPlan,
   employeesFromSelection,
@@ -1204,6 +1211,8 @@ emailSend?.addEventListener("click", async () => {
     !(await askInPane(
       `Deliver the reviewed report to ${to}? The selected format may include workbook data, report details and charts.`,
       "Send Excel report",
+      undefined,
+      emailSendCard(to, subject, textLanguage()),
     ))
   )
     return;
@@ -4293,6 +4302,8 @@ rollbackButton?.addEventListener("click", async () => {
         "Remove the result sheets and Table this add-in created? Your original data is not touched.",
       ),
       localizeMessage(language, "Remove"),
+      undefined,
+      removeResultsCard(items, language),
     ))
   )
     return log.record("rollback:confirm", "skip", "user cancelled");
@@ -4424,6 +4435,8 @@ cleanupButton?.addEventListener("click", async () => {
     !(await askInPane(
       `Remove ${older.length} older VynorAI result sheet(s)? The latest result and your original data stay.`,
       "Remove",
+      undefined,
+      removeResultsCard({ sheets: older }, textLanguage(), lastRevealSheet),
     ))
   )
     return;
@@ -5198,6 +5211,24 @@ async function startAgent() {
     agreed = false;
   }
   if (!agreed) {
+    // The card names what this request will really read: the selection's size and personal columns.
+    let facts: Parameters<typeof agentConsentCard>[0] = { request };
+    try {
+      const input = await inspectSelectedExcelRange(
+        officeRuntime(),
+        crypto.randomUUID(),
+      );
+      const layout = getCachedHeaderLayout(input);
+      facts = {
+        request,
+        rows: Math.max(0, input.values.length - layout.headerRowCount),
+        columns: layout.headers.length,
+        sheet: String(input.worksheetName ?? ""),
+        headers: layout.headers.map(String),
+      };
+    } catch {
+      // No usable selection: the card still names the request.
+    }
     agreed = await askInPane(
       localizeMessage(
         language,
@@ -5205,6 +5236,7 @@ async function startAgent() {
       ),
       localizeMessage(language, "Agree"),
       localizeMessage(language, "Cancel"),
+      agentConsentCard(facts, language),
     );
     if (!agreed) return setStatus("Nothing was sent.");
     try {
@@ -5622,6 +5654,12 @@ document
           `Add an "LK Holidays" sheet with the fixed-date holidays of ${year} and ${year + 1}? Poya days and festivals change every year: add them from the gazette. NETWORKDAYS(start, end, LK_Holidays) then skips them.`,
         ),
         localizeMessage(language, "Add"),
+        undefined,
+        holidaysCard(
+          [year, year + 1],
+          holidaySheetRows([year, year + 1]).rows.length,
+          language,
+        ),
       ))
     )
       return;

@@ -125,7 +125,9 @@
         background: var(--brand);
         color: var(--on-brand);
       }
-      .skip-link:focus {
+      /* Keep the accessibility shortcut hidden when Office restores focus after sign-in.
+         Keyboard users still get it immediately when they tab to it. */
+      .skip-link:focus-visible {
         top: 8px;
       }
       main {

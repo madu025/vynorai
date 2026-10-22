@@ -140,6 +140,12 @@ test("the prompt starts the pane and the workspace flows below it", () => {
   assert.ok(area < agent);
 });
 
+test("the skip link appears for keyboard focus without covering the signed-in pane", () => {
+  assert.match(html, /\.skip-link\s*\{[^}]*top:\s*-48px/);
+  assert.match(html, /\.skip-link:focus-visible\s*\{[^}]*top:\s*8px/);
+  assert.doesNotMatch(html, /\.skip-link:focus\s*\{[^}]*top:\s*8px/);
+});
+
 test("selection context and suggestions appear before the conversation", () => {
   const area = html.indexOf('id="scroll-area"');
   const context = html.indexOf('id="workbook-context"');

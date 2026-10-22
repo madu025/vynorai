@@ -345,6 +345,14 @@ const EXACT: Record<string, string> = {
     "முதலில் விசைகளைச் சுத்தம் செய்யவும்",
   "Keys are consistent":
     "விசைகள் சீராக உள்ளன",
+  "rows repeat another row exactly":
+    "வரிசைகள் மற்றொரு வரிசையுடன் முற்றிலும் ஒத்துள்ளன",
+  "Fix":
+    "சரிசெய்",
+  "Review":
+    "மதிப்பாய்வு",
+  "Look":
+    "பார்",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -361,6 +369,20 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^dates in (.+) are stored as text$/, (c) => `${c} இல் தேதிகள் உரையாகச் சேமிக்கப்பட்டுள்ளன`],
+  [/^unusual (.+) values?$/, (c) => `வழக்கத்துக்கு மாறான ${c} மதிப்பு`],
+  [/^blank cells? in (.+)$/, (c) => `${c} இல் வெற்றுக் கலங்கள்`],
+  [/^of (.+) comes from one (.+) \((.+)\)$/, (m, g, v) => `${m} இன் பெரும்பகுதி ஒரே ${g} இலிருந்து (${v})`],
+
+  [/^checks passed · (\d+) calculation\(s\)$/, (n) => `சரிபார்ப்புகள் தேறின · ${n} கணக்கீடுகள்`],
+  [/^(\d+) issue\(s\): (.+)$/, (n, first) => `${n} சிக்கல்கள்: ${first}`],
+  [/^(\d+) change\(s\) read back(?:, (\d+) failed)?$/, (n, failed) => `${n} மாற்றங்கள் மீண்டும் வாசிக்கப்பட்டன${failed ? `, ${failed} தோல்வி` : ""}`],
+  [
+    /^(.+) → (.+) · (one-to-one|one-to-many|many-to-one|many-to-many) · ([\d,]+) unmatched rows · ([\d,]+) duplicate keys$/,
+    (a, b, card, unmatched, dup) =>
+      `${a} → ${b} · ${localizeMessageTa(card)} · பொருந்தாத வரிசைகள் ${unmatched} · மீண்டும் வரும் விசைகள் ${dup}`,
+  ],
+
   [/^([\d,]+) unmatched rows$/, (n) => `பொருந்தாத வரிசைகள் ${n}`],
   [/^([\d,]+) duplicate keys$/, (n) => `மீண்டும் வரும் விசைகள் ${n}`],
 

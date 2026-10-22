@@ -1,6 +1,8 @@
 import {
   PersonalMask,
   answerSources,
+  columnLetters,
+  parseA1,
   appliedReport,
   describeChange,
   runAgent,
@@ -86,6 +88,8 @@ import {
   type AgentStage,
 } from "./taskpaneAgentView.js";
 import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
+import { noticeInData, NOTICE_MAX_ROWS, type NoticedTile } from "./noticed.js";
+import { readBackLine, relationshipLine, reviewerLine } from "./roleEvidence.js";
 import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
 import {
@@ -4693,6 +4697,74 @@ async function readWorkspaceContext(): Promise<{
   );
 }
 
+/** What the "Noticed in your data" card last read, so a slow read cannot overwrite a newer one. */
+let noticedToken = 0;
+const noticedCard = document.querySelector<HTMLElement>("#noticed");
+const noticedTiles = document.querySelector<HTMLElement>("#noticed-tiles");
+
+function renderNoticed(tiles: NoticedTile[]) {
+  if (!noticedCard || !noticedTiles) return;
+  noticedTiles.replaceChildren(
+    ...tiles.map((tile) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "noticed-tile";
+      const figure = document.createElement("b");
+      figure.textContent = tile.figure;
+      const label = document.createElement("span");
+      label.textContent = localizeMessage(language, tile.label);
+      const action = document.createElement("i");
+      action.textContent = localizeMessage(
+        language,
+        tile.tone === "fix" ? "Fix" : tile.tone === "review" ? "Review" : "Look",
+      );
+      button.append(figure, label, action);
+      button.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = tile.request;
+        instruction.dispatchEvent(new Event("input", { bubbles: true }));
+        instruction.focus();
+      });
+      return button;
+    }),
+  );
+  show(noticedCard, tiles.length > 0);
+}
+
+/** Looks at the first rows of the selection on this device; changes nothing and sends nothing. */
+async function refreshNoticed(address: string, rows: number, columns: number) {
+  if (!noticedCard) return;
+  const token = (noticedToken += 1);
+  if (rows < 4 || columns < 1 || columns > 30) return renderNoticed([]);
+  try {
+    const bang = address.lastIndexOf("!");
+    const sheetName = (bang > 0 ? address.slice(0, bang) : "")
+      .replace(/^'|'$/g, "")
+      .replace(/''/g, "'");
+    const box = parseA1(bang > 0 ? address.slice(bang + 1) : address);
+    const last = Math.min(box.lastRow, box.row + NOTICE_MAX_ROWS);
+    const read = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${last}`;
+    const values = await officeRuntime().run(async (context: any) => {
+      const range = sheetName
+        ? context.workbook.worksheets.getItem(sheetName).getRange(read)
+        : context.workbook.getSelectedRange();
+      range.load("values");
+      await context.sync();
+      return range.values as unknown[][];
+    });
+    if (token !== noticedToken) return;
+    const [headerRow = [], ...body] = values;
+    renderNoticed(
+      noticeInData(
+        headerRow.map((value: unknown) => String(value ?? "")),
+        body as never,
+      ),
+    );
+  } catch {
+    if (token === noticedToken) renderNoticed([]);
+  }
+}
+
 /** Shows which sheet and cells the next request will use; hidden when nothing can be read. */
 async function refreshSelectionChip() {
   if (!selectionChip || !selectionText) return;
@@ -4703,6 +4775,7 @@ async function refreshSelectionChip() {
     selectionText.textContent = text;
     show(selectionChip, text !== "");
     renderWorkspaceContext(info, schema);
+    if (!agentBusy) void refreshNoticed(info.address, info.rows, info.columns);
     const changedAfterPreview = Boolean(
       currentPlan &&
         previewSelectionAddress &&
@@ -4937,7 +5010,12 @@ function renderAgentRun(run: AgentRun) {
     `${run.changes.length} staged change(s)`,
   );
   if (relationship)
-    setAgentRoleView(document, "relationships", "done", "key evidence found");
+    setAgentRoleView(
+      document,
+      "relationships",
+      "done",
+      relationshipLine(relationship),
+    );
   if (agentReply) {
     agentReply.textContent = "";
     // The reply itself is shown once, in the chat; this card keeps only the limit notice.
@@ -5031,6 +5109,10 @@ function agentInputReader() {
     ));
 }
 
+/** Calculations each reviewer ran in this request, shown as that reviewer's evidence. */
+const helperCalculations = { accuracy: 0, safety: 0 };
+let currentReviewer: "accuracy" | "safety" | undefined;
+
 async function agentLoop(request: string) {
   agentBusy = true;
   agentStopped = false;
@@ -5047,6 +5129,9 @@ async function agentLoop(request: string) {
     showWorkbookMapView(document, undefined);
     resetAgentRolesView(document);
   }
+  helperCalculations.accuracy = 0;
+  helperCalculations.safety = 0;
+  currentReviewer = undefined;
   if (agentBadge) agentBadge.textContent = localizeMessage(language, "Working");
   if (agentProgress)
     agentProgress.textContent = localizeMessage(
@@ -5124,6 +5209,7 @@ async function agentLoop(request: string) {
       },
       onPlan: showAgentPlan,
       onReviewer: (focus) => {
+        currentReviewer = focus === "accuracy" ? "accuracy" : "safety";
         if (focus === "accuracy") {
           setAgentRoleView(
             document,
@@ -5149,6 +5235,8 @@ async function agentLoop(request: string) {
       },
       onHelperTool: (name, args) => {
         const label = agentToolLabel(name, args);
+        if (name === "calculate" && currentReviewer)
+          helperCalculations[currentReviewer] += 1;
         if (name === "map_relationships")
           setAgentRoleView(
             document,
@@ -5187,9 +5275,10 @@ async function agentLoop(request: string) {
         document,
         reviewer.focus === "accuracy" ? "accuracy" : "safety",
         "done",
-        reviewer.ok
-          ? "checks passed"
-          : `${reviewer.issues.length} issue(s) found`,
+        reviewerLine(
+          reviewer,
+          helperCalculations[reviewer.focus === "accuracy" ? "accuracy" : "safety"],
+        ),
       );
     renderAgentRun(run);
     // The answer and the changes to approve are below the chat: bring them into view above the box.
@@ -5518,7 +5607,12 @@ agentApprove?.addEventListener("click", async () => {
         })),
       ),
     );
-    setAgentRoleView(document, "verification", "done", "read-back completed");
+    setAgentRoleView(
+      document,
+      "verification",
+      "done",
+      readBackLine(report.results),
+    );
     agentVerifying = false;
   }
 });

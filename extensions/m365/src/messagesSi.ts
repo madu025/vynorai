@@ -336,6 +336,14 @@ const EXACT: Record<string, string> = {
     "මුලින් යතුරු පිරිසිදු කරන්න",
   "Keys are consistent":
     "යතුරු ගැලපේ",
+  "rows repeat another row exactly":
+    "පේළි වෙනත් පේළියක් හා හරියටම සමාන",
+  "Fix":
+    "හදන්න",
+  "Review":
+    "බලන්න",
+  "Look":
+    "බලන්න",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -352,6 +360,20 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  [/^dates in (.+) are stored as text$/, (c) => `${c} හි දින පෙළ ලෙස ඇත`],
+  [/^unusual (.+) values?$/, (c) => `අසාමාන්‍ය ${c} අගය`],
+  [/^blank cells? in (.+)$/, (c) => `${c} හි හිස් සෛල`],
+  [/^of (.+) comes from one (.+) \((.+)\)$/, (m, g, v) => `${m} හි බොහෝ කොටසක් එක් ${g} එකකින් (${v})`],
+
+  [/^checks passed · (\d+) calculation\(s\)$/, (n) => `පරීක්ෂා සමත් විය · ගණනය ${n}ක්`],
+  [/^(\d+) issue\(s\): (.+)$/, (n, first) => `ගැටලු ${n}ක්: ${first}`],
+  [/^(\d+) change\(s\) read back(?:, (\d+) failed)?$/, (n, failed) => `නැවත කියවූ වෙනස්කම් ${n}ක්${failed ? `, අසාර්ථක ${failed}ක්` : ""}`],
+  [
+    /^(.+) → (.+) · (one-to-one|one-to-many|many-to-one|many-to-many) · ([\d,]+) unmatched rows · ([\d,]+) duplicate keys$/,
+    (a, b, card, unmatched, dup) =>
+      `${a} → ${b} · ${localizeMessageSi(card)} · ගැලපෙන්නේ නැති පේළි ${unmatched}ක් · පුනරාවර්තන යතුරු ${dup}ක්`,
+  ],
+
   [/^([\d,]+) unmatched rows$/, (n) => `ගැලපෙන්නේ නැති පේළි ${n}ක්`],
   [/^([\d,]+) duplicate keys$/, (n) => `පුනරාවර්තන යතුරු ${n}ක්`],
 

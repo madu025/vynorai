@@ -147,3 +147,9 @@ test("the plan and the sources are drawn as cards and a long formula is collapse
   const view = readFileSync(new URL("./taskpaneAgentView.ts", import.meta.url), "utf8");
   assert.match(view, /createElement\("details"\)/);
 });
+
+test("the noticed card is in the Work panel and its tiles are localized", () => {
+  assert.match(html, /id="noticed"[\s\S]{0,200}data-workspace-panel="work"/);
+  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  assert.match(source, /localizeMessage\(language, tile\.label\)/);
+});

@@ -354,6 +354,7 @@ let previewReadyAt = 0;
 let lastSample: { totalRows: number; sampledRows: number } | undefined;
 let applyStartedAt = 0;
 let pendingSpecs: ExcelColumnSpecs | undefined;
+let refreshPreviewSummary: (() => void) | undefined;
 let excludedKinds = new Set<string>();
 let lastCreated:
   | { planId: string; sheets: string[]; tables: string[]; names: string[] }
@@ -2220,6 +2221,11 @@ inspect?.addEventListener("click", async () => {
         null,
         2,
       );
+    // Keep the visible preview in sync with the plan before the next paint. The
+    // MutationObserver below remains useful for external preview updates, but it
+    // is asynchronous and could briefly leave a stale Column/Line chart visible
+    // after a tweak has already been accepted by the planner.
+    refreshPreviewSummary?.();
     if (apply) apply.disabled = false;
     renderSteps(wanted, plan.actions);
     if (rollbackButton) rollbackButton.hidden = true;
@@ -3354,6 +3360,7 @@ function setupLayout() {
     workspaceNavigation.refresh();
     workspaceNavigation.activate("results");
   };
+  refreshPreviewSummary = renderSummary;
   if (preview)
     new MutationObserver(renderSummary).observe(preview, {
       childList: true,

@@ -234,8 +234,9 @@ test("every workbook-object tool checks its arguments and describes the change",
 });
 
 test("every workbook-object tool is offered to the model by the backend", async () => {
-  const { AGENT_TOOL_NAMES } =
-    await import("../../../backend/src/services/m365Agent.js");
+  const { AGENT_TOOL_NAMES } = await import(
+    "../../../backend/src/services/m365Agent.js"
+  );
   for (const tool of Object.keys(ACTION_TOOLS))
     assert.ok(AGENT_TOOL_NAMES.includes(tool), tool);
 });
@@ -531,8 +532,9 @@ test("batch-test fixes: a name without = works, Table filters use the same crite
 });
 
 test("delete_rows_where uses a filter pass per OR condition and one pass for AND", async () => {
-  const { conditionCriteria, deletePasses } =
-    await import("./officeAgentActions.js");
+  const { conditionCriteria, deletePasses } = await import(
+    "./officeAgentActions.js"
+  );
   assert.deepEqual(conditionCriteria({ operator: "=", value: "m" }), {
     criterion1: "=m",
   });

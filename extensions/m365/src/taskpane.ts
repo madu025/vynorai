@@ -4664,8 +4664,8 @@ async function refreshSelectionChip() {
     renderWorkspaceContext(info, schema);
     const changedAfterPreview = Boolean(
       currentPlan &&
-      previewSelectionAddress &&
-      info.address !== previewSelectionAddress,
+        previewSelectionAddress &&
+        info.address !== previewSelectionAddress,
     );
     show(selectionChangeWarning, changedAfterPreview);
     if (changedAfterPreview && apply) apply.disabled = true;

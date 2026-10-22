@@ -521,9 +521,9 @@ const CASES: Case[] = [
       return need(
         Boolean(
           format &&
-          format.bold === true &&
-          format.fill &&
-          /^A1:J1$/i.test(format.address),
+            format.bold === true &&
+            format.fill &&
+            /^A1:J1$/i.test(format.address),
         ),
         JSON.stringify(format ?? kinds(run)),
       );

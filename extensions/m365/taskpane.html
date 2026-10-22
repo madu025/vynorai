@@ -486,9 +486,12 @@
         font-weight: 600;
       }
       .context-card {
-        display: grid;
-        gap: 9px;
-        padding: 13px;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px 8px;
+        padding: 7px 9px;
+        border-radius: 12px;
         border-color: color-mix(in srgb, var(--brand) 27%, var(--line));
         background: linear-gradient(
           145deg,
@@ -505,7 +508,7 @@
       }
       .context-head h2 {
         margin: 0;
-        font-size: 14px;
+        font-size: 12px;
         letter-spacing: -0.1px;
       }
       .context-head .ghost {
@@ -514,13 +517,23 @@
         font-size: 11px;
       }
       #context-selection {
+        flex: 1 1 180px;
+        min-width: 0;
         margin: 0;
         font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .context-badges {
         display: flex;
         flex-wrap: wrap;
         gap: 5px;
+        flex: 0 1 auto;
+      }
+      .context-actions {
+        flex: 0 0 auto;
+        margin-left: auto;
       }
       .context-badge {
         padding: 3px 7px;
@@ -637,25 +650,6 @@
         box-shadow:
           0 0 0 3px color-mix(in srgb, var(--brand) 19%, transparent),
           0 7px 20px rgb(29 29 31 / 9%);
-      }
-      .selection-guidance {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        margin: 0 0 7px;
-        padding: 7px 8px;
-        border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--line));
-        border-radius: 11px;
-        background: color-mix(in srgb, var(--warning) 10%, var(--surface));
-        color: var(--ink);
-        font-size: 11px;
-      }
-      .selection-guidance .ghost {
-        flex: 0 0 auto;
-        min-height: 29px;
-        padding: 4px 8px;
-        font-size: 11px;
       }
       textarea {
         display: block;
@@ -1378,19 +1372,6 @@
             <span data-i18n="selection_using">Using:</span>
             <span id="selection-text"></span>
           </p>
-          <div id="selection-guidance" class="selection-guidance" hidden>
-            <span data-i18n="select_data_guide"
-              >This cell is empty. Select your table, or use the data already
-              found on this sheet.</span
-            ><button
-              id="use-sheet-data"
-              class="ghost"
-              type="button"
-              data-i18n="use_sheet_data"
-            >
-              Use sheet data
-            </button>
-          </div>
           <div id="dup-fix" hidden>
             <button id="dup-fix-btn" type="button" data-i18n="clean_first">
               Clean first, then run this
@@ -1581,7 +1562,11 @@
             aria-labelledby="workbook-context-heading"
           >
             <div class="context-head">
-              <h2 id="workbook-context-heading" data-i18n="workbook_context">
+              <h2
+                id="workbook-context-heading"
+                class="sr-only"
+                data-i18n="workbook_context"
+              >
                 Workbook context
               </h2>
               <button

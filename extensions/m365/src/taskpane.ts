@@ -4018,11 +4018,6 @@ refreshLanguage();
 
 const selectionChip = document.querySelector<HTMLElement>("#selection-chip");
 const selectionText = document.querySelector<HTMLElement>("#selection-text");
-const selectionGuidance = document.querySelector<HTMLElement>(
-  "#selection-guidance",
-);
-const useSheetData =
-  document.querySelector<HTMLButtonElement>("#use-sheet-data");
 const workbookContext =
   document.querySelector<HTMLElement>("#workbook-context");
 const contextSelection =
@@ -4110,7 +4105,6 @@ function renderWorkspaceContext(
   );
   show(workbookContext, description !== "");
   show(contextSuggestions, suggestions.length > 0);
-  show(selectionGuidance, info.isBlank === true);
   show(
     document.querySelector<HTMLElement>("#starter-suggestions"),
     conversationMessages.length === 0 && suggestions.length === 0,
@@ -4141,43 +4135,9 @@ async function refreshSelectionChip() {
     renderWorkspaceContext(info, schema);
   } catch {
     show(selectionChip, false);
-    show(selectionGuidance, false);
     renderWorkspaceContext(undefined);
   }
 }
-
-/** A blank cell outside a table is common; selecting the used range is a reversible UI action only. */
-useSheetData?.addEventListener("click", async () => {
-  try {
-    await officeRuntime().run(async (context: any) => {
-      const selected = context.workbook.getSelectedRange();
-      const used = selected.worksheet.getUsedRange();
-      used.load(["address", "rowCount", "columnCount"]);
-      await context.sync();
-      if (Number(used.rowCount) < 2 || Number(used.columnCount) < 1)
-        throw new Error("Select a table or a data range first.");
-      used.select();
-      await context.sync();
-    });
-    await refreshSelectionChip();
-    setStatus(
-      translate(
-        language,
-        "sheet_data_selected",
-        "Sheet data selected. Review the selection, then describe what to create.",
-      ),
-    );
-  } catch (error) {
-    log.record("selection:use-sheet-data", "info", describeError(error));
-    setStatus(
-      translate(
-        language,
-        "sheet_data_missing",
-        "Excel could not find a data range on this sheet. Select your table and try again.",
-      ),
-    );
-  }
-});
 
 document
   .querySelector("#refresh-context")

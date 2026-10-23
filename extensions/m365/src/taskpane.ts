@@ -5002,8 +5002,17 @@ document
   .querySelector("#explore-ai-go")
   ?.addEventListener("click", () => void askAiForIdeas());
 
+let noticedKey = "";
+let noticedAt = 0;
+/** The same selection read again within this time reuses the last result: no second read of 2,000 rows. */
+const NOTICED_REUSE_MS = 30_000;
+
 async function refreshNoticed(address: string, rows: number, columns: number) {
   if (!noticedCard) return;
+  const key = `${address}|${rows}x${columns}`;
+  if (key === noticedKey && Date.now() - noticedAt < NOTICED_REUSE_MS) return;
+  noticedKey = key;
+  noticedAt = Date.now();
   const token = (noticedToken += 1);
   if (rows < 4 || columns < 1 || columns > 30) {
     if (exploreStats) {
@@ -5088,7 +5097,10 @@ document
 
 document
   .querySelector("#refresh-context")
-  ?.addEventListener("click", () => void refreshSelectionChip());
+  ?.addEventListener("click", () => {
+    noticedKey = "";
+    void refreshSelectionChip();
+  });
 document.querySelector("#context-overview")?.addEventListener("click", () => {
   document.querySelector<HTMLButtonElement>("#overview")?.click();
 });
@@ -5101,7 +5113,7 @@ function watchSelection() {
       office().EventType.DocumentSelectionChanged,
       () => {
         clearTimeout(selectionTimer);
-        selectionTimer = setTimeout(() => void refreshSelectionChip(), 250);
+        selectionTimer = setTimeout(() => void refreshSelectionChip(), 500);
       },
     );
   } catch (error) {
@@ -5938,6 +5950,7 @@ agentApprove?.addEventListener("click", async () => {
   lastApplyStatus = failed || agentStopped
     ? "Partly applied. Undo puts everything back."
     : "Applied. Undo puts everything back.";
+  noticedKey = "";
   setStatus(lastApplyStatus);
   // The agent checks what was written once or twice and may stage fixes (they need approval again).
   if (agentRounds < 2 && !agentStopped) {
@@ -6009,6 +6022,7 @@ agentUndo?.addEventListener("click", async () => {
       changes: [],
       reference: "agent",
     });
+    noticedKey = "";
     setStatus("Undone. The workbook is back as it was.");
   } catch (error) {
     log.record("agent:undo", "fail", describeError(error));

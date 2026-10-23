@@ -87,15 +87,16 @@ import {
   resetAgentRolesView,
   setAgentViewLocalizer,
   setAgentRoleView,
+  settleActiveRolesView,
   showWorkbookMapView,
   type AgentStage,
 } from "./taskpaneAgentView.js";
 import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
 import { noticeInData, NOTICE_MAX_ROWS, type NoticedTile } from "./noticed.js";
 import {
+  finalRoleStates,
   readBackLine,
   relationshipLine,
-  reviewerLine,
 } from "./roleEvidence.js";
 import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
@@ -5258,6 +5259,33 @@ function agentInputReader() {
 /** Calculations each reviewer ran in this request, shown as that reviewer's evidence. */
 const helperCalculations = { accuracy: 0, safety: 0 };
 let currentReviewer: "accuracy" | "safety" | undefined;
+let mapperRan = false;
+
+/**
+ * Gives every team role its last state and one line of evidence, so none stays "pending" after a
+ * question, a skipped planner or a reviewer that did not run. A verify round only updates the
+ * reviewers; the planner, mapper and builder keep what the first round showed.
+ */
+function finishAgentRoles(reviewed: Awaited<ReturnType<typeof runTeam>>) {
+  const states = finalRoleStates({
+    planSteps: reviewed.plan?.length ?? 0,
+    link: relationshipEvidence(reviewed.run.messages),
+    mapperRan,
+    changes: reviewed.run.changes.length,
+    reviewers: reviewed.reviewers ?? [],
+    calculations: helperCalculations,
+  });
+  for (const item of states) {
+    if (
+      agentVerifying &&
+      (item.role === "planner" ||
+        item.role === "relationships" ||
+        item.role === "builder")
+    )
+      continue;
+    setAgentRoleView(document, item.role, item.state, item.evidence);
+  }
+}
 
 async function agentLoop(request: string) {
   agentBusy = true;
@@ -5278,6 +5306,7 @@ async function agentLoop(request: string) {
   helperCalculations.accuracy = 0;
   helperCalculations.safety = 0;
   currentReviewer = undefined;
+  mapperRan = false;
   if (agentBadge) agentBadge.textContent = localizeMessage(language, "Working");
   if (agentProgress)
     agentProgress.textContent = localizeMessage(
@@ -5325,6 +5354,7 @@ async function agentLoop(request: string) {
       },
       onTool: (name, args) => {
         const label = agentToolLabel(name, args);
+        if (name === "map_relationships") mapperRan = true;
         if (name === "map_relationships")
           setAgentRoleView(
             document,
@@ -5386,6 +5416,7 @@ async function agentLoop(request: string) {
         const label = agentToolLabel(name, args);
         if (name === "calculate" && currentReviewer)
           helperCalculations[currentReviewer] += 1;
+        if (name === "map_relationships") mapperRan = true;
         if (name === "map_relationships")
           setAgentRoleView(
             document,
@@ -5415,25 +5446,7 @@ async function agentLoop(request: string) {
         planSteps: reviewed.plan?.length ?? 0,
         revised: reviewed.revised,
       });
-    if (reviewed.plan?.length)
-      setAgentRoleView(
-        document,
-        "planner",
-        "done",
-        `${reviewed.plan.length} plan step(s)`,
-      );
-    for (const reviewer of reviewed.reviewers ?? [])
-      setAgentRoleView(
-        document,
-        reviewer.focus === "accuracy" ? "accuracy" : "safety",
-        "done",
-        reviewerLine(
-          reviewer,
-          helperCalculations[
-            reviewer.focus === "accuracy" ? "accuracy" : "safety"
-          ],
-        ),
-      );
+    finishAgentRoles(reviewed);
     renderAgentRun(run);
     // The answer and the changes to approve are below the chat: bring them into view above the box.
     window.requestAnimationFrame(() =>
@@ -5477,8 +5490,11 @@ async function agentLoop(request: string) {
       if (agentBadge)
         agentBadge.textContent = localizeMessage(language, "Stopped");
       setStatus("Stopped. Nothing was changed.");
-    } else if (error instanceof M365ApiError) handleApiError("agent", error);
-    else {
+    } else if (error instanceof M365ApiError) {
+      settleActiveRolesView(document, "did not finish");
+      handleApiError("agent", error);
+    } else {
+      settleActiveRolesView(document, "did not finish");
       log.record("agent:run", "fail", describeError(error));
       setStatus("The agent could not finish. Nothing was changed.");
     }
@@ -5733,7 +5749,19 @@ agentApprove?.addEventListener("click", async () => {
     agentChanges.textContent = "";
     for (const result of report.results) {
       const li = document.createElement("li");
-      li.textContent = `${result.status === "applied" ? "✓" : result.status === "failed" ? "✗" : "–"} ${result.change}${result.status === "failed" ? ` (${String(result.detail ?? "")})` : ""}${result.ms && result.ms >= 1000 ? ` - ${(result.ms / 1000).toFixed(1)} s` : ""}`;
+      // The glyph is decoration; the word beside it is what a screen reader announces.
+      const glyph = document.createElement("span");
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.textContent =
+        result.status === "applied" ? "✓" : result.status === "failed" ? "✗" : "–";
+      const word = document.createElement("span");
+      word.className = "sr-only";
+      word.textContent = `${localizeMessage(language, result.status === "applied" ? "applied" : result.status === "failed" ? "failed" : "skipped")}: `;
+      li.append(
+        glyph,
+        word,
+        ` ${result.change}${result.status === "failed" ? ` (${String(result.detail ?? "")})` : ""}${result.ms && result.ms >= 1000 ? ` - ${(result.ms / 1000).toFixed(1)} s` : ""}`,
+      );
       agentChanges.appendChild(li);
     }
   }

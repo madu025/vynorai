@@ -988,6 +988,11 @@
         text-align: left;
         overflow-wrap: normal;
       }
+      .noticed-tile:focus-visible,
+      .explore-chip:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 2px;
+      }
       .noticed-tile:hover {
         border-color: var(--brand);
       }
@@ -1217,22 +1222,28 @@
         gap: 5px;
         margin: 8px 0;
       }
-      /* A role name is one or two words: it keeps its letters together and the status wraps instead. */
+      /* A role name keeps its letters together; at 320px the status wraps below it (flex-wrap) instead
+         of being squeezed, and a name too long for the row shrinks with an ellipsis (title shows it). */
       .agent-activity-list > div strong {
-        flex: 0 0 auto;
+        flex: 0 1 auto;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
         overflow-wrap: normal;
         word-break: normal;
         white-space: nowrap;
       }
       .agent-activity-list > div .agent-role-status {
-        min-width: 0;
+        flex: 1 1 120px;
+        min-width: 120px;
         overflow-wrap: anywhere;
       }
       .agent-activity-list > div {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 2px 8px;
         padding: 7px 8px;
         border: 1px solid var(--line);
         border-radius: 9px;
@@ -1255,6 +1266,10 @@
       }
       .agent-activity-list > div[data-state="done"] .agent-role-status {
         color: var(--success);
+      }
+      .agent-activity-list > div[data-state="skipped"] .agent-role-status {
+        color: var(--muted);
+        font-style: italic;
       }
       .workbook-map {
         margin-top: 10px;
@@ -3165,7 +3180,7 @@
               <h2 id="agent-heading" tabindex="-1" data-i18n="agent_title">
                 Agent
               </h2>
-              <span class="badge" id="agent-badge">Working</span>
+              <span class="badge" id="agent-badge" role="status" aria-live="polite">Working</span>
             </div>
             <p id="agent-progress" class="muted" aria-live="polite"></p>
             <ol

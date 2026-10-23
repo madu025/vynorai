@@ -199,3 +199,20 @@ test("result glyphs have a text alternative and the tiles show a keyboard focus 
   assert.match(source, /createElement\("button"\);\s+button\.type = "button";\s+button\.className = "explore-chip"/);
   assert.match(html, /\.noticed-tile:focus-visible,\s*\.explore-chip:focus-visible \{[^}]*outline: 3px solid/);
 });
+
+test("every aria-label in the page has a Sinhala and a Tamil string (a screen reader reads it)", () => {
+  const missing: string[] = [];
+  for (const match of body.matchAll(/<(\w+)\b([^>]*)>/g)) {
+    const attrs = match[2];
+    const label = /aria-label="([^"]*)"/.exec(attrs)?.[1];
+    if (!label || label === "VynorAI Excel") continue;
+    const key = /data-i18n-aria-label="(\w+)"/.exec(attrs)?.[1];
+    if (!key) {
+      missing.push(`no key: ${label}`);
+      continue;
+    }
+    for (const lang of ["si", "ta"] as const)
+      if (!translate(lang, key, "")) missing.push(`${lang}: ${key}`);
+  }
+  assert.deepEqual(missing, []);
+});

@@ -78,3 +78,22 @@ test("the preview summary is built in Tamil from structured parts", () => {
     "வடிவமைப்பு, PivotTable — Sheet1_Vynor_Format தாளில். 5 தரவு வரிசைகள், 4 நெடுவரிசைகள். உங்கள் மூலத் தரவு மாறாது. Check dates.",
   );
 });
+
+test("the reading-progress line is fully Tamil (the general Reading rule must not take it)", () => {
+  const line = localizeMessageTa("Reading selected rows: 41/41...");
+  assert.match(line, TAMIL);
+  assert.doesNotMatch(line, /[A-Za-z]{3,}/);
+  assert.match(line, /41\/41/);
+});
+
+test("the suggestion outputs, the before/after table headers and the ideas texts are translated (ta)", () => {
+  for (const line of ["Chart result", "Dashboard sheet", "Quality report", "Formula audit", "Forecast report", "Clean result sheet", "Cell", "Now", "After approval", "Ideas for the selected columns", "Agree", "Cancel", "Add", "Replace", "Confirm", "(empty)", "The AI is still working on the last request. Try again when it finishes.", "The selection changed, so those ideas were dropped. Tap More ideas again."])
+    assert.notEqual(localizeMessageTa(line), line, line);
+});
+
+test("the apply progress line is localized with its change description (ta)", () => {
+  const line = localizeMessageTa("Applying 2 of 5: Add a new sheet \"Summary\"");
+  assert.match(line, /2\/5/);
+  assert.notEqual(line, "Applying 2 of 5: Add a new sheet \"Summary\"");
+  assert.doesNotMatch(line, /Applying/);
+});

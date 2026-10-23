@@ -65,6 +65,8 @@ try {
           node.hidden = false;
           node = node.parentElement;
         }
+        // Open the Results tab, as the person does after a preview is ready.
+        document.body.dataset.workspaceView = "results";
         const applyButton = document.getElementById("apply") as HTMLButtonElement;
         const cancelButton = document.getElementById("cancel-result") as HTMLButtonElement;
         applyButton.textContent = apply;

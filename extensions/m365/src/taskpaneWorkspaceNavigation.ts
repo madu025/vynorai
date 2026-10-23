@@ -32,10 +32,12 @@ export function createWorkspaceNavigation(
   const available = (view: WorkspaceView): boolean => {
     // Explore needs no result: its templates and questions come from the selection itself.
     if (view === "work" || view === "explore") return true;
+    // A developer-only panel ("Technical details") is never shown to the person, so it is not a result:
+    // counting it opened an empty Results view before any result existed.
     const selector =
       view === "results"
-        ? '[data-workspace-panel="results"]:not([hidden])'
-        : '[data-workspace-panel="share"]:not([hidden])';
+        ? '[data-workspace-panel="results"]:not([hidden]):not([data-dev])'
+        : '[data-workspace-panel="share"]:not([hidden]):not([data-dev])';
     return Boolean(document.querySelector(selector));
   };
 
@@ -65,8 +67,28 @@ export function createWorkspaceNavigation(
     return true;
   };
 
-  for (const [view, button] of buttons)
+  for (const [view, button] of buttons) {
     button.addEventListener("click", () => activate(view));
+    // Only the selected tab is in the Tab order (roving tabindex), so the arrow keys must reach the
+    // others: without them a keyboard user could never leave Work.
+    button.addEventListener("keydown", (event: KeyboardEvent) => {
+      const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+      if (!keys.includes(event.key)) return;
+      const enabled = [...buttons].filter(([, candidate]) => !candidate.disabled);
+      const at = enabled.findIndex(([name]) => name === view);
+      if (at < 0 || !enabled.length) return;
+      const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? enabled.length - 1
+            : (at + step + enabled.length) % enabled.length;
+      event.preventDefault();
+      const [name, target] = enabled[next];
+      if (activate(name)) target.focus();
+    });
+  }
 
   const observedPanels = [
     ...document.querySelectorAll<HTMLElement>("[data-workspace-panel]"),

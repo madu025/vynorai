@@ -121,3 +121,25 @@ test("every final role line has Sinhala and Tamil wording", () => {
     for (const lang of ["si", "ta"] as const)
       assert.notEqual(localizeMessage(lang, line), line, `${lang}: ${line}`);
 });
+
+test("the reviewer that really runs (focus coverage) fills the safety role", () => {
+  const states = finalRoleStates({
+    planSteps: 1,
+    changes: 2,
+    reviewers: [
+      { focus: "accuracy", ok: true, issues: [] },
+      { focus: "coverage", ok: false, issues: ["The Summary sheet name is unclear"] },
+    ],
+    calculations: { accuracy: 1, safety: 3 },
+  });
+  const safety = states.find((s) => s.role === "safety")!;
+  assert.equal(safety.state, "done");
+  assert.equal(safety.evidence, "1 issue(s): The Summary sheet name is unclear");
+  const passed = finalRoleStates({
+    planSteps: 0,
+    changes: 1,
+    reviewers: [{ focus: "coverage", ok: true, issues: [] }],
+    calculations: { accuracy: 0, safety: 2 },
+  });
+  assert.equal(passed.find((s) => s.role === "safety")!.evidence, "checks passed · 2 calculation(s)");
+});

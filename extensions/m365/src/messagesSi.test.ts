@@ -84,3 +84,23 @@ test("the workbook map words are Sinhala", () => {
   assert.match(si("0 unmatched rows"), /පේළි 0ක්/);
   assert.equal(si("Keys are consistent"), "යතුරු ගැලපේ");
 });
+
+test("the reading-progress line is fully Sinhala (the general Reading rule must not take it)", () => {
+  assert.equal(
+    localizeMessage("si", "Reading selected rows: 41/41..."),
+    "තෝරාගත් පේළි කියවමින්: 41/41...",
+  );
+  assert.doesNotMatch(localizeMessage("si", "Reading selected rows: 500/2000..."), /[A-Za-z]{3,}/);
+});
+
+test("the suggestion outputs, the before/after table headers and the ideas texts are translated (si)", () => {
+  for (const line of ["Chart result", "Dashboard sheet", "Quality report", "Formula audit", "Forecast report", "Clean result sheet", "Cell", "Now", "After approval", "Ideas for the selected columns", "Agree", "Cancel", "Add", "Replace", "Confirm", "(empty)", "The AI is still working on the last request. Try again when it finishes.", "The selection changed, so those ideas were dropped. Tap More ideas again."])
+    assert.notEqual(localizeMessage("si", line), line, line);
+});
+
+test("the apply progress line is localized with its change description (si)", () => {
+  const line = localizeMessage("si", "Applying 2 of 5: Add a new sheet \"Summary\"");
+  assert.match(line, /2\/5/);
+  assert.notEqual(line, "Applying 2 of 5: Add a new sheet \"Summary\"");
+  assert.doesNotMatch(line, /Applying/);
+});

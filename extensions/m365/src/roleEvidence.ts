@@ -72,7 +72,11 @@ export function finalRoleStates(input: {
       : { role: "builder", state: "done", evidence: "answer ready, nothing to change" },
   );
   for (const role of ["accuracy", "safety"] as const) {
-    const verdict = input.reviewers.find((reviewer) => reviewer.focus === role);
+    // The coverage-and-safety reviewer is run with the focus "coverage" (agentReview.ts) and shown as "safety".
+    const verdict = input.reviewers.find(
+      (reviewer) =>
+        reviewer.focus === role || (role === "safety" && reviewer.focus === "coverage"),
+    );
     if (verdict)
       states.push({ role, state: "done", evidence: reviewerLine(verdict, input.calculations[role]) });
     else

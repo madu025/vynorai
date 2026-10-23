@@ -3,11 +3,12 @@ import { test } from "node:test";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
 
 /** A tiny stand-in for the pane's DOM: four nav buttons and whichever panels are shown. */
-function fakePane(shownPanels: string[]) {
+function fakePane(shownPanels: string[], devOnlyPanels: string[] = []) {
+  const focused = { name: "" };
   const buttons = ["work", "results", "share", "explore"].map((target) => {
     const attributes: Record<string, string> = {};
     const classes = new Set<string>();
-    const listeners: Array<() => void> = [];
+    const listeners: Record<string, Array<(event?: any) => void>> = {};
     return {
       dataset: { workspaceTarget: target },
       disabled: false,
@@ -19,8 +20,19 @@ function fakePane(shownPanels: string[]) {
       setAttribute: (name: string, value: string) => {
         attributes[name] = value;
       },
-      addEventListener: (_: string, listener: () => void) => listeners.push(listener),
-      click: () => listeners.forEach((listener) => listener()),
+      addEventListener: (type: string, listener: (event?: any) => void) =>
+        (listeners[type] ??= []).push(listener),
+      click: () => (listeners.click ?? []).forEach((listener) => listener()),
+      /** Presses a key on this tab; returns true when the pane handled (prevented) it. */
+      press: (key: string) => {
+        let handled = false;
+        for (const listener of listeners.keydown ?? [])
+          listener({ key, preventDefault: () => (handled = true) });
+        return handled;
+      },
+      focus: () => {
+        focused.name = target;
+      },
       attributes,
     };
   });
@@ -31,10 +43,13 @@ function fakePane(shownPanels: string[]) {
       selector === "#workspace-nav [data-workspace-target]" ? buttons : [],
     querySelector: (selector: string) => {
       const panel = /data-workspace-panel="(\w+)"/.exec(selector)?.[1];
-      return panel && shownPanels.includes(panel) ? {} : null;
+      if (!panel) return null;
+      // A panel marked data-dev only matches a selector that does not exclude developer panels.
+      if (devOnlyPanels.includes(panel) && selector.includes(":not([data-dev])")) return null;
+      return shownPanels.includes(panel) || devOnlyPanels.includes(panel) ? {} : null;
     },
   };
-  return { document, buttons, body };
+  return { document, buttons, body, focused };
 }
 
 test("Explore is enabled from the start, with no result", () => {
@@ -66,4 +81,46 @@ test("tapping the Explore button opens it and marks it selected", () => {
   assert.equal(body.dataset.workspaceView, "explore");
   assert.equal(explore.attributes["aria-selected"], "true");
   assert.equal(buttons[0].attributes["aria-selected"], "false");
+});
+
+test("a developer-only panel does not make Results or Share available", () => {
+  const { document, buttons } = fakePane([], ["results", "share"]);
+  const nav = createWorkspaceNavigation(document, () => {});
+  const state = Object.fromEntries(buttons.map((b) => [b.dataset.workspaceTarget, b.disabled]));
+  assert.deepEqual(state, { work: false, results: true, share: true, explore: false });
+  assert.equal(nav.activate("results"), false);
+});
+
+test("the arrow keys move between the enabled tabs and wrap around", () => {
+  const { document, buttons, body, focused } = fakePane([]);
+  createWorkspaceNavigation(document, () => {});
+  const [work, , , explore] = buttons;
+  // Results and Share are disabled, so Work and Explore are the only stops.
+  assert.equal(work.press("ArrowRight"), true);
+  assert.equal(body.dataset.workspaceView, "explore");
+  assert.equal(focused.name, "explore");
+  assert.equal(explore.press("ArrowRight"), true);
+  assert.equal(body.dataset.workspaceView, "work");
+  assert.equal(work.press("ArrowLeft"), true);
+  assert.equal(body.dataset.workspaceView, "explore");
+  assert.equal(explore.press("Home"), true);
+  assert.equal(body.dataset.workspaceView, "work");
+  assert.equal(work.press("End"), true);
+  assert.equal(body.dataset.workspaceView, "explore");
+  assert.equal(explore.press("a"), false, "other keys are left alone");
+});
+
+test("the arrow keys also reach Results and Share once they exist", () => {
+  const { document, body } = fakePane(["results", "share"]);
+  const nav = createWorkspaceNavigation(document, () => {});
+  const seen: string[] = [];
+  for (let i = 0; i < 4; i += 1) {
+    const view = nav.current();
+    const button = (document.querySelectorAll("#workspace-nav [data-workspace-target]") as any[]).find(
+      (b) => b.dataset.workspaceTarget === view,
+    );
+    button.press("ArrowRight");
+    seen.push(body.dataset.workspaceView);
+  }
+  assert.deepEqual(seen, ["results", "share", "explore", "work"]);
 });

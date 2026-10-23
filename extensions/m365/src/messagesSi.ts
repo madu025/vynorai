@@ -229,10 +229,14 @@ const EXACT: Record<string, string> = {
     "යම් දෝෂයක් සිදු විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
   "I did not answer this time and nothing was changed. Please try again or ask in other words.":
     "මෙවර මම පිළිතුරු නොදුන්නෙමි; කිසිවක් වෙනස් කර නැත. නැවත උත්සාහ කරන්න හෝ වෙනත් වචන වලින් අසන්න.",
+  "The AI is still working on the last request. Try again when it finishes.":
+    "AI තවමත් පෙර ඉල්ලීම මත වැඩ කරයි. එය අවසන් වූ පසු නැවත උත්සාහ කරන්න.",
   "Asking the AI for ideas...": "AI ගෙන් අදහස් ඉල්ලමින්...",
   "Ideas ready. Tap one to put it in the request box.":
     "අදහස් සූදානම්. එකක් ඔබා ඉල්ලීම් පෙට්ටියට දමන්න.",
   "No new ideas this time.": "මෙවර අලුත් අදහස් නැත.",
+  "The selection changed, so those ideas were dropped. Tap More ideas again.":
+    "තේරීම වෙනස් වූ නිසා එම අදහස් ඉවත දැමුවා. නැවත \"තවත් අදහස්\" ඔබන්න.",
   "The ideas could not be made. See Diagnostics.":
     "අදහස් සෑදීමට නොහැකි විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
   "Undoing the agent's changes...": "Agent ගේ වෙනස්කම් ආපසු හරවමින්...",
@@ -293,6 +297,22 @@ const EXACT: Record<string, string> = {
   Applying: "යොදමින්",
   Undone: "ආපසු හරවන ලදී",
   Stopped: "නවත්වන ලදී",
+  "Chart result": "ප්‍රස්තාර ප්‍රතිඵලය",
+  "Dashboard sheet": "උපකරණ පුවරු පත්‍රිකාව",
+  "Quality report": "දත්ත ගුණාත්මක වාර්තාව",
+  "Formula audit": "සූත්‍ර විගණනය",
+  "Forecast report": "පුරෝකථන වාර්තාව",
+  "Clean result sheet": "පිරිසිදු කළ ප්‍රතිඵල පත්‍රිකාව",
+  Cell: "කොටුව",
+  Agree: "එකඟයි",
+  Cancel: "අවලංගු කරන්න",
+  Add: "එක් කරන්න",
+  Replace: "ප්‍රතිස්ථාපනය කරන්න",
+  Confirm: "තහවුරු කරන්න",
+  "(empty)": "(හිස්)",
+  Now: "දැන්",
+  "After approval": "අනුමැතියෙන් පසු",
+  "Ideas for the selected columns": "තෝරාගත් තීරු සඳහා අදහස්",
   "Waiting for approval": "අනුමැතිය බලාපොරොත්තුවෙන්",
   "Inspecting the selected data and preparing a safe plan.":
     "තෝරාගත් දත්ත පරීක්ෂා කර ආරක්ෂිත සැලසුමක් සූදානම් කරමින්.",
@@ -473,10 +493,19 @@ const TEMPLATES: Template[] = [
   ],
 
   [/^Team: (.+)$/, (what) => `කණ්ඩායම: ${localizeMessageSi(what)}`],
+  [
+    /^Applying (\d+) of (\d+): (.+)$/,
+    (i, n, what) => `යොදමින් ${i}/${n}: ${localizeMessageSi(what)}`,
+  ],
 
   [/^(\d+) staged change\(s\)$/, (n) => `සූදානම් කළ වෙනස්කම් ${n}ක්`],
   [/^(\d+) plan step\(s\)$/, (n) => `සැලසුම් පියවර ${n}ක්`],
   [/^(\d+) issue\(s\) found$/, (n) => `ගැටලු ${n}ක් හමු විය`],
+  // Before the general "Reading ..." rule below, which would otherwise take this message.
+  [
+    /^Reading selected rows: (\d+)\/(\d+)\.\.\.$/,
+    (done, total) => `තෝරාගත් පේළි කියවමින්: ${done}/${total}...`,
+  ],
   [/^Reading (.+)$/, (what) => `කියවමින්: ${what}`],
   [/^Calculating (.+)$/, (what) => `ගණනය කරමින්: ${what}`],
   [
@@ -521,10 +550,6 @@ const TEMPLATES: Template[] = [
     /^Found your table at (.+). Preview ready. Nothing has changed yet. Review it before applying.$/,
     (address) =>
       `ඔබේ වගුව ${address} හි හමු විය. පෙරදසුන සූදානම්. තවමත් කිසිවක් වෙනස් වී නැත. යෙදීමට පෙර එය පරීක්ෂා කරන්න.`,
-  ],
-  [
-    /^Reading selected rows: (\d+)\/(\d+)\.\.\.$/,
-    (done, total) => `තෝරාගත් පේළි කියවමින්: ${done}/${total}...`,
   ],
   [
     /^VynorAI request failed \((.+)\)\. See Diagnostics\.$/,

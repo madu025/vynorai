@@ -26,6 +26,41 @@ export function setAgentViewLocalizer(fn: (text: string) => string): void {
   localize = fn;
 }
 
+/**
+ * Run-time text is written in English and localized when it is shown. The English stays on the element,
+ * so switching the language while the agent card is open can write the same text again in the new one.
+ */
+export function setLocalizedText(element: HTMLElement, english: string): void {
+  element.dataset.en = english;
+  delete element.dataset.enParts;
+  element.textContent = localize(english);
+}
+
+/** A line made of several English parts, each localized on its own and joined with a space. */
+export function setLocalizedParts(element: HTMLElement, parts: readonly string[]): void {
+  delete element.dataset.en;
+  element.dataset.enParts = JSON.stringify(parts);
+  element.textContent = parts.map(localize).join(" ");
+}
+
+/** Writes every text set with `setLocalizedText` / `setLocalizedParts` again in the current language. */
+export function relocalizeView(root: ParentNode): void {
+  for (const element of root.querySelectorAll<HTMLElement>("[data-en]"))
+    element.textContent = localize(element.dataset.en ?? "");
+  for (const element of root.querySelectorAll<HTMLElement>("[data-en-parts]")) {
+    let parts: unknown;
+    try {
+      parts = JSON.parse(element.dataset.enParts ?? "[]");
+    } catch {
+      parts = [];
+    }
+    element.textContent = Array.isArray(parts) ? parts.map((part) => localize(String(part))).join(" ") : "";
+  }
+  // A role name cut short by a narrow pane shows in full as its title: keep it in the current language.
+  for (const name of root.querySelectorAll<HTMLElement>("#agent-activity-list [data-agent-role] strong"))
+    name.title = name.textContent ?? "";
+}
+
 export function setAgentRoleView(
   document: Document,
   role: AgentRole,
@@ -38,18 +73,22 @@ export function setAgentRoleView(
   if (!row) return;
   row.dataset.state = state;
   const status = row.querySelector<HTMLElement>(".agent-role-status");
-  if (status) status.textContent = localize(evidence || state);
+  if (status) setLocalizedText(status, evidence || state);
   // A name cut short by a narrow pane still shows in full on hover and to assistive technology.
   const name = row.querySelector<HTMLElement>("strong");
   if (name) name.title = name.textContent ?? "";
 }
 
-/** After a failed run, a role still "active" or "pending" ends as skipped with the reason, never spinning. */
+/**
+ * After a request ends without finishing its work (an error or Stop), a role still "active" ends as
+ * skipped with the reason, never spinning, and one that never started ends as skipped too: no role
+ * keeps saying "pending" for a request that is over.
+ */
 export function settleActiveRolesView(document: Document, evidence: string): void {
   for (const row of document.querySelectorAll<HTMLElement>(
     "#agent-activity-list [data-agent-role]",
   ))
-    if (row.dataset.state === "active")
+    if (row.dataset.state === "active" || row.dataset.state === "pending")
       setAgentRoleView(document, row.dataset.agentRole as AgentRole, "skipped", evidence);
 }
 
@@ -59,7 +98,7 @@ export function resetAgentRolesView(document: Document): void {
   )) {
     row.dataset.state = "pending";
     const status = row.querySelector<HTMLElement>(".agent-role-status");
-    if (status) status.textContent = localize("pending");
+    if (status) setLocalizedText(status, "pending");
   }
 }
 
@@ -142,9 +181,7 @@ export function showAgentSourcesView(options: {
           details.append(summary, code);
           item.append(details);
         } else
-          item.textContent = localize(
-            `Workbook check: ${source.text.replace(/_/g, " ")}`,
-          );
+          setLocalizedText(item, `Workbook check: ${source.text.replace(/_/g, " ")}`);
         return item;
       }
       const button = document.createElement("button");

@@ -44,6 +44,12 @@ function cardNode(card: PaneCard): HTMLElement {
   return wrap;
 }
 
+let localizeLabel: (text: string) => string = (text) => text;
+/** The pane hands over its language once; the buttons then show their words in it even where a caller passed English. */
+export function setDialogLocalizer(fn: (text: string) => string): void {
+  localizeLabel = fn;
+}
+
 export function askInPane(
   message: string,
   confirmLabel = "Confirm",
@@ -71,13 +77,13 @@ export function askInPane(
     };
     const cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.textContent = cancelLabel;
+    cancel.textContent = localizeLabel(cancelLabel);
     cancel.style.cssText =
       "padding:8px 12px;border:1px solid #dbe2ea;border-radius:10px;background:transparent;cursor:pointer";
     cancel.addEventListener("click", () => finish(false));
     const ok = document.createElement("button");
     ok.type = "button";
-    ok.textContent = confirmLabel;
+    ok.textContent = localizeLabel(confirmLabel);
     ok.style.cssText =
       "padding:8px 14px;border:0;border-radius:10px;background:#123a6b;color:#fff;font-weight:600;cursor:pointer";
     ok.addEventListener("click", () => finish(true));

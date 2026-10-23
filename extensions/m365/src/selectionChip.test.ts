@@ -25,6 +25,19 @@ test("one cell, one row and one column read naturally", () => {
   );
 });
 
+test("the words around the numbers can be given in another language", () => {
+  const words = { cell: "කොටුව", row: "පේළිය", rows: "පේළි", column: "තීරුව", columns: "තීරු" };
+  assert.equal(
+    describeSelection({ address: "Sales!A1:J500", rows: 500, columns: 10 }, words),
+    "'Sales'!A1:J500 · 500 පේළි × 10 තීරු",
+  );
+  assert.equal(describeSelection({ address: "Data!B2", rows: 1, columns: 1 }, words), "'Data'!B2 · 1 කොටුව");
+  assert.equal(
+    describeSelection({ address: "Data!C1:C9", rows: 9, columns: 1 }, words),
+    "'Data'!C1:C9 · 9 පේළි × 1 තීරුව",
+  );
+});
+
 test("a missing selection shows nothing, and an address without a sheet still works", () => {
   assert.equal(describeSelection(undefined), "");
   assert.equal(describeSelection({ address: "", rows: 0, columns: 0 }), "");

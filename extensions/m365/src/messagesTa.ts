@@ -238,10 +238,14 @@ const EXACT: Record<string, string> = {
     "ஏதோ தவறு நடந்தது. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
   "I did not answer this time and nothing was changed. Please try again or ask in other words.":
     "இந்த முறை நான் பதிலளிக்கவில்லை; எதுவும் மாற்றப்படவில்லை. மீண்டும் முயற்சிக்கவும் அல்லது வேறு வார்த்தைகளில் கேளுங்கள்.",
+  "The AI is still working on the last request. Try again when it finishes.":
+    "AI இன்னும் முந்தைய கோரிக்கையில் வேலை செய்கிறது. அது முடிந்த பின் மீண்டும் முயற்சிக்கவும்.",
   "Asking the AI for ideas...": "AI இடம் யோசனைகளைக் கேட்கிறது...",
   "Ideas ready. Tap one to put it in the request box.":
     "யோசனைகள் தயார். ஒன்றைத் தட்டி கோரிக்கை பெட்டியில் வையுங்கள்.",
   "No new ideas this time.": "இந்த முறை புதிய யோசனைகள் இல்லை.",
+  "The selection changed, so those ideas were dropped. Tap More ideas again.":
+    "தேர்வு மாறியதால் அந்த யோசனைகள் நீக்கப்பட்டன. மீண்டும் \"மேலும் யோசனைகள்\" என்பதைத் தட்டுங்கள்.",
   "The ideas could not be made. See Diagnostics.":
     "யோசனைகளை உருவாக்க முடியவில்லை. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
   "Undoing the agent's changes...": "Agent செய்த மாற்றங்களை மீளமைக்கிறது...",
@@ -303,6 +307,22 @@ const EXACT: Record<string, string> = {
   Applying: "பயன்படுத்துகிறது",
   Undone: "செயல்தவிர்க்கப்பட்டது",
   Stopped: "நிறுத்தப்பட்டது",
+  "Chart result": "வரைபட முடிவு",
+  "Dashboard sheet": "டாஷ்போர்டு தாள்",
+  "Quality report": "தரவு தர அறிக்கை",
+  "Formula audit": "சூத்திரத் தணிக்கை",
+  "Forecast report": "முன்கணிப்பு அறிக்கை",
+  "Clean result sheet": "சுத்தம் செய்த முடிவுத் தாள்",
+  Cell: "கலம்",
+  Agree: "ஒப்புக்கொள்கிறேன்",
+  Cancel: "ரத்து செய்",
+  Add: "சேர்",
+  Replace: "மாற்று",
+  Confirm: "உறுதிசெய்",
+  "(empty)": "(வெற்று)",
+  Now: "இப்போது",
+  "After approval": "ஒப்புதலுக்குப் பிறகு",
+  "Ideas for the selected columns": "தேர்ந்தெடுத்த நெடுவரிசைகளுக்கான யோசனைகள்",
   "Waiting for approval": "ஒப்புதலுக்காகக் காத்திருக்கிறது",
   "Inspecting the selected data and preparing a safe plan.":
     "தேர்ந்தெடுத்த தரவைச் சரிபார்த்து பாதுகாப்பான திட்டத்தைத் தயாரிக்கிறது.",
@@ -489,10 +509,19 @@ const TEMPLATES: Template[] = [
   ],
 
   [/^Team: (.+)$/, (what) => `குழு: ${localizeMessageTa(what)}`],
+  [
+    /^Applying (\d+) of (\d+): (.+)$/,
+    (i, n, what) => `பயன்படுத்துகிறது ${i}/${n}: ${localizeMessageTa(what)}`,
+  ],
 
   [/^(\d+) staged change\(s\)$/, (n) => `${n} தயார் செய்யப்பட்ட மாற்றங்கள்`],
   [/^(\d+) plan step\(s\)$/, (n) => `${n} திட்டப் படிகள்`],
   [/^(\d+) issue\(s\) found$/, (n) => `${n} சிக்கல்கள் கண்டறியப்பட்டன`],
+  // Before the general "Reading ..." rule below, which would otherwise take this message.
+  [
+    /^Reading selected rows: (\d+)\/(\d+)\.\.\.$/,
+    (done, total) => `தேர்ந்தெடுத்த வரிசைகளைப் படிக்கிறது: ${done}/${total}...`,
+  ],
   [/^Reading (.+)$/, (what) => `வாசிக்கிறது: ${what}`],
   [/^Calculating (.+)$/, (what) => `கணக்கிடுகிறது: ${what}`],
   [
@@ -537,10 +566,6 @@ const TEMPLATES: Template[] = [
     /^Found your table at (.+). Preview ready. Nothing has changed yet. Review it before applying.$/,
     (address) =>
       `உங்கள் அட்டவணை ${address} இல் கண்டறியப்பட்டது. முன்னோட்டம் தயார். இன்னும் எதுவும் மாறவில்லை. பயன்படுத்தும் முன் அதைச் சரிபார்க்கவும்.`,
-  ],
-  [
-    /^Reading selected rows: (\d+)\/(\d+)\.\.\.$/,
-    (done, total) => `தேர்ந்தெடுத்த வரிசைகளைப் படிக்கிறது: ${done}/${total}...`,
   ],
   [
     /^VynorAI request failed \((.+)\)\. See Diagnostics\.$/,

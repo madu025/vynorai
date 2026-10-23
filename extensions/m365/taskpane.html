@@ -1918,7 +1918,8 @@
         overflow: hidden;
         font-size: 11px;
         text-overflow: ellipsis;
-        white-space: nowrap;
+        /* Sinhala and Tamil size words are long: wrap instead of cutting off the column count. */
+        overflow-wrap: anywhere;
       }
       .mode-control select,
       .email-form input,
@@ -2343,6 +2344,7 @@
             aria-haspopup="true"
             aria-expanded="false"
             aria-label="More options"
+            data-i18n-aria-label="more_options"
           >
             &#8943;
           </button>
@@ -2439,7 +2441,7 @@
       </section>
 
       <div class="workspace">
-        <div class="chat-bar" id="chat-bar" aria-label="Chat controls">
+        <div class="chat-bar" id="chat-bar" aria-label="Chat controls" data-i18n-aria-label="chat_controls">
           <button
             id="new-chat"
             class="pill new-chat-action"
@@ -2823,7 +2825,7 @@
               Nothing has changed in your workbook yet.
             </p>
             <ul id="changed-list" class="details" hidden></ul>
-            <div class="safety-summary" aria-label="Safety and approval">
+            <div class="safety-summary" aria-label="Safety and approval" data-i18n-aria-label="safety_approval">
               <strong data-i18n="safety_approval">Safety &amp; approval</strong>
               <span data-i18n="trust_privacy">✓ Privacy protected</span>
               <span data-i18n="trust_original">✓ Original data preserved</span>
@@ -3418,6 +3420,7 @@
           class="workspace-nav"
           role="tablist"
           aria-label="Workspace"
+          data-i18n-aria-label="workspace_label"
         >
           <button type="button" class="active" data-workspace-target="work" role="tab" aria-selected="true" data-i18n="tab_work">Work</button>
           <button type="button" data-workspace-target="results" role="tab" aria-selected="false" data-i18n="tab_results" disabled>Results</button>

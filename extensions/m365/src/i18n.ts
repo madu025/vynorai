@@ -497,7 +497,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
   },
 };
 
-const STORAGE_KEY = "vynorai.m365.language";
+// v2: the pane starts in English again; an older saved Sinhala or Tamil choice is not carried over.
+const STORAGE_KEY = "vynorai.m365.language.v2";
 
 export function isLanguage(value: unknown): value is Language {
   return value === "en" || value === "si" || value === "ta";

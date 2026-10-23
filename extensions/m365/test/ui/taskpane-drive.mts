@@ -263,7 +263,7 @@ async function openPane(
           "vynorai.m365.excel.session.v2",
           JSON.stringify({ accessToken: "ui-drive-token", expiresAt: Date.now() + 3600_000, issuedAt: Date.now(), long: false }),
         );
-        localStorage.setItem("vynorai.m365.language", lang);
+        localStorage.setItem("vynorai.m365.language.v2", lang);
         localStorage.setItem("vynorai.m365.runMode", runMode);
         if (consent) localStorage.setItem("vynorai.m365.agentConsent", "1");
       } catch {

@@ -29,7 +29,7 @@ export function setAgentViewLocalizer(fn: (text: string) => string): void {
 export function setAgentRoleView(
   document: Document,
   role: AgentRole,
-  state: "pending" | "active" | "done",
+  state: "pending" | "active" | "done" | "skipped",
   evidence?: string,
 ): void {
   const row = document.querySelector<HTMLElement>(
@@ -39,6 +39,18 @@ export function setAgentRoleView(
   row.dataset.state = state;
   const status = row.querySelector<HTMLElement>(".agent-role-status");
   if (status) status.textContent = localize(evidence || state);
+  // A name cut short by a narrow pane still shows in full on hover and to assistive technology.
+  const name = row.querySelector<HTMLElement>("strong");
+  if (name) name.title = name.textContent ?? "";
+}
+
+/** After a failed run, a role still "active" or "pending" ends as skipped with the reason, never spinning. */
+export function settleActiveRolesView(document: Document, evidence: string): void {
+  for (const row of document.querySelectorAll<HTMLElement>(
+    "#agent-activity-list [data-agent-role]",
+  ))
+    if (row.dataset.state === "active")
+      setAgentRoleView(document, row.dataset.agentRole as AgentRole, "skipped", evidence);
 }
 
 export function resetAgentRolesView(document: Document): void {
@@ -184,8 +196,10 @@ export function showWorkbookMapView(
     box.className = "relationship-node";
     const table = document.createElement("strong");
     table.textContent = side.table.split("!")[0];
+    table.title = side.table.split("!")[0];
     const column = document.createElement("span");
     column.textContent = side.column;
+    column.title = side.column;
     box.append(table, column);
     return box;
   };

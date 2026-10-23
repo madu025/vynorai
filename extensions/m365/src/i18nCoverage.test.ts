@@ -165,3 +165,37 @@ test("buttons, selects and text boxes never fall back to the browser's plain loo
   for (const id of ["dup-fix-btn", "share-use-result", "share-use-selection", "share-copy-text", "email-ai-write", "prefs-holidays", "prefs-payroll"])
     assert.match(html, new RegExp(`<button[^>]*id="${id}"[^>]*class="[^"]*ghost|<button[^>]*class="[^"]*ghost[^"]*"[^>]*id="${id}"`), id);
 });
+
+test("agent role rows wrap the status under the name at 320px instead of squeezing it", () => {
+  assert.match(html, /\.agent-activity-list > div \{[^}]*display: flex[^}]*flex-wrap: wrap/);
+  assert.match(html, /\.agent-activity-list > div \.agent-role-status \{[^}]*flex: 1 1 120px[^}]*min-width: 120px/);
+  assert.match(html, /\.agent-activity-list > div strong \{[^}]*text-overflow: ellipsis/);
+  assert.match(html, /data-state="skipped"\] \.agent-role-status/);
+  const view = readFileSync(new URL("./taskpaneAgentView.ts", import.meta.url), "utf8");
+  assert.match(view, /table\.title = /);
+  assert.match(view, /name\.title = /);
+});
+
+test("the agent badge is a polite live region and every button has a name", () => {
+  assert.match(html, /id="agent-badge" role="status" aria-live="polite"/);
+  assert.match(html, /id="status"\s+role="status"\s+aria-live="polite"/);
+  const unnamed: string[] = [];
+  for (const match of body.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)) {
+    const [, attrs, inner] = match;
+    const text = inner.replace(/<[^>]+>/g, "").trim();
+    if (!/aria-label=|data-i18n-aria-label=/.test(attrs) && !/[A-Za-z0-9]{2}/.test(text))
+      unnamed.push(attrs.replace(/\s+/g, " ").slice(0, 80));
+  }
+  assert.deepEqual(unnamed, []);
+});
+
+test("result glyphs have a text alternative and the tiles show a keyboard focus outline", () => {
+  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  assert.match(source, /glyph\.setAttribute\("aria-hidden", "true"\)/);
+  assert.match(source, /word\.className = "sr-only"/);
+  assert.match(html, /\.sr-only \{/);
+  // Both tile kinds are real buttons (focusable, Enter and Space work) with a visible outline.
+  assert.match(source, /createElement\("button"\);\s+button\.type = "button";\s+button\.className = "noticed-tile"/);
+  assert.match(source, /createElement\("button"\);\s+button\.type = "button";\s+button\.className = "explore-chip"/);
+  assert.match(html, /\.noticed-tile:focus-visible,\s*\.explore-chip:focus-visible \{[^}]*outline: 3px solid/);
+});

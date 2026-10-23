@@ -1,5 +1,9 @@
-const token = 'cfat_y5HsQvrNKYI3Gq3ARyYtPcI3lvAjGcPBRzG2ZB4S23bad5f4';
-const accountId = 'fac748703d602c9fdf350cc1171a0adb';
+const token = process.env.CLOUDFLARE_API_TOKEN;
+const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+if (!token || !accountId) {
+  console.error('Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID first.');
+  process.exit(1);
+}
 
 async function check() {
   const url = 'https://api.cloudflare.com/client/v4/accounts/' + accountId + '/r2/buckets';

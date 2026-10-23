@@ -362,7 +362,14 @@ export function stageChange(
         cell,
         formula: checkFormula(text(args.formula)),
         ...(fillRange ? { fillRange } : {}),
-        ...(args.header ? { header: text(args.header).slice(0, 255) } : {}),
+        ...(args.header
+          ? {
+              header: ((value) =>
+                /^[=+\-@]/.test(value) ? `'${value}` : value)(
+                text(args.header).slice(0, 255),
+              ),
+            }
+          : {}),
       };
     }
     case "write_values": {
@@ -382,7 +389,7 @@ export function stageChange(
             return value;
           const restored = text(value);
           // A literal must never become a formula.
-          return /^[=+\-@]/.test(restored) && !/^-?\d/.test(restored)
+          return /^[=+\-@]/.test(restored) && !/^-?\d+(\.\d+)?$/.test(restored)
             ? `'${restored}`
             : restored.slice(0, 32_000);
         }),

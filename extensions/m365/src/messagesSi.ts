@@ -217,6 +217,16 @@ const EXACT: Record<string, string> = {
   "Applying failed. See Diagnostics.":
     "යෙදීම අසාර්ථක විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
   "Verifying the applied result...": "යෙදූ ප්‍රතිඵලය තහවුරු කරමින්...",
+  "Applied. Undo puts everything back.":
+    "යොදන ලදී. ආපසු හැරවීමෙන් සියල්ල නැවත පෙර පරිදි වේ.",
+  "Partly applied. Undo puts everything back.":
+    "කොටසක් පමණක් යොදන ලදී. ආපසු හැරවීමෙන් සියල්ල නැවත පෙර පරිදි වේ.",
+  "The agent stopped at its step limit. Try a smaller request.":
+    "Agent පියවර සීමාවේදී නතර විය. කුඩා ඉල්ලීමක් උත්සාහ කරන්න.",
+  "Something went wrong. See Diagnostics.":
+    "යම් දෝෂයක් සිදු විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
+  "I did not answer this time and nothing was changed. Please try again or ask in other words.":
+    "මෙවර මම පිළිතුරු නොදුන්නෙමි; කිසිවක් වෙනස් කර නැත. නැවත උත්සාහ කරන්න හෝ වෙනත් වචන වලින් අසන්න.",
   "Undoing the agent's changes...": "Agent ගේ වෙනස්කම් ආපසු හරවමින්...",
   "Undone. The workbook is back as it was.":
     "ආපසු හැරවිණි. වැඩපොත කලින් පරිදිම ය.",
@@ -449,6 +459,10 @@ const TEMPLATES: Template[] = [
   [/^(\d+) issue\(s\) found$/, (n) => `ගැටලු ${n}ක් හමු විය`],
   [/^Reading (.+)$/, (what) => `කියවමින්: ${what}`],
   [/^Calculating (.+)$/, (what) => `ගණනය කරමින්: ${what}`],
+  [
+    /^Running analysis code on (.+) \(on this device, no network\)$/,
+    (what) => `විශ්ලේෂණ කේතය ධාවනය කරමින්: ${what} (මෙම උපාංගයේ, ජාලයක් නොමැතිව)`,
+  ],
   [/^Checking a step: (.+)$/, (what) => `පියවරක් පරීක්ෂා කරමින්: ${what}`],
   [
     /^Preparing a change \((.+)\)$/,

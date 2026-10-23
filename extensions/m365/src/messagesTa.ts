@@ -226,6 +226,16 @@ const EXACT: Record<string, string> = {
     "பயன்படுத்துவது தோல்வியடைந்தது. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
   "Verifying the applied result...":
     "பயன்படுத்திய முடிவை உறுதிப்படுத்துகிறது...",
+  "Applied. Undo puts everything back.":
+    "பயன்படுத்தப்பட்டது. மீளமைத்தால் அனைத்தும் முன்பு போல் ஆகும்.",
+  "Partly applied. Undo puts everything back.":
+    "ஓரளவு பயன்படுத்தப்பட்டது. மீளமைத்தால் அனைத்தும் முன்பு போல் ஆகும்.",
+  "The agent stopped at its step limit. Try a smaller request.":
+    "Agent படி வரம்பில் நின்றது. சிறிய கோரிக்கையை முயற்சிக்கவும்.",
+  "Something went wrong. See Diagnostics.":
+    "ஏதோ தவறு நடந்தது. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
+  "I did not answer this time and nothing was changed. Please try again or ask in other words.":
+    "இந்த முறை நான் பதிலளிக்கவில்லை; எதுவும் மாற்றப்படவில்லை. மீண்டும் முயற்சிக்கவும் அல்லது வேறு வார்த்தைகளில் கேளுங்கள்.",
   "Undoing the agent's changes...": "Agent செய்த மாற்றங்களை மீளமைக்கிறது...",
   "Undone. The workbook is back as it was.":
     "மீளமைக்கப்பட்டது. பணிப்புத்தகம் முன்பு இருந்தபடியே உள்ளது.",
@@ -465,6 +475,10 @@ const TEMPLATES: Template[] = [
   [/^(\d+) issue\(s\) found$/, (n) => `${n} சிக்கல்கள் கண்டறியப்பட்டன`],
   [/^Reading (.+)$/, (what) => `வாசிக்கிறது: ${what}`],
   [/^Calculating (.+)$/, (what) => `கணக்கிடுகிறது: ${what}`],
+  [
+    /^Running analysis code on (.+) \(on this device, no network\)$/,
+    (what) => `பகுப்பாய்வு குறியீட்டை இயக்குகிறது: ${what} (இந்த சாதனத்தில், நெட்வொர்க் இல்லாமல்)`,
+  ],
   [/^Checking a step: (.+)$/, (what) => `ஒரு படியைச் சரிபார்க்கிறது: ${what}`],
   [
     /^Preparing a change \((.+)\)$/,

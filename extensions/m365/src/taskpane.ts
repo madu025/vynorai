@@ -5485,7 +5485,21 @@ async function agentLoop(request: string) {
   }
 }
 
+let agentStarting = false;
 async function startAgent() {
+  if (agentStarting) return;
+  agentStarting = true;
+  try {
+    await startAgentRun();
+  } catch (error) {
+    log.record("agent:start", "fail", describeError(error));
+    setStatus("Something went wrong. See Diagnostics.");
+  } finally {
+    agentStarting = false;
+  }
+}
+
+async function startAgentRun() {
   const request = (instruction?.value || "").trim();
   if (!request) return setStatus("Describe what you want first.");
   if (!config || !accessToken) return setStatus("Sign in first.");
@@ -5743,12 +5757,12 @@ agentApprove?.addEventListener("click", async () => {
         report.results,
       ),
     );
-  lastApplyStatus = failed
+  lastApplyStatus = failed || agentStopped
     ? "Partly applied. Undo puts everything back."
     : "Applied. Undo puts everything back.";
   setStatus(lastApplyStatus);
   // The agent checks what was written once or twice and may stage fixes (they need approval again).
-  if (agentRounds < 2) {
+  if (agentRounds < 2 && !agentStopped) {
     agentRounds += 1;
     agentVerifying = true;
     setAgentStage("verify");
@@ -5803,7 +5817,12 @@ agentUndo?.addEventListener("click", async () => {
       await rollbackCreatedItems(officeRuntime(), rollback as any, true);
     });
     agentLastUndo = undefined;
+    agentPending = undefined;
     show(agentUndo, false);
+    show(agentChanges, false);
+    show(agentNote, false);
+    show(agentApprove, false);
+    show(agentDiscard, false);
     agentHistory = [
       ...agentHistory,
       {

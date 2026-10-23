@@ -614,9 +614,9 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     document.querySelector("#email-subject").value = "Sales dashboard";
     document.querySelector("#email-body").value =
       "Please find the reviewed Excel report attached.";
-    const note = document.querySelector("#whatsapp-note");
-    note.removeAttribute("hidden");
-    note.textContent = "Sales dashboard\nTotal Net Amount: 7,461,955";
+    document.querySelector("#share-message-block").removeAttribute("hidden");
+    document.querySelector("#share-message").value =
+      "Sales dashboard\nTotal Net Amount: 7,461,955";
     email.scrollIntoView({ block: "start" });
   });
   await page.waitForFunction(
@@ -636,7 +636,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "the Share tab must expose its selected state",
   );
   await assertReachable(page, "#email-card");
-  await assertReachable(page, "#whatsapp-copy");
+  await assertReachable(page, "#share-copy-text");
   await page.screenshot({
     path: path.join(artifactDirectory, `taskpane-${label}-share.png`),
     fullPage: true,

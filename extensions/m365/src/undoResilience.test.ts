@@ -94,7 +94,7 @@ test("undo walks the changes newest first: a write after a step is undone before
   assert.deepEqual(log, ["clear S!A1:A2", "step-of-change-1"]);
 });
 
-test("a second Undo only runs the part that did not come back", async () => {
+test("a second Undo only runs the part that did not come back, and older parts wait for it", async () => {
   const log: string[] = [];
   const undo = twoChanges();
   const failing = new Set(["A1:A2"]);
@@ -104,13 +104,19 @@ test("a second Undo only runs the part that did not come back", async () => {
     }),
     /could not finish 1 step/,
   );
-  assert.deepEqual(log, ["step-of-change-1"]);
+  // The older step is not touched while the newer write is still out: the write restores cells
+  // the step may have changed, so the step must come back after it.
+  assert.equal(log.length, 0);
   failing.clear();
   await undoAgentChanges(fakeRuntime(log, failing), undo, async (rollback) => {
     log.push(String(rollback));
   });
-  // The step was not run twice; only the failed write came back.
-  assert.deepEqual(log, ["step-of-change-1", "clear S!A1:A2"]);
+  assert.deepEqual(log, ["clear S!A1:A2", "step-of-change-1"]);
+  // A third Undo has nothing left to do.
+  await undoAgentChanges(fakeRuntime(log, failing), undo, async (rollback) => {
+    log.push(String(rollback));
+  });
+  assert.deepEqual(log, ["clear S!A1:A2", "step-of-change-1"]);
 });
 
 test("two applies keep their order after mergeUndoData", async () => {
@@ -130,17 +136,20 @@ test("two applies keep their order after mergeUndoData", async () => {
 
 test("a sheet restored from its hidden copy is found again under its old id by earlier changes", async () => {
   const asked: string[] = [];
+  const cleared: string[] = [];
   const context: any = {
     sync: async () => {},
     workbook: {
       worksheets: {
         getItemOrNullObject: (key: string) => {
           asked.push(key);
+          // OLD was deleted; only its hidden copy is in the workbook.
+          if (key === "OLD") return { isNullObject: true, load() {} };
           return {
             isNullObject: false,
             load() {},
-            customProperties: { getItemOrNullObject: () => ({ delete() {} }) },
-            getRange: () => ({ clear() {} }),
+            customProperties: { getItemOrNullObject: () => ({ isNullObject: false, load() {}, delete() {} }) },
+            getRange: () => ({ clear: () => cleared.push(key) }),
           };
         },
       },
@@ -162,7 +171,9 @@ test("a sheet restored from its hidden copy is found again under its old id by e
   await undoAgentChanges({ run: (fn: any) => fn(context) } as any, undo, async () => {});
   // The delete is undone first (asks for COPY); the earlier write then goes to COPY, not to OLD.
   assert.ok(asked.indexOf("COPY") >= 0);
-  assert.equal(asked.includes("OLD"), false);
+  // OLD is asked once, by the delete's own undo (is the sheet still there?); the write goes to COPY.
+  assert.equal(asked.filter((key) => key === "OLD").length, 1);
+  assert.deepEqual(cleared, ["COPY"]);
 });
 
 test("a hidden backup that cannot be deleted is reported, the others are still deleted", async () => {

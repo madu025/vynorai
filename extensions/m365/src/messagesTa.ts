@@ -316,6 +316,11 @@ const EXACT: Record<string, string> = {
   Fix: "சரிசெய்",
   Review: "மதிப்பாய்வு",
   Look: "பார்",
+  "Payroll sheet": "சம்பளத் தாள்",
+  "EPF, ETF and APIT for the employees in this list":
+    "இந்தப் பட்டியலில் உள்ள ஊழியர்களுக்கு EPF, ETF, APIT",
+  "VAT column": "VAT நெடுவரிசை",
+  "Month column": "மாத நெடுவரிசை",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -506,6 +511,24 @@ const TEMPLATES: Template[] = [
     (done, unchanged, rest) =>
       `பயன்படுத்தப்பட்டது: ${done}. மூலத் தரவு மாறாமல் உள்ளதா: ${unchanged === "yes" ? "ஆம்" : "இல்லை — சரிபார்க்கவும்"}.${rest}`,
   ],
+  // Explore tab: templates and questions built from the selection's own headers.
+  [/^Summary by (.+)$/, (g) => `${g} வாரியாகச் சுருக்கம்`],
+  [
+    /^Total of (.+?) per (.+), as live formulas$/,
+    (m, g) => `${g} வாரியாக ${m} மொத்தம், நேரடி சூத்திரங்களாக`,
+  ],
+  [
+    /^(\d+(?:\.\d+)?)% VAT on (.+?)( \(check the rate\))?$/,
+    (p, m, check) =>
+      `${m} மீது ${p}% VAT${check ? " (விகிதத்தைச் சரிபார்க்கவும்)" : ""}`,
+  ],
+  [/^Month of (.+) as a new column$/, (d) => `${d} இன் மாதம் புதிய நெடுவரிசையாக`],
+  [
+    /^Which (.+?) has the (highest|lowest) (.+)\?$/,
+    (g, which, m) =>
+      `${which === "highest" ? "அதிக" : "குறைந்த"} ${m} உள்ள ${g} எது?`,
+  ],
+  [/^What is the total (.+)\?$/, (m) => `மொத்த ${m} எவ்வளவு?`],
 ];
 
 export function localizeMessageTa(text: string): string {

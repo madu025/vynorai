@@ -86,21 +86,16 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
   );
   const lastIndex = messages.length - 1;
   const lastMessage = messages[lastIndex];
-  let steps: ReturnType<typeof nextSteps> = [];
-  if (lastMessage && lastMessage.kind === "assistant") {
-    const lastUser = [...messages].reverse().find((m) => m.kind === "user");
-    steps = nextSteps({
-      questions: buildAnswerCard({
-        reply: localizeMessage(
-          options.textLanguage ?? language,
-          lastMessage.text,
-        ),
-        results: recallAnswerResults(lastMessage.text),
-      }).chips,
-      schema: options.schema,
-      asked: lastUser?.text,
-    });
-  }
+  const hasOwnQuestion =
+    lastMessage?.kind === "assistant" &&
+    buildAnswerCard({
+      reply: localizeMessage(
+        options.textLanguage ?? language,
+        lastMessage.text,
+      ),
+      results: recallAnswerResults(lastMessage.text),
+    }).chips.length > 0;
+  const steps = nextStepsFor(options);
   messages.forEach((message, index) => {
     const item = document.createElement("article");
     item.className = `message ${message.kind}`;
@@ -132,7 +127,9 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
       body.append(
         renderAnswerCard(
           document,
-          steps.length && index === lastIndex ? { ...drawn, chips: [] } : drawn,
+          hasOwnQuestion && index === lastIndex
+            ? { ...drawn, chips: [] }
+            : drawn,
           language,
           instruction,
         ),
@@ -194,30 +191,64 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
     }
     history.appendChild(item);
   });
-  if (steps.length) {
-    const row = document.createElement("div");
-    row.className = "next-steps";
-    row.setAttribute("role", "group");
-    row.setAttribute(
-      "aria-label",
-      translate(language, "next_steps", "Next steps"),
-    );
-    for (const step of steps) {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "next-step";
-      chip.textContent = step.label;
-      chip.title = step.text;
-      chip.addEventListener("click", () => {
-        if (!instruction) return;
-        instruction.value = step.text;
-        instruction.dispatchEvent(new Event("input"));
-        instruction.focus();
-      });
-      row.append(chip);
-    }
-    history.appendChild(row);
+  drawNextSteps(options, steps);
+}
+
+/** The chips under the latest answer, from the answer's own question and the table's columns. */
+function nextStepsFor(options: ChatViewOptions): ReturnType<typeof nextSteps> {
+  const { language, messages } = options;
+  const lastMessage = messages[messages.length - 1];
+  if (!lastMessage || lastMessage.kind !== "assistant") return [];
+  const lastUser = [...messages].reverse().find((m) => m.kind === "user");
+  return nextSteps({
+    questions: buildAnswerCard({
+      reply: localizeMessage(
+        options.textLanguage ?? language,
+        lastMessage.text,
+      ),
+      results: recallAnswerResults(lastMessage.text),
+    }).chips,
+    schema: options.schema,
+    asked: lastUser?.text,
+  });
+}
+
+function drawNextSteps(
+  options: ChatViewOptions,
+  steps: ReturnType<typeof nextSteps>,
+): void {
+  const { document, language, instruction } = options;
+  const history = document.querySelector<HTMLElement>("#conversation-history");
+  if (!history) return;
+  history.querySelector(".next-steps")?.remove();
+  if (!steps.length) return;
+  const row = document.createElement("div");
+  row.className = "next-steps";
+  row.setAttribute("role", "group");
+  row.setAttribute(
+    "aria-label",
+    translate(language, "next_steps", "Next steps"),
+  );
+  for (const step of steps) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "next-step";
+    chip.textContent = step.label;
+    chip.title = step.full ?? step.text;
+    chip.addEventListener("click", () => {
+      if (!instruction) return;
+      instruction.value = step.text;
+      instruction.dispatchEvent(new Event("input"));
+      instruction.focus();
+    });
+    row.append(chip);
   }
+  history.appendChild(row);
+}
+
+/** Redraws only the next-step row (for example when the table facts arrive after the answer). */
+export function renderNextStepsView(options: ChatViewOptions): void {
+  drawNextSteps(options, nextStepsFor(options));
 }
 
 /** The full reply, kept for screen readers and copy while the card is what people see. */

@@ -2782,6 +2782,51 @@
       .agent-checks-details #agent-usage-details {
         margin-top: 8px;
       }
+      /* ---- finished run: the whole agent card is ONE footnote line: [pill ........ Details] ---- */
+      .agent-line {
+        position: relative;
+        min-height: 28px;
+      }
+      #agent-card:has(#agent-checked[data-state="ok"], #agent-checked[data-state="warn"]) {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+      #agent-card:has(#agent-checked[data-state="ok"], #agent-checked[data-state="warn"]) .card-head {
+        /* heading and badge stay in the DOM (focus target, live region) but are not drawn */
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      #agent-card:has(#agent-checked[data-state="ok"], #agent-checked[data-state="warn"]) #agent-progress {
+        display: none;
+      }
+      #agent-card:has(#agent-checked[data-state="ok"], #agent-checked[data-state="warn"]) .agent-checked {
+        margin: 0;
+        max-width: calc(100% - 64px);
+        min-height: 28px;
+      }
+      #agent-card:has(#agent-checked[data-state="ok"], #agent-checked[data-state="warn"]) .agent-checks-details {
+        margin: 0;
+      }
+      #agent-card:has(#agent-checked[data-state="ok"], #agent-checked[data-state="warn"]) .agent-checks-details > summary {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        min-height: 28px;
+        margin: 0;
+        font-size: var(--fs-sm);
+      }
+      #agent-card:has(#agent-checked[data-state="ok"], #agent-checked[data-state="warn"]) .agent-checks-details[open] {
+        padding-top: 34px;
+      }
       /* short results: reply bullets are clamped; "Show more" reveals the rest */
       .reply-bullet {
         display: -webkit-box;
@@ -3314,7 +3359,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.14</p>
+          <p class="menu-version" id="build-id">Build 20261023.16</p>
         </div>
       </div>
 
@@ -4082,6 +4127,7 @@
               <span class="badge" id="agent-badge" role="status" aria-live="polite">Working</span>
             </div>
             <p id="agent-progress" class="muted"></p>
+            <div class="agent-line">
             <div id="agent-checked" class="agent-checked" role="status" hidden><span id="agent-checked-text"></span></div>
             <details id="agent-checks-details" class="agent-checks-details">
               <summary data-i18n="tech_details">Details</summary>
@@ -4122,6 +4168,7 @@
               <div id="workbook-map-content"></div>
             </section>
             </details>
+            </div>
             <div id="agent-plan" hidden>
               <strong data-i18n="agent_plan">Plan</strong>
               <ol id="agent-plan-steps" class="details"></ol>

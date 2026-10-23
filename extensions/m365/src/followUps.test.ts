@@ -44,3 +44,30 @@ test("a leading bullet or dash is stripped from chip text", () => {
   assert.equal(cleanChipText("• Next?"), "Next?");
   assert.equal(cleanChipText("Fine?"), "Fine?");
 });
+
+import { shortQuestion } from "./followUps.js";
+
+test("a follow-up question becomes a short chip", () => {
+  assert.equal(
+    shortQuestion(
+      "Total: 3,000 orders, perfectly even across channels — want this as a summary sheet or chart?",
+    ),
+    "Want a summary sheet or chart?",
+  );
+  assert.equal(
+    shortQuestion(
+      "- Want me to run the same check across the other sheets (OrderLines, Customers, Products)?",
+    ),
+    "Want me to run the same check?",
+  );
+  assert.ok(shortQuestion("x ".repeat(30) + "?").split(" ").length <= 9);
+});
+
+test("the answer's own question is the first chip with the full sentence kept", () => {
+  const steps = nextSteps({
+    questions: ["Total is 3,000 — want this as a summary sheet or chart?"],
+    schema: undefined,
+  });
+  assert.equal(steps[0].label, "Want a summary sheet or chart?");
+  assert.match(steps[0].full ?? "", /Total is 3,000/);
+});

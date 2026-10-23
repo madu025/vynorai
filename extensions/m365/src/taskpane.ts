@@ -85,6 +85,7 @@ import { canCancelPreview } from "./previewCancel.js";
 import {
   renderChatListView,
   renderConversationHistoryView,
+  renderNextStepsView,
 } from "./taskpaneChatView.js";
 import {
   agentToolLabel as agentToolLabelView,
@@ -486,6 +487,7 @@ type ConversationMessage = {
 let conversationMessages: ConversationMessage[] = [];
 /** The latest table facts, for the next-step chips under an answer. */
 let lastWorkspaceSchema: WorkspaceSchema | undefined;
+let nextStepsSchemaRequested = false;
 /** All saved chats of this person; the open chat mirrors `conversationMessages`. */
 let chatStore: ChatStore = emptyChatStore();
 const newChatId = () =>
@@ -698,6 +700,39 @@ function showChat(messages: ConversationMessage[]) {
   }, 0);
 }
 
+/** Redraws only the next-step chips; reads the table facts once if the answer arrived before them. */
+function refreshNextSteps() {
+  const last = conversationMessages[conversationMessages.length - 1];
+  if (!last || last.kind !== "assistant") return;
+  renderNextStepsView(chatViewOptions());
+  if (lastWorkspaceSchema || nextStepsSchemaRequested) return;
+  nextStepsSchemaRequested = true;
+  void readWorkspaceContext()
+    .then(({ schema }) => {
+      if (!schema) return;
+      lastWorkspaceSchema = schema;
+      refreshNextSteps();
+    })
+    .catch(() => undefined);
+}
+
+function chatViewOptions() {
+  return {
+    document,
+    language,
+    textLanguage: textLanguage(),
+    store: chatStore,
+    messages: conversationMessages,
+    instruction,
+    contextSuggestionsVisible: Boolean(
+      contextSuggestions && !contextSuggestions.hidden,
+    ),
+    contextSuggestionCount: contextSuggestionList?.children.length ?? 0,
+    setStatus,
+    schema: lastWorkspaceSchema,
+  };
+}
+
 function renderConversationHistory() {
   renderConversationHistoryView({
     document,
@@ -713,6 +748,7 @@ function renderConversationHistory() {
     setStatus,
     schema: lastWorkspaceSchema,
   });
+  if (!lastWorkspaceSchema) refreshNextSteps();
 }
 
 function restoreConversationHistory() {
@@ -4760,6 +4796,7 @@ function renderWorkspaceContext(
   }
   shownTable = schema?.tableAddress;
   lastWorkspaceSchema = schema;
+  if (schema) refreshNextSteps();
   const description = describeSelectionLocal(info);
   if (contextSelection) contextSelection.textContent = description;
   const badgeLabels = [

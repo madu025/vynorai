@@ -20,7 +20,7 @@ BUILD_ID=${VYNOR_M365_BUILD_ID:-$(git -C "$ROOT" rev-parse --short=12 HEAD)}
 
 # The bundle URL carries the commit id and is cached for a year: a build from uncommitted changes
 # would keep the same URL with different bytes. Publish only what is committed.
-if [ -n "$(git -C "$ROOT" status --porcelain -- extensions/m365 ':!extensions/m365/dist')" ]; then
+if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no -- extensions/m365 ':!extensions/m365/dist')" ]; then
   echo "extensions/m365 has uncommitted changes; commit them first (the build id is the commit)" >&2
   exit 1
 fi

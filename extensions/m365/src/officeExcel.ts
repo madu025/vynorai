@@ -666,7 +666,8 @@ export function readExcelReportValues(
     if (used.isNullObject) throw new Error("REPORT_SHEET_EMPTY");
     const rows = Math.min(maxRows, Number(used.rowCount));
     const columns = Math.min(maxColumns, Number(used.columnCount));
-    const range = sheet.getRangeByIndexes(0, 0, rows, columns);
+    // From the used range's own top-left cell: a table that starts at A20 is still the report.
+    const range = used.getCell(0, 0).getResizedRange(rows - 1, columns - 1);
     range.load("values");
     await context.sync();
     return {

@@ -5793,6 +5793,8 @@ agentApprove?.addEventListener("click", async () => {
       readBackLine(report.results),
     );
     agentVerifying = false;
+    // The verify round ends on its own wording; the person must still see that the apply is undoable.
+    if (!agentPending && !agentStopped) setStatus(lastApplyStatus);
   }
 });
 

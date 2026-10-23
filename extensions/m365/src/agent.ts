@@ -13,6 +13,7 @@ import {
   type RelationTable,
 } from "./relationships.js";
 import { PERSONAL_PATTERNS } from "./analysis.js";
+import { guardCombine } from "./combineGuard.js";
 import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 import { describeRequestMeaning } from "./businessContext.js";
@@ -1146,6 +1147,8 @@ async function runTool(
           `At most ${AGENT_MAX_CHANGES} changes per request.`,
         );
       const change = stageChange(call.function.name, args, restore);
+      if (change.kind === "excel_action" && change.tool === "combine_tables")
+        await guardCombine(change.args, host, clampReadAddress);
       changes.push({ callId: call.id, change });
       return {
         staged: changes.length,

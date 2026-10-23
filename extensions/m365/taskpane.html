@@ -714,13 +714,14 @@
         gap: 7px;
       }
       .composer-bar {
+        flex-wrap: wrap;
         justify-content: space-between;
         margin-top: 6px;
       }
       .mode-control {
         display: flex;
         min-width: 0;
-        flex: 1;
+        flex: 1 1 120px;
         gap: 6px;
       }
       .mode-control select {
@@ -1103,7 +1104,8 @@
       }
       .tweaks {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        /* A select needs room for its words: one column in a narrow pane, two when there is space. */
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
         gap: 7px;
         margin-top: 10px;
         padding-top: 9px;
@@ -1381,9 +1383,21 @@
         min-height: 58px;
         resize: vertical;
       }
+      /* The share text boxes need to look like boxes: a border and a background of their own. */
+      #share-paste,
+      #share-message {
+        width: 100%;
+        min-height: 64px;
+        padding: 7px 9px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface-solid);
+        color: var(--ink);
+        resize: vertical;
+      }
       .email-options {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
         gap: 7px;
       }
       .email-check {
@@ -1680,7 +1694,9 @@
           order: 3;
           flex: 1 0 100%;
         }
-        .tweaks,
+        .tweaks {
+          grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+        }
         .impact-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
@@ -2446,7 +2462,7 @@
             <span id="selection-text"></span>
           </p>
           <div id="dup-fix" hidden>
-            <button id="dup-fix-btn" type="button" data-i18n="clean_first">
+            <button id="dup-fix-btn" type="button" data-i18n="clean_first" class="ghost">
               Clean first, then run this
             </button>
           </div>
@@ -2891,14 +2907,14 @@
                 type="button"
                 id="share-use-result"
                 data-i18n="share_use_result"
-              >
+               class="ghost">
                 Latest result
               </button>
               <button
                 type="button"
                 id="share-use-selection"
                 data-i18n="share_use_selection"
-              >
+               class="ghost">
                 Selected cells
               </button>
             </div>
@@ -2938,7 +2954,7 @@
               <p class="hint" data-i18n="share_message_hint">
                 Formatted for WhatsApp. Nothing is sent from here.
               </p>
-              <button id="share-copy-text" type="button" data-i18n="share_copy_text">
+              <button id="share-copy-text" type="button" data-i18n="share_copy_text" class="ghost">
                 Copy text
               </button>
             </div>
@@ -3054,7 +3070,7 @@
                   id="email-ai-write"
                   type="button"
                   data-i18n="ai_message"
-                >
+                 class="ghost">
                   Write the message with AI
                 </button>
                 <label class="email-check"
@@ -3311,10 +3327,10 @@
                 >Record every change in a "VynorAI Log" sheet</span
               ></label
             >
-            <button id="prefs-holidays" type="button" data-i18n="add_holidays">
+            <button id="prefs-holidays" type="button" data-i18n="add_holidays" class="ghost">
               Add Sri Lanka holiday table
             </button>
-            <button id="prefs-payroll" type="button" data-i18n="add_payroll">
+            <button id="prefs-payroll" type="button" data-i18n="add_payroll" class="ghost">
               Add payroll sheet (EPF, ETF, APIT)
             </button>
             <button

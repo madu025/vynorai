@@ -153,3 +153,15 @@ test("the noticed card is in the Work panel and its tiles are localized", () => 
   const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
   assert.match(source, /localizeMessage\(language, tile\.label\)/);
 });
+
+test("buttons, selects and text boxes never fall back to the browser's plain look", () => {
+  // Boxes the person types in must have a border of their own (the request box sits inside the
+  // bordered composer, so it is the one exception).
+  assert.match(html, /#share-paste,\s*#share-message \{[^}]*border: 1px solid/);
+  // The run-mode select and the chart tweaks keep room for their words in a narrow pane.
+  assert.match(html, /\.mode-control \{[^}]*flex: 1 1 120px/);
+  assert.match(html, /\.tweaks \{[^}]*repeat\(auto-fit, minmax\(118px, 1fr\)\)/);
+  // Secondary buttons use the shared "ghost" style.
+  for (const id of ["dup-fix-btn", "share-use-result", "share-use-selection", "share-copy-text", "email-ai-write", "prefs-holidays", "prefs-payroll"])
+    assert.match(html, new RegExp(`<button[^>]*id="${id}"[^>]*class="[^"]*ghost|<button[^>]*class="[^"]*ghost[^"]*"[^>]*id="${id}"`), id);
+});

@@ -10,6 +10,7 @@ import {
   type AnswerCardData,
 } from "./answerCard.js";
 import { clampReply } from "./replyClamp.js";
+import { stripRanges } from "./selectionChip.js";
 
 export interface ChatViewOptions {
   document: Document;
@@ -192,7 +193,11 @@ export function renderAnswerCard(
   };
   const root = el("div", "answer-card");
   root.setAttribute("aria-hidden", "true");
-  root.append(el("h3", "ac-title", card.title));
+  {
+    const heading = el("h3", "ac-title", stripRanges(card.title));
+    heading.title = card.title;
+    root.append(heading);
+  }
   if (card.tiles.length) {
     const tiles = el("div", "ac-tiles");
     for (const tile of card.tiles) {
@@ -243,8 +248,11 @@ export function renderAnswerCard(
   }
   if (card.pills.length) {
     const pills = el("div", "ac-pills");
-    for (const pill of card.pills)
-      pills.append(el("span", "ac-pill " + pill.tone, pill.text));
+    for (const pill of card.pills) {
+      const node = el("span", "ac-pill " + pill.tone, stripRanges(pill.text));
+      node.title = pill.text;
+      pills.append(node);
+    }
     root.append(pills);
   }
   if (card.more.length) {

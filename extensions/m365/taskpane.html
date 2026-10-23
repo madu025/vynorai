@@ -3072,7 +3072,11 @@
         gap: 6px;
       }
       .ac-pill {
-        border-radius: var(--r-pill);
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+        border-radius: var(--r-md);
         padding: 3px 10px;
         font-size: var(--fs-sm);
         font-weight: 600;
@@ -3283,7 +3287,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.12</p>
+          <p class="menu-version" id="build-id">Build 20261023.13</p>
         </div>
       </div>
 

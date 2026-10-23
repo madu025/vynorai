@@ -18,7 +18,7 @@ import { describeReview, runTeam } from "./agentReview.js";
 import { retryTransient } from "./retryTransient.js";
 import { scrollToLatestMessage } from "./chatScroll.js";
 import { previewCells, previewTarget } from "./changePreview.js";
-import { describeSelection } from "./selectionChip.js";
+import { friendlySelection, stripRanges } from "./selectionChip.js";
 import {
   applyAgentChanges,
   createOfficeAgentHost,
@@ -686,6 +686,14 @@ function showChat(messages: ConversationMessage[]) {
   renderConversationHistory();
   renderChatList();
   window.requestAnimationFrame(() => scrollToLatestMessage(document, window));
+  // The idle suggestion cards depend on whether the chat is empty, so redraw them now.
+  window.setTimeout(() => {
+    try {
+      void refreshSelectionChip();
+    } catch {
+      // Not ready yet (early load); the first selection read draws them.
+    }
+  }, 0);
 }
 
 function renderConversationHistory() {
@@ -4714,8 +4722,9 @@ const selectionChangeWarning = document.querySelector<HTMLElement>(
 );
 let selectionTimer: ReturnType<typeof setTimeout> | undefined;
 /** The size line of the selection ("41 rows x 9 columns") with its words in the pane's language. */
+let shownTable: string | undefined;
 function describeSelectionLocal(info: WorkspaceSelection | undefined): string {
-  return describeSelection(info, {
+  return friendlySelection(info, shownTable, {
     cell: translate(language, "cell_label", "cell"),
     row: translate(language, "row_label", "row"),
     rows: translate(language, "rows_label", "rows"),
@@ -4746,6 +4755,7 @@ function renderWorkspaceContext(
     );
     return;
   }
+  shownTable = schema?.tableAddress;
   const description = describeSelectionLocal(info);
   if (contextSelection) contextSelection.textContent = description;
   const badgeLabels = [
@@ -4825,7 +4835,7 @@ function renderWorkspaceContext(
       };
       const meta = document.createElement("span");
       meta.className = "suggestion-meta";
-      meta.textContent = `${schema?.sampleRows ? 93 : 78}% · ${sources.length ? sources.join(", ") : description} · ${localizeMessage(language, expectedOutputs[suggestion.id])}`;
+      meta.textContent = `${sources.length ? sources.join(", ") : stripRanges(description)} · ${localizeMessage(language, expectedOutputs[suggestion.id])}`;
       button.append(title, reason, meta);
       button.addEventListener("click", () => {
         if (!instruction) return;
@@ -5191,6 +5201,7 @@ async function refreshSelectionChip() {
   if (!selectionChip || !selectionText) return;
   try {
     const { info, schema } = await readWorkspaceContext();
+    shownTable = schema?.tableAddress;
     const text = describeSelectionLocal(info);
     shownSelection = info;
     latestSelectionAddress = info.address;

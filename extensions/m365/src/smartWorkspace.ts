@@ -23,6 +23,8 @@ export interface WorkspaceSchema {
   blankColumns?: string[];
   /** The table the schema was read from (the selection can be one cell inside it). */
   tableAddress?: string;
+  /** Header names of the other sheets (first row only, at most 10 sheets), for cross-sheet suggestions. */
+  otherSheets?: { name: string; headers: string[] }[];
 }
 
 export interface WorkspaceBadgeLabels {

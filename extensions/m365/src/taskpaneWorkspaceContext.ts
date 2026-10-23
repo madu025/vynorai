@@ -104,6 +104,10 @@ export async function readWorkspaceContext(
             )
             .map(({ column }) => column.name),
           tableAddress: schemaInfo.address,
+          otherSheets: await readOtherSheetHeaders(
+            context,
+            String(schemaRange.worksheet.name),
+          ),
         };
       } catch (error) {
         onSchemaError?.(error);
@@ -154,4 +158,34 @@ async function findSheetDataRange(
     }
   }
   return undefined;
+}
+
+/** First-row header names of the other sheets: one small read, at most 10 sheets, never values below row 1. */
+async function readOtherSheetHeaders(
+  context: any,
+  activeName: string,
+): Promise<{ name: string; headers: string[] }[]> {
+  try {
+    const sheets = context.workbook.worksheets;
+    sheets.load("items/name");
+    await context.sync();
+    const names: string[] = (sheets.items ?? [])
+      .map((sheet: any) => String(sheet.name))
+      .filter((name: string) => name !== activeName && !/^vynorai/i.test(name))
+      .slice(0, 10);
+    const ranges = names.map((name) => {
+      const range = sheets.getItem(name).getRange("A1:T1");
+      range.load("values");
+      return range;
+    });
+    await context.sync();
+    return names.map((name, index) => ({
+      name,
+      headers: ((ranges[index].values?.[0] ?? []) as unknown[])
+        .map((cell) => String(cell ?? "").trim())
+        .filter(Boolean),
+    }));
+  } catch {
+    return [];
+  }
 }

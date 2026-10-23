@@ -22,7 +22,8 @@ export type ExploreStats = Record<string, ColumnStat>;
 
 /** Counts per column from a sample of rows; keyed by the trimmed header (first one wins). */
 export function columnStats(headers: string[], rows: unknown[][]): ExploreStats {
-  const out: ExploreStats = {};
+  // No prototype: a header named "constructor" or "__proto__" is a column, not an inherited member.
+  const out: ExploreStats = Object.create(null);
   headers.forEach((header, index) => {
     const name = String(header ?? "").trim();
     if (!name || out[name]) return;

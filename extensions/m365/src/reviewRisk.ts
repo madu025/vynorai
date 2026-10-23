@@ -20,13 +20,16 @@ const RISKY_FORMULA =
   /\b(XLOOKUP|VLOOKUP|HLOOKUP|LOOKUP|INDEX|MATCH|XMATCH|GROUPBY|PIVOTBY|LET|LAMBDA|MAP|BYROW|BYCOL|REDUCE|SCAN|FILTER|SORT|SORTBY|UNIQUE|HSTACK|VSTACK|TAKE|DROP|CHOOSECOLS|TEXTSPLIT|INDIRECT|OFFSET|SUMPRODUCT|FORECAST|LINEST|TREND|GROWTH|IRR|NPV|XIRR|XNPV|PMT)\b/i;
 
 /** A label that says the number beside it is calculated. */
-const COMPUTED_LABEL = /^\s*(grand\s+)?(sub)?(total|sum|average|avg|count|balance)\b/i;
+const COMPUTED_LABEL = /^\s*(grand[\s-]*)?(sub[\s-]*)?(totals?|sum|average|avg|count|balance)\b/i;
+/** A figure typed as text: 1,120 or 12.5% or $1,120 or Rs. 1,120 or (1,120) or 1 120. */
+const TYPED_NUMBER = /^\s*[(-]?\s*(?:[A-Za-z]{1,3}\.?\s*|[$€£¥₹])?[(-]?\d[\d,\s]*(\.\d+)?\s*%?\s*\)?\s*$/;
 
 const cellCount = (values: unknown[][]) =>
   values.reduce((sum, row) => sum + row.length, 0);
 
-const rowsOf = (address: string): number => {
-  const match = /(\d+)(?::[A-Za-z]+(\d+))?$/.exec(address);
+/** Rows in an address: "A2:A100", "$A$2:$A$100", "'My Sheet'!A2:A100" or one cell; Infinity when it has no row. */
+export const rowsOf = (address: string): number => {
+  const match = /(\d+)(?::[A-Za-z]+(\d+))?$/.exec(address.replace(/\$/g, ""));
   if (!match) return Number.POSITIVE_INFINITY;
   return match[2] ? Math.abs(Number(match[2]) - Number(match[1])) + 1 : 1;
 };
@@ -60,7 +63,7 @@ export function reviewRisk(
               row.some(
                 (cell) =>
                   typeof cell === "number" ||
-                  (typeof cell === "string" && /^\s*-?[\d,]+(\.\d+)?\s*%?\s*$/.test(cell)),
+                  (typeof cell === "string" && TYPED_NUMBER.test(cell)),
               ),
           )
         )

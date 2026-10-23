@@ -673,6 +673,31 @@ function resolveColumnSpecs(
       specs.chart.pivotResult ||
       chartType === "histogram" ||
       chartType === "waterfall";
+    const chartLowest = specs.chart.lowest === true;
+    if (chartGrouping) {
+      const why = specs.chart.pivotResult
+        ? "a chart that draws a PivotTable takes the PivotTable's own summary"
+        : `a ${chartType} chart does not group by category`;
+      if (
+        (chartAggregation !== undefined && chartAggregation !== "sum") ||
+        chartTopN !== undefined ||
+        chartLowest
+      )
+        fail(
+          "EXCEL_SPEC_INVALID",
+          `Remove the chart aggregation, top N and lowest options: ${why}.`,
+        );
+    }
+    if (chartLowest && chartTopN === undefined)
+      fail("EXCEL_SPEC_INVALID", "A chart needs a top N to use lowest.");
+    if (
+      chartTopN !== undefined &&
+      ["line", "area", "combo"].includes(chartType)
+    )
+      fail(
+        "EXCEL_SPEC_INVALID",
+        `A chart top N would reorder the time axis of a ${chartType} chart; remove it or use a column or bar chart.`,
+      );
     resolved.chart = {
       categoryColumn: headers[category],
       categoryIndex: category,

@@ -38,7 +38,7 @@ vynor.lk {
 	# Office.js task-pane assets. This is served before the API proxy so OAuth
 	# redirects and Excel load the exact public HTTPS origin in the manifest.
 	handle_path /m365/* {
-		header Cache-Control "no-store"
+		header Cache-Control "no-cache"
 		root * /srv/m365
 		file_server
 	}

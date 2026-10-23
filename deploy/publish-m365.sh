@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publish the M365 add-in. The installed Office manifest stays stable while this script publishes
 # a fresh build ID in the HTML asset URLs, so reopening a task pane cannot reuse an old bundle.
-# Caddy also sends no-store, but the versioned URLs protect Excel WebView caches that do not
+# Caddy sends no-cache (revalidate), but the versioned URLs protect Excel WebView caches that do not
 # immediately honour a changed response at the same URL.
 #
 #   VYNOR_M365_DIR=/opt/vynor/extensions/m365 ./deploy/publish-m365.sh

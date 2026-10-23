@@ -2919,6 +2919,56 @@
           transform: none;
         }
       }
+      /* pane height: the page is exactly as tall as the pane (100% first, so a host that reports a
+         taller dvh cannot push the tabs out of view); only the scroll area shrinks and scrolls */
+      html:has(body[data-auth="in"]),
+      body[data-auth="in"] {
+        height: 100%;
+        overflow: hidden;
+      }
+      body[data-auth="in"] main {
+        height: 100%;
+        max-height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+      }
+      body[data-auth="in"] .workspace {
+        min-height: 0;
+        overflow: hidden;
+      }
+      .workspace > .scroll-area {
+        flex: 1 1 0;
+        min-height: 120px;
+        overflow-y: auto;
+      }
+      .workspace > .workspace-nav,
+      .workspace > .composer {
+        position: static;
+        flex: 0 0 auto;
+      }
+      /* short windows: drop the extras so the chat keeps room */
+      @media (max-height: 640px) {
+        body[data-auth="in"] .workspace {
+          gap: 4px;
+        }
+        .workspace > .saved-footer,
+        .composer .more-tools > summary {
+          display: none;
+        }
+        .composer .more-tools:not([open]) {
+          display: none;
+        }
+        .brand-bar {
+          min-height: 28px;
+          padding-bottom: 2px;
+        }
+        .workspace > .composer textarea {
+          min-height: 32px;
+        }
+        .workspace-nav button {
+          padding-block: 3px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -3031,7 +3081,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.08</p>
+          <p class="menu-version" id="build-id">Build 20261023.09</p>
         </div>
       </div>
 

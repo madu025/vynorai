@@ -1,4 +1,4 @@
-export type WorkspaceView = "work" | "results" | "share";
+export type WorkspaceView = "work" | "results" | "share" | "explore";
 
 export interface WorkspaceNavigation {
   activate(view: WorkspaceView): boolean;
@@ -20,12 +20,18 @@ export function createWorkspaceNavigation(
     "#workspace-nav [data-workspace-target]",
   )) {
     const view = button.dataset.workspaceTarget as WorkspaceView;
-    if (view === "work" || view === "results" || view === "share")
+    if (
+      view === "work" ||
+      view === "results" ||
+      view === "share" ||
+      view === "explore"
+    )
       buttons.set(view, button);
   }
 
   const available = (view: WorkspaceView): boolean => {
-    if (view === "work") return true;
+    // Explore needs no result: its templates and questions come from the selection itself.
+    if (view === "work" || view === "explore") return true;
     const selector =
       view === "results"
         ? '[data-workspace-panel="results"]:not([hidden])'

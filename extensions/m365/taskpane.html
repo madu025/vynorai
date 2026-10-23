@@ -2151,6 +2151,77 @@
         min-height: 44px;
       }
     </style>
+    <style id="explore-styles">
+      /* Explore tab: templates and questions made for the selection. Four tabs share the nav. */
+      .workspace-nav {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 2px;
+        padding: 3px;
+      }
+      .workspace-nav button {
+        padding-inline: 0;
+        font-size: 11px;
+        overflow-wrap: normal;
+      }
+      body:not([data-workspace-view="explore"]) [data-workspace-panel="explore"],
+      body[data-workspace-view="explore"] [data-workspace-panel="work"],
+      body[data-workspace-view="explore"] [data-workspace-panel="results"],
+      body[data-workspace-view="explore"] [data-workspace-panel="share"],
+      body[data-workspace-view="explore"] .composer,
+      body[data-workspace-view="explore"] #starter-suggestions {
+        display: none !important;
+      }
+      .explore-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 0;
+      }
+      .explore-panel h2 {
+        margin: 0 0 4px;
+        font-size: 14px;
+      }
+      .explore-panel .card > p {
+        margin: 0 0 8px;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .explore-list {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
+      }
+      .explore-chip {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface-muted);
+        text-align: left;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        word-break: normal;
+      }
+      .explore-chip:hover {
+        border-color: var(--brand);
+      }
+      .explore-chip b {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .explore-chip span {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.3;
+      }
+      #explore-close-go {
+        width: 100%;
+        white-space: normal;
+      }
+    </style>
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -3183,6 +3254,40 @@
               Forget these choices
             </button>
           </details>
+          <section
+            id="explore-panel"
+            class="explore-panel"
+            data-workspace-panel="explore"
+            aria-label="Explore"
+            data-i18n-aria-label="tab_explore"
+          >
+            <p id="explore-empty" class="muted" data-i18n="explore_empty">
+              Select your data to see templates and questions made for it.
+            </p>
+            <section id="explore-close" class="card" aria-labelledby="explore-close-heading" hidden>
+              <h2 id="explore-close-heading" data-i18n="explore_close">Month-end close</h2>
+              <p class="muted" data-i18n="explore_close_note">
+                A payroll sheet with EPF, ETF and APIT for the employees in your selection. You see the figures and approve before anything is added.
+              </p>
+              <button id="explore-close-go" type="button" class="primary" data-i18n="explore_close_go">
+                Prepare the payroll
+              </button>
+            </section>
+            <section id="explore-templates" class="card" aria-labelledby="explore-templates-heading" hidden>
+              <h2 id="explore-templates-heading" data-i18n="explore_templates">Templates</h2>
+              <p class="muted" data-i18n="explore_templates_note">
+                Tap one to put the request in the box. Nothing changes until you approve.
+              </p>
+              <div id="explore-template-list" class="explore-list"></div>
+            </section>
+            <section id="explore-ask" class="card" aria-labelledby="explore-ask-heading" hidden>
+              <h2 id="explore-ask-heading" data-i18n="explore_ask">Ask your sheet</h2>
+              <p class="muted" data-i18n="explore_ask_note">
+                Tap a question to put it in the box. Plain questions are answered on this device.
+              </p>
+              <div id="explore-question-list" class="explore-list"></div>
+            </section>
+          </section>
         </div>
         <nav
           id="workspace-nav"
@@ -3193,6 +3298,7 @@
           <button type="button" class="active" data-workspace-target="work" role="tab" aria-selected="true" data-i18n="tab_work">Work</button>
           <button type="button" data-workspace-target="results" role="tab" aria-selected="false" data-i18n="tab_results" disabled>Results</button>
           <button type="button" data-workspace-target="share" role="tab" aria-selected="false" data-i18n="tab_share" disabled>Share</button>
+          <button type="button" data-workspace-target="explore" role="tab" aria-selected="false" data-i18n="tab_explore">Explore</button>
         </nav>
       </div>
 

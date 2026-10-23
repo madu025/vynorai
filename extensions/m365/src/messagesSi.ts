@@ -321,6 +321,11 @@ const EXACT: Record<string, string> = {
   "To review": "සමාලෝචනයට",
   columns: "තීරු",
   findings: "සොයාගැනීම්",
+  "Payroll sheet": "වැටුප් පත්‍රිකාව",
+  "EPF, ETF and APIT for the employees in this list":
+    "මෙම ලැයිස්තුවේ සේවකයින් සඳහා EPF, ETF සහ APIT",
+  "VAT column": "VAT තීරුව",
+  "Month column": "මාස තීරුව",
 };
 
 /** The second half of a team sentence from describeReview. */
@@ -507,6 +512,22 @@ const TEMPLATES: Template[] = [
     (done, unchanged, rest) =>
       `යොදන ලදී: ${done}. මූලාශ්‍ර දත්ත වෙනස් නොවීම: ${unchanged === "yes" ? "ඔව්" : "නැත — පරීක්ෂා කරන්න"}.${rest}`,
   ],
+  // Explore tab: templates and questions built from the selection's own headers.
+  [/^Summary by (.+)$/, (g) => `${g} අනුව සාරාංශය`],
+  [
+    /^Total of (.+?) per (.+), as live formulas$/,
+    (m, g) => `${g} අනුව ${m} එකතුව, සජීවී සූත්‍ර ලෙස`,
+  ],
+  [
+    /^(\d+(?:\.\d+)?)% VAT on (.+?)( \(check the rate\))?$/,
+    (p, m, check) => `${m} මත ${p}% VAT${check ? " (අනුපාතය පරීක්ෂා කරන්න)" : ""}`,
+  ],
+  [/^Month of (.+) as a new column$/, (d) => `${d} හි මාසය නව තීරුවක් ලෙස`],
+  [
+    /^Which (.+?) has the (highest|lowest) (.+)\?$/,
+    (g, which, m) => `${m} ${which === "highest" ? "වැඩිම" : "අඩුම"} ${g} කුමක්ද?`,
+  ],
+  [/^What is the total (.+)\?$/, (m) => `මුළු ${m} කීයද?`],
 ];
 
 export function localizeMessageSi(text: string): string {

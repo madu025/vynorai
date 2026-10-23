@@ -98,6 +98,8 @@ import {
 } from "./roleEvidence.js";
 import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
+import { exploreFor, type ExploreItem } from "./exploreView.js";
+import { ratesOn } from "./lkTaxRates.js";
 import {
   aiFirstOn,
   memoryKey,
@@ -4627,6 +4629,7 @@ function renderWorkspaceContext(
   info: WorkspaceSelection | undefined,
   schema?: WorkspaceSchema,
 ) {
+  renderExplore(info, schema);
   if (!info) {
     show(workbookContext, false);
     show(contextSuggestions, false);
@@ -4751,6 +4754,68 @@ async function readWorkspaceContext(): Promise<{
     log.record("selection:context-schema", "info", describeError(error)),
   );
 }
+
+/**
+ * The Explore tab: templates and questions made from the selection's real headers (exploreView.ts).
+ * A tap only puts its request sentence in the request box and opens the Work tab; the usual
+ * preview and approval decide everything after that. The month-end card starts the existing payroll
+ * flow, which shows its own figures and asks before it adds anything.
+ */
+let exploreState: { info?: WorkspaceSelection; schema?: WorkspaceSchema } = {};
+
+function exploreChips(host: string, items: ExploreItem[]) {
+  document.querySelector<HTMLElement>(host)?.replaceChildren(
+    ...items.map((item) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "explore-chip";
+      button.dataset.explore = item.id;
+      const title = document.createElement("b");
+      title.textContent = localizeMessage(language, item.title);
+      button.append(title);
+      if (item.detail) {
+        const detail = document.createElement("span");
+        detail.textContent = localizeMessage(language, item.detail);
+        button.append(detail);
+      }
+      button.addEventListener("click", () => {
+        workspaceNavigation.activate("work");
+        if (!instruction) return;
+        instruction.value = item.request;
+        instruction.dispatchEvent(new Event("input", { bubbles: true }));
+        instruction.focus();
+      });
+      return button;
+    }),
+  );
+}
+
+function renderExplore(
+  info: WorkspaceSelection | undefined,
+  schema?: WorkspaceSchema,
+) {
+  exploreState = { info, schema };
+  // Only a readable selection with a schema gets items; a blank cell or a single cell gets none.
+  const vat = ratesOn(new Date()).vat;
+  const view = exploreFor(info?.isBlank ? undefined : schema?.columns, {
+    vatRate: vat.value,
+    vatUnchecked: !vat.reviewed,
+  });
+  exploreChips("#explore-template-list", view.templates);
+  exploreChips("#explore-question-list", view.questions);
+  show(document.querySelector<HTMLElement>("#explore-templates"), view.templates.length > 0);
+  show(document.querySelector<HTMLElement>("#explore-ask"), view.questions.length > 0);
+  show(document.querySelector<HTMLElement>("#explore-close"), view.payroll);
+  show(
+    document.querySelector<HTMLElement>("#explore-empty"),
+    view.templates.length === 0 && view.questions.length === 0,
+  );
+}
+document.querySelector("#explore-close-go")?.addEventListener("click", () => {
+  workspaceNavigation.activate("work");
+  void offerPayroll("");
+});
+languageHooks.push(() => renderExplore(exploreState.info, exploreState.schema));
 
 /** What the "Noticed in your data" card last read, so a slow read cannot overwrite a newer one. */
 let noticedToken = 0;

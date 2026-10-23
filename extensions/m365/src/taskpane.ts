@@ -2425,15 +2425,9 @@ inspect?.addEventListener("click", async () => {
       "Planned it on the server and checked that both plans match. Nothing has changed yet",
     ]);
     setStatus(
-      (autoDetectedAddress
-        ? `Found your table at ${autoDetectedAddress}. `
-        : "") +
-        "Preview ready. Nothing has changed yet. Review it before applying.",
+      "Preview ready. Nothing has changed yet. Review it before applying.",
     );
-    renderConversation(
-      "assistant",
-      `Preview ready for ${actions.join(", ")}. Your original data will stay unchanged.`,
-    );
+    renderConversation("assistant", "Preview ready. Your data is untouched.");
     previewReadyAt = Date.now();
     document.querySelector<HTMLElement>("#preview-heading")?.focus();
     // "Review as you go" off: apply straight away, like Copilot's edit mode.
@@ -3204,7 +3198,7 @@ consentSend?.addEventListener("click", async () => {
   if (consentSend) consentSend.disabled = true;
   try {
     if (scriptMode) {
-      setStatus("Planning the steps...");
+      setStatus("Planning…");
       const response = await apiClient().scriptExcel({
         ...request,
         request: request.request || "",
@@ -5283,7 +5277,14 @@ const agentUsageDetails = document.querySelector<HTMLDetailsElement>(
 
 /** Shows the planner's steps as a numbered list; no steps hides the list. */
 function showAgentPlan(steps: readonly string[]) {
-  showAgentPlanView(document, steps);
+  showAgentPlanView(document, steps, selectRangeInWorkbook);
+}
+
+async function selectRangeInWorkbook(sheet: string, address: string) {
+  await officeRuntime()?.run(async (context: any) => {
+    context.workbook.worksheets.getItem(sheet).getRange(address).select();
+    await context.sync();
+  });
 }
 
 /** Where the answer came from; a range is a button that selects it in the workbook. */
@@ -5291,12 +5292,7 @@ function showAgentSources(sources: readonly AnswerSource[]) {
   showAgentSourcesView({
     document,
     sources,
-    selectRange: async (sheet, address) => {
-      await officeRuntime()?.run(async (context: any) => {
-        context.workbook.worksheets.getItem(sheet).getRange(address).select();
-        await context.sync();
-      });
-    },
+    selectRange: selectRangeInWorkbook,
     recordError: (error) =>
       log.record("agent:source", "fail", describeError(error)),
   });
@@ -5351,6 +5347,7 @@ let agentIssues: string[] = [];
  * The agent card shows one line (working, checked, or a check that needs attention); the role cards sit
  * under "details". A run that ends with a problem opens the details so the problem is visible.
  */
+let agentCheckedPrev = "idle";
 function refreshAgentChecked() {
   if (!agentChecked || !agentCheckedText) return;
   const line = checkedLine({
@@ -5367,7 +5364,45 @@ function refreshAgentChecked() {
     if (line.state === "warn") agentChecksDetails.open = true;
     else if (line.state === "ok") agentChecksDetails.open = false;
   }
+  // A run just ended: the problem is announced on warn, otherwise the person can type the next request.
+  if (agentCheckedPrev === "working" && line.state !== "working") {
+    const active = document.activeElement;
+    const typing =
+      active instanceof HTMLTextAreaElement ||
+      (active instanceof HTMLInputElement && active.type !== "button");
+    if (!typing || active === instruction) {
+      if (line.state === "warn")
+        document.querySelector<HTMLElement>("#agent-heading")?.focus();
+      else if (line.state === "ok") instruction?.focus();
+    }
+  }
+  agentCheckedPrev = line.state;
 }
+// Escape discards an open preview or plan, unless the person is typing.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  const active = document.activeElement;
+  if (
+    active instanceof HTMLTextAreaElement ||
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLSelectElement
+  )
+    return;
+  const visible = (button: HTMLButtonElement | null) =>
+    !!button &&
+    !button.hidden &&
+    !button.disabled &&
+    button.offsetParent !== null;
+  const target = visible(agentDiscard)
+    ? agentDiscard
+    : visible(cancelPreviewButton)
+      ? cancelPreviewButton
+      : null;
+  if (target) {
+    event.preventDefault();
+    target.click();
+  }
+});
 if (agentProgress && typeof MutationObserver !== "undefined")
   new MutationObserver(refreshAgentChecked).observe(agentProgress, {
     childList: true,
@@ -5661,9 +5696,8 @@ async function agentLoop(request: string) {
                   ? "Verifying"
                   : "Final answer",
           );
-        if (phase === "planning") setStatus("Planning the next step...");
-        else if (phase === "executing")
-          setStatus("Running the selected tool...");
+        if (phase === "planning") setStatus("Planning…");
+        else if (phase === "executing") setStatus("Working…");
         else if (phase === "verifying")
           setStatus("Checking the tool result...");
       },
@@ -5707,9 +5741,7 @@ async function agentLoop(request: string) {
             "active",
             "checking calculations",
           );
-          setStatus(
-            "A reviewer agent is checking ranges, formulas and totals...",
-          );
+          setStatus("Checking the result…");
         } else {
           setAgentRoleView(document, "accuracy", "done", "checks completed");
           setAgentRoleView(
@@ -5718,9 +5750,7 @@ async function agentLoop(request: string) {
             "active",
             "checking write safety",
           );
-          setStatus(
-            "A reviewer agent is checking that every part is covered and nothing is overwritten...",
-          );
+          setStatus("Checking safety…");
         }
       },
       onHelperTool: (name, args) => {
@@ -5735,7 +5765,7 @@ async function agentLoop(request: string) {
             "active",
             "checking keys",
           );
-        if (agentProgress) setLocalizedText(agentProgress, `Team: ${label}`);
+        if (agentProgress) setLocalizedText(agentProgress, label);
         log.record(`agent:team:${name}`, "info", label.slice(0, 120));
       },
     });
@@ -5792,7 +5822,7 @@ async function agentLoop(request: string) {
     });
     setStatus(
       run.changes.length
-        ? "The agent prepared changes. Nothing has changed yet: review them, then approve."
+        ? "Preview ready. Nothing changed yet."
         : agentVerifying
           ? lastApplyStatus
           : "The agent answered. Nothing was changed.",
@@ -5961,7 +5991,8 @@ smartRun?.addEventListener("click", () => {
   else void inspect?.click();
 });
 instruction?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" || (!event.ctrlKey && !event.metaKey)) return;
+  // Enter sends; Shift+Enter is a new line; Ctrl/Cmd+Enter still sends. Not while an IME is composing.
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
   event.preventDefault();
   smartRun?.click();
 });

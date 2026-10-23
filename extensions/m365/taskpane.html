@@ -8,39 +8,65 @@
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #f5f5f7;
+        /* one token set for the whole pane; the dark values follow in the media block below */
+        --r-sm: 9px;
+        --r-md: 14px;
+        --r-lg: 18px;
+        --r-pill: 999px;
+        --sp-1: 4px;
+        --sp-2: 8px;
+        --sp-3: 12px;
+        --sp-4: 16px;
+        --fs-xs: 11.5px;
+        --fs-sm: 12.5px;
+        --fs-md: 13.5px;
+        --fs-lg: 15px;
+        --fs-xl: 20px;
+        --bg: #f5f7fb;
         --surface: rgb(255 255 255 / 84%);
         --surface-solid: #ffffff;
-        --surface-muted: #f0f1f5;
-        --ink: #1d1d1f;
-        --muted: #6e6e73;
-        --line: rgb(60 60 67 / 18%);
-        --brand: #007aff;
-        --brand-hover: #0071e3;
+        --surface-muted: #f5f7fb;
+        --ink: #0f1b2d;
+        --muted: #5a6881;
+        --line: #dde3ee;
+        --brand: #2563ff;
+        --brand-hover: #1d4fd6;
         --on-brand: #ffffff;
-        --success: #12715b;
-        --warning: #8a5600;
-        --danger: #b42318;
-        --focus: #007aff;
-        --shadow: 0 12px 30px rgb(29 29 31 / 12%);
-        --control-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+        --tint: #e9f0ff;
+        --success: #0b7a55;
+        --success-bg: #e3f6ee;
+        --warning: #a14a00;
+        --warning-bg: #fff1de;
+        --danger: #b4281c;
+        --danger-bg: #fde8e5;
+        --bar-bg: #0f1b2d;
+        --bar-ink: #ffffff;
+        --focus: #2563ff;
+        --shadow: 0 12px 30px rgb(15 27 45 / 12%);
+        --control-shadow: 0 1px 2px rgb(15 27 45 / 8%);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #171719;
-          --surface: rgb(44 44 46 / 88%);
-          --surface-solid: #2c2c2e;
-          --surface-muted: #3a3a3c;
-          --ink: #f5f5f7;
-          --muted: #aeaeb2;
-          --line: rgb(235 235 245 / 18%);
-          --brand: #0a84ff;
-          --brand-hover: #409cff;
-          --on-brand: #ffffff;
-          --success: #30d158;
-          --warning: #ffd60a;
-          --danger: #ff6961;
-          --focus: #0a84ff;
+          --bg: #0b1220;
+          --surface: rgb(20 29 48 / 88%);
+          --surface-solid: #141d30;
+          --surface-muted: #101828;
+          --ink: #e7edf9;
+          --muted: #9aaccb;
+          --line: #26334d;
+          --brand: #5b8cff;
+          --brand-hover: #7aa3ff;
+          --on-brand: #071230;
+          --tint: #1a2a4d;
+          --success: #4fd69f;
+          --success-bg: #10301f;
+          --warning: #f0b35a;
+          --warning-bg: #3a2a10;
+          --danger: #ff8a7d;
+          --danger-bg: #3b1613;
+          --bar-bg: #e7edf9;
+          --bar-ink: #0b1220;
+          --focus: #5b8cff;
           --shadow: 0 14px 34px rgb(0 0 0 / 34%);
           --control-shadow: 0 1px 2px rgb(0 0 0 / 26%);
         }
@@ -2317,38 +2343,23 @@
     <style id="redesign-styles">
       /* Redesign: one calm screen. The composer is docked at the bottom, the six agent roles collapse
          into one "Checked" line, and Apply / Undo stay pinned above the input. Only layout and look
-         change here; every id and every hidden toggle is the same as before. */
-      @media (prefers-color-scheme: light) {
-        :root {
-          --bg: #f5f7fb;
-          --surface-muted: #f5f7fb;
-          --ink: #0f1b2d;
-          --muted: #5a6881;
-          --line: #dde3ee;
-          --brand: #2563ff;
-          --brand-hover: #1d4fd6;
-          --success: #0b7a55;
-          --warning: #a14a00;
-          --focus: #2563ff;
-        }
-        main {
-          background: #f7f9fc;
-        }
-      }
+         change here; every id and every hidden toggle is the same as before. The tokens are defined
+         once in :root at the top of the file; this block uses them and needs no !important. */
       main {
-        --card-radius: 16px;
+        --card-radius: var(--r-lg);
+        background: var(--bg);
       }
-      /* header: logo mark and a quiet title */
+      /* header: logo mark, quiet title, no tagline (Excel already names the pane) */
       .brand-bar {
         grid-template-columns: 28px minmax(0, 1fr);
         gap: 9px;
-        min-height: 40px;
-        padding: 4px 2px 6px;
+        min-height: 32px;
+        padding: 0 2px 4px;
       }
       .brand-mark {
         width: 28px;
         height: 28px;
-        border-radius: 9px;
+        border-radius: var(--r-sm);
         background: linear-gradient(135deg, #2563ff, #6a3df0);
         box-shadow: none;
         font-size: 14px;
@@ -2357,16 +2368,27 @@
         display: none;
       }
       .brand-copy strong {
-        font-size: 14.5px;
+        font-size: var(--fs-md);
         letter-spacing: -0.2px;
       }
       .brand-copy span {
-        margin-top: 0;
-        font-size: 10px;
+        display: none;
+      }
+      /* the status pill is a quiet line once signed in; errors keep their full look */
+      body[data-auth="in"] #status:not([data-tone="error"]):not([data-mode="signed-in-idle"]) {
+        min-height: 20px;
+        margin: 0;
+        padding: 0 2px;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+      body[data-auth="in"] #status:not([data-tone="error"]):not([data-mode="signed-in-idle"]) #status-text {
+        font-size: 11px;
       }
       /* layout: a column whose scroll area grows; the composer sits at the bottom */
       body[data-auth="in"] .workspace {
-        gap: 8px;
+        gap: 6px;
       }
       .workspace > .context-chip {
         order: 0;
@@ -2374,12 +2396,12 @@
         align-items: center;
         gap: 6px;
         margin: 0;
-        padding: 6px 10px;
+        padding: 5px 10px;
         border: 1px solid var(--line);
-        border-radius: 11px;
-        background: color-mix(in srgb, var(--surface-muted) 70%, var(--surface-solid));
+        border-radius: var(--r-md);
+        background: var(--surface-muted);
         color: var(--ink);
-        font-size: 11.5px;
+        font-size: var(--fs-sm);
       }
       .workspace > .context-chip[hidden] {
         display: none;
@@ -2390,23 +2412,42 @@
         flex: 0 0 auto;
         border-radius: 50%;
         background: var(--success);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 16%, transparent);
+        box-shadow: 0 0 0 3px var(--success-bg);
         content: "";
       }
+      /* chat controls: ONE row; the history select takes what is left and never lies over a card */
       .workspace > .chat-bar {
         order: 1;
-        min-height: 40px;
-        padding: 4px;
-        border-radius: 12px;
+        position: relative;
+        z-index: 2;
+        flex-wrap: nowrap;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
         background: transparent;
         box-shadow: none;
         backdrop-filter: none;
       }
+      .workspace > .chat-bar select {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .workspace > .chat-bar .pill {
+        min-height: 30px;
+        padding: 3px 10px;
+        white-space: nowrap;
+      }
       .workspace > #noticed {
         order: 2;
       }
+      /* the room for the pinned bar belongs to the end of the scroll area, not to the workspace */
       .workspace > .scroll-area {
         order: 3;
+        padding-bottom: 12px;
+        scroll-padding-bottom: 12px;
       }
       .workspace > #starter-suggestions {
         order: 4;
@@ -2420,7 +2461,7 @@
       .workspace > .workspace-nav {
         order: 7;
       }
-      /* quick-start suggestions become one row of chips above the input */
+      /* quick-start suggestions: one row of chips above the input; away while a result is showing */
       #starter-suggestions.quick-start {
         flex: 0 0 auto;
         flex-wrap: nowrap;
@@ -2435,87 +2476,256 @@
       #starter-suggestions.quick-start .pill {
         flex: 0 0 auto;
         padding: 5px 11px;
-        border-radius: 999px;
+        border-radius: var(--r-pill);
         font-size: 12px;
         white-space: nowrap;
       }
-      /* the composer: rounded box, focus ring, compact controls */
+      body:has(#result-card:not([hidden])) #starter-suggestions {
+        display: none;
+      }
+      /* ---- state: the screen follows the work ---- */
+      /* idle: the greeting shows only while there is no chat and no agent run */
+      body:has(#agent-card:not([hidden])) #welcome-state,
+      .conversation:has(#conversation-history > *) #welcome-state {
+        display: none;
+      }
+      .welcome h1 {
+        font-size: var(--fs-xl);
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+      /* working: ONE live line (#agent-checked); the plan, reply, sources and progress wait */
+      body:has(#agent-checked[data-state="working"]) #agent-plan,
+      body:has(#agent-checked[data-state="working"]) #agent-reply,
+      body:has(#agent-checked[data-state="working"]) #agent-note,
+      body:has(#agent-checked[data-state="working"]) #agent-sources,
+      body:has(#agent-checked[data-state="working"]) #agent-progress {
+        display: none;
+      }
+      /* the sentence lives in the pinned bar's title; the paragraph itself stays out of the way */
+      #agent-note {
+        display: none;
+      }
+      /* data-driven suggestions are cards, like the demo */
+      .context-suggestions {
+        gap: 8px;
+      }
+      .smart-suggestion-list {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+      }
+      .smart-suggestion,
+      .smart-suggestion-list[data-count="1"] .smart-suggestion {
+        grid-template-columns: 34px minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        column-gap: 10px;
+        row-gap: 1px;
+        align-items: center;
+        min-height: 0;
+        padding: 10px 28px 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        background: var(--surface-solid);
+        box-shadow: none;
+        transition: border-color 0.15s ease, transform 0.15s ease;
+      }
+      .smart-suggestion::before,
+      .smart-suggestion-list[data-count="1"] .smart-suggestion::before {
+        grid-row: 1 / span 2;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: var(--tint);
+        color: var(--brand);
+      }
+      .smart-suggestion > *,
+      .smart-suggestion-list[data-count="1"] .smart-suggestion > * {
+        grid-column: 2;
+      }
+      .smart-suggestion strong,
+      .smart-suggestion-list[data-count="1"] .smart-suggestion strong {
+        font-size: var(--fs-md);
+        line-height: 1.25;
+      }
+      .smart-suggestion:hover:not(:disabled) {
+        border-color: var(--brand);
+        background: var(--surface-solid);
+        box-shadow: none;
+        transform: translateY(-1px);
+      }
+      /* ---- composer: rounded box, focus ring, compact controls ---- */
       .composer {
-        padding: 9px 9px 7px 13px;
+        padding: var(--sp-2) var(--sp-2) 6px var(--sp-3);
         border: 1.5px solid var(--line);
-        border-radius: 18px;
+        border-radius: var(--r-lg);
         background: var(--surface-solid);
         box-shadow: 0 1px 2px rgb(15 27 45 / 6%), 0 8px 22px rgb(15 27 45 / 8%);
       }
       .composer:focus-within {
         border-color: var(--brand);
-        box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 16%, transparent);
+        box-shadow: 0 0 0 4px var(--tint);
       }
       .composer textarea {
-        min-height: 44px;
+        min-height: 36px;
         max-height: 160px;
         resize: none;
         padding: 2px 0;
-        font-size: 13.5px;
+        font-size: var(--fs-md);
       }
       .composer-bar {
         flex-wrap: nowrap;
-        margin-top: 4px;
-        gap: 8px;
+        margin-top: 2px;
+        gap: var(--sp-2);
       }
       .mode-control {
         flex: 1 1 auto;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: var(--sp-2);
       }
       .mode-control select {
         flex: 0 1 auto;
         max-width: 62%;
         padding: 4px 24px 4px 10px;
         border: 1px solid var(--line);
-        border-radius: 999px;
-        background-color: color-mix(in srgb, var(--surface-muted) 80%, var(--surface-solid));
+        border-radius: var(--r-pill);
+        background-color: var(--surface-muted);
         box-shadow: none;
         font-size: 12px;
         font-weight: 600;
       }
       #smart-run {
         flex: 0 0 auto;
-        min-width: 36px;
-        min-height: 36px;
+        min-width: 34px;
+        min-height: 34px;
         padding: 0 16px;
-        border-radius: 999px;
+        border-radius: var(--r-pill);
+        background: var(--brand);
+        box-shadow: none;
+        color: var(--on-brand);
         font-weight: 700;
       }
+      #smart-run:hover:not(:disabled) {
+        background: var(--brand-hover);
+      }
       .more-tools {
-        margin-top: 2px;
+        margin: 0;
         font-size: 11px;
       }
       .more-tools summary {
-        padding: 2px 0;
+        padding: 0;
+        line-height: 1.5;
       }
-      /* cards: calmer edges */
+      /* ---- buttons: primary filled, ghost outlined, danger in the danger colour ---- */
+      .primary,
+      .ghost {
+        min-height: 36px;
+        border-radius: var(--r-sm);
+        font-size: var(--fs-sm);
+        font-weight: 600;
+      }
+      .primary {
+        border-color: var(--brand);
+        background: var(--brand);
+        box-shadow: none;
+        color: var(--on-brand);
+      }
+      .primary:hover:not(:disabled) {
+        border-color: var(--brand-hover);
+        background: var(--brand-hover);
+      }
+      .ghost {
+        border: 1px solid var(--line);
+        background: var(--surface-solid);
+        box-shadow: none;
+        color: var(--ink);
+      }
+      .ghost.danger,
+      .danger {
+        border-color: var(--danger);
+        background: transparent;
+        color: var(--danger);
+      }
+      /* ---- cards, chat bubbles, KPI tiles, mini preview table ---- */
       #signin-card,
       .card,
       #ai-result.analysis-card {
-        border-radius: 16px;
+        padding: var(--sp-4);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        background: var(--surface-solid);
         box-shadow: 0 1px 2px rgb(15 27 45 / 5%);
       }
-      /* agent: one line says what happened; the six checks sit behind Details */
+      .message {
+        max-width: 92%;
+        padding: 9px 12px;
+        border: 0;
+        border-radius: 16px 16px 16px 4px;
+        background: var(--tint);
+        box-shadow: none;
+        color: var(--ink);
+        font-size: var(--fs-md);
+        line-height: 1.5;
+      }
+      .message.user {
+        border-radius: 16px 16px 4px 16px;
+        background: var(--brand);
+        color: var(--on-brand);
+      }
+      .message.user .message-label {
+        color: inherit;
+        opacity: 0.8;
+      }
+      .message.error {
+        background: var(--danger-bg);
+        color: var(--danger);
+      }
+      .kpi {
+        padding: 8px 11px;
+        border-radius: var(--r-md);
+        background: var(--surface-muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .kpi strong {
+        font-size: var(--fs-lg);
+      }
+      .change-preview {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        font-size: var(--fs-xs);
+      }
+      .change-preview th {
+        background: var(--surface-muted);
+      }
+      .badge {
+        border-radius: var(--r-pill);
+        background: var(--surface-muted);
+      }
+      .pill.ok,
+      .badge.ok {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+      .pill.warn,
+      .badge.warn {
+        background: var(--warning-bg);
+        color: var(--warning);
+      }
+      /* ---- agent: one line says what happened; the six checks sit behind Details ---- */
       .agent-checked {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--sp-2);
+        width: fit-content;
         margin: 6px 0;
-        font-size: 12.5px;
+        padding: 4px 10px;
+        border-radius: var(--r-pill);
+        font-size: var(--fs-sm);
         font-weight: 600;
       }
       .agent-checked[data-state="working"] {
-        width: fit-content;
-        padding: 5px 12px;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--surface-muted) 85%, var(--surface-solid));
+        background: var(--surface-muted);
         color: var(--muted);
       }
       .agent-checked[data-state="working"]::before {
@@ -2527,9 +2737,11 @@
         content: "";
       }
       .agent-checked[data-state="ok"] {
+        background: var(--success-bg);
         color: var(--success);
       }
       .agent-checked[data-state="warn"] {
+        background: var(--warning-bg);
         color: var(--warning);
       }
       @keyframes agent-pulse {
@@ -2556,36 +2768,73 @@
       .agent-checks-details[open] > summary {
         margin-bottom: 8px;
       }
-      /* Apply / Discard / Undo: a dark bar pinned above the composer, only while a button shows */
+      .agent-checks-details #agent-sources,
+      .agent-checks-details #workbook-map,
+      .agent-checks-details #agent-usage-details {
+        margin-top: 8px;
+      }
+      /* short results: reply bullets are clamped; "Show more" reveals the rest */
+      .reply-bullet {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+      }
+      .reply-line {
+        display: block;
+      }
+      .reply-more {
+        min-height: 32px;
+        margin-top: 6px;
+        padding: 3px 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-pill);
+        background: transparent;
+        color: var(--brand);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      /* ---- Apply / Discard / Undo: a bar pinned at the bottom of the scroll area, only while a button shows ---- */
       .apply-dock {
         bottom: 0;
-        margin: 10px 0 0;
-        padding: 8px 8px 8px 12px;
+        margin: 6px 0 0;
+        padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
         border: 0;
-        border-radius: 14px;
-        background: #0f1b2d;
+        border-radius: var(--r-md);
+        background: var(--bar-bg);
         box-shadow: 0 8px 22px rgb(15 27 45 / 22%);
-        color: #ffffff;
+        color: var(--bar-ink);
       }
       .apply-dock:not(:has(button:not([hidden]))) {
         display: none;
       }
-      .apply-dock .ghost {
-        border-color: rgb(255 255 255 / 32%);
-        background: transparent;
-        color: #ffffff;
+      .apply-dock button {
+        min-height: 40px;
       }
       .apply-dock .primary {
         flex: 1 1 130px;
-        border-radius: 10px;
+        border-radius: var(--r-sm);
+        background: var(--brand);
+        color: var(--on-brand);
+      }
+      .apply-dock button:not(.primary) {
+        border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+        background: transparent;
+        color: inherit;
+      }
+      .apply-dock button:not(.primary):hover:not(:disabled) {
+        background: color-mix(in srgb, currentColor 14%, transparent);
       }
       /* the saved-time line is a whisper, not a card */
       .saved-footer {
+        margin: 0;
         padding: 0 8px;
         border: 0;
         background: transparent;
         justify-content: center;
-        font-size: 10.5px;
+        font-size: 10px;
+        line-height: 1;
       }
       /* bottom tabs: small pills */
       .workspace-nav {
@@ -2593,82 +2842,73 @@
         margin-top: 0;
         padding: 2px;
         border-color: transparent;
-        border-radius: 999px;
+        border-radius: var(--r-pill);
         background: transparent;
         box-shadow: none;
         backdrop-filter: none;
       }
       .workspace-nav button {
-        min-height: 28px;
-        padding: 4px 8px;
-        border-radius: 999px;
+        min-height: 32px;
+        padding: 4px 12px;
+        border-radius: var(--r-pill);
+        color: var(--muted);
         font-size: 12px;
       }
       .workspace-nav button.active {
-        background: color-mix(in srgb, var(--brand) 12%, var(--surface-solid));
+        background: var(--tint);
         box-shadow: none;
-        color: var(--brand);
+        color: var(--ink);
+        font-weight: 700;
       }
+      /* touch targets */
+      details > summary {
+        min-height: 32px;
+        padding-block: 7px;
+      }
+      /* dark mode: the tokens carry it; only the old hard-coded dark surfaces are pulled onto them */
       @media (prefers-color-scheme: dark) {
-        .composer {
+        main {
+          background: var(--bg);
+        }
+        #signin-card,
+        .card,
+        .composer,
+        #ai-result.analysis-card,
+        .smart-suggestion {
           background: var(--surface-solid);
         }
-        .workspace > .context-chip {
-          background: var(--surface-muted);
+        .workspace-nav {
+          background: transparent;
         }
-        .apply-dock {
-          border: 1px solid var(--line);
-          background: #0b1220;
+      }
+      /* Windows high contrast: borders replace the colours that are dropped */
+      @media (forced-colors: active) {
+        .apply-dock,
+        .agent-checked,
+        .pill,
+        .message {
+          border: 1px solid CanvasText;
+          forced-color-adjust: auto;
+        }
+        .agent-checked[data-state="working"]::before,
+        .workspace > .context-chip::before {
+          background: Highlight;
+          forced-color-adjust: none;
+        }
+        button:focus-visible {
+          outline: 2px solid Highlight;
         }
       }
       @media (prefers-reduced-motion: reduce) {
         .agent-checked[data-state="working"]::before {
           animation: none;
         }
-      }
-
-      /* Short results: the reply bullets are clamped, internals live in Details, nothing is hidden behind the pinned bar */
-      .reply-bullet {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        overflow: hidden;
-      }
-      .reply-line { display: block; }
-      .reply-more {
-        margin-top: 6px;
-        padding: 3px 10px;
-        border: 1px solid var(--border, #dde3ee);
-        border-radius: 999px;
-        background: transparent;
-        color: var(--accent, #2563ff);
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .agent-checks-details #agent-sources,
-      .agent-checks-details #workbook-map,
-      .agent-checks-details #agent-usage-details { margin-top: 8px; }
-      /* the chat bar keeps its own row: the history select never lies over the card below */
-      .workspace > .chat-bar {
-        position: relative;
-        z-index: 2;
-        flex-wrap: wrap;
-        row-gap: 6px;
-        margin-bottom: 8px;
-      }
-      .workspace > .chat-bar select { max-width: 100%; min-width: 0; flex: 1 1 100%; }
-      /* the last card can scroll fully above the pinned bar */
-      .workspace { scroll-padding-bottom: 96px; }
-      .workspace::after { content: ""; display: block; flex: 0 0 auto; height: 72px; }
-      /* Cancel / Discard in the dark bar: a ghost button, light text, same height as the primary */
-      .apply-dock button { min-height: 40px; }
-      .apply-dock .ghost,
-      .apply-dock button.secondary,
-      .apply-dock button:not(.primary) {
-        background: transparent !important;
-        color: #ffffff !important;
-        border: 1px solid rgb(255 255 255 / 40%) !important;
+        .smart-suggestion {
+          transition: none;
+        }
+        .smart-suggestion:hover:not(:disabled) {
+          transform: none;
+        }
       }
     </style>
   </head>
@@ -2681,7 +2921,7 @@
         <div class="brand-mark" aria-hidden="true">V</div>
         <div class="brand-copy">
           <strong>VynorAI Excel</strong>
-          <span data-i18n="brand_tagline">Analyze, plan and apply safely</span>
+          <span data-i18n="brand_tagline">Ask. Preview. Apply.</span>
         </div>
       </header>
       <div
@@ -2782,7 +3022,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.06</p>
+          <p class="menu-version" id="build-id">Build 20261023.07</p>
         </div>
       </div>
 
@@ -3064,8 +3304,7 @@
                 What would you like to do with your data?
               </h1>
               <p data-i18n="hero_hint">
-                VynorAI finds your table automatically and previews a new result
-                sheet before changes are made.
+                Ask about your data. You preview every change.
               </p>
             </div>
             <div
@@ -3549,8 +3788,8 @@
               </h2>
               <span class="badge" id="agent-badge" role="status" aria-live="polite">Working</span>
             </div>
-            <p id="agent-progress" class="muted" aria-live="polite"></p>
-            <div id="agent-checked" class="agent-checked" hidden><span id="agent-checked-text"></span></div>
+            <p id="agent-progress" class="muted"></p>
+            <div id="agent-checked" class="agent-checked" role="status" hidden><span id="agent-checked-text"></span></div>
             <details id="agent-checks-details" class="agent-checks-details">
               <summary data-i18n="tech_details">Details</summary>
             <ol
@@ -3571,14 +3810,14 @@
             </ol>
             <div id="agent-activity-list" class="agent-activity-list">
               <div data-agent-role="planner"><strong data-i18n="role_planner">Planner</strong><span class="agent-role-status">pending</span></div>
-              <div data-agent-role="relationships"><strong data-i18n="role_relationships">Relationship mapper</strong><span class="agent-role-status">pending</span></div>
+              <div data-agent-role="relationships"><strong data-i18n="role_relationships">Checked data links</strong><span class="agent-role-status">pending</span></div>
               <div data-agent-role="builder"><strong data-i18n="role_builder">Builder</strong><span class="agent-role-status">pending</span></div>
               <div data-agent-role="accuracy"><strong data-i18n="role_accuracy">Accuracy reviewer</strong><span class="agent-role-status">pending</span></div>
               <div data-agent-role="safety"><strong data-i18n="role_safety">Safety reviewer</strong><span class="agent-role-status">pending</span></div>
               <div data-agent-role="verification"><strong data-i18n="role_verification">Verification</strong><span class="agent-role-status">pending</span></div>
             </div>
             <details id="agent-usage-details" hidden>
-              <summary data-i18n="tech_details">Technical details</summary>
+              <summary data-i18n="tech_details">Details</summary>
               <p id="agent-usage" class="muted"></p>
             </details>
             <div id="agent-sources" hidden>
@@ -3597,9 +3836,9 @@
             <div id="agent-reply"></div>
             <ol id="agent-changes" class="details" hidden></ol>
             <p id="agent-note" class="muted" hidden data-i18n="agent_note">
-              Nothing has changed yet. Review the changes, then approve.
+              Nothing changed yet.
             </p>
-            <div class="apply-dock">
+            <div class="apply-dock" title="Nothing changed yet.">
               <button
                 id="agent-approve"
                 class="primary"

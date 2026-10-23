@@ -37,7 +37,10 @@ export function setLocalizedText(element: HTMLElement, english: string): void {
 }
 
 /** A line made of several English parts, each localized on its own and joined with a space. */
-export function setLocalizedParts(element: HTMLElement, parts: readonly string[]): void {
+export function setLocalizedParts(
+  element: HTMLElement,
+  parts: readonly string[],
+): void {
   delete element.dataset.en;
   element.dataset.enParts = JSON.stringify(parts);
   element.textContent = parts.map(localize).join(" ");
@@ -54,10 +57,14 @@ export function relocalizeView(root: ParentNode): void {
     } catch {
       parts = [];
     }
-    element.textContent = Array.isArray(parts) ? parts.map((part) => localize(String(part))).join(" ") : "";
+    element.textContent = Array.isArray(parts)
+      ? parts.map((part) => localize(String(part))).join(" ")
+      : "";
   }
   // A role name cut short by a narrow pane shows in full as its title: keep it in the current language.
-  for (const name of root.querySelectorAll<HTMLElement>("#agent-activity-list [data-agent-role] strong"))
+  for (const name of root.querySelectorAll<HTMLElement>(
+    "#agent-activity-list [data-agent-role] strong",
+  ))
     name.title = name.textContent ?? "";
 }
 
@@ -84,12 +91,20 @@ export function setAgentRoleView(
  * skipped with the reason, never spinning, and one that never started ends as skipped too: no role
  * keeps saying "pending" for a request that is over.
  */
-export function settleActiveRolesView(document: Document, evidence: string): void {
+export function settleActiveRolesView(
+  document: Document,
+  evidence: string,
+): void {
   for (const row of document.querySelectorAll<HTMLElement>(
     "#agent-activity-list [data-agent-role]",
   ))
     if (row.dataset.state === "active" || row.dataset.state === "pending")
-      setAgentRoleView(document, row.dataset.agentRole as AgentRole, "skipped", evidence);
+      setAgentRoleView(
+        document,
+        row.dataset.agentRole as AgentRole,
+        "skipped",
+        evidence,
+      );
 }
 
 export function resetAgentRolesView(document: Document): void {
@@ -124,36 +139,104 @@ export function agentToolLabel(
   name: string,
   args: Record<string, unknown>,
 ): string {
+  // Plain words only: no formulas, ranges or tool names in the live line.
   switch (name) {
     case "get_workbook":
-      return "Looking at the workbook";
+      return "Reading workbook";
     case "read_range":
-      return `Reading ${String(args.sheet ?? "")}!${String(args.address ?? "")}`;
+      return `Reading ${String(args.sheet ?? "").trim() || "data"}`;
     case "calculate":
-      return `Calculating ${String(args.formula ?? "").slice(0, 80)}`;
+      return "Calculating…";
     case "run_code":
-      return `Running analysis code on ${String(args.sheet ?? "")}!${String(args.address ?? "")} (on this device, no network)`;
+      return `Analysing ${String(args.sheet ?? "").trim() || "data"}`;
     case "vynor_step":
-      return `Checking a step: ${String(args.instruction ?? "").slice(0, 80)}`;
+      return "Checking a step";
     default:
-      return `Preparing a change (${name})`;
+      return "Preparing a change";
   }
+}
+
+/** First plan steps shown before "Show all N steps". */
+export const PLAN_STEPS_SHOWN = 3;
+
+/** "'Sheet'!A1:B2" or "Sheet!A1" in a step; the first one found. */
+export function stepRange(
+  step: string,
+): { sheet: string; address: string } | undefined {
+  const m =
+    /(?:'((?:[^']|'')+)'|([A-Za-z_][\w.]*))!(\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?)/.exec(
+      step,
+    );
+  if (!m) return undefined;
+  return { sheet: (m[1] ?? m[2]).replace(/''/g, "'"), address: m[3] };
+}
+
+/** A step for display: ranges and addresses removed, the full text stays in the title. */
+export function plainStep(step: string): string {
+  return step
+    .replace(
+      /\s*(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?/g,
+      "",
+    )
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export function showAgentPlanView(
   document: Document,
   steps: readonly string[],
+  selectRange?: (sheet: string, address: string) => Promise<void>,
 ): void {
   const plan = document.querySelector<HTMLElement>("#agent-plan");
   const planSteps = document.querySelector<HTMLElement>("#agent-plan-steps");
   if (!plan || !planSteps) return;
   planSteps.replaceChildren(
-    ...steps.map((step) => {
+    ...steps.map((step, index) => {
       const item = document.createElement("li");
-      item.textContent = step;
+      item.textContent = plainStep(step) || step;
+      item.title = step;
+      const range = stepRange(step);
+      if (range && selectRange) {
+        item.tabIndex = 0;
+        item.className = "plan-step-link";
+        const go = () => {
+          void selectRange(range.sheet, range.address).catch(() => undefined);
+        };
+        item.addEventListener("click", go);
+        item.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            go();
+          }
+        });
+      }
+      if (index >= PLAN_STEPS_SHOWN) item.hidden = true;
       return item;
     }),
   );
+  planSteps.parentElement
+    ?.querySelector<HTMLElement>("#agent-plan-more")
+    ?.remove();
+  if (steps.length > PLAN_STEPS_SHOWN) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.id = "agent-plan-more";
+    more.className = "link";
+    more.setAttribute("aria-expanded", "false");
+    more.setAttribute("aria-controls", "agent-plan-steps");
+    more.textContent = `Show all ${steps.length} steps`;
+    more.addEventListener("click", () => {
+      const open = more.getAttribute("aria-expanded") !== "true";
+      more.setAttribute("aria-expanded", String(open));
+      more.textContent = open
+        ? "Show fewer steps"
+        : `Show all ${steps.length} steps`;
+      planSteps.querySelectorAll<HTMLElement>("li").forEach((li, i) => {
+        if (i >= PLAN_STEPS_SHOWN) li.hidden = !open;
+      });
+    });
+    planSteps.after(more);
+  }
   plan.hidden = steps.length === 0;
 }
 
@@ -175,13 +258,17 @@ export function showAgentSourcesView(options: {
           // A long formula is one line of text in a card; the whole formula opens on demand.
           const details = document.createElement("details");
           const summary = document.createElement("summary");
-          summary.textContent = `${localize("Excel computed")}: ${source.text.length > 48 ? `${source.text.slice(0, 48)}…` : source.text}`;
+          summary.textContent = localize("Calculation");
+          summary.title = source.text;
           const code = document.createElement("code");
           code.textContent = source.text;
           details.append(summary, code);
           item.append(details);
         } else
-          setLocalizedText(item, `Workbook check: ${source.text.replace(/_/g, " ")}`);
+          setLocalizedText(
+            item,
+            `Workbook check: ${source.text.replace(/_/g, " ")}`,
+          );
         return item;
       }
       const button = document.createElement("button");

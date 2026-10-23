@@ -7,6 +7,10 @@
 import { localizeAction } from "./messagesActions.js";
 
 const EXACT: Record<string, string> = {
+  "Checking the result…": "முடிவைச் சரிபார்க்கிறது…",
+  "Checking safety…": "பாதுகாப்பைச் சரிபார்க்கிறது…",
+  "Preview ready. Nothing changed yet.":
+    "முன்னோட்டம் தயார். இன்னும் எதுவும் மாறவில்லை.",
   "Sparklines are not available in this Excel add-in yet. Use a line chart on a new result sheet instead.":
     "இந்த Excel add-in-இல் Sparklines இன்னும் கிடைக்கவில்லை. அதற்குப் பதிலாக புதிய முடிவுத் தாளில் ஒரு line chart-ஐப் பயன்படுத்தவும்.",
   "Scheduled refresh is not available in this add-in yet. Run the request again when you want a fresh, reviewed result.":

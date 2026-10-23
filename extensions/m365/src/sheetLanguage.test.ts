@@ -299,5 +299,10 @@ test("run-time messages are shown in Tamil when the pane or the request is Tamil
   assert.equal(localizeMessage("ta", "Some new message."), "Some new message.");
   assert.equal(responseLanguage("Region வாரியாக மொத்தம்", "en"), "ta");
   assert.equal(responseLanguage("Region අනුව එකතුව", "ta"), "si");
-  assert.equal(responseLanguage("total by Region", "ta"), "ta");
+  // The pane language does not decide the answer language: English, Singlish and mixed requests get English.
+  assert.equal(responseLanguage("total by Region", "ta"), "en");
+  assert.equal(responseLanguage("region wise total ekak hadanna", "si"), "en");
+  assert.equal(responseLanguage("explain this in sinhala", "en"), "si");
+  assert.equal(responseLanguage("meka sinhalen pahadili karanna", "en"), "si");
+  assert.equal(responseLanguage("tamilil sollunga", "en"), "ta");
 });

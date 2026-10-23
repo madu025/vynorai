@@ -526,14 +526,20 @@ export function localizeMessage(language: Language, text: string): string {
   return text;
 }
 
+const ASKS_SINHALA =
+  /\b(sinhalen|sinhala\s*(walin|wlin|valin|eken|ta)|(in|into|to)\s+sinhala|sinhala\s+(explain|reply|answer))\b/i;
+const ASKS_TAMIL =
+  /\b(tamilil|(in|into|to)\s+tamil|tamil\s+(explain|reply|answer))\b/i;
+
 /**
- * The language an AI answer should be written in: the script the person typed in wins, then the
- * language chosen in the pane, then English.
+ * The language an AI answer should be written in. English, Singlish and mixed requests get English
+ * answers; Sinhala or Tamil only when the person typed in that script or asked for it ("explain
+ * in Sinhala", "sinhalen pahadili karanna"). The pane language does not decide it.
  */
-export function responseLanguage(typed: string, pane: Language): Language {
-  if (/[඀-෿]/.test(typed)) return "si";
-  if (/[஀-௿]/.test(typed)) return "ta";
-  return pane;
+export function responseLanguage(typed: string, _pane?: Language): Language {
+  if (/[඀-෿]/.test(typed) || ASKS_SINHALA.test(typed)) return "si";
+  if (/[஀-௿]/.test(typed) || ASKS_TAMIL.test(typed)) return "ta";
+  return "en";
 }
 
 export function loadLanguage(

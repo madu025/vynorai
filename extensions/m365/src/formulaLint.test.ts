@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StagedChange } from "./agent.js";
-import { lintChanges, lintFormula, repairChanges, repairFormula } from "./formulaLint.js";
+import {
+  lintChanges,
+  lintFormula,
+  repairChanges,
+  repairFormula,
+} from "./formulaLint.js";
 
 test("GROUPBY with field_headers 1 on ranges below the header is flagged", () => {
   const formula = "=GROUPBY(TRIM('Orders'!D2:D301),'Orders'!J2:J301,SUM,1,0)";
@@ -73,7 +78,10 @@ test("the mistake is repaired: 1 becomes 0 and 3 becomes 2, the rest of the form
     "=PIVOTBY(A2:A9,C2:C9,B2:B9,SUM,2)",
   );
   // A correct formula is returned as it was.
-  assert.equal(repairFormula("=GROUPBY(A1:A9,B1:B9,SUM,1)"), "=GROUPBY(A1:A9,B1:B9,SUM,1)");
+  assert.equal(
+    repairFormula("=GROUPBY(A1:A9,B1:B9,SUM,1)"),
+    "=GROUPBY(A1:A9,B1:B9,SUM,1)",
+  );
 });
 
 test("repairChanges fixes staged formulas in place and counts them", () => {
@@ -97,4 +105,30 @@ test("repairChanges fixes staged formulas in place and counts them", () => {
   ];
   assert.equal(repairChanges(changes), 1);
   assert.equal(lintChanges(changes).length, 0);
+});
+
+test("lintChanges flags a write inside the area a table formula spills into", () => {
+  const spill = {
+    kind: "write_formula" as const,
+    sheet: "Orders with Region",
+    cell: "A1",
+    formula:
+      '=VSTACK(HSTACK(Orders!A1:L1,"Region ID"),HSTACK(Orders!A2:L3001,XLOOKUP(Orders!C2:C3001,Customers!A2:A3001,Customers!E2:E3001,"Not found")))',
+  };
+  const header = {
+    kind: "write_values" as const,
+    sheet: "Orders with Region",
+    cell: "M1",
+    values: [["Region ID"]],
+  };
+  const issues = lintChanges([{ change: spill }, { change: header }]);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /M1.*#SPILL!/);
+  const outside = { ...header, cell: "N1" };
+  assert.equal(lintChanges([{ change: spill }, { change: outside }]).length, 0);
+  const otherSheet = { ...header, sheet: "Other" };
+  assert.equal(
+    lintChanges([{ change: spill }, { change: otherSheet }]).length,
+    0,
+  );
 });

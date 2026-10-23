@@ -80,7 +80,9 @@ function scan(formula: string): { issues: string[]; repaired: string } {
     if (starts.length && Math.min(...starts) >= 2) {
       const open = match.index + match[0].length - 1;
       const fixed = args.map((arg, index) =>
-        index === headersIndex ? arg.replace(/[13]/, headers === "1" ? "0" : "2") : arg,
+        index === headersIndex
+          ? arg.replace(/[13]/, headers === "1" ? "0" : "2")
+          : arg,
       );
       repaired =
         repaired.slice(0, open + 1) +
@@ -110,6 +112,65 @@ export function repairChanges(
   return count;
 }
 
+function columnNumber(letters: string): number {
+  let n = 0;
+  for (const ch of letters.toUpperCase()) n = n * 26 + ch.charCodeAt(0) - 64;
+  return n;
+}
+
+function splitCell(cell: string): { col: number; row: number } | undefined {
+  const m = /^\$?([A-Z]{1,3})\$?(\d+)$/i.exec(cell.trim());
+  return m ? { col: columnNumber(m[1]), row: Number(m[2]) } : undefined;
+}
+
+/** Columns a VSTACK/HSTACK table formula spills across, read from its first HSTACK row; undefined if unknown. */
+function spillWidth(formula: string): number | undefined {
+  const match = /^=\s*(?:VSTACK\s*\(\s*)?HSTACK\s*\(/i.exec(formula);
+  if (!match) return undefined;
+  const args = callArguments(formula, match[0].length - 1);
+  if (!args) return undefined;
+  let width = 0;
+  for (const arg of args) {
+    const range =
+      /^\s*(?:'[^']+'|\w+)?!?\$?([A-Z]{1,3})\$?\d+\s*:\s*\$?([A-Z]{1,3})\$?\d+\s*$/i.exec(
+        arg,
+      );
+    if (range) width += columnNumber(range[2]) - columnNumber(range[1]) + 1;
+    else if (/[A-Z]{1,3}\$?\d+\s*:/i.test(arg)) return undefined;
+    else width += 1;
+  }
+  return width;
+}
+
+/**
+ * A table formula (VSTACK/HSTACK) fills a rectangle by itself. A later step that writes a header or
+ * value into that rectangle blocks the spill (#SPILL!) and every lookup next to it reads "Not found".
+ */
+function spillOverlaps(changes: readonly { change: StagedChange }[]): string[] {
+  const issues: string[] = [];
+  changes.forEach(({ change }, index) => {
+    if (change.kind !== "write_formula" || change.fillRange) return;
+    const anchor = splitCell(change.cell);
+    const width = spillWidth(change.formula);
+    if (!anchor || !width) return;
+    for (const { change: later } of changes.slice(index + 1)) {
+      if (
+        (later.kind !== "write_values" && later.kind !== "write_formula") ||
+        later.sheet !== change.sheet
+      )
+        continue;
+      const target = splitCell(later.cell);
+      if (!target || target.row < anchor.row) continue;
+      if (target.col < anchor.col || target.col >= anchor.col + width) continue;
+      if (target.col === anchor.col && target.row === anchor.row) continue;
+      issues.push(
+        `'${later.sheet}'!${later.cell}: ${change.cell} is a table formula that spills across ${width} columns and rows below it, so writing into ${later.cell} blocks it (#SPILL!). Put the extra column inside the spilled formula (for example another HSTACK argument and a header in its first row) or write outside the spill area.`,
+      );
+    }
+  });
+  return issues;
+}
+
 /** Problems found in the staged formulas, each with the cell it is in. */
 export function lintChanges(
   changes: readonly { change: StagedChange }[],
@@ -120,5 +181,6 @@ export function lintChanges(
     for (const issue of lintFormula(change.formula))
       issues.push(`'${change.sheet}'!${change.cell}: ${issue}`);
   }
+  issues.push(...spillOverlaps(changes));
   return issues.slice(0, 5);
 }

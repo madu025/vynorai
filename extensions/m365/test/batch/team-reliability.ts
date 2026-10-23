@@ -320,7 +320,7 @@ for (const scenario of SCENARIOS) {
   let risk = reviewRisk(scenario.changes);
   if (!risk.high && (await overwritesExisting(scenario.changes, host)))
     risk = { high: true, reason: "it would replace existing cells" };
-  const rules = risk.high ? [] : await checkSimpleFormulas(scenario.changes, host);
+  const rules = risk.high ? [] : (await checkSimpleFormulas(scenario.changes, host)).issues;
   const route = risk.high ? `reviewers (${risk.reason})` : rules.length ? "rules caught it" : "skips reviewers";
   const missed = scenario.expect === "FIX" && !risk.high && !rules.length;
   if (missed) gateMissed += 1;

@@ -1160,7 +1160,8 @@ export async function deleteHiddenSheets(
 ): Promise<string[]> {
   const left: string[] = [];
   if (!ids.length) return left;
-  await runtime.run(async (context) => {
+  try {
+    await runtime.run(async (context) => {
     for (const key of ids) {
       try {
         const sheet = context.workbook.worksheets.getItemOrNullObject(key);
@@ -1175,5 +1176,9 @@ export async function deleteHiddenSheets(
       }
     }
   });
+  } catch {
+    // The whole request failed (Excel busy): nothing is known to be deleted, keep every id.
+    return [...ids];
+  }
   return left;
 }

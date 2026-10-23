@@ -56,9 +56,12 @@ export function reviewRisk(
         if (
           change.values.some(
             (row) =>
-              typeof row[0] === "string" &&
-              COMPUTED_LABEL.test(row[0]) &&
-              row.slice(1).some((cell) => typeof cell === "number"),
+              row.some((cell) => typeof cell === "string" && COMPUTED_LABEL.test(cell)) &&
+              row.some(
+                (cell) =>
+                  typeof cell === "number" ||
+                  (typeof cell === "string" && /^\s*-?[\d,]+(\.\d+)?\s*%?\s*$/.test(cell)),
+              ),
           )
         )
           return { high: true, reason: "a typed-in total" };

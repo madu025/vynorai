@@ -45,17 +45,17 @@ const host = (values: unknown[]) =>
 const column = ["Amount", 10, 20, 30, 40]; // numbers on rows 2..5
 
 test("a total over the whole column passes the rules", async () => {
-  assert.deepEqual(await checkSimpleFormulas([formula("B6", "=SUM(B2:B5)")], host(column)), []);
+  assert.deepEqual((await checkSimpleFormulas([formula("B6", "=SUM(B2:B5)")], host(column))).issues, []);
 });
 
 test("a range one row short, a range that starts late, and the wrong column are caught", async () => {
-  const short = await checkSimpleFormulas([formula("B6", "=SUM(B2:B4)")], host(column));
+  const short = (await checkSimpleFormulas([formula("B6", "=SUM(B2:B4)")], host(column))).issues;
   assert.match(short[0], /stops at row 4.*run to row 5/);
-  const late = await checkSimpleFormulas([formula("B6", "=SUM(B3:B5)")], host(column));
+  const late = (await checkSimpleFormulas([formula("B6", "=SUM(B3:B5)")], host(column))).issues;
   assert.match(late[0], /starts at row 3.*start at row 2/);
-  const wrong = await checkSimpleFormulas([formula("C6", "=SUM(B2:B5)")], host(column));
+  const wrong = (await checkSimpleFormulas([formula("C6", "=SUM(B2:B5)")], host(column))).issues;
   assert.match(wrong[0], /sums column B but the result sits under column C/);
-  const none = await checkSimpleFormulas([formula("B6", "=SUM(B2:B5)")], host(["Name", "a", "b", "c", "d"]));
+  const none = (await checkSimpleFormulas([formula("B6", "=SUM(B2:B5)")], host(["Name", "a", "b", "c", "d"]))).issues;
   assert.match(none[0], /holds no numbers/);
 });
 
@@ -81,4 +81,31 @@ test("a write onto cells that already hold something is detected, a new sheet is
   assert.equal(await overwritesExisting([write], empty), false);
   const created = { change: { kind: "create_sheet", name: "Data" } as StagedChange };
   assert.equal(await overwritesExisting([created, write], filled), false);
+});
+
+test("a total beside its data that stops short is caught, and a number above the data is not data", async () => {
+  const col = ["Amount", 10, 20, 30, 40, 50];
+  const beside = (await checkSimpleFormulas([formula("D1", "=SUM(B2:B4)")], host(col))).issues;
+  assert.match(beside[0], /stops at row 4.*run to row 6/);
+  const withYear = [2026, "Amount", 10, 20, 30]; // a year in row 1, header in row 2, data rows 3..5
+  assert.deepEqual((await checkSimpleFormulas([formula("B6", "=SUM(B3:B5)")], host(withYear))).issues, []);
+});
+
+test("a column that cannot be read makes the change unverified, so it goes to the reviewers", async () => {
+  const broken = { readRange: async () => { throw new Error("protected"); } } as unknown as AgentHost;
+  const result = await checkSimpleFormulas([formula("B6", "=SUM(B2:B5)")], broken);
+  assert.equal(result.unverified, true);
+});
+
+test("a typed-in total as text, or beside any label, is not low risk", () => {
+  const write = (values: unknown[][]) => ({ change: { kind: "write_values", sheet: "D", cell: "A1", values } as StagedChange });
+  assert.equal(reviewRisk([write([["Total", "1120"]])]).high, true);
+  assert.equal(reviewRisk([write([["Q1", "Total", 1120]])]).high, true);
+  assert.equal(reviewRisk([write([["Name", "Note"]])]).high, false);
+});
+
+test("a formula written onto a filled cell is detected", async () => {
+  const { overwritesExisting } = await import("./simpleChecks.js");
+  const filled = { readRange: async () => ({ address: "x", values: [[7]] }) } as unknown as AgentHost;
+  assert.equal(await overwritesExisting([formula("B6", "=SUM(B2:B5)")], filled), true);
 });

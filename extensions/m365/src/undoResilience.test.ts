@@ -186,3 +186,8 @@ test("a hidden backup that cannot be deleted is reported, the others are still d
   assert.deepEqual(left, ["B2"]);
   assert.deepEqual(deleted, ["B1", "B3"]);
 });
+
+test("when the whole backup deletion fails, every backup id is kept for the next try", async () => {
+  const left = await deleteHiddenSheets({ run: async () => { throw new Error("busy"); } } as any, ["B1", "B2"]);
+  assert.deepEqual(left, ["B1", "B2"]);
+});

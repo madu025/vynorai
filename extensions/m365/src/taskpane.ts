@@ -5011,8 +5011,7 @@ async function refreshNoticed(address: string, rows: number, columns: number) {
   if (!noticedCard) return;
   const key = `${address}|${rows}x${columns}`;
   if (key === noticedKey && Date.now() - noticedAt < NOTICED_REUSE_MS) return;
-  noticedKey = key;
-  noticedAt = Date.now();
+  noticedKey = "";
   const token = (noticedToken += 1);
   if (rows < 4 || columns < 1 || columns > 30) {
     if (exploreStats) {
@@ -5039,6 +5038,9 @@ async function refreshNoticed(address: string, rows: number, columns: number) {
       return range.values as unknown[][];
     });
     if (token !== noticedToken) return;
+    // Remembered only after a read that worked, so a failed read can be tried again at once.
+    noticedKey = key;
+    noticedAt = Date.now();
     const [headerRow = [], ...body] = values;
     const stats = columnStats(
       headerRow.map((value: unknown) => String(value ?? "")),
@@ -5056,6 +5058,7 @@ async function refreshNoticed(address: string, rows: number, columns: number) {
       ),
     );
   } catch {
+    noticedKey = "";
     if (token === noticedToken) renderNoticed([]);
   }
 }

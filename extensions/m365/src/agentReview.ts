@@ -244,10 +244,11 @@ export async function reviewAndRevise(options: {
   if (!run.changes.length) return { run, revised: false };
   const reviewers: ReviewerVerdict[] = [];
   // A mistake that is plain from the formula text goes straight back to the builder: no reviewer needed.
+  const simple = await checkSimpleFormulas(run.changes, options.host);
   const linted = [
     ...lintChanges(run.changes),
     ...(await evaluateJoins(run.changes, options.host)),
-    ...(await checkSimpleFormulas(run.changes, options.host)),
+    ...simple.issues,
   ].slice(0, REVIEW_MAX_ISSUES);
   if (linted.length)
     reviewers.push({ focus: "accuracy", ok: false, issues: linted });
@@ -356,7 +357,8 @@ export async function runTeam(
   // A small, plain change is checked by the rules only; the reviewer models run for the rest.
   const lowRisk =
     !reviewRisk(first.changes).high &&
-    !(await overwritesExisting(first.changes, helper.host).catch(() => true));
+    !(await overwritesExisting(first.changes, helper.host).catch(() => true)) &&
+    !(await checkSimpleFormulas(first.changes, helper.host)).unverified;
   const reviewed = await reviewAndRevise({
     ...helper,
     request: options.request,

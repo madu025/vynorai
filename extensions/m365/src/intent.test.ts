@@ -350,3 +350,18 @@ test("duplicate checks with no column named use the business key", () => {
   );
   assert.equal(named.specs.view.highlight.column, 1);
 });
+
+test("'at least five' is not a bottom-5 rank", async () => {
+  const { readRank } = await import("./intent.js");
+  assert.equal(readRank("pivot of customers with at least five orders by revenue"), undefined);
+  assert.equal(readRank("bottom 5 customers")?.lowest, true);
+});
+
+test("a top N is not put on a chart type the server rejects", () => {
+  const headers = ["Region", "Product", "Customer", "Revenue"];
+  const rows = [["N", "A", "C1", 10], ["S", "B", "C2", 20]];
+  const run = (text: string): any => interpretInstruction(text, headers, rows);
+  assert.equal(run("waterfall of the top 5 products by revenue").specs.chart?.topN, undefined);
+  assert.equal(run("line chart of the top 3 regions by revenue").specs.chart?.topN, undefined);
+  assert.equal(run("column chart of the top 3 regions by revenue").specs.chart?.topN, 3);
+});

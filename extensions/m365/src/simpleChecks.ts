@@ -28,11 +28,18 @@ export function isSimpleAggregate(
 const columnNumber = (letters: string) =>
   [...letters.toUpperCase()].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
 
+export interface SimpleCheck {
+  issues: string[];
+  /** A column could not be read: the change was not verified, so it must go to the reviewers. */
+  unverified: boolean;
+}
+
 export async function checkSimpleFormulas(
   changes: readonly { change: StagedChange }[],
   host: AgentHost,
-): Promise<string[]> {
+): Promise<SimpleCheck> {
   const issues: string[] = [];
+  let unverified = false;
   for (const { change } of changes) {
     if (change.kind !== "write_formula" || !isSimpleAggregate(change)) continue;
     const match = AGG.exec(change.formula)!;
@@ -41,45 +48,46 @@ export async function checkSimpleFormulas(
     const start = Number(match[3]);
     const end = Number(match[5]);
     const cellRow = Number(cell[2]);
+    const sameColumn = cell[1].toUpperCase() === column;
     const where = `'${change.sheet}'!${change.cell}`;
-    if (cellRow > 1 && cellRow - 1 >= end) {
-      // The result sits under its range: it must be under the same column.
-      if (cellRow === end + 1 && cell[1].toUpperCase() !== column)
-        issues.push(
-          `${where}: ${change.formula} sums column ${column} but the result sits under column ${cell[1].toUpperCase()}.`,
-        );
-    }
-    try {
-      const read = await host.readRange(
-        change.sheet,
-        `${column}1:${column}${Math.max(cellRow - 1, end, 1)}`,
-        false,
+    // The result sits directly under its range: it must be under the same column.
+    if (cellRow === end + 1 && !sameColumn)
+      issues.push(
+        `${where}: ${change.formula} sums column ${column} but the result sits under column ${cell[1].toUpperCase()}.`,
       );
-      const numbers: number[] = [];
+    try {
+      const read = await host.readRange(change.sheet, `${column}1:${column}${SIMPLE_MAX_ROW}`, false);
+      const numeric = new Set<number>();
       read.values.forEach((row, index) => {
         const value = (row as unknown[])[0];
-        if (typeof value === "number" && Number.isFinite(value)) numbers.push(index + 1);
+        const row1 = index + 1;
+        // The cell being written in this column is not data.
+        if (typeof value === "number" && Number.isFinite(value) && !(sameColumn && row1 >= cellRow))
+          numeric.add(row1);
       });
-      const inside = numbers.filter((row) => row < cellRow || row <= end);
-      if (!inside.length) {
+      // The block of numbers the range belongs to: the run that holds its last number at or above its end.
+      const upTo = [...numeric].filter((row) => row <= end);
+      if (!upTo.length) {
         issues.push(`${where}: column ${column} holds no numbers in ${change.formula}.`);
         continue;
       }
-      const first = Math.min(...inside);
-      const last = Math.max(...inside.filter((row) => row < cellRow || cellRow <= start));
-      if (end < last && last < cellRow)
+      let blockEnd = Math.max(...upTo);
+      let blockStart = blockEnd;
+      while (numeric.has(blockStart - 1)) blockStart -= 1;
+      while (numeric.has(blockEnd + 1)) blockEnd += 1;
+      if (end < blockEnd)
         issues.push(
-          `${where}: ${change.formula} stops at row ${end} but the numbers in column ${column} run to row ${last}.`,
+          `${where}: ${change.formula} stops at row ${end} but the numbers in column ${column} run to row ${blockEnd}.`,
         );
-      if (start > first)
+      if (start > blockStart)
         issues.push(
-          `${where}: ${change.formula} starts at row ${start} but the numbers in column ${column} start at row ${first}.`,
+          `${where}: ${change.formula} starts at row ${start} but the numbers in column ${column} start at row ${blockStart}.`,
         );
     } catch {
-      // A column that cannot be read is not judged here.
+      unverified = true;
     }
   }
-  return issues;
+  return { issues, unverified };
 }
 
 /**
@@ -94,11 +102,19 @@ export async function overwritesExisting(
     changes.flatMap(({ change }) => (change.kind === "create_sheet" ? [change.name] : [])),
   );
   for (const { change } of changes) {
-    if (change.kind !== "write_values" || created.has(change.sheet)) continue;
+    if (
+      (change.kind !== "write_values" && change.kind !== "write_formula") ||
+      created.has(change.sheet)
+    )
+      continue;
+    if (change.kind === "write_formula" && change.fillRange) return true;
     const cell = CELL.exec(change.cell);
     if (!cell) return true;
-    const rows = change.values.length;
-    const columns = Math.max(1, ...change.values.map((row) => row.length));
+    const rows = change.kind === "write_values" ? change.values.length : 1;
+    const columns =
+      change.kind === "write_values"
+        ? Math.max(1, ...change.values.map((row) => row.length))
+        : 1;
     const last = `${columnLetters(columnNumber(cell[1]) + columns - 1)}${Number(cell[2]) + rows - 1}`;
     try {
       const read = await host.readRange(change.sheet, `${cell[1]}${cell[2]}:${last}`, false);

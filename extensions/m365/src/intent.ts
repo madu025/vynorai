@@ -1619,7 +1619,7 @@ export function readRank(
     [];
   const patterns: Array<[RegExp, boolean, boolean]> = [
     [new RegExp(`\\b(${RANK_HIGH})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`, "gi"), false, false],
-    [new RegExp(`\\b(${RANK_LOW})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`, "gi"), true, false],
+    [new RegExp(`(?<!\\bat\\s)\\b(${RANK_LOW})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`, "gi"), true, false],
     [new RegExp(`\\b(${RANK_NUMBER})\\s+(${RANK_HIGH})\\b`, "gi"), false, true],
     [new RegExp(`\\b(${RANK_NUMBER})\\s+(${RANK_LOW})\\b`, "gi"), true, true],
   ];
@@ -1764,7 +1764,11 @@ function interpretChartAndPivot(
       )
         ? { pivotResult: true }
         : {}),
-      ...(rank && !isHistogram
+      // The server rejects a top N on these: a time axis, a waterfall or a chart of a pivot result.
+      ...(rank &&
+      !isHistogram &&
+      !/^(?:line|area|combo|waterfall)/i.test(String(chartType)) &&
+      !/\bpivot(?:\s*table)?\s+result\b|\bchart\s+(?:the\s+)?pivot\b/i.test(text)
         ? { topN: rank.topN, ...(rank.lowest ? { lowest: true } : {}) }
         : {}),
       ...(isHistogram

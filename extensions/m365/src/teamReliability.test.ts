@@ -166,7 +166,11 @@ test("a silent builder still gives the person a reply", async () => {
 
 const columnHost = (values: unknown[]): AgentHost => ({
   ...host,
-  readRange: async (_sheet, address) => ({ address, values: values.map((v) => [v]) }),
+  // The column is read from row 1; the one cell the total goes into is empty.
+  readRange: async (_sheet, address) => ({
+    address,
+    values: /^C6:C6$|^C6$/.test(address) ? [[null]] : values.map((v) => [v]),
+  }),
 });
 const totalBuilder = (formula: string) => async (messages: AgentMessage[]) =>
   fresh(messages)

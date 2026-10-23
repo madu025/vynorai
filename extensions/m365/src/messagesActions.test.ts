@@ -17,6 +17,14 @@ test("every workbook-object tool description gets Sinhala and Tamil wording", ()
   }
 });
 
+test("a multi-word action is translated whole, not just the frame", () => {
+  const text = 'Table "T1": add column Net';
+  assert.doesNotMatch(localizeMessageSi(text), /add column/);
+  assert.match(localizeMessageSi(text), /Net/);
+  assert.doesNotMatch(localizeMessageTa('PivotTable "P1": remove field Region'), /remove field/);
+  assert.doesNotMatch(localizeMessageSi(`Chart "C1" on 'S': axis titles`), /axis titles/);
+});
+
 test("names, values and addresses inside a description are kept as they are", () => {
   const text = "Join 'Orders'!A1:C9 with 'Customers'!A1:B5 on Customer Id into 'Result'!A1 as live formulas";
   assert.match(localizeMessageSi(text), /'Orders'!A1:C9/);

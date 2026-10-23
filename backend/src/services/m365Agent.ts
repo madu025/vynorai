@@ -1012,6 +1012,16 @@ export function cleanAgentReply(raw: {
   usage?: any;
 }): AgentReply {
   const calls = Array.isArray(raw.tool_calls) ? raw.tool_calls : [];
+  const taken = new Set<string>();
+  // The add-in sends these ids back and checkAgentConversation rejects a repeated one, so a
+  // duplicate or colliding id from the model must not reach the add-in.
+  const uniqueId = (wanted: string, index: number): string => {
+    let id = wanted;
+    for (let n = 0; taken.has(id); n++)
+      id = `${wanted.slice(0, 54)}_${index}${n ? `_${n}` : ""}`;
+    taken.add(id);
+    return id;
+  };
   const tool_calls = calls
     .map((call: any, index: number) => ({
       id:
@@ -1021,14 +1031,16 @@ export function cleanAgentReply(raw: {
       type: "function" as const,
       function: {
         name: String(call?.function?.name ?? ""),
-        arguments:
-          typeof call?.function?.arguments === "string"
-            ? call.function.arguments.slice(0, 12_000)
-            : JSON.stringify(call?.function?.arguments ?? {}),
+        // Cut to the size the next request may carry back, whatever shape the model used.
+        arguments: (typeof call?.function?.arguments === "string"
+          ? call.function.arguments
+          : JSON.stringify(call?.function?.arguments ?? {})
+        ).slice(0, 12_000),
       },
     }))
     .filter((call) => AGENT_TOOL_NAMES.includes(call.function.name))
-    .slice(0, AGENT_MAX_CHANGES + 4);
+    .slice(0, AGENT_MAX_CHANGES + 4)
+    .map((call, index) => ({ ...call, id: uniqueId(call.id, index) }));
   const usage = raw.usage
     ? {
         prompt: Number(raw.usage.prompt_tokens) || 0,
@@ -1110,8 +1122,15 @@ export async function agentTurn(
     { role: "system", content: LANGUAGE_LINE[parsed.data.language] },
     ...parsed.data.messages,
   ];
+  // Tool call arguments ride in the assistant messages and are paid for like any input.
   const chars = messages.reduce(
-    (sum, message: any) => sum + (message.content?.length ?? 0),
+    (sum, message: any) =>
+      sum +
+      (message.content?.length ?? 0) +
+      (message.tool_calls ?? []).reduce(
+        (n: number, call: any) => n + call.function.arguments.length,
+        0,
+      ),
     0,
   );
   const maxTokens = parsed.data.language === "en" ? 2500 : 5000;

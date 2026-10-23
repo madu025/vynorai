@@ -475,23 +475,12 @@ export const proxyAnalysisRunner: AnalysisRunner = async (
       proxied as unknown as Response,
       reservation,
     );
-  } catch (error) {
+  } catch {
+    // The provider's error text is not kept: it can echo the prompt, and the routes log the detail.
     await releaseQuotaReservation(reservation).catch(() => undefined);
-    throw new M365AnalysisError(
-      "AI_PROVIDER_UNAVAILABLE",
-      502,
-      (error as Error).message?.slice(0, 80),
-    );
+    throw new M365AnalysisError("AI_PROVIDER_UNAVAILABLE", 502);
   }
-  if (response.statusCode >= 400) {
-    const code = (response.body as any)?.error?.code;
-    throw new M365AnalysisError(
-      typeof code === "string" && /^[A-Za-z0-9_.-]{1,60}$/.test(code)
-        ? code
-        : "AI_PROVIDER_UNAVAILABLE",
-      response.statusCode >= 500 ? 502 : response.statusCode,
-    );
-  }
+  await failIfErrorResponse(response, reservation);
   return response.text();
 };
 

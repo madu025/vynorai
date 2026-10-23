@@ -89,7 +89,11 @@ import {
 } from "./taskpaneAgentView.js";
 import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
 import { noticeInData, NOTICE_MAX_ROWS, type NoticedTile } from "./noticed.js";
-import { readBackLine, relationshipLine, reviewerLine } from "./roleEvidence.js";
+import {
+  readBackLine,
+  relationshipLine,
+  reviewerLine,
+} from "./roleEvidence.js";
 import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
 import {
@@ -4525,8 +4529,14 @@ const aiFirstButton = document.querySelector<HTMLButtonElement>("#ai-first");
 const showAiFirst = () => {
   if (aiFirstButton)
     aiFirstButton.textContent = aiFirstOn()
-      ? localizeMessage(language, "AI reads every request: ON (click to turn off)")
-      : localizeMessage(language, "AI reads every request: OFF (click to turn on)");
+      ? localizeMessage(
+          language,
+          "AI reads every request: ON (click to turn off)",
+        )
+      : localizeMessage(
+          language,
+          "AI reads every request: OFF (click to turn on)",
+        );
 };
 showAiFirst();
 languageHooks.push(showAiFirst);
@@ -4716,7 +4726,11 @@ function renderNoticed(tiles: NoticedTile[]) {
       const action = document.createElement("i");
       action.textContent = localizeMessage(
         language,
-        tile.tone === "fix" ? "Fix" : tile.tone === "review" ? "Review" : "Look",
+        tile.tone === "fix"
+          ? "Fix"
+          : tile.tone === "review"
+            ? "Review"
+            : "Look",
       );
       button.append(figure, label, action);
       button.addEventListener("click", () => {
@@ -5019,15 +5033,14 @@ function renderAgentRun(run: AgentRun) {
   if (agentReply) {
     agentReply.textContent = "";
     // The reply itself is shown once, in the chat; this card keeps only the limit notice.
-    for (const line of (
-      run.reply
-        ? ""
-        : run.stoppedAtLimit
-          ? localizeMessage(
-              language,
-              "The agent stopped at its step limit. Try a smaller request.",
-            )
-          : ""
+    for (const line of (run.reply
+      ? ""
+      : run.stoppedAtLimit
+        ? localizeMessage(
+            language,
+            "The agent stopped at its step limit. Try a smaller request.",
+          )
+        : ""
     ).split(/\n+/)) {
       if (!line.trim()) continue;
       const p = document.createElement("p");
@@ -5195,15 +5208,18 @@ async function agentLoop(request: string) {
         if (phase === "plan") {
           setAgentRoleView(document, "planner", "active", "building plan");
           if (!agentVerifying) setAgentStage("plan");
-          if (agentBadge) agentBadge.textContent = localizeMessage(language, "Planning");
+          if (agentBadge)
+            agentBadge.textContent = localizeMessage(language, "Planning");
           setStatus("A planner agent is splitting the request into steps...");
         } else if (phase === "reviewing") {
           setAgentRoleView(document, "planner", "done", "plan ready");
           setAgentRoleView(document, "builder", "done", "preview staged");
           if (!agentVerifying) setAgentStage("review");
-          if (agentBadge) agentBadge.textContent = localizeMessage(language, "Reviewing");
+          if (agentBadge)
+            agentBadge.textContent = localizeMessage(language, "Reviewing");
         } else if (phase === "revising") {
-          if (agentBadge) agentBadge.textContent = localizeMessage(language, "Correcting");
+          if (agentBadge)
+            agentBadge.textContent = localizeMessage(language, "Correcting");
           setStatus("Correcting the plan after the review...");
         }
       },
@@ -5245,7 +5261,10 @@ async function agentLoop(request: string) {
             "checking keys",
           );
         if (agentProgress)
-          agentProgress.textContent = localizeMessage(language, `Team: ${label}`);
+          agentProgress.textContent = localizeMessage(
+            language,
+            `Team: ${label}`,
+          );
         log.record(`agent:team:${name}`, "info", label.slice(0, 120));
       },
     });
@@ -5277,7 +5296,9 @@ async function agentLoop(request: string) {
         "done",
         reviewerLine(
           reviewer,
-          helperCalculations[reviewer.focus === "accuracy" ? "accuracy" : "safety"],
+          helperCalculations[
+            reviewer.focus === "accuracy" ? "accuracy" : "safety"
+          ],
         ),
       );
     renderAgentRun(run);
@@ -5321,8 +5342,7 @@ async function agentLoop(request: string) {
       if (agentBadge)
         agentBadge.textContent = localizeMessage(language, "Stopped");
       setStatus("Stopped. Nothing was changed.");
-    }
-    else if (error instanceof M365ApiError) handleApiError("agent", error);
+    } else if (error instanceof M365ApiError) handleApiError("agent", error);
     else {
       log.record("agent:run", "fail", describeError(error));
       setStatus("The agent could not finish. Nothing was changed.");
@@ -5504,7 +5524,8 @@ agentDiscard?.addEventListener("click", () => {
   show(agentNote, false);
   show(agentApprove, false);
   show(agentDiscard, false);
-  if (agentBadge) agentBadge.textContent = localizeMessage(language, "Discarded");
+  if (agentBadge)
+    agentBadge.textContent = localizeMessage(language, "Discarded");
   setAgentStage("approval", true);
   setStatus("Discarded. Nothing was changed.");
 });
@@ -5516,7 +5537,8 @@ agentApprove?.addEventListener("click", async () => {
   agentBusy = true;
   show(agentApprove, false);
   show(agentDiscard, false);
-  if (agentBadge) agentBadge.textContent = localizeMessage(language, "Applying");
+  if (agentBadge)
+    agentBadge.textContent = localizeMessage(language, "Applying");
   setAgentStage("apply");
   setAgentRoleView(document, "verification", "pending", "waiting for apply");
   agentStopped = false;
@@ -5596,7 +5618,8 @@ agentApprove?.addEventListener("click", async () => {
       "active",
       "reading results back",
     );
-    if (agentBadge) agentBadge.textContent = localizeMessage(language, "Verifying");
+    if (agentBadge)
+      agentBadge.textContent = localizeMessage(language, "Verifying");
     setStatus("Verifying the applied result...");
     await agentLoop(
       appliedReport(
@@ -5649,7 +5672,8 @@ agentUndo?.addEventListener("click", async () => {
           "[Report from the add-in] The person undid all applied changes.",
       },
     ];
-    if (agentBadge) agentBadge.textContent = localizeMessage(language, "Undone");
+    if (agentBadge)
+      agentBadge.textContent = localizeMessage(language, "Undone");
     log.record("agent:undo", "pass");
     await logChanges({
       at: new Date(),
@@ -5941,6 +5965,11 @@ const shareImage = document.querySelector<HTMLImageElement>("#share-card-img");
 const shareMain = document.querySelector<HTMLButtonElement>("#share-main");
 const shareStatus = document.querySelector<HTMLElement>("#share-card-status");
 const sharePaste = document.querySelector<HTMLTextAreaElement>("#share-paste");
+const shareMessage =
+  document.querySelector<HTMLTextAreaElement>("#share-message");
+const shareMessageBlock = document.querySelector<HTMLElement>(
+  "#share-message-block",
+);
 let shareState: { card: ShareCard; blob: Blob | null } | undefined;
 
 function setShareStatus(message: string) {
@@ -5965,6 +5994,7 @@ async function showShareCard(
   if (card.kind === "empty") {
     shareState = undefined;
     if (shareImage) shareImage.hidden = true;
+    if (shareMessageBlock) shareMessageBlock.hidden = true;
     if (shareMain) shareMain.disabled = true;
     return setShareStatus(
       localizeMessage(
@@ -5980,6 +6010,8 @@ async function showShareCard(
     shareImage.alt = card.title;
     shareImage.hidden = false;
   }
+  if (shareMessage) shareMessage.value = card.message;
+  if (shareMessageBlock) shareMessageBlock.hidden = false;
   if (shareMain) shareMain.disabled = false;
   setShareStatus("");
 }
@@ -6037,11 +6069,33 @@ shareMain?.addEventListener("click", async () => {
   if (!shareState) return;
   const outcome = await deliverShare(
     shareState.blob,
-    shareState.card.message,
+    shareMessage?.value.trim() || shareState.card.message,
     browserShareEnv(),
   );
   log.record("share:deliver", outcome === "failed" ? "fail" : "pass", outcome);
   setShareStatus(shareOutcomeText(outcome, textLanguage()));
 });
+document
+  .querySelector("#share-copy-text")
+  ?.addEventListener("click", async () => {
+    const text = shareMessage?.value.trim() || shareState?.card.message || "";
+    if (!text) return;
+    const env = browserShareEnv();
+    let copied = false;
+    try {
+      if (env.writeText) {
+        await env.writeText(text);
+        copied = true;
+      }
+    } catch {
+      // The old copy command is the next try.
+    }
+    if (!copied) copied = env.execCopy?.(text) ?? false;
+    setShareStatus(
+      copied
+        ? localizeMessage(textLanguage(), "Text copied.")
+        : localizeMessage(textLanguage(), "Could not copy the text."),
+    );
+  });
 
 void initialize();

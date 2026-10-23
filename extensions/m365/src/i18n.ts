@@ -209,6 +209,9 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     share_use_selection: "තෝරාගත් කොටු",
     share_paste_label: "නැතහොත් Excel වලින් පිටපත් කළ කොටු අලවන්න",
     share_button: "බෙදාගන්න",
+    share_message_label: "WhatsApp සාරාංශය (ඔබට සංස්කරණය කළ හැක)",
+    share_message_hint: "WhatsApp සඳහා සකසා ඇත. මෙතැනින් කිසිවක් නොයැවේ.",
+    share_copy_text: "පෙළ පිටපත් කරන්න",
     timeline_preview: "පෙරදසුන",
     role_planner: "සැලසුම්කරු",
     role_relationships: "වගු සම්බන්ධතා සොයන්නා",
@@ -223,7 +226,8 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
   },
   ta: {
     noticed_title: "உங்கள் தரவில் கவனித்தவை",
-    noticed_note: "இந்தச் சாதனத்திலேயே சரிபார்க்கப்பட்டது. எதுவும் அனுப்பப்படவில்லை.",
+    noticed_note:
+      "இந்தச் சாதனத்திலேயே சரிபார்க்கப்பட்டது. எதுவும் அனுப்பப்படவில்லை.",
     add_payroll: "சம்பளத் தாளைச் சேர் (EPF, ETF, APIT)",
     product_title: "VynorAI Excel",
     product_subtitle: "பாதுகாப்பாக பகுப்பாய்வு, திட்டம் மற்றும் பயன்படுத்து",
@@ -422,6 +426,10 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     share_use_selection: "தேர்ந்தெடுத்த கலங்கள்",
     share_paste_label: "அல்லது Excel-இல் நகலெடுத்த கலங்களை ஒட்டுங்கள்",
     share_button: "பகிர்",
+    share_message_label: "WhatsApp சுருக்கம் (திருத்தலாம்)",
+    share_message_hint:
+      "WhatsApp-க்கு வடிவமைக்கப்பட்டது. இங்கிருந்து எதுவும் அனுப்பப்படாது.",
+    share_copy_text: "உரையை நகலெடு",
     timeline_preview: "முன்னோட்டம்",
     role_planner: "திட்டமிடுபவர்",
     role_relationships: "அட்டவணைத் தொடர்புகளைக் கண்டறிபவர்",

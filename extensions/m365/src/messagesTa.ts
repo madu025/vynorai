@@ -167,6 +167,8 @@ const EXACT: Record<string, string> = {
   "Create a report first.": "முதலில் ஓர் அறிக்கையை உருவாக்கவும்.",
   "No numbers found there. Pick or paste cells with a header row and a number column.":
     "அங்கு எண்கள் எதுவும் இல்லை. தலைப்பு வரிசையும் எண் நெடுவரிசையும் உள்ள கலங்களைத் தேர்ந்தெடுக்கவும் அல்லது ஒட்டவும்.",
+  "Text copied.": "உரை நகலெடுக்கப்பட்டது.",
+  "Could not copy the text.": "உரையை நகலெடுக்க முடியவில்லை.",
   "The card could not be made. See Diagnostics.":
     "அட்டையை உருவாக்க முடியவில்லை. Diagnostics-ஐப் பாருங்கள்.",
   "Make a report first.": "முதலில் ஓர் அறிக்கையை உருவாக்கவும்.",
@@ -243,64 +245,35 @@ const EXACT: Record<string, string> = {
     "ஒரு மதிப்பாய்வு agent ஒவ்வொரு பகுதியும் உள்ளடக்கப்பட்டுள்ளதா, எதுவும் மேலெழுதப்படவில்லையா என்று சரிபார்க்கிறது...",
   "Not sent yet · approval required":
     "இன்னும் அனுப்பப்படவில்லை · ஒப்புதல் தேவை",
-  "Size calculated after approval":
-    "ஒப்புதலுக்குப் பிறகு அளவு கணக்கிடப்படும்",
-  "pending":
-    "நிலுவையில்",
-  "active":
-    "நடைபெறுகிறது",
-  "done":
-    "முடிந்தது",
-  "key evidence found":
-    "முக்கிய ஆதாரம் கிடைத்தது",
-  "checking keys":
-    "விசைகளைச் சரிபார்க்கிறது",
-  "building plan":
-    "திட்டத்தை உருவாக்குகிறது",
-  "plan ready":
-    "திட்டம் தயார்",
-  "preview staged":
-    "முன்னோட்டம் தயார்",
-  "checking calculations":
-    "கணக்கீடுகளைச் சரிபார்க்கிறது",
-  "checks completed":
-    "சரிபார்ப்புகள் முடிந்தன",
-  "checking write safety":
-    "எழுதும் பாதுகாப்பைச் சரிபார்க்கிறது",
-  "checks passed":
-    "சரிபார்ப்புகள் தேறின",
-  "waiting for apply":
-    "பயன்படுத்துவதற்காகக் காத்திருக்கிறது",
-  "reading results back":
-    "முடிவுகளை மீண்டும் வாசிக்கிறது",
-  "read-back completed":
-    "மீண்டும் வாசிப்பு முடிந்தது",
-  "Looking at the workbook":
-    "பணிப்புத்தகத்தைப் பார்க்கிறது",
-  "Working":
-    "செயல்படுகிறது",
-  "Planning":
-    "திட்டமிடுகிறது",
-  "Executing":
-    "செயல்படுத்துகிறது",
-  "Verifying":
-    "சரிபார்க்கிறது",
-  "Final answer":
-    "இறுதிப் பதில்",
-  "Reviewing":
-    "மதிப்பாய்வு செய்கிறது",
-  "Correcting":
-    "திருத்துகிறது",
-  "Discarded":
-    "நிராகரிக்கப்பட்டது",
-  "Applying":
-    "பயன்படுத்துகிறது",
-  "Undone":
-    "செயல்தவிர்க்கப்பட்டது",
-  "Stopped":
-    "நிறுத்தப்பட்டது",
-  "Waiting for approval":
-    "ஒப்புதலுக்காகக் காத்திருக்கிறது",
+  "Size calculated after approval": "ஒப்புதலுக்குப் பிறகு அளவு கணக்கிடப்படும்",
+  pending: "நிலுவையில்",
+  active: "நடைபெறுகிறது",
+  done: "முடிந்தது",
+  "key evidence found": "முக்கிய ஆதாரம் கிடைத்தது",
+  "checking keys": "விசைகளைச் சரிபார்க்கிறது",
+  "building plan": "திட்டத்தை உருவாக்குகிறது",
+  "plan ready": "திட்டம் தயார்",
+  "preview staged": "முன்னோட்டம் தயார்",
+  "checking calculations": "கணக்கீடுகளைச் சரிபார்க்கிறது",
+  "checks completed": "சரிபார்ப்புகள் முடிந்தன",
+  "checking write safety": "எழுதும் பாதுகாப்பைச் சரிபார்க்கிறது",
+  "checks passed": "சரிபார்ப்புகள் தேறின",
+  "waiting for apply": "பயன்படுத்துவதற்காகக் காத்திருக்கிறது",
+  "reading results back": "முடிவுகளை மீண்டும் வாசிக்கிறது",
+  "read-back completed": "மீண்டும் வாசிப்பு முடிந்தது",
+  "Looking at the workbook": "பணிப்புத்தகத்தைப் பார்க்கிறது",
+  Working: "செயல்படுகிறது",
+  Planning: "திட்டமிடுகிறது",
+  Executing: "செயல்படுத்துகிறது",
+  Verifying: "சரிபார்க்கிறது",
+  "Final answer": "இறுதிப் பதில்",
+  Reviewing: "மதிப்பாய்வு செய்கிறது",
+  Correcting: "திருத்துகிறது",
+  Discarded: "நிராகரிக்கப்பட்டது",
+  Applying: "பயன்படுத்துகிறது",
+  Undone: "செயல்தவிர்க்கப்பட்டது",
+  Stopped: "நிறுத்தப்பட்டது",
+  "Waiting for approval": "ஒப்புதலுக்காகக் காத்திருக்கிறது",
   "Inspecting the selected data and preparing a safe plan.":
     "தேர்ந்தெடுத்த தரவைச் சரிபார்த்து பாதுகாப்பான திட்டத்தைத் தயாரிக்கிறது.",
   "AI reads every request: ON (click to turn off)":
@@ -331,52 +304,64 @@ const EXACT: Record<string, string> = {
     "Agent பதிலளித்தது. எதுவும் மாற்றப்படவில்லை.",
   "The agent prepared changes. Nothing has changed yet: review them, then approve.":
     "Agent மாற்றங்களைத் தயாரித்தது. இன்னும் எதுவும் மாற்றப்படவில்லை: அவற்றை மதிப்பாய்வு செய்து ஒப்புதல் அளிக்கவும்.",
-  "Excel computed":
-    "Excel கணக்கிட்டது",
-  "one-to-one":
-    "ஒன்று-ஒன்று",
-  "one-to-many":
-    "ஒன்று-பல",
-  "many-to-one":
-    "பல-ஒன்று",
-  "many-to-many":
-    "பல-பல",
-  "Clean keys first":
-    "முதலில் விசைகளைச் சுத்தம் செய்யவும்",
-  "Keys are consistent":
-    "விசைகள் சீராக உள்ளன",
+  "Excel computed": "Excel கணக்கிட்டது",
+  "one-to-one": "ஒன்று-ஒன்று",
+  "one-to-many": "ஒன்று-பல",
+  "many-to-one": "பல-ஒன்று",
+  "many-to-many": "பல-பல",
+  "Clean keys first": "முதலில் விசைகளைச் சுத்தம் செய்யவும்",
+  "Keys are consistent": "விசைகள் சீராக உள்ளன",
   "rows repeat another row exactly":
     "வரிசைகள் மற்றொரு வரிசையுடன் முற்றிலும் ஒத்துள்ளன",
-  "Fix":
-    "சரிசெய்",
-  "Review":
-    "மதிப்பாய்வு",
-  "Look":
-    "பார்",
+  Fix: "சரிசெய்",
+  Review: "மதிப்பாய்வு",
+  Look: "பார்",
 };
 
 /** The second half of a team sentence from describeReview. */
 function tail(rest: string): string {
   if (rest === "worked on this.") return "இதில் பணியாற்றினர்.";
-  if (rest === "checked the plan: no problems found.") return "திட்டத்தைச் சரிபார்த்தனர்: சிக்கல்கள் இல்லை.";
-  const corrected = /^checked the plan and found (\d+) problem\(s\); the plan was corrected\.$/.exec(rest);
-  if (corrected) return ((n) => `திட்டத்தைச் சரிபார்த்து ${n} சிக்கல்கள் கண்டறிந்து, திட்டம் திருத்தப்பட்டது.`)(corrected[1]);
+  if (rest === "checked the plan: no problems found.")
+    return "திட்டத்தைச் சரிபார்த்தனர்: சிக்கல்கள் இல்லை.";
+  const corrected =
+    /^checked the plan and found (\d+) problem\(s\); the plan was corrected\.$/.exec(
+      rest,
+    );
+  if (corrected)
+    return ((n) =>
+      `திட்டத்தைச் சரிபார்த்து ${n} சிக்கல்கள் கண்டறிந்து, திட்டம் திருத்தப்பட்டது.`)(
+      corrected[1],
+    );
   const found = /^checked the plan and found: (.+)$/.exec(rest);
-  if (found) return ((what) => `திட்டத்தைச் சரிபார்த்து கண்டறிந்தது: ${what}`)(found[1]);
+  if (found)
+    return ((what) => `திட்டத்தைச் சரிபார்த்து கண்டறிந்தது: ${what}`)(found[1]);
   return rest;
 }
 
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
-  [/^dates in (.+) are stored as text$/, (c) => `${c} இல் தேதிகள் உரையாகச் சேமிக்கப்பட்டுள்ளன`],
+  [
+    /^dates in (.+) are stored as text$/,
+    (c) => `${c} இல் தேதிகள் உரையாகச் சேமிக்கப்பட்டுள்ளன`,
+  ],
   [/^unusual (.+) values?$/, (c) => `வழக்கத்துக்கு மாறான ${c} மதிப்பு`],
   [/^blank cells? in (.+)$/, (c) => `${c} இல் வெற்றுக் கலங்கள்`],
-  [/^of (.+) comes from one (.+) \((.+)\)$/, (m, g, v) => `${m} இன் பெரும்பகுதி ஒரே ${g} இலிருந்து (${v})`],
+  [
+    /^of (.+) comes from one (.+) \((.+)\)$/,
+    (m, g, v) => `${m} இன் பெரும்பகுதி ஒரே ${g} இலிருந்து (${v})`,
+  ],
 
-  [/^checks passed · (\d+) calculation\(s\)$/, (n) => `சரிபார்ப்புகள் தேறின · ${n} கணக்கீடுகள்`],
+  [
+    /^checks passed · (\d+) calculation\(s\)$/,
+    (n) => `சரிபார்ப்புகள் தேறின · ${n} கணக்கீடுகள்`,
+  ],
   [/^(\d+) issue\(s\): (.+)$/, (n, first) => `${n} சிக்கல்கள்: ${first}`],
-  [/^(\d+) change\(s\) read back(?:, (\d+) failed)?$/, (n, failed) => `${n} மாற்றங்கள் மீண்டும் வாசிக்கப்பட்டன${failed ? `, ${failed} தோல்வி` : ""}`],
+  [
+    /^(\d+) change\(s\) read back(?:, (\d+) failed)?$/,
+    (n, failed) =>
+      `${n} மாற்றங்கள் மீண்டும் வாசிக்கப்பட்டன${failed ? `, ${failed} தோல்வி` : ""}`,
+  ],
   [
     /^(.+) → (.+) · (one-to-one|one-to-many|many-to-one|many-to-many) · ([\d,]+) unmatched rows · ([\d,]+) duplicate keys$/,
     (a, b, card, unmatched, dup) =>
@@ -386,25 +371,69 @@ const TEMPLATES: Template[] = [
   [/^([\d,]+) unmatched rows$/, (n) => `பொருந்தாத வரிசைகள் ${n}`],
   [/^([\d,]+) duplicate keys$/, (n) => `மீண்டும் வரும் விசைகள் ${n}`],
 
-  [/^Outlook draft created for (.+) and verified by Microsoft Graph\.$/, (who) => `Outlook வரைவு ${who} க்காக உருவாக்கப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`],
-  [/^Report sent to (.+) and verified by Microsoft Graph\.$/, (who) => `அறிக்கை ${who} க்கு அனுப்பப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`],
+  [
+    /^Outlook draft created for (.+) and verified by Microsoft Graph\.$/,
+    (who) =>
+      `Outlook வரைவு ${who} க்காக உருவாக்கப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`,
+  ],
+  [
+    /^Report sent to (.+) and verified by Microsoft Graph\.$/,
+    (who) =>
+      `அறிக்கை ${who} க்கு அனுப்பப்பட்டு Microsoft Graph மூலம் சரிபார்க்கப்பட்டது.`,
+  ],
 
   [/^Excel computed (.+)$/, (what) => `Excel கணக்கிட்டது: ${what}`],
   [/^Workbook check: (.+)$/, (what) => `பணிப்புத்தக சரிபார்ப்பு: ${what}`],
-  [/^Before and after \((\d+)(?: of ([\d,]+))? cells\)$/, (n, total) => total ? `முன் மற்றும் பின் (${total} கலங்களில் ${n})` : `முன் மற்றும் பின் (${n} கலங்கள்)`],
-  [/^Fill ('.+?'![A-Z]+\d+:[A-Z]+\d+) with: (.+)$/s, (range, rest) => `${range} நிரப்பு: ${rest}`],
-  [/^Write in ('.+?'![A-Z]+\d+): (.+)$/s, (cell, rest) => `${cell} இல் எழுது: ${rest}`],
-  [/^Write (\d+) x (\d+) values from ('.+?'![A-Z]+\d+)$/, (r, c, at) => `${at} இலிருந்து ${r} x ${c} மதிப்புகளை எழுது`],
+  [
+    /^Before and after \((\d+)(?: of ([\d,]+))? cells\)$/,
+    (n, total) =>
+      total
+        ? `முன் மற்றும் பின் (${total} கலங்களில் ${n})`
+        : `முன் மற்றும் பின் (${n} கலங்கள்)`,
+  ],
+  [
+    /^Fill ('.+?'![A-Z]+\d+:[A-Z]+\d+) with: (.+)$/s,
+    (range, rest) => `${range} நிரப்பு: ${rest}`,
+  ],
+  [
+    /^Write in ('.+?'![A-Z]+\d+): (.+)$/s,
+    (cell, rest) => `${cell} இல் எழுது: ${rest}`,
+  ],
+  [
+    /^Write (\d+) x (\d+) values from ('.+?'![A-Z]+\d+)$/,
+    (r, c, at) => `${at} இலிருந்து ${r} x ${c} மதிப்புகளை எழுது`,
+  ],
   [/^Add a new sheet "(.+)"$/, (name) => `புதிய தாளைச் சேர்: "${name}"`],
-  [/^Add a (\w[\w-]*) chart of (.+)$/, (type, what) => `${type} வரைபடத்தைச் சேர்: ${what}`],
-  [/^Sort ('.+?'![A-Z]+\d+:[A-Z]+\d+) by (.+?) (ascending|descending) \(edits the data; undo restores it\)$/, (range, col, dir) => `${range} ஐ ${col} படி ${dir === "ascending" ? "ஏறுவரிசையில்" : "இறங்குவரிசையில்"} வரிசைப்படுத்து (தரவு மாறும்; செயல்தவிர்த்தால் மீளும்)`],
+  [
+    /^Add a (\w[\w-]*) chart of (.+)$/,
+    (type, what) => `${type} வரைபடத்தைச் சேர்: ${what}`,
+  ],
+  [
+    /^Sort ('.+?'![A-Z]+\d+:[A-Z]+\d+) by (.+?) (ascending|descending) \(edits the data; undo restores it\)$/,
+    (range, col, dir) =>
+      `${range} ஐ ${col} படி ${dir === "ascending" ? "ஏறுவரிசையில்" : "இறங்குவரிசையில்"} வரிசைப்படுத்து (தரவு மாறும்; செயல்தவிர்த்தால் மீளும்)`,
+  ],
 
-  [/^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/, (n, c) => `சுமார் ${n} டோக்கன்கள் பயன்படுத்தப்பட்டன (உள்ளீட்டில் ${c}% cache இலிருந்து).`],
-  [/^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/, (a, b, rest) => `திட்டமிடுபவர் (${a} படிகள்), உருவாக்குபவர் மற்றும் ${b} மதிப்பாய்வாளர்கள் ${tail(rest)}`],
+  [
+    /^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/,
+    (n, c) =>
+      `சுமார் ${n} டோக்கன்கள் பயன்படுத்தப்பட்டன (உள்ளீட்டில் ${c}% cache இலிருந்து).`,
+  ],
+  [
+    /^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/,
+    (a, b, rest) =>
+      `திட்டமிடுபவர் (${a} படிகள்), உருவாக்குபவர் மற்றும் ${b} மதிப்பாய்வாளர்கள் ${tail(rest)}`,
+  ],
   [/^(\d+) agents (.+)$/, (n, rest) => `${n} agents ${tail(rest)}`],
   [
     /^Sent to the AI: ([\d,]+) characters(?:; (\d+) personal value\(s\) replaced with tokens, and put back only here|(; no personal values found to replace))\.(.*)$/,
-    (chars, n, none, rest) => ((chars, how, rest) => `AI க்கு அனுப்பியது: ${chars} எழுத்துகள்${how === "none" ? "; மாற்ற வேண்டிய தனிப்பட்ட மதிப்புகள் இல்லை" : `; ${how} தனிப்பட்ட மதிப்புகள் tokens ஆக மாற்றப்பட்டு, இங்கு மட்டுமே திரும்ப வைக்கப்படும்`}.${rest}`)(chars, none ? "none" : n, rest),
+    (chars, n, none, rest) =>
+      ((chars, how, rest) =>
+        `AI க்கு அனுப்பியது: ${chars} எழுத்துகள்${how === "none" ? "; மாற்ற வேண்டிய தனிப்பட்ட மதிப்புகள் இல்லை" : `; ${how} தனிப்பட்ட மதிப்புகள் tokens ஆக மாற்றப்பட்டு, இங்கு மட்டுமே திரும்ப வைக்கப்படும்`}.${rest}`)(
+        chars,
+        none ? "none" : n,
+        rest,
+      ),
   ],
 
   [/^Team: (.+)$/, (what) => `குழு: ${localizeMessageTa(what)}`],
@@ -415,7 +444,10 @@ const TEMPLATES: Template[] = [
   [/^Reading (.+)$/, (what) => `வாசிக்கிறது: ${what}`],
   [/^Calculating (.+)$/, (what) => `கணக்கிடுகிறது: ${what}`],
   [/^Checking a step: (.+)$/, (what) => `ஒரு படியைச் சரிபார்க்கிறது: ${what}`],
-  [/^Preparing a change \((.+)\)$/, (what) => `மாற்றத்தைத் தயார் செய்கிறது (${what})`],
+  [
+    /^Preparing a change \((.+)\)$/,
+    (what) => `மாற்றத்தைத் தயார் செய்கிறது (${what})`,
+  ],
 
   [
     /^Removed (\d+) (?:older )?(?:VynorAI )?(?:result )?sheet\(s\)\.$/,

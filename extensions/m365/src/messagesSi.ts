@@ -162,6 +162,8 @@ const EXACT: Record<string, string> = {
   "Create a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
   "No numbers found there. Pick or paste cells with a header row and a number column.":
     "එහි අංක කිසිවක් හමු වුණේ නැත. ශීර්ෂ පේළියක් සහ අංක තීරුවක් සහිත කොටු තෝරන්න හෝ අලවන්න.",
+  "Text copied.": "පෙළ පිටපත් කළා.",
+  "Could not copy the text.": "පෙළ පිටපත් කළ නොහැකි විය.",
   "The card could not be made. See Diagnostics.":
     "කාඩ්පත සෑදිය නොහැකි විය. Diagnostics බලන්න.",
   "Make a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
@@ -232,66 +234,36 @@ const EXACT: Record<string, string> = {
     "සමාලෝචන agent එකක් පරාස, සූත්‍ර සහ එකතු පරීක්ෂා කරමින්...",
   "A reviewer agent is checking that every part is covered and nothing is overwritten...":
     "සමාලෝචන agent එකක් සෑම කොටසක්ම ආවරණය වී ඇති බවත් කිසිවක් උඩින් ලියා නැති බවත් පරීක්ෂා කරමින්...",
-  "Not sent yet · approval required":
-    "තවම යවා නැත · අනුමැතිය අවශ්‍යයි",
-  "Size calculated after approval":
-    "ප්‍රමාණය අනුමැතියෙන් පසු ගණනය කෙරේ",
-  "pending":
-    "පොරොත්තුවේ",
-  "active":
-    "සිදුවෙමින්",
-  "done":
-    "අවසන්",
-  "key evidence found":
-    "ප්‍රධාන සාක්ෂි හමු විය",
-  "checking keys":
-    "යතුරු පරීක්ෂා කරමින්",
-  "building plan":
-    "සැලසුම සාදමින්",
-  "plan ready":
-    "සැලසුම සූදානම්",
-  "preview staged":
-    "පෙරදසුන සූදානම්",
-  "checking calculations":
-    "ගණනය පරීක්ෂා කරමින්",
-  "checks completed":
-    "පරීක්ෂා අවසන්",
-  "checking write safety":
-    "ලිවීමේ ආරක්ෂාව පරීක්ෂා කරමින්",
-  "checks passed":
-    "පරීක්ෂා සමත් විය",
-  "waiting for apply":
-    "යෙදීම බලාපොරොත්තුවෙන්",
-  "reading results back":
-    "ප්‍රතිඵල නැවත කියවමින්",
-  "read-back completed":
-    "නැවත කියවීම අවසන්",
-  "Looking at the workbook":
-    "වැඩපොත බලමින්",
-  "Working":
-    "වැඩ කරමින්",
-  "Planning":
-    "සැලසුම් කරමින්",
-  "Executing":
-    "ක්‍රියාත්මක කරමින්",
-  "Verifying":
-    "තහවුරු කරමින්",
-  "Final answer":
-    "අවසාන පිළිතුර",
-  "Reviewing":
-    "සමාලෝචනය කරමින්",
-  "Correcting":
-    "නිවැරදි කරමින්",
-  "Discarded":
-    "ඉවත දමන ලදී",
-  "Applying":
-    "යොදමින්",
-  "Undone":
-    "ආපසු හරවන ලදී",
-  "Stopped":
-    "නවත්වන ලදී",
-  "Waiting for approval":
-    "අනුමැතිය බලාපොරොත්තුවෙන්",
+  "Not sent yet · approval required": "තවම යවා නැත · අනුමැතිය අවශ්‍යයි",
+  "Size calculated after approval": "ප්‍රමාණය අනුමැතියෙන් පසු ගණනය කෙරේ",
+  pending: "පොරොත්තුවේ",
+  active: "සිදුවෙමින්",
+  done: "අවසන්",
+  "key evidence found": "ප්‍රධාන සාක්ෂි හමු විය",
+  "checking keys": "යතුරු පරීක්ෂා කරමින්",
+  "building plan": "සැලසුම සාදමින්",
+  "plan ready": "සැලසුම සූදානම්",
+  "preview staged": "පෙරදසුන සූදානම්",
+  "checking calculations": "ගණනය පරීක්ෂා කරමින්",
+  "checks completed": "පරීක්ෂා අවසන්",
+  "checking write safety": "ලිවීමේ ආරක්ෂාව පරීක්ෂා කරමින්",
+  "checks passed": "පරීක්ෂා සමත් විය",
+  "waiting for apply": "යෙදීම බලාපොරොත්තුවෙන්",
+  "reading results back": "ප්‍රතිඵල නැවත කියවමින්",
+  "read-back completed": "නැවත කියවීම අවසන්",
+  "Looking at the workbook": "වැඩපොත බලමින්",
+  Working: "වැඩ කරමින්",
+  Planning: "සැලසුම් කරමින්",
+  Executing: "ක්‍රියාත්මක කරමින්",
+  Verifying: "තහවුරු කරමින්",
+  "Final answer": "අවසාන පිළිතුර",
+  Reviewing: "සමාලෝචනය කරමින්",
+  Correcting: "නිවැරදි කරමින්",
+  Discarded: "ඉවත දමන ලදී",
+  Applying: "යොදමින්",
+  Undone: "ආපසු හරවන ලදී",
+  Stopped: "නවත්වන ලදී",
+  "Waiting for approval": "අනුමැතිය බලාපොරොත්තුවෙන්",
   "Inspecting the selected data and preparing a safe plan.":
     "තෝරාගත් දත්ත පරීක්ෂා කර ආරක්ෂිත සැලසුමක් සූදානම් කරමින්.",
   "AI reads every request: ON (click to turn off)":
@@ -304,8 +276,7 @@ const EXACT: Record<string, string> = {
     "Agent (පෙරදසුන): අක්‍රීයයි (සක්‍රීය කිරීමට ක්ලික් කරන්න)",
   "Agent workflow is not available for this account. Use local preview.":
     "මෙම ගිණුම සඳහා Agent කාර්ය ප්‍රවාහය නොමැත. දේශීය පෙරදසුන භාවිතා කරන්න.",
-  "Create a preview or report first.":
-    "මුලින්ම පෙරදසුනක් හෝ වාර්තාවක් සාදන්න.",
+  "Create a preview or report first.": "මුලින්ම පෙරදසුනක් හෝ වාර්තාවක් සාදන්න.",
   "Create and verify a report before sharing it.":
     "බෙදාගැනීමට පෙර වාර්තාවක් සාදා තහවුරු කරන්න.",
   "Creating and verifying the Outlook draft...":
@@ -322,36 +293,33 @@ const EXACT: Record<string, string> = {
     "Agent පිළිතුරු දුන්නා. කිසිවක් වෙනස් කර නැත.",
   "The agent prepared changes. Nothing has changed yet: review them, then approve.":
     "Agent වෙනස්කම් සූදානම් කළා. තවමත් කිසිවක් වෙනස් වී නැත: ඒවා පරීක්ෂා කර අනුමත කරන්න.",
-  "Excel computed":
-    "Excel ගණනය කළා",
-  "one-to-one":
-    "එක-එක",
-  "one-to-many":
-    "එක-බොහෝ",
-  "many-to-one":
-    "බොහෝ-එක",
-  "many-to-many":
-    "බොහෝ-බොහෝ",
-  "Clean keys first":
-    "මුලින් යතුරු පිරිසිදු කරන්න",
-  "Keys are consistent":
-    "යතුරු ගැලපේ",
-  "rows repeat another row exactly":
-    "පේළි වෙනත් පේළියක් හා හරියටම සමාන",
-  "Fix":
-    "හදන්න",
-  "Review":
-    "බලන්න",
-  "Look":
-    "බලන්න",
+  "Excel computed": "Excel ගණනය කළා",
+  "one-to-one": "එක-එක",
+  "one-to-many": "එක-බොහෝ",
+  "many-to-one": "බොහෝ-එක",
+  "many-to-many": "බොහෝ-බොහෝ",
+  "Clean keys first": "මුලින් යතුරු පිරිසිදු කරන්න",
+  "Keys are consistent": "යතුරු ගැලපේ",
+  "rows repeat another row exactly": "පේළි වෙනත් පේළියක් හා හරියටම සමාන",
+  Fix: "හදන්න",
+  Review: "බලන්න",
+  Look: "බලන්න",
 };
 
 /** The second half of a team sentence from describeReview. */
 function tail(rest: string): string {
   if (rest === "worked on this.") return "මේ සඳහා වැඩ කළා.";
-  if (rest === "checked the plan: no problems found.") return "සැලසුම පරීක්ෂා කළා: ගැටලු නැත.";
-  const corrected = /^checked the plan and found (\d+) problem\(s\); the plan was corrected\.$/.exec(rest);
-  if (corrected) return ((n) => `සැලසුම පරීක්ෂා කර ගැටලු ${n}ක් හමු වී, සැලසුම නිවැරදි කළා.`)(corrected[1]);
+  if (rest === "checked the plan: no problems found.")
+    return "සැලසුම පරීක්ෂා කළා: ගැටලු නැත.";
+  const corrected =
+    /^checked the plan and found (\d+) problem\(s\); the plan was corrected\.$/.exec(
+      rest,
+    );
+  if (corrected)
+    return ((n) =>
+      `සැලසුම පරීක්ෂා කර ගැටලු ${n}ක් හමු වී, සැලසුම නිවැරදි කළා.`)(
+      corrected[1],
+    );
   const found = /^checked the plan and found: (.+)$/.exec(rest);
   if (found) return ((what) => `සැලසුම පරීක්ෂා කර හමු වූයේ: ${what}`)(found[1]);
   return rest;
@@ -363,11 +331,21 @@ const TEMPLATES: Template[] = [
   [/^dates in (.+) are stored as text$/, (c) => `${c} හි දින පෙළ ලෙස ඇත`],
   [/^unusual (.+) values?$/, (c) => `අසාමාන්‍ය ${c} අගය`],
   [/^blank cells? in (.+)$/, (c) => `${c} හි හිස් සෛල`],
-  [/^of (.+) comes from one (.+) \((.+)\)$/, (m, g, v) => `${m} හි බොහෝ කොටසක් එක් ${g} එකකින් (${v})`],
+  [
+    /^of (.+) comes from one (.+) \((.+)\)$/,
+    (m, g, v) => `${m} හි බොහෝ කොටසක් එක් ${g} එකකින් (${v})`,
+  ],
 
-  [/^checks passed · (\d+) calculation\(s\)$/, (n) => `පරීක්ෂා සමත් විය · ගණනය ${n}ක්`],
+  [
+    /^checks passed · (\d+) calculation\(s\)$/,
+    (n) => `පරීක්ෂා සමත් විය · ගණනය ${n}ක්`,
+  ],
   [/^(\d+) issue\(s\): (.+)$/, (n, first) => `ගැටලු ${n}ක්: ${first}`],
-  [/^(\d+) change\(s\) read back(?:, (\d+) failed)?$/, (n, failed) => `නැවත කියවූ වෙනස්කම් ${n}ක්${failed ? `, අසාර්ථක ${failed}ක්` : ""}`],
+  [
+    /^(\d+) change\(s\) read back(?:, (\d+) failed)?$/,
+    (n, failed) =>
+      `නැවත කියවූ වෙනස්කම් ${n}ක්${failed ? `, අසාර්ථක ${failed}ක්` : ""}`,
+  ],
   [
     /^(.+) → (.+) · (one-to-one|one-to-many|many-to-one|many-to-many) · ([\d,]+) unmatched rows · ([\d,]+) duplicate keys$/,
     (a, b, card, unmatched, dup) =>
@@ -377,25 +355,69 @@ const TEMPLATES: Template[] = [
   [/^([\d,]+) unmatched rows$/, (n) => `ගැලපෙන්නේ නැති පේළි ${n}ක්`],
   [/^([\d,]+) duplicate keys$/, (n) => `පුනරාවර්තන යතුරු ${n}ක්`],
 
-  [/^Outlook draft created for (.+) and verified by Microsoft Graph\.$/, (who) => `Outlook කෙටුම්පත ${who} සඳහා සාදා Microsoft Graph මගින් තහවුරු කළා.`],
-  [/^Report sent to (.+) and verified by Microsoft Graph\.$/, (who) => `වාර්තාව ${who} වෙත යවා Microsoft Graph මගින් තහවුරු කළා.`],
+  [
+    /^Outlook draft created for (.+) and verified by Microsoft Graph\.$/,
+    (who) =>
+      `Outlook කෙටුම්පත ${who} සඳහා සාදා Microsoft Graph මගින් තහවුරු කළා.`,
+  ],
+  [
+    /^Report sent to (.+) and verified by Microsoft Graph\.$/,
+    (who) => `වාර්තාව ${who} වෙත යවා Microsoft Graph මගින් තහවුරු කළා.`,
+  ],
 
   [/^Excel computed (.+)$/, (what) => `Excel ගණනය කළා: ${what}`],
   [/^Workbook check: (.+)$/, (what) => `වැඩපොත පරීක්ෂාව: ${what}`],
-  [/^Before and after \((\d+)(?: of ([\d,]+))? cells\)$/, (n, total) => total ? `පෙර සහ පසු (සෛල ${total}න් ${n}ක්)` : `පෙර සහ පසු (සෛල ${n}ක්)`],
-  [/^Fill ('.+?'![A-Z]+\d+:[A-Z]+\d+) with: (.+)$/s, (range, rest) => `${range} පුරවන්න: ${rest}`],
-  [/^Write in ('.+?'![A-Z]+\d+): (.+)$/s, (cell, rest) => `${cell} හි ලියන්න: ${rest}`],
-  [/^Write (\d+) x (\d+) values from ('.+?'![A-Z]+\d+)$/, (r, c, at) => `${at} සිට අගයන් ${r} x ${c} ලියන්න`],
-  [/^Add a new sheet "(.+)"$/, (name) => `අලුත් පත්‍රිකාවක් එක් කරන්න: "${name}"`],
-  [/^Add a (\w[\w-]*) chart of (.+)$/, (type, what) => `${type} ප්‍රස්තාරයක් එක් කරන්න: ${what}`],
-  [/^Sort ('.+?'![A-Z]+\d+:[A-Z]+\d+) by (.+?) (ascending|descending) \(edits the data; undo restores it\)$/, (range, col, dir) => `${range} ${col} අනුව ${dir === "ascending" ? "ආරෝහණව" : "අවරෝහණව"} පෙළගස්වන්න (දත්ත වෙනස් වේ; ආපසු හැරවීමෙන් නැවත ලැබේ)`],
+  [
+    /^Before and after \((\d+)(?: of ([\d,]+))? cells\)$/,
+    (n, total) =>
+      total ? `පෙර සහ පසු (සෛල ${total}න් ${n}ක්)` : `පෙර සහ පසු (සෛල ${n}ක්)`,
+  ],
+  [
+    /^Fill ('.+?'![A-Z]+\d+:[A-Z]+\d+) with: (.+)$/s,
+    (range, rest) => `${range} පුරවන්න: ${rest}`,
+  ],
+  [
+    /^Write in ('.+?'![A-Z]+\d+): (.+)$/s,
+    (cell, rest) => `${cell} හි ලියන්න: ${rest}`,
+  ],
+  [
+    /^Write (\d+) x (\d+) values from ('.+?'![A-Z]+\d+)$/,
+    (r, c, at) => `${at} සිට අගයන් ${r} x ${c} ලියන්න`,
+  ],
+  [
+    /^Add a new sheet "(.+)"$/,
+    (name) => `අලුත් පත්‍රිකාවක් එක් කරන්න: "${name}"`,
+  ],
+  [
+    /^Add a (\w[\w-]*) chart of (.+)$/,
+    (type, what) => `${type} ප්‍රස්තාරයක් එක් කරන්න: ${what}`,
+  ],
+  [
+    /^Sort ('.+?'![A-Z]+\d+:[A-Z]+\d+) by (.+?) (ascending|descending) \(edits the data; undo restores it\)$/,
+    (range, col, dir) =>
+      `${range} ${col} අනුව ${dir === "ascending" ? "ආරෝහණව" : "අවරෝහණව"} පෙළගස්වන්න (දත්ත වෙනස් වේ; ආපසු හැරවීමෙන් නැවත ලැබේ)`,
+  ],
 
-  [/^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/, (n, c) => `ටෝකන් ආසන්න වශයෙන් ${n}ක් භාවිතා විය (ආදානයෙන් ${c}% ක් cache එකෙන්).`],
-  [/^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/, (a, b, rest) => `සැලසුම්කරු (පියවර ${a}), සාදන්නා සහ සමාලෝචකයන් ${b} දෙනා ${tail(rest)}`],
+  [
+    /^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/,
+    (n, c) =>
+      `ටෝකන් ආසන්න වශයෙන් ${n}ක් භාවිතා විය (ආදානයෙන් ${c}% ක් cache එකෙන්).`,
+  ],
+  [
+    /^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/,
+    (a, b, rest) =>
+      `සැලසුම්කරු (පියවර ${a}), සාදන්නා සහ සමාලෝචකයන් ${b} දෙනා ${tail(rest)}`,
+  ],
   [/^(\d+) agents (.+)$/, (n, rest) => `agents ${n} දෙනා ${tail(rest)}`],
   [
     /^Sent to the AI: ([\d,]+) characters(?:; (\d+) personal value\(s\) replaced with tokens, and put back only here|(; no personal values found to replace))\.(.*)$/,
-    (chars, n, none, rest) => ((chars, how, rest) => `AI වෙත යැවූ: අක්ෂර ${chars}ක්${how === "none" ? "; ප්‍රතිස්ථාපනය කළ යුතු පෞද්ගලික අගයන් නොමැත" : `; පෞද්ගලික අගයන් ${how}ක් tokens වලින් ප්‍රතිස්ථාපනය කර, නැවත දමන්නේ මෙහි පමණි`}.${rest}`)(chars, none ? "none" : n, rest),
+    (chars, n, none, rest) =>
+      ((chars, how, rest) =>
+        `AI වෙත යැවූ: අක්ෂර ${chars}ක්${how === "none" ? "; ප්‍රතිස්ථාපනය කළ යුතු පෞද්ගලික අගයන් නොමැත" : `; පෞද්ගලික අගයන් ${how}ක් tokens වලින් ප්‍රතිස්ථාපනය කර, නැවත දමන්නේ මෙහි පමණි`}.${rest}`)(
+        chars,
+        none ? "none" : n,
+        rest,
+      ),
   ],
 
   [/^Team: (.+)$/, (what) => `කණ්ඩායම: ${localizeMessageSi(what)}`],
@@ -406,7 +428,10 @@ const TEMPLATES: Template[] = [
   [/^Reading (.+)$/, (what) => `කියවමින්: ${what}`],
   [/^Calculating (.+)$/, (what) => `ගණනය කරමින්: ${what}`],
   [/^Checking a step: (.+)$/, (what) => `පියවරක් පරීක්ෂා කරමින්: ${what}`],
-  [/^Preparing a change \((.+)\)$/, (what) => `වෙනසක් සූදානම් කරමින් (${what})`],
+  [
+    /^Preparing a change \((.+)\)$/,
+    (what) => `වෙනසක් සූදානම් කරමින් (${what})`,
+  ],
 
   [
     /^Removed (\d+) (?:older )?(?:VynorAI )?(?:result )?sheet\(s\)\.$/,

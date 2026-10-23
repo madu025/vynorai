@@ -2205,7 +2205,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261022.04</p>
+          <p class="menu-version" id="build-id">Build 20261022.05</p>
         </div>
       </div>
 
@@ -2719,6 +2719,23 @@
               ></textarea>
             </label>
             <img id="share-card-img" alt="" hidden />
+            <div id="share-message-block" hidden>
+              <label for="share-message"
+                ><span data-i18n="share_message_label"
+                  >WhatsApp summary (you can edit it)</span
+                ><textarea
+                  id="share-message"
+                  rows="7"
+                  maxlength="4000"
+                ></textarea>
+              </label>
+              <p class="hint" data-i18n="share_message_hint">
+                Formatted for WhatsApp. Nothing is sent from here.
+              </p>
+              <button id="share-copy-text" type="button" data-i18n="share_copy_text">
+                Copy text
+              </button>
+            </div>
             <button
               id="share-main"
               class="primary"

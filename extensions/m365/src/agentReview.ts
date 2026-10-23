@@ -19,6 +19,7 @@ import {
   type PersonalMask,
 } from "./agent.js";
 import { lintChanges, repairChanges } from "./formulaLint.js";
+import { evaluateJoins } from "./resultCheck.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 
 /** The reviewer only reads and calculates; it never needs many turns. */
@@ -239,7 +240,10 @@ export async function reviewAndRevise(options: {
   if (!run.changes.length) return { run, revised: false };
   const reviewers: ReviewerVerdict[] = [];
   // A mistake that is plain from the formula text goes straight back to the builder: no reviewer needed.
-  const linted = lintChanges(run.changes);
+  const linted = [
+    ...lintChanges(run.changes),
+    ...(await evaluateJoins(run.changes, options.host)),
+  ].slice(0, REVIEW_MAX_ISSUES);
   if (linted.length)
     reviewers.push({ focus: "accuracy", ok: false, issues: linted });
   for (const focus of linted.length

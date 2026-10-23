@@ -249,3 +249,40 @@ test("only known, well-formed tool calls reach the add-in", () => {
     ],
   );
 });
+
+test("the rate-limit map drops idle users instead of growing without bound", async () => {
+  const { assertAgentRateLimit, agentRateLimitSizeForTests } = await import(
+    "../src/services/m365Agent.js"
+  );
+  const start = 1_000_000;
+  for (let i = 0; i < 200; i++) assertAgentRateLimit(`idle-${i}`, start);
+  assert.equal(agentRateLimitSizeForTests(), 200);
+  // Two minutes later one new caller arrives: every idle entry is swept.
+  assertAgentRateLimit("fresh", start + 120_000);
+  assert.equal(agentRateLimitSizeForTests(), 1);
+});
+
+test("the credit reservation estimate includes the serialized tool definitions", async () => {
+  const { agentToolTokenEstimate } = await import(
+    "../src/services/m365Agent.js"
+  );
+  const toolTokens = agentToolTokenEstimate();
+  assert.equal(toolTokens, Math.ceil(JSON.stringify(AGENT_TOOLS).length / 4));
+  assert.ok(toolTokens > 1000);
+  let seen = 0;
+  setM365AgentRunnerForTests(async (_user, messages, _tools, credits, max) => {
+    seen = credits;
+    const chars = (messages as any[]).reduce(
+      (sum, m) => sum + (m.content?.length ?? 0),
+      0,
+    );
+    assert.equal(credits, Math.ceil(chars / 4) + toolTokens + max);
+    return { content: "ok", tool_calls: [] };
+  });
+  await agentTurn(user, {
+    consent: true,
+    messages: [{ role: "user", content: "hello" }],
+    language: "en",
+  });
+  assert.ok(seen > toolTokens);
+});

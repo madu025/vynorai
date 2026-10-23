@@ -193,13 +193,18 @@ export function stripFormulaText(text: string): string {
 
 /** A step for display: ranges and addresses removed, the full text stays in the title. */
 export function plainStep(step: string): string {
-  return stripFormulaText(step)
-    .replace(
-      /\s*(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?/g,
-      "",
-    )
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  return (
+    stripFormulaText(step)
+      .replace(
+        /\s*(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?/g,
+        "",
+      )
+      // Tool names the planner copied into a step ("write_formula") read as plain words.
+      .replace(/\b[a-z]+(?:_[a-z]+)+\b/g, (name) => name.replace(/_/g, " "))
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .replace(/^[a-z]/, (letter) => letter.toUpperCase())
+  );
 }
 
 /** First changes shown before "Show all N changes". */

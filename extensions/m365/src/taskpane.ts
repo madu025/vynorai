@@ -5311,6 +5311,23 @@ function watchSelection() {
   } catch (error) {
     log.record("selection:watch", "info", describeError(error));
   }
+  // Excel for the web does not always raise a selection event when the person only switches sheet.
+  try {
+    const excel = officeRuntime();
+    void excel
+      ?.run?.(async (context: any) => {
+        context.workbook.worksheets.onActivated.add(async () => {
+          clearTimeout(selectionTimer);
+          selectionTimer = setTimeout(() => void refreshSelectionChip(), 300);
+        });
+        await context.sync();
+      })
+      ?.catch?.((error: unknown) =>
+        log.record("selection:sheet-watch", "info", describeError(error)),
+      );
+  } catch (error) {
+    log.record("selection:sheet-watch", "info", describeError(error));
+  }
 }
 
 async function initialize() {

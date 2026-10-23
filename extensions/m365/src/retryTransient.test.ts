@@ -5,10 +5,20 @@ import { isTransient, retryTransient } from "./retryTransient.js";
 const coded = (code: string) => Object.assign(new Error(code), { code });
 
 test("only busy-service and network errors are worth another try", () => {
-  for (const code of ["HTTP_502", "HTTP_503", "HTTP_504", "HTTP_429", "NETWORK_ERROR"])
+  for (const code of [
+    "HTTP_502",
+    "HTTP_503",
+    "HTTP_504",
+    "HTTP_429",
+    "HTTP_520",
+    "HTTP_522",
+    "HTTP_525",
+    "NETWORK_ERROR",
+  ])
     assert.equal(isTransient(coded(code)), true, code);
   for (const code of [
     "HTTP_403",
+    "HTTP_524",
     "HTTP_401",
     "CREDITS_EXHAUSTED",
     "REQUEST_ABORTED",
@@ -71,7 +81,12 @@ test("a refusal or a stop is never retried", async () => {
         calls += 1;
         throw coded("HTTP_503");
       },
-      { tries: 3, delays: [1, 1], wait: async () => {}, shouldStop: () => true },
+      {
+        tries: 3,
+        delays: [1, 1],
+        wait: async () => {},
+        shouldStop: () => true,
+      },
     ),
   );
   assert.equal(calls, 1, "pressing Stop ends the retries");

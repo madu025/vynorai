@@ -221,3 +221,15 @@ test("collapseAppliedList hides all but the first three, never a failed one", as
   assert.deepEqual(hidden, [false, false, false, true, true, false]);
   assert.match(doc.getElementById("agent-changes-more")!.textContent!, /6/);
 });
+
+test("plainStep turns copied tool names into words", async () => {
+  const { plainStep } = await import("./taskpaneAgentView.js");
+  assert.equal(
+    plainStep('create_sheet "Sales Summary" (source stays untouched).'),
+    'Create sheet "Sales Summary" (source stays untouched).',
+  );
+  assert.equal(
+    plainStep("write_formula in 'Sales Summary' column C: share of total"),
+    "Write formula in 'Sales Summary' column C: share of total",
+  );
+});

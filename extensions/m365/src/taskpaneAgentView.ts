@@ -171,9 +171,29 @@ export function stepRange(
   return { sheet: (m[1] ?? m[2]).replace(/''/g, "'"), address: m[3] };
 }
 
+/** Removes every call such as LET(...), balanced to its closing bracket, and the "=" that leads it. */
+export function stripFormulaText(text: string): string {
+  let out = text;
+  for (let guard = 0; guard < 20; guard++) {
+    const start = /=?\s*\b[A-Z][A-Z0-9.]{1,}\(/.exec(out);
+    if (!start) break;
+    let depth = 0;
+    let end = -1;
+    for (let i = start.index + start[0].length - 1; i < out.length; i++) {
+      if (out[i] === "(") depth++;
+      else if (out[i] === ")" && --depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+    out = out.slice(0, start.index) + (end < 0 ? "" : out.slice(end));
+  }
+  return out.replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1");
+}
+
 /** A step for display: ranges and addresses removed, the full text stays in the title. */
 export function plainStep(step: string): string {
-  return step
+  return stripFormulaText(step)
     .replace(
       /\s*(?:'(?:[^']|'')+'|[A-Za-z_][\w.]*)!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?/g,
       "",
@@ -184,6 +204,58 @@ export function plainStep(step: string): string {
 
 /** First changes shown before "Show all N changes". */
 export const CHANGES_SHOWN = 3;
+
+/**
+ * An applied change for display: the sheet name stays, ranges and formulas go.
+ * "Write in 'Sales Summary'!A10: =LET(...)" reads "Write in Sales Summary".
+ */
+export function shortResult(text: string): string {
+  return text
+    .replace(
+      /(?:'((?:[^']|'')+)'|([A-Za-z_][\w.]*))!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?/g,
+      (_all, quoted: string | undefined, plain: string | undefined) =>
+        (quoted ?? plain ?? "").replace(/''/g, "'"),
+    )
+    .replace(/:?\s*=.*$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/**
+ * After an apply, only the first CHANGES_SHOWN lines (and every failed one) stay visible; the rest
+ * wait behind "Show all N changes". The full text of each line stays in its title.
+ */
+export function collapseAppliedList(
+  document: Document,
+  list: HTMLElement,
+  shown: number = CHANGES_SHOWN,
+): void {
+  const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
+  const hideable = items.filter(
+    (li, index) => index >= shown && li.dataset.status !== "failed",
+  );
+  if (!hideable.length) return;
+  hideable.forEach((li) => {
+    li.hidden = true;
+  });
+  const more = document.createElement("button");
+  more.type = "button";
+  more.id = "agent-changes-more";
+  more.className = "link";
+  more.setAttribute("aria-expanded", "false");
+  more.setAttribute("aria-controls", list.id || "agent-changes");
+  const closed = `Show all ${items.length} changes`;
+  more.textContent = closed;
+  more.addEventListener("click", () => {
+    const open = more.getAttribute("aria-expanded") !== "true";
+    more.setAttribute("aria-expanded", String(open));
+    more.textContent = open ? "Show fewer changes" : closed;
+    hideable.forEach((li) => {
+      li.hidden = !open;
+    });
+  });
+  list.after(more);
+}
 
 /** A short plain description of a staged change; formulas and ranges stay in the full text. */
 export function shortChange(change: StagedChange, full: string): string {

@@ -77,6 +77,7 @@ test("a scalar becomes one tile", () => {
   const card = buildAnswerCard({
     reply: "- Total is 5",
     results: [{ values: [[43016675]] }],
+    question: "what is the total net amount?",
   });
   assert.equal(card.tiles[0].value, "43,016,675");
 });
@@ -329,4 +330,17 @@ test("a lone number is a tile named from the question, and the answer stays visi
   assert.equal(prose.tiles.length, 0);
   assert.match(prose.answer ?? "", /14,338\.89/);
   assert.deepEqual(prose.more, ["Based on 3,000 orders"]);
+});
+
+test("a number or table with no real names does not become a card", () => {
+  const lone = buildAnswerCard({
+    reply: "- Checked.",
+    results: [{ values: [[0]], formula: "=SUM(A1:A2)-SUM(B1:B2)" }],
+  });
+  assert.equal(lone.tiles.length, 0);
+  const raw = buildAnswerCard({
+    reply: "- Checked.",
+    results: [{ values: [[43016675, 43016675, 1, 1]], formula: "=X" }],
+  });
+  assert.equal(raw.table, undefined);
 });

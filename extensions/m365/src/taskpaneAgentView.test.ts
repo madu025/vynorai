@@ -186,3 +186,38 @@ test("shortChange gives plain lines and keeps formulas out of them", async () =>
   );
   assert.ok(!shortChange(formula, full).includes("="));
 });
+
+test("plan steps and applied lines keep formulas out", async () => {
+  const { plainStep, shortResult } = await import("./taskpaneAgentView.js");
+  const step =
+    'On "Sales Summary" A10: "Net Amount by Region" with GROUPBY LET(n,XLOOKUP(a,b,c),t,GROUPBY(n,x,SUM,0,0),HSTACK(t,TAKE(t,,-1)))';
+  assert.ok(
+    !/LET|GROUPBY\(|XLOOKUP/.test(plainStep(step).replace("with GROUPBY", "")),
+  );
+  assert.equal(
+    shortResult("Write in 'Sales Summary'!A10: =LET(n,SUM(A1:A2),n)"),
+    "Write in Sales Summary",
+  );
+  assert.equal(
+    shortResult("Format 'Sales Summary'!C3:C6: number format 0.0%"),
+    "Format Sales Summary: number format 0.0%",
+  );
+});
+
+test("collapseAppliedList hides all but the first three, never a failed one", async () => {
+  const { collapseAppliedList } = await import("./taskpaneAgentView.js");
+  const { JSDOM } = await import("jsdom").catch(() => ({ JSDOM: undefined }));
+  if (!JSDOM) return;
+  const dom = new JSDOM("<ul id=l></ul>");
+  const doc = dom.window.document;
+  const list = doc.getElementById("l")!;
+  for (let i = 0; i < 6; i++) {
+    const li = doc.createElement("li");
+    li.dataset.status = i === 5 ? "failed" : "applied";
+    list.append(li);
+  }
+  collapseAppliedList(doc, list);
+  const hidden = [...list.children].map((li) => (li as HTMLElement).hidden);
+  assert.deepEqual(hidden, [false, false, false, true, true, false]);
+  assert.match(doc.getElementById("agent-changes-more")!.textContent!, /6/);
+});

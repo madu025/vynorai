@@ -92,6 +92,8 @@ import {
   setAgentStageView,
   showAgentPlanView,
   showChangeList,
+  shortResult,
+  collapseAppliedList,
   showAgentSourcesView,
   relationshipEvidence,
   resetAgentRolesView,
@@ -5948,6 +5950,9 @@ async function agentLoop(request: string) {
       setStatus("Stopped. Nothing was changed.");
     } else if (error instanceof M365ApiError) {
       settleActiveRolesView(document, "did not finish");
+      // The line must leave "Working…": a failed request is a check that needs attention.
+      agentIssues = [describeError(error)];
+      setAgentBadge("Failed");
       handleApiError("agent", error);
     } else {
       settleActiveRolesView(document, "did not finish");
@@ -6214,6 +6219,9 @@ agentApprove?.addEventListener("click", async () => {
     agentBusy = false;
     show(agentStop, false);
     setAgentRoleView(document, "verification", "skipped", "did not finish");
+    agentIssues = [describeError(error)];
+    if (agentProgress) setLocalizedText(agentProgress, "");
+    setAgentBadge("Failed");
     log.record("agent:apply", "fail", describeError(error));
     setStatus("Applying failed. See Diagnostics.");
     return;
@@ -6255,7 +6263,9 @@ agentApprove?.addEventListener("click", async () => {
             : "skipped",
       );
       const what = document.createElement("span");
-      setLocalizedText(what, result.change);
+      setLocalizedText(what, shortResult(result.change));
+      li.title = result.change;
+      li.dataset.status = result.status;
       const colon = document.createElement("span");
       colon.className = "sr-only";
       colon.textContent = ": ";
@@ -6269,6 +6279,7 @@ agentApprove?.addEventListener("click", async () => {
       );
       agentChanges.appendChild(li);
     }
+    collapseAppliedList(document, agentChanges);
   }
   show(agentNote, false);
   const failed = report.results.some((result) => result.status === "failed");

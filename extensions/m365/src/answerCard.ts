@@ -202,10 +202,10 @@ function fromResult(
     const literal = [...(result.formula ?? "").matchAll(/"([^"]{2,30})"/g)]
       .map((m) => m[1].trim())
       .find((t) => /[A-Za-z]/.test(t) && !/^not found$/i.test(t));
-    card.tiles.push({
-      label: header?.[0] ?? literal ?? (questionPhrase(question) || "Result"),
-      value: formatNumber(data[0][0] as number),
-    });
+    const label = header?.[0] ?? literal ?? questionPhrase(question);
+    // A number with no name (a read-back check) means nothing on a card.
+    if (!label) return false;
+    card.tiles.push({ label, value: formatNumber(data[0][0] as number) });
     return true;
   }
   if (
@@ -258,8 +258,10 @@ function fromResult(
         ? (data[0] as string[])
         : undefined);
     const body = head && !header ? data.slice(1) : data;
+    // Columns without real names ("Column 1, Column 2") are a raw dump, not an answer.
+    if (!head) return false;
     card.table = {
-      headers: (head ?? data[0].map((_, i) => `Column ${i + 1}`)).map(String),
+      headers: head.map(String),
       rows: body.slice(0, MAX_TABLE_ROWS).map((row) => row.map(show)),
     };
     return true;

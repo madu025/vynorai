@@ -10,7 +10,6 @@ test("only busy-service and network errors are worth another try", () => {
     "HTTP_503",
     "HTTP_504",
     "HTTP_429",
-    "HTTP_520",
     "HTTP_522",
     "HTTP_525",
     "NETWORK_ERROR",
@@ -18,6 +17,7 @@ test("only busy-service and network errors are worth another try", () => {
     assert.equal(isTransient(coded(code)), true, code);
   for (const code of [
     "HTTP_403",
+    "HTTP_520",
     "HTTP_524",
     "HTTP_401",
     "CREDITS_EXHAUSTED",

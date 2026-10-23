@@ -18,6 +18,13 @@ BUILD_ID=${VYNOR_M365_BUILD_ID:-$(git -C "$ROOT" rev-parse --short=12 HEAD)}
 
 [[ "$BUILD_ID" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "VYNOR_M365_BUILD_ID has unsafe characters" >&2; exit 1; }
 
+# The bundle URL carries the commit id and is cached for a year: a build from uncommitted changes
+# would keep the same URL with different bytes. Publish only what is committed.
+if [ -n "$(git -C "$ROOT" status --porcelain -- extensions/m365 ':!extensions/m365/dist')" ]; then
+  echo "extensions/m365 has uncommitted changes; commit them first (the build id is the commit)" >&2
+  exit 1
+fi
+
 (cd "$SRC" && npm run build)
 for bundle in taskpane text; do
   [ -f "$SRC/dist/$bundle.bundle.js" ] || { echo "dist/$bundle.bundle.js missing" >&2; exit 1; }

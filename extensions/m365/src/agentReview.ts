@@ -19,6 +19,7 @@ import {
   type PersonalMask,
 } from "./agent.js";
 import { lintChanges, repairChanges } from "./formulaLint.js";
+import { checkLabelGrouping } from "./labelCheck.js";
 import { evaluateJoins } from "./resultCheck.js";
 import { reviewRisk } from "./reviewRisk.js";
 import { checkSimpleFormulas, overwritesExisting } from "./simpleChecks.js";
@@ -248,6 +249,7 @@ export async function reviewAndRevise(options: {
   const linted = [
     ...lintChanges(run.changes),
     ...(await evaluateJoins(run.changes, options.host)),
+    ...(await checkLabelGrouping(options.request, run.changes, options.host)),
     ...simple.issues,
   ].slice(0, REVIEW_MAX_ISSUES);
   if (linted.length)
@@ -369,6 +371,9 @@ export async function runTeam(
       if (phase === "reviewing" || phase === "revising") onTeamPhase?.(phase);
     },
   });
-  const result = lowRisk && first.changes.length ? { ...reviewed, reviewSkipped: true } : reviewed;
+  const result =
+    lowRisk && first.changes.length
+      ? { ...reviewed, reviewSkipped: true }
+      : reviewed;
   return plan.length ? { ...result, plan } : result;
 }

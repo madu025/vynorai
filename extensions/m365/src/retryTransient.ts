@@ -3,15 +3,14 @@
  * model calls per request, and one provider hiccup should not lose the whole run. Refusals
  * (quota, consent, sign-in) and a Stop are never retried.
  */
-// 520-523 and 525 are Cloudflare saying it could not reach or handshake with the server for this one
-// request; the next request usually works. 524 (it waited too long) is not retried: it would repeat a
-// slow model call.
+// 521-523 and 525 are Cloudflare saying it could not reach or handshake with the server: the request
+// never ran, so another try is safe. 520 (unknown error, the connection may have dropped after the
+// server did the work) and 524 (it waited too long) are not retried: they could repeat a billed model call.
 const TRANSIENT = new Set([
   "HTTP_502",
   "HTTP_503",
   "HTTP_504",
   "HTTP_429",
-  "HTTP_520",
   "HTTP_521",
   "HTTP_522",
   "HTTP_523",

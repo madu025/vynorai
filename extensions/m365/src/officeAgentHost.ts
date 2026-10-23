@@ -469,6 +469,8 @@ export interface AgentUndo {
   settled?: boolean[];
   /** Old sheet id -> id of the copy that replaced it, kept for a second Undo (see `sheetAliases`). */
   aliases?: Record<string, string>;
+  /** Signature of the last failed Undo: the same failure again switches to finishing what can be finished. */
+  lastFailure?: string;
 }
 
 export interface UndoMark {
@@ -972,7 +974,9 @@ export async function applyAgentChanges(
           if (change.numberFormat !== undefined) {
             // A percent format over amounts would show 157400 as 15740000%: leave it off.
             if (
-              String(change.numberFormat).includes("%") &&
+              String(change.numberFormat)
+                .replace(/"[^"]*"/g, "")
+                .includes("%") &&
               cells <= SNAPSHOT_CELLS
             ) {
               range.load("values");
@@ -1150,13 +1154,21 @@ export async function undoAgentChanges(
   sheetAliases.clear();
   for (const [from, to] of Object.entries(undo.aliases ?? {}))
     sheetAliases.set(from, to);
+  // The same failure twice in a row means pressing Undo again will never get past it: from then on the
+  // remaining parts still run (in order) and the sheets this agent created are removed at the end, so
+  // the person is not left with a stray sheet; what could not be restored is named in the error.
+  let forcing = false;
+  /** The failure of the first part that failed in this try (what the next try is compared with). */
+  let firstSignature = "";
   try {
-    for (
-      let index = parts.length - 1;
-      index >= 0 && !failures.length;
-      index -= 1
-    ) {
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      if (failures.length && !forcing) {
+        // Another failure than last time: the strict order stays (older parts wait for this one).
+        if (undo.lastFailure !== firstSignature) break;
+        forcing = true;
+      }
       if (settled[index]) continue;
+      const before = failures.length;
       await undoPart(
         runtime,
         sliceUndo(undo, parts[index]),
@@ -1164,17 +1176,58 @@ export async function undoAgentChanges(
         attempt,
         doomed,
       );
-      settled[index] = failures.length === 0;
+      settled[index] = failures.length === before;
+      if (failures.length && !firstSignature)
+        firstSignature = failureSignature(failures);
+    }
+    if (!forcing && failures.length && undo.lastFailure === firstSignature)
+      forcing = true;
+    if (failures.length && forcing) {
+      // Only sheets this agent created (undo.createdSheets) whose part did not come back, never any other.
+      const open = parts.flatMap((part, index) =>
+        settled[index] ? [] : sliceUndo(undo, part).createdSheets,
+      );
+      const missed: string[] = [];
+      try {
+        await runtime.run(async (context) => {
+          for (const key of [...open].reverse()) {
+            const sheet = context.workbook.worksheets.getItemOrNullObject(
+              sheetAliases.get(key) ?? key,
+            );
+            sheet.load("isNullObject");
+            await context.sync();
+            if (!sheet.isNullObject) {
+              sheet.delete();
+              await context.sync();
+            }
+          }
+        });
+      } catch (error) {
+        missed.push(
+          `created sheets: ${(error as Error)?.message ?? String(error)}`,
+        );
+      }
+      failures.push(...missed);
     }
   } finally {
     undo.aliases = Object.fromEntries(sheetAliases);
     sheetAliases.clear();
   }
-  if (failures.length)
+  if (failures.length) {
+    undo.lastFailure = firstSignature || failureSignature(failures);
     throw new Error(
       `Undo could not finish ${failures.length} step(s): ${failures.join("; ").slice(0, 400)}`,
     );
+  }
+  undo.lastFailure = undefined;
 }
+
+/** What went wrong, without numbers that change between tries, to tell "the same failure again". */
+const failureSignature = (failures: readonly string[]): string =>
+  failures
+    .map((text) => text.replace(/\d+/g, "#"))
+    .join("|")
+    .slice(0, 300);
 
 async function undoPart(
   runtime: ExcelRuntimeLike,

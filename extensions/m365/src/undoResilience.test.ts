@@ -357,3 +357,91 @@ test("formats and cells on a sheet the agent created are not put back, so a larg
   );
   assert.deepEqual(log, ["delete New"]);
 });
+
+test("the same failure twice does not leave a created sheet behind, and no other sheet is deleted", async () => {
+  const zero = {
+    steps: 0,
+    journal: 0,
+    tableSizes: 0,
+    restores: 0,
+    formats: 0,
+    backups: 0,
+    charts: 0,
+    createdSheets: 0,
+  };
+  // change 1 created sheet "New"; change 2 (a write on the existing sheet "S") can never be restored
+  const undo: any = {
+    createdSheets: ["New"],
+    steps: [],
+    journal: [],
+    restores: [{ sheet: "S", address: "A1:A9", formulas: null }],
+    formats: [],
+    backups: [],
+    charts: [],
+    tableSizes: [],
+    marks: [zero, { ...zero, createdSheets: 1 }],
+  };
+  const log: string[] = [];
+  const runtime = fakeRuntime(log, new Set(["A1:A9"]));
+  const press = () => undoAgentChanges(runtime, undo, async () => {});
+  await assert.rejects(press(), /could not finish 1 step/);
+  assert.deepEqual(
+    log,
+    [],
+    "the first failure keeps the strict order: nothing older ran",
+  );
+  await assert.rejects(press(), /could not finish 1 step/);
+  assert.deepEqual(
+    log,
+    ["delete New"],
+    "only the sheet the agent created is removed",
+  );
+  assert.equal(
+    log.some((entry) => entry.includes("delete S")),
+    false,
+  );
+});
+
+test("a different failure than last time keeps the strict order", async () => {
+  const zero = {
+    steps: 0,
+    journal: 0,
+    tableSizes: 0,
+    restores: 0,
+    formats: 0,
+    backups: 0,
+    charts: 0,
+    createdSheets: 0,
+  };
+  const undo: any = {
+    createdSheets: ["New"],
+    steps: [],
+    journal: [],
+    restores: [
+      { sheet: "S", address: "A1:A9", formulas: null },
+      { sheet: "S", address: "B1:B9", formulas: null },
+    ],
+    formats: [],
+    backups: [],
+    charts: [],
+    tableSizes: [],
+    marks: [
+      zero,
+      { ...zero, createdSheets: 1 },
+      { ...zero, createdSheets: 1, restores: 1 },
+    ],
+  };
+  const log: string[] = [];
+  const failing = new Set(["B1:B9"]);
+  const runtime = fakeRuntime(log, failing);
+  const press = () => undoAgentChanges(runtime, undo, async () => {});
+  await assert.rejects(press(), /could not finish 1 step/);
+  failing.delete("B1:B9");
+  failing.add("A1:A9");
+  await assert.rejects(press(), /could not finish 1 step/);
+  assert.equal(
+    log.includes("delete New"),
+    false,
+    "a new kind of failure is not forced past",
+  );
+});

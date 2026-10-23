@@ -9,12 +9,10 @@ export function percentMisfit(
   const formats = Array.isArray(numberFormat)
     ? numberFormat.flat()
     : [numberFormat];
-  if (
-    !formats.some(
-      (format) => typeof format === "string" && format.includes("%"),
-    )
-  )
-    return false;
+  // A "%" inside quotes (0.0"%") is plain text for values already multiplied by 100.
+  const scales = (format: unknown) =>
+    typeof format === "string" && format.replace(/"[^"]*"/g, "").includes("%");
+  if (!formats.some(scales)) return false;
   return values.some((row) =>
     row.some((cell) => typeof cell === "number" && Math.abs(cell) > 10),
   );

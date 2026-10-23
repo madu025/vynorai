@@ -8,4 +8,5 @@ test("a percent format over amounts is a misfit, over shares it is not", () => {
   assert.equal(percentMisfit("0.0%", [[1.5], [0.5]]), false);
   assert.equal(percentMisfit("#,##0", [[157400]]), false);
   assert.equal(percentMisfit([["0.0%"]], [[157400]]), true);
+  assert.equal(percentMisfit('0.0"%"', [[31.1], [27.4]]), false);
 });

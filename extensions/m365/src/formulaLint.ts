@@ -146,13 +146,46 @@ function spillWidth(formula: string): number | undefined {
  * A table formula (VSTACK/HSTACK) fills a rectangle by itself. A later step that writes a header or
  * value into that rectangle blocks the spill (#SPILL!) and every lookup next to it reads "Not found".
  */
+function spillArea(
+  change: StagedChange,
+): { sheet: string; cell: string; width: number } | undefined {
+  if (change.kind === "write_formula" && !change.fillRange) {
+    const width = spillWidth(change.formula);
+    return width
+      ? { sheet: change.sheet, cell: change.cell, width }
+      : undefined;
+  }
+  if (change.kind === "excel_action" && change.tool === "combine_tables") {
+    const args = change.args as Record<string, any>;
+    if (args.mode !== "join" && args.mode !== "append") return undefined;
+    const box = /^\$?([A-Z]{1,3})\$?\d+\s*:\s*\$?([A-Z]{1,3})\$?\d+$/i.exec(
+      String(args.left_address ?? "").trim(),
+    );
+    if (!box || !args.sheet || !args.cell) return undefined;
+    const left = columnNumber(box[2]) - columnNumber(box[1]) + 1;
+    const brought =
+      args.mode === "join"
+        ? Array.isArray(args.columns) && args.columns.length
+          ? args.columns.length
+          : 1
+        : 0;
+    return {
+      sheet: String(args.sheet),
+      cell: String(args.cell),
+      width: left + brought,
+    };
+  }
+  return undefined;
+}
+
 function spillOverlaps(changes: readonly { change: StagedChange }[]): string[] {
   const issues: string[] = [];
-  changes.forEach(({ change }, index) => {
-    if (change.kind !== "write_formula" || change.fillRange) return;
+  changes.forEach(({ change: first }, index) => {
+    const change = spillArea(first);
+    if (!change) return;
     const anchor = splitCell(change.cell);
-    const width = spillWidth(change.formula);
-    if (!anchor || !width) return;
+    const width = change.width;
+    if (!anchor) return;
     for (const { change: later } of changes.slice(index + 1)) {
       if (
         (later.kind !== "write_values" && later.kind !== "write_formula") ||

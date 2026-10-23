@@ -132,3 +132,41 @@ test("lintChanges flags a write inside the area a table formula spills into", ()
     0,
   );
 });
+
+test("lintChanges flags a write into the area a combine_tables join spills into", () => {
+  const join = {
+    kind: "excel_action" as const,
+    tool: "combine_tables",
+    args: {
+      mode: "join",
+      left_sheet: "Orders",
+      left_address: "A1:L3001",
+      right_sheet: "Customers",
+      right_address: "A1:F3001",
+      key: "Customer ID",
+      columns: ["Region ID", "Segment"],
+      sheet: "Orders with Region",
+      cell: "A1",
+    },
+  } as any;
+  const header = {
+    kind: "write_values" as const,
+    sheet: "Orders with Region",
+    cell: "M1",
+    values: [["Customer Region ID"]],
+  };
+  const fill = {
+    kind: "write_formula" as const,
+    sheet: "Orders with Region",
+    cell: "O2",
+    formula: "=XLOOKUP(M2:M3001,Regions!A2:A3001,Regions!B2:B3001)",
+    fillRange: "O2:O3001",
+  };
+  const issues = lintChanges([
+    { change: join },
+    { change: header },
+    { change: fill },
+  ]);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /M1.*#SPILL!/);
+});

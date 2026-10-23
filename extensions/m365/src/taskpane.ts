@@ -799,6 +799,19 @@ function signInDialogMessage(code: unknown): string {
 
 let lastStatus = "";
 const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
+/** The preview card's badge: "No changes yet" before Apply, "Applied" after it, so it never contradicts the status line. */
+function setPreviewBadge(applied: boolean) {
+  const badge = document.querySelector<HTMLElement>(
+    "#result-card [data-i18n^='preview_']",
+  );
+  if (!badge) return;
+  badge.dataset.i18n = applied ? "preview_applied" : "preview_safe";
+  badge.textContent = localizeMessage(
+    textLanguage(),
+    applied ? "Applied" : "No changes yet",
+  );
+}
+
 function setStatus(message: string) {
   lastStatus = message;
   if (status) status.textContent = localizeMessage(textLanguage(), message);
@@ -2595,6 +2608,7 @@ apply?.addEventListener("click", async () => {
         lastCreated.sheets.length + lastCreated.tables.length === 0;
     currentPlan = undefined;
     previewFingerprint = "";
+    setPreviewBadge(failed.length === 0);
     lastDoneSentence = failed.length
       ? ""
       : doneSentence(
@@ -3541,6 +3555,7 @@ function setupLayout() {
     renderPreviewKpis(actions, parsed);
     renderOutcomes(actions);
     configurePreviewTweaks(actions);
+    setPreviewBadge(false);
     resultCard.hidden = false;
     workspaceNavigation.refresh();
     workspaceNavigation.activate("results");
@@ -4713,8 +4728,10 @@ function describeSelectionLocal(info: WorkspaceSelection | undefined): string {
 let shownSelection: WorkspaceSelection | undefined;
 languageHooks.push(() => {
   if (!shownSelection) return;
-  if (selectionText) selectionText.textContent = describeSelectionLocal(shownSelection);
-  if (contextSelection) contextSelection.textContent = describeSelectionLocal(shownSelection);
+  if (selectionText)
+    selectionText.textContent = describeSelectionLocal(shownSelection);
+  if (contextSelection)
+    contextSelection.textContent = describeSelectionLocal(shownSelection);
 });
 
 function renderWorkspaceContext(
@@ -4860,7 +4877,10 @@ let exploreStats: ExploreStats | undefined;
 let exploreAiIdeas: ExploreItem[] = [];
 /** Which cells and columns the Explore tab is showing now. */
 const selectionKey = () =>
-  JSON.stringify([exploreState.info?.address, exploreState.schema?.columns?.map((column) => column.name)]);
+  JSON.stringify([
+    exploreState.info?.address,
+    exploreState.schema?.columns?.map((column) => column.name),
+  ]);
 
 function exploreChips(host: string, items: ExploreItem[]) {
   document.querySelector<HTMLElement>(host)?.replaceChildren(
@@ -4908,8 +4928,14 @@ function renderExplore(
     view.templates.length > 0 || view.questions.length > 0,
   );
   exploreChips("#explore-question-list", view.questions);
-  show(document.querySelector<HTMLElement>("#explore-templates"), view.templates.length > 0);
-  show(document.querySelector<HTMLElement>("#explore-ask"), view.questions.length > 0);
+  show(
+    document.querySelector<HTMLElement>("#explore-templates"),
+    view.templates.length > 0,
+  );
+  show(
+    document.querySelector<HTMLElement>("#explore-ask"),
+    view.questions.length > 0,
+  );
   show(document.querySelector<HTMLElement>("#explore-close"), view.payroll);
   show(
     document.querySelector<HTMLElement>("#explore-empty"),
@@ -4968,8 +4994,14 @@ async function askAiForIdeas() {
     role: String(column.role ?? ""),
   }));
   if (!columns.length) return;
-  if (agentBusy) return setStatus("The AI is still working on the last request. Try again when it finishes.");
-  const request = ideasRequest(columns.filter((column) => column.name), exploreStats);
+  if (agentBusy)
+    return setStatus(
+      "The AI is still working on the last request. Try again when it finishes.",
+    );
+  const request = ideasRequest(
+    columns.filter((column) => column.name),
+    exploreStats,
+  );
   let agreed = false;
   try {
     agreed = localStorage.getItem(AGENT_CONSENT_KEY) === "1";
@@ -4985,7 +5017,9 @@ async function askAiForIdeas() {
       localizeMessage(language, "Agree"),
       localizeMessage(language, "Cancel"),
       agentConsentCard(
-        { request: localizeMessage(language, "Ideas for the selected columns") },
+        {
+          request: localizeMessage(language, "Ideas for the selected columns"),
+        },
         language,
       ),
     );
@@ -5015,7 +5049,9 @@ async function askAiForIdeas() {
       maxTurns: 2,
     });
     if (selectionKey() !== askedFor) {
-      setStatus("The selection changed, so those ideas were dropped. Tap More ideas again.");
+      setStatus(
+        "The selection changed, so those ideas were dropped. Tap More ideas again.",
+      );
       return;
     }
     exploreAiIdeas = parseIdeas(run.reply).map((idea) => ({
@@ -5153,12 +5189,10 @@ document
     void inspect?.click();
   });
 
-document
-  .querySelector("#refresh-context")
-  ?.addEventListener("click", () => {
-    noticedKey = "";
-    void refreshSelectionChip();
-  });
+document.querySelector("#refresh-context")?.addEventListener("click", () => {
+  noticedKey = "";
+  void refreshSelectionChip();
+});
 document.querySelector("#context-overview")?.addEventListener("click", () => {
   document.querySelector<HTMLButtonElement>("#overview")?.click();
 });
@@ -5421,7 +5455,8 @@ function renderAgentRun(run: AgentRun) {
   show(agentApprove, pending);
   show(agentDiscard, pending);
   if (agentBadge)
-    setAgentBadge(pending
+    setAgentBadge(
+      pending
         ? "Waiting for approval"
         : run.phase === "verifying"
           ? "Verifying"
@@ -5507,7 +5542,12 @@ function finishAgentRoles(reviewed: Awaited<ReturnType<typeof runTeam>>) {
   }
   // An answer with nothing staged is never applied, so there is nothing to read back afterwards.
   if (!agentVerifying && reviewed.run.changes.length === 0)
-    setAgentRoleView(document, "verification", "skipped", "not needed, nothing was changed");
+    setAgentRoleView(
+      document,
+      "verification",
+      "skipped",
+      "not needed, nothing was changed",
+    );
 }
 
 async function agentLoop(request: string) {
@@ -5563,7 +5603,8 @@ async function agentLoop(request: string) {
         else if (phase === "planning") setAgentStage("plan");
         else if (phase === "executing") setAgentStage("preview");
         if (agentBadge)
-          setAgentBadge(phase === "planning"
+          setAgentBadge(
+            phase === "planning"
               ? "Planning"
               : phase === "executing"
                 ? "Executing"
@@ -5595,18 +5636,15 @@ async function agentLoop(request: string) {
         if (phase === "plan") {
           setAgentRoleView(document, "planner", "active", "building plan");
           if (!agentVerifying) setAgentStage("plan");
-          if (agentBadge)
-            setAgentBadge("Planning");
+          if (agentBadge) setAgentBadge("Planning");
           setStatus("A planner agent is splitting the request into steps...");
         } else if (phase === "reviewing") {
           setAgentRoleView(document, "planner", "done", "plan ready");
           setAgentRoleView(document, "builder", "done", "preview staged");
           if (!agentVerifying) setAgentStage("review");
-          if (agentBadge)
-            setAgentBadge("Reviewing");
+          if (agentBadge) setAgentBadge("Reviewing");
         } else if (phase === "revising") {
-          if (agentBadge)
-            setAgentBadge("Correcting");
+          if (agentBadge) setAgentBadge("Correcting");
           setStatus("Correcting the plan after the review...");
         }
       },
@@ -5683,7 +5721,11 @@ async function agentLoop(request: string) {
     if (agentProgress)
       setLocalizedParts(
         agentProgress,
-        [describeReview(reviewed), usageLine(), describePrivacyReceipt(receipt)].filter(Boolean),
+        [
+          describeReview(reviewed),
+          usageLine(),
+          describePrivacyReceipt(receipt),
+        ].filter(Boolean),
       );
     const leaks =
       receipt.leaks.emails + receipt.leaks.phones + receipt.leaks.nic;
@@ -5704,8 +5746,7 @@ async function agentLoop(request: string) {
     if (agentStopped) {
       // The roles that did not get to work end as skipped, not as "pending" for a request that is over.
       settleActiveRolesView(document, "did not finish");
-      if (agentBadge)
-        setAgentBadge("Stopped");
+      if (agentBadge) setAgentBadge("Stopped");
       setStatus("Stopped. Nothing was changed.");
     } else if (error instanceof M365ApiError) {
       settleActiveRolesView(document, "did not finish");
@@ -5739,7 +5780,10 @@ async function startAgentRun() {
   const request = (instruction?.value || "").trim();
   if (!request) return setStatus("Describe what you want first.");
   if (!config || !accessToken) return setStatus("Sign in first.");
-  if (agentBusy) return setStatus("The AI is still working on the last request. Try again when it finishes.");
+  if (agentBusy)
+    return setStatus(
+      "The AI is still working on the last request. Try again when it finishes.",
+    );
   // A payroll sheet is a local template: nothing is sent for it.
   if (
     isPayrollRequest(request) &&
@@ -5913,9 +5957,13 @@ agentDiscard?.addEventListener("click", () => {
   show(agentNote, false);
   show(agentApprove, false);
   show(agentDiscard, false);
-  if (agentBadge)
-    setAgentBadge("Discarded");
-  setAgentRoleView(document, "verification", "skipped", "not needed, nothing was changed");
+  if (agentBadge) setAgentBadge("Discarded");
+  setAgentRoleView(
+    document,
+    "verification",
+    "skipped",
+    "not needed, nothing was changed",
+  );
   setAgentStage("approval", true);
   setStatus("Discarded. Nothing was changed.");
 });
@@ -5927,8 +5975,7 @@ agentApprove?.addEventListener("click", async () => {
   agentBusy = true;
   show(agentApprove, false);
   show(agentDiscard, false);
-  if (agentBadge)
-    setAgentBadge("Applying");
+  if (agentBadge) setAgentBadge("Applying");
   setAgentStage("apply");
   setAgentRoleView(document, "verification", "pending", "waiting for apply");
   agentStopped = false;
@@ -5953,7 +6000,10 @@ agentApprove?.addEventListener("click", async () => {
       {
         onProgress: (index, total, label) => {
           if (agentProgress)
-            setLocalizedText(agentProgress, `Applying ${index} of ${total}: ${label.slice(0, 120)}`);
+            setLocalizedText(
+              agentProgress,
+              `Applying ${index} of ${total}: ${label.slice(0, 120)}`,
+            );
         },
         isCancelled: () => agentStopped,
       },
@@ -5979,10 +6029,21 @@ agentApprove?.addEventListener("click", async () => {
       const glyph = document.createElement("span");
       glyph.setAttribute("aria-hidden", "true");
       glyph.textContent =
-        result.status === "applied" ? "✓" : result.status === "failed" ? "✗" : "–";
+        result.status === "applied"
+          ? "✓"
+          : result.status === "failed"
+            ? "✗"
+            : "–";
       const word = document.createElement("span");
       word.className = "sr-only";
-      setLocalizedText(word, result.status === "applied" ? "applied" : result.status === "failed" ? "failed" : "skipped");
+      setLocalizedText(
+        word,
+        result.status === "applied"
+          ? "applied"
+          : result.status === "failed"
+            ? "failed"
+            : "skipped",
+      );
       const what = document.createElement("span");
       setLocalizedText(what, result.change);
       const colon = document.createElement("span");
@@ -6022,9 +6083,10 @@ agentApprove?.addEventListener("click", async () => {
         report.results,
       ),
     );
-  lastApplyStatus = failed || agentStopped
-    ? "Partly applied. Undo puts everything back."
-    : "Applied. Undo puts everything back.";
+  lastApplyStatus =
+    failed || agentStopped
+      ? "Partly applied. Undo puts everything back."
+      : "Applied. Undo puts everything back.";
   noticedKey = "";
   setStatus(lastApplyStatus);
   // The agent checks what was written once or twice and may stage fixes (they need approval again).
@@ -6038,8 +6100,7 @@ agentApprove?.addEventListener("click", async () => {
       "active",
       "reading results back",
     );
-    if (agentBadge)
-      setAgentBadge("Verifying");
+    if (agentBadge) setAgentBadge("Verifying");
     setStatus("Verifying the applied result...");
     await agentLoop(
       appliedReport(
@@ -6090,8 +6151,7 @@ agentUndo?.addEventListener("click", async () => {
           "[Report from the add-in] The person undid all applied changes.",
       },
     ];
-    if (agentBadge)
-      setAgentBadge("Undone");
+    if (agentBadge) setAgentBadge("Undone");
     log.record("agent:undo", "pass");
     await logChanges({
       at: new Date(),

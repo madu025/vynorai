@@ -6,7 +6,6 @@
  */
 import { localizeAction } from "./messagesActions.js";
 
-
 const EXACT: Record<string, string> = {
   "Sparklines are not available in this Excel add-in yet. Use a line chart on a new result sheet instead.":
     "இந்த Excel add-in-இல் Sparklines இன்னும் கிடைக்கவில்லை. அதற்குப் பதிலாக புதிய முடிவுத் தாளில் ஒரு line chart-ஐப் பயன்படுத்தவும்.",
@@ -169,6 +168,8 @@ const EXACT: Record<string, string> = {
   "Create a report first.": "முதலில் ஓர் அறிக்கையை உருவாக்கவும்.",
   "No numbers found there. Pick or paste cells with a header row and a number column.":
     "அங்கு எண்கள் எதுவும் இல்லை. தலைப்பு வரிசையும் எண் நெடுவரிசையும் உள்ள கலங்களைத் தேர்ந்தெடுக்கவும் அல்லது ஒட்டவும்.",
+  Applied: "பயன்படுத்தப்பட்டது",
+  "No changes yet": "இன்னும் மாற்றங்கள் இல்லை",
   "Text copied.": "உரை நகலெடுக்கப்பட்டது.",
   "Could not copy the text.": "உரையை நகலெடுக்க முடியவில்லை.",
   "The card could not be made. See Diagnostics.":
@@ -245,7 +246,7 @@ const EXACT: Record<string, string> = {
     "யோசனைகள் தயார். ஒன்றைத் தட்டி கோரிக்கை பெட்டியில் வையுங்கள்.",
   "No new ideas this time.": "இந்த முறை புதிய யோசனைகள் இல்லை.",
   "The selection changed, so those ideas were dropped. Tap More ideas again.":
-    "தேர்வு மாறியதால் அந்த யோசனைகள் நீக்கப்பட்டன. மீண்டும் \"மேலும் யோசனைகள்\" என்பதைத் தட்டுங்கள்.",
+    'தேர்வு மாறியதால் அந்த யோசனைகள் நீக்கப்பட்டன. மீண்டும் "மேலும் யோசனைகள்" என்பதைத் தட்டுங்கள்.',
   "The ideas could not be made. See Diagnostics.":
     "யோசனைகளை உருவாக்க முடியவில்லை. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
   "Undoing the agent's changes...": "Agent செய்த மாற்றங்களை மீளமைக்கிறது...",
@@ -287,8 +288,10 @@ const EXACT: Record<string, string> = {
   "answer ready, nothing to change": "பதில் தயார், மாற்ற எதுவுமில்லை",
   "not needed, nothing was changed": "தேவையில்லை, எதுவும் மாற்றப்படவில்லை",
   "did not finish": "முடிக்கவில்லை",
-  "simple change, checked by rules only": "எளிய மாற்றம், விதிகளால் மட்டும் சரிபார்க்கப்பட்டது",
-  "not run, the builder corrected first": "இயக்கப்படவில்லை, முதலில் builder திருத்தியது",
+  "simple change, checked by rules only":
+    "எளிய மாற்றம், விதிகளால் மட்டும் சரிபார்க்கப்பட்டது",
+  "not run, the builder corrected first":
+    "இயக்கப்படவில்லை, முதலில் builder திருத்தியது",
   stopped: "நிறுத்தப்பட்டது",
   applied: "பயன்படுத்தப்பட்டது",
   failed: "தோல்வி",
@@ -526,7 +529,8 @@ const TEMPLATES: Template[] = [
   [/^Calculating (.+)$/, (what) => `கணக்கிடுகிறது: ${what}`],
   [
     /^Running analysis code on (.+) \(on this device, no network\)$/,
-    (what) => `பகுப்பாய்வு குறியீட்டை இயக்குகிறது: ${what} (இந்த சாதனத்தில், நெட்வொர்க் இல்லாமல்)`,
+    (what) =>
+      `பகுப்பாய்வு குறியீட்டை இயக்குகிறது: ${what} (இந்த சாதனத்தில், நெட்வொர்க் இல்லாமல்)`,
   ],
   [/^Checking a step: (.+)$/, (what) => `ஒரு படியைச் சரிபார்க்கிறது: ${what}`],
   [
@@ -598,7 +602,10 @@ const TEMPLATES: Template[] = [
     (p, m, check) =>
       `${m} மீது ${p}% VAT${check ? " (விகிதத்தைச் சரிபார்க்கவும்)" : ""}`,
   ],
-  [/^Month of (.+) as a new column$/, (d) => `${d} இன் மாதம் புதிய நெடுவரிசையாக`],
+  [
+    /^Month of (.+) as a new column$/,
+    (d) => `${d} இன் மாதம் புதிய நெடுவரிசையாக`,
+  ],
   [
     /^Which (.+?) has the (highest|lowest) (.+)\?$/,
     (g, which, m) =>

@@ -56,7 +56,10 @@ export function groupChartRows(
 ): ChartGroup[] {
   const buckets = new Map<string, number[][]>();
   for (const row of rows) {
-    const key = String(row[categoryIndex] ?? "");
+    // ' Central' and 'Central' are the same group; stray spaces must not split a category.
+    const key = String(row[categoryIndex] ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
     const bucket = buckets.get(key) ?? valueIndexes.map(() => [] as number[]);
     valueIndexes.forEach((index, at) => {
       const value = chartCellNumber(row[index]);

@@ -82,9 +82,9 @@ export function doneSentence(
   const base = created.length
     ? pick(
         language,
-        `Done. ${kinds[0].toUpperCase()}${kinds.slice(1)} created on sheet ${sheets}.`,
-        `සම්පූර්ණයි. ${kinds} ${sheets} පත්‍රිකාවේ සාදන ලදී.`,
-        `முடிந்தது. ${kinds} ${sheets} தாளில் உருவாக்கப்பட்டது.`,
+        `Applied. ${kinds[0].toUpperCase()}${kinds.slice(1)} created on sheet ${sheets}.`,
+        `යොදන ලදී. ${kinds} ${sheets} පත්‍රිකාවේ සාදන ලදී.`,
+        `பயன்படுத்தப்பட்டது. ${kinds} ${sheets} தாளில் உருவாக்கப்பட்டது.`,
       )
     : pick(
         language,
@@ -113,7 +113,15 @@ export function doneSentence(
         "මූලාශ්‍ර දත්ත පරීක්ෂා කරන්න.",
         "உங்கள் மூலத் தரவைச் சரிபார்க்கவும்.",
       );
-  return `${base}${already} ${source}`;
+  const undo = created.length
+    ? pick(
+        language,
+        " Undo puts everything back.",
+        " පෙර තත්ත්වයට ගෙන ඒමට පසුගමනය (Undo) භාවිතා කරන්න.",
+        " எல்லாவற்றையும் மீண்டும் பழைய நிலைக்குக் கொண்டுவர Undo பயன்படுத்தவும்.",
+      )
+    : "";
+  return `${base}${already} ${source}${undo}`;
 }
 
 const rupees = (value: number) =>

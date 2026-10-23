@@ -146,3 +146,20 @@ test("a summary the person asked for always groups, even on a time axis or uniqu
   );
   assert.equal(chartNeedsGrouping(unique, 0, "Region", {}, true), true);
 });
+
+test("stray spaces do not split a category", () => {
+  const groups = groupChartRows(
+    [
+      [" Central ", 10],
+      ["Central", 5],
+      ["Central  ", 1],
+      ["North", 2],
+    ],
+    0,
+    [1],
+  );
+  assert.deepEqual(groups, [
+    { key: "Central", values: [16] },
+    { key: "North", values: [2] },
+  ]);
+});

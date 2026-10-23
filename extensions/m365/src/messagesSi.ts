@@ -5,7 +5,6 @@
  */
 import { localizeAction } from "./messagesActions.js";
 
-
 const EXACT: Record<string, string> = {
   "Sparklines are not available in this Excel add-in yet. Use a line chart on a new result sheet instead.":
     "මෙම Excel add-in එකේ Sparklines තවම ලබාගත නොහැක. ඒ වෙනුවට අලුත් result sheet එකක line chart එකක් භාවිතා කරන්න.",
@@ -164,6 +163,8 @@ const EXACT: Record<string, string> = {
   "Create a report first.": "මුලින්ම වාර්තාවක් සාදන්න.",
   "No numbers found there. Pick or paste cells with a header row and a number column.":
     "එහි අංක කිසිවක් හමු වුණේ නැත. ශීර්ෂ පේළියක් සහ අංක තීරුවක් සහිත කොටු තෝරන්න හෝ අලවන්න.",
+  Applied: "යොදන ලදී",
+  "No changes yet": "තවම වෙනස්කම් නැත",
   "Text copied.": "පෙළ පිටපත් කළා.",
   "Could not copy the text.": "පෙළ පිටපත් කළ නොහැකි විය.",
   "The card could not be made. See Diagnostics.":
@@ -236,7 +237,7 @@ const EXACT: Record<string, string> = {
     "අදහස් සූදානම්. එකක් ඔබා ඉල්ලීම් පෙට්ටියට දමන්න.",
   "No new ideas this time.": "මෙවර අලුත් අදහස් නැත.",
   "The selection changed, so those ideas were dropped. Tap More ideas again.":
-    "තේරීම වෙනස් වූ නිසා එම අදහස් ඉවත දැමුවා. නැවත \"තවත් අදහස්\" ඔබන්න.",
+    'තේරීම වෙනස් වූ නිසා එම අදහස් ඉවත දැමුවා. නැවත "තවත් අදහස්" ඔබන්න.',
   "The ideas could not be made. See Diagnostics.":
     "අදහස් සෑදීමට නොහැකි විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
   "Undoing the agent's changes...": "Agent ගේ වෙනස්කම් ආපසු හරවමින්...",
@@ -274,11 +275,14 @@ const EXACT: Record<string, string> = {
   "no plan needed": "සැලසුමක් අවශ්‍ය නැත",
   "not needed for this request": "මෙම ඉල්ලීමට අවශ්‍ය නැත",
   "no join found between the ranges": "පරාස අතර සම්බන්ධයක් හමු නොවීය",
-  "answer ready, nothing to change": "පිළිතුර සූදානම්, වෙනස් කිරීමට කිසිවක් නැත",
+  "answer ready, nothing to change":
+    "පිළිතුර සූදානම්, වෙනස් කිරීමට කිසිවක් නැත",
   "not needed, nothing was changed": "අවශ්‍ය නැත, කිසිවක් වෙනස් කළේ නැත",
   "did not finish": "අවසන් කළේ නැත",
-  "simple change, checked by rules only": "සරල වෙනසක්, නීති මගින් පමණක් පරීක්ෂා කළා",
-  "not run, the builder corrected first": "ධාවනය නොකළා, පළමුව builder නිවැරදි කළා",
+  "simple change, checked by rules only":
+    "සරල වෙනසක්, නීති මගින් පමණක් පරීක්ෂා කළා",
+  "not run, the builder corrected first":
+    "ධාවනය නොකළා, පළමුව builder නිවැරදි කළා",
   stopped: "නවත්වා ඇත",
   applied: "යෙදුවා",
   failed: "අසාර්ථකයි",
@@ -510,7 +514,8 @@ const TEMPLATES: Template[] = [
   [/^Calculating (.+)$/, (what) => `ගණනය කරමින්: ${what}`],
   [
     /^Running analysis code on (.+) \(on this device, no network\)$/,
-    (what) => `විශ්ලේෂණ කේතය ධාවනය කරමින්: ${what} (මෙම උපාංගයේ, ජාලයක් නොමැතිව)`,
+    (what) =>
+      `විශ්ලේෂණ කේතය ධාවනය කරමින්: ${what} (මෙම උපාංගයේ, ජාලයක් නොමැතිව)`,
   ],
   [/^Checking a step: (.+)$/, (what) => `පියවරක් පරීක්ෂා කරමින්: ${what}`],
   [
@@ -579,12 +584,14 @@ const TEMPLATES: Template[] = [
   ],
   [
     /^(\d+(?:\.\d+)?)% VAT on (.+?)( \(check the rate\))?$/,
-    (p, m, check) => `${m} මත ${p}% VAT${check ? " (අනුපාතය පරීක්ෂා කරන්න)" : ""}`,
+    (p, m, check) =>
+      `${m} මත ${p}% VAT${check ? " (අනුපාතය පරීක්ෂා කරන්න)" : ""}`,
   ],
   [/^Month of (.+) as a new column$/, (d) => `${d} හි මාසය නව තීරුවක් ලෙස`],
   [
     /^Which (.+?) has the (highest|lowest) (.+)\?$/,
-    (g, which, m) => `${m} ${which === "highest" ? "වැඩිම" : "අඩුම"} ${g} කුමක්ද?`,
+    (g, which, m) =>
+      `${m} ${which === "highest" ? "වැඩිම" : "අඩුම"} ${g} කුමක්ද?`,
   ],
   [/^What is the total (.+)\?$/, (m) => `මුළු ${m} කීයද?`],
   // Footer of the pane (timeSaved.ts): an estimate of time saved this month, and the day streak.

@@ -154,6 +154,7 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     replace_toggle:
       "යෙදීමෙන් පසු පැරණි VynorAI ප්‍රතිඵල පත්‍රිකා ප්‍රතිස්ථාපනය කරන්න",
     preview_safe: "තවම වෙනස්කම් නැත",
+    preview_applied: "යොදන ලදී",
     tweak_chart: "ප්‍රස්තාර වර්ගය",
     tweak_aggregation: "සාරාංශ කරන ආකාරය",
     tweak_category: "කාණ්ඩය",
@@ -233,8 +234,7 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     tab_results: "ප්‍රතිඵල",
     tab_share: "බෙදාගන්න",
     tab_explore: "සොයන්න",
-    explore_empty:
-      "ඔබේ දත්ත තෝරන්න; ඒවාට ගැළපෙන සැකිලි සහ ප්‍රශ්න මෙතැන පෙනේ.",
+    explore_empty: "ඔබේ දත්ත තෝරන්න; ඒවාට ගැළපෙන සැකිලි සහ ප්‍රශ්න මෙතැන පෙනේ.",
     explore_close: "මාසාන්ත වසා දැමීම",
     explore_close_note:
       "තේරූ සේවකයින් සඳහා EPF, ETF සහ APIT සහිත වැටුප් පත්‍රිකාවක්. කිසිවක් එක් කිරීමට පෙර ඔබ සංඛ්‍යා බලා අනුමත කරයි.",
@@ -395,6 +395,7 @@ const STRINGS: Record<Exclude<Language, "en">, Dictionary> = {
     review_toggle: "ஒவ்வொரு படியையும் மதிப்பாய்வு செய்",
     replace_toggle: "பயன்படுத்திய பின் பழைய VynorAI முடிவுத் தாள்களை மாற்று",
     preview_safe: "இன்னும் மாற்றங்கள் இல்லை",
+    preview_applied: "பயன்படுத்தப்பட்டது",
     tweak_chart: "விளக்கப்பட வகை",
     tweak_aggregation: "சுருக்கம்",
     tweak_category: "வகை",

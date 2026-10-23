@@ -243,7 +243,7 @@ test("pane sentences are written in English, Sinhala and Tamil", () => {
       true,
       "en",
     ),
-    "Done. Chart created on sheet Summary. Your original data was not changed.",
+    "Applied. Chart created on sheet Summary. Your original data was not changed. Undo puts everything back.",
   );
 });
 

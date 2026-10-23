@@ -263,6 +263,39 @@ test("the smallest N rows of a pivot: bottom, lowest, least", () => {
   assert.equal(top.specs.pivot.lowest, undefined);
 });
 
+test("top N / bottom N in a chart or summary request: digits or words, 1..100", () => {
+  const headers = ["Region", "Product", "Customer", "Revenue"];
+  const rows = [
+    ["N", "A", "C1", 10],
+    ["S", "B", "C2", 20],
+  ];
+  const run = (text: string): any => interpretInstruction(text, headers, rows);
+  const top = run("chart top 5 regions by revenue");
+  assert.equal(top.specs.chart.category, 0);
+  assert.equal(top.specs.chart.topN, 5);
+  assert.equal(top.specs.chart.lowest, undefined);
+  const products = run("top 3 products by revenue chart");
+  assert.equal(products.specs.chart.category, 1);
+  assert.equal(products.specs.chart.topN, 3);
+  assert.equal(products.specs.view, undefined);
+  const low = run("chart the lowest 5 customers by revenue");
+  assert.equal(low.specs.chart.topN, 5);
+  assert.equal(low.specs.chart.lowest, true);
+  const words = run("bar chart of five best customers by Revenue");
+  assert.equal(words.specs.chart.category, 2);
+  assert.equal(words.specs.chart.topN, 5);
+  assert.equal(
+    run("pivot table of revenue by product, bottom three").specs.pivot.lowest,
+    true,
+  );
+  assert.equal(run("chart revenue by region, top 101").specs.chart.topN, undefined);
+  assert.equal(run("chart revenue by region, top 0").specs.chart.topN, undefined);
+  assert.equal(run("chart top 5% of revenue by region").specs.chart.topN, undefined);
+  assert.equal(run("chart revenue by region").specs.chart.topN, undefined);
+  // Not a chart or summary: a plain ranking question is left alone.
+  assert.equal(run("top 5 regions").specs.chart, undefined);
+});
+
 test("delete or remove rows where ... is a copy without them, never only those rows", () => {
   const headers = ["Service ID", "Status", "UoM", "Issued Quantity"];
   const rows = [["a", "S", "Ea", 2]];

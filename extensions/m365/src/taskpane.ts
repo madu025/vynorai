@@ -101,6 +101,7 @@ import {
   showWorkbookMapView,
   type AgentStage,
 } from "./taskpaneAgentView.js";
+import { checkedLine } from "./agentChecked.js";
 import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
 import { noticeInData, NOTICE_MAX_ROWS, type NoticedTile } from "./noticed.js";
 import {
@@ -5331,7 +5332,49 @@ let agentVerifying = false;
 /** The badge words are written in English and localized now; a language switch writes them again. */
 function setAgentBadge(english: string) {
   if (agentBadge) setLocalizedText(agentBadge, english);
+  agentBadgeEnglish = english;
+  refreshAgentChecked();
 }
+
+const agentChecked = document.querySelector<HTMLElement>("#agent-checked");
+const agentCheckedText = document.querySelector<HTMLElement>(
+  "#agent-checked-text",
+);
+const agentChecksDetails = document.querySelector<HTMLDetailsElement>(
+  "#agent-checks-details",
+);
+let agentBadgeEnglish = "";
+/** Problems of the current run (reviewers, lint, apply, verification), first one first. */
+let agentIssues: string[] = [];
+
+/**
+ * The agent card shows one line (working, checked, or a check that needs attention); the role cards sit
+ * under "details". A run that ends with a problem opens the details so the problem is visible.
+ */
+function refreshAgentChecked() {
+  if (!agentChecked || !agentCheckedText) return;
+  const line = checkedLine({
+    badge: agentBadgeEnglish,
+    progress: agentProgress?.textContent ?? "",
+    issues: agentIssues,
+  });
+  agentChecked.hidden = line.state === "idle";
+  agentChecked.dataset.state = line.state;
+  const detail = line.detail;
+  agentCheckedText.textContent =
+    `${localizeMessage(language, line.prefix)}${detail ? ` ${detail}` : ""}`.trim();
+  if (agentChecksDetails) {
+    if (line.state === "warn") agentChecksDetails.open = true;
+    else if (line.state === "ok") agentChecksDetails.open = false;
+  }
+}
+if (agentProgress && typeof MutationObserver !== "undefined")
+  new MutationObserver(refreshAgentChecked).observe(agentProgress, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+languageHooks.push(refreshAgentChecked);
 languageHooks.push(() => relocalizeView(document));
 
 function setAgentStage(stage: AgentStage, complete = false) {
@@ -5578,6 +5621,7 @@ async function agentLoop(request: string) {
   helperCalculations.safety = 0;
   currentReviewer = undefined;
   mapperRan = false;
+  agentIssues = [];
   if (agentBadge) setAgentBadge("Working");
   if (agentUsageDetails) agentUsageDetails.hidden = true;
   if (agentProgress)
@@ -5709,6 +5753,9 @@ async function agentLoop(request: string) {
         planSteps: reviewed.plan?.length ?? 0,
         revised: reviewed.revised,
       });
+    // Problems the reviewers found and the builder did not fix stay visible on the one-line summary.
+    if (reviewed.review && !reviewed.review.ok && !reviewed.revised)
+      agentIssues = [...reviewed.review.issues];
     finishAgentRoles(reviewed);
     renderAgentRun(run);
     // The answer and the changes to approve are below the chat: bring them into view above the box.
@@ -5762,6 +5809,9 @@ async function agentLoop(request: string) {
       handleApiError("agent", error);
     } else {
       settleActiveRolesView(document, "did not finish");
+      agentIssues = [describeError(error)];
+      agentBadgeEnglish = "Failed";
+      refreshAgentChecked();
       log.record("agent:run", "fail", describeError(error));
       setStatus("The agent could not finish. Nothing was changed.");
     }
@@ -6028,6 +6078,13 @@ agentApprove?.addEventListener("click", async () => {
   agentBusy = false;
   show(agentStop, false);
   if (agentProgress) setLocalizedText(agentProgress, "");
+  agentIssues = report.results
+    .filter((result) => result.status === "failed")
+    .map(
+      (result) =>
+        `${result.change}${result.detail ? `: ${result.detail}` : ""}`,
+    );
+  refreshAgentChecked();
   agentLastUndo = mergeUndo(agentLastUndo, report.undo);
   show(agentUndo, true);
   if (agentChanges) {

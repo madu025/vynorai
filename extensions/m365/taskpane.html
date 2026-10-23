@@ -2314,6 +2314,319 @@
         white-space: normal;
       }
     </style>
+    <style id="redesign-styles">
+      /* Redesign: one calm screen. The composer is docked at the bottom, the six agent roles collapse
+         into one "Checked" line, and Apply / Undo stay pinned above the input. Only layout and look
+         change here; every id and every hidden toggle is the same as before. */
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f5f7fb;
+          --surface-muted: #f5f7fb;
+          --ink: #0f1b2d;
+          --muted: #5a6881;
+          --line: #dde3ee;
+          --brand: #2563ff;
+          --brand-hover: #1d4fd6;
+          --success: #0b7a55;
+          --warning: #a14a00;
+          --focus: #2563ff;
+        }
+        main {
+          background: #f7f9fc;
+        }
+      }
+      main {
+        --card-radius: 16px;
+      }
+      /* header: logo mark and a quiet title */
+      .brand-bar {
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 9px;
+        min-height: 40px;
+        padding: 4px 2px 6px;
+      }
+      .brand-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 9px;
+        background: linear-gradient(135deg, #2563ff, #6a3df0);
+        box-shadow: none;
+        font-size: 14px;
+      }
+      .brand-mark::after {
+        display: none;
+      }
+      .brand-copy strong {
+        font-size: 14.5px;
+        letter-spacing: -0.2px;
+      }
+      .brand-copy span {
+        margin-top: 0;
+        font-size: 10px;
+      }
+      /* layout: a column whose scroll area grows; the composer sits at the bottom */
+      body[data-auth="in"] .workspace {
+        gap: 8px;
+      }
+      .workspace > .context-chip {
+        order: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: color-mix(in srgb, var(--surface-muted) 70%, var(--surface-solid));
+        color: var(--ink);
+        font-size: 11.5px;
+      }
+      .workspace > .context-chip[hidden] {
+        display: none;
+      }
+      .workspace > .context-chip::before {
+        width: 8px;
+        height: 8px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 16%, transparent);
+        content: "";
+      }
+      .workspace > .chat-bar {
+        order: 1;
+        min-height: 40px;
+        padding: 4px;
+        border-radius: 12px;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+      }
+      .workspace > #noticed {
+        order: 2;
+      }
+      .workspace > .scroll-area {
+        order: 3;
+      }
+      .workspace > #starter-suggestions {
+        order: 4;
+      }
+      .workspace > .composer {
+        order: 5;
+      }
+      .workspace > .saved-footer {
+        order: 6;
+      }
+      .workspace > .workspace-nav {
+        order: 7;
+      }
+      /* quick-start suggestions become one row of chips above the input */
+      #starter-suggestions.quick-start {
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 6px;
+        padding: 0 1px 2px;
+        scrollbar-width: none;
+      }
+      #starter-suggestions.quick-start::-webkit-scrollbar {
+        display: none;
+      }
+      #starter-suggestions.quick-start .pill {
+        flex: 0 0 auto;
+        padding: 5px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      /* the composer: rounded box, focus ring, compact controls */
+      .composer {
+        padding: 9px 9px 7px 13px;
+        border: 1.5px solid var(--line);
+        border-radius: 18px;
+        background: var(--surface-solid);
+        box-shadow: 0 1px 2px rgb(15 27 45 / 6%), 0 8px 22px rgb(15 27 45 / 8%);
+      }
+      .composer:focus-within {
+        border-color: var(--brand);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 16%, transparent);
+      }
+      .composer textarea {
+        min-height: 44px;
+        max-height: 160px;
+        resize: none;
+        padding: 2px 0;
+        font-size: 13.5px;
+      }
+      .composer-bar {
+        flex-wrap: nowrap;
+        margin-top: 4px;
+        gap: 8px;
+      }
+      .mode-control {
+        flex: 1 1 auto;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .mode-control select {
+        flex: 0 1 auto;
+        max-width: 62%;
+        padding: 4px 24px 4px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background-color: color-mix(in srgb, var(--surface-muted) 80%, var(--surface-solid));
+        box-shadow: none;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      #smart-run {
+        flex: 0 0 auto;
+        min-width: 36px;
+        min-height: 36px;
+        padding: 0 16px;
+        border-radius: 999px;
+        font-weight: 700;
+      }
+      .more-tools {
+        margin-top: 2px;
+        font-size: 11px;
+      }
+      .more-tools summary {
+        padding: 2px 0;
+      }
+      /* cards: calmer edges */
+      #signin-card,
+      .card,
+      #ai-result.analysis-card {
+        border-radius: 16px;
+        box-shadow: 0 1px 2px rgb(15 27 45 / 5%);
+      }
+      /* agent: one line says what happened; the six checks sit behind Details */
+      .agent-checked {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 6px 0;
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .agent-checked[data-state="working"] {
+        width: fit-content;
+        padding: 5px 12px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface-muted) 85%, var(--surface-solid));
+        color: var(--muted);
+      }
+      .agent-checked[data-state="working"]::before {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--brand);
+        animation: agent-pulse 1.1s ease-in-out infinite;
+        content: "";
+      }
+      .agent-checked[data-state="ok"] {
+        color: var(--success);
+      }
+      .agent-checked[data-state="warn"] {
+        color: var(--warning);
+      }
+      @keyframes agent-pulse {
+        0%,
+        100% {
+          opacity: 0.45;
+          transform: scale(0.7);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.15);
+        }
+      }
+      .agent-checks-details {
+        margin: 4px 0 8px;
+        font-size: 12px;
+      }
+      .agent-checks-details > summary {
+        width: fit-content;
+        color: var(--muted);
+        cursor: pointer;
+        text-decoration: underline;
+      }
+      .agent-checks-details[open] > summary {
+        margin-bottom: 8px;
+      }
+      /* Apply / Discard / Undo: a dark bar pinned above the composer, only while a button shows */
+      .apply-dock {
+        bottom: 0;
+        margin: 10px 0 0;
+        padding: 8px 8px 8px 12px;
+        border: 0;
+        border-radius: 14px;
+        background: #0f1b2d;
+        box-shadow: 0 8px 22px rgb(15 27 45 / 22%);
+        color: #ffffff;
+      }
+      .apply-dock:not(:has(button:not([hidden]))) {
+        display: none;
+      }
+      .apply-dock .ghost {
+        border-color: rgb(255 255 255 / 32%);
+        background: transparent;
+        color: #ffffff;
+      }
+      .apply-dock .primary {
+        flex: 1 1 130px;
+        border-radius: 10px;
+      }
+      /* the saved-time line is a whisper, not a card */
+      .saved-footer {
+        padding: 0 8px;
+        border: 0;
+        background: transparent;
+        justify-content: center;
+        font-size: 10.5px;
+      }
+      /* bottom tabs: small pills */
+      .workspace-nav {
+        gap: 2px;
+        margin-top: 0;
+        padding: 2px;
+        border-color: transparent;
+        border-radius: 999px;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+      }
+      .workspace-nav button {
+        min-height: 28px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+      }
+      .workspace-nav button.active {
+        background: color-mix(in srgb, var(--brand) 12%, var(--surface-solid));
+        box-shadow: none;
+        color: var(--brand);
+      }
+      @media (prefers-color-scheme: dark) {
+        .composer {
+          background: var(--surface-solid);
+        }
+        .workspace > .context-chip {
+          background: var(--surface-muted);
+        }
+        .apply-dock {
+          border: 1px solid var(--line);
+          background: #0b1220;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .agent-checked[data-state="working"]::before {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -2425,7 +2738,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.04</p>
+          <p class="menu-version" id="build-id">Build 20261023.05</p>
         </div>
       </div>
 
@@ -2441,6 +2754,10 @@
       </section>
 
       <div class="workspace">
+        <p id="selection-chip" class="muted context-chip" aria-live="polite" hidden>
+          <span data-i18n="selection_using">Using:</span>
+          <span id="selection-text"></span>
+        </p>
         <div class="chat-bar" id="chat-bar" aria-label="Chat controls" data-i18n-aria-label="chat_controls">
           <button
             id="new-chat"
@@ -2474,10 +2791,6 @@
           <label class="sr-only" for="instruction" data-i18n="instruction_label"
             >Describe what to create</label
           >
-          <p id="selection-chip" class="muted" aria-live="polite" hidden>
-            <span data-i18n="selection_using">Using:</span>
-            <span id="selection-text"></span>
-          </p>
           <div id="dup-fix" hidden>
             <button id="dup-fix-btn" type="button" data-i18n="clean_first" class="ghost">
               Clean first, then run this
@@ -3197,6 +3510,9 @@
               <summary data-i18n="tech_details">Technical details</summary>
               <p id="agent-usage" class="muted"></p>
             </details>
+            <div id="agent-checked" class="agent-checked" hidden><span id="agent-checked-text"></span></div>
+            <details id="agent-checks-details" class="agent-checks-details">
+              <summary data-i18n="tech_details">Details</summary>
             <ol
               id="agent-timeline"
               class="agent-timeline"
@@ -3221,6 +3537,7 @@
               <div data-agent-role="safety"><strong data-i18n="role_safety">Safety reviewer</strong><span class="agent-role-status">pending</span></div>
               <div data-agent-role="verification"><strong data-i18n="role_verification">Verification</strong><span class="agent-role-status">pending</span></div>
             </div>
+            </details>
             <div id="agent-plan" hidden>
               <strong data-i18n="agent_plan">Plan</strong>
               <ol id="agent-plan-steps" class="details"></ol>

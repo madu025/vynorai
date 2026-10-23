@@ -5,6 +5,7 @@
  * new sheets are deleted, overwritten cells get their old formulas back, and an in-place edit of a
  * large range (sort, a big format) works on a hidden backup copy of the sheet made first.
  */
+import { percentMisfit } from "./formatGuard.js";
 import { boxAddress, clearPosition, parseBox } from "./chartPlacement.js";
 import {
   CALC_MAX_COLUMNS,
@@ -967,10 +968,26 @@ export async function applyAgentChanges(
             range.copyFrom(sheet.getRange(change.copyFrom), "Formats");
           if (change.clear) range.clear("Formats");
           if (change.style) range.style = change.style;
-          if (change.numberFormat !== undefined)
+          let skippedFormat = "";
+          if (change.numberFormat !== undefined) {
+            // A percent format over amounts would show 157400 as 15740000%: leave it off.
+            if (
+              String(change.numberFormat).includes("%") &&
+              cells <= SNAPSHOT_CELLS
+            ) {
+              range.load("values");
+              await context.sync();
+              if (
+                percentMisfit(change.numberFormat, range.values as unknown[][])
+              )
+                skippedFormat =
+                  "The percent format was not applied: these cells hold amounts, not fractions.";
+            }
             // One value applies to every cell, without building a huge array.
-            (range as { numberFormat: unknown }).numberFormat =
-              change.numberFormat;
+            if (!skippedFormat)
+              (range as { numberFormat: unknown }).numberFormat =
+                change.numberFormat;
+          }
           const format = range.format;
           if (change.bold !== undefined) format.font.bold = change.bold;
           if (change.italic !== undefined) format.font.italic = change.italic;
@@ -1033,7 +1050,9 @@ export async function applyAgentChanges(
           }
           if (change.autofit) format.autofitColumns();
           await context.sync();
-          return { formatted: cells };
+          return skippedFormat
+            ? { formatted: cells, note: skippedFormat }
+            : { formatted: cells };
         }
         throw new Error("unknown change");
       });

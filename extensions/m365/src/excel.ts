@@ -2683,7 +2683,9 @@ export function adaptForSampledRange(
     !specs.chart.pivotResult
   ) {
     // A chart and a PivotTable asked together: the chart draws the PivotTable Excel computes.
-    out.chart = { ...specs.chart, pivotResult: true };
+    // The PivotTable carries the grouping (aggregation, top N); the chart only draws its result.
+    const { aggregation: _a, topN: _t, lowest: _l, ...plain } = specs.chart;
+    out.chart = { ...plain, pivotResult: true };
     if (
       specs.pivot?.rows !== specs.chart.category ||
       specs.pivot?.values !== specs.chart.value

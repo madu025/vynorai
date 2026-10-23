@@ -84,4 +84,34 @@ export function changeGrouping(
     else if (change.topN !== undefined) holder.topN = change.topN;
     if (change.lowest !== undefined) holder.lowest = change.lowest;
   }
+  normalizeChartGrouping(specs);
+}
+
+/**
+ * Drops the chart settings the server rejects for the chart as it now is: nothing of aggregation,
+ * top N or lowest on a histogram, a waterfall or a chart of a PivotTable's result (the PivotTable
+ * carries them); no top N on a time-axis chart; no "lowest" without a top N.
+ */
+export function normalizeChartGrouping(specs: ExcelColumnSpecs): void {
+  const chart = specs.chart;
+  if (!chart) return;
+  if (
+    chart.pivotResult === true ||
+    chart.chartType === "histogram" ||
+    chart.chartType === "waterfall"
+  ) {
+    delete chart.aggregation;
+    delete chart.topN;
+    delete chart.lowest;
+    return;
+  }
+  if (
+    chart.chartType === "line" ||
+    chart.chartType === "area" ||
+    chart.chartType === "combo"
+  ) {
+    delete chart.topN;
+    delete chart.lowest;
+  }
+  if (chart.topN === undefined) delete chart.lowest;
 }

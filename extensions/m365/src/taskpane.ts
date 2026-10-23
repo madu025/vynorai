@@ -73,7 +73,12 @@ import {
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import { chooseInstructionRoute } from "./taskpaneRouting.js";
 import { createPreviewController } from "./taskpanePreviewControl.js";
-import { canGroup, changeGrouping, readGrouping } from "./previewGrouping.js";
+import {
+  canGroup,
+  changeGrouping,
+  normalizeChartGrouping,
+  readGrouping,
+} from "./previewGrouping.js";
 import { buildPreviewKpis } from "./previewKpis.js";
 import { canCancelPreview } from "./previewCancel.js";
 import {
@@ -4110,10 +4115,12 @@ tweakChartType?.addEventListener("change", (event) => {
   if (!event.isTrusted) return;
   if (!tweakChartType.value) return;
   replanWithTweak((specs) => {
-    if (specs.chart)
+    if (specs.chart) {
       specs.chart.chartType = tweakChartType.value as NonNullable<
         ExcelColumnSpecs["chart"]
       >["chartType"];
+      normalizeChartGrouping(specs);
+    }
   });
 });
 tweakAggregation?.addEventListener("change", (event) => {

@@ -78,7 +78,8 @@ test("a PivotTable and a chart of the raw rows stay consistent", () => {
   assert.equal(specs.pivot?.aggregation, "min");
   assert.equal(specs.pivot?.topN, 4);
   assert.equal(specs.chart?.aggregation, "min");
-  assert.equal(specs.chart?.topN, 4);
+  // A line chart has a time axis: the server rejects a top N there, so only the PivotTable keeps it.
+  assert.equal(specs.chart?.topN, undefined);
 });
 
 test("nothing changes when the plan has nothing to summarize", () => {
@@ -92,4 +93,21 @@ test("nothing changes when the plan has nothing to summarize", () => {
     chartType: "histogram",
   });
   assert.equal(readGrouping(specs), undefined);
+});
+
+import { normalizeChartGrouping } from "./previewGrouping.js";
+
+test("chart settings the server rejects are dropped for the chart as it now is", () => {
+  const waterfall: any = { chart: { category: 0, value: 1, chartType: "waterfall", topN: 3, lowest: true, aggregation: "average" } };
+  normalizeChartGrouping(waterfall);
+  assert.deepEqual(waterfall.chart, { category: 0, value: 1, chartType: "waterfall" });
+  const line: any = { chart: { category: 0, value: 1, chartType: "line", topN: 3, lowest: true, aggregation: "average" } };
+  normalizeChartGrouping(line);
+  assert.deepEqual(line.chart, { category: 0, value: 1, chartType: "line", aggregation: "average" });
+  const lowestOnly: any = { chart: { category: 0, value: 1, chartType: "column", lowest: true } };
+  normalizeChartGrouping(lowestOnly);
+  assert.equal(lowestOnly.chart.lowest, undefined);
+  const column: any = { chart: { category: 0, value: 1, chartType: "column", topN: 3, lowest: true } };
+  normalizeChartGrouping(column);
+  assert.equal(column.chart.topN, 3);
 });

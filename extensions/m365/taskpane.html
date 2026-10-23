@@ -3368,7 +3368,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.17</p>
+          <p class="menu-version" id="build-id">Build 20261023.18</p>
         </div>
       </div>
 
@@ -4427,13 +4427,26 @@
             status.textContent =
               "Add-in startup failed. Update Excel or use Excel for the web.";
         });
+        // The bundle is about 290 KB and is not cached (Cache-Control: no-store), so on a slow
+        // connection it can take well over five seconds. Say "still loading" first and only call
+        // it a failure after a long wait.
         window.setTimeout(function () {
           if (status && status.textContent === "Loading…") {
-            note("Task pane bundle did not initialize within five seconds.");
+            note("Task pane bundle is still loading after eight seconds.");
+            status.textContent = "Still loading… slow connection.";
+          }
+        }, 8000);
+        window.setTimeout(function () {
+          if (
+            status &&
+            (status.textContent === "Loading…" ||
+              status.textContent === "Still loading… slow connection.")
+          ) {
+            note("Task pane bundle did not initialize within forty seconds.");
             status.textContent =
               "Add-in scripts did not start. Close and reopen the task pane.";
           }
-        }, 5000);
+        }, 40000);
       })();
     </script>
     <script nomodule>
@@ -4446,6 +4459,8 @@
         function add(src, done) {
           var script = document.createElement("script");
           script.src = src;
+          // Download in parallel, run in the order added (config before the bundle).
+          script.async = false;
           script.onload = done;
           script.onerror = done;
           document.body.appendChild(script);
@@ -4453,9 +4468,8 @@
         add("./build-id.js?open=" + openingId, function () {
           var buildId = window.__VYNOR_M365_BUILD_ID__ || "dev";
           var suffix = encodeURIComponent(buildId);
-          add("./runtime-config.js?v=" + suffix, function () {
-            add("./dist/taskpane.bundle.js?v=" + suffix, function () {});
-          });
+          add("./runtime-config.js?v=" + suffix, function () {});
+          add("./dist/taskpane.bundle.js?v=" + suffix, function () {});
         });
       })();
     </script>

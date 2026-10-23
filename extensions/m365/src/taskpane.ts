@@ -71,6 +71,8 @@ import {
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import { chooseInstructionRoute } from "./taskpaneRouting.js";
 import { createPreviewController } from "./taskpanePreviewControl.js";
+import { canGroup, changeGrouping, readGrouping } from "./previewGrouping.js";
+import { buildPreviewKpis } from "./previewKpis.js";
 import {
   renderChatListView,
   renderConversationHistoryView,
@@ -3460,6 +3462,7 @@ function setupLayout() {
       void sheets;
       void label;
     }
+    renderPreviewKpis(actions, parsed);
     renderOutcomes(actions);
     configurePreviewTweaks(actions);
     resultCard.hidden = false;
@@ -3735,6 +3738,40 @@ function drawChart(chart: OutcomeChart): SVGElement {
   return svg;
 }
 
+/** Key figures (total, top group, rows; or checked, clean, to review) from the plan and the real data. */
+function renderPreviewKpis(actions: any[], parsed: any) {
+  const container = document.querySelector<HTMLElement>("#preview-kpis");
+  if (!container) return;
+  container.textContent = "";
+  const tiles = lastRange
+    ? buildPreviewKpis({
+        actions,
+        headers: lastRange.headers,
+        rows: lastRange.rows,
+        sample: parsed?.profile?.sample ?? lastSample,
+        normalized: Boolean(parsed?.normalization),
+        tr: (text) => localizeMessage(textLanguage(), text),
+      })
+    : [];
+  for (const tile of tiles) {
+    const box = document.createElement("div");
+    box.className = tile.warn ? "kpi warn" : "kpi";
+    if (tile.title) box.title = tile.title;
+    const label = document.createElement("small");
+    label.textContent = tile.label;
+    const value = document.createElement("strong");
+    value.textContent = tile.value;
+    box.append(label, value);
+    if (tile.sub) {
+      const sub = document.createElement("span");
+      sub.textContent = tile.sub;
+      box.append(sub);
+    }
+    container.append(box);
+  }
+  container.hidden = tiles.length === 0;
+}
+
 /** The first thing a person sees: what will exist afterwards, drawn from their own data. */
 function renderOutcomes(actions: any[]) {
   const container = document.querySelector<HTMLElement>("#outcomes");
@@ -3850,6 +3887,9 @@ function renderPendingPreviewSpecs(specs: ExcelColumnSpecs) {
           ...(specs.chart.showDataLabels
             ? { showDataLabels: true }
             : { showDataLabels: undefined }),
+          aggregation: specs.chart.aggregation,
+          topN: specs.chart.topN,
+          lowest: specs.chart.lowest,
         },
       };
     if (action.kind === "pivot-table" && specs.pivot)
@@ -3917,6 +3957,9 @@ function configurePreviewTweaks(actions: any[]) {
   if (!panel || !lastRange) return;
   const hasChart = actions.some((action) => action.kind === "chart");
   const hasPivot = actions.some((action) => action.kind === "pivot-table");
+  // Summarize by, Top-N and sort order: a PivotTable, or a chart that groups its own rows.
+  const canGroupRows = canGroup(previewSpecs);
+  const grouping = readGrouping(previewSpecs);
   const supportsTotals = Boolean(previewSpecs?.summary || previewSpecs?.format);
   panel.hidden = !hasChart && !hasPivot && !supportsTotals;
   if (panel.hidden) return;
@@ -3945,22 +3988,23 @@ function configurePreviewTweaks(actions: any[]) {
       value,
       label: value[0].toUpperCase() + value.slice(1),
     })),
-    pivot?.aggregation ?? "sum",
+    grouping?.aggregation ?? "sum",
   );
   setTweakOptions(tweakCategory, columns, chart?.category ?? pivot?.rows ?? 0);
   setTweakOptions(tweakValue, columns, chart?.value ?? pivot?.values ?? 0);
   if (tweakChartType) tweakChartType.closest("label")!.hidden = !hasChart;
-  if (tweakAggregation) tweakAggregation.closest("label")!.hidden = !hasPivot;
+  if (tweakAggregation)
+    tweakAggregation.closest("label")!.hidden = !canGroupRows;
   if (tweakCategory)
     tweakCategory.closest("label")!.hidden = !hasChart && !hasPivot;
   if (tweakValue) tweakValue.closest("label")!.hidden = !hasChart && !hasPivot;
   if (tweakTopN) {
-    tweakTopN.closest("label")!.hidden = !hasPivot;
-    tweakTopN.value = pivot?.topN ? String(pivot.topN) : "";
+    tweakTopN.closest("label")!.hidden = !canGroupRows;
+    tweakTopN.value = grouping?.topN ? String(grouping.topN) : "";
   }
   if (tweakRankDirection) {
-    tweakRankDirection.closest("label")!.hidden = !hasPivot;
-    tweakRankDirection.value = pivot?.lowest ? "bottom" : "top";
+    tweakRankDirection.closest("label")!.hidden = !canGroupRows;
+    tweakRankDirection.value = grouping?.lowest ? "bottom" : "top";
   }
   if (tweakDataLabels) {
     tweakDataLabels.closest("label")!.hidden = !hasChart;
@@ -4009,10 +4053,11 @@ tweakAggregation?.addEventListener("change", (event) => {
   if (!event.isTrusted) return;
   if (!tweakAggregation.value) return;
   replanWithTweak((specs) => {
-    if (specs.pivot)
-      specs.pivot.aggregation = tweakAggregation.value as NonNullable<
+    changeGrouping(specs, {
+      aggregation: tweakAggregation.value as NonNullable<
         ExcelColumnSpecs["pivot"]
-      >["aggregation"];
+      >["aggregation"],
+    });
   });
 });
 tweakCategory?.addEventListener("change", (event) => {
@@ -4034,16 +4079,16 @@ tweakValue?.addEventListener("change", (event) => {
 tweakTopN?.addEventListener("change", (event) => {
   if (!event.isTrusted) return;
   replanWithTweak((specs) => {
-    if (!specs.pivot) return;
     const value = Number(tweakTopN.value);
-    if (Number.isInteger(value) && value > 0) specs.pivot.topN = value;
-    else delete specs.pivot.topN;
+    changeGrouping(specs, {
+      topN: Number.isInteger(value) && value > 0 ? value : null,
+    });
   });
 });
 tweakRankDirection?.addEventListener("change", (event) => {
   if (!event.isTrusted) return;
   replanWithTweak((specs) => {
-    if (specs.pivot) specs.pivot.lowest = tweakRankDirection.value === "bottom";
+    changeGrouping(specs, { lowest: tweakRankDirection.value === "bottom" });
   });
 });
 tweakDataLabels?.addEventListener("change", (event) => {

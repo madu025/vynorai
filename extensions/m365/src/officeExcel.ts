@@ -73,6 +73,7 @@ export type ExcelActionStatus =
   | "skipped_unsupported";
 
 import { plannedSheetName } from "./outcome.js";
+import { chartNeedsGrouping, groupChartRows } from "./chartGroups.js";
 import { responseLanguage, type Language } from "./i18n.js";
 import { workbookText } from "./workbookText.js";
 import {
@@ -2042,39 +2043,43 @@ export async function applyApprovedExcelPlan(
                 let extraIndexes: number[] = spec.extraValueIndexes ?? [];
                 let secondary: number[] = spec.secondaryIndexes ?? [];
                 const sourceData = splitHeader(await readSourceValues());
-                const seenCategories = sourceData.rows.map((row: any[]) =>
-                  String(row[categoryIndex] ?? ""),
-                );
-                const repeats =
-                  new Set(seenCategories).size < seenCategories.length &&
-                  !/date|day|week|month|quarter|year|period|time/i.test(
-                    String(spec.categoryColumn),
-                  );
+                const groupOptions = {
+                  aggregation: spec.aggregation,
+                  topN: spec.topN,
+                  lowest: spec.lowest,
+                };
                 if (
                   spec.chartType !== "histogram" &&
-                  (options.aggregateCharts || repeats)
+                  chartNeedsGrouping(
+                    sourceData.rows,
+                    categoryIndex,
+                    String(spec.categoryColumn),
+                    groupOptions,
+                    Boolean(options.aggregateCharts),
+                  )
                 ) {
-                  // One summed row per category, written next to the chart, so a chart shows the
-                  // same totals a pivot would instead of one bar per raw row.
+                  // One aggregated row per category (a sum unless the plan says otherwise), written
+                  // next to the chart, so a chart shows the same figures a pivot would instead of
+                  // one bar per raw row.
                   try {
                     const { headers, rows } = sourceData;
                     const wanted = [valueIndex, ...extraIndexes];
-                    const totals = new Map<string, number[]>();
-                    for (const row of rows) {
-                      const key = String(row[categoryIndex] ?? "");
-                      const sums = totals.get(key) ?? wanted.map(() => 0);
-                      wanted.forEach((index, at) => {
-                        const n = Number(row[index]);
-                        if (Number.isFinite(n)) sums[at] += n;
-                      });
-                      totals.set(key, sums);
-                    }
+                    const aggregation = spec.aggregation ?? "sum";
+                    const label = (index: number) =>
+                      aggregation === "sum"
+                        ? headers[index]
+                        : words.aggregateOf(
+                            words.aggregate(aggregation),
+                            String(headers[index]),
+                          );
                     const out: (string | number)[][] = [
-                      [
-                        headers[categoryIndex],
-                        ...wanted.map((i) => headers[i]),
-                      ],
-                      ...[...totals].map(([key, sums]) => [key, ...sums]),
+                      [headers[categoryIndex], ...wanted.map(label)],
+                      ...groupChartRows(
+                        rows,
+                        categoryIndex,
+                        wanted,
+                        groupOptions,
+                      ).map(({ key, values }) => [key, ...values]),
                     ];
                     const block = sheet.getRangeByIndexes(
                       19,
@@ -2117,10 +2122,19 @@ export async function applyApprovedExcelPlan(
                 chart.title.text =
                   spec.chartType === "histogram"
                     ? words.distribution(spec.valueColumn)
-                    : words.chartBy(
-                        [spec.valueColumn, ...(spec.extraValueColumns ?? [])],
-                        spec.categoryColumn,
-                      );
+                    : spec.aggregation
+                      ? words.aggregateOfBy(
+                          words.aggregate(spec.aggregation),
+                          [
+                            spec.valueColumn,
+                            ...(spec.extraValueColumns ?? []),
+                          ].join(", "),
+                          spec.categoryColumn,
+                        )
+                      : words.chartBy(
+                          [spec.valueColumn, ...(spec.extraValueColumns ?? [])],
+                          spec.categoryColumn,
+                        );
                 if (spec.showDataLabels) {
                   try {
                     chart.dataLabels.showValue = true;

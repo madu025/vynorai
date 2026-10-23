@@ -484,6 +484,10 @@ export interface QualityReport {
   headerRow: number;
   /** The record key (transaction, invoice or order number) the duplicate check used, when one was found. */
   businessKey?: BusinessKey;
+  /** How many problems the report lists (0 when it says nothing was found). */
+  issueCount: number;
+  /** How many columns have at least one problem of their own (blanks, mixed types, spaces, outliers). */
+  columnsWithFindings: number;
 }
 
 function quantile(sorted: number[], q: number): number {
@@ -521,7 +525,9 @@ export function buildQualityReport(
     if (count > 1) duplicateRows += 1;
   }
   const findings: string[] = [];
+  let columnsWithFindings = 0;
   const perColumn = headers.map((header, column) => {
+    const findingsBefore = findings.length;
     const cells = rows.map((row) => row[column]);
     const filled = cells.filter((cell) => !isBlank(cell));
     const blanks = cells.length - filled.length;
@@ -588,6 +594,7 @@ export function buildQualityReport(
           outliers +
           " unusual value(s) outside the normal range.",
       );
+    if (findings.length > findingsBefore) columnsWithFindings += 1;
     return [
       header,
       type,
@@ -620,6 +627,7 @@ export function buildQualityReport(
   }
   if (duplicateRows > 0)
     findings.unshift(duplicateRows + " duplicate row(s) found.");
+  const issueCount = findings.length;
   if (findings.length === 0)
     findings.push("No problems found in the selected data.");
   const values: Array<Array<string | number>> = [
@@ -662,6 +670,8 @@ export function buildQualityReport(
     values,
     findings,
     headerRow: 7,
+    issueCount,
+    columnsWithFindings,
     ...(businessKey ? { businessKey } : {}),
   };
 }

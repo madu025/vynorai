@@ -132,6 +132,11 @@ const excelPlanSchema = z.object({
             .optional(),
           showDataLabels: z.boolean().optional(),
           pivotResult: z.boolean().optional(),
+          aggregation: z
+            .enum(["sum", "count", "average", "min", "max"])
+            .optional(),
+          topN: z.number().int().min(1).max(100).optional(),
+          lowest: z.boolean().optional(),
         })
         .strict()
         .optional(),

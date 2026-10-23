@@ -487,3 +487,67 @@ test("a Sinhala request and language reach the model as data and the call succee
   assert.match(system, /Sinhala/);
   assert.match(system, /කලාප අනුව/);
 });
+
+async function postPlan(chart: Record<string, unknown>) {
+  const response = await fetch(`${baseUrl}/v1/m365/excel/plan`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${token()}`,
+      "x-correlation-id": "corr-test-0002",
+    },
+    body: JSON.stringify({
+      workbookId: "book",
+      worksheetName: "Sales",
+      address: "Sales!A1:B5",
+      values: [
+        ["Region", "Net Amount"],
+        ["West", 100],
+        ["East", 40],
+        ["West", 50],
+        ["South", 10],
+      ],
+      actions: ["chart"],
+      specs: {
+        chart: { category: 0, value: 1, chartType: "column", ...chart },
+      },
+    }),
+  });
+  return { status: response.status, json: (await response.json()) as any };
+}
+
+test("the plan route carries a chart's Summarize by and Top-N into the plan", async () => {
+  // An earlier test in this file used up the monthly credits on purpose.
+  await dbm.dbRun(
+    "UPDATE monthly_usage SET used_tokens = 0 WHERE user_id = ?",
+    ["user-analysis"],
+  );
+  const { status, json } = await postPlan({
+    aggregation: "average",
+    topN: 2,
+    lowest: true,
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+  const spec = json.actions[0].spec;
+  assert.equal(spec.aggregation, "average");
+  assert.equal(spec.topN, 2);
+  assert.equal(spec.lowest, true);
+  // The default stays out of the plan, so older plans are unchanged.
+  const plain = await postPlan({ aggregation: "sum" });
+  assert.equal(plain.status, 200, JSON.stringify(plain.json));
+  assert.equal(plain.json.actions[0].spec.aggregation, undefined);
+  assert.equal(plain.json.actions[0].spec.topN, undefined);
+});
+
+test("the plan route refuses a chart aggregation or Top-N it cannot honour", async () => {
+  for (const chart of [
+    { topN: 0 },
+    { topN: 101 },
+    { topN: 1.5 },
+    { aggregation: "median" },
+    { lowest: "yes" },
+  ]) {
+    const { status } = await postPlan(chart);
+    assert.equal(status, 400, JSON.stringify(chart));
+  }
+});

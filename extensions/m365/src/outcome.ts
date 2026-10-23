@@ -5,6 +5,7 @@
  * the person's own selected data. Nothing is simulated or invented.
  */
 
+import { chartNeedsGrouping, groupChartRows } from "./chartGroups.js";
 import { UsageAccumulator } from "./usageDashboard.js";
 import { parseExpression } from "./expression.js";
 import { previewExpressionValue } from "./previewValue.js";
@@ -316,29 +317,67 @@ export function buildOutcomes(
       const categoryIndex = Number.isInteger(spec.categoryIndex)
         ? spec.categoryIndex
         : 0;
-      const slice = rows.slice(0, MAX_POINTS);
       const isHistogram = spec.chartType === "histogram";
+      // A chart drawing a PivotTable shows that PivotTable's summary; a plain chart its own.
+      const pivotSpec = spec.pivotSourceName
+        ? actions.find((other) => other.kind === "pivot-table")?.spec
+        : undefined;
+      const groupOptions = {
+        aggregation: (pivotSpec ?? spec).aggregation,
+        topN: (pivotSpec ?? spec).topN,
+        lowest: (pivotSpec ?? spec).lowest,
+      };
+      // The written chart has one point per category when the person asked for a summary or a
+      // category repeats; the preview groups the same way instead of drawing the first raw rows.
+      const grouped =
+        !isHistogram &&
+        (Boolean(pivotSpec) ||
+          chartNeedsGrouping(
+            rows,
+            categoryIndex,
+            String(headers[categoryIndex] ?? spec.categoryColumn ?? ""),
+            groupOptions,
+          ))
+          ? groupChartRows(
+              rows,
+              categoryIndex,
+              valueIndexes,
+              groupOptions,
+            ).slice(0, MAX_POINTS)
+          : undefined;
+      const slice = rows.slice(0, MAX_POINTS);
       item.chart = {
         type: String(spec.chartType ?? "column"),
-        categories: isHistogram
-          ? slice.map((_, index) => String(index + 1))
-          : slice.map((row) => cell(row[categoryIndex])),
-        series: valueIndexes.map((index: number) => ({
+        categories: grouped
+          ? grouped.map((group) => cell(group.key))
+          : isHistogram
+            ? slice.map((_, index) => String(index + 1))
+            : slice.map((row) => cell(row[categoryIndex])),
+        series: valueIndexes.map((index: number, at: number) => ({
           name: String(headers[index] ?? `Column ${index + 1}`),
-          values: slice.map((row) => numeric(row[index])),
+          values: grouped
+            ? grouped.map((group) => group.values[at])
+            : slice.map((row) => numeric(row[index])),
         })),
         ...(spec.showDataLabels ? { showDataLabels: true } : {}),
       };
       const names = item.chart.series.map((entry) => entry.name).join(", ");
       const by = headers[categoryIndex] ?? "";
+      // "Average Net Amount" instead of "Net Amount" when the plan summarizes by something else.
+      const summaryNames =
+        grouped &&
+        groupOptions.aggregation &&
+        groupOptions.aggregation !== "sum"
+          ? `${agg(groupOptions.aggregation)} ${names}`
+          : names;
       item.title =
         language === "si"
-          ? `${kindTitle("chart", language)}: ${names} — ${by} අනුව`
+          ? `${kindTitle("chart", language)}: ${summaryNames} — ${by} අනුව`
           : language === "ta"
-            ? `${kindTitle("chart", language)}: ${names} — ${by} வாரியாக`
+            ? `${kindTitle("chart", language)}: ${summaryNames} — ${by} வாரியாக`
             : isHistogram
               ? `Histogram preview: ${names}`
-              : `${item.chart.type[0].toUpperCase()}${item.chart.type.slice(1)} chart: ${names} by ${by}`;
+              : `${item.chart.type[0].toUpperCase()}${item.chart.type.slice(1)} chart: ${summaryNames} by ${by}`;
       item.details.push(
         say(
           `Compares ${names} for each ${by}.`,
@@ -346,6 +385,14 @@ export function buildOutcomes(
           `ஒவ்வொரு ${by} க்கும் ${names} ஐ ஒப்பிடும்.`,
         ),
       );
+      if (grouped && groupOptions.topN)
+        item.details.push(
+          say(
+            `Shows only the ${groupOptions.topN} ${groupOptions.lowest ? "smallest" : "largest"} ${by} values.`,
+            `${by} අගයන් අතරින් ${groupOptions.lowest ? "කුඩාම" : "විශාලතම"} ${groupOptions.topN} පමණක් පෙන්වයි.`,
+            `${by} மதிப்புகளில் ${groupOptions.lowest ? "மிகச் சிறிய" : "மிகப் பெரிய"} ${groupOptions.topN} மட்டும் காட்டப்படும்.`,
+          ),
+        );
       if (isHistogram)
         item.details.push(
           "Shows the selected numeric values; Excel will group them into histogram bins when applied.",

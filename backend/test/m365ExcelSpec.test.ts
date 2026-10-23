@@ -71,6 +71,94 @@ test("server and add-in preserve explicit chart data-label intent", () => {
   assert.equal(server.actions[0].spec.showDataLabels, true);
 });
 
+test("server and add-in agree on a chart's Summarize by and Top-N", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "bar" as const,
+      aggregation: "average" as const,
+      topN: 2,
+      lowest: true,
+    },
+  };
+  const local = createExcelPreviewPlan(input as any, ["chart"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["chart"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec.aggregation, "average");
+  assert.equal(server.actions[0].spec.topN, 2);
+  assert.equal(server.actions[0].spec.lowest, true);
+  // The default aggregation stays out of the plan; lowest needs a top N.
+  const plain = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "bar" as const,
+      aggregation: "sum" as const,
+      lowest: true,
+    },
+  };
+  const plainServer = createServerExcelPreviewPlan(
+    input,
+    ["chart"],
+    500,
+    plain,
+  );
+  assert.equal(plainServer.actions[0].spec.aggregation, undefined);
+  assert.equal(plainServer.actions[0].spec.lowest, undefined);
+  assert.equal(
+    excelPlansMatch(
+      createExcelPreviewPlan(input as any, ["chart"], 500, plain),
+      plainServer,
+    ),
+    true,
+  );
+});
+
+test("server and add-in both refuse a chart Top-N or aggregation out of range", () => {
+  for (const extra of [
+    { topN: 0 },
+    { topN: 101 },
+    { topN: 2.5 },
+    { aggregation: "median" },
+  ]) {
+    const specs = {
+      chart: { category: 1, value: 2, chartType: "column", ...extra },
+    } as any;
+    assert.throws(
+      () => createExcelPreviewPlan(input as any, ["chart"], 500, specs),
+      /chart/i,
+      JSON.stringify(extra),
+    );
+    assert.throws(
+      () => createServerExcelPreviewPlan(input, ["chart"], 500, specs),
+      /chart/i,
+      JSON.stringify(extra),
+    );
+  }
+});
+
+test("a chart that draws a PivotTable takes the PivotTable's summary on both sides", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "column" as const,
+      pivotResult: true,
+      aggregation: "max" as const,
+      topN: 1,
+    },
+    pivot: { rows: 1, values: 2, aggregation: "average" as const, topN: 2 },
+  };
+  const actions = ["chart", "pivot-table"] as const;
+  const local = createExcelPreviewPlan(input as any, [...actions], 500, specs);
+  const server = createServerExcelPreviewPlan(input, [...actions], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  const chart = server.actions.find((action) => action.kind === "chart");
+  assert.equal(chart?.spec.aggregation, undefined);
+  assert.equal(chart?.spec.topN, undefined);
+});
+
 test("server and add-in preserve explicit PivotTable-result chart intent", () => {
   const specs = {
     chart: {

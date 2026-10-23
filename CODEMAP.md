@@ -50,6 +50,19 @@ monthly band table, net pay and employer cost, plus a VAT and SSCL invoice helpe
 ETF, APIT, VAT and SSCL rates with their effective dates and sources, `reviewed` false until an accountant
 checks them). The task pane offers it from the request or the Workbook settings button; the
 `payroll-*` benchmark scenarios check it.
+The preview card's key figures and summary controls: `extensions/m365/src/previewKpis.ts` (pure: up to three
+tiles from the plan and the selected rows, never invented: total or average of the measure, top group with its
+share, row count; for a quality report columns checked, columns clean and findings, from `buildQualityReport`;
+a sampled very large range shows only the real row count; `renderPreviewKpis` in `taskpane.ts` draws them into
+`#preview-kpis`), `extensions/m365/src/chartGroups.ts` (pure: one aggregated row per category with sum, count,
+average, min or max and an optional top or bottom N; used by the chart writer in `officeExcel.ts` and by the
+preview in `outcome.ts`, so the approved picture is built like the written chart) and
+`extensions/m365/src/previewGrouping.ts` (which spec the Summarize by, Top-N and Sort order controls change:
+the PivotTable, and a plain chart through `chart.aggregation`, `chart.topN` and `chart.lowest`, mirrored in
+`backend/src/services/m365ExcelPlan.ts` and the `/v1/m365/excel/plan` schema; histograms, waterfalls and
+PivotTable-result charts do not offer them). Tests: `previewKpis.test.ts`, `chartGroups.test.ts`,
+`previewGrouping.test.ts`, `previewChartOutcome.test.ts`, the chart summary tests in `officeExcel.test.ts` and
+the parity tests in `backend/test/m365ExcelSpec.test.ts`.
 
 VynorAI is a multi-tier AI coding platform: an IDE extension (VS Code, Antigravity, Cursor, Windsurf, JetBrains, CLI) backed by a metered cloud proxy. It provides cost-optimized frontier models (DeepSeek V4.1 Flash by default), Sri Lankan payments (PayHere, LKR), a zero-token deterministic Golden Vault engine, with request tiers picked by an in-process classifier. Background jobs (conversation compaction) run on DeepSeek Flash or, when configured, a GPU server (`backgroundLlm.ts`).
 

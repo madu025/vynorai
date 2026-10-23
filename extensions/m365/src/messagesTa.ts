@@ -316,6 +316,23 @@ const EXACT: Record<string, string> = {
   Fix: "சரிசெய்",
   Review: "மதிப்பாய்வு",
   Look: "பார்",
+  // Key figures at the top of the preview card (previewKpis.ts).
+  Total: "மொத்தம்",
+  Average: "சராசரி",
+  Count: "எண்ணிக்கை",
+  Smallest: "மிகச் சிறியது",
+  Largest: "மிகப் பெரியது",
+  "Top group": "முதன்மைக் குழு",
+  "Lowest group": "குறைந்த குழு",
+  "of total": "மொத்தத்தில்",
+  Rows: "வரிசைகள்",
+  groups: "குழுக்கள்",
+  "(blank)": "(வெற்று)",
+  Checked: "சரிபார்த்தவை",
+  Clean: "சுத்தமானவை",
+  "To review": "மதிப்பாய்வுக்கு",
+  columns: "நெடுவரிசைகள்",
+  findings: "கண்டறிதல்கள்",
 };
 
 /** The second half of a team sentence from describeReview. */

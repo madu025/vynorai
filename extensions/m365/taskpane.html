@@ -860,6 +860,62 @@
         color: var(--muted);
         font-size: 10px;
       }
+      /* Key figures worked out from the plan and the selected data (previewKpis.ts). In the
+         narrow pane each figure is one row (label left, value right); a wide pane shows three tiles. */
+      .kpis {
+        display: grid;
+        gap: 5px;
+        margin-bottom: 9px;
+      }
+      .kpi {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+        column-gap: 8px;
+        align-items: center;
+        min-width: 0;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: var(--surface-muted);
+      }
+      .kpi small,
+      .kpi strong,
+      .kpi span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .kpi small,
+      .kpi span {
+        grid-column: 1;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.25;
+      }
+      .kpi strong {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        font-size: 13px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .kpi.warn strong {
+        color: var(--warning);
+      }
+      @media (min-width: 420px) {
+        .kpis {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .kpi {
+          display: block;
+        }
+        .kpi small,
+        .kpi strong,
+        .kpi span {
+          display: block;
+        }
+        .kpi strong {
+          text-align: left;
+        }
+      }
       .preview-warnings {
         margin: 0 0 9px;
         padding: 7px 7px 7px 25px;
@@ -2520,6 +2576,13 @@
               data-i18n-aria-label="preview_impact"
             ></div>
             <ul id="preview-warnings" class="preview-warnings" hidden></ul>
+            <div
+              id="preview-kpis"
+              class="kpis"
+              hidden
+              aria-label="Key figures"
+              data-i18n-aria-label="preview_kpis"
+            ></div>
             <div
               id="outcomes"
               aria-label="What will be created"

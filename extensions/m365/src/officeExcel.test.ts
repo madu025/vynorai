@@ -47,6 +47,12 @@ function fakeWorkbook(
     address: string;
     values: unknown;
   }> = [];
+  /** Values written with getRangeByIndexes (the chart summary block), with their first row. */
+  const blockWrites: Array<{
+    sheet: string;
+    row: number;
+    values: unknown[][];
+  }> = [];
   const sheets = new Map<string, any>();
   const tables = new Set<string>();
   const pivots = new Set<string>();
@@ -173,6 +179,7 @@ function fakeWorkbook(
           set(object: any, key, value) {
             if (key === "values") {
               calls.push(`write ${name}!A1 normalized`);
+              blockWrites.push({ sheet: name, row: _row, values: value });
               object.values = value;
               return true;
             }
@@ -340,6 +347,7 @@ function fakeWorkbook(
   return {
     calls,
     formulaWrites,
+    blockWrites,
     setCells: (next: unknown[][]) => (cells = next),
     addSheet: makeSheet,
     runtime: {
@@ -1556,4 +1564,144 @@ test("PivotTable fields are found when Excel spells the header with other case o
   });
   assert.ok(excel.calls.includes("pivot.row Region"), excel.calls.join("\n"));
   assert.ok(excel.calls.includes("pivot.value Net Sales"));
+});
+
+const repeatingCells = [
+  ["region", "amount"],
+  ["LK", 10],
+  ["IN", 20],
+  ["LK", 30],
+  ["US", 5],
+  ["IN", 40],
+];
+
+async function chartBlock(
+  specs: Record<string, unknown>,
+  cells: unknown[][] = repeatingCells,
+) {
+  const excel = fakeWorkbook(cells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["chart"], 500, specs as any);
+  const report = await applyApprovedExcelPlan(
+    excel.runtime,
+    plan,
+    true,
+    "approval",
+    { expectedSourceFingerprint: plan.sourceFingerprint },
+  );
+  assert.equal(report.results[0].status, "created");
+  return { excel, plan, block: excel.blockWrites.at(-1) };
+}
+
+test("a chart of repeating categories is written as one summed row per category", async () => {
+  const { block } = await chartBlock({
+    chart: { category: 0, value: 1, chartType: "column" },
+  });
+  assert.deepEqual(block?.values, [
+    ["region", "amount"],
+    ["LK", 40],
+    ["IN", 60],
+    ["US", 5],
+  ]);
+});
+
+test("a chart with an average and a top 2 writes only the two highest averages", async () => {
+  const { block, plan } = await chartBlock({
+    chart: {
+      category: 0,
+      value: 1,
+      chartType: "column",
+      aggregation: "average",
+      topN: 2,
+    },
+  });
+  assert.equal(plan.actions[0].spec?.aggregation, "average");
+  assert.equal(plan.actions[0].spec?.topN, 2);
+  assert.deepEqual(block?.values, [
+    ["region", "Average of amount"],
+    ["IN", 30],
+    ["LK", 20],
+  ]);
+});
+
+test("a chart with the smallest 1 category keeps the lowest total", async () => {
+  const { block } = await chartBlock({
+    chart: { category: 0, value: 1, chartType: "bar", topN: 1, lowest: true },
+  });
+  assert.deepEqual(block?.values, [
+    ["region", "amount"],
+    ["US", 5],
+  ]);
+});
+
+test("a chart whose categories do not repeat is still summarized when a top N is asked for", async () => {
+  const { block } = await chartBlock(
+    { chart: { category: 0, value: 1, chartType: "column", topN: 2 } },
+    [
+      ["region", "amount"],
+      ["A", 1],
+      ["B", 9],
+      ["C", 5],
+    ],
+  );
+  assert.deepEqual(block?.values, [
+    ["region", "amount"],
+    ["B", 9],
+    ["C", 5],
+  ]);
+});
+
+test("a chart that draws a PivotTable ignores its own aggregation and top N", async () => {
+  const excel = fakeWorkbook(repeatingCells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const plan = createExcelPreviewPlan(input, ["chart", "pivot-table"], 500, {
+    chart: {
+      category: 0,
+      value: 1,
+      chartType: "column",
+      pivotResult: true,
+      aggregation: "average",
+      topN: 1,
+    },
+    pivot: { rows: 0, values: 1, aggregation: "average", topN: 2 },
+  });
+  const chart = plan.actions.find((action) => action.kind === "chart");
+  assert.equal(chart?.spec?.aggregation, undefined);
+  assert.equal(chart?.spec?.topN, undefined);
+  const pivot = plan.actions.find((action) => action.kind === "pivot-table");
+  assert.equal(pivot?.spec?.aggregation, "average");
+  assert.equal(pivot?.spec?.topN, 2);
+});
+
+test("a chart aggregation or top N the plan cannot honour is refused", async () => {
+  const excel = fakeWorkbook(repeatingCells.map((row) => [...row]));
+  const input = await inspectSelectedExcelRange(excel.runtime, "book-1");
+  const make = (chart: Record<string, unknown>) => () =>
+    createExcelPreviewPlan(input, ["chart"], 500, {
+      chart: { category: 0, value: 1, chartType: "column", ...chart },
+    } as any);
+  assert.throws(make({ topN: 0 }), /top N/);
+  assert.throws(make({ topN: 101 }), /top N/);
+  assert.throws(make({ topN: 1.5 }), /top N/);
+  assert.throws(make({ aggregation: "median" }), /aggregation/);
+  assert.doesNotThrow(make({ topN: 100, aggregation: "max" }));
+});
+
+test("a sampled very large range turns a chart summary into the PivotTable's own", () => {
+  const adapted = adaptForSampledRange(["chart"], {
+    chart: {
+      category: 0,
+      value: 1,
+      chartType: "column",
+      aggregation: "average",
+      topN: 3,
+      lowest: true,
+    },
+  });
+  assert.equal(adapted.specs.pivot?.aggregation, "average");
+  assert.equal(adapted.specs.pivot?.topN, 3);
+  assert.equal(adapted.specs.pivot?.lowest, true);
+  assert.equal(adapted.specs.chart?.pivotResult, true);
+  assert.equal(adapted.specs.chart?.aggregation, undefined);
+  assert.equal(adapted.specs.chart?.topN, undefined);
 });

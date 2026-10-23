@@ -249,6 +249,11 @@ export interface ExcelColumnSpecs {
     extraValues?: number[];
     showDataLabels?: boolean;
     pivotResult?: boolean;
+    /** How each category's rows are combined (default sum). Ignored when the chart draws a PivotTable. */
+    aggregation?: ExcelAggregation;
+    /** Draw only the N largest categories (the N smallest with `lowest`). */
+    topN?: number;
+    lowest?: boolean;
   };
   pivot?: {
     rows: number;
@@ -748,6 +753,22 @@ function resolveColumnSpecs(
             );
           })
         : [];
+    const { aggregation: chartAggregation, topN: chartTopN } = specs.chart;
+    if (
+      chartAggregation !== undefined &&
+      !["sum", "count", "average", "min", "max"].includes(chartAggregation)
+    )
+      fail("EXCEL_SPEC_INVALID", "Choose a supported chart aggregation.");
+    if (
+      chartTopN !== undefined &&
+      (!Number.isInteger(chartTopN) || chartTopN < 1 || chartTopN > 100)
+    )
+      fail("EXCEL_SPEC_INVALID", "A chart top N must be between 1 and 100.");
+    // A chart that draws a PivotTable takes the PivotTable's own aggregation and top N.
+    const chartGrouping =
+      specs.chart.pivotResult ||
+      chartType === "histogram" ||
+      chartType === "waterfall";
     resolved.chart = {
       categoryColumn: headers[category],
       categoryIndex: category,
@@ -755,6 +776,15 @@ function resolveColumnSpecs(
       valueIndex: value,
       chartType,
       ...(specs.chart.showDataLabels ? { showDataLabels: true } : {}),
+      ...(!chartGrouping && chartAggregation && chartAggregation !== "sum"
+        ? { aggregation: chartAggregation }
+        : {}),
+      ...(!chartGrouping && chartTopN !== undefined
+        ? {
+            topN: chartTopN,
+            ...(specs.chart.lowest === true ? { lowest: true } : {}),
+          }
+        : {}),
       ...(extra.length
         ? {
             extraValueColumns: extra.map((index) => headers[index]),
@@ -2631,11 +2661,15 @@ export function adaptForSampledRange(
     specs.chart.chartType !== "waterfall"
   ) {
     next.add("pivot-table");
-    out.chart = { ...specs.chart, pivotResult: true };
+    const { aggregation, topN, lowest, ...plainChart } = specs.chart;
+    out.chart = { ...plainChart, pivotResult: true };
     out.pivot = {
       rows: specs.chart.category,
       values: specs.chart.value,
-      aggregation: "sum",
+      aggregation: aggregation ?? "sum",
+      ...(topN !== undefined
+        ? { topN, ...(lowest ? { lowest: true } : {}) }
+        : {}),
       ...(specs.chart.extraValues?.length
         ? { extraValues: specs.chart.extraValues.slice(0, 3) }
         : {}),

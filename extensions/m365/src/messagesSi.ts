@@ -304,6 +304,23 @@ const EXACT: Record<string, string> = {
   Fix: "හදන්න",
   Review: "බලන්න",
   Look: "බලන්න",
+  // Key figures at the top of the preview card (previewKpis.ts).
+  Total: "එකතුව",
+  Average: "සාමාන්‍යය",
+  Count: "ගණන",
+  Smallest: "කුඩාම",
+  Largest: "විශාලතම",
+  "Top group": "ඉහළම කාණ්ඩය",
+  "Lowest group": "පහළම කාණ්ඩය",
+  "of total": "මුළුවෙන්",
+  Rows: "පේළි",
+  groups: "කාණ්ඩ",
+  "(blank)": "(හිස්)",
+  Checked: "පරීක්ෂා කළ",
+  Clean: "පිරිසිදු",
+  "To review": "සමාලෝචනයට",
+  columns: "තීරු",
+  findings: "සොයාගැනීම්",
 };
 
 /** The second half of a team sentence from describeReview. */

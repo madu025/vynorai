@@ -57,6 +57,33 @@ try {
     assert.ok(result.scrollWidth <= 320, `${lang}: horizontal scroll ${result.scrollWidth}`);
     assert.ok(Math.min(...result.widths) >= 120, `${lang}: role status ${Math.min(...result.widths)}px`);
     console.log(lang, "scrollWidth", result.scrollWidth, "min status width", Math.round(Math.min(...result.widths)));
+    // The Preview card: Apply and Cancel share the dock without horizontal scroll, and Cancel is reachable by keyboard.
+    const dock = await page.evaluate(
+      ({ apply, cancel }) => {
+        let node: HTMLElement | null = document.getElementById("result-card");
+        while (node) {
+          node.hidden = false;
+          node = node.parentElement;
+        }
+        const applyButton = document.getElementById("apply") as HTMLButtonElement;
+        const cancelButton = document.getElementById("cancel-result") as HTMLButtonElement;
+        applyButton.textContent = apply;
+        cancelButton.textContent = cancel;
+        cancelButton.focus();
+        const box = cancelButton.getBoundingClientRect();
+        return {
+          scrollWidth: (document.scrollingElement as HTMLElement).scrollWidth,
+          focused: document.activeElement === cancelButton,
+          right: box.right,
+          width: box.width,
+        };
+      },
+      { apply: translate(lang, "apply", "Confirm and apply"), cancel: translate(lang, "cancel_preview", "Cancel") },
+    );
+    assert.ok(dock.scrollWidth <= 320, `${lang}: preview card scroll ${dock.scrollWidth}`);
+    assert.ok(dock.focused, `${lang}: Cancel cannot take focus`);
+    assert.ok(dock.right <= 320 && dock.width >= 40, `${lang}: Cancel box ${dock.right}/${dock.width}`);
+    console.log(lang, "cancel button right", Math.round(dock.right), "width", Math.round(dock.width));
     await page.close();
   }
 } finally {

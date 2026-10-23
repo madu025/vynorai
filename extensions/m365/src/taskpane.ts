@@ -75,6 +75,7 @@ import { chooseInstructionRoute } from "./taskpaneRouting.js";
 import { createPreviewController } from "./taskpanePreviewControl.js";
 import { canGroup, changeGrouping, readGrouping } from "./previewGrouping.js";
 import { buildPreviewKpis } from "./previewKpis.js";
+import { canCancelPreview } from "./previewCancel.js";
 import {
   renderChatListView,
   renderConversationHistoryView,
@@ -1810,6 +1811,39 @@ cancelPreviewButton?.addEventListener("click", () => {
   setStatus("Preview cancelled. Nothing has changed in your workbook.");
   updateAuthenticationUi(Boolean(accessToken));
 });
+
+/** Cancel on the Preview card: drop an unapplied preview and go back to idle; the workbook is not touched. */
+document
+  .querySelector<HTMLButtonElement>("#cancel-result")
+  ?.addEventListener("click", () => {
+    const showResultButton =
+      document.querySelector<HTMLElement>("#show-result");
+    if (
+      !canCancelPreview({
+        hasPreview: Boolean(currentPlan || previewFingerprint),
+        applying: Boolean(instruction?.disabled),
+        applied: Boolean(
+          (rollbackButton && !rollbackButton.hidden) ||
+            (showResultButton && !showResultButton.hidden),
+        ),
+      })
+    )
+      return;
+    previewController.cancel();
+    pendingSpecs = undefined;
+    previewSpecs = undefined;
+    excludedKinds = new Set<string>();
+    currentPlan = undefined;
+    previewFingerprint = "";
+    confirmedPreviewText = "";
+    confirmedPreviewSpecs = undefined;
+    if (apply) apply.disabled = true;
+    // The card follows this text: it is not a plan, so the card hides.
+    if (preview) preview.textContent = "No preview yet.";
+    log.record("preview:cancel", "pass", "cancelled on the preview card");
+    setStatus("Preview cancelled. Nothing has changed in your workbook.");
+    instruction?.focus();
+  });
 
 instruction?.addEventListener("input", () => {
   previewController.cancel();

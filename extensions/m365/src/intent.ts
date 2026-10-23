@@ -34,6 +34,10 @@ export interface InstructionSpecs {
     extraValues?: number[];
     showDataLabels?: boolean;
     pivotResult?: boolean;
+    /** Keep only the N categories with the largest values ("top 5 regions"). */
+    topN?: number;
+    /** With topN: the smallest N instead ("bottom 5", "lowest 3"). */
+    lowest?: boolean;
   };
   /** Bring a column from another sheet; the pane resolves the sheet's headers. */
   lookup?: {
@@ -1588,6 +1592,79 @@ function interpretDashboard(
 const numericColumn = isNumericColumn;
 const TEMPORAL_HEADER = /\b(date|day|week|month|quarter|year|period|time)\b/i;
 
+const RANK_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+};
+const RANK_HIGH = "top|best|highest|largest|biggest";
+const RANK_LOW = "bottom|lowest|least|smallest|worst";
+const RANK_NUMBER = "\\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten";
+
+/**
+ * "top 5 regions", "lowest 3 products", "five best customers": the number of categories to keep and
+ * whether it is the smallest ones. Only 1..100; "top 5%" is a share, not a count.
+ */
+export function readRank(
+  text: string,
+): { topN: number; lowest: boolean; end: number } | undefined {
+  const found: Array<{ at: number; n: number; lowest: boolean; end: number }> =
+    [];
+  const patterns: Array<[RegExp, boolean, boolean]> = [
+    [new RegExp(`\\b(${RANK_HIGH})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`, "gi"), false, false],
+    [new RegExp(`\\b(${RANK_LOW})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`, "gi"), true, false],
+    [new RegExp(`\\b(${RANK_NUMBER})\\s+(${RANK_HIGH})\\b`, "gi"), false, true],
+    [new RegExp(`\\b(${RANK_NUMBER})\\s+(${RANK_LOW})\\b`, "gi"), true, true],
+  ];
+  for (const [pattern, lowest, numberFirst] of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const raw = (numberFirst ? match[1] : match[2]).toLowerCase();
+      const n = RANK_WORDS[raw] ?? Number(raw);
+      if (Number.isInteger(n) && n >= 1 && n <= 100)
+        found.push({
+          at: match.index ?? 0,
+          n,
+          lowest,
+          end: (match.index ?? 0) + match[0].length,
+        });
+    }
+  }
+  found.sort((a, b) => a.at - b.at);
+  const first = found[0];
+  return first && { topN: first.n, lowest: first.lowest, end: first.end };
+}
+
+/** The column named by the noun after a rank ("top 5 regions" -> Region), singular or plural. */
+function rankedCategory(
+  text: string,
+  end: number,
+  headers: string[],
+  isLabel: (index: number) => boolean,
+): number | undefined {
+  const phrase = /^\s+([^,.;]+?)(?:\s+(?:by|per|of|in|for|from|with|on|as|and|then)\b|[,.;]|$)/i
+    .exec(text.slice(end))?.[1]
+    ?.toLowerCase()
+    .trim();
+  if (!phrase) return undefined;
+  const candidates = [
+    phrase,
+    phrase.replace(/ies$/, "y"),
+    phrase.replace(/(es|s)$/, ""),
+  ];
+  const index = headers.findIndex(
+    (header, i) =>
+      isLabel(i) && candidates.includes(String(header).toLowerCase().trim()),
+  );
+  return index >= 0 ? index : undefined;
+}
+
 function interpretChartAndPivot(
   text: string,
   headers: string[],
@@ -1620,12 +1697,29 @@ function interpretChartAndPivot(
         (index) => index !== fallbackLabel && isNumericColumn(rows, index),
       )
     : [];
+  const rank = readRank(text);
+  const rankedLabel = rank
+    ? rankedCategory(
+        text,
+        rank.end,
+        headers,
+        (index) => !isNumericColumn(rows, index),
+      )
+    : undefined;
   const categoryEntry =
     afterBy[0] ??
+    (rankedLabel !== undefined ? { index: rankedLabel, at: 0 } : undefined) ??
     (fallbackLabel !== undefined ? { index: fallbackLabel, at: 0 } : undefined);
   const numericEntries = numeric.length
     ? numeric
-    : fallbackNumeric.map((index) => ({ index, at: 0 }));
+    : fallbackNumeric.length
+      ? fallbackNumeric.map((index) => ({ index, at: 0 }))
+      : rank && rankedLabel !== undefined
+        ? fallbackIndexes
+            .filter((index) => isNumericColumn(rows, index))
+            .slice(0, 1)
+            .map((index) => ({ index, at: 0 }))
+        : [];
   const requestedChartType =
     CHART_TYPE_WORDS.find(([pattern]) => pattern.test(text))?.[1] ?? "column";
   const waterfallCategory =
@@ -1669,6 +1763,9 @@ function interpretChartAndPivot(
         text,
       )
         ? { pivotResult: true }
+        : {}),
+      ...(rank && !isHistogram
+        ? { topN: rank.topN, ...(rank.lowest ? { lowest: true } : {}) }
         : {}),
       ...(isHistogram
         ? {}
@@ -1720,10 +1817,6 @@ function interpretChartAndPivot(
     const moreValues = bare
       ? []
       : numericEntries.slice(1, 4).map((entry) => entry.index);
-    const topMatch =
-      /\b(?:top|highest|best|largest|biggest)\s+(\d{1,3})\b/i.exec(text);
-    const bottomMatch =
-      /\b(?:bottom|lowest|least|smallest|worst)\s+(\d{1,3})\b/i.exec(text);
     result.specs.pivot = {
       rows: categoryEntry.index,
       values: numericEntries[0]?.index ?? countLabel!.index,
@@ -1739,11 +1832,9 @@ function interpretChartAndPivot(
         : wantsShare
           ? { showAs: "percent-of-total" as const }
           : {}),
-      ...(topMatch && Number(topMatch[1]) >= 1
-        ? { topN: Number(topMatch[1]) }
-        : bottomMatch && Number(bottomMatch[1]) >= 1
-          ? { topN: Number(bottomMatch[1]), lowest: true }
-          : {}),
+      ...(rank
+        ? { topN: rank.topN, ...(rank.lowest ? { lowest: true } : {}) }
+        : {}),
     };
     const filterMatch = /\bfilter(?:ed)?\s+(?:by|on|using)\s+/i.exec(text);
     if (filterMatch && result.specs.pivot) {
@@ -1776,6 +1867,8 @@ function interpretView(
     const column = header(top[3]);
     if (
       column >= 0 &&
+      // "chart the top 3 products by revenue" ranks the chart; it does not also sort and highlight the rows.
+      !result.specs.chart?.topN &&
       isNumericColumn(rows, column) &&
       !/\bconditional\s+format(?:ting)?\b|\bformat(?:ting)?\b/i.test(text)
     ) {

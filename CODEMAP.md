@@ -68,8 +68,8 @@ preview in `outcome.ts`, so the approved picture is built like the written chart
 `extensions/m365/src/previewGrouping.ts` (which spec the Summarize by, Top-N and Sort order controls change:
 the PivotTable, and a plain chart through `chart.aggregation`, `chart.topN` and `chart.lowest`, mirrored in
 `backend/src/services/m365ExcelPlan.ts` and the `/v1/m365/excel/plan` schema; histograms, waterfalls and
-PivotTable-result charts do not offer them). Tests: `previewKpis.test.ts`, `chartGroups.test.ts`,
-`previewGrouping.test.ts`, `previewChartOutcome.test.ts`, the chart summary tests in `officeExcel.test.ts` and
+PivotTable-result charts do not offer them). `intent.ts` `readRank` reads "top 5 regions" / "lowest 3" / "five best customers" (1..100, digits or one..ten) into `chart.topN` / `chart.lowest` and the pivot; `previewCancel.ts` decides when the Preview card Cancel button may clear an unapplied preview. Tests: `previewKpis.test.ts`, `chartGroups.test.ts`,
+`previewGrouping.test.ts`, `previewCancel.test.ts`, `previewChartOutcome.test.ts`, the chart summary tests in `officeExcel.test.ts` and
 the parity tests in `backend/test/m365ExcelSpec.test.ts`.
 
 VynorAI is a multi-tier AI coding platform: an IDE extension (VS Code, Antigravity, Cursor, Windsurf, JetBrains, CLI) backed by a metered cloud proxy. It provides cost-optimized frontier models (DeepSeek V4.1 Flash by default), Sri Lankan payments (PayHere, LKR), a zero-token deterministic Golden Vault engine, with request tiers picked by an in-process classifier. Background jobs (conversation compaction) run on DeepSeek Flash or, when configured, a GPU server (`backgroundLlm.ts`).

@@ -2626,6 +2626,50 @@
           animation: none;
         }
       }
+
+      /* Short results: the reply bullets are clamped, internals live in Details, nothing is hidden behind the pinned bar */
+      .reply-bullet {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+      }
+      .reply-line { display: block; }
+      .reply-more {
+        margin-top: 6px;
+        padding: 3px 10px;
+        border: 1px solid var(--border, #dde3ee);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--accent, #2563ff);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .agent-checks-details #agent-sources,
+      .agent-checks-details #workbook-map,
+      .agent-checks-details #agent-usage-details { margin-top: 8px; }
+      /* the chat bar keeps its own row: the history select never lies over the card below */
+      .workspace > .chat-bar {
+        position: relative;
+        z-index: 2;
+        flex-wrap: wrap;
+        row-gap: 6px;
+        margin-bottom: 8px;
+      }
+      .workspace > .chat-bar select { max-width: 100%; min-width: 0; flex: 1 1 100%; }
+      /* the last card can scroll fully above the pinned bar */
+      .workspace { scroll-padding-bottom: 96px; }
+      .workspace::after { content: ""; display: block; flex: 0 0 auto; height: 72px; }
+      /* Cancel / Discard in the dark bar: a ghost button, light text, same height as the primary */
+      .apply-dock button { min-height: 40px; }
+      .apply-dock .ghost,
+      .apply-dock button.secondary,
+      .apply-dock button:not(.primary) {
+        background: transparent !important;
+        color: #ffffff !important;
+        border: 1px solid rgb(255 255 255 / 40%) !important;
+      }
     </style>
   </head>
   <body>
@@ -2738,7 +2782,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.05</p>
+          <p class="menu-version" id="build-id">Build 20261023.06</p>
         </div>
       </div>
 
@@ -3506,10 +3550,6 @@
               <span class="badge" id="agent-badge" role="status" aria-live="polite">Working</span>
             </div>
             <p id="agent-progress" class="muted" aria-live="polite"></p>
-            <details id="agent-usage-details" hidden>
-              <summary data-i18n="tech_details">Technical details</summary>
-              <p id="agent-usage" class="muted"></p>
-            </details>
             <div id="agent-checked" class="agent-checked" hidden><span id="agent-checked-text"></span></div>
             <details id="agent-checks-details" class="agent-checks-details">
               <summary data-i18n="tech_details">Details</summary>
@@ -3537,12 +3577,10 @@
               <div data-agent-role="safety"><strong data-i18n="role_safety">Safety reviewer</strong><span class="agent-role-status">pending</span></div>
               <div data-agent-role="verification"><strong data-i18n="role_verification">Verification</strong><span class="agent-role-status">pending</span></div>
             </div>
+            <details id="agent-usage-details" hidden>
+              <summary data-i18n="tech_details">Technical details</summary>
+              <p id="agent-usage" class="muted"></p>
             </details>
-            <div id="agent-plan" hidden>
-              <strong data-i18n="agent_plan">Plan</strong>
-              <ol id="agent-plan-steps" class="details"></ol>
-            </div>
-            <div id="agent-reply"></div>
             <div id="agent-sources" hidden>
               <strong data-i18n="agent_sources">Sources</strong>
               <ul id="agent-sources-list" class="details"></ul>
@@ -3551,6 +3589,12 @@
               <h3 data-i18n="workbook_map">Workbook Map</h3>
               <div id="workbook-map-content"></div>
             </section>
+            </details>
+            <div id="agent-plan" hidden>
+              <strong data-i18n="agent_plan">Plan</strong>
+              <ol id="agent-plan-steps" class="details"></ol>
+            </div>
+            <div id="agent-reply"></div>
             <ol id="agent-changes" class="details" hidden></ol>
             <p id="agent-note" class="muted" hidden data-i18n="agent_note">
               Nothing has changed yet. Review the changes, then approve.

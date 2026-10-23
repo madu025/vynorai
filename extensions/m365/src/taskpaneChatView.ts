@@ -4,6 +4,7 @@ import {
   type ChatStore,
 } from "./chatSessions.js";
 import { localizeMessage, translate, type Language } from "./i18n.js";
+import { clampReply } from "./replyClamp.js";
 
 export interface ChatViewOptions {
   document: Document;
@@ -86,11 +87,40 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
           : "VynorAI";
     const body = document.createElement("span");
     body.className = "message-body";
-    body.textContent = localizeMessage(
+    const shown = localizeMessage(
       options.textLanguage ?? language,
       message.text,
     );
+    const clamped =
+      message.kind === "assistant" ? clampReply(shown) : undefined;
+    if (clamped && clamped.hiddenCount > 0) {
+      clamped.lines.forEach((line) => {
+        const row = document.createElement("span");
+        row.className = `reply-line${line.bullet ? " reply-bullet" : ""}${line.extra ? " reply-extra" : ""}`;
+        row.textContent = line.text;
+        if (line.extra) row.hidden = true;
+        body.append(row);
+      });
+    } else body.textContent = shown;
     item.append(label, body);
+    if (clamped && clamped.hiddenCount > 0) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "reply-more";
+      more.setAttribute("aria-expanded", "false");
+      const labelMore = `${translate(language, "show_more", "Show more")} (${clamped.hiddenCount})`;
+      const labelLess = translate(language, "show_less", "Show less");
+      more.textContent = labelMore;
+      more.addEventListener("click", () => {
+        const open = more.getAttribute("aria-expanded") !== "true";
+        body
+          .querySelectorAll<HTMLElement>(".reply-extra")
+          .forEach((row) => (row.hidden = !open));
+        more.setAttribute("aria-expanded", String(open));
+        more.textContent = open ? labelLess : labelMore;
+      });
+      item.append(more);
+    }
     if (message.kind === "user" && index === messages.length - 1) {
       const tools = document.createElement("div");
       tools.className = "message-tools";

@@ -802,7 +802,7 @@ const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
 /** The preview card's badge: "No changes yet" before Apply, "Applied" after it, so it never contradicts the status line. */
 function setPreviewBadge(applied: boolean) {
   const badge = document.querySelector<HTMLElement>(
-    "#result-card [data-i18n^='preview_']",
+    "#result-card [data-i18n='preview_safe'], #result-card [data-i18n='preview_applied']",
   );
   if (!badge) return;
   badge.dataset.i18n = applied ? "preview_applied" : "preview_safe";

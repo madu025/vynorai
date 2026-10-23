@@ -38,7 +38,10 @@ vynor.lk {
 	# Office.js task-pane assets. This is served before the API proxy so OAuth
 	# redirects and Excel load the exact public HTTPS origin in the manifest.
 	handle_path /m365/* {
-		header Cache-Control "no-cache"
+		@live {
+			not path /dist/*
+		}
+		header @live Cache-Control "no-cache"
 		# The bundle URL carries the build id (?v=), so one build never changes: cache it at the edge and
 		# in the browser. Only the first open of a build reaches the origin (Cloudflare to origin was
 		# intermittently slow or failing, and a 1 MB miss is where the pane used to hang).

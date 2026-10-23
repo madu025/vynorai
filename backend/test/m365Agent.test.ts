@@ -286,3 +286,9 @@ test("the credit reservation estimate includes the serialized tool definitions",
   });
   assert.ok(seen > toolTokens);
 });
+
+test("the agent prompt asks for plain wording in Sinhala and Tamil replies", () => {
+  assert.match(AGENT_SYSTEM_PROMPT, /PLAIN WORDS/);
+  assert.match(AGENT_SYSTEM_PROMPT, /Never use internal jargon/);
+  assert.match(AGENT_SYSTEM_PROMPT, /ONE name for each column/);
+});

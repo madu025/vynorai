@@ -116,14 +116,42 @@ test("a closing question becomes a chip", () => {
   assert.deepEqual(card.chips, ["Want a bar chart?"]);
 });
 
-test("without calculations, label and number pairs in a bullet make the bars", () => {
+test("without calculations, numbers in prose never become tiles or bars", () => {
   const card = buildAnswerCard({ reply: REPLY });
+  assert.equal(card.bars.length, 0);
+  assert.equal(card.tiles.length, 0);
+  assert.equal(card.table, undefined);
+  assert.ok(card.fallbackText);
+});
+
+test("the real bad example (old chat, no results) is a text fallback, not a card", () => {
+  const card = buildAnswerCard({
+    reply: [
+      "- The reviewer is right: the data spans 2 years: 22,070,525 in 2025, 1,460 orders and 20,946,150 in 2026.",
+      "- Should I put the split bar by year on the summary too?",
+    ].join("\n"),
+  });
+  assert.equal(card.bars.length + card.tiles.length, 0);
+  assert.ok(card.fallbackText);
+  assert.equal(card.title, "Result");
+});
+
+test("a leaked reviewer sentence is never the title", () => {
+  const card = buildAnswerCard({
+    reply: "- The reviewer is right.\n- Central 1, West 2",
+    results: [{ values: REGIONS }],
+  });
+  assert.equal(card.title, "Result");
+});
+
+test("five real result rows give exact bars and sums", () => {
+  const card = buildAnswerCard({
+    reply: REPLY,
+    results: [{ values: REGIONS }],
+  });
   assert.equal(card.bars.length, 5);
-  assert.equal(
-    card.bars[0].label.endsWith("Central") || card.bars[0].label === "Central",
-    true,
-  );
-  assert.equal(card.bars[0].value, "8,620,425");
+  assert.equal(card.tiles[0].value, "43,016,675");
+  assert.equal(card.fallbackText, undefined);
 });
 
 test("an answer with no numbers falls back to the first bullet", () => {

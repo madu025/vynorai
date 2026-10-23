@@ -90,6 +90,7 @@ import {
   agentToolLabel as agentToolLabelView,
   setAgentStageView,
   showAgentPlanView,
+  showChangeList,
   showAgentSourcesView,
   relationshipEvidence,
   resetAgentRolesView,
@@ -5521,12 +5522,13 @@ function renderAgentRun(run: AgentRun) {
   }
   const keepApplied = !run.changes.length && agentVerifying;
   if (agentChanges && !keepApplied) {
-    agentChanges.textContent = "";
-    for (const item of run.changes) {
-      const li = document.createElement("li");
-      setLocalizedText(li, describeChange(item.change));
-      agentChanges.appendChild(li);
-    }
+    showChangeList(
+      document,
+      agentChanges,
+      run.changes.map((item) => item.change),
+      describeChange,
+      setLocalizedText,
+    );
   }
   const pending = run.changes.length > 0;
   setAgentStage(
@@ -5644,7 +5646,10 @@ async function agentLoop(request: string) {
   // The read-back round after an apply keeps the list of what was applied (check marks, failures and
   // why) on screen; it is replaced only when that round stages fixes of its own.
   if (!agentVerifying) {
-    if (agentChanges) agentChanges.textContent = "";
+    if (agentChanges) {
+      agentChanges.textContent = "";
+      document.querySelector("#agent-changes-more")?.remove();
+    }
     show(agentChanges, false);
   }
   showAgentPlan([]);
@@ -6127,6 +6132,7 @@ agentApprove?.addEventListener("click", async () => {
   show(agentUndo, true);
   if (agentChanges) {
     agentChanges.textContent = "";
+    document.querySelector("#agent-changes-more")?.remove();
     for (const result of report.results) {
       const li = document.createElement("li");
       // The glyph is decoration; the word beside it is what a screen reader announces.

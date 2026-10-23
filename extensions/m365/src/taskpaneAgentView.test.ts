@@ -154,3 +154,35 @@ test("plan steps lose ranges for display and keep them for click-to-select", () 
   assert.equal(stepRange("Sort the data"), undefined);
   assert.equal(PLAN_STEPS_SHOWN, 3);
 });
+
+test("shortChange gives plain lines and keeps formulas out of them", async () => {
+  const { shortChange } = await import("./taskpaneAgentView.js");
+  const full =
+    "Write in 'Net Amount by Channel'!A2: =GROUPBY('Orders'!H2:H3001,'Orders'!L2:L3001,SUM,0,0)";
+  const formula = {
+    kind: "write_formula",
+    sheet: "Net Amount by Channel",
+    cell: "A2",
+    formula: "=GROUPBY(Orders!H2:H3001,Orders!L2:L3001,SUM,0,0)",
+    header: "Channel",
+  } as any;
+  assert.equal(
+    shortChange(formula, full),
+    "Fill the Net Amount by Channel table",
+  );
+  assert.equal(
+    shortChange(
+      { kind: "create_sheet", name: "Summary" } as any,
+      "Add a new sheet",
+    ),
+    "Create sheet Summary",
+  );
+  assert.equal(
+    shortChange(
+      { kind: "format_range", sheet: "S", address: "A1:B1", bold: true } as any,
+      "Format",
+    ),
+    "Format the header",
+  );
+  assert.ok(!shortChange(formula, full).includes("="));
+});

@@ -1,8 +1,8 @@
 /**
  * Turns an agent answer into a card: a title, number tiles, a bar list or a small table, warning
- * pills and follow-up questions as chips. The numbers come from the calculations Excel ran for the
- * answer (never from the model's words) and, when there are none, from "Label 1,234" pairs in the
- * reply. Display only and pure: nothing here writes to the workbook.
+ * pills and follow-up questions as chips. The numbers come ONLY from the calculations Excel ran for
+ * the answer, never from the model's words: with no such result there is no data card and the
+ * caller shows the reply as clamped text (fallbackText). Display only and pure.
  */
 import type { AgentMessage } from "./agent.js";
 
@@ -116,18 +116,6 @@ const lines = (reply: string): string[] =>
     .map((line) => line.trim())
     .filter(Boolean);
 
-/** "Central 8,620,425.00, Western 8,612,825.00" -> label/number pairs, when there are at least 3. */
-function pairsFrom(text: string): { label: string; value: number }[] {
-  const pairs: { label: string; value: number }[] = [];
-  const pattern =
-    /([A-Za-z][A-Za-z .\/&-]{0,24}?)\s+(-?\d[\d,]*(?:\.\d+)?)(?=\s*[,;)]|\s*$)/g;
-  for (let m = pattern.exec(text); m; m = pattern.exec(text)) {
-    const value = Number(m[2].replace(/,/g, ""));
-    if (Number.isFinite(value)) pairs.push({ label: m[1].trim(), value });
-  }
-  return pairs;
-}
-
 function fromResult(result: CardResult, card: AnswerCardData): boolean {
   let rows = result.values.filter((row) => row.length > 0);
   if (!rows.length) return false;
@@ -223,32 +211,18 @@ export function buildAnswerCard(input: {
   }
   const first = plain[0];
   if (first) {
-    const title = words(clause(first), 7);
-    if (title) card.title = title;
+    const head = clause(first);
+    // A leaked internal sentence ("The reviewer is right: ...") or a long one is not a title.
+    if (
+      head &&
+      head.split(/\s+/).length <= 7 &&
+      !/^(the\s+)?(reviewers?|agents?|team)\b/i.test(head)
+    )
+      card.title = head;
   }
   for (const result of input.results ?? []) {
     if (card.bars.length || card.table) break;
     fromResult(result, card);
-  }
-  if (!card.bars.length && !card.table && !card.tiles.length) {
-    const bullet = plain.find((text) => pairsFrom(text).length >= 3);
-    const pairs = bullet ? pairsFrom(bullet).slice(0, MAX_BARS) : [];
-    if (pairs.length >= 3) {
-      const max = Math.max(...pairs.map((p) => Math.abs(p.value))) || 1;
-      for (const p of pairs)
-        card.bars.push({
-          label: p.label,
-          value: formatNumber(p.value),
-          ratio: Math.abs(p.value) / max,
-        });
-      card.tiles.push(
-        {
-          label: "Total",
-          value: formatNumber(pairs.reduce((a, p) => a + p.value, 0)),
-        },
-        { label: "Rows", value: formatNumber(pairs.length) },
-      );
-    }
   }
   card.tiles = card.tiles.slice(0, MAX_TILES);
   card.pills = card.pills.slice(0, 3);

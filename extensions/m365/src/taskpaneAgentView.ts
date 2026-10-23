@@ -1,4 +1,4 @@
-import type { AgentMessage, AnswerSource } from "./agent.js";
+import type { AgentMessage, AnswerSource, StagedChange } from "./agent.js";
 import type { RelationLink } from "./relationships.js";
 
 export const AGENT_STAGES = [
@@ -180,6 +180,94 @@ export function plainStep(step: string): string {
     )
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+/** First changes shown before "Show all N changes". */
+export const CHANGES_SHOWN = 3;
+
+/** A short plain description of a staged change; formulas and ranges stay in the full text. */
+export function shortChange(change: StagedChange, full: string): string {
+  switch (change.kind) {
+    case "create_sheet":
+      return `Create sheet ${change.name}`;
+    case "write_formula":
+      return change.fillRange || change.header
+        ? `Fill the ${change.sheet} table`
+        : `Write a formula in ${change.sheet}`;
+    case "write_values":
+      return `Write values in ${change.sheet}`;
+    case "create_chart":
+      return `Add a ${change.chartType} chart`;
+    case "sort_range":
+      return `Sort ${change.sheet} by ${change.column}`;
+    case "format_range":
+      return change.bold && !change.numberFormat
+        ? "Format the header"
+        : change.numberFormat
+          ? "Format the numbers"
+          : `Format ${change.sheet}`;
+    case "vynor_step":
+      return change.instruction;
+    default:
+      return plainStep(full) || full;
+  }
+}
+
+/**
+ * The approval list: one short line per change, the full text (formulas, ranges) in the title and in
+ * a collapsed Details, and the first CHANGES_SHOWN changes visible with a toggle for the rest. All
+ * text stays in the page. Later additions (the before/after tables) are appended to each item.
+ */
+export function showChangeList(
+  document: Document,
+  list: HTMLElement,
+  changes: readonly StagedChange[],
+  describe: (change: StagedChange) => string,
+  write: (element: HTMLElement, text: string) => void = (element, text) => {
+    element.textContent = text;
+  },
+): void {
+  list.parentElement?.querySelector("#agent-changes-more")?.remove();
+  list.replaceChildren(
+    ...changes.map((change, index) => {
+      const full = describe(change);
+      const li = document.createElement("li");
+      const line = document.createElement("span");
+      write(line, shortChange(change, full));
+      li.title = full;
+      li.append(line);
+      const details = document.createElement("details");
+      details.className = "change-full";
+      const summary = document.createElement("summary");
+      summary.textContent = "Details";
+      const text = document.createElement("p");
+      write(text, full);
+      details.append(summary, text);
+      li.append(details);
+      if (index >= CHANGES_SHOWN) li.hidden = true;
+      return li;
+    }),
+  );
+  if (changes.length > CHANGES_SHOWN) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.id = "agent-changes-more";
+    more.className = "link";
+    more.setAttribute("aria-expanded", "false");
+    more.setAttribute("aria-controls", list.id || "agent-changes");
+    more.textContent = `Show all ${changes.length} changes`;
+    more.addEventListener("click", () => {
+      const open = more.getAttribute("aria-expanded") !== "true";
+      more.setAttribute("aria-expanded", String(open));
+      more.textContent = open
+        ? "Show fewer changes"
+        : `Show all ${changes.length} changes`;
+      list.querySelectorAll<HTMLElement>(":scope > li").forEach((li, i) => {
+        if (i >= CHANGES_SHOWN) li.hidden = !open;
+      });
+    });
+    list.after(more);
+  }
 }
 
 export function showAgentPlanView(

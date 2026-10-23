@@ -1098,7 +1098,12 @@ m365Router.post(
     const tenant = identity(req);
     const correlationId = safeCorrelationId(req.headers["x-correlation-id"]);
     res.setHeader("x-correlation-id", correlationId);
-    const tenantRecord = await getM365Tenant(tenant.tenantId);
+    let tenantRecord: Awaited<ReturnType<typeof getM365Tenant>>;
+    try {
+      tenantRecord = await getM365Tenant(tenant.tenantId);
+    } catch {
+      return res.status(500).json({ error: { code: "M365_TENANT_LOOKUP_FAILED" } });
+    }
     if (tenantRecord && !tenantRecord.aiEnabled)
       return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
     if (req.body?.consent !== true)

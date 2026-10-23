@@ -976,6 +976,7 @@ async function runTool(
         },
       );
       if (lastRow >= box.lastRow) return result;
+      const firstColumn = Array.isArray(args.columns) ? args.columns[0] : undefined;
       // Outliers over every row: one formula calculate can run to get the exact sheet rows.
       const outlierColumn =
         kind === "anomalies"
@@ -984,7 +985,7 @@ async function runTool(
                 String(header ?? "")
                   .trim()
                   .toLowerCase() ===
-                restore(String((args.columns as unknown[])[0] ?? ""))
+                restore(String(firstColumn ?? ""))
                   .trim()
                   .toLowerCase(),
             )
@@ -1010,6 +1011,10 @@ async function runTool(
       if (!Array.isArray(args.ranges))
         throw new AgentToolError(
           'ranges must be a list like ["Orders!A1:F900", "Customers!A1:C40"].',
+        );
+      if (args.ranges.length < 2 || args.ranges.length > RELATION_MAX_TABLES)
+        throw new AgentToolError(
+          `Give between 2 and ${RELATION_MAX_TABLES} ranges, each with its header row.`,
         );
       const tables: RelationTable[] = [];
       for (const entry of args.ranges.slice(0, RELATION_MAX_TABLES + 1)) {

@@ -25,6 +25,8 @@ export interface ActionRun {
   /** Makes (once per sheet per apply) a hidden copy so undo can put the cells back. */
   backup(name: string): Promise<void>;
   rename(from: string, to: string): void;
+  /** A sheet was deleted: its name no longer belongs to a sheet made in this apply. */
+  deleted?(name: string): void;
 }
 
 export const CHART_TYPES: Record<string, string> = {
@@ -49,6 +51,12 @@ export const CHART_TYPES: Record<string, string> = {
   box_whisker: "BoxWhisker",
   funnel: "Funnel",
   map: "RegionMap",
+};
+let backupCounter = 0;
+/** A hidden backup copy's name: time plus a counter, so two copies made in one millisecond differ. */
+export const uniqueBackupName = () => {
+  backupCounter += 1;
+  return `VynorAI_backup_${Date.now().toString(36)}${backupCounter.toString(36)}`;
 };
 const title = (text: string) =>
   text
@@ -91,6 +99,42 @@ async function headerIndex(
   const index = names.indexOf(column.trim().toLowerCase());
   if (index < 0) throw new Error(`"${column}" is not a header of this range`);
   return index;
+}
+
+/** Rows or columns read one by one when a range is partly hidden (a whole-sheet range is never walked). */
+const HIDDEN_PARTS_MAX = 500;
+
+/** Whether the rows (or columns) of a range are hidden: one answer, or one per row when they differ. */
+async function hiddenBefore(
+  context: any,
+  range: any,
+  rows: boolean,
+): Promise<{ hidden: boolean } | { parts: { address: string; hidden: boolean }[] }> {
+  const whole = rows ? range.getEntireRow() : range.getEntireColumn();
+  whole.load(rows ? "rowHidden" : "columnHidden");
+  await context.sync();
+  const state = rows ? whole.rowHidden : whole.columnHidden;
+  if (state === true || state === false) return { hidden: state };
+  range.load(["rowCount", "columnCount"]);
+  await context.sync();
+  const count = Math.min(
+    rows ? Number(range.rowCount) : Number(range.columnCount),
+    HIDDEN_PARTS_MAX,
+  );
+  const parts = Array.from({ length: count }, (_, index) => {
+    const part = rows ? range.getRow(index) : range.getColumn(index);
+    part.load("address");
+    const entire = rows ? part.getEntireRow() : part.getEntireColumn();
+    entire.load(rows ? "rowHidden" : "columnHidden");
+    return { part, entire };
+  });
+  await context.sync();
+  return {
+    parts: parts.map(({ part, entire }) => ({
+      address: String(part.address).split("!").pop()!,
+      hidden: Boolean(rows ? entire.rowHidden : entire.columnHidden),
+    })),
+  };
 }
 
 /** Runs one approved workbook-object action. */
@@ -169,23 +213,25 @@ export async function runExcelAction(
           break;
         case "hide_rows":
         case "unhide_rows":
-          range.getEntireRow().rowHidden = action === "hide_rows";
+          // Undo puts back what each row was, not the opposite of the action: unhiding rows that
+          // were already visible must not hide them on undo.
           inverse({
             sheetId: id,
             address: args.address,
             rows: true,
-            hidden: action !== "hide_rows",
+            ...(await hiddenBefore(context, range, true)),
           });
+          range.getEntireRow().rowHidden = action === "hide_rows";
           break;
         case "hide_columns":
         case "unhide_columns":
-          range.getEntireColumn().columnHidden = action === "hide_columns";
           inverse({
             sheetId: id,
             address: args.address,
             rows: false,
-            hidden: action !== "hide_columns",
+            ...(await hiddenBefore(context, range, false)),
           });
+          range.getEntireColumn().columnHidden = action === "hide_columns";
           break;
         case "group_rows":
           range.getEntireRow().group("ByRows");
@@ -379,7 +425,13 @@ export async function runExcelAction(
       await context.sync();
       switch (args.action) {
         case "rename":
-          inverse({ sheetId: id, name: sheet.name });
+          // Recorded for a sheet made in this apply too: undo may need its old name back to free
+          // the new one for a deleted sheet that had it.
+          run.journal.push({
+            type: "inverse",
+            tool,
+            data: { sheetId: id, name: sheet.name },
+          });
           sheet.name = args.value;
           run.rename(sheetName!, args.value);
           break;
@@ -399,20 +451,27 @@ export async function runExcelAction(
           sheet.visibility = args.action === "hide" ? "Hidden" : "Visible";
           break;
         case "move":
-          inverse({ sheetId: id, position: sheet.position });
+          // Also for a sheet made in this apply: it is still in the workbook while later changes
+          // are undone, and their sheet positions count it.
+          run.journal.push({
+            type: "inverse",
+            tool,
+            data: { sheetId: id, position: sheet.position },
+          });
           sheet.position = args.value;
           break;
         case "copy": {
           const copy = sheet.copy("After", sheet);
-          copy.name = args.value;
-          copy.customProperties.add("vynorai", "agent");
           copy.load("id");
           await context.sync();
+          // Noted before the name is set: a name that is taken fails after the copy exists.
           run.journal.push({
             type: "inverse",
             tool,
             data: { deleteId: String(copy.id) },
           });
+          copy.name = args.value;
+          copy.customProperties.add("vynorai", "agent");
           break;
         }
         case "delete": {
@@ -427,15 +486,14 @@ export async function runExcelAction(
           if (args.permanent) {
             // The person asked for it explicitly: no hidden copy, undo cannot bring the sheet back.
             sheet.delete();
+            run.deleted?.(sheetName!);
             break;
           }
           const copy = sheet.copy("End");
           copy.load("id");
           await context.sync();
-          copy.name = `VynorAI_backup_${Date.now().toString(36)}`;
-          copy.visibility = "Hidden";
-          copy.customProperties.add("vynorai-backup", sheet.name);
-          await context.sync();
+          // Noted as soon as the copy exists, so a failure below does not leave it behind. Undo
+          // deletes the copy instead of restoring it when the sheet itself is still there.
           run.journal.push({
             type: "inverse",
             tool,
@@ -446,7 +504,12 @@ export async function runExcelAction(
               position: sheet.position,
             },
           });
+          copy.name = uniqueBackupName();
+          copy.visibility = "Hidden";
+          copy.customProperties.add("vynorai-backup", sheet.name);
+          await context.sync();
           sheet.delete();
+          run.deleted?.(sheetName!);
           break;
         }
         case "tab_color":
@@ -1545,7 +1608,7 @@ const RESTORE_CELLS_MIN = 20_000;
  * Puts a backup copy of a sheet (or of one range of it) back, in parts. Nothing is cleared up front:
  * every part is overwritten from the backup, so a failure half way leaves the data in place (the
  * backup sheet is kept) instead of an empty sheet. Cells the agent added outside the backup's
- * range are cleared at the end.
+ * range are cleared first (the backup holds nothing there).
  */
 export async function restoreFromBackup(
   context: any,
@@ -1579,6 +1642,36 @@ export async function restoreFromBackup(
   const col0 = Number(source.columnIndex);
   const rows = Number(source.rowCount);
   const columns = Number(source.columnCount);
+  if (!address && !current.isNullObject) {
+    // Everything the agent put outside the backup's block: below and right of it, and also above
+    // and left of it when the data did not start at A1 (a move, a transpose, a deleted column).
+    // The backup holds nothing there, so clearing first loses no data; clearing after the copy would
+    // also wipe the border lines the copy shares with the cells next to the block.
+    const top = Number(current.rowIndex);
+    const left = Number(current.columnIndex);
+    const bottom = top + Number(current.rowCount);
+    const right = left + Number(current.columnCount);
+    const blockBottom = row0 + rows;
+    const blockRight = col0 + columns;
+    const strips: [number, number, number, number][] = [];
+    if (top < row0) strips.push([top, left, Math.min(bottom, row0) - top, right - left]);
+    if (bottom > blockBottom) {
+      const from = Math.max(top, blockBottom);
+      strips.push([from, left, bottom - from, right - left]);
+    }
+    const beside = [Math.max(top, row0), Math.min(bottom, blockBottom)];
+    if (beside[1] > beside[0]) {
+      if (left < col0)
+        strips.push([beside[0], left, beside[1] - beside[0], Math.min(right, col0) - left]);
+      if (right > blockRight) {
+        const from = Math.max(left, blockRight);
+        strips.push([beside[0], from, beside[1] - beside[0], right - from]);
+      }
+    }
+    for (const [r, c, height, width] of strips)
+      sheet.getRangeByIndexes(r, c, height, width).clear("All");
+    await context.sync();
+  }
   // The part size adapts: a part that finishes quickly doubles it, a slow one halves it.
   let cells = RESTORE_CELLS;
   for (let start = 0; start < rows; ) {
@@ -1599,32 +1692,6 @@ export async function restoreFromBackup(
     if (took < 4_000) cells = Math.min(RESTORE_CELLS_MAX, cells * 2);
     else if (took > 20_000)
       cells = Math.max(RESTORE_CELLS_MIN, Math.floor(cells / 2));
-  }
-  if (!address && !current.isNullObject) {
-    // Rows and columns the agent added after the backup was made.
-    const endRow = Number(current.rowIndex) + Number(current.rowCount);
-    const endColumn = Number(current.columnIndex) + Number(current.columnCount);
-    if (endRow > row0 + rows) {
-      sheet
-        .getRangeByIndexes(
-          row0 + rows,
-          Number(current.columnIndex),
-          endRow - row0 - rows,
-          Number(current.columnCount),
-        )
-        .clear("All");
-    }
-    if (endColumn > col0 + columns) {
-      sheet
-        .getRangeByIndexes(
-          Number(current.rowIndex),
-          col0 + columns,
-          Number(current.rowCount),
-          endColumn - col0 - columns,
-        )
-        .clear("All");
-    }
-    await context.sync();
   }
 }
 
@@ -1663,6 +1730,11 @@ export async function undoJournalEntry(
         const range = sheet.getRange(data.address);
         if (data.rows) range.getEntireRow().rowHidden = data.hidden;
         else range.getEntireColumn().columnHidden = data.hidden;
+      }
+      for (const part of data.parts ?? []) {
+        const range = sheet.getRange(part.address);
+        if (data.rows) range.getEntireRow().rowHidden = part.hidden;
+        else range.getEntireColumn().columnHidden = part.hidden;
       }
       if (data.ungroup) {
         const range = sheet.getRange(data.address);
@@ -1718,10 +1790,26 @@ export async function undoJournalEntry(
       if (data.restoreId) {
         const copy = await byId(data.restoreId);
         if (!copy) return;
+        if (data.oldId) {
+          // The delete never happened (Excel refused it): the sheet is still here, so the copy goes.
+          // Asked without the alias, which after a restore points at the copy itself.
+          const original = sheets.getItemOrNullObject(String(data.oldId));
+          original.load("isNullObject");
+          await context.sync();
+          if (!original.isNullObject) {
+            copy.delete();
+            await context.sync();
+            return;
+          }
+        }
         copy.name = data.name;
         copy.visibility = "Visible";
         copy.position = data.position;
-        copy.customProperties.getItemOrNullObject("vynorai-backup").delete();
+        // A second Undo finds the mark already gone, and deleting a missing property fails.
+        const mark = copy.customProperties.getItemOrNullObject("vynorai-backup");
+        mark.load("isNullObject");
+        await context.sync();
+        if (!mark.isNullObject) mark.delete();
         // Earlier changes to this sheet name its old id; the restored copy has a new one.
         if (data.oldId) sheetAliases.set(String(data.oldId), String(data.restoreId));
         break;

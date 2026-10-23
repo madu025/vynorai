@@ -31,6 +31,7 @@ import {
   restoreFromBackup,
   runExcelAction,
   sheetAliases,
+  uniqueBackupName,
   undoJournalEntry,
   type ActionRun,
   type JournalEntry,
@@ -46,8 +47,7 @@ const CHART_MAX_ROWS = 5000;
 /** Cells per read when run_code loads a large range. */
 const RUN_CODE_CHUNK_CELLS = 50_000;
 /** A hidden backup copy has its own recognisable name, so the agent never mistakes it for the person's sheet. */
-const backupName = () =>
-  `VynorAI_backup_${Date.now().toString(36)}${Math.floor(Math.random() * 36).toString(36)}`;
+const backupName = uniqueBackupName;
 const isInternal = (name: string) =>
   name === CALC_SHEET || /^VynorAI_backup/.test(name);
 
@@ -465,6 +465,8 @@ export interface AgentUndo {
   marks?: UndoMark[];
   /** Which marked parts already came back, so a second Undo does not run them again. */
   settled?: boolean[];
+  /** Old sheet id -> id of the copy that replaced it, kept for a second Undo (see `sheetAliases`). */
+  aliases?: Record<string, string>;
 }
 
 export interface UndoMark {
@@ -526,7 +528,9 @@ export function mergeUndoData(earlier: AgentUndo | undefined, next: AgentUndo): 
     tableSizes: [...(earlier.tableSizes ?? []), ...(next.tableSizes ?? [])],
     journal: [...(earlier.journal ?? []), ...(next.journal ?? [])],
     marks: [...(earlier.marks ?? []), base, ...(next.marks ?? []).map(shift)],
-    settled: undefined,
+    // Parts of the earlier apply keep their place, so what an Undo already put back stays settled.
+    settled: earlier.settled,
+    aliases: earlier.aliases,
   };
 }
 
@@ -602,9 +606,24 @@ export async function applyAgentChanges(
             sheet: (name) => sheets.getItem(sheetOf(name)),
             ours: (name) => createdNames.has(sheetOf(name)),
             journal: undo.journal!,
+            deleted: (name) => {
+              const current = sheetOf(name);
+              createdNames.delete(current);
+              for (const [key, target] of renamed)
+                if (target === current) renamed.delete(key);
+            },
             rename: (from, to) => {
+              const current = sheetOf(from);
+              // Names the agent used for this sheet follow it; the new name now means this sheet,
+              // not whatever sheet an earlier rename or create_sheet had mapped it to.
+              for (const [name, target] of renamed)
+                if (target === current) renamed.set(name, to);
+              renamed.delete(to);
               renamed.set(from, to);
-              if (createdNames.has(from)) createdNames.add(to);
+              if (createdNames.has(current)) {
+                createdNames.delete(current);
+                createdNames.add(to);
+              }
             },
             backup: async (name) => {
               const sheet = sheets.getItem(sheetOf(name));
@@ -615,16 +634,17 @@ export async function applyAgentChanges(
               const copy = sheet.copy("End");
               copy.load("id");
               await context.sync();
-              copy.name = backupName();
-              copy.visibility = "Hidden";
-              copy.customProperties.add(BACKUP_MARK, id);
-              await context.sync();
+              // Noted as soon as the copy exists: a failure while naming it must not leave it behind.
               undo.journal!.push({
                 type: "backup",
                 sheetId: id,
                 backupId: String(copy.id),
               });
               backedUp.add(id);
+              copy.name = backupName();
+              copy.visibility = "Hidden";
+              copy.customProperties.add(BACKUP_MARK, id);
+              await context.sync();
             },
           };
           return runExcelAction(run, change.tool, change.args);
@@ -639,12 +659,14 @@ export async function applyAgentChanges(
           for (let n = 2; taken.has(name.toLowerCase()); n += 1)
             name = `${change.name.slice(0, 28)} ${n}`;
           const sheet = sheets.add(name);
-          sheet.customProperties.add("vynorai", "agent");
           sheet.load("id");
           await context.sync();
+          // Noted as soon as the sheet exists: a failure while marking it must not leave it behind.
           renamed.set(change.name, name);
           createdNames.add(name);
           undo.createdSheets.push(String(sheet.id));
+          sheet.customProperties.add("vynorai", "agent");
+          await context.sync();
           return { sheet: name };
         }
         const sheetName = sheetOf(change.sheet);
@@ -791,6 +813,22 @@ export async function applyAgentChanges(
               change.style ||
               change.clear ||
               change.copyFrom);
+          // Formats copied onto one cell cover the whole source range, not just that cell.
+          let affected = change.address;
+          if (change.kind === "format_range" && change.copyFrom && cells === 1) {
+            const painter = sheet.getRange(change.copyFrom);
+            painter.load(["rowCount", "columnCount"]);
+            await context.sync();
+            if (Number(painter.rowCount) * Number(painter.columnCount) > 1) {
+              const wide = range.getResizedRange(
+                Number(painter.rowCount) - 1,
+                Number(painter.columnCount) - 1,
+              );
+              wide.load("address");
+              await context.sync();
+              affected = String(wide.address).split("!").pop()!;
+            }
+          }
           if (!ours) {
             if (
               change.kind === "format_range" &&
@@ -812,16 +850,38 @@ export async function applyAgentChanges(
               const copy = sheet.copy("End");
               copy.load("id");
               await context.sync();
+              undo.backups.push({
+                sheet: sheetKey,
+                backup: String(copy.id),
+                address: affected,
+              });
               copy.name = backupName();
               copy.visibility = "Hidden";
               copy.customProperties.add(BACKUP_MARK, sheetKey);
               await context.sync();
-              undo.backups.push({
-                sheet: sheetKey,
-                backup: String(copy.id),
-                address: change.address,
-              });
             }
+          }
+          if (change.kind === "format_range" && change.autofit && !ours) {
+            // Autofit changes column widths, which neither the format snapshot nor a backup copy holds.
+            const count = Math.min(Number(range.columnCount), 200);
+            const columns = Array.from({ length: count }, (_, index) => {
+              const column = range.getColumn(index);
+              column.load(["address", "format/columnWidth"]);
+              return column;
+            });
+            await context.sync();
+            undo.journal!.push({
+              type: "inverse",
+              tool: "edit_rows_columns",
+              data: {
+                sheetId: sheetKey,
+                widths: true,
+                sizes: columns.map((column: any) => ({
+                  address: String(column.address).split("!").pop(),
+                  value: column.format.columnWidth,
+                })),
+              },
+            });
           }
           if (change.kind === "sort_range") {
             const header = (headerRow.values as any[][])[0].map((value) =>
@@ -999,14 +1059,20 @@ function sliceUndo(undo: AgentUndo, part: { from: UndoMark; to: UndoMark }): Age
  * Puts back what the agent changed, newest change first (each change's own entries in reverse).
  * Built-in steps are rolled back by `undoStep`. A part that came back completely is remembered in
  * `undo.settled`, so pressing Undo again after a failure only runs what is still open.
+ *
+ * The parts run strictly in that order: when one cannot be finished, the older ones are left alone
+ * until the person presses Undo again. Their data is only right for the workbook as the failed part
+ * leaves it once it is back (a write restores cells that an older part clears, a move restores a
+ * sheet position counted with the sheets the newer part brings back), so putting them back first
+ * would only be undone again, or done twice, by the retry.
  */
 export async function undoAgentChanges(
   runtime: ExcelRuntimeLike,
   undo: AgentUndo,
   undoStep: (rollback: unknown) => Promise<void>,
 ): Promise<void> {
-  // One step that cannot be undone must not leave the others undone: every step runs, and the
-  // ones that failed are named in the error (the person sees "Undo did not finish").
+  // One entry that cannot be undone must not leave the rest of its change undone: every entry of
+  // a part runs, and the ones that failed are named in the error (the person sees "Undo did not finish").
   const failures: string[] = [];
   const attempt: Attempt = async (label, run) => {
     try {
@@ -1017,14 +1083,17 @@ export async function undoAgentChanges(
   };
   const parts = undoParts(undo);
   const settled = (undo.settled ??= []);
+  // A sheet restored by an earlier Undo keeps its new id here, so a second Undo still finds it.
+  sheetAliases.clear();
+  for (const [from, to] of Object.entries(undo.aliases ?? {})) sheetAliases.set(from, to);
   try {
-    for (let index = parts.length - 1; index >= 0; index -= 1) {
+    for (let index = parts.length - 1; index >= 0 && !failures.length; index -= 1) {
       if (settled[index]) continue;
-      const before = failures.length;
       await undoPart(runtime, sliceUndo(undo, parts[index]), undoStep, attempt);
-      settled[index] = failures.length === before;
+      settled[index] = failures.length === 0;
     }
   } finally {
+    undo.aliases = Object.fromEntries(sheetAliases);
     sheetAliases.clear();
   }
   if (failures.length)

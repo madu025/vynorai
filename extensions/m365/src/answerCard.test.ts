@@ -121,7 +121,10 @@ test("without calculations, numbers in prose never become tiles or bars", () => 
   assert.equal(card.bars.length, 0);
   assert.equal(card.tiles.length, 0);
   assert.equal(card.table, undefined);
-  assert.ok(card.fallbackText);
+  // Still a compact card: the warning and the question show, no number is invented.
+  assert.equal(card.fallbackText, undefined);
+  assert.equal(card.pills[0].tone, "warn");
+  assert.equal(card.chips.length, 1);
 });
 
 test("the real bad example (old chat, no results) is a text fallback, not a card", () => {
@@ -132,8 +135,9 @@ test("the real bad example (old chat, no results) is a text fallback, not a card
     ].join("\n"),
   });
   assert.equal(card.bars.length + card.tiles.length, 0);
-  assert.ok(card.fallbackText);
+  assert.equal(card.fallbackText, undefined);
   assert.equal(card.title, "Result");
+  assert.equal(card.chips.length, 1);
 });
 
 test("a leaked reviewer sentence is never the title", () => {
@@ -154,12 +158,66 @@ test("five real result rows give exact bars and sums", () => {
   assert.equal(card.fallbackText, undefined);
 });
 
-test("an answer with no numbers falls back to the first bullet", () => {
+test("an answer with no numbers is a compact card with a title", () => {
   const card = buildAnswerCard({
     reply: "- The Region column has no blanks.\n- Nothing else needs fixing.",
   });
-  assert.equal(card.fallbackText, "The Region column has no blanks.");
   assert.equal(card.bars.length + card.tiles.length, 0);
+  assert.equal(card.fallbackText, undefined);
+  assert.equal(card.pills.length, 2);
+  assert.ok(card.pills.every((p) => p.tone === "ok"));
+  assert.match(card.pills[0].text, /no blanks/);
+});
+
+test("only a reply with nothing to derive is plain text", () => {
+  const card = buildAnswerCard({
+    reply:
+      "- I looked at the Orders sheet and compared the columns against the request in detail.",
+  });
+  assert.ok(card.fallbackText);
+});
+
+test("a one-row [0,0,0] result is never labelled Value N", () => {
+  const reply = [
+    "- Checked the Orders sheet.",
+    "- No duplicate Order IDs.",
+    "- 0 blank cells in Orders.",
+  ].join("\n");
+  const card = buildAnswerCard({ reply, results: [{ values: [[0, 0, 0]] }] });
+  assert.ok(!card.tiles.some((t) => /^Value \d/.test(t.label)));
+  assert.equal(card.tiles.length, 0);
+  assert.ok(
+    card.pills.some((p) => p.tone === "ok" && /duplicate/i.test(p.text)),
+  );
+  assert.ok(card.pills.some((p) => p.tone === "ok" && /blank/i.test(p.text)));
+  assert.equal(card.fallbackText, undefined);
+});
+
+test("tile names come from string literals in the formula", () => {
+  const card = buildAnswerCard({
+    reply: "- Checked",
+    results: [
+      {
+        formula: 'HSTACK("Duplicate IDs","Blank cells","Errors")',
+        values: [[0, 0, 0]],
+      },
+    ],
+  });
+  assert.deepEqual(
+    card.tiles.map((t) => t.label),
+    ["Duplicate IDs", "Blank cells", "Errors"],
+  );
+});
+
+test("tile names can come from the numbers in an answer sentence", () => {
+  const card = buildAnswerCard({
+    reply: "- 12 duplicate Order IDs, 3 blank cells and 0 errors",
+    results: [{ values: [[12, 3, 0]] }],
+  });
+  assert.deepEqual(
+    card.tiles.map((t) => t.label),
+    ["Duplicate Order IDs", "Blank cells", "Errors"],
+  );
 });
 
 test("numbers use thousands separators and at most two decimals", () => {

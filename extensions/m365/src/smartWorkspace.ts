@@ -19,6 +19,10 @@ export interface WorkspaceSchema {
   hasText: boolean;
   sampleRows: number;
   columns?: Array<{ name: string; role: string }>;
+  /** Columns that have an empty cell in the sampled rows. */
+  blankColumns?: string[];
+  /** The table the schema was read from (the selection can be one cell inside it). */
+  tableAddress?: string;
 }
 
 export interface WorkspaceBadgeLabels {

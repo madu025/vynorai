@@ -39,11 +39,28 @@ export async function readWorkspaceContext(
       }
     }
     let schema: WorkspaceSchema | undefined;
-    const sampleRows = Math.min(Math.max(info.rows, 0), 26);
-    const sampleColumns = Math.min(Math.max(info.columns, 0), 20);
+    // One filled cell inside a table: read the schema of the surrounding table (selection unchanged),
+    // so the idle suggestions can name real columns.
+    let schemaRange = range;
+    let schemaInfo = info;
+    if (info.rows === 1 && info.columns === 1 && !info.isBlank) {
+      const table = await findSheetDataRange(range, context);
+      if (table) {
+        table.load(["address", "rowCount", "columnCount"]);
+        await context.sync();
+        schemaRange = table;
+        schemaInfo = {
+          address: String(table.address),
+          rows: Number(table.rowCount),
+          columns: Number(table.columnCount),
+        };
+      }
+    }
+    const sampleRows = Math.min(Math.max(schemaInfo.rows, 0), 26);
+    const sampleColumns = Math.min(Math.max(schemaInfo.columns, 0), 20);
     if (sampleRows >= 2 && sampleColumns >= 1) {
       try {
-        const sample = range
+        const sample = schemaRange
           .getCell(0, 0)
           .getResizedRange(sampleRows - 1, sampleColumns - 1);
         sample.load("values");
@@ -60,8 +77,8 @@ export async function readWorkspaceContext(
         );
         const summary = buildSchemaSummary({
           workbookId: "local-workspace-context",
-          worksheetName: String(range.worksheet.name),
-          address: info.address,
+          worksheetName: String(schemaRange.worksheet.name),
+          address: schemaInfo.address,
           values,
         });
         schema = {
@@ -78,6 +95,15 @@ export async function readWorkspaceContext(
             name: column.name,
             role: column.roleHint,
           })),
+          blankColumns: summary.columns
+            .map((column, index) => ({ column, index }))
+            .filter(({ index }) =>
+              values
+                .slice(summary.headerRowCount)
+                .some((row) => String(row[index] ?? "").trim() === ""),
+            )
+            .map(({ column }) => column.name),
+          tableAddress: schemaInfo.address,
         };
       } catch (error) {
         onSchemaError?.(error);

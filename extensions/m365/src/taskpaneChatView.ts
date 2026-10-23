@@ -247,6 +247,28 @@ export function renderAnswerCard(
       pills.append(el("span", "ac-pill " + pill.tone, pill.text));
     root.append(pills);
   }
+  if (card.more.length) {
+    const rest = el("div", "ac-more");
+    rest.hidden = true;
+    for (const text of card.more) rest.append(el("p", undefined, text));
+    const toggle = el(
+      "button",
+      "reply-more",
+      `${translate(language, "show_more", "Show more")} (${card.more.length})`,
+    ) as HTMLButtonElement;
+    toggle.type = "button";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") !== "true";
+      rest.hidden = !open;
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.textContent = open
+        ? translate(language, "show_less", "Show less")
+        : `${translate(language, "show_more", "Show more")} (${card.more.length})`;
+    });
+    root.removeAttribute("aria-hidden");
+    root.append(toggle, rest);
+  }
   if (card.chips.length) {
     const chips = el("div", "ac-chips");
     for (const text of card.chips) {

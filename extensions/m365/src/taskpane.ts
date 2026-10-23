@@ -111,6 +111,7 @@ import {
   readBackLine,
   relationshipLine,
 } from "./roleEvidence.js";
+import { idleSuggestions } from "./idleSuggestions.js";
 import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
 import { exploreFor, type ExploreItem } from "./exploreView.js";
@@ -4841,11 +4842,47 @@ function renderWorkspaceContext(
     }),
   );
   show(workbookContext, description !== "");
-  show(contextSuggestions, suggestions.length > 0);
+  const idle = conversationMessages.length === 0 ? idleSuggestions(schema) : [];
+  renderIdleCards(idle);
+  show(contextSuggestions, suggestions.length > 0 && idle.length === 0);
   show(
     document.querySelector<HTMLElement>("#starter-suggestions"),
-    conversationMessages.length === 0 && suggestions.length === 0,
+    conversationMessages.length === 0 &&
+      suggestions.length === 0 &&
+      idle.length === 0,
   );
+}
+
+/** Data-driven suggestion cards for the empty chat: a click fills the input and never runs. */
+function renderIdleCards(list: ReturnType<typeof idleSuggestions>) {
+  const host = document.querySelector<HTMLElement>("#idle-cards");
+  if (!host) return;
+  host.replaceChildren(
+    ...list.map((item) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "idle-card";
+      const icon = document.createElement("span");
+      icon.className = "idle-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = item.icon;
+      const text = document.createElement("span");
+      const title = document.createElement("b");
+      title.textContent = item.title;
+      const hint = document.createElement("small");
+      hint.textContent = item.hint;
+      text.append(title, hint);
+      button.append(icon, text);
+      button.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = item.text;
+        instruction.dispatchEvent(new Event("input"));
+        instruction.focus();
+      });
+      return button;
+    }),
+  );
+  host.hidden = list.length === 0;
 }
 
 /**

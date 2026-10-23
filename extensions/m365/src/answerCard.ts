@@ -21,12 +21,17 @@ export interface AnswerCardData {
   table?: { headers: string[]; rows: string[][] };
   pills: { tone: "ok" | "warn"; text: string }[];
   chips: string[];
+  /** The rest of the answer text, shown behind "Show more" inside the card. */
+  more: string[];
   /** Set when there is nothing to draw: the first bullet only, the rest stays as text. */
   fallbackText?: string;
 }
 
 const WARNING =
   /not found|unmatched|error|warning|failed|check needed|#spill|⚠|no match/i;
+/** A finding that says nothing is wrong: "No duplicate Order IDs", "0 blank cells". */
+const OK_FINDING =
+  /^(no|none|zero|0|nothing)\b(?!.*(not found|unmatched|no match))|\bno\s+(duplicate|blank|empty|missing|error|mismatch|issue|problem)/i;
 const BULLET = /^\s*[-•*]\s+/;
 const MAX_BARS = 12;
 const MAX_TABLE_ROWS = 5;
@@ -116,7 +121,41 @@ const lines = (reply: string): string[] =>
     .map((line) => line.trim())
     .filter(Boolean);
 
-function fromResult(result: CardResult, card: AnswerCardData): boolean {
+/** Real names for the numbers of a one-row result, or undefined when none can be found. */
+function tileLabels(
+  numbers: number[],
+  header: string[] | undefined,
+  formula: string | undefined,
+  sentences: string[],
+): string[] | undefined {
+  if (header && header.length === numbers.length) return header;
+  if (formula) {
+    const literals = [...formula.matchAll(/"([^"]{2,30})"/g)]
+      .map((m) => m[1].trim())
+      .filter((t) => /[A-Za-z]/.test(t) && !/^not found$/i.test(t));
+    if (literals.length === numbers.length) return literals;
+  }
+  for (const sentence of sentences) {
+    const found: string[] = [];
+    let at = 0;
+    const pattern =
+      /(\d[\d,]*(?:\.\d+)?)\s+([A-Za-z][A-Za-z ]{2,30}?)(?=[,;.)(]|\s+and\s|\s*$)/g;
+    for (const m of sentence.matchAll(pattern)) {
+      if (Number(m[1].replace(/,/g, "")) === numbers[at]) {
+        found.push(m[2].trim().replace(/^./, (c) => c.toUpperCase()));
+        at += 1;
+        if (at === numbers.length) return found;
+      }
+    }
+  }
+  return undefined;
+}
+
+function fromResult(
+  result: CardResult,
+  card: AnswerCardData,
+  sentences: string[],
+): boolean {
   let rows = result.values.filter((row) => row.length > 0);
   if (!rows.length) return false;
   const header =
@@ -165,11 +204,16 @@ function fromResult(result: CardResult, card: AnswerCardData): boolean {
     columns <= MAX_TILES &&
     data[0].every(isNum)
   ) {
+    const names = tileLabels(
+      data[0] as number[],
+      header,
+      result.formula,
+      sentences,
+    );
+    // Without real names the numbers would mean nothing: no tiles, the pills and text carry it.
+    if (!names) return false;
     data[0].forEach((cell, i) =>
-      card.tiles.push({
-        label: header?.[i] ?? `Value ${i + 1}`,
-        value: formatNumber(cell as number),
-      }),
+      card.tiles.push({ label: names[i], value: formatNumber(cell as number) }),
     );
     return true;
   }
@@ -200,11 +244,14 @@ export function buildAnswerCard(input: {
     bars: [],
     pills: [],
     chips: [],
+    more: [],
   };
   const plain: string[] = [];
   for (const line of all) {
     const text = line.replace(BULLET, "");
     if (/\?\s*$/.test(text)) card.chips.push(text);
+    else if (OK_FINDING.test(text))
+      card.pills.push({ tone: "ok", text: words(clause(text), 8) });
     else if (WARNING.test(text))
       card.pills.push({ tone: "warn", text: words(clause(text), 8) });
     else plain.push(text);
@@ -222,12 +269,24 @@ export function buildAnswerCard(input: {
   }
   for (const result of input.results ?? []) {
     if (card.bars.length || card.table) break;
-    fromResult(result, card);
+    fromResult(
+      result,
+      card,
+      all.map((l) => l.replace(BULLET, "")),
+    );
   }
   card.tiles = card.tiles.slice(0, MAX_TILES);
   card.pills = card.pills.slice(0, 3);
   card.chips = card.chips.slice(0, 2);
-  if (!card.bars.length && !card.table && !card.tiles.length)
+  card.more = plain.slice(card.title === "Result" ? 0 : 1);
+  const data = card.bars.length || card.table || card.tiles.length;
+  // Without numbers it is still a compact card when there is a title, a finding or a question.
+  if (
+    !data &&
+    card.title === "Result" &&
+    !card.pills.length &&
+    !card.chips.length
+  )
     card.fallbackText = plain[0] ?? all[0] ?? input.reply;
   return card;
 }

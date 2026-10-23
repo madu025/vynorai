@@ -3101,6 +3101,56 @@
         border-color: var(--brand);
         color: var(--brand);
       }
+      .ac-more {
+        display: grid;
+        gap: 4px;
+        color: var(--muted);
+        font-size: var(--fs-sm);
+      }
+      .ac-more p {
+        margin: 0;
+      }
+      .idle-cards {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .idle-card {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        text-align: left;
+        min-height: 52px;
+        padding: 9px 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        background: var(--surface-solid);
+        color: var(--ink);
+        font: inherit;
+        cursor: pointer;
+      }
+      .idle-card:hover {
+        border-color: var(--brand);
+      }
+      .idle-card b,
+      .idle-card small {
+        display: block;
+      }
+      .idle-card small {
+        color: var(--muted);
+        font-size: var(--fs-sm);
+      }
+      .idle-icon {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: var(--tint);
+        color: var(--brand);
+        font-weight: 800;
+      }
       @keyframes ac-grow {
         from {
           transform: scaleX(0);
@@ -3233,7 +3283,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.11</p>
+          <p class="menu-version" id="build-id">Build 20261023.12</p>
         </div>
       </div>
 
@@ -3517,6 +3567,7 @@
               <p data-i18n="hero_hint">
                 Ask about your data. You preview every change.
               </p>
+              <div id="idle-cards" class="idle-cards" hidden></div>
             </div>
             <div
               id="conversation-history"

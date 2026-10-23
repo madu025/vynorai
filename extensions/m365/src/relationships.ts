@@ -74,7 +74,7 @@ function looksLikeKey(values: KeyCell[], header: string): boolean {
   ).length;
   if (fractional / present.length > 0.2) return false;
   if (
-    /amount|total|price|cost|qty|quantity|revenue|salary|balance|rate|percent|%/i.test(
+    /\b(amount|total|subtotal|price|cost|qty|quantity|revenue|salary|balance|rate|percent|date)\b|%/i.test(
       header,
     )
   )

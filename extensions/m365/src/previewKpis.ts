@@ -279,6 +279,7 @@ export function buildPreviewKpis(input: PreviewKpiInput): PreviewKpi[] {
       return [];
     return qualityKpis(input, tr);
   }
+  if (input.normalized) return [];
   const source = sourceOf(input.actions);
   if (!source || input.headers[source.measure] === undefined) return [];
   // Totals over a sample are not the real totals: show only the real row count.

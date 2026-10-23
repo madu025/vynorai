@@ -262,9 +262,17 @@ export function createOfficeAgentHost(
         tables.load("items/name");
         const active = sheets.getActiveWorksheet();
         active.load("name");
-        const selection = context.workbook.getSelectedRange();
-        selection.load("address");
         await context.sync();
+        // A chart or shape can be selected: then there is no cell selection, and nothing else fails.
+        let selectionAddress = "";
+        try {
+          const selection = context.workbook.getSelectedRange();
+          selection.load("address");
+          await context.sync();
+          selectionAddress = String(selection.address);
+        } catch {
+          selectionAddress = "";
+        }
         const visible = sheets.items.filter(
           (sheet: any) =>
             !isInternal(String(sheet.name)) &&
@@ -329,7 +337,7 @@ export function createOfficeAgentHost(
         }
         return {
           activeSheet: String(active.name),
-          selection: String(selection.address).split("!").pop(),
+          selection: selectionAddress.split("!").pop() || undefined,
           sheets: used.map(({ sheet, range }: any) => ({
             name: String(sheet.name),
             usedRange: range.isNullObject

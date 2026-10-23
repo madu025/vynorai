@@ -5438,7 +5438,9 @@ async function agentLoop(request: string) {
     window.requestAnimationFrame(() =>
       agentCard?.scrollIntoView?.({ block: "end", behavior: "smooth" }),
     );
-    void showChangePreviews(run, host);
+    showChangePreviews(run, host).catch((error) =>
+      log.record("agent:preview", "fail", describeError(error)),
+    );
     if (run.reply) renderConversation("assistant", run.reply, false);
     showAgentSources(
       answerSources(run.messages, (text) => agentMask.unmask(text)),
@@ -6253,7 +6255,10 @@ document
   });
 sharePaste?.addEventListener("input", () => {
   const text = sharePaste.value;
-  if (text.trim()) void showShareCard(parsePastedCells(text), "", "pasted");
+  if (text.trim())
+    showShareCard(parsePastedCells(text), "", "pasted").catch((error) =>
+      log.record("share:card", "fail", describeError(error)),
+    );
 });
 document
   .querySelector('#workspace-nav [data-workspace-target="share"]')
@@ -6263,13 +6268,22 @@ document
   });
 shareMain?.addEventListener("click", async () => {
   if (!shareState) return;
-  const outcome = await deliverShare(
-    shareState.blob,
-    shareMessage?.value.trim() || shareState.card.message,
-    browserShareEnv(),
-  );
-  log.record("share:deliver", outcome === "failed" ? "fail" : "pass", outcome);
-  setShareStatus(shareOutcomeText(outcome, textLanguage()));
+  try {
+    const outcome = await deliverShare(
+      shareState.blob,
+      shareMessage?.value.trim() || shareState.card.message,
+      browserShareEnv(),
+    );
+    log.record(
+      "share:deliver",
+      outcome === "failed" ? "fail" : "pass",
+      outcome,
+    );
+    setShareStatus(shareOutcomeText(outcome, textLanguage()));
+  } catch (error) {
+    log.record("share:deliver", "fail", describeError(error));
+    setShareStatus(shareOutcomeText("failed", textLanguage()));
+  }
 });
 document
   .querySelector("#share-copy-text")

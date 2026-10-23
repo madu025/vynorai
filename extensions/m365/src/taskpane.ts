@@ -1,3 +1,4 @@
+import "./bootGuard.js";
 import { answerResults, rememberAnswerResults } from "./answerCard.js";
 import {
   PersonalMask,

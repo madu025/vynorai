@@ -3368,7 +3368,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.19</p>
+          <p class="menu-version" id="build-id">Build 20261023.20</p>
         </div>
       </div>
 
@@ -4410,6 +4410,8 @@
             );
             return;
           }
+          if (event.message && event.message.indexOf("VYNOR_DUPLICATE_BOOT") >= 0)
+            return; // a second copy of the bundle after a retry; the first one is running
           if (event.message) {
             note("Startup error: " + event.message);
             if (status)
@@ -4427,7 +4429,7 @@
             status.textContent =
               "Add-in startup failed. Update Excel or use Excel for the web.";
         });
-        // The bundle is about 290 KB and is not cached (Cache-Control: no-store), so on a slow
+        // The bundle is about 290 KB gzipped; the first open of a build may reach the server, so on a slow
         // connection it can take well over five seconds. Say "still loading" first and only call
         // it a failure after a long wait.
         window.setTimeout(function () {
@@ -4442,11 +4444,11 @@
             (status.textContent === "Loading…" ||
               status.textContent === "Still loading… slow connection.")
           ) {
-            note("Task pane bundle did not initialize within forty seconds.");
+            note("Task pane bundle did not initialize within sixty seconds.");
             status.textContent =
               "Add-in scripts did not start. Close and reopen the task pane.";
           }
-        }, 40000);
+        }, 60000);
       })();
     </script>
     <script nomodule>
@@ -4456,20 +4458,48 @@
     <script>
       (function () {
         var openingId = Date.now().toString(36);
-        function add(src, done) {
+        function add(src, done, onFail, ordered) {
           var script = document.createElement("script");
           script.src = src;
-          // Download in parallel, run in the order added (config before the bundle).
-          script.async = false;
+          // Download in parallel, run in the order added (config before the bundle). A retry is not
+          // ordered: it must not wait behind a request that is stuck.
+          script.async = ordered === false;
           script.onload = done;
-          script.onerror = done;
+          script.onerror = onFail || done;
           document.body.appendChild(script);
+        }
+        // Cloudflare to the server sometimes stalls or answers 5xx for a file it has not cached yet.
+        // Ask for the bundle again (up to four tries); the bundle itself ignores a second copy.
+        function loadBundle(suffix) {
+          var tries = 0;
+          var loading = function () {
+            var status = document.getElementById("status-text");
+            return (
+              !window.__VYNOR_BOOTED__ &&
+              status &&
+              (status.textContent === "Loading…" ||
+                status.textContent === "Still loading… slow connection.")
+            );
+          };
+          var attempt = function () {
+            var url = "./dist/taskpane.bundle.js?v=" + suffix;
+            if (tries) url += "&try=" + tries;
+            tries += 1;
+            add(url, function () {}, function () {
+              if (loading() && tries < 4) window.setTimeout(attempt, 800 * tries);
+            }, tries === 1);
+            if (tries < 4)
+              window.setTimeout(function () {
+                if (loading()) attempt();
+              }, 12000);
+          };
+          attempt();
         }
         add("./build-id.js?open=" + openingId, function () {
           var buildId = window.__VYNOR_M365_BUILD_ID__ || "dev";
           var suffix = encodeURIComponent(buildId);
           add("./runtime-config.js?v=" + suffix, function () {});
-          add("./dist/taskpane.bundle.js?v=" + suffix, function () {});
+          loadBundle(suffix);
         });
       })();
     </script>

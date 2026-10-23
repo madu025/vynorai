@@ -21,6 +21,8 @@ export interface AnswerCardData {
   table?: { headers: string[]; rows: string[][] };
   pills: { tone: "ok" | "warn"; text: string }[];
   chips: string[];
+  /** The answer itself as one visible line when no number can be drawn; the rest stays in `more`. */
+  answer?: string;
   /** The rest of the answer text, shown behind "Show more" inside the card. */
   more: string[];
   /** Set when there is nothing to draw: the first bullet only, the rest stays as text. */
@@ -125,6 +127,21 @@ export const pillText = (text: string): string => {
   return first.split(/\s+/).filter(Boolean).slice(0, 7).join(" ");
 };
 
+/** "what is the average net amount per order? just tell me" -> "Average net amount per order". */
+export function questionPhrase(question: string | undefined): string {
+  let q = (question ?? "")
+    .split(/[?.!\n]/)[0]
+    .replace(/,?\s*(just|please)\b.*$/i, "")
+    .replace(
+      /^\s*(?:please\s+)?(?:(?:what|which)\s+(?:is|are|was|were)|how\s+(?:much|many)\s+(?:is|are)?|tell me|show me|give me|calculate|find|get)\s+(?:the\s+)?/i,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!q || q.split(" ").length > 7) return "";
+  return q.charAt(0).toUpperCase() + q.slice(1);
+}
+
 const cleanChip = (text: string): string =>
   text.replace(/^\s*(?:[-–—•*]+\s*)+/, "").trim();
 
@@ -168,6 +185,7 @@ function fromResult(
   result: CardResult,
   card: AnswerCardData,
   sentences: string[],
+  question?: string,
 ): boolean {
   let rows = result.values.filter((row) => row.length > 0);
   if (!rows.length) return false;
@@ -181,8 +199,11 @@ function fromResult(
   if (!data.length) return false;
   const columns = Math.max(...data.map((row) => row.length));
   if (columns === 1 && data.length === 1 && isNum(data[0][0])) {
+    const literal = [...(result.formula ?? "").matchAll(/"([^"]{2,30})"/g)]
+      .map((m) => m[1].trim())
+      .find((t) => /[A-Za-z]/.test(t) && !/^not found$/i.test(t));
     card.tiles.push({
-      label: header?.[0] ?? "Result",
+      label: header?.[0] ?? literal ?? (questionPhrase(question) || "Result"),
       value: formatNumber(data[0][0] as number),
     });
     return true;
@@ -249,6 +270,8 @@ function fromResult(
 export function buildAnswerCard(input: {
   reply: string;
   results?: readonly CardResult[];
+  /** What the person asked: names a lone number when the result has no label. */
+  question?: string;
 }): AnswerCardData {
   const all = lines(input.reply);
   const card: AnswerCardData = {
@@ -270,6 +293,7 @@ export function buildAnswerCard(input: {
     else plain.push(text);
   }
   const first = plain[0];
+  let titleFromBullet = false;
   if (first) {
     const head = clause(first);
     // A leaked internal sentence ("The reviewer is right: ...") or a long one is not a title.
@@ -277,8 +301,10 @@ export function buildAnswerCard(input: {
       head &&
       head.split(/\s+/).length <= 7 &&
       !/^(the\s+)?(reviewers?|agents?|team)\b/i.test(head)
-    )
+    ) {
       card.title = head;
+      titleFromBullet = true;
+    }
   }
   for (const result of input.results ?? []) {
     if (card.bars.length || card.table) break;
@@ -286,13 +312,26 @@ export function buildAnswerCard(input: {
       result,
       card,
       all.map((l) => l.replace(BULLET, "")),
+      input.question,
     );
   }
   card.tiles = card.tiles.slice(0, MAX_TILES);
   card.pills = card.pills.slice(0, 3);
   card.chips = card.chips.slice(0, 2);
-  card.more = plain.slice(card.title === "Result" ? 0 : 1);
   const data = card.bars.length || card.table || card.tiles.length;
+  {
+    const asked = questionPhrase(input.question);
+    if (asked) {
+      card.title = asked;
+      titleFromBullet = false;
+    }
+  }
+  if (data) card.more = plain.slice(titleFromBullet ? 1 : 0);
+  else if (plain.length) {
+    // No number to draw: the first bullet is the answer and stays visible, only the rest is folded.
+    card.answer = plain[0];
+    card.more = plain.slice(1);
+  }
   // Without numbers it is still a compact card when there is a title, a finding or a question.
   if (
     !data &&

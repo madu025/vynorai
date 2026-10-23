@@ -709,11 +709,16 @@ function refreshNextSteps() {
   nextStepsSchemaRequested = true;
   void readWorkspaceContext()
     .then(({ schema }) => {
-      if (!schema) return;
+      if (!schema) {
+        nextStepsSchemaRequested = false;
+        return;
+      }
       lastWorkspaceSchema = schema;
       refreshNextSteps();
     })
-    .catch(() => undefined);
+    .catch(() => {
+      nextStepsSchemaRequested = false;
+    });
 }
 
 function chatViewOptions() {
@@ -4795,7 +4800,8 @@ function renderWorkspaceContext(
     return;
   }
   shownTable = schema?.tableAddress;
-  lastWorkspaceSchema = schema;
+  // A read without a schema (a moment when no table was found) must not wipe the one we have.
+  if (schema) lastWorkspaceSchema = schema;
   if (schema) refreshNextSteps();
   const description = describeSelectionLocal(info);
   if (contextSelection) contextSelection.textContent = description;

@@ -308,3 +308,25 @@ test("a chip question has no leading dash or bullet", () => {
   });
   assert.ok(card.chips.every((c) => !/^[-•*]/.test(c)));
 });
+
+test("a lone number is a tile named from the question, and the answer stays visible without results", () => {
+  const card = buildAnswerCard({
+    reply:
+      "- The average is about 14,338.89 per order\n- Based on 3,000 orders",
+    results: [{ formula: "=AVERAGE(Orders!L2:L3001)", values: [[14338.89]] }],
+    question: "what is the average net amount per order? just tell me",
+  });
+  assert.deepEqual(card.tiles, [
+    { label: "Average net amount per order", value: "14,338.89" },
+  ]);
+  assert.equal(card.title, "Average net amount per order");
+  assert.equal(card.fallbackText, undefined);
+  const prose = buildAnswerCard({
+    reply:
+      "- The average net amount per order is 14,338.89 across all three thousand rows in the sheet\n- Based on 3,000 orders",
+    question: "what is the average net amount per order? just tell me",
+  });
+  assert.equal(prose.tiles.length, 0);
+  assert.match(prose.answer ?? "", /14,338\.89/);
+  assert.deepEqual(prose.more, ["Based on 3,000 orders"]);
+});

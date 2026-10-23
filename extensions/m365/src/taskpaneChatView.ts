@@ -85,6 +85,11 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
       (contextSuggestionsVisible && contextSuggestionCount > 0),
   );
   const lastIndex = messages.length - 1;
+  const questionBefore = (index: number): string | undefined => {
+    for (let i = index - 1; i >= 0; i--)
+      if (messages[i].kind === "user") return messages[i].text;
+    return undefined;
+  };
   const lastMessage = messages[lastIndex];
   const hasOwnQuestion =
     lastMessage?.kind === "assistant" &&
@@ -94,6 +99,7 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
         lastMessage.text,
       ),
       results: recallAnswerResults(lastMessage.text),
+      question: questionBefore(lastIndex),
     }).chips.length > 0;
   const steps = nextStepsFor(options);
   messages.forEach((message, index) => {
@@ -118,6 +124,7 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
         ? buildAnswerCard({
             reply: shown,
             results: recallAnswerResults(message.text),
+            question: questionBefore(index),
           })
         : undefined;
     const drawn = card && !card.fallbackText ? card : undefined;
@@ -326,6 +333,12 @@ export function renderAnswerCard(
     }
     wrap.append(table);
     root.append(wrap);
+  }
+  if (card.answer) {
+    const line = el("p", "ac-answer", stripRanges(card.answer));
+    line.title = card.answer;
+    root.removeAttribute("aria-hidden");
+    root.append(line);
   }
   if (card.pills.length) {
     const pills = el("div", "ac-pills");

@@ -52,14 +52,21 @@ test("the preview summary is built in Sinhala from structured parts", () => {
 test("the team, usage and privacy lines are Sinhala, with the inner label too", () => {
   const si = (text: string) => localizeMessage("si", text);
   assert.match(si("Team: Looking at the workbook"), /කණ්ඩායම: වැඩපොත බලමින්/);
-  assert.match(si("Used about 12,345 tokens (80% of the input from cache)."), /ටෝකන් ආසන්න වශයෙන් 12,345ක්/);
   assert.match(
-    si("Planner (3 steps), builder and 2 reviewer(s) checked the plan: no problems found."),
+    si("Used about 12,345 tokens (80% of the input from cache)."),
+    /tokens ආසන්න වශයෙන් 12,345ක්/,
+  );
+  assert.match(
+    si(
+      "Planner (3 steps), builder and 2 reviewer(s) checked the plan: no problems found.",
+    ),
     /සැලසුම්කරු \(පියවර 3\).*ගැටලු නැත/,
   );
   assert.match(si("3 agents worked on this."), /agents 3 දෙනා මේ සඳහා වැඩ කළා/);
   assert.match(
-    si("Sent to the AI: 1,200 characters; 2 personal value(s) replaced with tokens, and put back only here."),
+    si(
+      "Sent to the AI: 1,200 characters; 2 personal value(s) replaced with tokens, and put back only here.",
+    ),
     /අක්ෂර 1,200ක්; පෞද්ගලික අගයන් 2ක්/,
   );
   assert.match(
@@ -70,9 +77,12 @@ test("the team, usage and privacy lines are Sinhala, with the inner label too", 
 
 test("staged step lines and the before/after heading are Sinhala", () => {
   const si = (text: string) => localizeMessage("si", text);
-  assert.match(si("Fill 'Orders'!L2:L301 with: =G2*H2 (header \"Total\")"), /'Orders'!L2:L301 පුරවන්න: =G2\*H2/);
+  assert.match(
+    si("Fill 'Orders'!L2:L301 with: =G2*H2 (header \"Total\")"),
+    /'Orders'!L2:L301 පුරවන්න: =G2\*H2/,
+  );
   assert.match(si("Write in 'S'!A1: =SUM(B:B)"), /'S'!A1 හි ලියන්න/);
-  assert.match(si("Add a new sheet \"Summary\""), /අලුත් පත්‍රිකාවක්/);
+  assert.match(si('Add a new sheet "Summary"'), /අලුත් පත්‍රිකාවක්/);
   assert.match(si("Before and after (36 of 300 cells)"), /සෛල 300න් 36ක්/);
   assert.match(si("Excel computed =SUM(A:A)"), /Excel ගණනය කළා/);
 });
@@ -90,17 +100,42 @@ test("the reading-progress line is fully Sinhala (the general Reading rule must 
     localizeMessage("si", "Reading selected rows: 41/41..."),
     "තෝරාගත් පේළි කියවමින්: 41/41...",
   );
-  assert.doesNotMatch(localizeMessage("si", "Reading selected rows: 500/2000..."), /[A-Za-z]{3,}/);
+  assert.doesNotMatch(
+    localizeMessage("si", "Reading selected rows: 500/2000..."),
+    /[A-Za-z]{3,}/,
+  );
 });
 
 test("the suggestion outputs, the before/after table headers and the ideas texts are translated (si)", () => {
-  for (const line of ["Chart result", "Dashboard sheet", "Quality report", "Formula audit", "Forecast report", "Clean result sheet", "Cell", "Now", "After approval", "Ideas for the selected columns", "Agree", "Cancel", "Add", "Replace", "Confirm", "(empty)", "The AI is still working on the last request. Try again when it finishes.", "The selection changed, so those ideas were dropped. Tap More ideas again."])
+  for (const line of [
+    "Chart result",
+    "Dashboard sheet",
+    "Quality report",
+    "Formula audit",
+    "Forecast report",
+    "Clean result sheet",
+    "Cell",
+    "Now",
+    "After approval",
+    "Ideas for the selected columns",
+    "Agree",
+    "Cancel",
+    "Add",
+    "Replace",
+    "Confirm",
+    "(empty)",
+    "The AI is still working on the last request. Try again when it finishes.",
+    "The selection changed, so those ideas were dropped. Tap More ideas again.",
+  ])
     assert.notEqual(localizeMessage("si", line), line, line);
 });
 
 test("the apply progress line is localized with its change description (si)", () => {
-  const line = localizeMessage("si", "Applying 2 of 5: Add a new sheet \"Summary\"");
+  const line = localizeMessage(
+    "si",
+    'Applying 2 of 5: Add a new sheet "Summary"',
+  );
   assert.match(line, /2\/5/);
-  assert.notEqual(line, "Applying 2 of 5: Add a new sheet \"Summary\"");
+  assert.notEqual(line, 'Applying 2 of 5: Add a new sheet "Summary"');
   assert.doesNotMatch(line, /Applying/);
 });

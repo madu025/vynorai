@@ -5275,6 +5275,10 @@ async function initialize() {
 const AGENT_CONSENT_KEY = "vynorai.m365.agentConsent";
 const agentCard = document.querySelector<HTMLElement>("#agent-card");
 const agentProgress = document.querySelector<HTMLElement>("#agent-progress");
+const agentUsageText = document.querySelector<HTMLElement>("#agent-usage");
+const agentUsageDetails = document.querySelector<HTMLDetailsElement>(
+  "#agent-usage-details",
+);
 
 /** Shows the planner's steps as a numbered list; no steps hides the list. */
 function showAgentPlan(steps: readonly string[]) {
@@ -5575,6 +5579,7 @@ async function agentLoop(request: string) {
   currentReviewer = undefined;
   mapperRan = false;
   if (agentBadge) setAgentBadge("Working");
+  if (agentUsageDetails) agentUsageDetails.hidden = true;
   if (agentProgress)
     setLocalizedText(
       agentProgress,
@@ -5721,12 +5726,16 @@ async function agentLoop(request: string) {
     if (agentProgress)
       setLocalizedParts(
         agentProgress,
-        [
-          describeReview(reviewed),
-          usageLine(),
-          describePrivacyReceipt(receipt),
-        ].filter(Boolean),
+        [describeReview(reviewed)].filter(Boolean),
       );
+    // Token and privacy counts are for the curious: collapsed under "Technical details".
+    if (agentUsageText) {
+      setLocalizedParts(
+        agentUsageText,
+        [usageLine(), describePrivacyReceipt(receipt)].filter(Boolean),
+      );
+      if (agentUsageDetails) agentUsageDetails.hidden = false;
+    }
     const leaks =
       receipt.leaks.emails + receipt.leaks.phones + receipt.leaks.nic;
     log.record("agent:privacy", leaks ? "fail" : "pass", {

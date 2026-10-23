@@ -207,7 +207,7 @@ const EXACT: Record<string, string> = {
   "A planner agent is splitting the request into steps...":
     "සැලසුම්කරු agent ඉල්ලීම පියවර වලට බෙදමින්...",
   "Correcting the plan after the review...":
-    "සමාලෝචනයෙන් පසු සැලසුම නිවැරදි කරමින්...",
+    "පරීක්ෂා කිරීමෙන් පසු සැලසුම නිවැරදි කරමින්...",
   "Stopped. Nothing was changed.": "නවත්වන ලදී. කිසිවක් වෙනස් කර නැත.",
   "The agent could not finish. Nothing was changed.":
     "Agent එකට අවසන් කළ නොහැකි විය. කිසිවක් වෙනස් කර නැත.",
@@ -254,9 +254,9 @@ const EXACT: Record<string, string> = {
   "Refreshing the preview for the current selection...":
     "වත්මන් තේරීම සඳහා පෙරදසුන යළි සාදමින්...",
   "A reviewer agent is checking ranges, formulas and totals...":
-    "සමාලෝචන agent එකක් පරාස, සූත්‍ර සහ එකතු පරීක්ෂා කරමින්...",
+    "පරීක්ෂා කරන agent එකක් පරාස, සූත්‍ර සහ එකතු බලමින්...",
   "A reviewer agent is checking that every part is covered and nothing is overwritten...":
-    "සමාලෝචන agent එකක් සෑම කොටසක්ම ආවරණය වී ඇති බවත් කිසිවක් උඩින් ලියා නැති බවත් පරීක්ෂා කරමින්...",
+    "පරීක්ෂා කරන agent එකක් සෑම කොටසක්ම ඇතුළත් බවත් කිසිවක් උඩින් ලියැවෙන්නේ නැති බවත් බලමින්...",
   "Not sent yet · approval required": "තවම යවා නැත · අනුමැතිය අවශ්‍යයි",
   "Size calculated after approval": "ප්‍රමාණය අනුමැතියෙන් පසු ගණනය කෙරේ",
   pending: "පොරොත්තුවේ",
@@ -295,7 +295,7 @@ const EXACT: Record<string, string> = {
   Executing: "ක්‍රියාත්මක කරමින්",
   Verifying: "තහවුරු කරමින්",
   "Final answer": "අවසාන පිළිතුර",
-  Reviewing: "සමාලෝචනය කරමින්",
+  Reviewing: "පරීක්ෂා කරමින්",
   Correcting: "නිවැරදි කරමින්",
   Discarded: "ඉවත දමන ලදී",
   Applying: "යොදමින්",
@@ -372,7 +372,7 @@ const EXACT: Record<string, string> = {
   "(blank)": "(හිස්)",
   Checked: "පරීක්ෂා කළ",
   Clean: "පිරිසිදු",
-  "To review": "සමාලෝචනයට",
+  "To review": "පරීක්ෂා කිරීමට",
   columns: "තීරු",
   findings: "සොයාගැනීම්",
   "Payroll sheet": "වැටුප් පත්‍රිකාව",
@@ -477,19 +477,19 @@ const TEMPLATES: Template[] = [
   [
     /^Used about ([\d,]+) tokens \((\d+)% of the input from cache\)\.$/,
     (n, c) =>
-      `ටෝකන් ආසන්න වශයෙන් ${n}ක් භාවිතා විය (ආදානයෙන් ${c}% ක් cache එකෙන්).`,
+      `AI භාවිතය: tokens ආසන්න වශයෙන් ${n}ක් (ඉන් ${c}% ක් කලින් සුරැකි කොටස් නැවත භාවිතා කළා).`,
   ],
   [
     /^Planner \((\d+) steps?\), builder and (\d+) reviewer\(s\) (.+)$/,
     (a, b, rest) =>
-      `සැලසුම්කරු (පියවර ${a}), සාදන්නා සහ සමාලෝචකයන් ${b} දෙනා ${tail(rest)}`,
+      `සැලසුම්කරු (පියවර ${a}), සාදන්නා සහ පරීක්ෂා කරන්නන් ${b} දෙනා ${tail(rest)}`,
   ],
   [/^(\d+) agents (.+)$/, (n, rest) => `agents ${n} දෙනා ${tail(rest)}`],
   [
     /^Sent to the AI: ([\d,]+) characters(?:; (\d+) personal value\(s\) replaced with tokens, and put back only here|(; no personal values found to replace))\.(.*)$/,
     (chars, n, none, rest) =>
       ((chars, how, rest) =>
-        `AI වෙත යැවූ: අක්ෂර ${chars}ක්${how === "none" ? "; ප්‍රතිස්ථාපනය කළ යුතු පෞද්ගලික අගයන් නොමැත" : `; පෞද්ගලික අගයන් ${how}ක් tokens වලින් ප්‍රතිස්ථාපනය කර, නැවත දමන්නේ මෙහි පමණි`}.${rest}`)(
+        `AI වෙත යැවූ: අක්ෂර ${chars}ක්${how === "none" ? "; සඟවිය යුතු පෞද්ගලික අගයන් නොමැත" : `; පෞද්ගලික අගයන් ${how}ක් සඟවා යැවූ අතර, නැවත පෙන්වන්නේ මෙහි පමණි`}.${rest}`)(
         chars,
         none ? "none" : n,
         rest,

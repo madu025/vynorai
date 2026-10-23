@@ -245,7 +245,26 @@ import {
   parsePastedCells,
   type ShareCard,
 } from "./shareCard.js";
-import { canvasToBlob, drawShareCard } from "./shareCardCanvas.js";
+import { canvasToBlob } from "./shareCardCanvas.js";
+import { drawShareCardStyle, thumbnailDataUrl } from "./shareCardStyles.js";
+import {
+  SHARE_STYLES,
+  availableShareStyles,
+  pickShareStyle,
+  readShareStyle,
+  storeShareStyle,
+  type ShareStyle,
+} from "./shareStyle.js";
+import { onStylePick, updateStylePicker } from "./taskpaneShareStyle.js";
+import {
+  agentApplyKinds,
+  browserStorage,
+  classicApplyKinds,
+  readLedger,
+  recordVerifiedApply,
+  savedFooterText,
+  type WorkKind,
+} from "./timeSaved.js";
 import {
   browserShareEnv,
   deliverShare,
@@ -2539,6 +2558,9 @@ apply?.addEventListener("click", async () => {
       })),
       reference: approvedPlan.planId,
     });
+    noteVerifiedApply(
+      classicApplyKinds(report.results, report.sourceUnchangedAfterApply),
+    );
     renderChanged(
       report.results.map(
         (result) =>
@@ -5603,6 +5625,14 @@ agentApprove?.addEventListener("click", async () => {
     })),
     reference: "agent",
   });
+  // Only the first apply of a request counts; the agent's later fix rounds do not add time.
+  if (agentRounds === 0)
+    noteVerifiedApply(
+      agentApplyKinds(
+        run.changes.map((item) => item.change),
+        report.results,
+      ),
+    );
   lastApplyStatus = failed
     ? "Partly applied. Undo puts everything back."
     : "Applied. Undo puts everything back.";
@@ -5976,6 +6006,42 @@ function setShareStatus(message: string) {
   if (shareStatus) shareStatus.textContent = message;
 }
 
+/* Card styles (Summary / Chart / Insight): drawn on this device from the same card. */
+const shareStylesRoot = document.querySelector<HTMLElement>("#share-styles");
+let shareStyleChoice: ShareStyle | undefined = readShareStyle(browserStorage());
+let shareCanvases: Partial<Record<ShareStyle, HTMLCanvasElement>> = {};
+
+/** Draws every style this card can show, fills the picker, and returns the chosen style's picture. */
+function renderShareStyles(card: ShareCard): HTMLCanvasElement {
+  const available = availableShareStyles(card);
+  const style = pickShareStyle(card, shareStyleChoice);
+  shareCanvases = {};
+  const thumbnails: Partial<Record<ShareStyle, string>> = {};
+  for (const name of SHARE_STYLES.filter((item) => available.includes(item))) {
+    shareCanvases[name] = drawShareCardStyle(card, name);
+    thumbnails[name] = thumbnailDataUrl(shareCanvases[name]!);
+  }
+  updateStylePicker(shareStylesRoot, available, style, thumbnails);
+  return shareCanvases[style]!;
+}
+
+onStylePick(shareStylesRoot, async (style) => {
+  const canvas = shareCanvases[style];
+  if (!shareState || !canvas) return;
+  shareStyleChoice = style;
+  storeShareStyle(browserStorage(), style);
+  const blob = await canvasToBlob(canvas);
+  if (shareStyleChoice !== style || !shareState) return;
+  shareState = { card: shareState.card, blob };
+  if (shareImage) shareImage.src = canvas.toDataURL("image/png");
+  updateStylePicker(
+    shareStylesRoot,
+    availableShareStyles(shareState.card),
+    style,
+    {},
+  );
+});
+
 async function showShareCard(
   values: any[][],
   sheet: string,
@@ -5994,6 +6060,7 @@ async function showShareCard(
   if (card.kind === "empty") {
     shareState = undefined;
     if (shareImage) shareImage.hidden = true;
+    if (shareStylesRoot) shareStylesRoot.hidden = true;
     if (shareMessageBlock) shareMessageBlock.hidden = true;
     if (shareMain) shareMain.disabled = true;
     return setShareStatus(
@@ -6003,7 +6070,7 @@ async function showShareCard(
       ),
     );
   }
-  const canvas = drawShareCard(card);
+  const canvas = renderShareStyles(card);
   shareState = { card, blob: await canvasToBlob(canvas) };
   if (shareImage) {
     shareImage.src = canvas.toDataURL("image/png");
@@ -6097,5 +6164,27 @@ document
         : localizeMessage(textLanguage(), "Could not copy the text."),
     );
   });
+
+/* "Saved this month" footer: an estimate kept on this device (timeSaved.ts); nothing is sent. */
+function refreshSavedFooter() {
+  const footer = document.querySelector<HTMLElement>("#saved-footer");
+  const month = document.querySelector<HTMLElement>("#saved-month");
+  const streak = document.querySelector<HTMLElement>("#saved-streak");
+  if (!footer || !month || !streak) return;
+  const text = savedFooterText(readLedger(browserStorage()), new Date());
+  month.textContent = text.month ? localizeMessage(language, text.month) : "";
+  streak.textContent = text.streak
+    ? localizeMessage(language, text.streak)
+    : "";
+  footer.hidden = !text.month && !text.streak;
+}
+
+/** Called after an apply the add-in verified; an apply with no counted work records nothing. */
+function noteVerifiedApply(kinds: WorkKind[]) {
+  recordVerifiedApply(browserStorage(), kinds);
+  refreshSavedFooter();
+}
+languageHooks.push(refreshSavedFooter);
+refreshSavedFooter();
 
 void initialize();

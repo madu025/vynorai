@@ -506,6 +506,13 @@ const TEMPLATES: Template[] = [
     (done, unchanged, rest) =>
       `பயன்படுத்தப்பட்டது: ${done}. மூலத் தரவு மாறாமல் உள்ளதா: ${unchanged === "yes" ? "ஆம்" : "இல்லை — சரிபார்க்கவும்"}.${rest}`,
   ],
+  // Footer of the pane (timeSaved.ts): an estimate of time saved this month, and the day streak.
+  [
+    /^About (?:(\d+) h)? ?(?:(\d+) min)? saved this month \(estimate\)$/,
+    (hours, minutes) =>
+      `இந்த மாதம் சேமித்த நேரம்: ஏறக்குறைய ${[hours ? `${hours} மணி` : "", minutes ? `${minutes} நிமிடம்` : ""].filter(Boolean).join(" ")} (மதிப்பீடு)`,
+  ],
+  [/^(\d+) day streak$/, (n) => `${n} நாள் தொடர்ச்சி`],
 ];
 
 export function localizeMessageTa(text: string): string {

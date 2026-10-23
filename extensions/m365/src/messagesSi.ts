@@ -490,6 +490,13 @@ const TEMPLATES: Template[] = [
     (done, unchanged, rest) =>
       `යොදන ලදී: ${done}. මූලාශ්‍ර දත්ත වෙනස් නොවීම: ${unchanged === "yes" ? "ඔව්" : "නැත — පරීක්ෂා කරන්න"}.${rest}`,
   ],
+  // Footer of the pane (timeSaved.ts): an estimate of time saved this month, and the day streak.
+  [
+    /^About (?:(\d+) h)? ?(?:(\d+) min)? saved this month \(estimate\)$/,
+    (hours, minutes) =>
+      `මෙම මාසයේ ඉතිරි කළ කාලය: ආසන්න වශයෙන් ${[hours ? `පැය ${hours}` : "", minutes ? `විනාඩි ${minutes}` : ""].filter(Boolean).join(" ")} (ඇස්තමේන්තුවක්)`,
+  ],
+  [/^(\d+) day streak$/, (n) => `දින ${n}ක් අඛණ්ඩව`],
 ];
 
 export function localizeMessageSi(text: string): string {

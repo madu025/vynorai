@@ -441,6 +441,7 @@ export async function runExcelAction(
             tool,
             data: {
               restoreId: String(copy.id),
+              oldId: id,
               name: sheet.name,
               position: sheet.position,
             },
@@ -1628,6 +1629,9 @@ export async function restoreFromBackup(
 }
 
 /** Undoes one journal entry (newest first). Entries for objects already gone are skipped. */
+/** Old sheet id -> id of the copy that took its place, while one undo runs (see `undoAgentChanges`). */
+export const sheetAliases = new Map<string, string>();
+
 export async function undoJournalEntry(
   context: any,
   entry: JournalEntry,
@@ -1635,7 +1639,7 @@ export async function undoJournalEntry(
   const workbook = context.workbook;
   const sheets = workbook.worksheets;
   const byId = async (id: string) => {
-    const sheet = sheets.getItemOrNullObject(id);
+    const sheet = sheets.getItemOrNullObject(sheetAliases.get(id) ?? id);
     sheet.load("isNullObject");
     await context.sync();
     return sheet.isNullObject ? undefined : sheet;
@@ -1718,6 +1722,8 @@ export async function undoJournalEntry(
         copy.visibility = "Visible";
         copy.position = data.position;
         copy.customProperties.getItemOrNullObject("vynorai-backup").delete();
+        // Earlier changes to this sheet name its old id; the restored copy has a new one.
+        if (data.oldId) sheetAliases.set(String(data.oldId), String(data.restoreId));
         break;
       }
       if (!sheet) return;

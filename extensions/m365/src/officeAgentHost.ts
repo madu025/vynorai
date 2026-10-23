@@ -30,6 +30,7 @@ import {
   readDetails,
   restoreFromBackup,
   runExcelAction,
+  sheetAliases,
   undoJournalEntry,
   type ActionRun,
   type JournalEntry,
@@ -457,6 +458,76 @@ export interface AgentUndo {
   charts?: { sheet: string; name: string }[];
   /** Undo of workbook-object actions (officeAgentActions.ts), newest last. */
   journal?: JournalEntry[];
+  /**
+   * Cumulative length of every list above after each change ran, so undo can walk the changes
+   * newest first instead of category by category.
+   */
+  marks?: UndoMark[];
+  /** Which marked parts already came back, so a second Undo does not run them again. */
+  settled?: boolean[];
+}
+
+export interface UndoMark {
+  steps: number;
+  journal: number;
+  tableSizes: number;
+  restores: number;
+  formats: number;
+  backups: number;
+  charts: number;
+  createdSheets: number;
+}
+
+const markOf = (undo: AgentUndo): UndoMark => ({
+  steps: undo.steps.length,
+  journal: undo.journal?.length ?? 0,
+  tableSizes: undo.tableSizes?.length ?? 0,
+  restores: undo.restores.length,
+  formats: undo.formats.length,
+  backups: undo.backups.length,
+  charts: undo.charts?.length ?? 0,
+  createdSheets: undo.createdSheets.length,
+});
+
+/** The undo entries one change added: marks are cumulative, so a part runs from one to the next. */
+export function undoParts(undo: AgentUndo): { from: UndoMark; to: UndoMark }[] {
+  const empty = markOf({ createdSheets: [], restores: [], formats: [], backups: [], steps: [] });
+  const bounds = [...(undo.marks ?? []), markOf(undo)];
+  const parts: { from: UndoMark; to: UndoMark }[] = [];
+  let from = empty;
+  for (const to of bounds) {
+    if (JSON.stringify(from) !== JSON.stringify(to)) parts.push({ from, to });
+    from = to;
+  }
+  return parts;
+}
+
+/** Joins the undo data of two applies; the second apply's marks count from the end of the first. */
+export function mergeUndoData(earlier: AgentUndo | undefined, next: AgentUndo): AgentUndo {
+  if (!earlier) return next;
+  const base = markOf(earlier);
+  const shift = (mark: UndoMark): UndoMark => ({
+    steps: mark.steps + base.steps,
+    journal: mark.journal + base.journal,
+    tableSizes: mark.tableSizes + base.tableSizes,
+    restores: mark.restores + base.restores,
+    formats: mark.formats + base.formats,
+    backups: mark.backups + base.backups,
+    charts: mark.charts + base.charts,
+    createdSheets: mark.createdSheets + base.createdSheets,
+  });
+  return {
+    createdSheets: [...earlier.createdSheets, ...next.createdSheets],
+    restores: [...earlier.restores, ...next.restores],
+    formats: [...earlier.formats, ...next.formats],
+    backups: [...earlier.backups, ...next.backups],
+    steps: [...earlier.steps, ...next.steps],
+    charts: [...(earlier.charts ?? []), ...(next.charts ?? [])],
+    tableSizes: [...(earlier.tableSizes ?? []), ...(next.tableSizes ?? [])],
+    journal: [...(earlier.journal ?? []), ...(next.journal ?? [])],
+    marks: [...(earlier.marks ?? []), base, ...(next.marks ?? []).map(shift)],
+    settled: undefined,
+  };
 }
 
 export type AgentApplyResult = {
@@ -494,6 +565,7 @@ export async function applyAgentChanges(
     steps: [],
     journal: [],
   };
+  undo.marks = [];
   const results: AgentApplyResult[] = [];
   const renamed = new Map<string, string>();
   const createdNames = new Set<string>();
@@ -501,6 +573,7 @@ export async function applyAgentChanges(
   const sheetOf = (name: string) => renamed.get(name) ?? name;
   let failed = false;
   for (const [position, change] of changes.entries()) {
+    undo.marks.push(markOf(undo));
     const label = describeChange(change);
     if (failed || options.isCancelled?.()) {
       results.push({ change: label, status: "skipped" });
@@ -904,7 +977,29 @@ const SNAPSHOT_FORMAT = {
   borders: { style: true, color: true, weight: true },
 };
 
-/** Puts back what the agent changed, newest first. Built-in steps are rolled back by `undoStep`. */
+type Attempt = (label: string, run: () => Promise<void>) => Promise<void>;
+
+/** The undo entries of one marked part (one change). */
+function sliceUndo(undo: AgentUndo, part: { from: UndoMark; to: UndoMark }): AgentUndo {
+  const cut = <T>(list: T[] | undefined, key: keyof UndoMark): T[] =>
+    (list ?? []).slice(part.from[key], part.to[key]);
+  return {
+    createdSheets: cut(undo.createdSheets, "createdSheets"),
+    restores: cut(undo.restores, "restores"),
+    formats: cut(undo.formats, "formats"),
+    backups: cut(undo.backups, "backups"),
+    steps: cut(undo.steps, "steps"),
+    charts: cut(undo.charts, "charts"),
+    tableSizes: cut(undo.tableSizes, "tableSizes"),
+    journal: cut(undo.journal, "journal"),
+  };
+}
+
+/**
+ * Puts back what the agent changed, newest change first (each change's own entries in reverse).
+ * Built-in steps are rolled back by `undoStep`. A part that came back completely is remembered in
+ * `undo.settled`, so pressing Undo again after a failure only runs what is still open.
+ */
 export async function undoAgentChanges(
   runtime: ExcelRuntimeLike,
   undo: AgentUndo,
@@ -913,23 +1008,45 @@ export async function undoAgentChanges(
   // One step that cannot be undone must not leave the others undone: every step runs, and the
   // ones that failed are named in the error (the person sees "Undo did not finish").
   const failures: string[] = [];
-  const attempt = async (label: string, run: () => Promise<void>) => {
+  const attempt: Attempt = async (label, run) => {
     try {
       await run();
     } catch (error) {
       failures.push(`${label}: ${(error as Error)?.message ?? String(error)}`);
     }
   };
+  const parts = undoParts(undo);
+  const settled = (undo.settled ??= []);
+  try {
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      if (settled[index]) continue;
+      const before = failures.length;
+      await undoPart(runtime, sliceUndo(undo, parts[index]), undoStep, attempt);
+      settled[index] = failures.length === before;
+    }
+  } finally {
+    sheetAliases.clear();
+  }
+  if (failures.length)
+    throw new Error(`Undo could not finish ${failures.length} step(s): ${failures.join("; ").slice(0, 400)}`);
+}
+
+async function undoPart(
+  runtime: ExcelRuntimeLike,
+  undo: AgentUndo,
+  undoStep: (rollback: unknown) => Promise<void>,
+  attempt: Attempt,
+): Promise<void> {
   for (const rollback of [...undo.steps].reverse())
     await attempt("step", () => undoStep(rollback));
-  await runtime.run(async (context) => {
+  await attempt("workbook", () => runtime.run(async (context) => {
     for (const entry of [...(undo.journal ?? [])].reverse())
       await attempt(`journal ${entry.type}`, () =>
         undoJournalEntry(context, entry),
       );
     const sheets = context.workbook.worksheets;
     const byKey = async (key: string) => {
-      const sheet = sheets.getItemOrNullObject(key);
+      const sheet = sheets.getItemOrNullObject(sheetAliases.get(key) ?? key);
       sheet.load("isNullObject");
       await context.sync();
       return sheet.isNullObject ? undefined : sheet;
@@ -1006,9 +1123,7 @@ export async function undoAgentChanges(
         if (sheet) sheet.delete();
         await context.sync();
       });
-  });
-  if (failures.length)
-    throw new Error(`Undo could not finish ${failures.length} step(s): ${failures.join("; ").slice(0, 400)}`);
+  }));
 }
 
 /** After the person keeps the result: the hidden backup copies are no longer needed. */
@@ -1037,6 +1152,8 @@ export async function dropAgentBackups(
     await context.sync();
   });
   undo.backups = [];
+  undo.marks = undefined;
+  undo.settled = undefined;
   undo.journal = (undo.journal ?? []).filter(
     (entry) => entry.type !== "backup" && !entry.data?.restoreId,
   );

@@ -24,6 +24,7 @@ import {
   dropAgentBackups,
   undoAgentChanges,
   type AgentUndo,
+  mergeUndoData,
 } from "./officeAgentHost.js";
 import {
   AnalysisConsentError,
@@ -5798,19 +5799,7 @@ agentApprove?.addEventListener("click", async () => {
   }
 });
 
-function mergeUndo(earlier: AgentUndo | undefined, next: AgentUndo): AgentUndo {
-  if (!earlier) return next;
-  return {
-    createdSheets: [...earlier.createdSheets, ...next.createdSheets],
-    restores: [...earlier.restores, ...next.restores],
-    formats: [...earlier.formats, ...next.formats],
-    backups: [...earlier.backups, ...next.backups],
-    steps: [...earlier.steps, ...next.steps],
-    charts: [...(earlier.charts ?? []), ...(next.charts ?? [])],
-    tableSizes: [...(earlier.tableSizes ?? []), ...(next.tableSizes ?? [])],
-    journal: [...(earlier.journal ?? []), ...(next.journal ?? [])],
-  };
-}
+const mergeUndo = mergeUndoData;
 
 agentUndo?.addEventListener("click", async () => {
   if (!agentLastUndo || agentBusy) return;

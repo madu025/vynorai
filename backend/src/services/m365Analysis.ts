@@ -2,7 +2,11 @@ import crypto from "node:crypto";
 import type { Response } from "express";
 import { z } from "../middleware/validate.js";
 import { handleChatCompletions, type AuthenticatedUser } from "./aiProxy.js";
-import { releaseQuotaReservation, reserveQuotaAtomic } from "./monthlyQuota.js";
+import {
+  releaseQuotaReservation,
+  reserveQuotaAtomic,
+  type QuotaReservation,
+} from "./monthlyQuota.js";
 import { PiiMap } from "./piiShield.js";
 
 export const ANALYSIS_CONTRACT_VERSION =
@@ -545,25 +549,33 @@ export const proxyAgentRunner: AgentRunner = async (
       {},
       "m365",
     );
-  } catch (error) {
+  } catch {
+    // The provider's error text is not kept: it can echo the prompt.
     await releaseQuotaReservation(reservation).catch(() => undefined);
-    throw new M365AnalysisError(
-      "AI_PROVIDER_UNAVAILABLE",
-      502,
-      (error as Error).message?.slice(0, 80),
-    );
+    throw new M365AnalysisError("AI_PROVIDER_UNAVAILABLE", 502);
   }
-  if (response.statusCode >= 400) {
-    const code = (response.body as any)?.error?.code;
-    throw new M365AnalysisError(
-      typeof code === "string" && /^[A-Za-z0-9_.-]{1,60}$/.test(code)
-        ? code
-        : "AI_PROVIDER_UNAVAILABLE",
-      response.statusCode >= 500 ? 502 : response.statusCode,
-    );
-  }
+  await failIfErrorResponse(response, reservation);
   return response.message();
 };
+
+/**
+ * An error status from the in-process gateway call must never leave the credit reservation held.
+ * Releasing is idempotent (a no-op when the gateway already settled it).
+ */
+export async function failIfErrorResponse(
+  response: { statusCode: number; body?: unknown },
+  reservation: QuotaReservation,
+): Promise<void> {
+  if (response.statusCode < 400) return;
+  await releaseQuotaReservation(reservation).catch(() => undefined);
+  const code = (response.body as any)?.error?.code;
+  throw new M365AnalysisError(
+    typeof code === "string" && /^[A-Za-z0-9_.-]{1,60}$/.test(code)
+      ? code
+      : "AI_PROVIDER_UNAVAILABLE",
+    response.statusCode >= 500 ? 502 : response.statusCode,
+  );
+}
 
 let agentRunner: AgentRunner = proxyAgentRunner;
 export function setM365AgentRunnerForTests(next?: AgentRunner): void {

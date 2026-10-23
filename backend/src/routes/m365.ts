@@ -1104,10 +1104,19 @@ m365Router.post(
     } catch {
       return res.status(500).json({ error: { code: "M365_TENANT_LOOKUP_FAILED" } });
     }
+    const deny = async (reason: string, code: string) => {
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_AGENT_DENIED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ reason, code, correlationId }),
+      });
+      return res.status(403).json({ error: { code } });
+    };
     if (tenantRecord && !tenantRecord.aiEnabled)
-      return res.status(403).json({ error: { code: "AI_DISABLED_BY_ADMIN" } });
+      return deny("ai_disabled_by_admin", "AI_DISABLED_BY_ADMIN");
     if (req.body?.consent !== true)
-      return res.status(403).json({ error: { code: "AI_CONSENT_REQUIRED" } });
+      return deny("consent_required", "AI_CONSENT_REQUIRED");
     try {
       const reply = await agentTurn(user, req.body);
       await logSecurityEvent({
@@ -1126,16 +1135,17 @@ m365Router.post(
     } catch (error) {
       const known = error instanceof M365AnalysisError;
       const code = known ? error.code : "AI_AGENT_FAILED";
+      // The code only: provider and parser messages can echo prompt text.
       console.error(
         "[m365] excel agent failed",
-        JSON.stringify({
-          code,
-          detail: known
-            ? error.detail
-            : (error as Error)?.message?.slice(0, 120),
-          correlationId,
-        }),
+        JSON.stringify({ code, correlationId }),
       );
+      await logSecurityEvent({
+        eventType: "M365_EXCEL_AGENT_FAILED",
+        actor: user.id,
+        target: tenant.tenantId,
+        details: JSON.stringify({ code, correlationId }),
+      }).catch(() => undefined);
       return res.status(known ? error.status : 500).json({ error: { code } });
     }
   },

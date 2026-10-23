@@ -22,7 +22,10 @@ export function isSimpleAggregate(
   const cell = CELL.exec(change.cell);
   if (!match || !cell) return false;
   if (match[2].toUpperCase() !== match[4].toUpperCase()) return false;
-  return Number(cell[2]) <= SIMPLE_MAX_ROW;
+  return (
+    Number(cell[2]) <= SIMPLE_MAX_ROW &&
+    Math.max(Number(match[3]), Number(match[5])) <= SIMPLE_MAX_ROW
+  );
 }
 
 const columnNumber = (letters: string) =>
@@ -33,6 +36,11 @@ export interface SimpleCheck {
   /** A column could not be read: the change was not verified, so it must go to the reviewers. */
   unverified: boolean;
 }
+
+/** A formula that adds up other cells: an existing total is not data and must not be counted twice. */
+const TOTAL_FORMULA = /^\s*=\s*(SUM|SUBTOTAL|AVERAGE|COUNT|MAX|MIN|MEDIAN|AGGREGATE)\s*\(/i;
+/** Blank rows between two runs of numbers that are still one column of data with a hole in it. */
+const GAP_ROWS = 3;
 
 export async function checkSimpleFormulas(
   changes: readonly { change: StagedChange }[],
@@ -45,8 +53,9 @@ export async function checkSimpleFormulas(
     const match = AGG.exec(change.formula)!;
     const cell = CELL.exec(change.cell)!;
     const column = match[2].toUpperCase();
-    const start = Number(match[3]);
-    const end = Number(match[5]);
+    // =SUM(B11:B2) is the same range as =SUM(B2:B11).
+    const start = Math.min(Number(match[3]), Number(match[5]));
+    const end = Math.max(Number(match[3]), Number(match[5]));
     const cellRow = Number(cell[2]);
     const sameColumn = cell[1].toUpperCase() === column;
     const where = `'${change.sheet}'!${change.cell}`;
@@ -55,16 +64,38 @@ export async function checkSimpleFormulas(
       issues.push(
         `${where}: ${change.formula} sums column ${column} but the result sits under column ${cell[1].toUpperCase()}.`,
       );
+    // A total inside its own range is a circular reference.
+    if (sameColumn && cellRow >= start && cellRow <= end) {
+      issues.push(`${where}: ${change.formula} includes its own cell, which is a circular reference.`);
+      continue;
+    }
     try {
-      const read = await host.readRange(change.sheet, `${column}1:${column}${SIMPLE_MAX_ROW}`, false);
+      const read = await host.readRange(change.sheet, `${column}1:${column}${SIMPLE_MAX_ROW}`, true);
       const numeric = new Set<number>();
+      const totals: number[] = [];
+      const blank = (row: number) => {
+        const value = (read.values[row - 1] as unknown[] | undefined)?.[0];
+        return value === null || value === undefined || String(value).trim() === "";
+      };
       read.values.forEach((row, index) => {
         const value = (row as unknown[])[0];
         const row1 = index + 1;
-        // The cell being written in this column is not data.
-        if (typeof value === "number" && Number.isFinite(value) && !(sameColumn && row1 >= cellRow))
-          numeric.add(row1);
+        // The cell being written is not data (a total above the data is in the same column too).
+        if (typeof value !== "number" || !Number.isFinite(value) || (sameColumn && row1 === cellRow)) return;
+        const formula = (read.formulas?.[index] as unknown[] | undefined)?.[0];
+        if (typeof formula === "string" && TOTAL_FORMULA.test(formula)) totals.push(row1);
+        else numeric.add(row1);
       });
+      // Numbers down to the last row that was read: the data may go on below, so it is not verified.
+      if (numeric.has(SIMPLE_MAX_ROW)) {
+        unverified = true;
+        continue;
+      }
+      const counted = totals.find((row) => row >= start && row <= end);
+      if (counted !== undefined)
+        issues.push(
+          `${where}: ${change.formula} includes the total in row ${counted} of column ${column}, so it would be counted twice.`,
+        );
       // The block of numbers the range belongs to: the run that holds its last number at or above its end.
       const upTo = [...numeric].filter((row) => row <= end);
       if (!upTo.length) {
@@ -83,6 +114,17 @@ export async function checkSimpleFormulas(
         issues.push(
           `${where}: ${change.formula} starts at row ${start} but the numbers in column ${column} start at row ${blockStart}.`,
         );
+      // Numbers just past a short blank gap outside the range may be the same data: not verified.
+      const across = (from: number, step: 1 | -1) => {
+        let row = from;
+        let gap = 0;
+        while (row >= 1 && row <= SIMPLE_MAX_ROW && blank(row) && gap < GAP_ROWS) {
+          row += step;
+          gap += 1;
+        }
+        return gap > 0 && numeric.has(row);
+      };
+      if (across(end + 1, 1) || across(start - 1, -1)) unverified = true;
     } catch {
       unverified = true;
     }

@@ -1,3 +1,4 @@
+import { answerResults, rememberAnswerResults } from "./answerCard.js";
 import {
   PersonalMask,
   answerSources,
@@ -5795,7 +5796,13 @@ async function agentLoop(request: string) {
     showChangePreviews(run, host).catch((error) =>
       log.record("agent:preview", "fail", describeError(error)),
     );
-    if (run.reply) renderConversation("assistant", run.reply, false);
+    if (run.reply) {
+      rememberAnswerResults(
+        run.reply.slice(0, MAX_CONVERSATION_CHARS),
+        answerResults(run.messages, (text) => agentMask.unmask(text)),
+      );
+      renderConversation("assistant", run.reply, false);
+    }
     showAgentSources(
       answerSources(run.messages, (text) => agentMask.unmask(text)),
     );

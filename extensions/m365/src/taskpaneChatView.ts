@@ -4,6 +4,11 @@ import {
   type ChatStore,
 } from "./chatSessions.js";
 import { localizeMessage, translate, type Language } from "./i18n.js";
+import {
+  buildAnswerCard,
+  recallAnswerResults,
+  type AnswerCardData,
+} from "./answerCard.js";
 import { clampReply } from "./replyClamp.js";
 
 export interface ChatViewOptions {
@@ -91,9 +96,22 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
       options.textLanguage ?? language,
       message.text,
     );
+    const card =
+      message.kind === "assistant"
+        ? buildAnswerCard({
+            reply: shown,
+            results: recallAnswerResults(message.text),
+          })
+        : undefined;
+    const drawn = card && !card.fallbackText ? card : undefined;
     const clamped =
-      message.kind === "assistant" ? clampReply(shown) : undefined;
-    if (clamped && clamped.hiddenCount > 0) {
+      message.kind === "assistant" && !drawn ? clampReply(shown) : undefined;
+    if (drawn) {
+      body.append(
+        renderAnswerCard(document, drawn, language, instruction),
+        hiddenText(document, shown),
+      );
+    } else if (clamped && clamped.hiddenCount > 0) {
       clamped.lines.forEach((line) => {
         const row = document.createElement("span");
         row.className = `reply-line${line.bullet ? " reply-bullet" : ""}${line.extra ? " reply-extra" : ""}`;
@@ -149,4 +167,101 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
     }
     history.appendChild(item);
   });
+}
+
+/** The full reply, kept for screen readers and copy while the card is what people see. */
+function hiddenText(document: Document, text: string): HTMLElement {
+  const span = document.createElement("span");
+  span.className = "sr-only";
+  span.textContent = text;
+  return span;
+}
+
+/** Draws the card: title, tiles, bars or a table, warning pills and follow-up chips. */
+export function renderAnswerCard(
+  document: Document,
+  card: AnswerCardData,
+  language: Language,
+  instruction: HTMLTextAreaElement | null,
+): HTMLElement {
+  const el = (tag: string, className?: string, text?: string) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const root = el("div", "answer-card");
+  root.setAttribute("aria-hidden", "true");
+  root.append(el("h3", "ac-title", card.title));
+  if (card.tiles.length) {
+    const tiles = el("div", "ac-tiles");
+    for (const tile of card.tiles) {
+      const box = el("div", "ac-tile");
+      box.append(
+        el(
+          "small",
+          undefined,
+          translate(language, "card_" + tile.label.toLowerCase(), tile.label),
+        ),
+        el("b", undefined, tile.value),
+      );
+      tiles.append(box);
+    }
+    root.append(tiles);
+  }
+  if (card.bars.length) {
+    const bars = el("div", "ac-bars");
+    for (const bar of card.bars) {
+      const row = el("div", "ac-bar");
+      const fill = el("i");
+      fill.style.width = Math.max(2, Math.round(bar.ratio * 100)) + "%";
+      const track = el("span", "ac-track");
+      track.append(fill);
+      row.append(
+        el("span", "ac-label", bar.label),
+        track,
+        el("span", "ac-value", bar.value),
+      );
+      bars.append(row);
+    }
+    root.append(bars);
+  }
+  if (card.table) {
+    const wrap = el("div", "ac-tablewrap");
+    const table = el("table", "ac-table");
+    const head = el("tr");
+    for (const h of card.table.headers) head.append(el("th", undefined, h));
+    table.append(head);
+    for (const r of card.table.rows) {
+      const tr = el("tr");
+      for (const cell of r)
+        tr.append(el("td", /^-?[d,.]+$/.test(cell) ? "n" : undefined, cell));
+      table.append(tr);
+    }
+    wrap.append(table);
+    root.append(wrap);
+  }
+  if (card.pills.length) {
+    const pills = el("div", "ac-pills");
+    for (const pill of card.pills)
+      pills.append(el("span", "ac-pill " + pill.tone, pill.text));
+    root.append(pills);
+  }
+  if (card.chips.length) {
+    const chips = el("div", "ac-chips");
+    for (const text of card.chips) {
+      const chip = el("button", "ac-chip", text) as HTMLButtonElement;
+      chip.type = "button";
+      chip.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = text;
+        instruction.focus();
+      });
+      chips.append(chip);
+    }
+    // Chips are controls: they stay reachable even though the card text is read from the hidden copy.
+    root.removeAttribute("aria-hidden");
+    root.append(chips);
+  }
+  return root;
 }

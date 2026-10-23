@@ -1130,7 +1130,7 @@ async function undoPart(
 export async function dropAgentBackups(
   runtime: ExcelRuntimeLike,
   undo: AgentUndo,
-): Promise<void> {
+): Promise<string[]> {
   const hidden = [
     ...undo.backups.map((item) => item.backup),
     ...(undo.journal ?? []).flatMap((entry) =>
@@ -1141,20 +1141,39 @@ export async function dropAgentBackups(
           : [],
     ),
   ];
-  if (!hidden.length) return;
-  await runtime.run(async (context) => {
-    for (const key of hidden) {
-      const sheet = context.workbook.worksheets.getItemOrNullObject(key);
-      sheet.load("isNullObject");
-      await context.sync();
-      if (!sheet.isNullObject) sheet.delete();
-    }
-    await context.sync();
-  });
   undo.backups = [];
   undo.marks = undefined;
   undo.settled = undefined;
   undo.journal = (undo.journal ?? []).filter(
     (entry) => entry.type !== "backup" && !entry.data?.restoreId,
   );
+  return deleteHiddenSheets(runtime, hidden);
+}
+
+/**
+ * Deletes hidden backup sheets one by one, so one that cannot be deleted does not keep the others.
+ * Returns the ids still in the workbook; the caller tries them again later.
+ */
+export async function deleteHiddenSheets(
+  runtime: ExcelRuntimeLike,
+  ids: string[],
+): Promise<string[]> {
+  const left: string[] = [];
+  if (!ids.length) return left;
+  await runtime.run(async (context) => {
+    for (const key of ids) {
+      try {
+        const sheet = context.workbook.worksheets.getItemOrNullObject(key);
+        sheet.load("isNullObject");
+        await context.sync();
+        if (!sheet.isNullObject) {
+          sheet.delete();
+          await context.sync();
+        }
+      } catch {
+        left.push(key);
+      }
+    }
+  });
+  return left;
 }

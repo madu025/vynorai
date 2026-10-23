@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mergeUndoData, undoAgentChanges } from "./officeAgentHost.js";
+import { deleteHiddenSheets, mergeUndoData, undoAgentChanges } from "./officeAgentHost.js";
 
 const emptyUndo: any = {
   steps: ["a", "b", "c"],
@@ -163,4 +163,26 @@ test("a sheet restored from its hidden copy is found again under its old id by e
   // The delete is undone first (asks for COPY); the earlier write then goes to COPY, not to OLD.
   assert.ok(asked.indexOf("COPY") >= 0);
   assert.equal(asked.includes("OLD"), false);
+});
+
+test("a hidden backup that cannot be deleted is reported, the others are still deleted", async () => {
+  const deleted: string[] = [];
+  const context: any = {
+    sync: async () => {},
+    workbook: {
+      worksheets: {
+        getItemOrNullObject: (key: string) => ({
+          isNullObject: false,
+          load() {},
+          delete: () => {
+            if (key === "B2") throw new Error("protected");
+            deleted.push(key);
+          },
+        }),
+      },
+    },
+  };
+  const left = await deleteHiddenSheets({ run: (fn: any) => fn(context) } as any, ["B1", "B2", "B3"]);
+  assert.deepEqual(left, ["B2"]);
+  assert.deepEqual(deleted, ["B1", "B3"]);
 });

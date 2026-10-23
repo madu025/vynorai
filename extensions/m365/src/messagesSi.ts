@@ -3,6 +3,8 @@
  * preview summary). Static labels live in i18n.ts. A message is matched as a whole first, then
  * sentence by sentence; anything unknown stays in English so nothing is ever mistranslated.
  */
+import { localizeAction } from "./messagesActions.js";
+
 
 const EXACT: Record<string, string> = {
   "Sparklines are not available in this Excel add-in yet. Use a line chart on a new result sheet instead.":
@@ -575,7 +577,7 @@ export function localizeMessageSi(text: string): string {
     const match = pattern.exec(trimmed);
     if (match) return build(...match.slice(1));
   }
-  return text;
+  return localizeAction(text, "si");
 }
 
 /** Preview summary line: "<actions> on <sheets>. N data rows, M columns. Your source data stays unchanged." */

@@ -1,5 +1,5 @@
 /**
- * Evaluates the staged cross-sheet joins on the real cells before any reviewer model runs: how many
+ * Evaluates the staged cross-sheet joins, appends and reconciliations on the real cells before any reviewer model runs: how many
  * result cells would be errors and how many rows would say "Not found". A model reviewer reading
  * the one-line description cannot see the formula `combine_tables` writes, so this check does.
  * Read-only: `host.calculate` leaves nothing in the workbook.
@@ -24,7 +24,6 @@ export async function evaluateJoins(
     if (change.kind !== "excel_action" || change.tool !== "combine_tables")
       continue;
     const args = change.args as Record<string, any>;
-    if (args.mode !== "join") continue;
     try {
       const header = async (sheet: string, address: string) => {
         const read = await host.readRange(
@@ -36,8 +35,8 @@ export async function evaluateJoins(
           String(cell ?? ""),
         );
       };
-      const [formula] = combineCells({
-        mode: "join",
+      const cells = combineCells({
+        mode: args.mode,
         left: {
           sheet: args.left_sheet,
           address: args.left_address,
@@ -51,8 +50,26 @@ export async function evaluateJoins(
         key: args.key,
         rightKey: args.right_key,
         columns: args.columns,
-      }).map((cell) => cell.formula.slice(1));
-      const label = `Join into '${args.sheet}'!${args.cell}`;
+        amount: args.amount,
+        rightAmount: args.right_amount,
+      });
+      const label = `${args.mode === "join" ? "Join" : args.mode === "append" ? "Append" : "Reconcile"} into '${args.sheet}'!${args.cell}`;
+      if (args.mode !== "join") {
+        let bad = 0;
+        for (const cell of cells)
+          bad +=
+            scalar(
+              await host.calculate(
+                `=LET(r,${cell.formula.slice(1)},SUM(--ISERROR(r)))`,
+              ),
+            ) ?? 0;
+        if (bad)
+          issues.push(
+            `${label}: the result holds ${bad} error value(s) when calculated on the real cells.`,
+          );
+        continue;
+      }
+      const formula = cells[0].formula.slice(1);
       const errors = scalar(
         await host.calculate(`=LET(r,${formula},SUM(--ISERROR(r)))`),
       );

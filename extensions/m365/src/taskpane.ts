@@ -21,6 +21,7 @@ import { describeSelection } from "./selectionChip.js";
 import {
   applyAgentChanges,
   createOfficeAgentHost,
+  deleteHiddenSheets,
   dropAgentBackups,
   undoAgentChanges,
   type AgentUndo,
@@ -5171,6 +5172,8 @@ let agentHistory: AgentMessage[] = [];
 let agentMask = new PersonalMask();
 let agentPending: AgentRun | undefined;
 let agentLastUndo: AgentUndo | undefined;
+/** Hidden backup sheets that could not be deleted yet. */
+let leftoverBackups: string[] = [];
 let agentBusy = false;
 let agentStopped = false;
 /** What the status line says after an apply; the read-back that follows must not overwrite it with "Nothing was changed". */
@@ -5678,12 +5681,19 @@ async function startAgentRun() {
   }
   // A new request: earlier backups are no longer needed once the person moved on.
   if (agentLastUndo) {
-    await dropAgentBackups(officeRuntime(), agentLastUndo).catch(
-      () => undefined,
+    const stuck = await dropAgentBackups(officeRuntime(), agentLastUndo).catch(
+      () => [] as string[],
     );
+    // A backup that could not be deleted is tried again with the next request, never forgotten.
+    leftoverBackups = [...leftoverBackups, ...stuck];
     agentLastUndo = undefined;
     show(agentUndo, false);
   }
+  if (leftoverBackups.length)
+    leftoverBackups = await deleteHiddenSheets(
+      officeRuntime(),
+      leftoverBackups,
+    ).catch(() => leftoverBackups);
   agentRounds = 0;
   agentVerifying = false;
   setAgentStage("inspect");

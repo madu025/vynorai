@@ -54,3 +54,23 @@ test("a clean join, other changes and a failing calculate give no issue", async 
   const broken = { ...hostWith(0, 0, 1), calculate: async () => { throw new Error("x"); } } as AgentHost;
   assert.deepEqual(await evaluateJoins([change], broken), []);
 });
+
+test("an append or reconcile that errors on the real cells is reported", async () => {
+  for (const mode of ["append", "reconcile"]) {
+    const staged = {
+      change: {
+        ...change.change,
+        args: { ...(change.change as any).args, mode, amount: undefined },
+      } as StagedChange,
+    };
+    // Both ranges share one header row, as an append and a reconcile on the same key need.
+    const base = hostWith(2, 0, 10);
+    const host = {
+      ...base,
+      readRange: async () => ({ address: "A1", values: [["Order", "Customer", "Amount"]] }),
+    } as unknown as AgentHost;
+    const issues = await evaluateJoins([staged], host);
+    assert.equal(issues.length, 1, mode);
+    assert.match(issues[0], /error value/);
+  }
+});

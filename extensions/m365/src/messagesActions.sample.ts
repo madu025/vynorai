@@ -1,0 +1,22 @@
+/** One sample argument set per workbook-object tool, to check that each description is localized. */
+export const ACTIONS_SAMPLE: Record<string, Record<string, unknown>> = {
+  edit_rows_columns: { action: "insert_rows", sheet: "S", address: "A2:A3" },
+  delete_rows_where: { sheet: "S", address: "A1:C9", conditions: [{ column: "Qty", operator: "=", value: 0 }], match: "all" },
+  filter_range: { sheet: "S", address: "A1:C9", kind: "values", column: "Region", values: ["East"] },
+  sheet_action: { action: "rename", sheet: "S", value: "T" },
+  conditional_format: { sheet: "S", address: "A1:A9", rule: "greater_than", value: 5 },
+  data_validation: { sheet: "S", address: "A1:A9", rule: "list", values: ["a", "b"] },
+  table_action: { action: "rename", table: "T1", value: "Sales" },
+  named_range: { action: "add", name: "Rate", refers_to: "S!A1" },
+  pivot_action: { action: "refresh", pivot: "P1" },
+  chart_action: { action: "title", chart: "C1", sheet: "S", value: "Sales" },
+  comment: { action: "add", sheet: "S", address: "A1", text: "hi" },
+  page_setup: { sheet: "S", orientation: "landscape" },
+  protect_sheet: { action: "protect", sheet: "S" },
+  find_replace: { find: "a", replace: "b", sheet: "S", address: "A1:B9" },
+  clean_in_place: { sheet: "S", address: "A1:B9", op: "trim" },
+  goal_seek: { sheet: "S", formula_cell: "B1", changing_cell: "A1", target: 10 },
+  combine_tables: { mode: "join", left_sheet: "O", left_address: "A1:C9", right_sheet: "C", right_address: "A1:B5", key: "Id", sheet: "R", cell: "A1" },
+  financial_model: { kind: "loan_schedule", principal: 100000, annual_rate: 0.12, years: 5, payments_per_year: 12, sheet: "R", cell: "A1" },
+  what_if: { mode: "table", model_sheet: "M", outputs: ["B5"], input_cell: "B1", values: [1, 2], sheet: "R", cell: "A1" },
+};

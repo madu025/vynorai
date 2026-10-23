@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deleteHiddenSheets, mergeUndoData, undoAgentChanges } from "./officeAgentHost.js";
+import {
+  deleteHiddenSheets,
+  mergeUndoData,
+  undoAgentChanges,
+} from "./officeAgentHost.js";
 
 const emptyUndo: any = {
   steps: ["a", "b", "c"],
@@ -30,17 +34,27 @@ test("one step that cannot be undone does not stop the others, and the error nam
     sync: async () => {},
     workbook: {
       worksheets: {
-        getItemOrNullObject: () => ({ isNullObject: false, load() {}, ...sheet }),
+        getItemOrNullObject: () => ({
+          isNullObject: false,
+          load() {},
+          ...sheet,
+        }),
       },
-      tables: { getItemOrNullObject: () => ({ isNullObject: true, load() {} }) },
+      tables: {
+        getItemOrNullObject: () => ({ isNullObject: true, load() {} }),
+      },
     },
   };
   const ran: string[] = [];
   await assert.rejects(
-    undoAgentChanges({ run: (fn: any) => fn(context) } as any, emptyUndo, async (rollback) => {
-      ran.push(String(rollback));
-      if (rollback === "b") throw new Error("step b broke");
-    }),
+    undoAgentChanges(
+      { run: (fn: any) => fn(context) } as any,
+      emptyUndo,
+      async (rollback) => {
+        ran.push(String(rollback));
+        if (rollback === "b") throw new Error("step b broke");
+      },
+    ),
     /could not finish 2 step\(s\).*step b broke.*restore S!L2:L301.*cannot clear/s,
   );
   assert.deepEqual(ran, ["c", "b", "a"]);
@@ -64,7 +78,9 @@ const fakeRuntime = (log: string[], failing = new Set<string>()): any => {
           }),
         }),
       },
-      tables: { getItemOrNullObject: () => ({ isNullObject: true, load() {} }) },
+      tables: {
+        getItemOrNullObject: () => ({ isNullObject: true, load() {} }),
+      },
     },
   };
   return { run: (fn: any) => fn(context) };
@@ -81,8 +97,26 @@ const twoChanges = (): any => ({
   tableSizes: [],
   // change 1 = the step, change 2 = a write after it
   marks: [
-    { steps: 0, journal: 0, tableSizes: 0, restores: 0, formats: 0, backups: 0, charts: 0, createdSheets: 0 },
-    { steps: 1, journal: 0, tableSizes: 0, restores: 0, formats: 0, backups: 0, charts: 0, createdSheets: 0 },
+    {
+      steps: 0,
+      journal: 0,
+      tableSizes: 0,
+      restores: 0,
+      formats: 0,
+      backups: 0,
+      charts: 0,
+      createdSheets: 0,
+    },
+    {
+      steps: 1,
+      journal: 0,
+      tableSizes: 0,
+      restores: 0,
+      formats: 0,
+      backups: 0,
+      charts: 0,
+      createdSheets: 0,
+    },
   ],
 });
 
@@ -122,16 +156,37 @@ test("a second Undo only runs the part that did not come back, and older parts w
 test("two applies keep their order after mergeUndoData", async () => {
   const a: any = { ...twoChanges() };
   const b: any = {
-    createdSheets: [], steps: ["step-of-apply-2"], journal: [], restores: [],
-    formats: [], backups: [], charts: [], tableSizes: [],
-    marks: [{ steps: 0, journal: 0, tableSizes: 0, restores: 0, formats: 0, backups: 0, charts: 0, createdSheets: 0 }],
+    createdSheets: [],
+    steps: ["step-of-apply-2"],
+    journal: [],
+    restores: [],
+    formats: [],
+    backups: [],
+    charts: [],
+    tableSizes: [],
+    marks: [
+      {
+        steps: 0,
+        journal: 0,
+        tableSizes: 0,
+        restores: 0,
+        formats: 0,
+        backups: 0,
+        charts: 0,
+        createdSheets: 0,
+      },
+    ],
   };
   const merged = mergeUndoData(a, b);
   const log: string[] = [];
   await undoAgentChanges(fakeRuntime(log), merged, async (rollback) => {
     log.push(String(rollback));
   });
-  assert.deepEqual(log, ["step-of-apply-2", "clear S!A1:A2", "step-of-change-1"]);
+  assert.deepEqual(log, [
+    "step-of-apply-2",
+    "clear S!A1:A2",
+    "step-of-change-1",
+  ]);
 });
 
 test("a sheet restored from its hidden copy is found again under its old id by earlier changes", async () => {
@@ -148,27 +203,66 @@ test("a sheet restored from its hidden copy is found again under its old id by e
           return {
             isNullObject: false,
             load() {},
-            customProperties: { getItemOrNullObject: () => ({ isNullObject: false, load() {}, delete() {} }) },
+            customProperties: {
+              getItemOrNullObject: () => ({
+                isNullObject: false,
+                load() {},
+                delete() {},
+              }),
+            },
             getRange: () => ({ clear: () => cleared.push(key) }),
           };
         },
       },
-      tables: { getItemOrNullObject: () => ({ isNullObject: true, load() {} }) },
+      tables: {
+        getItemOrNullObject: () => ({ isNullObject: true, load() {} }),
+      },
     },
   };
   const undo: any = {
-    createdSheets: [], steps: [], formats: [], backups: [], charts: [], tableSizes: [],
+    createdSheets: [],
+    steps: [],
+    formats: [],
+    backups: [],
+    charts: [],
+    tableSizes: [],
     restores: [{ sheet: "OLD", address: "A1:A2", formulas: null }],
     journal: [
-      { type: "inverse", tool: "sheet_action", data: { restoreId: "COPY", oldId: "OLD", name: "X", position: 0 } },
+      {
+        type: "inverse",
+        tool: "sheet_action",
+        data: { restoreId: "COPY", oldId: "OLD", name: "X", position: 0 },
+      },
     ],
     // change 1 wrote to OLD, change 2 deleted it (soft)
     marks: [
-      { steps: 0, journal: 0, tableSizes: 0, restores: 0, formats: 0, backups: 0, charts: 0, createdSheets: 0 },
-      { steps: 0, journal: 0, tableSizes: 0, restores: 1, formats: 0, backups: 0, charts: 0, createdSheets: 0 },
+      {
+        steps: 0,
+        journal: 0,
+        tableSizes: 0,
+        restores: 0,
+        formats: 0,
+        backups: 0,
+        charts: 0,
+        createdSheets: 0,
+      },
+      {
+        steps: 0,
+        journal: 0,
+        tableSizes: 0,
+        restores: 1,
+        formats: 0,
+        backups: 0,
+        charts: 0,
+        createdSheets: 0,
+      },
     ],
   };
-  await undoAgentChanges({ run: (fn: any) => fn(context) } as any, undo, async () => {});
+  await undoAgentChanges(
+    { run: (fn: any) => fn(context) } as any,
+    undo,
+    async () => {},
+  );
   // The delete is undone first (asks for COPY); the earlier write then goes to COPY, not to OLD.
   assert.ok(asked.indexOf("COPY") >= 0);
   // OLD is asked once, by the delete's own undo (is the sheet still there?); the write goes to COPY.
@@ -193,12 +287,73 @@ test("a hidden backup that cannot be deleted is reported, the others are still d
       },
     },
   };
-  const left = await deleteHiddenSheets({ run: (fn: any) => fn(context) } as any, ["B1", "B2", "B3"]);
+  const left = await deleteHiddenSheets(
+    { run: (fn: any) => fn(context) } as any,
+    ["B1", "B2", "B3"],
+  );
   assert.deepEqual(left, ["B2"]);
   assert.deepEqual(deleted, ["B1", "B3"]);
 });
 
 test("when the whole backup deletion fails, every backup id is kept for the next try", async () => {
-  const left = await deleteHiddenSheets({ run: async () => { throw new Error("busy"); } } as any, ["B1", "B2"]);
+  const left = await deleteHiddenSheets(
+    {
+      run: async () => {
+        throw new Error("busy");
+      },
+    } as any,
+    ["B1", "B2"],
+  );
   assert.deepEqual(left, ["B1", "B2"]);
+});
+
+test("formats and cells on a sheet the agent created are not put back, so a large one cannot block the Undo", async () => {
+  const log: string[] = [];
+  const context: any = {
+    sync: async () => {},
+    workbook: {
+      worksheets: {
+        getItemOrNullObject: (key: string) => ({
+          isNullObject: false,
+          load() {},
+          delete: () => log.push(`delete ${key}`),
+          getRange: () => ({
+            set numberFormat(_: unknown) {
+              throw new Error(
+                "The argument is invalid or missing or has an incorrect format.",
+              );
+            },
+            setCellProperties() {},
+            clear: () => log.push("clear"),
+          }),
+        }),
+      },
+      tables: {
+        getItemOrNullObject: () => ({ isNullObject: true, load() {} }),
+      },
+    },
+  };
+  const undo: any = {
+    steps: [],
+    journal: [],
+    restores: [{ sheet: "New", address: "A1:B9", formulas: null }],
+    formats: [
+      {
+        sheet: "New",
+        address: "A1:A5000",
+        numberFormat: [["0.0%"]],
+        cells: [[{}]],
+      },
+    ],
+    backups: [],
+    charts: [],
+    createdSheets: ["New"],
+    tableSizes: [],
+  };
+  await undoAgentChanges(
+    { run: (fn: any) => fn(context) } as any,
+    undo,
+    async () => {},
+  );
+  assert.deepEqual(log, ["delete New"]);
 });

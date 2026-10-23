@@ -258,6 +258,8 @@ const EXACT: Record<string, string> = {
     "மீளமைக்கப்பட்டது. பணிப்புத்தகம் முன்பு இருந்தபடியே உள்ளது.",
   "Undo did not finish. See Diagnostics.":
     "மீளமைப்பு முடியவில்லை. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
+  "Undo did not finish. Press Undo again.":
+    "மீளமைப்பு முடியவில்லை. மீண்டும் மீளமை அழுத்தவும்.",
   "Forgot the saved choices for this workbook.":
     "இந்தப் பணிப்புத்தகத்திற்குச் சேமித்த தேர்வுகள் மறக்கப்பட்டன.",
   "Copied. Paste it into WhatsApp; nothing was sent.":

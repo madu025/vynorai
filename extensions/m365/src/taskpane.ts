@@ -6403,7 +6403,11 @@ agentUndo?.addEventListener("click", async () => {
     setStatus("Undone. The workbook is back as it was.");
   } catch (error) {
     log.record("agent:undo", "fail", describeError(error));
-    setStatus("Undo did not finish. See Diagnostics.");
+    // Say which step and why: the Diagnostics panel is hidden for most people, and Undo can be pressed again.
+    setStatus("Undo did not finish. Press Undo again.");
+    if (status)
+      status.textContent =
+        `${status.textContent ?? ""} ${describeError(error).slice(0, 240)}`.trim();
   } finally {
     agentBusy = false;
   }

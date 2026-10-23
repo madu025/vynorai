@@ -5,6 +5,7 @@
  * new sheets are deleted, overwritten cells get their old formulas back, and an in-place edit of a
  * large range (sort, a big format) works on a hidden backup copy of the sheet made first.
  */
+import { boxAddress, clearPosition, parseBox } from "./chartPlacement.js";
 import {
   CALC_MAX_COLUMNS,
   CALC_MAX_ROWS,
@@ -493,7 +494,13 @@ const markOf = (undo: AgentUndo): UndoMark => ({
 
 /** The undo entries one change added: marks are cumulative, so a part runs from one to the next. */
 export function undoParts(undo: AgentUndo): { from: UndoMark; to: UndoMark }[] {
-  const empty = markOf({ createdSheets: [], restores: [], formats: [], backups: [], steps: [] });
+  const empty = markOf({
+    createdSheets: [],
+    restores: [],
+    formats: [],
+    backups: [],
+    steps: [],
+  });
   const bounds = [...(undo.marks ?? []), markOf(undo)];
   const parts: { from: UndoMark; to: UndoMark }[] = [];
   let from = empty;
@@ -505,7 +512,10 @@ export function undoParts(undo: AgentUndo): { from: UndoMark; to: UndoMark }[] {
 }
 
 /** Joins the undo data of two applies; the second apply's marks count from the end of the first. */
-export function mergeUndoData(earlier: AgentUndo | undefined, next: AgentUndo): AgentUndo {
+export function mergeUndoData(
+  earlier: AgentUndo | undefined,
+  next: AgentUndo,
+): AgentUndo {
   if (!earlier) return next;
   const base = markOf(earlier);
   const shift = (mark: UndoMark): UndoMark => ({
@@ -784,7 +794,31 @@ export async function applyAgentChanges(
           );
           if (change.title) chart.title.text = change.title;
           if (change.position) {
-            const [start, end = start] = change.position.split(":");
+            // The formulas written before this chart have spilled by now: keep the chart off their cells.
+            let place = change.position;
+            const box = parseBox(place);
+            if (box) {
+              const used = sheet.getUsedRangeOrNullObject(true);
+              used.load(["isNullObject", "rowIndex", "rowCount"]);
+              await context.sync();
+              const last = used.isNullObject
+                ? 0
+                : Number(used.rowIndex) + Number(used.rowCount);
+              if (last > box.row) {
+                const below = sheet.getRangeByIndexes(
+                  box.row,
+                  box.column,
+                  Math.min(last - box.row, 5000),
+                  box.columns,
+                );
+                below.load("values");
+                await context.sync();
+                place = boxAddress(
+                  clearPosition(box, below.values as unknown[][]),
+                );
+              }
+            }
+            const [start, end = start] = place.split(":");
             chart.setPosition(start, end);
           }
           chart.load("name");
@@ -815,7 +849,11 @@ export async function applyAgentChanges(
               change.copyFrom);
           // Formats copied onto one cell cover the whole source range, not just that cell.
           let affected = change.address;
-          if (change.kind === "format_range" && change.copyFrom && cells === 1) {
+          if (
+            change.kind === "format_range" &&
+            change.copyFrom &&
+            cells === 1
+          ) {
             const painter = sheet.getRange(change.copyFrom);
             painter.load(["rowCount", "columnCount"]);
             await context.sync();
@@ -1040,7 +1078,10 @@ const SNAPSHOT_FORMAT = {
 type Attempt = (label: string, run: () => Promise<void>) => Promise<void>;
 
 /** The undo entries of one marked part (one change). */
-function sliceUndo(undo: AgentUndo, part: { from: UndoMark; to: UndoMark }): AgentUndo {
+function sliceUndo(
+  undo: AgentUndo,
+  part: { from: UndoMark; to: UndoMark },
+): AgentUndo {
   const cut = <T>(list: T[] | undefined, key: keyof UndoMark): T[] =>
     (list ?? []).slice(part.from[key], part.to[key]);
   return {
@@ -1083,13 +1124,27 @@ export async function undoAgentChanges(
   };
   const parts = undoParts(undo);
   const settled = (undo.settled ??= []);
+  // A sheet this agent created goes away at the end of the Undo: putting its cells and formats back
+  // first is wasted work, and a large range there can fail ("argument is invalid") and block the rest.
+  const doomed = new Set(undo.createdSheets);
   // A sheet restored by an earlier Undo keeps its new id here, so a second Undo still finds it.
   sheetAliases.clear();
-  for (const [from, to] of Object.entries(undo.aliases ?? {})) sheetAliases.set(from, to);
+  for (const [from, to] of Object.entries(undo.aliases ?? {}))
+    sheetAliases.set(from, to);
   try {
-    for (let index = parts.length - 1; index >= 0 && !failures.length; index -= 1) {
+    for (
+      let index = parts.length - 1;
+      index >= 0 && !failures.length;
+      index -= 1
+    ) {
       if (settled[index]) continue;
-      await undoPart(runtime, sliceUndo(undo, parts[index]), undoStep, attempt);
+      await undoPart(
+        runtime,
+        sliceUndo(undo, parts[index]),
+        undoStep,
+        attempt,
+        doomed,
+      );
       settled[index] = failures.length === 0;
     }
   } finally {
@@ -1097,7 +1152,9 @@ export async function undoAgentChanges(
     sheetAliases.clear();
   }
   if (failures.length)
-    throw new Error(`Undo could not finish ${failures.length} step(s): ${failures.join("; ").slice(0, 400)}`);
+    throw new Error(
+      `Undo could not finish ${failures.length} step(s): ${failures.join("; ").slice(0, 400)}`,
+    );
 }
 
 async function undoPart(
@@ -1105,94 +1162,104 @@ async function undoPart(
   undo: AgentUndo,
   undoStep: (rollback: unknown) => Promise<void>,
   attempt: Attempt,
+  doomed: ReadonlySet<string> = new Set(),
 ): Promise<void> {
   for (const rollback of [...undo.steps].reverse())
     await attempt("step", () => undoStep(rollback));
-  await attempt("workbook", () => runtime.run(async (context) => {
-    for (const entry of [...(undo.journal ?? [])].reverse())
-      await attempt(`journal ${entry.type}`, () =>
-        undoJournalEntry(context, entry),
-      );
-    const sheets = context.workbook.worksheets;
-    const byKey = async (key: string) => {
-      const sheet = sheets.getItemOrNullObject(sheetAliases.get(key) ?? key);
-      sheet.load("isNullObject");
-      await context.sync();
-      return sheet.isNullObject ? undefined : sheet;
-    };
-    // A Table that grew into a written column shrinks back first (an empty header is not allowed).
-    for (const size of [...(undo.tableSizes ?? [])].reverse())
-      await attempt(`table ${size.name}`, async () => {
-      const table = context.workbook.tables.getItemOrNullObject(size.name);
-      table.load("isNullObject");
-      await context.sync();
-      if (table.isNullObject) return;
-      const columns = table.columns;
-      columns.load("count");
-      await context.sync();
-      for (
-        let index = Number(columns.count) - 1;
-        index >= size.columns;
-        index -= 1
-      )
-        columns.getItemAt(index).delete();
-      await context.sync();
-    });
-    for (const item of [...undo.restores].reverse())
-      await attempt(`restore ${item.sheet}!${item.address}`, async () => {
-      const sheet = await byKey(item.sheet);
-      if (!sheet) return;
-      const range = sheet.getRange(item.address);
-      if (!item.formulas) {
-        range.clear("Contents");
+  await attempt("workbook", () =>
+    runtime.run(async (context) => {
+      for (const entry of [...(undo.journal ?? [])].reverse())
+        await attempt(`journal ${entry.type}`, () =>
+          undoJournalEntry(context, entry),
+        );
+      const sheets = context.workbook.worksheets;
+      const byKey = async (key: string) => {
+        const sheet = sheets.getItemOrNullObject(sheetAliases.get(key) ?? key);
+        sheet.load("isNullObject");
         await context.sync();
-        return;
-      }
-      // Written back in parts: one request for 366k cells is too large for Excel on the web.
-      const rows = item.formulas.length;
-      for (let start = 0; start < rows; start += RESTORE_ROWS) {
-        const part = item.formulas.slice(start, start + RESTORE_ROWS);
-        range
-          .getCell(start, 0)
-          .getResizedRange(part.length - 1, part[0].length - 1).formulas = part;
-        await context.sync();
-      }
-    });
-    for (const item of [...undo.formats].reverse())
-      await attempt(`format ${item.sheet}!${item.address}`, async () => {
-        const sheet = await byKey(item.sheet);
-        if (!sheet) return;
-        const range = sheet.getRange(item.address);
-        range.numberFormat = item.numberFormat;
-        range.setCellProperties(item.cells);
-        await context.sync();
-      });
-    for (const item of [...undo.backups].reverse())
-      await attempt(`backup ${item.sheet}!${item.address}`, async () => {
-        const sheet = await byKey(item.sheet);
-        const backup = await byKey(item.backup);
-        if (!sheet || !backup) return;
-        await restoreFromBackup(context, sheet, backup, item.address);
-        backup.delete();
-        await context.sync();
-      });
-    for (const item of [...(undo.charts ?? [])].reverse())
-      await attempt(`chart ${item.name}`, async () => {
-        const sheet = await byKey(item.sheet);
-        if (!sheet) return;
-        const chart = sheet.charts.getItemOrNullObject(item.name);
-        chart.load("isNullObject");
-        await context.sync();
-        if (!chart.isNullObject) chart.delete();
-        await context.sync();
-      });
-    for (const key of [...undo.createdSheets].reverse())
-      await attempt(`sheet ${key}`, async () => {
-        const sheet = await byKey(key);
-        if (sheet) sheet.delete();
-        await context.sync();
-      });
-  }));
+        return sheet.isNullObject ? undefined : sheet;
+      };
+      // A Table that grew into a written column shrinks back first (an empty header is not allowed).
+      for (const size of [...(undo.tableSizes ?? [])].reverse())
+        await attempt(`table ${size.name}`, async () => {
+          const table = context.workbook.tables.getItemOrNullObject(size.name);
+          table.load("isNullObject");
+          await context.sync();
+          if (table.isNullObject) return;
+          const columns = table.columns;
+          columns.load("count");
+          await context.sync();
+          for (
+            let index = Number(columns.count) - 1;
+            index >= size.columns;
+            index -= 1
+          )
+            columns.getItemAt(index).delete();
+          await context.sync();
+        });
+      for (const item of [...undo.restores]
+        .reverse()
+        .filter((entry) => !doomed.has(entry.sheet)))
+        await attempt(`restore ${item.sheet}!${item.address}`, async () => {
+          const sheet = await byKey(item.sheet);
+          if (!sheet) return;
+          const range = sheet.getRange(item.address);
+          if (!item.formulas) {
+            range.clear("Contents");
+            await context.sync();
+            return;
+          }
+          // Written back in parts: one request for 366k cells is too large for Excel on the web.
+          const rows = item.formulas.length;
+          for (let start = 0; start < rows; start += RESTORE_ROWS) {
+            const part = item.formulas.slice(start, start + RESTORE_ROWS);
+            range
+              .getCell(start, 0)
+              .getResizedRange(part.length - 1, part[0].length - 1).formulas =
+              part;
+            await context.sync();
+          }
+        });
+      for (const item of [...undo.formats]
+        .reverse()
+        .filter((entry) => !doomed.has(entry.sheet)))
+        await attempt(`format ${item.sheet}!${item.address}`, async () => {
+          const sheet = await byKey(item.sheet);
+          if (!sheet) return;
+          const range = sheet.getRange(item.address);
+          range.numberFormat = item.numberFormat;
+          range.setCellProperties(item.cells);
+          await context.sync();
+        });
+      for (const item of [...undo.backups].reverse())
+        await attempt(`backup ${item.sheet}!${item.address}`, async () => {
+          const sheet = await byKey(item.sheet);
+          const backup = await byKey(item.backup);
+          if (!sheet || !backup) return;
+          await restoreFromBackup(context, sheet, backup, item.address);
+          backup.delete();
+          await context.sync();
+        });
+      for (const item of [...(undo.charts ?? [])]
+        .reverse()
+        .filter((entry) => !doomed.has(entry.sheet)))
+        await attempt(`chart ${item.name}`, async () => {
+          const sheet = await byKey(item.sheet);
+          if (!sheet) return;
+          const chart = sheet.charts.getItemOrNullObject(item.name);
+          chart.load("isNullObject");
+          await context.sync();
+          if (!chart.isNullObject) chart.delete();
+          await context.sync();
+        });
+      for (const key of [...undo.createdSheets].reverse())
+        await attempt(`sheet ${key}`, async () => {
+          const sheet = await byKey(key);
+          if (sheet) sheet.delete();
+          await context.sync();
+        });
+    }),
+  );
 }
 
 /** After the person keeps the result: the hidden backup copies are no longer needed. */
@@ -1231,20 +1298,20 @@ export async function deleteHiddenSheets(
   if (!ids.length) return left;
   try {
     await runtime.run(async (context) => {
-    for (const key of ids) {
-      try {
-        const sheet = context.workbook.worksheets.getItemOrNullObject(key);
-        sheet.load("isNullObject");
-        await context.sync();
-        if (!sheet.isNullObject) {
-          sheet.delete();
+      for (const key of ids) {
+        try {
+          const sheet = context.workbook.worksheets.getItemOrNullObject(key);
+          sheet.load("isNullObject");
           await context.sync();
+          if (!sheet.isNullObject) {
+            sheet.delete();
+            await context.sync();
+          }
+        } catch {
+          left.push(key);
         }
-      } catch {
-        left.push(key);
       }
-    }
-  });
+    });
   } catch {
     // The whole request failed (Excel busy): nothing is known to be deleted, keep every id.
     return [...ids];

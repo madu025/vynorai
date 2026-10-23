@@ -277,3 +277,34 @@ test("remembered results are recalled by reply text", () => {
   assert.equal(recallAnswerResults("reply-x").length, 1);
   assert.equal(recallAnswerResults("other").length, 0);
 });
+
+test("pill text is cut at a natural boundary with no ellipsis", async () => {
+  const { pillText, buildAnswerCard } = await import("./answerCard.js");
+  assert.equal(
+    pillText("No duplicate Order IDs in Orders (3,000 rows, 0 repeats)"),
+    "No duplicate Order IDs in Orders",
+  );
+  assert.equal(
+    pillText("- No blank cells in Order ID, and no errors"),
+    "No blank cells in Order ID",
+  );
+  assert.equal(
+    pillText("There are one two three four five six seven eight nine nuts"),
+    "There are one two three four five",
+  );
+  const card = buildAnswerCard({
+    reply:
+      "- No duplicate Order IDs in Orders (3,000 rows, …\n- No blank cells in Order ID, and no errors\n- Want me to check the other sheets?",
+    results: [],
+  });
+  assert.ok(card.pills.every((p) => !p.text.includes("…")));
+});
+
+test("a chip question has no leading dash or bullet", () => {
+  const card = buildAnswerCard({
+    reply:
+      "- Totals hold\n- Want me to run the same check across the other sheets?",
+    results: [],
+  });
+  assert.ok(card.chips.every((c) => !/^[-•*]/.test(c)));
+});

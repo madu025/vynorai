@@ -9,7 +9,9 @@ import {
   recallAnswerResults,
   type AnswerCardData,
 } from "./answerCard.js";
+import { nextSteps } from "./followUps.js";
 import { clampReply } from "./replyClamp.js";
+import type { WorkspaceSchema } from "./smartWorkspace.js";
 import { stripRanges } from "./selectionChip.js";
 
 export interface ChatViewOptions {
@@ -23,6 +25,8 @@ export interface ChatViewOptions {
   contextSuggestionsVisible: boolean;
   contextSuggestionCount: number;
   setStatus(message: string): void;
+  /** The table facts for next-step chips under the latest answer. */
+  schema?: WorkspaceSchema;
 }
 
 /** Renders only the chat picker controls; it does not mutate chat state or workbook state. */
@@ -80,6 +84,23 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
     messages.length > 0 ||
       (contextSuggestionsVisible && contextSuggestionCount > 0),
   );
+  const lastIndex = messages.length - 1;
+  const lastMessage = messages[lastIndex];
+  let steps: ReturnType<typeof nextSteps> = [];
+  if (lastMessage && lastMessage.kind === "assistant") {
+    const lastUser = [...messages].reverse().find((m) => m.kind === "user");
+    steps = nextSteps({
+      questions: buildAnswerCard({
+        reply: localizeMessage(
+          options.textLanguage ?? language,
+          lastMessage.text,
+        ),
+        results: recallAnswerResults(lastMessage.text),
+      }).chips,
+      schema: options.schema,
+      asked: lastUser?.text,
+    });
+  }
   messages.forEach((message, index) => {
     const item = document.createElement("article");
     item.className = `message ${message.kind}`;
@@ -109,7 +130,12 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
       message.kind === "assistant" && !drawn ? clampReply(shown) : undefined;
     if (drawn) {
       body.append(
-        renderAnswerCard(document, drawn, language, instruction),
+        renderAnswerCard(
+          document,
+          steps.length && index === lastIndex ? { ...drawn, chips: [] } : drawn,
+          language,
+          instruction,
+        ),
         hiddenText(document, shown),
       );
     } else if (clamped && clamped.hiddenCount > 0) {
@@ -168,6 +194,30 @@ export function renderConversationHistoryView(options: ChatViewOptions): void {
     }
     history.appendChild(item);
   });
+  if (steps.length) {
+    const row = document.createElement("div");
+    row.className = "next-steps";
+    row.setAttribute("role", "group");
+    row.setAttribute(
+      "aria-label",
+      translate(language, "next_steps", "Next steps"),
+    );
+    for (const step of steps) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "next-step";
+      chip.textContent = step.label;
+      chip.title = step.text;
+      chip.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = step.text;
+        instruction.dispatchEvent(new Event("input"));
+        instruction.focus();
+      });
+      row.append(chip);
+    }
+    history.appendChild(row);
+  }
 }
 
 /** The full reply, kept for screen readers and copy while the card is what people see. */

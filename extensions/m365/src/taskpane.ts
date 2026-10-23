@@ -484,6 +484,8 @@ type ConversationMessage = {
 };
 
 let conversationMessages: ConversationMessage[] = [];
+/** The latest table facts, for the next-step chips under an answer. */
+let lastWorkspaceSchema: WorkspaceSchema | undefined;
 /** All saved chats of this person; the open chat mirrors `conversationMessages`. */
 let chatStore: ChatStore = emptyChatStore();
 const newChatId = () =>
@@ -709,6 +711,7 @@ function renderConversationHistory() {
     ),
     contextSuggestionCount: contextSuggestionList?.children.length ?? 0,
     setStatus,
+    schema: lastWorkspaceSchema,
   });
 }
 
@@ -4756,6 +4759,7 @@ function renderWorkspaceContext(
     return;
   }
   shownTable = schema?.tableAddress;
+  lastWorkspaceSchema = schema;
   const description = describeSelectionLocal(info);
   if (contextSelection) contextSelection.textContent = description;
   const badgeLabels = [
@@ -4854,7 +4858,12 @@ function renderWorkspaceContext(
   show(workbookContext, description !== "");
   const idle = conversationMessages.length === 0 ? idleSuggestions(schema) : [];
   renderIdleCards(idle);
-  show(contextSuggestions, suggestions.length > 0 && idle.length === 0);
+  show(
+    contextSuggestions,
+    conversationMessages.length === 0 &&
+      suggestions.length > 0 &&
+      idle.length === 0,
+  );
   show(
     document.querySelector<HTMLElement>("#starter-suggestions"),
     conversationMessages.length === 0 &&

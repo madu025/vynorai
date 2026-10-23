@@ -115,6 +115,19 @@ const words = (text: string, max: number): string => {
     : list.join(" ");
 };
 
+/** Pill text: cut at the first comma, period or dash, parentheses dropped, at most 7 words, no ellipsis. */
+export const pillText = (text: string): string => {
+  const first = text
+    .replace(BULLET, "")
+    .replace(/\([^)]*\)?/g, " ")
+    .split(/,|;|[.:]\s|\.$|\s[—–-]\s/)[0]
+    .trim();
+  return first.split(/\s+/).filter(Boolean).slice(0, 7).join(" ");
+};
+
+const cleanChip = (text: string): string =>
+  text.replace(/^\s*(?:[-–—•*]+\s*)+/, "").trim();
+
 const lines = (reply: string): string[] =>
   reply
     .split(/\n/)
@@ -249,11 +262,11 @@ export function buildAnswerCard(input: {
   const plain: string[] = [];
   for (const line of all) {
     const text = line.replace(BULLET, "");
-    if (/\?\s*$/.test(text)) card.chips.push(text);
+    if (/\?\s*$/.test(text)) card.chips.push(cleanChip(text));
     else if (OK_FINDING.test(text))
-      card.pills.push({ tone: "ok", text: words(clause(text), 8) });
+      card.pills.push({ tone: "ok", text: pillText(text) });
     else if (WARNING.test(text))
-      card.pills.push({ tone: "warn", text: words(clause(text), 8) });
+      card.pills.push({ tone: "warn", text: pillText(text) });
     else plain.push(text);
   }
   const first = plain[0];

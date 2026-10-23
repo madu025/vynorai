@@ -3065,6 +3065,33 @@
         text-align: right;
         font-variant-numeric: tabular-nums;
       }
+      .next-steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 2px 0 6px;
+      }
+      .next-step {
+        min-height: 32px;
+        max-width: 100%;
+        border: 1px solid var(--line);
+        border-radius: var(--r-pill);
+        background: var(--surface-solid, var(--surface));
+        color: var(--ink);
+        padding: 4px 12px;
+        font: inherit;
+        font-size: var(--fs-sm);
+        text-align: left;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .next-step:hover {
+        border-color: var(--brand);
+        color: var(--brand);
+      }
+      body:has(#agent-checked[data-state="working"]) .next-steps {
+        display: none;
+      }
       .ac-pills,
       .ac-chips {
         display: flex;
@@ -3287,7 +3314,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.13</p>
+          <p class="menu-version" id="build-id">Build 20261023.14</p>
         </div>
       </div>
 

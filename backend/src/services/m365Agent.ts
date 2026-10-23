@@ -1050,17 +1050,41 @@ export function cleanAgentReply(raw: {
 const WINDOW_MS = 60_000;
 const MAX_TURNS_PER_WINDOW = 40;
 const recent = new Map<string, number[]>();
+let lastSweep = 0;
+/** Drops every user whose newest turn is older than the window, so the map cannot grow without bound. */
+function sweepAgentRateLimit(now: number): void {
+  lastSweep = now;
+  for (const [id, stamps] of recent) {
+    if (!stamps.length || now - stamps[stamps.length - 1] >= WINDOW_MS)
+      recent.delete(id);
+  }
+}
+export function agentRateLimitSizeForTests(): number {
+  return recent.size;
+}
 export function assertAgentRateLimit(userId: string, now = Date.now()): void {
+  if (now - lastSweep >= WINDOW_MS || recent.size > 5000)
+    sweepAgentRateLimit(now);
   const stamps = (recent.get(userId) ?? []).filter(
     (stamp) => now - stamp < WINDOW_MS,
   );
-  if (stamps.length >= MAX_TURNS_PER_WINDOW)
+  if (stamps.length >= MAX_TURNS_PER_WINDOW) {
+    recent.set(userId, stamps);
     throw new M365AnalysisError("AI_ANALYSIS_RATE_LIMITED", 429);
+  }
   stamps.push(now);
   recent.set(userId, stamps);
 }
 export function resetAgentRateLimitForTests(): void {
   recent.clear();
+  lastSweep = 0;
+}
+
+/** The tool definitions ride in every request: counted once, at about 4 characters a token. */
+let toolTokenEstimate: number | undefined;
+export function agentToolTokenEstimate(): number {
+  toolTokenEstimate ??= Math.ceil(JSON.stringify(AGENT_TOOLS).length / 4);
+  return toolTokenEstimate;
 }
 
 /** One model turn: the fixed system prompt and tools, then the conversation. */
@@ -1095,7 +1119,7 @@ export async function agentTurn(
     user,
     messages,
     AGENT_TOOLS,
-    Math.ceil(chars / 4) + maxTokens,
+    Math.ceil(chars / 4) + agentToolTokenEstimate() + maxTokens,
     maxTokens,
   );
   return cleanAgentReply(raw);

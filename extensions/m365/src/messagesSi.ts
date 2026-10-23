@@ -227,6 +227,12 @@ const EXACT: Record<string, string> = {
     "යම් දෝෂයක් සිදු විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
   "I did not answer this time and nothing was changed. Please try again or ask in other words.":
     "මෙවර මම පිළිතුරු නොදුන්නෙමි; කිසිවක් වෙනස් කර නැත. නැවත උත්සාහ කරන්න හෝ වෙනත් වචන වලින් අසන්න.",
+  "Asking the AI for ideas...": "AI ගෙන් අදහස් ඉල්ලමින්...",
+  "Ideas ready. Tap one to put it in the request box.":
+    "අදහස් සූදානම්. එකක් ඔබා ඉල්ලීම් පෙට්ටියට දමන්න.",
+  "No new ideas this time.": "මෙවර අලුත් අදහස් නැත.",
+  "The ideas could not be made. See Diagnostics.":
+    "අදහස් සෑදීමට නොහැකි විය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
   "Undoing the agent's changes...": "Agent ගේ වෙනස්කම් ආපසු හරවමින්...",
   "Undone. The workbook is back as it was.":
     "ආපසු හැරවිණි. වැඩපොත කලින් පරිදිම ය.",

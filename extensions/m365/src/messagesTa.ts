@@ -236,6 +236,12 @@ const EXACT: Record<string, string> = {
     "ஏதோ தவறு நடந்தது. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
   "I did not answer this time and nothing was changed. Please try again or ask in other words.":
     "இந்த முறை நான் பதிலளிக்கவில்லை; எதுவும் மாற்றப்படவில்லை. மீண்டும் முயற்சிக்கவும் அல்லது வேறு வார்த்தைகளில் கேளுங்கள்.",
+  "Asking the AI for ideas...": "AI இடம் யோசனைகளைக் கேட்கிறது...",
+  "Ideas ready. Tap one to put it in the request box.":
+    "யோசனைகள் தயார். ஒன்றைத் தட்டி கோரிக்கை பெட்டியில் வையுங்கள்.",
+  "No new ideas this time.": "இந்த முறை புதிய யோசனைகள் இல்லை.",
+  "The ideas could not be made. See Diagnostics.":
+    "யோசனைகளை உருவாக்க முடியவில்லை. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
   "Undoing the agent's changes...": "Agent செய்த மாற்றங்களை மீளமைக்கிறது...",
   "Undone. The workbook is back as it was.":
     "மீளமைக்கப்பட்டது. பணிப்புத்தகம் முன்பு இருந்தபடியே உள்ளது.",

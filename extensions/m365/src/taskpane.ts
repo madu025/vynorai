@@ -101,6 +101,12 @@ import {
 import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
 import { exploreFor, type ExploreItem } from "./exploreView.js";
+import {
+  columnStats,
+  ideasRequest,
+  parseIdeas,
+  type ExploreStats,
+} from "./exploreIdeas.js";
 import { ratesOn } from "./lkTaxRates.js";
 import {
   aiFirstOn,
@@ -4786,6 +4792,10 @@ async function readWorkspaceContext(): Promise<{
  * flow, which shows its own figures and asks before it adds anything.
  */
 let exploreState: { info?: WorkspaceSelection; schema?: WorkspaceSchema } = {};
+/** Counts from the sample that "Noticed" reads (exploreIdeas.ts): they choose the measure and groups. */
+let exploreStats: ExploreStats | undefined;
+/** The AI's ideas for the current selection; cleared when the selection changes. */
+let exploreAiIdeas: ExploreItem[] = [];
 
 function exploreChips(host: string, items: ExploreItem[]) {
   document.querySelector<HTMLElement>(host)?.replaceChildren(
@@ -4824,8 +4834,14 @@ function renderExplore(
   const view = exploreFor(info?.isBlank ? undefined : schema?.columns, {
     vatRate: vat.value,
     vatUnchecked: !vat.reviewed,
+    stats: exploreStats,
   });
   exploreChips("#explore-template-list", view.templates);
+  exploreChips("#explore-ai-list", exploreAiIdeas);
+  show(
+    document.querySelector<HTMLElement>("#explore-ai"),
+    view.templates.length > 0 || view.questions.length > 0,
+  );
   exploreChips("#explore-question-list", view.questions);
   show(document.querySelector<HTMLElement>("#explore-templates"), view.templates.length > 0);
   show(document.querySelector<HTMLElement>("#explore-ask"), view.questions.length > 0);
@@ -4880,10 +4896,88 @@ function renderNoticed(tiles: NoticedTile[]) {
 }
 
 /** Looks at the first rows of the selection on this device; changes nothing and sends nothing. */
+/** "More ideas": the agent gets column names, roles and counts (no cell) after the person agreed. */
+async function askAiForIdeas() {
+  const columns = (exploreState.schema?.columns ?? []).map((column) => ({
+    name: String(column.name ?? "").trim(),
+    role: String(column.role ?? ""),
+  }));
+  if (!columns.length || agentBusy) return;
+  const request = ideasRequest(columns.filter((column) => column.name), exploreStats);
+  let agreed = false;
+  try {
+    agreed = localStorage.getItem(AGENT_CONSENT_KEY) === "1";
+  } catch {
+    agreed = false;
+  }
+  if (!agreed) {
+    agreed = await askInPane(
+      localizeMessage(
+        language,
+        "The agent sends your request, the column names and small samples of the cells it reads (at most 50 rows at a time) to the VynorAI AI service. Personal data such as e-mail addresses and phone numbers is replaced before anything leaves this workbook. Nothing changes until you approve.",
+      ),
+      localizeMessage(language, "Agree"),
+      localizeMessage(language, "Cancel"),
+      agentConsentCard({ request: "Ideas for the selected columns" }, language),
+    );
+    if (!agreed) return setStatus("Nothing was sent.");
+    try {
+      localStorage.setItem(AGENT_CONSENT_KEY, "1");
+    } catch {
+      // Asked again next time.
+    }
+  }
+  const button = document.querySelector<HTMLButtonElement>("#explore-ai-go");
+  if (button) button.disabled = true;
+  agentBusy = true;
+  setStatus("Asking the AI for ideas...");
+  try {
+    const run = await runAgent({
+      request,
+      host: createOfficeAgentHost(
+        officeRuntime(),
+        checkStepWith(agentInputReader()),
+        apiClient(),
+      ),
+      model: agentModel,
+      mask: agentMask,
+      maxTurns: 2,
+    });
+    exploreAiIdeas = parseIdeas(run.reply).map((idea) => ({
+      id: "ai" as const,
+      title: idea,
+      detail: "",
+      request: idea,
+    }));
+    renderExplore(exploreState.info, exploreState.schema);
+    setStatus(
+      exploreAiIdeas.length
+        ? "Ideas ready. Tap one to put it in the request box."
+        : "No new ideas this time.",
+    );
+  } catch (error) {
+    log.record("explore:ideas", "fail", describeError(error));
+    setStatus("The ideas could not be made. See Diagnostics.");
+  } finally {
+    agentBusy = false;
+    if (button) button.disabled = false;
+  }
+}
+document
+  .querySelector("#explore-ai-go")
+  ?.addEventListener("click", () => void askAiForIdeas());
+
 async function refreshNoticed(address: string, rows: number, columns: number) {
   if (!noticedCard) return;
   const token = (noticedToken += 1);
-  if (rows < 4 || columns < 1 || columns > 30) return renderNoticed([]);
+  if (rows < 4 || columns < 1 || columns > 30) {
+    if (exploreStats) {
+      exploreStats = undefined;
+      exploreAiIdeas = [];
+      renderExplore(exploreState.info, exploreState.schema);
+    }
+    return renderNoticed([]);
+  }
   try {
     const bang = address.lastIndexOf("!");
     const sheetName = (bang > 0 ? address.slice(0, bang) : "")
@@ -4902,6 +4996,15 @@ async function refreshNoticed(address: string, rows: number, columns: number) {
     });
     if (token !== noticedToken) return;
     const [headerRow = [], ...body] = values;
+    const stats = columnStats(
+      headerRow.map((value: unknown) => String(value ?? "")),
+      body as never,
+    );
+    if (JSON.stringify(stats) !== JSON.stringify(exploreStats)) {
+      exploreStats = stats;
+      exploreAiIdeas = [];
+      renderExplore(exploreState.info, exploreState.schema);
+    }
     renderNoticed(
       noticeInData(
         headerRow.map((value: unknown) => String(value ?? "")),

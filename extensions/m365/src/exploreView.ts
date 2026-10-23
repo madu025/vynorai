@@ -6,6 +6,7 @@
  * against the reader itself. Nothing here changes the workbook.
  */
 import { isMoneyHeader } from "./businessContext.js";
+import { rankCategories, rankMeasures, type ExploreStats } from "./exploreIdeas.js";
 import { mapPayrollColumns } from "./payroll.js";
 
 export interface ExploreColumn {
@@ -15,7 +16,7 @@ export interface ExploreColumn {
 }
 
 export interface ExploreItem {
-  id: "summary" | "vat" | "month" | "payroll" | "highest" | "lowest" | "item" | "total";
+  id: "summary" | "vat" | "month" | "payroll" | "highest" | "lowest" | "item" | "total" | "ai";
   /** English title; run-time text, localized by the pane. */
   title: string;
   /** One line under the title; empty for a question. */
@@ -38,6 +39,8 @@ export interface ExploreOptions {
   vatRate?: number;
   /** The rate has not been checked by an accountant yet (lkTaxRates `reviewed`): the card says so. */
   vatUnchecked?: boolean;
+  /** Counts from a sample of the selection (exploreIdeas.ts): choose the measure and the groups. */
+  stats?: ExploreStats;
 }
 
 /** A name safe to put inside a request sentence: no brackets (formula column syntax) or line breaks. */
@@ -61,8 +64,8 @@ export function exploreFor(
     .filter((column) => plain(column.name));
   const names = (role: string) =>
     named.filter((column) => column.role === role).map((column) => column.name);
-  const categories = names("category");
-  const measures = names("measure");
+  const categories = rankCategories(names("category"), options.stats);
+  const measures = rankMeasures(names("measure"), options.stats);
   const dates = names("date");
   const payroll = mapPayrollColumns(columns.map((column) => String(column.name ?? ""))) !== null;
 

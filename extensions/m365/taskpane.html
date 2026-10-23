@@ -2150,6 +2150,66 @@
         width: 100%;
         min-height: 44px;
       }
+      .share-styles {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .share-styles[hidden],
+      .share-style[hidden] {
+        display: none;
+      }
+      .share-style {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+        padding: 3px;
+        border: 2px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 10px;
+        text-align: center;
+      }
+      .share-style img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        object-position: top;
+        border-radius: 7px;
+      }
+      .share-style[aria-pressed="true"] {
+        border-color: var(--brand);
+        color: inherit;
+        font-weight: 600;
+      }
+      .saved-footer {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 1px 8px;
+        min-width: 0;
+        margin: 2px 0 0;
+        padding: 4px 8px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      .saved-footer[hidden],
+      body:not([data-auth="in"]) .saved-footer,
+      .saved-footer span:empty {
+        display: none;
+      }
+      .saved-streak {
+        color: var(--brand);
+        font-weight: 600;
+      }
     </style>
     <style id="explore-styles">
       /* Explore tab: templates and questions made for the selection. Four tabs share the nav. */
@@ -2852,6 +2912,18 @@
                 placeholder="Ctrl+V"
               ></textarea>
             </label>
+            <div
+              id="share-styles"
+              class="share-styles"
+              role="group"
+              aria-label="Card style"
+              data-i18n-aria-label="share_style_label"
+              hidden
+            >
+              <button type="button" class="share-style" data-style="summary" aria-pressed="true"><img alt="" /><span data-i18n="share_style_summary">Summary</span></button>
+              <button type="button" class="share-style" data-style="chart" aria-pressed="false"><img alt="" /><span data-i18n="share_style_chart">Chart</span></button>
+              <button type="button" class="share-style" data-style="insight" aria-pressed="false"><img alt="" /><span data-i18n="share_style_insight">Insight</span></button>
+            </div>
             <img id="share-card-img" alt="" hidden />
             <div id="share-message-block" hidden>
               <label for="share-message"
@@ -3289,6 +3361,9 @@
             </section>
           </section>
         </div>
+        <p id="saved-footer" class="saved-footer" role="note" hidden>
+          <span id="saved-month"></span><span id="saved-streak" class="saved-streak"></span>
+        </p>
         <nav
           id="workspace-nav"
           class="workspace-nav"

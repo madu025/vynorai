@@ -41,7 +41,15 @@ sent, masked values counted, unmasked e-mail/phone/NIC flagged), `extensions/m36
 `extensions/m365/src/shareCard.ts` (pure: pasted Excel cells to a grid, and a result sheet, selection or paste to
 a card with tiles, bars, headline and message in en/si/ta), `extensions/m365/src/shareCardCanvas.ts` (draws the
 card as a PNG), `extensions/m365/src/shareDelivery.ts` (phone share sheet, else clipboard image plus text for
-WhatsApp Web or Desktop; nothing is sent automatically), `readSelectedExcelValues` in `officeExcel.ts`, and the Office writers in
+WhatsApp Web or Desktop; nothing is sent automatically), the card style picker (Summary, Chart, Insight; a style is
+offered only when the card holds what it shows): `extensions/m365/src/shareStyle.ts` (pure: styles, availability,
+sizes, remembered choice), `extensions/m365/src/shareCardStyles.ts` (draws the chart and insight cards and the
+thumbnails; summary stays `shareCardCanvas.ts`) and `extensions/m365/src/taskpaneShareStyle.ts` (the `#share-styles`
+buttons), the pane footer "About N min saved this month (estimate) · N day streak": `extensions/m365/src/timeSaved.ts`
+(pure: a fixed, conservative minutes estimate per kind of work, counted only for an apply the add-in verified (classic:
+source unchanged and nothing failed; agent: every change applied and read back clean, first apply of a request), kept
+per month and per day in this browser's localStorage, shown only after the first entry, never sent anywhere; tested in
+`timeSaved.test.ts`), `readSelectedExcelValues` in `officeExcel.ts`, and the Office writers in
 `extensions/m365/src/officeSriLanka.ts` (log sheet append, "LK Holidays" sheet and name, payroll sheet).
 The payroll template is `extensions/m365/src/payroll.ts` (a "Payroll YYYY-MM" sheet: employee rows copied
 from a selected staff list or left blank, live formulas for gross pay, EPF 8%/12%, ETF 3%, APIT from the

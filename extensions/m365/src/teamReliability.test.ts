@@ -56,7 +56,7 @@ function team(
       return {
         content: "",
         tool_calls: [
-          call("w", "write_formula", { sheet: "Data", cell: "C12", formula: "=SUM(C2:C11)" }),
+          call("w", "write_formula", { sheet: "Data", cell: "C12", formula: "=SUM(Data!C2:C11)" }),
         ],
       };
     return { content: "- Added a total in C12.", tool_calls: [] };
@@ -162,4 +162,47 @@ test("a silent builder still gives the person a reply", async () => {
   const t = team({ builder: async () => ({ content: "", tool_calls: [] }) });
   const result = await go(t.model);
   assert.ok(result.run.reply.trim().length > 0);
+});
+
+const columnHost = (values: unknown[]): AgentHost => ({
+  ...host,
+  readRange: async (_sheet, address) => ({ address, values: values.map((v) => [v]) }),
+});
+const totalBuilder = (formula: string) => async (messages: AgentMessage[]) =>
+  fresh(messages)
+    ? { content: "", tool_calls: [call("w", "write_formula", { sheet: "Data", cell: "C6", formula })] }
+    : { content: "- Added a total in C6.", tool_calls: [] };
+
+test("a plain total that the rules verify skips the reviewer models", async () => {
+  const t = team({ builder: totalBuilder("=SUM(C2:C5)") });
+  const result = await runTeam({
+    request,
+    host: columnHost(["Amount", 1, 2, 3, 4]),
+    model: t.model,
+    mask: new PersonalMask(),
+  });
+  assert.equal(t.runs.reviewer, 0);
+  assert.equal(result.reviewSkipped, true);
+  assert.equal(result.run.changes.length, 1);
+});
+
+test("a plain total that is one row short goes back to the builder without the reviewer models", async () => {
+  let restaged = false;
+  const t = team({
+    builder: totalBuilder("=SUM(C2:C4)"),
+    reviser: async (messages) => {
+      if (!fresh(messages)) return { content: "- Corrected.", tool_calls: [] };
+      restaged = true;
+      return { content: "", tool_calls: [call("w2", "write_formula", { sheet: "Data", cell: "C6", formula: "=SUM(C2:C5)" })] };
+    },
+  });
+  const result = await runTeam({
+    request,
+    host: columnHost(["Amount", 1, 2, 3, 4]),
+    model: t.model,
+    mask: new PersonalMask(),
+  });
+  assert.equal(t.runs.reviewer, 0, "the rules caught it, no reviewer model was needed");
+  assert.equal(restaged, true);
+  assert.equal((result.run.changes[0].change as any).formula, "=SUM(C2:C5)");
 });

@@ -20,6 +20,8 @@ import {
 } from "./agent.js";
 import { lintChanges, repairChanges } from "./formulaLint.js";
 import { evaluateJoins } from "./resultCheck.js";
+import { reviewRisk } from "./reviewRisk.js";
+import { checkSimpleFormulas, overwritesExisting } from "./simpleChecks.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 
 /** The reviewer only reads and calculates; it never needs many turns. */
@@ -60,6 +62,8 @@ export interface ReviewedRun {
   plan?: string[];
   /** True when the first agent staged a corrected plan after the review. */
   revised: boolean;
+  /** True when the change was simple enough to skip the reviewer models (rules still ran). */
+  reviewSkipped?: boolean;
 }
 
 /** The reviewer's request: the person's words and the staged plan, in plain text. */
@@ -243,6 +247,7 @@ export async function reviewAndRevise(options: {
   const linted = [
     ...lintChanges(run.changes),
     ...(await evaluateJoins(run.changes, options.host)),
+    ...(await checkSimpleFormulas(run.changes, options.host)),
   ].slice(0, REVIEW_MAX_ISSUES);
   if (linted.length)
     reviewers.push({ focus: "accuracy", ok: false, issues: linted });
@@ -348,14 +353,20 @@ export async function runTeam(
     ...builderOptions,
     facts: [options.facts ?? "", planFacts(plan)].filter(Boolean).join("\n"),
   });
+  // A small, plain change is checked by the rules only; the reviewer models run for the rest.
+  const lowRisk =
+    !reviewRisk(first.changes).high &&
+    !(await overwritesExisting(first.changes, helper.host).catch(() => true));
   const reviewed = await reviewAndRevise({
     ...helper,
     request: options.request,
     run: first,
+    focuses: lowRisk ? [] : undefined,
     onReviewer,
     onPhase: (phase) => {
       if (phase === "reviewing" || phase === "revising") onTeamPhase?.(phase);
     },
   });
-  return plan.length ? { ...reviewed, plan } : reviewed;
+  const result = lowRisk && first.changes.length ? { ...reviewed, reviewSkipped: true } : reviewed;
+  return plan.length ? { ...result, plan } : result;
 }

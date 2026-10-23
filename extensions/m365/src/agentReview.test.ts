@@ -81,7 +81,7 @@ function scripted(review: string, revisedFormula?: string) {
           call("w1", "write_formula", {
             sheet: "Data",
             cell: "C12",
-            formula: "=SUM(C2:C10)",
+            formula: "=SUM(Data!C2:C10)",
           }),
         ],
       };

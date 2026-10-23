@@ -31,6 +31,9 @@ import {
 const KEY = process.env.VYNORAI_E2E_API_KEY || "";
 const BASE = process.env.VYNOR_E2E_API_BASE || "https://vynor.lk";
 const runsArg = process.argv.indexOf("--runs");
+import { reviewRisk } from "../../src/reviewRisk.js";
+import { checkSimpleFormulas, overwritesExisting } from "../../src/simpleChecks.js";
+
 const RUNS = runsArg > 0 ? Number(process.argv[runsArg + 1]) || 2 : 2;
 
 const HEADER = ["Region", "Amount", "Cost"];
@@ -310,9 +313,23 @@ for (const scenario of SCENARIOS) {
     `${ok ? "PASS" : "FAIL"} ${scenario.id}: expected ${scenario.expect}, said FIX ${fixes}/${answers.length}${sample.length && scenario.expect === "OK" ? ` — ${sample[0].slice(0, 120)}` : ""}`,
   );
 }
+// The risk gate (reviewRisk + checkSimpleFormulas): which plans reach the reviewer models, which are
+// caught by rules alone, and whether any wrong plan would slip through without a reviewer.
+let gateMissed = 0;
+for (const scenario of SCENARIOS) {
+  let risk = reviewRisk(scenario.changes);
+  if (!risk.high && (await overwritesExisting(scenario.changes, host)))
+    risk = { high: true, reason: "it would replace existing cells" };
+  const rules = risk.high ? [] : await checkSimpleFormulas(scenario.changes, host);
+  const route = risk.high ? `reviewers (${risk.reason})` : rules.length ? "rules caught it" : "skips reviewers";
+  const missed = scenario.expect === "FIX" && !risk.high && !rules.length;
+  if (missed) gateMissed += 1;
+  console.log(`gate ${missed ? "MISS" : "ok  "} ${scenario.id}: ${route}`);
+}
+console.log(`gate: ${gateMissed} wrong plan(s) would skip the reviewers and pass`);
 const catchRate = bad ? caught / bad : 1;
 const alarmRate = good ? alarms / good : 0;
 console.log(
   `team-reliability: caught ${caught}/${bad} wrong plans (${Math.round(catchRate * 100)}%), false alarms ${alarms}/${good} (${Math.round(alarmRate * 100)}%)`,
 );
-process.exit(catchRate >= 0.8 && alarmRate <= 0.25 ? 0 : 1);
+process.exit(catchRate >= 0.8 && alarmRate <= 0.25 && gateMissed === 0 ? 0 : 1);

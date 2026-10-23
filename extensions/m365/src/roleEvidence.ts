@@ -50,6 +50,8 @@ export function finalRoleStates(input: {
   changes: number;
   reviewers: readonly { focus: string; ok: boolean; issues: string[] }[];
   calculations: { accuracy: number; safety: number };
+  /** The change was simple: the reviewer models were skipped on purpose (the rules still ran). */
+  reviewSkipped?: boolean;
 }): FinalRoleState[] {
   const states: FinalRoleState[] = [
     input.planSteps > 0
@@ -79,7 +81,9 @@ export function finalRoleStates(input: {
         state: "skipped",
         evidence: !input.changes
           ? "not needed, nothing was changed"
-          : input.reviewers.length
+          : input.reviewSkipped
+            ? "simple change, checked by rules only"
+            : input.reviewers.length
             ? "not run, the builder corrected first"
             : "did not finish",
       });

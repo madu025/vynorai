@@ -5426,6 +5426,7 @@ function finishAgentRoles(reviewed: Awaited<ReturnType<typeof runTeam>>) {
     changes: reviewed.run.changes.length,
     reviewers: reviewed.reviewers ?? [],
     calculations: helperCalculations,
+    reviewSkipped: reviewed.reviewSkipped,
   });
   for (const item of states) {
     if (

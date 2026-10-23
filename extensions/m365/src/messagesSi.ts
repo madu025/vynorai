@@ -273,6 +273,7 @@ const EXACT: Record<string, string> = {
   "answer ready, nothing to change": "පිළිතුර සූදානම්, වෙනස් කිරීමට කිසිවක් නැත",
   "not needed, nothing was changed": "අවශ්‍ය නැත, කිසිවක් වෙනස් කළේ නැත",
   "did not finish": "අවසන් කළේ නැත",
+  "simple change, checked by rules only": "සරල වෙනසක්, නීති මගින් පමණක් පරීක්ෂා කළා",
   "not run, the builder corrected first": "ධාවනය නොකළා, පළමුව builder නිවැරදි කළා",
   stopped: "නවත්වා ඇත",
   applied: "යෙදුවා",

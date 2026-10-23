@@ -283,6 +283,7 @@ const EXACT: Record<string, string> = {
   "answer ready, nothing to change": "பதில் தயார், மாற்ற எதுவுமில்லை",
   "not needed, nothing was changed": "தேவையில்லை, எதுவும் மாற்றப்படவில்லை",
   "did not finish": "முடிக்கவில்லை",
+  "simple change, checked by rules only": "எளிய மாற்றம், விதிகளால் மட்டும் சரிபார்க்கப்பட்டது",
   "not run, the builder corrected first": "இயக்கப்படவில்லை, முதலில் builder திருத்தியது",
   stopped: "நிறுத்தப்பட்டது",
   applied: "பயன்படுத்தப்பட்டது",

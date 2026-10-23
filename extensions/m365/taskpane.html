@@ -2431,9 +2431,18 @@
         backdrop-filter: none;
       }
       .workspace > .chat-bar select {
+        order: 0; /* the narrow-pane rule gives it order 3, which sent it behind Delete */
         flex: 1 1 0;
         min-width: 0;
         max-width: 100%;
+        text-overflow: ellipsis;
+      }
+      .workspace > .chat-bar > .pill {
+        flex: 0 0 auto;
+      }
+      /* column items keep their height; only the scroll area may shrink (a shrunk bar draws over the chat) */
+      .workspace > :not(.scroll-area) {
+        flex-shrink: 0;
       }
       .workspace > .chat-bar .pill {
         min-height: 30px;
@@ -3022,7 +3031,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261023.07</p>
+          <p class="menu-version" id="build-id">Build 20261023.08</p>
         </div>
       </div>
 

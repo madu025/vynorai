@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { describeError, maskEmail } from "./httpHygiene.js";
 
 export interface EmailOptions {
   to: string;
@@ -39,12 +40,16 @@ export async function sendEmail(
       });
       const data = (await res.json()) as any;
       if (res.ok) {
-        console.log(`[Email] Sent via Resend to ${to} (id: ${data.id})`);
+        console.log(
+          `[Email] Sent via Resend to ${maskEmail(to)} (id: ${data.id})`,
+        );
         return { success: true, messageId: data.id };
       }
-      console.warn("[Email] Resend API error:", data);
+      console.warn(
+        `[Email] Resend API error: HTTP ${res.status} ${String(data?.name || "").slice(0, 60)}`,
+      );
     } catch (err) {
-      console.error("[Email] Resend delivery failed:", err);
+      console.error(`[Email] Resend delivery failed: ${describeError(err)}`);
     }
   }
 
@@ -74,10 +79,12 @@ export async function sendEmail(
         text: text || html.replace(/<[^>]+>/g, " ").trim(),
       });
 
-      console.log(`[Email] Sent via SMTP to ${to} (id: ${info.messageId})`);
+      console.log(
+        `[Email] Sent via SMTP to ${maskEmail(to)} (id: ${info.messageId})`,
+      );
       return { success: true, messageId: info.messageId };
     } catch (err) {
-      console.error("[Email] SMTP delivery failed:", err);
+      console.error(`[Email] SMTP delivery failed: ${describeError(err)}`);
     }
   }
 
@@ -87,7 +94,7 @@ export async function sendEmail(
     console.error("[Email] Delivery is not configured; message was not sent.");
     return { success: false };
   }
-  console.log(`[Email-Simulated] To: ${to}; Subject: ${subject}`);
+  console.log(`[Email-Simulated] To: ${maskEmail(to)}; Subject: ${subject}`);
   return { success: true, simulated: true };
 }
 

@@ -1,6 +1,11 @@
 import cors from "cors";
 import { warmUpLocalSlm } from "./services/localSlmRouter.js";
 import { scheduleRetention } from "./services/retention.js";
+import {
+  DEFAULT_CORS_ORIGINS,
+  describeError,
+  isAllowedCorsOrigin,
+} from "./services/httpHygiene.js";
 import { scheduleReservationReconcile } from "./services/monthlyQuota.js";
 import { scheduleSandboxSweep } from "./services/m365Sandbox.js";
 import { releasesRouter } from "./routes/releases.js";
@@ -22,6 +27,7 @@ import { initCacheTable } from "./services/cacheEngine.js";
 import { startHealthMonitor } from "./services/healthMonitor.js";
 import { getRedis, redisStatus } from "./services/redisStore.js";
 import { billingDbStatus } from "./services/billingDb.js";
+import { assertPayhereConfig } from "./services/payhere.js";
 import { loadProviderCredentials } from "./services/providerCredentials.js";
 import { scheduleBackgroundReconciliation } from "./services/backgroundTasks.js";
 import {
@@ -113,8 +119,7 @@ app.set("trust proxy", 1);
 
 app.use(securityHeadersMiddleware);
 const allowedOrigins = new Set([
-  "https://vynor.lk",
-  "https://admin.vynor.lk",
+  ...DEFAULT_CORS_ORIGINS,
   ...(process.env.CORS_ORIGINS || "")
     .split(",")
     .map((v) => v.trim())
@@ -124,17 +129,8 @@ app.use(
   cors({
     origin(origin, callback) {
       // Native IDE/CLI requests do not carry a browser Origin header.
-      if (!origin || allowedOrigins.has(origin)) return callback(null, true);
-      // Allow VS Code / IDE webviews and local dev origins
-      if (
-        origin.startsWith("vscode-webview://") ||
-        origin.startsWith("vscode-file://") ||
-        origin.startsWith("http://localhost:") ||
-        origin.startsWith("https://localhost:") ||
-        origin.endsWith(".vynor.lk")
-      ) {
+      if (!origin || isAllowedCorsOrigin(origin, allowedOrigins))
         return callback(null, true);
-      }
       return callback(new Error("Origin not allowed"));
     },
   }),
@@ -273,7 +269,7 @@ app.use((req: Request, res: Response) => {
 
 // Error handler
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  console.error(`[Error] ${req.method} ${req.originalUrl}:`, err);
+  console.error(`[Error] ${req.method} ${req.path}: ${describeError(err)}`);
   if (res.headersSent) return;
   if (req.path.startsWith("/api/") || req.path.startsWith("/v1")) {
     return res
@@ -348,7 +344,9 @@ adminApp.use((req: Request, res: Response) => {
 });
 
 adminApp.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  console.error(`[AdminError] ${req.method} ${req.originalUrl}:`, err);
+  console.error(
+    `[AdminError] ${req.method} ${req.path}: ${describeError(err)}`,
+  );
   if (res.headersSent) return;
   res.status(err?.status || 500).json({ error: "Internal server error" });
 });
@@ -369,6 +367,7 @@ async function start() {
     if (!process.env.DATA_ENCRYPTION_KEY) {
       throw new Error("DATA_ENCRYPTION_KEY must be configured in production");
     }
+    assertPayhereConfig();
     if (process.env.BG_ENABLED === "true") {
       for (const name of [
         "BG_ARTIFACT_MASTER_KEY",

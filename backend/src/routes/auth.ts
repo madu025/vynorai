@@ -5,9 +5,12 @@ import {
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { NextFunction, Request, Response, Router } from "express";
-import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import { config } from "../config.js";
+import {
+  sessionPredatesPasswordChange,
+  signUserSession,
+  verifyUserSession,
+} from "../services/userSession.js";
 import {
   billingAll as dbAll,
   billingGet as dbGet,
@@ -19,6 +22,7 @@ import {
   sendVerificationEmail,
 } from "../services/emailService.js";
 import {
+  escapeLike,
   getUserSecurityEvents,
   logSecurityEvent,
 } from "../services/securityAudit.js";
@@ -48,6 +52,15 @@ export const authRouter = Router();
 
 const sha256 = (v: string) =>
   crypto.createHash("sha256").update(v).digest("hex");
+/** A query on a table that this deployment does not have yet is fine; any other error is not. */
+const ignoreMissingTable =
+  <T>(fallback: T) =>
+  (error: unknown): T => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/no such table|does not exist|undefined_table/i.test(message))
+      return fallback;
+    throw error;
+  };
 const getClientIp = (req: Request) =>
   (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
 // Plain address characters only: no quotes, angle brackets or spaces, so an
@@ -195,17 +208,20 @@ export async function requireAuth(
 
   // 2. Support JWT Bearer token authentication
   try {
-    const payload = jwt.verify(token, config.jwtSecret) as {
-      userId: string;
-      email: string;
-    };
+    const payload = verifyUserSession(token);
     const user = await dbGet<any>(
-      "SELECT id, email, name, api_key, api_key_encrypted, api_key_masked, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE id = ?",
+      "SELECT id, email, name, api_key, api_key_encrypted, api_key_masked, password_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE id = ?",
       [payload.userId],
     );
     if (!user) {
       return res.status(401).json({ error: "User not found" });
     }
+    // A password change or reset ends every older session.
+    if (sessionPredatesPasswordChange(payload, user.password_hash)) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    // The hash is only for the check above: it must never travel further on req.user.
+    delete user.password_hash;
     if (user.is_suspended === 1) {
       return res.status(403).json({
         error:
@@ -259,7 +275,7 @@ authRouter.post(
       await logSecurityEvent({
         eventType: "PASSWORD_RESET_REQUESTED",
         severity: "INFO",
-        actor: user.email,
+        actor: user.id,
         target: user.id,
         details: "Password reset link requested",
         ipAddress: getClientIp(req),
@@ -307,7 +323,7 @@ authRouter.post(
     await logSecurityEvent({
       eventType: "PASSWORD_RESET_COMPLETED",
       severity: "WARN",
-      actor: record.email,
+      actor: record.user_id,
       target: record.user_id,
       details: "Password changed using a single-use reset link",
       ipAddress: getClientIp(req),
@@ -502,7 +518,17 @@ authRouter.post(
       const apiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
       const apiKeyHash = sha256(apiKey);
       const encryptedApiKey = encryptCredential(apiKey);
-      const storedApiKey = encryptedApiKey ? `encrypted:${userId}` : apiKey;
+      // Never fall back to a plaintext key at rest: fail the registration instead.
+      if (!encryptedApiKey) {
+        console.error(
+          "[Auth] Registration refused: key encryption unavailable",
+        );
+        return res.status(503).json({
+          error: "Registration is temporarily unavailable",
+          code: "ENCRYPTION_UNAVAILABLE",
+        });
+      }
+      const storedApiKey = `encrypted:${userId}`;
 
       await dbRun(
         "INSERT INTO users (id, email, password_hash, api_key, api_key_hash, api_key_masked, api_key_encrypted, name, email_verified, privacy_accepted_at, privacy_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, ?)",
@@ -546,15 +572,13 @@ authRouter.post(
       await logSecurityEvent({
         eventType: "AUTH_REGISTER",
         severity: "INFO",
-        actor: email,
+        actor: userId,
         target: userId,
         details: "New account registered. Verification OTP dispatched.",
         ipAddress: clientIp,
       });
 
-      const token = jwt.sign({ userId, email }, config.jwtSecret, {
-        expiresIn: "30d",
-      });
+      const token = signUserSession({ userId, email }, passwordHash);
 
       res.json({
         success: true,
@@ -600,7 +624,10 @@ authRouter.post(
         await logSecurityEvent({
           eventType: "AUTH_LOGIN_FAILED",
           severity: "WARN",
-          actor: email,
+          // The submitted address is attacker-controlled and personal data of someone who may not
+          // even have an account: keep only a short non-reversible fingerprint (enough to spot a
+          // repeated target), never the raw string, which would also survive account deletion.
+          actor: `unknown:${sha256(email).slice(0, 16)}`,
           details: "Non-existent user email login attempt",
           ipAddress: clientIp,
         });
@@ -612,7 +639,7 @@ authRouter.post(
         await logSecurityEvent({
           eventType: "AUTH_LOGIN_BLOCKED_SUSPENDED",
           severity: "CRITICAL",
-          actor: user.email,
+          actor: user.id,
           details: "Login blocked for suspended account",
           ipAddress: clientIp,
         });
@@ -627,7 +654,7 @@ authRouter.post(
         await logSecurityEvent({
           eventType: "AUTH_LOGIN_FAILED",
           severity: "WARN",
-          actor: user.email,
+          actor: user.id,
           details: "Incorrect password entered",
           ipAddress: clientIp,
         });
@@ -637,16 +664,15 @@ authRouter.post(
       await logSecurityEvent({
         eventType: "AUTH_LOGIN_SUCCESS",
         severity: "INFO",
-        actor: user.email,
+        actor: user.id,
         target: user.id,
         details: "User authenticated successfully",
         ipAddress: clientIp,
       });
 
-      const token = jwt.sign(
+      const token = signUserSession(
         { userId: user.id, email: user.email },
-        config.jwtSecret,
-        { expiresIn: "30d" },
+        user.password_hash,
       );
 
       res.json({
@@ -927,7 +953,7 @@ authRouter.post(
       await logSecurityEvent({
         eventType: "EMAIL_VERIFIED",
         severity: "INFO",
-        actor: user.email,
+        actor: user.id,
         target: user.id,
         details: "Email address verified via 6-digit OTP hash",
         ipAddress: clientIp,
@@ -972,7 +998,7 @@ authRouter.get("/verify-email", async (req: Request, res: Response) => {
     await logSecurityEvent({
       eventType: "EMAIL_VERIFIED",
       severity: "INFO",
-      actor: record.email,
+      actor: record.user_id,
       target: record.user_id,
       details: "Email address verified via one-click link",
     });
@@ -995,7 +1021,14 @@ authRouter.post(
       const newApiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
       const newApiKeyHash = sha256(newApiKey);
       const encryptedApiKey = encryptCredential(newApiKey);
-      const storedApiKey = encryptedApiKey ? `encrypted:${user.id}` : newApiKey;
+      // Never fall back to a plaintext key at rest.
+      if (!encryptedApiKey) {
+        return res.status(503).json({
+          error: "Key rotation is temporarily unavailable",
+          code: "ENCRYPTION_UNAVAILABLE",
+        });
+      }
+      const storedApiKey = `encrypted:${user.id}`;
 
       await dbRun(
         "UPDATE users SET api_key = ?, api_key_hash = ?, api_key_masked = ?, api_key_encrypted = ? WHERE id = ?",
@@ -1012,7 +1045,7 @@ authRouter.post(
       await logSecurityEvent({
         eventType: "KEY_ROTATED",
         severity: "INFO",
-        actor: user.email,
+        actor: user.id,
         target: user.id,
         details:
           "User rotated their API Key. Previous key immediately revoked.",
@@ -1053,7 +1086,7 @@ authRouter.post(
       await logSecurityEvent({
         eventType: "IP_RESTRICTIONS_UPDATED",
         severity: "INFO",
-        actor: user.email,
+        actor: user.id,
         target: user.id,
         details: sanitized
           ? `Allowed IPs restricted to: ${sanitized}`
@@ -1082,7 +1115,8 @@ authRouter.get(
   async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      const events = await getUserSecurityEvents(user.email, 15);
+      // Rows written before audit actors became user ids carry the email: read both.
+      const events = await getUserSecurityEvents([user.id, user.email], 15);
       res.json({ events });
     } catch (err: any) {
       res.status(500).json({ error: "Failed to fetch security logs" });
@@ -1116,7 +1150,7 @@ authRouter.post(
         await logSecurityEvent({
           eventType: "PASSWORD_CHANGE_FAILED",
           severity: "WARN",
-          actor: user.email,
+          actor: user.id,
           details: "Failed password change: current password incorrect",
           ipAddress: clientIp,
         });
@@ -1132,13 +1166,18 @@ authRouter.post(
       await logSecurityEvent({
         eventType: "PASSWORD_CHANGED",
         severity: "INFO",
-        actor: user.email,
+        actor: user.id,
         target: user.id,
         details: "User password changed successfully",
         ipAddress: clientIp,
       });
 
-      res.json({ success: true, message: "Password updated successfully" });
+      // The new hash invalidates every older session (including this one): hand back a fresh token.
+      res.json({
+        success: true,
+        message: "Password updated successfully",
+        token: signUserSession({ userId: user.id, email: user.email }, newHash),
+      });
     } catch (err: any) {
       console.error("Change password error:", err);
       res.status(500).json({ error: "Failed to change password" });
@@ -1274,6 +1313,14 @@ authRouter.post(
       [`deleted:${sha256(user.id).slice(0, 24)}`, user.id],
     ).catch(() => {});
 
+    // Identities this person had in Microsoft 365 tenants: needed to scrub audit `details` JSON.
+    const objectIds = (
+      await dbAll<{ object_id: string }>(
+        "SELECT object_id FROM m365_identity_links WHERE user_id = ?",
+        [user.id],
+      ).catch(ignoreMissingTable([] as Array<{ object_id: string }>))
+    ).map((row) => row.object_id);
+
     await dbRun(
       `UPDATE security_audit_logs SET actor = 'deleted-user' WHERE actor = ? OR actor = ?`,
       [user.id, user.email],
@@ -1282,6 +1329,29 @@ authRouter.post(
       `UPDATE security_audit_logs SET target = 'deleted-user' WHERE target = ? OR target = ?`,
       [user.id, user.email],
     ).catch(() => {});
+    // `details` is free text/JSON and can carry the user id, the email or an Entra object id.
+    for (const value of [user.id, String(user.email), ...objectIds]) {
+      if (!value || value.length < 6) continue;
+      await dbRun(
+        `UPDATE security_audit_logs SET details = REPLACE(details, ?, '[deleted-user]') WHERE details LIKE ? ESCAPE '\\'`,
+        [value, `%${escapeLike(value)}%`],
+      );
+    }
+    // Rows keyed by user id that have no foreign key (they predate or deliberately avoid one):
+    // transient holds and job rows are deleted, usage ledger rows keep their counts but lose identity.
+    await dbRun("DELETE FROM quota_reservations WHERE user_id = ?", [
+      user.id,
+    ]).catch(ignoreMissingTable(undefined));
+    await dbRun("DELETE FROM m365_quota_reservations WHERE user_id = ?", [
+      user.id,
+    ]).catch(ignoreMissingTable(undefined));
+    await dbRun("DELETE FROM m365_sandbox_jobs WHERE user_id = ?", [
+      user.id,
+    ]).catch(ignoreMissingTable(undefined));
+    await dbRun("UPDATE m365_tenant_usage SET user_id = ? WHERE user_id = ?", [
+      `deleted:${sha256(user.id).slice(0, 24)}`,
+      user.id,
+    ]).catch(ignoreMissingTable(undefined));
     // Cache rows are keyed by a one-way prompt hash, so they need an explicit
     // tenant index rather than relying on the users-table cascade.
     await purgeUserCache(user.id);

@@ -1712,6 +1712,10 @@
         });
         const data = await res.json();
         if (res.ok) {
+          // A password change ends every older session; the server returns a fresh one for this tab.
+          if (data.token) {
+            localStorage.setItem(localStorage.getItem('vynor_jwt') ? 'vynor_jwt' : 'vynorai_token', data.token);
+          }
           closeChangePasswordModal();
           alert('✅ Password changed successfully!');
         } else {

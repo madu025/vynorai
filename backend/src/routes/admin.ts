@@ -28,6 +28,10 @@ import {
 import { getAdmissionSnapshot } from "../services/admissionControl.js";
 import { sendEmail } from "../services/emailService.js";
 import {
+  readCfAccessConfig,
+  verifyCfAccessAssertion,
+} from "../services/cfAccess.js";
+import {
   GraphMailError,
   acquireGraphTokenOnBehalfOf,
   bearerFromHeader,
@@ -74,20 +78,33 @@ export const AdminPoolIdParamSchema = z.object({
   id: idParam("id"),
 });
 
+/** A typo such as 9999999 days would produce an unparseable `valid_until` and a grant that never works. */
+export const ADMIN_MAX_GRANT_DAYS = 3650;
+/** Keeps a top-up inside a signed 64-bit counter with plenty of headroom (PostgreSQL BIGINT). */
+export const ADMIN_MAX_TOPUP_TOKENS = 1_000_000_000_000;
+
 export const AdminGrantSubscriptionSchema = z.object({
   plan: z.enum(["starter", "pro", "ultra"]).default("starter"),
   days: z
     .union([
-      z.number().int().positive(),
-      z.string().regex(/^\d+$/).transform(Number),
+      z.number().int().positive().max(ADMIN_MAX_GRANT_DAYS),
+      z
+        .string()
+        .regex(/^\d{1,5}$/)
+        .transform(Number)
+        .pipe(z.number().int().positive().max(ADMIN_MAX_GRANT_DAYS)),
     ])
     .default(30),
 });
 
 export const AdminAddTokensSchema = z.object({
   tokens: z.union([
-    z.number().int().positive(),
-    z.string().regex(/^\d+$/).transform(Number),
+    z.number().int().positive().max(ADMIN_MAX_TOPUP_TOKENS),
+    z
+      .string()
+      .regex(/^\d{1,13}$/)
+      .transform(Number)
+      .pipe(z.number().int().positive().max(ADMIN_MAX_TOPUP_TOKENS)),
   ]),
 });
 
@@ -254,40 +271,82 @@ export const AdminCloudDeliveryTransitionSchema = z.object({
 
 export const adminRouter = Router();
 
-/**
- * Cryptographically timing-safe admin check:
- * 1. Cloudflare Zero Trust (Cloudflare Access):
- *    If incoming request carries `cf-access-authenticated-user-email`
- *    (optionally with `cf-access-jwt-assertion`), trust the Cloudflare Zero Trust perimeter.
- * 2. Fallback / Direct / Local Development:
- *    Inspect `x-admin-secret` header against process.env.ADMIN_SECRET.
- */
-export function verifyAdminAccess(req: Request): {
+type AdminAccess = {
   ok: boolean;
   authMethod: "cloudflare_zero_trust" | "secret_key" | "unauthorized";
   email?: string;
-} {
+};
+
+/**
+ * Admin check, timing-safe:
+ * 1. Cloudflare Access: `cf-access-authenticated-user-email` is a plain header and is NEVER trusted
+ *    on its own. It counts only when the signed `cf-access-jwt-assertion` verifies (RS256, team JWKS,
+ *    audience, issuer, expiry, email claim equal to the header). Without CF_ACCESS_TEAM_DOMAIN and
+ *    CF_ACCESS_AUD this path is disabled (fail closed); the only exception is NODE_ENV=test.
+ * 2. `x-admin-secret` against process.env.ADMIN_SECRET (constant-time).
+ */
+export async function resolveAdminAccess(req: Request): Promise<AdminAccess> {
   const cfEmail = (req.headers["cf-access-authenticated-user-email"] || "")
     .toString()
     .trim();
   const cfJwt = (req.headers["cf-access-jwt-assertion"] || "")
     .toString()
     .trim();
-
-  // If request arrived through Cloudflare Access Zero Trust
-  if (
-    cfEmail &&
-    (cfJwt ||
-      process.env.NODE_ENV === "production" ||
-      process.env.NODE_ENV === "test")
-  ) {
-    return {
-      ok: true,
-      authMethod: "cloudflare_zero_trust",
-      email: cfEmail,
-    };
+  if (cfEmail) {
+    if (readCfAccessConfig()) {
+      const verified = await verifyCfAccessAssertion(cfJwt, cfEmail);
+      if (verified.ok)
+        return {
+          ok: true,
+          authMethod: "cloudflare_zero_trust",
+          email: verified.email,
+        };
+    } else if (process.env.NODE_ENV === "test") {
+      return { ok: true, authMethod: "cloudflare_zero_trust", email: cfEmail };
+    }
+    // An unverifiable Access header never grants access, but the secret path below still can.
   }
+  return verifyAdminAccess(req);
+}
 
+/** Verified admin identity for audit rows: the Access email or a fixed label, never a literal "ADMIN". */
+export function adminActor(req: Request): string {
+  const admin = (req as any).adminUser as
+    | { email?: string; authMethod?: string }
+    | undefined;
+  const email = admin?.email;
+  return email
+    ? String(email)
+        .replace(/[\u0000-\u001f\u007f]/g, "")
+        .slice(0, 120)
+    : "admin-secret";
+}
+
+/**
+ * Error body for admin responses: a stable machine code, never the raw `err.message` (database,
+ * driver and crypto errors can carry table names, SQL fragments or key material).
+ */
+export function adminErrorBody(err: unknown): { error: string; code: string } {
+  const raw =
+    err && typeof err === "object" && typeof (err as any).code === "string"
+      ? String((err as any).code)
+      : err instanceof Error
+        ? err.message
+        : "";
+  const code = /^[A-Z][A-Z0-9_]{2,63}$/.test(raw)
+    ? raw
+    : "ADMIN_REQUEST_REJECTED";
+  return { error: "Request rejected", code };
+}
+
+/** The error text only when it already is a stable UPPER_SNAKE code, otherwise the fallback code. */
+export function stableAdminMessage(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : "";
+  return /^[A-Z][A-Z0-9_]{2,63}$/.test(raw) ? raw : fallback;
+}
+
+/** Secret-key check only (synchronous). Cloudflare Access is handled by resolveAdminAccess. */
+export function verifyAdminAccess(req: Request): AdminAccess {
   // Fallback: x-admin-secret header check
   const secret =
     typeof req.headers["x-admin-secret"] === "string"
@@ -305,8 +364,10 @@ export function verifyAdminAccess(req: Request): {
   return { ok: false, authMethod: "unauthorized" };
 }
 
-function requireAdmin(req: Request, res: Response, next: Function) {
-  const check = verifyAdminAccess(req);
+async function requireAdmin(req: Request, res: Response, next: Function) {
+  const check = await resolveAdminAccess(req).catch(
+    (): AdminAccess => ({ ok: false, authMethod: "unauthorized" }),
+  );
   if (check.ok) {
     (req as any).adminUser = {
       email: check.email,
@@ -330,8 +391,10 @@ function requireAdmin(req: Request, res: Response, next: Function) {
  * GET /admin/session
  * Returns authentication status. Used by admin UI to detect Cloudflare Zero Trust session on boot.
  */
-adminRouter.get("/session", (req: Request, res: Response) => {
-  const check = verifyAdminAccess(req);
+adminRouter.get("/session", async (req: Request, res: Response) => {
+  const check = await resolveAdminAccess(req).catch(
+    (): AdminAccess => ({ ok: false, authMethod: "unauthorized" }),
+  );
   if (check.ok) {
     return res.json({
       authenticated: true,
@@ -505,6 +568,7 @@ import {
   getRecentSecurityEvents,
 } from "../services/securityAudit.js";
 import {
+  getM365Tenant,
   listM365Tenants,
   upsertM365Tenant,
 } from "../services/m365TenantRegistry.js";
@@ -621,9 +685,9 @@ adminRouter.post(
     await logSecurityEvent({
       eventType: "ADMIN_MANUAL_EMAIL_VERIFIED",
       severity: "INFO",
-      actor: "ADMIN",
-      target: user.email,
-      details: `Admin manually verified email for ${user.email}`,
+      actor: adminActor(req),
+      target: `user:${userId}`,
+      details: `Admin manually verified email for user ${userId}`,
     });
 
     res.json({ ok: true, message: `Email verified for ${user.email}` });
@@ -656,26 +720,28 @@ adminRouter.post(
     );
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const durationDays = parseInt(days) || 30;
+    const durationDays = Math.min(
+      Math.max(1, parseInt(days) || 30),
+      ADMIN_MAX_GRANT_DAYS,
+    );
     const validUntil = new Date(
       Date.now() + durationDays * 86400000,
     ).toISOString();
     const planConfig = (PLANS as any)[plan];
     const maxTokens = planConfig?.monthlyTokens || 11_000_000;
 
-    // Deactivate any currently active subscriptions for this user
-    await dbRun(
-      "UPDATE subscriptions SET status = 'cancelled' WHERE user_id = ? AND status = 'active'",
-      [userId],
-    );
-
-    // Insert newly granted subscription
+    // Insert the grant FIRST, then cancel the other active rows. If the insert fails the old
+    // subscription is untouched (the old order cancelled first and could leave the user with none).
     const subId = uuidv4();
     const orderId = `MANUAL_GRANT_${newId()}`;
     await dbRun(
       `INSERT INTO subscriptions (id, user_id, plan_name, status, order_id, payment_id, amount, currency, valid_until)
      VALUES (?, ?, ?, 'active', ?, 'ADMIN_MANUAL_GRANT', ?, 'LKR', ?)`,
       [subId, userId, plan, orderId, planConfig?.priceLKR || 0, validUntil],
+    );
+    await dbRun(
+      "UPDATE subscriptions SET status = 'cancelled' WHERE user_id = ? AND status = 'active' AND id <> ?",
+      [userId, subId],
     );
     invalidateAuthCache();
 
@@ -685,9 +751,9 @@ adminRouter.post(
     await logSecurityEvent({
       eventType: "ADMIN_GRANT_SUBSCRIPTION",
       severity: "WARN",
-      actor: "ADMIN",
-      target: user.email,
-      details: `Admin granted ${plan.toUpperCase()} plan for ${durationDays} days to ${user.email}`,
+      actor: adminActor(req),
+      target: `user:${userId}`,
+      details: `Admin granted ${plan.toUpperCase()} plan for ${durationDays} days to user ${userId}`,
     });
 
     res.json({
@@ -730,9 +796,9 @@ adminRouter.post(
     await logSecurityEvent({
       eventType: "ADMIN_TOKEN_TOPUP",
       severity: "INFO",
-      actor: "ADMIN",
-      target: user.email,
-      details: `Admin added +${amt.toLocaleString()} tokens and +${requests.toLocaleString()} requests to ${user.email}`,
+      actor: adminActor(req),
+      target: `user:${userId}`,
+      details: `Admin added +${amt.toLocaleString()} tokens and +${requests.toLocaleString()} requests to user ${userId}`,
     });
 
     res.json({
@@ -761,15 +827,16 @@ adminRouter.post(
     const newApiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
     const hash = crypto.createHash("sha256").update(newApiKey).digest("hex");
     const encrypted = encryptCredential(newApiKey);
+    // Never fall back to storing the key in plaintext when encryption is unavailable.
+    if (!encrypted) {
+      return res.status(503).json({
+        error: "Key encryption is not available",
+        code: "ENCRYPTION_UNAVAILABLE",
+      });
+    }
     await dbRun(
       "UPDATE users SET api_key = ?, api_key_hash = ?, api_key_masked = ?, api_key_encrypted = ? WHERE id = ?",
-      [
-        encrypted ? `encrypted:${userId}` : newApiKey,
-        hash,
-        maskApiKey(newApiKey),
-        encrypted,
-        userId,
-      ],
+      [`encrypted:${userId}`, hash, maskApiKey(newApiKey), encrypted, userId],
     );
     // The old (possibly compromised) key must stop working now, not in 60s.
     invalidateAuthCache();
@@ -777,9 +844,9 @@ adminRouter.post(
     await logSecurityEvent({
       eventType: "ADMIN_FORCE_KEY_ROTATED",
       severity: "WARN",
-      actor: "ADMIN",
-      target: user.email,
-      details: `Admin force-rotated API Key for ${user.email}`,
+      actor: adminActor(req),
+      target: `user:${userId}`,
+      details: `Admin force-rotated API Key for user ${userId}`,
     });
 
     res.json({
@@ -816,11 +883,11 @@ adminRouter.post(
     await logSecurityEvent({
       eventType: nextState ? "ADMIN_USER_SUSPENDED" : "ADMIN_USER_REACTIVATED",
       severity: nextState ? "CRITICAL" : "INFO",
-      actor: "ADMIN",
-      target: user.email,
+      actor: adminActor(req),
+      target: `user:${userId}`,
       details: nextState
-        ? `User account ${user.email} suspended by Admin`
-        : `User account ${user.email} reactivated by Admin`,
+        ? `User account ${userId} suspended by Admin`
+        : `User account ${userId} reactivated by Admin`,
     });
 
     res.json({
@@ -937,6 +1004,13 @@ adminRouter.put(
       is_default_autocomplete: req.body.is_default_autocomplete ? 1 : 0,
       enabled: req.body.enabled !== false ? 1 : 0,
     });
+    await logSecurityEvent({
+      eventType: "ADMIN_MODEL_UPSERTED",
+      severity: "WARN",
+      actor: adminActor(req),
+      target: `model:${id}`,
+      details: `Model ${id} saved; fields: ${Object.keys(req.body).sort().join(",")}`,
+    });
     res.json({
       ok: true,
       message: `Model "${id}" saved — live immediately (no restart needed)`,
@@ -955,6 +1029,13 @@ adminRouter.post(
   async (req: Request, res: Response) => {
     const id = req.params["id"] as string;
     await disableModel(id);
+    await logSecurityEvent({
+      eventType: "ADMIN_MODEL_DISABLED",
+      severity: "WARN",
+      actor: adminActor(req),
+      target: `model:${id}`,
+      details: `Model ${id} disabled for all users`,
+    });
     res.json({
       ok: true,
       message: `Model "${id}" disabled — users will get routing error`,
@@ -973,6 +1054,13 @@ adminRouter.post(
   async (req: Request, res: Response) => {
     const id = req.params["id"] as string;
     await enableModel(id);
+    await logSecurityEvent({
+      eventType: "ADMIN_MODEL_ENABLED",
+      severity: "INFO",
+      actor: adminActor(req),
+      target: `model:${id}`,
+      details: `Model ${id} enabled`,
+    });
     res.json({ ok: true, message: `Model "${id}" enabled` });
   },
 );
@@ -1103,6 +1191,14 @@ adminRouter.patch(
     }
 
     await updatePlanField(planId, fields);
+    // Field NAMES only: plan values are commercial data, not needed to attribute the change.
+    await logSecurityEvent({
+      eventType: "ADMIN_PLAN_UPDATED",
+      severity: "WARN",
+      actor: adminActor(req),
+      target: `plan:${planId}`,
+      details: `Plan ${planId} fields changed: ${Object.keys(fields).sort().join(",")}`,
+    });
     res.json({
       ok: true,
       planId,
@@ -1123,6 +1219,13 @@ adminRouter.delete(
   async (req: Request, res: Response) => {
     const planId = req.params["planId"] as string;
     await resetPlanToDefault(planId);
+    await logSecurityEvent({
+      eventType: "ADMIN_PLAN_OVERRIDE_CLEARED",
+      severity: "WARN",
+      actor: adminActor(req),
+      target: `plan:${planId}`,
+      details: `Plan ${planId} reset to its default`,
+    });
     res.json({
       ok: true,
       message: `Plan "${planId}" reset to default — live within 30s`,
@@ -1479,14 +1582,14 @@ adminRouter.post(
       await logSecurityEvent({
         eventType: "ADMIN_PROVIDER_KEY_POOL_ADDED",
         severity: "WARN",
-        actor: "ADMIN",
+        actor: adminActor(req),
         target: provider,
         details: `Added key "${label}" for ${provider} (${item.masked}) to pool`,
         ipAddress: req.ip,
       });
       res.json({ ok: true, key: item });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(adminErrorBody(err));
     }
   },
 );
@@ -1509,7 +1612,7 @@ adminRouter.patch(
       if (!item) return res.status(404).json({ error: "Key not found" });
       res.json({ ok: true, key: item });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(adminErrorBody(err));
     }
   },
 );
@@ -1526,14 +1629,14 @@ adminRouter.delete(
       await logSecurityEvent({
         eventType: "ADMIN_PROVIDER_KEY_POOL_DELETED",
         severity: "WARN",
-        actor: "ADMIN",
+        actor: adminActor(req),
         target: id,
         details: `Deleted key ${id} from pool`,
         ipAddress: req.ip,
       });
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(adminErrorBody(err));
     }
   },
 );
@@ -1549,7 +1652,7 @@ adminRouter.post(
       const balance = await refreshKeyBalance(id);
       res.json({ ok: true, balance });
     } catch (err: any) {
-      res.status(400).json({ error: err.message });
+      res.status(400).json(adminErrorBody(err));
     }
   },
 );
@@ -1577,7 +1680,7 @@ adminRouter.put(
       await logSecurityEvent({
         eventType: "ADMIN_PROVIDER_KEY_SET",
         severity: "WARN",
-        actor: "ADMIN",
+        actor: adminActor(req),
         target: provider,
         details: `Provider key for ${provider} set (${status.masked})`,
         ipAddress: req.ip,
@@ -1601,7 +1704,7 @@ adminRouter.delete(
     await logSecurityEvent({
       eventType: "ADMIN_PROVIDER_KEY_DELETED",
       severity: "WARN",
-      actor: "ADMIN",
+      actor: adminActor(req),
       target: provider,
       details: `Provider key for ${provider} removed; now ${status.source}`,
       ipAddress: req.ip,
@@ -1750,8 +1853,7 @@ adminRouter.post(
       });
       return res.status(201).json({ ok: true, manifest });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Invalid manifest";
+      const message = stableAdminMessage(error, "CLOUD_MANIFEST_INVALID");
       return res.status(400).json({ ok: false, error: message });
     }
   },
@@ -1770,8 +1872,7 @@ adminRouter.post(
       );
       return res.json({ ok: true, manifest });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Approval rejected";
+      const message = stableAdminMessage(error, "CLOUD_APPROVAL_REJECTED");
       const status = message === "CLOUD_MANIFEST_NOT_FOUND" ? 404 : 409;
       return res.status(status).json({ ok: false, error: message });
     }
@@ -1810,8 +1911,7 @@ adminRouter.post(
       );
       return res.json({ ok: true, manifest });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Transition rejected";
+      const message = stableAdminMessage(error, "CLOUD_TRANSITION_REJECTED");
       const status = message === "CLOUD_MANIFEST_NOT_FOUND" ? 404 : 409;
       return res.status(status).json({ ok: false, error: message });
     }
@@ -1883,7 +1983,7 @@ adminRouter.post(
       logSecurityEvent({
         eventType,
         severity,
-        actor: "ADMIN",
+        actor: adminActor(req),
         target: "email-test",
         details: `${details}; recipient: redacted; correlation: ${correlationId}`,
         ipAddress: req.ip,
@@ -2003,7 +2103,7 @@ adminRouter.post(
     await logSecurityEvent({
       eventType: "ADMIN_EMAIL_BROADCAST_SENT",
       severity: "INFO",
-      actor: "ADMIN",
+      actor: adminActor(req),
       target: targetPlan || "ALL",
       details: `Broadcast "${subject}" sent to ${sentCount} recipients`,
       ipAddress: req.ip,
@@ -2043,7 +2143,7 @@ adminRouter.put(
           ? "M365_TENANT_ENABLED"
           : "M365_TENANT_DISABLED",
       severity: "WARN",
-      actor: (req as any).adminUser?.email || "ADMIN",
+      actor: adminActor(req),
       target: tenant.tenantId,
       details: JSON.stringify({
         allowedScopes: tenant.allowedScopes,
@@ -2085,27 +2185,57 @@ adminRouter.put(
       [req.body.userId],
     );
     if (!user) return res.status(404).json({ error: "User not found" });
-    await dbRun(
-      `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = excluded.enabled`,
-      [
-        String(req.params.tenantId),
-        String(req.params.objectId),
-        req.body.userId,
-        req.body.enabled ? 1 : 0,
-      ],
+    const tenantId = String(req.params.tenantId);
+    const objectId = String(req.params.objectId);
+    const previous = await dbGet<{ user_id: string; enabled: number }>(
+      "SELECT user_id, enabled FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?",
+      [tenantId, objectId],
     );
+    if (req.body.enabled) {
+      // The seat check and the write are ONE statement: two admins racing for the last seat cannot
+      // both pass a stale count. Zero rows written means the limit was reached.
+      const tenant = await getM365Tenant(tenantId);
+      const seatLimit = Number(tenant?.seatLimit);
+      const written = await dbRun(
+        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
+       SELECT ?, ?, ?, 1
+       WHERE (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1 AND object_id <> ?) < ?
+       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = excluded.enabled`,
+        [
+          tenantId,
+          objectId,
+          req.body.userId,
+          tenantId,
+          objectId,
+          Number.isInteger(seatLimit) && seatLimit >= 1 ? seatLimit : 0,
+        ],
+      );
+      if (!written.changes)
+        return res
+          .status(409)
+          .json({ error: { code: "m365_seat_limit_reached" } });
+    } else {
+      await dbRun(
+        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
+       VALUES (?, ?, ?, 0)
+       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 0`,
+        [tenantId, objectId, req.body.userId],
+      );
+    }
+    const repointed = Boolean(previous && previous.user_id !== req.body.userId);
     await logSecurityEvent({
       eventType: req.body.enabled
-        ? "M365_IDENTITY_LINKED"
+        ? repointed
+          ? "M365_IDENTITY_RELINKED"
+          : "M365_IDENTITY_LINKED"
         : "M365_IDENTITY_DISABLED",
       severity: "WARN",
-      actor: (req as any).adminUser?.email || "ADMIN",
-      target: String(req.params.tenantId),
+      actor: adminActor(req),
+      target: tenantId,
       details: JSON.stringify({
-        objectId: String(req.params.objectId),
+        objectId,
         userId: req.body.userId,
+        ...(repointed ? { previousUserId: previous!.user_id } : {}),
       }),
       ipAddress: req.ip,
     });

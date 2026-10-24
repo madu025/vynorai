@@ -136,8 +136,8 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
         </div>
         <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
           <label style="display:flex;align-items:center;gap:7px;font-size:0.78rem;color:var(--muted);cursor:pointer;margin:0;">
-            <input type="checkbox" id="rememberSecretCheckbox" style="width:auto;margin:0;cursor:pointer;" checked>
-            Remember this device
+            <input type="checkbox" id="rememberSecretCheckbox" style="width:auto;margin:0;cursor:pointer;" checked disabled>
+            Stay signed in for this browser tab
           </label>
         </div>
       </div>
@@ -904,12 +904,10 @@ async function handleAdminLogin(e) {
 
     // Success! Save secret
     currentAdminSecret = secret;
-    const rememberMe = document.getElementById('rememberSecretCheckbox')?.checked;
-    if (rememberMe) {
-      localStorage.setItem('vynor_admin_secret', secret);
-    } else {
-      sessionStorage.setItem('vynor_admin_secret', secret);
-    }
+    // The admin secret is a long-lived credential: it lives in sessionStorage only (cleared when
+    // the tab closes). It is never written to localStorage, where any script on this origin could
+    // read it long after the session ended.
+    sessionStorage.setItem('vynor_admin_secret', secret);
 
     unlockDashboard('secret_key', null);
     showToast('Admin session authenticated');
@@ -1818,9 +1816,9 @@ async function loadProviders() {
           <td>${formatBalanceBadge(k.balanceDetails || (k.balanceUsd !== null ? { totalBalance: k.balanceUsd, currency: k.balanceCurrency } : null))}</td>
           <td style="font-size:.75rem;color:var(--muted)">${escHtml(k.lastCheckedAt ? k.lastCheckedAt.slice(0, 19).replace('T', ' ') : (k.updatedAt || '—'))}</td>
           <td style="display:flex;gap:.35rem;flex-wrap:wrap">
-            <button class="btn btn-ghost" style="padding:.25rem .5rem;font-size:.75rem;color:var(--accent2);border-color:var(--accent)" onclick="checkPoolKeyBalance('${k.id}', '${escHtml(k.label)}')">↻ Balance</button>
-            <button class="btn btn-ghost" style="padding:.25rem .5rem;font-size:.75rem" onclick="togglePoolKeyActive('${k.id}', ${k.isActive})">${k.isActive ? 'Disable' : 'Enable'}</button>
-            <button class="btn btn-danger" style="padding:.25rem .5rem;font-size:.75rem" onclick="deletePoolKey('${k.id}', '${escHtml(k.label)}')">Delete</button>
+            <button class="btn btn-ghost" style="padding:.25rem .5rem;font-size:.75rem;color:var(--accent2);border-color:var(--accent)" onclick="checkPoolKeyBalance(${escHtml(JSON.stringify(String(k.id)))}, ${escHtml(JSON.stringify(String(k.label)))})">↻ Balance</button>
+            <button class="btn btn-ghost" style="padding:.25rem .5rem;font-size:.75rem" onclick="togglePoolKeyActive(${escHtml(JSON.stringify(String(k.id)))}, ${k.isActive ? 'true' : 'false'})">${k.isActive ? 'Disable' : 'Enable'}</button>
+            <button class="btn btn-danger" style="padding:.25rem .5rem;font-size:.75rem" onclick="deletePoolKey(${escHtml(JSON.stringify(String(k.id)))}, ${escHtml(JSON.stringify(String(k.label)))})">Delete</button>
           </td>
         </tr>
       `).join('');
@@ -2000,11 +1998,11 @@ async function loadModels() {
       <td><strong>${escHtml(m.id)}</strong>${m.is_default_chat?'<span class="tag" style="margin-left:.4rem">CHAT</span>':''}${m.is_default_autocomplete?'<span class="tag" style="margin-left:.3rem">AUTO</span>':''}</td>
       <td><code style="font-family:JetBrains Mono,monospace;font-size:.75rem;color:var(--muted)">${escHtml(m.openrouter_id)}</code></td>
       <td><span class="tag">${ctx(m.context_window)}</span></td>
-      <td><span class="badge ${BADGE[m.min_plan]||'badge-free'}">${m.min_plan}</span></td>
+      <td><span class="badge ${BADGE[m.min_plan]||'badge-free'}">${escHtml(m.min_plan)}</span></td>
       <td style="display:flex;gap:.4rem">
         ${m.enabled
-          ? `<button class="btn btn-danger" style="padding:.3rem .6rem;font-size:.75rem" onclick="toggleModel('${m.id}','disable')">Disable</button>`
-          : `<button class="btn btn-success" style="padding:.3rem .6rem;font-size:.75rem" onclick="toggleModel('${m.id}','enable')">Enable</button>`}
+          ? `<button class="btn btn-danger" style="padding:.3rem .6rem;font-size:.75rem" onclick="toggleModel('${escId(m.id)}','disable')">Disable</button>`
+          : `<button class="btn btn-success" style="padding:.3rem .6rem;font-size:.75rem" onclick="toggleModel('${escId(m.id)}','enable')">Enable</button>`}
       </td>
     </tr>
   `).join('');
@@ -2077,8 +2075,10 @@ window.onload = async () => {
     }
   } catch (_) {}
 
-  // 2. Second: Check saved secret in localStorage or sessionStorage (Remember this device)
-  const saved = localStorage.getItem('vynor_admin_secret') || sessionStorage.getItem('vynor_admin_secret');
+  // 2. Second: the secret saved for this tab (sessionStorage). A copy that an older version of this
+  // page left in localStorage is removed, not used.
+  localStorage.removeItem('vynor_admin_secret');
+  const saved = sessionStorage.getItem('vynor_admin_secret');
   if (saved) {
     currentAdminSecret = saved;
     try {

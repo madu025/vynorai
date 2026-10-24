@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -369,6 +370,17 @@ export const PLANS: Record<string, PlanDefinition> = {
 // billing and checkout must all read the same numbers the pricing page shows.
 let planOverlay: Record<string, PlanDefinition> | null = null;
 
+/**
+ * True only when NODE_ENV is explicitly "development" or "test". An unset NODE_ENV is NOT a
+ * development build: routes that mint free plans or skip checks must use this instead of
+ * `nodeEnv !== "production"`, so a host that forgot NODE_ENV fails closed.
+ */
+export function isDevelopmentBuild(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.NODE_ENV === "development" || env.NODE_ENV === "test";
+}
+
 export function setPlanOverlay(plans: Record<string, PlanDefinition> | null) {
   planOverlay = plans;
 }
@@ -464,7 +476,14 @@ export const config = {
   ),
   nodeEnv: process.env.NODE_ENV || "development",
   baseUrl: process.env.BASE_URL || "http://localhost:3000",
-  jwtSecret: process.env.JWT_SECRET || "vynorai_default_secret_2026",
+  // The old public default secret is only ever used by the test runner. Elsewhere a missing
+  // JWT_SECRET gives a random per-process secret (tokens die on restart) instead of a value that
+  // anyone who read this file could use to forge sessions; production refuses to boot without it.
+  jwtSecret:
+    process.env.JWT_SECRET ||
+    (process.env.NODE_ENV === "test"
+      ? "vynorai_default_secret_2026"
+      : crypto.randomBytes(32).toString("hex")),
 
   payhere: {
     merchantId: process.env.PAYHERE_MERCHANT_ID || "",

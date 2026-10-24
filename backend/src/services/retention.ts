@@ -16,7 +16,18 @@ export const RETENTION_DAYS = {
   routing_feedback: 365,
   error_reports: 90,
   task_outcomes: 180,
+  // M365 tenant usage cycles: about 13 months, matching the usage history promised for usage_logs
+  // plus one cycle of slack. Rows hold counts and ids only.
+  m365_tenant_usage: 395,
 } as const;
+
+/**
+ * Deliberately NOT purged here: `zk_compliance_audit_logs` is a Merkle hash chain (each row commits
+ * to the previous one), so deleting old rows would make the whole chain unverifiable. It holds only
+ * surrogate user ids and one-way fingerprints, never an email, prompt or code. This is an accepted,
+ * documented exception to time-based deletion.
+ */
+export const RETENTION_EXCLUDED_TABLES = ["zk_compliance_audit_logs"] as const;
 
 function cutoff(days: number): string {
   return new Date(Date.now() - days * 86400_000)

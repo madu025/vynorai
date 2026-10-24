@@ -160,9 +160,7 @@ export async function authenticateApiKey(
   }
 
   if (user.is_suspended === 1) {
-    console.warn(
-      `[Security] Blocked request from suspended user: ${user.email}`,
-    );
+    console.warn(`[Security] Blocked request from suspended user: ${user.id}`);
     return null;
   }
 
@@ -171,7 +169,7 @@ export async function authenticateApiKey(
     const allowed = user.allowed_ips.split(",").map((s: string) => s.trim());
     if (!allowed.includes("*") && !allowed.includes(clientIp)) {
       console.warn(
-        `[Security] IP ${clientIp} not in allowed_ips for user ${user.email}`,
+        `[Security] IP ${clientIp} not in allowed_ips for user ${user.id}`,
       );
       return null;
     }

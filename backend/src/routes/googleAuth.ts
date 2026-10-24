@@ -6,9 +6,9 @@ import {
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { Request, Response, Router } from "express";
-import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { config } from "../config.js";
+import { deriveKey, signUserSession } from "../services/userSession.js";
 import { dbGet, dbRun } from "../db.js";
 import { authRateLimiter } from "../middleware/security.js";
 import { encryptCredential, maskApiKey } from "../services/credentialVault.js";
@@ -58,8 +58,9 @@ function redirectUri(): string {
 const b64url = (buf: Buffer) => buf.toString("base64url");
 
 function sign(value: string): string {
+  // Purpose-bound key: a cookie signed here can never be confused with any other token type.
   const mac = crypto
-    .createHmac("sha256", config.jwtSecret)
+    .createHmac("sha256", deriveKey("google-oauth-state"))
     .update(value)
     .digest("base64url");
   return `${value}.${mac}`;
@@ -291,7 +292,7 @@ googleAuthRouter.get(
         await logSecurityEvent({
           eventType: "AUTH_LOGIN_BLOCKED_SUSPENDED",
           severity: "CRITICAL",
-          actor: claims.email,
+          actor: user.id,
           details: "Google login blocked for suspended account",
           ipAddress: clientIp,
         });
@@ -304,7 +305,7 @@ googleAuthRouter.get(
       await logSecurityEvent({
         eventType: user.created ? "AUTH_REGISTER_GOOGLE" : "AUTH_LOGIN_SUCCESS",
         severity: "INFO",
-        actor: claims.email,
+        actor: user.id,
         target: user.id,
         details: user.created
           ? "Account created with Google"
@@ -312,12 +313,9 @@ googleAuthRouter.get(
         ipAddress: clientIp,
       });
 
-      const token = jwt.sign(
+      const token = signUserSession(
         { userId: user.id, email: claims.email },
-        config.jwtSecret,
-        {
-          expiresIn: "30d",
-        },
+        user.passwordHash,
       );
       res.redirect(
         302,
@@ -342,14 +340,21 @@ googleAuthRouter.get(
 async function findOrCreateGoogleUser(
   email: string,
   name?: string,
-): Promise<{ id: string; is_suspended: number; created: boolean }> {
+): Promise<{
+  id: string;
+  is_suspended: number;
+  created: boolean;
+  passwordHash: string;
+}> {
   const existing = await dbGet<{
     id: string;
     is_suspended: number;
     email_verified: number;
-  }>("SELECT id, is_suspended, email_verified FROM users WHERE email = ?", [
-    email,
-  ]);
+    password_hash: string;
+  }>(
+    "SELECT id, is_suspended, email_verified, password_hash FROM users WHERE email = ?",
+    [email],
+  );
   if (existing) {
     if (existing.email_verified !== 1) {
       await dbRun("UPDATE users SET email_verified = 1 WHERE id = ?", [
@@ -360,12 +365,15 @@ async function findOrCreateGoogleUser(
       id: existing.id,
       is_suspended: existing.is_suspended,
       created: false,
+      passwordHash: existing.password_hash,
     };
   }
 
   const userId = uuidv4();
   const apiKey = `vynor_live_${uuidv4().replace(/-/g, "")}`;
   const encryptedApiKey = encryptCredential(apiKey);
+  // Never store the key in plaintext when encryption is unavailable.
+  if (!encryptedApiKey) throw new Error("Sign-in is temporarily unavailable.");
   const passwordHash = await bcrypt.hash(
     crypto.randomBytes(32).toString("hex"),
     12,
@@ -376,7 +384,7 @@ async function findOrCreateGoogleUser(
       userId,
       email,
       passwordHash,
-      encryptedApiKey ? `encrypted:${userId}` : apiKey,
+      `encrypted:${userId}`,
       crypto.createHash("sha256").update(apiKey).digest("hex"),
       maskApiKey(apiKey),
       encryptedApiKey,
@@ -384,5 +392,5 @@ async function findOrCreateGoogleUser(
       PRIVACY_POLICY_VERSION,
     ],
   );
-  return { id: userId, is_suspended: 0, created: true };
+  return { id: userId, is_suspended: 0, created: true, passwordHash };
 }

@@ -1883,6 +1883,24 @@ document
     delete document.body.dataset.chatHistoryOpen;
     (event.target as HTMLSelectElement).setAttribute("hidden", "");
   });
+function closeChatHistoryPicker() {
+  delete document.body.dataset.chatHistoryOpen;
+  document
+    .querySelector<HTMLSelectElement>("#chat-history-select")
+    ?.setAttribute("hidden", "");
+}
+document
+  .querySelector<HTMLSelectElement>("#chat-history-select")
+  ?.addEventListener("blur", () =>
+    window.setTimeout(closeChatHistoryPicker, 150),
+  );
+document
+  .querySelector<HTMLSelectElement>("#chat-history-select")
+  ?.addEventListener("keydown", (event) => {
+    if ((event as KeyboardEvent).key !== "Escape") return;
+    closeChatHistoryPicker();
+    document.querySelector<HTMLButtonElement>("#open-chat-history")?.focus();
+  });
 document
   .querySelector<HTMLButtonElement>("#open-chat-history")
   ?.addEventListener("click", () => {

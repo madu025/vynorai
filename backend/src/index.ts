@@ -2,6 +2,7 @@ import cors from "cors";
 import { warmUpLocalSlm } from "./services/localSlmRouter.js";
 import { scheduleRetention } from "./services/retention.js";
 import { scheduleReservationReconcile } from "./services/monthlyQuota.js";
+import { scheduleSandboxSweep } from "./services/m365Sandbox.js";
 import { releasesRouter } from "./routes/releases.js";
 import express, { NextFunction, Request, Response } from "express";
 import fs from "fs";
@@ -411,6 +412,7 @@ async function start() {
   void warmUpLocalSlm();
   scheduleRetention();
   scheduleReservationReconcile();
+  scheduleSandboxSweep();
   scheduleBackgroundReconciliation();
 
   // ── Main API server ──────────────────────────────────────────────────────────

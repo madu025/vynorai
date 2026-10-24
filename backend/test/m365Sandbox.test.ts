@@ -802,3 +802,117 @@ test("routes: approval required, ownership 404 and cancellation work end to end"
     stranger.close();
   }
 });
+
+test("security review: a running job past its expiry never becomes a result", async () => {
+  sbx.registerSandboxWorker(fakeWorker);
+  const now = Date.now();
+  const job = await approvedSubmit(alice, request("x1") as any, now);
+  assert.equal(await sbx.markSandboxJobRunning(job.jobId, now), true);
+  const later = now + sbx.SANDBOX_LIMITS.jobTtlSeconds * 1000 + 1;
+  const state = await sbx.completeSandboxJob(
+    job.jobId,
+    { result: { tables: [], metrics: { total: 1 }, notes: [] } },
+    later,
+  );
+  assert.equal(state, "expired");
+  const view = await sbx.getSandboxJob(alice, job.jobId, later);
+  assert.equal(view.state, "expired");
+  assert.equal(view.result, undefined);
+  assert.ok(cancelled.includes(job.jobId));
+});
+
+test("security review: a stored result is unreadable after expiry even before the sweep", async () => {
+  sbx.registerSandboxWorker(fakeWorker);
+  const now = Date.now();
+  const job = await approvedSubmit(alice, request("x2") as any, now);
+  await sbx.markSandboxJobRunning(job.jobId, now);
+  await sbx.completeSandboxJob(
+    job.jobId,
+    { result: { tables: [], metrics: { total: 2 }, notes: [] } },
+    now,
+  );
+  assert.equal(
+    (await sbx.getSandboxJob(alice, job.jobId, now)).result?.metrics.total,
+    2,
+  );
+  const later = now + sbx.SANDBOX_LIMITS.jobTtlSeconds * 1000 + 1;
+  const view = await sbx.getSandboxJob(alice, job.jobId, later);
+  assert.equal(view.result, undefined);
+});
+
+test("security review: a chunked body without content-length is still capped", async () => {
+  sbx.registerSandboxWorker(fakeWorker);
+  const app = await serve(stubAuth(alice));
+  try {
+    const big = JSON.stringify({
+      request: { ...request(), script: "x".repeat(1_500_000) },
+    });
+    const url = new URL(`${app.url}/preview`);
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          method: "POST",
+          headers: { "content-type": "application/json" },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on("error", reject);
+      req.write(big.slice(0, 700_000));
+      req.write(big.slice(700_000));
+      req.end();
+    });
+    assert.equal(status, 413);
+    assert.equal(dispatched.length, 0);
+  } finally {
+    app.close();
+  }
+});
+
+test("security review: the sandbox sweep is scheduled at start-up", () => {
+  const index = fs.readFileSync(
+    path.join(originalCwd, "src", "index.ts"),
+    "utf8",
+  );
+  assert.match(index, /scheduleSandboxSweep\(\)/);
+  assert.equal(typeof sbx.scheduleSandboxSweep, "function");
+});
+
+test("security review: tokens and credentials in any field are rejected before dispatch", async () => {
+  sbx.registerSandboxWorker(fakeWorker);
+  const jwt =
+    "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlLXZhbHVl";
+  const bad = [
+    request("t1", { script: `token = "${jwt}"` }),
+    request("t2", { purpose: "use Bearer abcdefghijklmnopqrstuvwxyz0123" }),
+    request("t3", {
+      input: {
+        columns: ["Month", "Sales"],
+        rows: [["access_token=abcdef123456", 1]],
+      },
+    }),
+    request("t4", {
+      input: {
+        columns: ["client_secret: abcdefghijk", "Sales"],
+        rows: [["Jan", 1]],
+      },
+    }),
+  ];
+  for (const body of bad)
+    assert.equal(
+      await rejectCode(sbx.previewSandboxJob(alice, body as any)),
+      "SANDBOX_INPUT_INVALID",
+    );
+  assert.equal(dispatched.length, 0);
+  // Ordinary text that merely mentions the words is accepted.
+  const ok = await sbx.previewSandboxJob(
+    alice,
+    request("t5", { purpose: "Explain what a bearer is" }) as any,
+  );
+  assert.equal(ok.requiresApproval, true);
+});

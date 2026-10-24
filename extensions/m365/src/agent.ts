@@ -256,7 +256,7 @@ export function checkRange(address: unknown): string {
 }
 
 const BLOCKED_FUNCTIONS =
-  /\b(WEBSERVICE|RTD|CALL|REGISTER\.ID|EXEC|DDE|IMAGE|HYPERLINK|FOPEN|SQL\.REQUEST)\s*\(/i;
+  /\b(WEBSERVICE|RTD|CALL|REGISTER\.ID|EXEC|DDE|IMAGE|HYPERLINK|FOPEN|SQL\.REQUEST|PY)\s*\(/i;
 
 /** A formula the agent may write: no network, no other files, no macros. */
 export function checkFormula(formula: unknown): string {

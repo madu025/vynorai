@@ -48,6 +48,17 @@ const bodyGuard: RequestHandler = (req, res, next) => {
     return res.status(413).json({
       error: { code: "SANDBOX_INPUT_INVALID", message: "Request is too large" },
     });
+  // content-length can be absent (chunked); the parsed body is checked too.
+  let parsed = 0;
+  try {
+    parsed = Buffer.byteLength(JSON.stringify(req.body ?? {}));
+  } catch {
+    parsed = Number.MAX_SAFE_INTEGER;
+  }
+  if (parsed > MAX_BODY_BYTES)
+    return res.status(413).json({
+      error: { code: "SANDBOX_INPUT_INVALID", message: "Request is too large" },
+    });
   next();
 };
 

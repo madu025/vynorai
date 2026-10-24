@@ -183,3 +183,11 @@ anything about production environment values is marked "not verified".
 - Companion-only Excel features (VBA/COM, Solver, Scenario Manager, Power Pivot authoring, Sparklines authoring) are exposed only on Excel desktop on Windows with a verified, signed, tenant-allowed companion. Web, Mac and every other host never see them, so there is no false parity.
 - This repository ships the contract, the pure state function and a transport that always answers `not_installed`; the pane never probes localhost or any network address. The companion, its signing and its update channel are unbuilt (see `docs/WINDOWS_COMPANION_DESIGN.md`).
 - Discovery carries no workbook data; `rawWorkbookExport` must be `false` or the reply is rejected.
+
+## Security review of the capability, sandbox and companion work
+
+- A job past its expiry never becomes a result: a late worker result expires the job, and a stored result is unreadable after expiry even before the sweep clears it. `sweepSandboxJobs` runs from `scheduleSandboxSweep()` at start-up (first run after 60 s, then every 5 minutes; failures are swallowed).
+- The sandbox route checks the parsed body size as well as `content-length`, so a chunked request cannot exceed the cap. Access tokens, bearer values, JWTs and `client_secret`/`api_key` assignments in the script, purpose, headers or cells are rejected before preview and dispatch, never forwarded to a worker.
+- `=PY(` (Python in Excel, which sends cell data to a Microsoft cloud runtime) is a blocked formula function for the agent. Singlish ("python eken") and Sinhala/Tamil Python wording route to the honest `python-sandbox` refusal; a data value such as "Skill is Python" is not refused.
+- Known limit: an add-in report (message starting `[Report from the add-in`) is not screened for native-feature wording, because reports carry workbook text. The model has no Python or VBA tool, so a spoofed prefix cannot run anything.
+- The prompt prefix (system prompt and tool definitions) is unchanged: `AI_TEXT_FEATURES` has the same three values, and the refusal runs before any model call.

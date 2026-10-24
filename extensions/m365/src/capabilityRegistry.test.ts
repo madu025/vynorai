@@ -441,3 +441,20 @@ test("every local analytics feature is backed by real TypeScript, never Python",
     );
   }
 });
+
+test("security review: Singlish Python phrasing, =PY() and Sinhala/Tamil Python words are refused, ordinary words are not", () => {
+  for (const text of [
+    "python eken forecast ekak karanna",
+    "do this in python",
+    "=PY(A1)",
+    "පයිතන් වලින් විශ්ලේෂණය කරන්න",
+    "பைதான் மூலம் செய்யவும்",
+  ])
+    assert.equal(classifyNativeRequest(text), "python-sandbox", text);
+  for (const text of [
+    "total sales by region",
+    "create a pivot table of sales",
+    "forecast next month revenue",
+  ])
+    assert.equal(classifyNativeRequest(text), undefined, text);
+});

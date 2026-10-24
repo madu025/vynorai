@@ -617,7 +617,7 @@ const NATIVE_REQUEST_PATTERNS: ReadonlyArray<[NativeOnlyFeature, RegExp]> = [
   ["sparklines", /\bsparklines?\b/i],
   [
     "python-sandbox",
-    /\b(?:run|execute|use|using|with|via|in|write|create|generate|build)\b[^.]{0,40}\b(?:python|pandas|numpy|scipy|scikit-?learn|jupyter|matplotlib)\b|\b(?:python|pandas|numpy|jupyter)\s+(?:script|code|notebook|program|library|package|model)\b|\b(?:pandas|numpy|jupyter|matplotlib|scikit-?learn)\b/i,
+    /\b(?:run|execute|use|using|with|via|in|write|create|generate|build)\b[^.]{0,40}\b(?:python|pandas|numpy|scipy|scikit-?learn|jupyter|matplotlib)\b|\b(?:python|pandas|numpy|jupyter)\s+(?:script|code|notebook|program|library|package|model)\b|\b(?:pandas|numpy|jupyter|matplotlib|scikit-?learn)\b|\bpython\s+(?:eken|walin|wala|ekak)\b|\bpy\s*\(|පයිතන්|பைதான்/i,
   ],
 ];
 

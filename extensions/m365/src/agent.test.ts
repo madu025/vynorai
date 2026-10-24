@@ -54,6 +54,8 @@ test("formulas with web calls, links or other workbooks are refused", () => {
   for (const bad of [
     '=WEBSERVICE("x")',
     '=HYPERLINK("http://a","b")',
+    '=PY("df.describe()")',
+    "=SUM(1)+py (1)",
     "=[Book2.xlsx]Sheet1!A1",
     '="https://x"',
     "SUM(A1)",

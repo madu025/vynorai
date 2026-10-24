@@ -244,6 +244,10 @@ interface PreparedRequest {
   cells: number;
 }
 
+/** Access tokens and bearer credentials never travel to a worker, whatever field they hide in. */
+const TOKEN_LIKE =
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*|\bbearer\s+[A-Za-z0-9._~+/-]{20,}|\b(?:client_secret|access_token|refresh_token|api[_-]?key)\b\s*[:=]\s*\S{8,}/i;
+
 /** Validates, bounds and masks a request. Throws SANDBOX_INPUT_INVALID with a generic reason. */
 export function prepareSandboxRequest(raw: unknown): PreparedRequest {
   const parsed = sandboxRequestSchema.safeParse(raw);
@@ -256,6 +260,19 @@ export function prepareSandboxRequest(raw: unknown): PreparedRequest {
     );
   }
   const request = parsed.data;
+  const texts: string[] = [
+    request.purpose,
+    request.script,
+    ...request.input.columns,
+    ...request.input.rows.flatMap((row) =>
+      row.filter((value): value is string => typeof value === "string"),
+    ),
+  ];
+  if (texts.some((text) => TOKEN_LIKE.test(text)))
+    throw new M365SandboxError(
+      "SANDBOX_INPUT_INVALID",
+      "Invalid field: credentials are not accepted",
+    );
   const width = request.input.columns.length;
   let cells = 0;
   for (const row of request.input.rows) {
@@ -369,7 +386,9 @@ export interface SandboxJobView {
   result?: SandboxResult;
 }
 
-function toView(row: JobRow): SandboxJobView {
+function toView(row: JobRow, now = Date.now()): SandboxJobView {
+  // A result is only readable until the job's expiry, even before the sweep has cleared it.
+  const live = Number(row.expires_at_ms) > now;
   return {
     contractVersion: M365_SANDBOX_CONTRACT_VERSION,
     jobId: row.job_id,
@@ -379,7 +398,7 @@ function toView(row: JobRow): SandboxJobView {
     rows: row.row_count,
     columns: row.column_count,
     ...(row.error_code ? { errorCode: row.error_code } : {}),
-    ...(row.state === "succeeded" && row.result_json
+    ...(row.state === "succeeded" && row.result_json && live
       ? { result: JSON.parse(row.result_json) as SandboxResult }
       : {}),
   };
@@ -656,7 +675,7 @@ export async function getSandboxJob(
     }
     row = await loadOwned(caller, jobId);
   }
-  return toView(row);
+  return toView(row, now);
 }
 
 async function bestEffortCancel(jobId: string): Promise<void> {
@@ -722,6 +741,23 @@ export async function completeSandboxJob(
     objectId: row.object_id,
     userId: row.user_id,
   };
+  // A job past its expiry never turns into a result, whatever the worker reports.
+  if (
+    SANDBOX_ACTIVE_STATES.includes(row.state) &&
+    Number(row.expires_at_ms) <= now
+  ) {
+    await setState(
+      row,
+      SANDBOX_ACTIVE_STATES,
+      "expired",
+      "SANDBOX_JOB_EXPIRED",
+      null,
+      now,
+    );
+    await bestEffortCancel(jobId);
+    await audit("M365_SANDBOX_EXPIRED", caller, jobId, { state: "expired" });
+    return "expired";
+  }
   // A cancelled-while-running job stays cancelled whatever the worker reports.
   if (row.state === "cancel_requested") {
     await setState(row, ["cancel_requested"], "cancelled", null, null, now);
@@ -809,4 +845,11 @@ export async function sweepSandboxJobs(now = Date.now()): Promise<{
     ])
   ).changes;
   return { expired, cleared, deleted };
+}
+
+/** Periodic expiry/cleanup. Failures are swallowed so a bad sweep never takes the API down. */
+export function scheduleSandboxSweep(): void {
+  const run = () => void sweepSandboxJobs().catch(() => {});
+  setTimeout(run, 60_000).unref();
+  setInterval(run, 5 * 60_000).unref();
 }

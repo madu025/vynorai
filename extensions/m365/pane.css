@@ -5052,7 +5052,21 @@ body[data-auth="in"] .composer #smart-run {
 }
 body[data-auth="in"] .scroll-area {
   gap: 18px;
-  padding: 0 1px 18px;
+  padding: 0 4px 22px 1px;
+  scrollbar-color: rgb(100 116 139 / 30%) transparent;
+  scrollbar-width: thin;
+}
+body[data-auth="in"] .scroll-area::-webkit-scrollbar {
+  width: 5px;
+}
+body[data-auth="in"] .scroll-area::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(100 116 139 / 32%);
+}
+/* The estimate is useful after verified work, but it should never compete with the landing
+   screen's next action cards or reduce the visible part of a data-driven suggestion. */
+body[data-auth="in"][data-workspace-view="work"] .saved-footer {
+  display: none;
 }
 body[data-auth="in"] .welcome {
   padding: 2px 2px 0;

@@ -14,7 +14,10 @@ export interface IdleSuggestion {
   text: string;
 }
 
-const MAX = 5;
+// The landing screen is deliberately a short decision surface.  Four cards fit as a complete
+// 2×2 grid in normal Excel task panes and as four deliberate scroll stops in compact panes.
+// More choices belong in Explore, not half-hidden behind the workspace navigation.
+const MAX = 4;
 
 export function idleSuggestions(
   schema: WorkspaceSchema | undefined,

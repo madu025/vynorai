@@ -453,6 +453,33 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   ]) {
     await assertReachable(page, selector);
   }
+  // A landing suggestion is a safe shortcut: it may prepare a request, but it must never run a
+  // workbook operation or create chat output before the person presses Run.
+  const beforeSuggestion = await page.evaluate(() => ({
+    messages: document.querySelector("#conversation-history")?.childElementCount,
+    previewHidden: document.querySelector("#result-card")?.hasAttribute("hidden"),
+  }));
+  await page.click(".idle-card");
+  const afterSuggestion = await page.evaluate(() => ({
+    request: document.querySelector("#instruction")?.value,
+    messages: document.querySelector("#conversation-history")?.childElementCount,
+    previewHidden: document.querySelector("#result-card")?.hasAttribute("hidden"),
+  }));
+  assert.ok(afterSuggestion.request, "a landing suggestion must fill the request box");
+  assert.equal(
+    afterSuggestion.messages,
+    beforeSuggestion.messages,
+    "a landing suggestion must not create a chat reply before Run",
+  );
+  assert.equal(
+    afterSuggestion.previewHidden,
+    beforeSuggestion.previewHidden,
+    "a landing suggestion must not create a preview before Run",
+  );
+  await page.$eval("#instruction", (element) => {
+    element.value = "";
+    element.dispatchEvent(new Event("input"));
+  });
   await page.waitForSelector('#context-suggestion-list[data-count="3"]');
   if (viewport.width <= 360) {
     assert.equal(

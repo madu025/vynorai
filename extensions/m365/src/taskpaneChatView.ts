@@ -328,7 +328,7 @@ export function renderAnswerCard(
     for (const r of card.table.rows) {
       const tr = el("tr");
       for (const cell of r)
-        tr.append(el("td", /^-?[d,.]+$/.test(cell) ? "n" : undefined, cell));
+        tr.append(el("td", /^-?[\d,.]+$/.test(cell) ? "n" : undefined, cell));
       table.append(tr);
     }
     wrap.append(table);

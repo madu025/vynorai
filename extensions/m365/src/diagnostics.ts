@@ -10,6 +10,7 @@ import {
   type AdvancedCapabilityReport,
   type CapabilityContext,
 } from "./capabilityRegistry.js";
+import { classifyHost, deriveCompanionState } from "./companionState.js";
 
 export interface DiagnosticEntry {
   at: string;
@@ -206,6 +207,26 @@ export function describeOfficeHost(office: any): Record<string, unknown> {
 }
 
 /**
+ * The companion layer as the pane can honestly see it: this build ships no companion transport, so
+ * Windows desktop reports "not installed" and Web/Mac report "unsupported host" (no false parity).
+ */
+function companionForPane(
+  officePlatform: unknown,
+): CapabilityContext["companion"] {
+  const status = deriveCompanionState(
+    classifyHost(
+      typeof officePlatform === "string" ? officePlatform : undefined,
+    ),
+    { kind: "no_response" },
+    { trustedSignerThumbprints: [], minCompanionVersion: "0.0.0", nonce: "" },
+  );
+  if (status.state === "ready") return "ready";
+  if (status.state === "not_installed") return "not_installed";
+  if (status.state === "not_signed") return "unsigned";
+  return "unsupported_host";
+}
+
+/**
  * What this host and account can do, for the shared capability resolver. Optional layers that do not
  * exist yet (the Windows companion, the managed Python sandbox) are always reported as missing.
  */
@@ -221,6 +242,7 @@ export function hostCapabilityContext(input: {
   aiConsent?: boolean;
 }): CapabilityContext {
   const host = describeOfficeHost(input.office);
+  const platformRaw = input.office?.context?.platform ?? host.platform;
   return baseCapabilityContext({
     platform: hostPlatformFromOffice(
       input.office?.context?.platform ?? host.platform,
@@ -228,7 +250,7 @@ export function hostCapabilityContext(input: {
     apiSets: supportedApiSets(
       host.excelApi as Record<string, boolean> | undefined,
     ),
-    companion: "not_installed",
+    companion: companionForPane(platformRaw),
     sandbox: "unavailable",
     canRead: input.server?.excel.canInspect ?? false,
     canWrite: input.server?.excel.canApply ?? false,

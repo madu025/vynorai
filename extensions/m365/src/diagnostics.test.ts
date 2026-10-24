@@ -180,3 +180,15 @@ test("without a server answer the host never reports more than it can run", () =
   assert.equal(report.forecast.status, "unsupported");
   assert.equal(report.chart.status, "unsupported");
 });
+
+test("the companion layer is never available from the pane: Web and Mac are unsupported, Windows is not installed", () => {
+  const ctx = (platform: string) =>
+    hostCapabilityContext({ office: { context: { platform } } as any });
+  assert.equal(ctx("OfficeOnline").companion, "unsupported_host");
+  assert.equal(ctx("Mac").companion, "unsupported_host");
+  assert.equal(ctx("PC").companion, "not_installed");
+  assert.equal(
+    hostCapabilityContext({ office: undefined }).companion,
+    "unsupported_host",
+  );
+});

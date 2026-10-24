@@ -161,3 +161,9 @@ anything about production environment values is marked "not verified".
   relationship output bounded, reports when candidate links were truncated, and never invents a join when a key
   is absent. The existing package contracts remain source-only until the separate backend/add-in build contexts can
   consume one shared package without changing the production deployment boundary.
+
+## Windows companion boundary
+
+- Companion-only Excel features (VBA/COM, Solver, Scenario Manager, Power Pivot authoring, Sparklines authoring) are exposed only on Excel desktop on Windows with a verified, signed, tenant-allowed companion. Web, Mac and every other host never see them, so there is no false parity.
+- This repository ships the contract, the pure state function and a transport that always answers `not_installed`; the pane never probes localhost or any network address. The companion, its signing and its update channel are unbuilt (see `docs/WINDOWS_COMPANION_DESIGN.md`).
+- Discovery carries no workbook data; `rawWorkbookExport` must be `false` or the reply is rejected.

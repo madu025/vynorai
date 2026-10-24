@@ -157,3 +157,5 @@ export interface AnalysisRecommendation {
   confidence: number;
   reason: string;
 }
+
+export * from "./companion.js";

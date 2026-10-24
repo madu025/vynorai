@@ -788,3 +788,9 @@ VynorAI is an independent product built from a pinned Continue-derived foundatio
 - Continue security or compatibility updates are selected explicitly, applied on a temporary integration branch, and accepted only after Core, GUI, extension, packaging, and Antigravity smoke gates pass.
 - IDE-specific behavior must remain behind protocol or IDE adapters. Cloud billing, quota, agent policy, task persistence, and Vynor UI must not depend on an upstream release schedule.
 - Existing direct changes to shared chat/core files are migration seams. New Vynor functionality should prefer dedicated modules with small typed integration points rather than additional embedded forks.
+
+## Windows companion boundary (design only)
+
+- `packages/m365-contracts/src/companion.ts`: versioned companion contract (states, companion-only features, hello / hello-ack schemas). Source-only; exported from the package index.
+- `extensions/m365/src/companionState.ts`: pure routing (`classifyHost`, `deriveCompanionState`, `companionOnlyFeatures`, `probeCompanion`) and the `noCompanionTransport` that always reports `not_installed`. No network, socket or file access. Test: `companionState.test.ts`.
+- `docs/WINDOWS_COMPANION_DESIGN.md`: packaging, signing, update channel, local authentication, audit and threat model. The companion itself is not built.

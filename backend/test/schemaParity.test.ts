@@ -14,7 +14,12 @@ import { before, test } from "node:test";
 // These tests inspect the SQLite schema, so they stay on SQLite even when DATABASE_URL points at
 // PostgreSQL (the PostgreSQL run of the whole suite uses that variable).
 process.env.DB_DRIVER = "sqlite";
-import { PG_MIGRATIONS } from "../src/services/postgresSchema.js";
+import {
+  LEGACY_PG_VERSIONS,
+  PG_BASELINE_COVERS_SQLITE_THROUGH,
+  PG_BASELINE_VERSION,
+  PG_MIGRATIONS,
+} from "../src/services/postgresSchema.js";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-parity-"));
 let dbm: typeof import("../src/db.js");
@@ -22,6 +27,10 @@ let dbm: typeof import("../src/db.js");
 interface Column {
   notNull: boolean;
   intType: boolean;
+  /** PostgreSQL only: a TIMESTAMPTZ column whose DEFAULT now() always fills it. */
+  defaultedTimestamp?: boolean;
+  /** PostgreSQL only: the declared type, upper-cased (first word). */
+  pgType?: string;
 }
 interface ForeignKey {
   column: string;
@@ -75,6 +84,9 @@ function readColumnDefinition(table: TableShape, definition: string): void {
   table.columns.set(name.toLowerCase(), {
     notNull: /\bNOT\s+NULL\b|\bPRIMARY\s+KEY\b/i.test(rest),
     intType: INT_TYPE.test(rest),
+    defaultedTimestamp:
+      /^TIMESTAMPTZ\b/i.test(rest) && /\bDEFAULT\s+now\(\)/i.test(rest),
+    pgType: /^[A-Za-z_]+/.exec(rest)?.[0]?.toUpperCase(),
   });
   const reference =
     /\bREFERENCES\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)(?:\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION))?/i.exec(
@@ -230,6 +242,8 @@ const SQLITE_ONLY_INDEXES = new Set<string>([
   // SQLite keeps a legacy plain index next to the UNIQUE order_id constraint.
   "idx_users_api_key",
   "idx_subscriptions_order_id",
+  // PostgreSQL replaces the plain index with the UNIQUE partial idx_users_api_key_hash_unique.
+  "idx_users_api_key_hash",
   // PostgreSQL enforces the same rule with UNIQUE (user_id, period_start) on monthly_usage.
   "idx_monthly_usage_user_period",
   "idx_monthly_usage_user_period_unique",
@@ -237,39 +251,47 @@ const SQLITE_ONLY_INDEXES = new Set<string>([
 /** PostgreSQL-only migrations: the sequence behind zk_compliance_audit_logs.seq. */
 const PG_ONLY_MIGRATIONS = new Set<string>(["025_zk_audit_sequence"]);
 
-test("every SQLite migration has a PostgreSQL migration of the same version (or a reviewed reason)", async () => {
+test("the typed baseline covers every SQLite migration; later ones need a PostgreSQL twin", async () => {
   const sqliteVersions = (
     await dbm.dbAll<{ version: string }>(
       "SELECT version FROM schema_migrations ORDER BY version",
     )
   ).map((row) => row.version);
+  assert.ok(sqliteVersions.length >= 40, "the SQLite migrations are present");
+  assert.equal(PG_MIGRATIONS[0].version, PG_BASELINE_VERSION);
+  assert.ok(
+    sqliteVersions.includes(PG_BASELINE_COVERS_SQLITE_THROUGH),
+    "the baseline names a real SQLite migration",
+  );
+  // A SQLite migration newer than the baseline changed the schema after it: PostgreSQL needs the
+  // same change as its own migration with the same version.
   const pgVersions = new Set(PG_MIGRATIONS.map((m) => m.version));
-  // Migrations 001-023 were folded into the pg_001..pg_011 baseline; from 024 on versions match.
-  const folded = sqliteVersions.filter((v) => Number(v.slice(0, 3)) < 24);
-  const unfolded = sqliteVersions.filter((v) => Number(v.slice(0, 3)) >= 24);
-  assert.ok(folded.length >= 20, "baseline SQLite migrations are present");
-  const missing = unfolded.filter((version) => !pgVersions.has(version));
+  const newer = sqliteVersions.filter(
+    (v) => v > PG_BASELINE_COVERS_SQLITE_THROUGH,
+  );
   assert.deepEqual(
-    missing,
+    newer.filter((version) => !pgVersions.has(version)),
     [],
     "add a PostgreSQL migration with the same version in postgresSchema.ts",
   );
-  const pgOnly = [...pgVersions].filter(
-    (version) =>
-      !version.startsWith("pg_") &&
-      !sqliteVersions.includes(version) &&
-      !PG_ONLY_MIGRATIONS.has(version),
-  );
-  assert.deepEqual(pgOnly, [], "PostgreSQL migrations without a SQLite twin");
   const duplicates = PG_MIGRATIONS.map((m) => m.version).filter(
     (version, index, all) => all.indexOf(version) !== index,
   );
   assert.deepEqual(duplicates, []);
-  // Versions are applied in array order: it must be strictly increasing within each family.
-  const numbered = PG_MIGRATIONS.map((m) => m.version).filter(
-    (v) => !v.startsWith("pg_"),
+  const after = PG_MIGRATIONS.slice(1).map((m) => m.version);
+  assert.deepEqual(
+    [...after].sort(),
+    after,
+    "migrations after the baseline are ordered",
   );
-  assert.deepEqual([...numbered].sort(), numbered, "migrations are ordered");
+  // The retired ladder is only ever recognised, never re-applied.
+  assert.ok(LEGACY_PG_VERSIONS.length >= 29);
+  assert.ok(!LEGACY_PG_VERSIONS.includes(PG_BASELINE_VERSION));
+  for (const legacy of LEGACY_PG_VERSIONS)
+    assert.ok(
+      !pgVersions.has(legacy),
+      `${legacy} must not be a live PostgreSQL migration`,
+    );
 });
 
 test("tables, columns, NOT NULL, foreign keys and indexes match between SQLite and PostgreSQL", async () => {
@@ -290,7 +312,12 @@ test("tables, columns, NOT NULL, foreign keys and indexes match between SQLite a
         problems.push(`${name}.${column} exists on PostgreSQL only`);
         continue;
       }
-      if (twin.notNull !== definition.notNull)
+      // PostgreSQL is stricter on timestamps that DEFAULT now() always fills; SQLite left them
+      // nullable. That is intentional (no row can have a missing created_at in production).
+      if (
+        twin.notNull !== definition.notNull &&
+        !(definition.notNull && !twin.notNull && definition.defaultedTimestamp)
+      )
         problems.push(
           `${name}.${column} NOT NULL differs (sqlite ${twin.notNull}, pg ${definition.notNull})`,
         );
@@ -367,4 +394,35 @@ test("running initDb again and re-applying migration 040 changes nothing", async
     "SELECT version FROM schema_migrations WHERE version = '040_security_hardening'",
   );
   assert.equal(rows.length, 1);
+});
+
+test("the PostgreSQL baseline really is typed: dates, money and flags are not text", () => {
+  const pg = parsePostgres();
+  const dateLike = /(_at|_until|_start|_end|^purge_after)$/;
+  const bad: string[] = [];
+  for (const [table, shape] of pg.tables)
+    for (const [column, def] of shape.columns) {
+      // period_start / period_end are billing days (YYYY-MM-DD), so DATE; every other date is an instant.
+      const expected = /^period_(start|end)$/.test(column)
+        ? "DATE"
+        : "TIMESTAMPTZ";
+      if (dateLike.test(column) && def.pgType !== expected)
+        bad.push(`${table}.${column} is ${def.pgType}, expected ${expected}`);
+      if (
+        /(price|amount|balance|cost|revenue|margin)(_usd|_lkr)?$/.test(
+          column,
+        ) &&
+        !/_minor$/.test(column) &&
+        !["NUMERIC"].includes(def.pgType ?? "")
+      )
+        bad.push(`${table}.${column} is ${def.pgType}, expected NUMERIC`);
+    }
+  assert.deepEqual(bad, []);
+  const sql = PG_MIGRATIONS.map((m) => m.sql).join("\n");
+  assert.ok(!/to_char\(/i.test(sql), "no text timestamps built with to_char");
+  assert.ok(
+    /CREATE DOMAIN vynor_id/i.test(sql),
+    "application ids use the constrained domain",
+  );
+  assert.ok(/CHECK \(status IN/i.test(sql), "status columns are constrained");
 });

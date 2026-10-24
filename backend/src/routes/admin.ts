@@ -1405,9 +1405,9 @@ adminRouter.get(
     ] = await Promise.all([
       dbGet<any>(`SELECT ${SUMS} FROM request_economics ${WHERE}`, [since]),
       dbAll<any>(
-        `SELECT SUBSTR(created_at, 1, 10) AS day, ${SUMS}
+        `SELECT SUBSTR(CAST(created_at AS TEXT), 1, 10) AS day, ${SUMS}
            FROM request_economics ${WHERE}
-           GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
+           GROUP BY SUBSTR(CAST(created_at AS TEXT), 1, 10) ORDER BY day`,
         [since],
       ),
       dbAll<any>(
@@ -1452,11 +1452,11 @@ adminRouter.get(
         [since],
       ),
       dbAll<any>(
-        `SELECT SUBSTR(created_at, 1, 10) AS day,
+        `SELECT SUBSTR(CAST(created_at AS TEXT), 1, 10) AS day,
             COALESCE(SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN amount_minor ELSE 0 END), 0) / 100.0 AS netCollectedLkr,
             SUM(CASE WHEN payment_id IS NOT NULL AND status IN ('active','superseded','expired','credited') THEN 1 ELSE 0 END) AS successfulOrders
            FROM subscriptions WHERE created_at >= ?
-           GROUP BY SUBSTR(created_at, 1, 10) ORDER BY day`,
+           GROUP BY SUBSTR(CAST(created_at AS TEXT), 1, 10) ORDER BY day`,
         [since],
       ),
     ]);

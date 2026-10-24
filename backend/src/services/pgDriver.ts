@@ -18,15 +18,32 @@ export function parseInt8(value: string): number | string {
 }
 types.setTypeParser(20, parseInt8); // int8
 types.setTypeParser(1700, (v) => Number(v)); // numeric
-// timestamptz would arrive as a Date object; hand back the ISO string so JSON output is stable
-// and matches the text timestamps used by every other column.
-types.setTypeParser(1184, (v) => new Date(v).toISOString());
+/**
+ * timestamptz arrives from the wire as e.g. "2026-10-24 13:34:07.123456+00". Return the same value
+ * as an ISO-8601 UTC string ("2026-10-24T13:34:07.123Z") so JSON output is stable and every
+ * consumer can use `new Date(value)`. A value the parser cannot read is returned untouched rather
+ * than turned into "Invalid Date"; "infinity" and "-infinity" pass through.
+ */
+export function parseTimestamptz(value: string): string {
+  const m =
+    /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::?\d{2})?)$/.exec(
+      value,
+    );
+  if (!m) return value;
+  const [, day, time, fraction = "", zone] = m;
+  let offset = zone;
+  if (zone !== "Z") {
+    const digits = zone.slice(1).replace(":", "");
+    offset = `${zone[0]}${digits.slice(0, 2)}:${digits.slice(2) || "00"}`;
+  }
+  const date = new Date(
+    `${day}T${time}.${(fraction + "000").slice(0, 3)}${offset}`,
+  );
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+types.setTypeParser(1184, parseTimestamptz);
 // DATE(created_at) must stay the plain "YYYY-MM-DD" string SQLite returned.
 types.setTypeParser(1082, (v) => v);
-
-/** SQLite's CURRENT_TIMESTAMP format: UTC "YYYY-MM-DD HH:MM:SS" text. */
-export const PG_NOW_TEXT =
-  "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')";
 
 let pool: pg.Pool | null = null;
 let ready = false;
@@ -82,6 +99,8 @@ export function getPool(): pg.Pool {
       max: Number(process.env.PG_POOL_MAX || 20),
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 30_000,
+      // Date and day arithmetic must never depend on the server's local zone.
+      options: "-c timezone=UTC",
       ssl: postgresSslOption(process.env.DATABASE_URL),
     });
     pool.on("error", (err) =>
@@ -112,7 +131,7 @@ function outsideStrings(sql: string, fn: (code: string) => string): string {
 /**
  * SQLite → PostgreSQL for application queries:
  * - `?` placeholders → `$1..$n`
- * - `CURRENT_TIMESTAMP` → SQLite-format UTC text (date columns are TEXT)
+ * - `CURRENT_TIMESTAMP` → `now()` (date columns are TIMESTAMPTZ)
  * - two-argument scalar `MAX(0, x)` → `GREATEST(0, x)`
  * - camelCase aliases are quoted (Postgres folds unquoted names to lowercase),
  *   including where the alias is referenced again, e.g. in ORDER BY
@@ -132,7 +151,7 @@ export function translatePostgresSql(sql: string): string {
   return outsideStrings(sql, (code) => {
     let out = code
       .replace(/\?/g, () => `$${++index}`)
-      .replace(/\bCURRENT_TIMESTAMP\b/gi, PG_NOW_TEXT)
+      .replace(/\bCURRENT_TIMESTAMP\b/gi, "now()")
       .replace(/\bMAX\(\s*0\s*,/gi, "GREATEST(0,");
     for (const alias of aliases) {
       out = out.replace(

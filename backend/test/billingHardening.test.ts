@@ -401,11 +401,15 @@ test("reverseTopup takes from the plan allowance only what it removes from the b
 test("a malformed or past expiry never counts as an active subscription", async () => {
   const userId = await createUser();
   for (const [i, until] of ["garbage", "9999", "not-a-date"].entries()) {
-    await dbm.dbRun(
+    const insert = dbm.dbRun(
       `INSERT INTO subscriptions (id, user_id, plan_name, status, order_id, amount_minor, amount, currency, valid_until)
        VALUES (?, ?, 'pro', 'active', ?, 0, 0, 'LKR', ?)`,
       [crypto.randomUUID(), userId, `bad-${userId}-${i}`, until],
     );
+    // PostgreSQL's TIMESTAMPTZ column refuses a malformed expiry outright; SQLite stores the text,
+    // so there the read path has to fail closed on it.
+    if (dbm.usingPostgres) await assert.rejects(insert);
+    else await insert;
   }
   assert.equal(await quota.getActiveSubscription(userId), undefined);
   // A real future expiry next to them is still found.

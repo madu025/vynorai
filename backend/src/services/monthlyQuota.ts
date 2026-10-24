@@ -219,7 +219,10 @@ export async function getActiveSubscription<T = any>(
   // would look active. Only a parseable, future date counts; anything else fails closed.
   const now = Date.now();
   return rows.find((row) => {
-    const until = Date.parse(String(row.valid_until));
+    const raw = String(row.valid_until);
+    // Date.parse accepts bare years such as "9999"; an expiry must be a full ISO date.
+    if (!/^\d{4}-\d{2}-\d{2}/.test(raw)) return false;
+    const until = Date.parse(raw);
     return Number.isFinite(until) && until > now;
   }) as T | undefined;
 }

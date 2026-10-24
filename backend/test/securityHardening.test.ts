@@ -12,6 +12,10 @@ import { authRouter, verifyTurnstileToken } from "../src/routes/auth.js";
 import { initDb, dbRun, dbGet } from "../src/db.js";
 
 test("Security Hardening Test Suite", async (suite) => {
+  // The login path reads users, so the schema must exist before the first subtest. SQLite happened
+  // to have it from an earlier run of the same file; a fresh PostgreSQL database does not.
+  await initDb();
+
   // ─── 1. DUAL-PORT ISOLATION TESTS ──────────────────────────────────────────
   await suite.test(
     "Dual-Port Isolation: Customer Port vs Admin Port",

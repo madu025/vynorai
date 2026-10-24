@@ -64,7 +64,7 @@ export function askInPane(
       "position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.45)";
     const box = document.createElement("div");
     box.style.cssText =
-      "max-width:320px;width:100%;padding:18px;border-radius:16px;background:#fff;color:#1b2a41;box-shadow:0 12px 32px rgba(15,23,42,.25);font:14px/1.45 system-ui,sans-serif";
+      "max-width:320px;width:100%;padding:18px;border:1px solid var(--line,#dbe2ea);border-radius:18px;background:var(--surface-solid,#fff);color:var(--ink,#1b2a41);box-shadow:var(--shadow,0 12px 32px rgba(15,23,42,.25));font:13.5px/1.45 system-ui,sans-serif";
     const text = document.createElement("p");
     text.style.cssText =
       "margin:0 0 14px;white-space:pre-wrap;max-height:50vh;overflow:auto";
@@ -79,13 +79,13 @@ export function askInPane(
     cancel.type = "button";
     cancel.textContent = localizeLabel(cancelLabel);
     cancel.style.cssText =
-      "padding:8px 12px;border:1px solid #dbe2ea;border-radius:10px;background:transparent;cursor:pointer";
+      "min-height:36px;padding:8px 14px;border:1px solid var(--line,#dbe2ea);border-radius:10px;background:transparent;color:inherit;font:inherit;cursor:pointer";
     cancel.addEventListener("click", () => finish(false));
     const ok = document.createElement("button");
     ok.type = "button";
     ok.textContent = localizeLabel(confirmLabel);
     ok.style.cssText =
-      "padding:8px 14px;border:0;border-radius:10px;background:#123a6b;color:#fff;font-weight:600;cursor:pointer";
+      "min-height:36px;padding:8px 16px;border:0;border-radius:10px;background:var(--brand,#123a6b);color:var(--on-brand,#fff);font:inherit;font-weight:700;cursor:pointer";
     ok.addEventListener("click", () => finish(true));
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") finish(false);

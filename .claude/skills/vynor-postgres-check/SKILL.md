@@ -34,3 +34,16 @@ DATABASE_URL=postgres://vynor:testpw@127.0.0.1:55432/vynor_test npx tsx --test -
 
 New tables need a migration in `backend/src/services/postgresSchema.ts` AND the SQLite schema in `src/db.ts`.
 A test that uses SQLite-only SQL for its own setup should be made portable, not skipped.
+
+## Fast path: run the suite on the VPS next to a throwaway PostgreSQL
+
+Over an SSH tunnel every query costs a round trip, so one file can take minutes and the whole suite
+about 35. Running the tests on the VPS, beside a throwaway PostgreSQL, takes about ten minutes for all
+files (three workers). Production data is never involved: the database is a separate container.
+
+- Throwaway PostgreSQL: `docker run -d --name vynor-audit-pg --memory 768m -e POSTGRES_USER=vynor -e POSTGRES_PASSWORD=<throwaway> -p 127.0.0.1:55432:5432 postgres:16-alpine`, plus empty databases `vynor_t1..vynor_t3` (one per worker).
+- `pg-vps-sync.sh` copies code only (`backend/src|test|public`, `docs/*.md`, `packages/m365-contracts/src`, `extensions/m365/src`, `core/llm/utils`, `core/util`) to `/tmp/vtest/repo`; `/tmp/vtest/node_modules` is the backend image's `node_modules` plus `tsx` and `typescript`.
+- `pg-vps-run.sh` (runs on the VPS) resets the schema, then runs each file in the backend image with `NODE_ENV=test` (the image sets production, which changes route behaviour), `--test-force-exit` (an unclosed `pg` pool otherwise keeps the process alive after all subtests pass) and `--test-concurrency=1`.
+- One database per worker, and nothing else may touch `vynor_t1..t3` while a run is going (another run's schema reset kills it and the failures look random). Use another database for ad-hoc runs.
+- Environment limits, not product bugs: the image has no `git`, so `gitWorktreeSandbox.test.ts` is run locally instead.
+- The typed baseline is applied by `initDb()`; `carryOver.test.ts` needs `DATABASE_URL` to be a superuser (it creates and drops its own databases).

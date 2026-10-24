@@ -820,3 +820,11 @@ VynorAI is an independent product built from a pinned Continue-derived foundatio
 ### Schema hardening tests (backend/test)
 
 `schemaParity.test.ts` (SQLite schema vs the PostgreSQL migration SQL, reviewed-difference lists), `migrationSafety.test.ts` (migration 040/041 guards, duplicate-safe indexes, runner rules), `deleteAccountCoverage.test.ts` (every table with a `user_id` is cascaded, handled by `/delete-account`, or reviewed) and `pgDriverSecurity.test.ts` (TLS policy, int8 parsing). Migrations live in `src/db.ts` (SQLite) and `src/services/postgresSchema.ts` (PostgreSQL, `PG_MIGRATIONS` exported for the parity test).
+
+## Typed PostgreSQL schema and cutover
+
+- `backend/src/services/postgresSchema.ts`: the typed PostgreSQL baseline (`PG_BASELINE_VERSION`, `PG_MIGRATIONS`, `LEGACY_PG_VERSIONS`, `PG_BASELINE_COVERS_SQLITE_THROUGH`) and `applyPostgresMigrations`, which refuses a legacy text-timestamp database (`LegacyPostgresSchemaError`).
+- `backend/src/services/pgDriver.ts`: PostgreSQL driver; `parseTimestamptz`, UTC sessions, `CURRENT_TIMESTAMP` to `now()`, TLS rule, `int8` parsing.
+- `backend/src/services/pgCarryOver.ts`: one-time carry-over from the retired database into a typed one (`runCarryOver`, `parseLegacyTimestamp`, `convertValue`, `CARRY_OVER_TABLES`); CLI `backend/src/scripts/carryOver.ts`.
+- `deploy/typed-db-cutover.sh` and `docs/DB_CUTOVER_RUNBOOK.md`: the operator procedure (preflight, backup, prepare, copy, swap, rollback).
+- Tests: `backend/test/carryOver.test.ts` (needs PostgreSQL; uses `backend/test/fixtures/legacyPgSchema.sql` as the old layout), `schemaParity.test.ts`, `pgDriver.test.ts`.

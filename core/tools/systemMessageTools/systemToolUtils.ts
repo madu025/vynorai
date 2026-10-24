@@ -11,9 +11,17 @@ export function splitAtCodeblocksAndNewLines(content: string) {
 function randomLettersAndNumbers(length: number): string {
   const characters =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  // Tool-call ids are matched against provider responses, so they come from the CSPRNG.
+  // Rejection sampling keeps the characters uniform (248 is the largest multiple of 62 below 256).
   let result = "";
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  const bytes = new Uint8Array(length * 2);
+  while (result.length < length) {
+    globalThis.crypto.getRandomValues(bytes);
+    for (const byte of bytes) {
+      if (byte >= 248) continue;
+      result += characters.charAt(byte % characters.length);
+      if (result.length === length) break;
+    }
   }
   return result;
 }

@@ -6,18 +6,14 @@
  * type a URL, click, scroll and type into the page, and read console and
  * network errors, while the agent drives the same browser.
  */
+import { randomBytes } from "crypto";
 import { browserSession } from "core/tools/browser/session";
 import * as vscode from "vscode";
 
 let panel: vscode.WebviewPanel | undefined;
 
 function nonce(): string {
-  let s = "";
-  const chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for (let i = 0; i < 32; i++)
-    s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
+  return randomBytes(16).toString("hex");
 }
 
 function html(webview: vscode.Webview): string {

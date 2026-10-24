@@ -51,7 +51,7 @@ export async function runSubagentImpl(
     };
     agentLabel = agent.name;
   }
-  const id = extras.toolCallId ?? `subagent-${Date.now()}-${Math.random()}`;
+  const id = extras.toolCallId ?? `subagent-${globalThis.crypto.randomUUID()}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SUBAGENT_TIMEOUT_MS);
   running.set(id, controller);

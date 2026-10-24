@@ -501,10 +501,16 @@ let lastWorkspaceSchema: WorkspaceSchema | undefined;
 let nextStepsSchemaRequested = false;
 /** All saved chats of this person; the open chat mirrors `conversationMessages`. */
 let chatStore: ChatStore = emptyChatStore();
-const newChatId = () =>
-  (
-    globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now()}-${Math.random()}`
-  ).slice(0, 36);
+const newChatId = () => {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  // Older hosts: build a v4-shaped id from getRandomValues, never from a clock or Math.random.
+  const b = c.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+};
 
 const previewController = createPreviewController((visible) => {
   if (!cancelPreviewButton) return;

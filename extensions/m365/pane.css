@@ -5063,6 +5063,168 @@ body[data-auth="in"] .scroll-area::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgb(100 116 139 / 32%);
 }
+/* The selected range is retained for every preview, approval and result check, but repeating it
+   as a full-width row costs valuable review space. The composer and result evidence name it when
+   it matters. */
+body[data-auth="in"] .workspace > #selection-chip {
+  display: none !important;
+}
+/* New chat and history are frequent actions, so they live beside the product identity instead of
+   taking a separate row above the work surface. */
+body[data-auth="in"] .brand-bar {
+  grid-template-columns: 40px minmax(0, 1fr) auto !important;
+}
+body[data-auth="in"] .brand-copy {
+  min-width: 0;
+}
+body[data-auth="in"] .brand-copy strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-auth="in"] .brand-actions {
+  display: inline-flex;
+  grid-column: 3;
+  gap: 4px;
+  align-items: center;
+}
+body:not([data-auth="in"]) .brand-actions {
+  display: none;
+}
+body[data-auth="in"] .header-action {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+body[data-auth="in"] .header-action:hover {
+  border-color: rgb(83 105 134 / 18%);
+  background: rgb(255 255 255 / 72%);
+  color: var(--brand);
+}
+body[data-auth="in"] .header-action:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+body[data-auth="in"] .header-action:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+body[data-auth="in"] .header-action svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+/* During execution, keep the Agent visible as one honest, animated process line. Details and
+   Stop remain available without pushing the preview/result below the fold. */
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+}
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) .card-head,
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) .apply-dock {
+  display: contents;
+}
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) #agent-heading {
+  grid-column: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) #agent-badge,
+body[data-auth="in"]
+  #agent-card:has(#agent-stop:not([hidden]))
+  #agent-progress {
+  display: none;
+}
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) .agent-line {
+  display: flex;
+  grid-column: 2;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) .agent-checked {
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-auth="in"]
+  #agent-card:has(#agent-stop:not([hidden]))
+  .agent-checks-details {
+  flex: 0 0 auto;
+  margin: 0;
+}
+body[data-auth="in"]
+  #agent-card:has(#agent-stop:not([hidden]))
+  .agent-checks-details
+  > summary {
+  min-height: 28px;
+  font-size: var(--fs-xs);
+}
+body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) #agent-stop {
+  grid-column: 3;
+  min-height: 30px;
+  padding-inline: 10px;
+}
+@media (max-width: 380px) {
+  body[data-auth="in"] .brand-bar {
+    grid-template-columns: 36px minmax(0, 1fr) auto !important;
+  }
+  body[data-auth="in"] .header-action {
+    width: 30px;
+    height: 30px;
+  }
+  body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+  body[data-auth="in"]
+    #agent-card:has(#agent-stop:not([hidden]))
+    #agent-heading {
+    font-size: 12px;
+  }
+  body[data-auth="in"]
+    #agent-card:has(#agent-stop:not([hidden]))
+    .agent-checks-details
+    > summary {
+    width: 20px;
+    overflow: hidden;
+    color: transparent;
+    font-size: 0;
+    text-decoration: none;
+  }
+  body[data-auth="in"]
+    #agent-card:has(#agent-stop:not([hidden]))
+    .agent-checks-details
+    > summary::after {
+    color: var(--brand);
+    content: "›";
+    font-size: 18px;
+    line-height: 1;
+  }
+  body[data-auth="in"] #agent-card:has(#agent-stop:not([hidden])) #agent-stop {
+    grid-column: 3;
+    padding-inline: 8px;
+  }
+}
 /* The estimate is useful after verified work, but it should never compete with the landing
    screen's next action cards or reduce the visible part of a data-driven suggestion. */
 body[data-auth="in"][data-workspace-view="work"] .saved-footer {

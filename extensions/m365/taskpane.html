@@ -15,9 +15,9 @@
         color: CanvasText;
       }
     </style>
-    <link rel="stylesheet" href="pane.css?v=20261024.04" onerror="this.onerror=null;this.href='pane.css?v=20261024.04&amp;try=1'" />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261024.04" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261024.04" />
+    <link rel="stylesheet" href="pane.css?v=20261024.05" onerror="this.onerror=null;this.href='pane.css?v=20261024.05&amp;try=1'" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261024.05" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261024.05" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -29,6 +29,28 @@
         <div class="brand-copy">
           <strong>VynorAI Excel</strong>
           <span data-i18n="brand_tagline">Ask. Preview. Apply.</span>
+        </div>
+        <div class="brand-actions" aria-label="Chat actions">
+          <button
+            id="header-new-chat"
+            class="header-action new-chat-action"
+            type="button"
+            aria-label="New chat"
+            data-i18n-aria-label="new_chat"
+            title="New chat"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <button
+            id="open-chat-history"
+            class="header-action"
+            type="button"
+            aria-label="Chat history"
+            data-i18n-aria-label="chat_history"
+            title="Chat history"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.67M4 4v4.67h4.67M12 7v5l3.5 2" /></svg>
+          </button>
         </div>
       </header>
       <div
@@ -70,9 +92,6 @@
             data-i18n="menu_overview"
           >
             Workbook overview
-          </button>
-          <button id="open-chat-history" type="button" role="menuitem">
-            Chat history
           </button>
           <button
             id="advanced-workbook-options"
@@ -132,7 +151,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261024.04</p>
+          <p class="menu-version" id="build-id">Build 20261024.05</p>
         </div>
       </div>
 
@@ -1309,7 +1328,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261024.04";
+        var BUILD = "20261024.05";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");

@@ -36,6 +36,8 @@ export function renderChatListView(options: ChatViewOptions): void {
     "#chat-history-select",
   );
   const remove = document.querySelector<HTMLButtonElement>("#delete-chat");
+  const openHistory =
+    document.querySelector<HTMLButtonElement>("#open-chat-history");
   if (!select) return;
   const saved = historyList(store);
   select.replaceChildren();
@@ -53,6 +55,10 @@ export function renderChatListView(options: ChatViewOptions): void {
     ? store.activeId
     : "";
   select.hidden = saved.length === 0;
+  if (openHistory) {
+    openHistory.disabled = saved.length === 0;
+    openHistory.setAttribute("aria-disabled", String(saved.length === 0));
+  }
   // Chat controls are a top-level workspace affordance. Keep New chat visible even for a
   // brand-new workbook; history and delete remain conditional on saved conversations.
   document.querySelector<HTMLElement>("#chat-bar")?.removeAttribute("hidden");

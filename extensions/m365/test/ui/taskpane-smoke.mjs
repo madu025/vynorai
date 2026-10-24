@@ -399,6 +399,20 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     true,
     "the premium workspace brand header must remain visible",
   );
+  await assertReachable(page, "#header-new-chat");
+  assert.equal(
+    await page.$eval(
+      "#open-chat-history",
+      (element) => element.getClientRects().length > 0,
+    ),
+    true,
+    "the disabled history control must remain discoverable in the header",
+  );
+  assert.equal(
+    await page.$eval("#selection-chip", (element) => element.getClientRects().length),
+    0,
+    "the retained selection context must not consume a work-screen row",
+  );
   assert.equal(
     await page.$("#workbook-context"),
     null,
@@ -539,8 +553,11 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     document.querySelector("#prefs-card").setAttribute("hidden", "");
     card.removeAttribute("hidden");
     card.querySelector("#agent-badge").textContent = "Planning";
-    card.querySelector("#agent-progress").textContent =
-      "Inspecting the selected data and preparing a safe plan.";
+    const checked = card.querySelector("#agent-checked");
+    checked.removeAttribute("hidden");
+    checked.dataset.state = "working";
+    checked.querySelector("#agent-checked-text").textContent =
+      "Working... Calculating...";
     card.querySelector("#agent-stop").removeAttribute("hidden");
     card.querySelector('[data-stage="inspect"]').classList.add("done");
     card.querySelector('[data-stage="plan"]').classList.add("active");
@@ -552,6 +569,13 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   });
   await assertReachable(page, "#agent-card");
   await assertReachable(page, "#agent-stop");
+  assert.equal(
+    await page.$eval("#agent-checked", (element) =>
+      element.textContent?.includes("Working... Calculating..."),
+    ),
+    true,
+    "the compact agent state must show the current process before details",
+  );
   assert.equal(
     await page.evaluate(
       () =>

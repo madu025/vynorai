@@ -144,3 +144,5 @@ export interface AnalysisRecommendation {
   reason: string;
 }
 export * from "./capabilities.js";
+
+export * from "./sandbox.js";

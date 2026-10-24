@@ -48,6 +48,7 @@ import {
   TEXT_ANALYSIS_CONTRACT_VERSION,
   textAnalysisRequestSchema,
 } from "../services/m365TextAnalysis.js";
+import { createSandboxRouter } from "./m365Sandbox.js";
 import { z, validateBody } from "../middleware/validate.js";
 
 const excelPlanSchema = z.object({
@@ -606,6 +607,12 @@ const requireM365TextAuth = requireM365Scope("m365.text.read");
 
 export const m365Router = Router();
 
+/** Managed Python sandbox: preview, approval, job status and cancel. Fails closed without a worker. */
+m365Router.use(
+  "/sandbox",
+  createSandboxRouter(requireM365Scope("m365.excel.write")),
+);
+
 /** Per-gate access report for the task pane; needs a valid Entra token, changes no access state. */
 m365Router.get("/diagnostics", async (req: Request, res: Response) => {
   const authorization = req.headers.authorization;
@@ -1102,7 +1109,9 @@ m365Router.post(
     try {
       tenantRecord = await getM365Tenant(tenant.tenantId);
     } catch {
-      return res.status(500).json({ error: { code: "M365_TENANT_LOOKUP_FAILED" } });
+      return res
+        .status(500)
+        .json({ error: { code: "M365_TENANT_LOOKUP_FAILED" } });
     }
     const deny = async (reason: string, code: string) => {
       await logSecurityEvent({

@@ -1101,6 +1101,39 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "037_m365_sandbox_jobs",
+    description:
+      "Metadata ledger for managed Python sandbox jobs (no script or input is stored)",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_sandbox_jobs (
+        job_id VARCHAR(64) PRIMARY KEY,
+        tenant_id VARCHAR(128) NOT NULL,
+        object_id VARCHAR(128) NOT NULL,
+        user_id TEXT NOT NULL,
+        state VARCHAR(24) NOT NULL CHECK(state IN ('queued', 'running', 'cancel_requested', 'cancelled', 'succeeded', 'failed', 'expired')),
+        input_fingerprint VARCHAR(64) NOT NULL,
+        row_count INTEGER NOT NULL,
+        column_count INTEGER NOT NULL,
+        masked_cells INTEGER NOT NULL DEFAULT 0,
+        timeout_seconds INTEGER NOT NULL,
+        error_code VARCHAR(40),
+        result_json TEXT,
+        created_at_ms BIGINT NOT NULL,
+        updated_at_ms BIGINT NOT NULL,
+        expires_at_ms BIGINT NOT NULL
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_sandbox_owner ON m365_sandbox_jobs(tenant_id, object_id, created_at_ms)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_sandbox_state ON m365_sandbox_jobs(state, expires_at_ms)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_sandbox_user ON m365_sandbox_jobs(user_id, created_at_ms)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

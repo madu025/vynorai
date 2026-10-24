@@ -15,6 +15,11 @@ export interface M365Identity {
   tenantId: string;
   objectId: string;
   scopes: string[];
+  /**
+   * Epoch seconds of the Entra sign-in this identity ultimately comes from. Set only for identities
+   * read from a VynorAI session token; a fresh Entra token has none (it IS the proof).
+   */
+  authIat?: number;
 }
 
 interface EntraClaims {
@@ -112,18 +117,31 @@ export async function validateEntraAccessToken(
   };
 }
 
-/** A signed-in person stays signed in for this long after they last used the add-in. */
+/** One session token lives at most this long. */
 export const M365_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+/**
+ * Renewing a session never extends the original Entra proof: after this long a person must sign in
+ * with Entra again, so a stolen session token cannot be kept alive forever by renewing it.
+ */
+export const M365_SESSION_MAX_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 
 /**
  * VynorAI's own long session. It is issued only after an Entra token was fully validated, carries
  * the same tenant, object and scopes, and is re-checked against the tenant policy and the identity
  * link on every request, so disabling a tenant or unlinking a person ends it at once.
  */
-export function createM365SessionToken(identity: M365Identity): {
+export function createM365SessionToken(
+  identity: M365Identity,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): {
   token: string;
   expiresInSeconds: number;
 } {
+  // The proof time is carried across renewals; a fresh Entra identity starts a new window.
+  const authIat = identity.authIat ?? nowSeconds;
+  const remaining = authIat + M365_SESSION_MAX_LIFETIME_SECONDS - nowSeconds;
+  if (remaining <= 0) throw new Error("m365_session_expired");
+  const expiresInSeconds = Math.min(M365_SESSION_TTL_SECONDS, remaining);
   const token = jwt.sign(
     {
       kind: "m365_session",
@@ -131,35 +149,56 @@ export function createM365SessionToken(identity: M365Identity): {
       oid: identity.objectId,
       scp: identity.scopes.join(" "),
       ver: "vynorai-session",
+      auth_iat: authIat,
     },
     config.jwtSecret,
     {
       algorithm: "HS256",
-      expiresIn: M365_SESSION_TTL_SECONDS,
+      expiresIn: expiresInSeconds,
       jwtid: crypto.randomUUID(),
     },
   );
-  return { token, expiresInSeconds: M365_SESSION_TTL_SECONDS };
+  return { token, expiresInSeconds };
 }
 
-export function verifyM365SessionToken(token: string): M365Identity {
+export function verifyM365SessionToken(
+  token: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): M365Identity {
   const claims = jwt.verify(token, config.jwtSecret, {
     algorithms: ["HS256"],
   }) as Record<string, unknown>;
   if (
     claims.kind !== "m365_session" ||
+    claims.ver !== "vynorai-session" ||
+    typeof claims.jti !== "string" ||
+    !claims.jti ||
     typeof claims.tid !== "string" ||
     typeof claims.oid !== "string" ||
     !claims.tid ||
     !claims.oid
   )
     throw new Error("invalid_m365_session");
+  // Tokens issued before `auth_iat` existed count from their own issue time.
+  const authIat =
+    typeof claims.auth_iat === "number" && Number.isFinite(claims.auth_iat)
+      ? claims.auth_iat
+      : typeof claims.iat === "number"
+        ? claims.iat
+        : undefined;
+  if (
+    authIat === undefined ||
+    authIat > nowSeconds + 60 ||
+    nowSeconds - authIat >= M365_SESSION_MAX_LIFETIME_SECONDS
+  )
+    throw new Error("m365_session_expired");
   return {
     tenantId: claims.tid,
     objectId: claims.oid,
     scopes: String(claims.scp ?? "")
       .split(" ")
       .filter(Boolean),
+    authIat,
   };
 }
 
@@ -246,7 +285,9 @@ export function verifyM365ApprovalToken(
     sourceFingerprint: string;
   },
 ): { jti: string; expiresAtMs: number } {
-  const claims = jwt.verify(token, config.jwtSecret) as Record<string, unknown>;
+  const claims = jwt.verify(token, config.jwtSecret, {
+    algorithms: ["HS256"],
+  }) as Record<string, unknown>;
   for (const [key, value] of Object.entries({
     kind: "m365_excel_approval",
     ...expected,

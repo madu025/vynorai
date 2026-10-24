@@ -12,12 +12,12 @@ const NOW = `(${PG_NOW_TEXT})`;
 const SUBSCRIPTION_STATUSES =
   "'pending', 'active', 'cancelled', 'expired', 'failed', 'credited', 'superseded', 'chargedback'";
 
-interface PgMigration {
+export interface PgMigration {
   version: string;
   sql: string;
 }
 
-const PG_MIGRATIONS: PgMigration[] = [
+export const PG_MIGRATIONS: PgMigration[] = [
   {
     version: "pg_001_initial_schema",
     sql: `
@@ -727,6 +727,67 @@ CREATE TABLE IF NOT EXISTS m365_quota_reservations (
 );
 CREATE INDEX IF NOT EXISTS idx_m365_quota_reservations_created ON m365_quota_reservations(created_at);
 `,
+  },
+  {
+    version: "040_security_hardening",
+    sql: `
+ALTER TABLE quota_reservations ADD COLUMN IF NOT EXISTS period_start TEXT;
+ALTER TABLE m365_quota_reservations ADD COLUMN IF NOT EXISTS period_start TEXT;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM users WHERE api_key_hash IS NOT NULL AND api_key_hash <> '' GROUP BY api_key_hash HAVING COUNT(*) > 1) THEN
+    RAISE WARNING 'idx_users_api_key_hash_unique skipped: duplicate users.api_key_hash values exist';
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key_hash_unique ON users(api_key_hash) WHERE api_key_hash IS NOT NULL AND api_key_hash <> '';
+  END IF;
+  IF EXISTS (SELECT 1 FROM subscriptions WHERE payment_id ~ '^[0-9]+$' GROUP BY payment_id HAVING COUNT(*) > 1) THEN
+    RAISE WARNING 'idx_subscriptions_payment_id_unique skipped: duplicate subscriptions.payment_id values exist';
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_payment_id_unique ON subscriptions(payment_id) WHERE payment_id ~ '^[0-9]+$';
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_m365_tenant_usage_nonneg') THEN
+    ALTER TABLE m365_tenant_usage ADD CONSTRAINT chk_m365_tenant_usage_nonneg
+      CHECK (max_tokens >= 0 AND used_tokens >= 0 AND used_requests >= 0 AND bonus_tokens >= 0 AND bonus_requests >= 0) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_m365_quota_reservations_nonneg') THEN
+    ALTER TABLE m365_quota_reservations ADD CONSTRAINT chk_m365_quota_reservations_nonneg
+      CHECK (tokens >= 0 AND requests >= 0) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_m365_tenants_seat_limit') THEN
+    ALTER TABLE m365_tenants ADD CONSTRAINT chk_m365_tenants_seat_limit CHECK (seat_limit >= 1) NOT VALID;
+  END IF;
+  -- Validate existing rows; if some already violate a rule the constraint stays enforced for new
+  -- writes (NOT VALID) and the migration still succeeds with a metadata-only warning.
+  BEGIN
+    ALTER TABLE m365_tenant_usage VALIDATE CONSTRAINT chk_m365_tenant_usage_nonneg;
+  EXCEPTION WHEN check_violation THEN
+    RAISE WARNING 'chk_m365_tenant_usage_nonneg left NOT VALID: existing rows violate it';
+  END;
+  BEGIN
+    ALTER TABLE m365_quota_reservations VALIDATE CONSTRAINT chk_m365_quota_reservations_nonneg;
+  EXCEPTION WHEN check_violation THEN
+    RAISE WARNING 'chk_m365_quota_reservations_nonneg left NOT VALID: existing rows violate it';
+  END;
+  BEGIN
+    ALTER TABLE m365_tenants VALIDATE CONSTRAINT chk_m365_tenants_seat_limit;
+  EXCEPTION WHEN check_violation THEN
+    RAISE WARNING 'chk_m365_tenants_seat_limit left NOT VALID: existing rows violate it';
+  END;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_quota_reservations_user ON quota_reservations(user_id);
+CREATE INDEX IF NOT EXISTS idx_m365_quota_reservations_user ON m365_quota_reservations(user_id);
+CREATE INDEX IF NOT EXISTS idx_m365_tenant_usage_user ON m365_tenant_usage(user_id);
+CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON security_audit_logs(actor);
+`,
+  },
+  {
+    // SQLite twin adds a unique index on legacy files; here monthly_usage already has
+    // UNIQUE (user_id, period_start), so there is nothing to change.
+    version: "041_monthly_usage_conflict_target",
+    sql: `SELECT 1;`,
   },
 ];
 

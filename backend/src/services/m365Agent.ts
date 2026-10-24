@@ -10,6 +10,7 @@ import { z } from "../middleware/validate.js";
 import type { AuthenticatedUser } from "./aiProxy.js";
 import { M365AnalysisError, runAgentModel } from "./m365Analysis.js";
 import { STEP_FORMS } from "./m365Script.js";
+import { PiiMap } from "./piiShield.js";
 import {
   AI_TEXT_FEATURES,
   baseCapabilityContext,
@@ -1122,6 +1123,69 @@ export function nativeFeatureReply(
 }
 
 /** One model turn: the fixed system prompt and tools, then the conversation. */
+const PLACEHOLDER_IN_TEXT = /__PII_(EMAIL|PHONE|NIC|CARD)_(\d+)__/g;
+
+/**
+ * Defence in depth: the pane masks personal data on the device, but a modified or older client may
+ * not. Every message (content and tool call arguments) is masked again here with a map whose
+ * numbering starts after any placeholder the client already used, so the two never collide. Only the
+ * messages are touched; the fixed system and tool prefix stays byte-identical for the prompt cache.
+ */
+export function maskAgentMessages<
+  T extends { content?: unknown; tool_calls?: unknown },
+>(messages: T[]): { messages: T[]; map: PiiMap } {
+  const map = new PiiMap();
+  const counts = (map as unknown as { counts: Record<string, number> }).counts;
+  const scan = (text: unknown) => {
+    if (typeof text !== "string") return;
+    for (const match of text.matchAll(PLACEHOLDER_IN_TEXT)) {
+      const kind = match[1];
+      counts[kind] = Math.max(counts[kind] ?? 0, Number(match[2]));
+    }
+  };
+  for (const message of messages) {
+    scan(message.content);
+    if (Array.isArray(message.tool_calls))
+      for (const call of message.tool_calls as any[])
+        scan(call?.function?.arguments);
+  }
+  const masked = messages.map((message) => {
+    const next: any = { ...message };
+    if (typeof message.content === "string")
+      next.content = map.mask(message.content);
+    if (Array.isArray(message.tool_calls))
+      next.tool_calls = (message.tool_calls as any[]).map((call) =>
+        typeof call?.function?.arguments === "string"
+          ? {
+              ...call,
+              function: {
+                ...call.function,
+                arguments: map.mask(call.function.arguments),
+              },
+            }
+          : call,
+      );
+    return next as T;
+  });
+  return { messages: masked, map };
+}
+
+/** Restores the values this request masked, in the reply text and in tool call arguments. */
+export function restoreAgentReply(reply: AgentReply, map: PiiMap): AgentReply {
+  if (map.size === 0) return reply;
+  return {
+    ...reply,
+    content: map.restore(reply.content),
+    tool_calls: reply.tool_calls.map((call) => ({
+      ...call,
+      function: {
+        ...call.function,
+        arguments: map.restore(call.function.arguments),
+      },
+    })),
+  };
+}
+
 export async function agentTurn(
   user: AuthenticatedUser,
   body: unknown,
@@ -1143,10 +1207,11 @@ export async function agentTurn(
   if (refusal) return refusal;
   assertAgentRateLimit(user.id);
   // The language line goes after the fixed prompt in its own message, so the long prefix stays identical.
+  const piiMasked = maskAgentMessages(parsed.data.messages as any[]);
   const messages = [
     { role: "system", content: AGENT_SYSTEM_PROMPT },
     { role: "system", content: LANGUAGE_LINE[parsed.data.language] },
-    ...parsed.data.messages,
+    ...piiMasked.messages,
   ];
   // Tool call arguments ride in the assistant messages and are paid for like any input.
   const chars = messages.reduce(
@@ -1167,5 +1232,5 @@ export async function agentTurn(
     Math.ceil(chars / 4) + agentToolTokenEstimate() + maxTokens,
     maxTokens,
   );
-  return cleanAgentReply(raw);
+  return restoreAgentReply(cleanAgentReply(raw), piiMasked.map);
 }

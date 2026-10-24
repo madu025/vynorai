@@ -44,7 +44,21 @@ async function requireScopedModelToken(
     const auth = String(req.headers.authorization || "");
     if (!auth.startsWith("Bearer "))
       throw new Error("MISSING_BACKGROUND_MODEL_TOKEN");
-    (req as any).backgroundClaims = verifyBackgroundModelToken(auth.slice(7));
+    const claims = verifyBackgroundModelToken(auth.slice(7));
+    (req as any).backgroundClaims = claims;
+    // A scoped token outlives a suspension by up to 50 minutes, so the account is re-checked on
+    // every call: a suspended or deleted user's running task can no longer spend model credits.
+    const account = await dbGet<{ is_suspended: number | null }>(
+      "SELECT is_suspended FROM users WHERE id = ?",
+      [claims.userId],
+    );
+    if (!account || Number(account.is_suspended ?? 0) !== 0)
+      return res.status(403).json({
+        error: {
+          code: "BACKGROUND_USER_SUSPENDED",
+          message: "This account cannot run background tasks.",
+        },
+      });
     next();
   } catch {
     res.status(401).json({

@@ -40,6 +40,14 @@ export interface M365IdentityLink {
   user_id: string;
   email: string;
   subscription_plan?: string;
+  /** 1 when an administrator suspended the linked VynorAI account; such a link never grants access. */
+  is_suspended?: number | null;
+}
+
+/** True when the linked account is suspended. Anything but a clean 0/null counts as suspended. */
+export function isM365LinkSuspended(link: M365IdentityLink): boolean {
+  const value = link.is_suspended;
+  return !(value === undefined || value === null || Number(value) === 0);
 }
 
 export interface M365DiagnosticStage {
@@ -82,7 +90,7 @@ export function findM365IdentityLink(
   objectId: string,
 ): Promise<M365IdentityLink | undefined> {
   return dbGet<M365IdentityLink>(
-    "SELECT l.user_id, u.email, s.plan_name as subscription_plan FROM m365_identity_links l JOIN users u ON u.id = l.user_id LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' WHERE l.tenant_id = ? AND l.object_id = ? AND l.enabled = 1 ORDER BY s.valid_until DESC LIMIT 1",
+    "SELECT l.user_id, u.email, u.is_suspended, s.plan_name as subscription_plan FROM m365_identity_links l JOIN users u ON u.id = l.user_id LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' WHERE l.tenant_id = ? AND l.object_id = ? AND l.enabled = 1 ORDER BY s.valid_until DESC LIMIT 1",
     [tenantId, objectId],
   );
 }
@@ -150,13 +158,18 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
   }
 
   const link = await findM365IdentityLink(identity.tenantId, identity.objectId);
+  const suspended = Boolean(link && isM365LinkSuspended(link));
   stages.push({
     name: "identity",
-    ok: Boolean(link),
-    code: link ? undefined : "M365_IDENTITY_NOT_LINKED",
+    ok: Boolean(link) && !suspended,
+    code: !link
+      ? "M365_IDENTITY_NOT_LINKED"
+      : suspended
+        ? "M365_USER_SUSPENDED"
+        : undefined,
   });
 
-  if (link) {
+  if (link && !suspended) {
     const entitlement = await resolveM365Entitlement(
       identity.tenantId,
       identity.objectId,
@@ -192,6 +205,7 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
       },
     });
   } else {
+    // No usable identity (unlinked or suspended): the later gates are skipped, never assumed.
     stages.push({ name: "credits", ok: false, code: "skipped_no_identity" });
     stages.push({
       name: "subscription",

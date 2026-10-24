@@ -140,9 +140,16 @@ test("a signed-in person gets a 30 day session that carries the same identity an
   const { token, expiresInSeconds } = createM365SessionToken(identity);
   assert.equal(expiresInSeconds, 30 * 24 * 60 * 60);
   assert.equal(M365_SESSION_TTL_SECONDS, expiresInSeconds);
-  assert.deepEqual(verifyM365SessionToken(token), identity);
+  // The verified identity also carries the original sign-in time (`authIat`) so renewals cannot
+  // extend it past the 30 day cap.
+  const { authIat, ...verified } = verifyM365SessionToken(token);
+  assert.deepEqual(verified, identity);
+  assert.ok(authIat && Math.abs(authIat - Date.now() / 1000) < 10);
   // The same entry point the routes use accepts it without calling Microsoft.
-  assert.deepEqual(await validateM365BearerToken(token), identity);
+  const { authIat: viaBearer, ...bearer } =
+    await validateM365BearerToken(token);
+  assert.deepEqual(bearer, identity);
+  assert.equal(viaBearer, authIat);
   const claims = jwt.decode(token) as { exp: number; iat: number };
   assert.equal(claims.exp - claims.iat, 30 * 24 * 60 * 60);
 });

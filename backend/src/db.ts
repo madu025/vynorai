@@ -88,11 +88,9 @@ async function execSchema(sql: string): Promise<void> {
     await dbRun(sql);
   } catch (err: any) {
     const msg = err.message || "";
-    if (
-      msg.includes("duplicate column") ||
-      msg.includes("already exists") ||
-      msg.includes("no such column")
-    ) {
+    // Only "this object is already there" is safe to skip; any other failure (a locked or full
+    // database, a missing column) must stop the migration instead of being recorded as applied.
+    if (msg.includes("duplicate column") || msg.includes("already exists")) {
       console.warn(`[DB Schema Non-Fatal] ${sql.slice(0, 60)}: ${msg}`);
       return;
     }
@@ -112,7 +110,15 @@ async function addColumnIfNotExists(
   try {
     await dbRun(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
   } catch (err: any) {
-    // Duplicate column / column already exists is safe to ignore
+    // A duplicate column is already done. A table another service creates later (plan_overrides)
+    // has nothing to alter yet and gets the column from its own CREATE TABLE. Anything else (a
+    // locked or full database) means the column was not added and must not be recorded as applied.
+    const message = String(err?.message ?? "");
+    if (
+      !message.includes("duplicate column") &&
+      !message.includes("no such table")
+    )
+      throw err;
   }
 }
 
@@ -124,6 +130,8 @@ interface Migration {
   version: string;
   description: string;
   up: () => Promise<void>;
+  /** The migration opens and closes its own transaction, so the runner must not wrap it. */
+  ownTransaction?: boolean;
 }
 
 const MIGRATIONS: Migration[] = [
@@ -555,6 +563,7 @@ const MIGRATIONS: Migration[] = [
     version: "012_topup_credits_ledger",
     description:
       "Track top-up credits per cycle and stop top-up orders acting as subscription tiers",
+    ownTransaction: true,
     up: async () => {
       await addColumnIfNotExists(
         "monthly_usage",
@@ -1190,7 +1199,92 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "040_security_hardening",
+    description:
+      "Counter guards on the M365 ledger, guarded unique indexes for API-key hashes and payment ids, hold cycle column, lookup indexes",
+    up: async () => {
+      // Nullable and additive: older code ignores them, newer code may record the cycle a hold
+      // was taken in so a late refund lands in the right cycle.
+      await addColumnIfNotExists("quota_reservations", "period_start TEXT");
+      await addColumnIfNotExists(
+        "m365_quota_reservations",
+        "period_start TEXT",
+      );
+
+      // Created only when no duplicates exist; otherwise skipped with a metadata-only warning so
+      // an existing production database is never blocked by this migration.
+      await createGuardedUniqueIndex(
+        "idx_users_api_key_hash_unique",
+        "users.api_key_hash",
+        "SELECT COUNT(*) AS n FROM (SELECT api_key_hash FROM users WHERE api_key_hash IS NOT NULL AND api_key_hash <> '' GROUP BY api_key_hash HAVING COUNT(*) > 1)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key_hash_unique ON users(api_key_hash) WHERE api_key_hash IS NOT NULL AND api_key_hash <> ''",
+      );
+      // Only genuine PayHere payment ids (digits) are unique. Admin grants and test activations
+      // share fixed labels such as ADMIN_MANUAL_GRANT, so those rows must stay repeatable.
+      await createGuardedUniqueIndex(
+        "idx_subscriptions_payment_id_unique",
+        "subscriptions.payment_id",
+        "SELECT COUNT(*) AS n FROM (SELECT payment_id FROM subscriptions WHERE payment_id GLOB '[0-9]*' AND payment_id NOT GLOB '*[^0-9]*' GROUP BY payment_id HAVING COUNT(*) > 1)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_payment_id_unique ON subscriptions(payment_id) WHERE payment_id GLOB '[0-9]*' AND payment_id NOT GLOB '*[^0-9]*'",
+      );
+
+      // SQLite cannot add a CHECK to an existing table without a rebuild, so the same rules are
+      // enforced by triggers (PostgreSQL uses CHECK constraints, see postgresSchema.ts).
+      for (const statement of [
+        "CREATE TRIGGER IF NOT EXISTS trg_m365_tenant_usage_guard_insert BEFORE INSERT ON m365_tenant_usage WHEN NEW.max_tokens < 0 OR NEW.used_tokens < 0 OR NEW.used_requests < 0 OR NEW.bonus_tokens < 0 OR NEW.bonus_requests < 0 BEGIN SELECT RAISE(ABORT, 'm365_tenant_usage counters must not be negative'); END",
+        "CREATE TRIGGER IF NOT EXISTS trg_m365_tenant_usage_guard_update BEFORE UPDATE ON m365_tenant_usage WHEN NEW.max_tokens < 0 OR NEW.used_tokens < 0 OR NEW.used_requests < 0 OR NEW.bonus_tokens < 0 OR NEW.bonus_requests < 0 BEGIN SELECT RAISE(ABORT, 'm365_tenant_usage counters must not be negative'); END",
+        "CREATE TRIGGER IF NOT EXISTS trg_m365_quota_reservations_guard_insert BEFORE INSERT ON m365_quota_reservations WHEN NEW.tokens < 0 OR NEW.requests < 0 BEGIN SELECT RAISE(ABORT, 'm365_quota_reservations amounts must not be negative'); END",
+        "CREATE TRIGGER IF NOT EXISTS trg_m365_quota_reservations_guard_update BEFORE UPDATE ON m365_quota_reservations WHEN NEW.tokens < 0 OR NEW.requests < 0 BEGIN SELECT RAISE(ABORT, 'm365_quota_reservations amounts must not be negative'); END",
+        "CREATE TRIGGER IF NOT EXISTS trg_m365_tenants_guard_insert BEFORE INSERT ON m365_tenants WHEN NEW.seat_limit < 1 BEGIN SELECT RAISE(ABORT, 'm365_tenants.seat_limit must be at least 1'); END",
+        "CREATE TRIGGER IF NOT EXISTS trg_m365_tenants_guard_update BEFORE UPDATE ON m365_tenants WHEN NEW.seat_limit < 1 BEGIN SELECT RAISE(ABORT, 'm365_tenants.seat_limit must be at least 1'); END",
+      ])
+        await execSchema(statement);
+
+      // The delete-account scrub and the stale sweeps look rows up by owner.
+      for (const statement of [
+        "CREATE INDEX IF NOT EXISTS idx_quota_reservations_user ON quota_reservations(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_m365_quota_reservations_user ON m365_quota_reservations(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_m365_tenant_usage_user ON m365_tenant_usage(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON security_audit_logs(actor)",
+      ])
+        await execSchema(statement);
+    },
+  },
+  {
+    version: "041_monthly_usage_conflict_target",
+    description:
+      "Guarantee the UNIQUE(user_id, period_start) conflict target on legacy SQLite monthly_usage tables",
+    up: async () => {
+      // A legacy SQLite file can have monthly_usage without UNIQUE(user_id, period_start) (migration
+      // 011 reused the name of a plain index from 002), which makes ON CONFLICT(user_id,
+      // period_start) fail. PostgreSQL always has the constraint, so its twin migration is a no-op.
+      await createGuardedUniqueIndex(
+        "idx_monthly_usage_user_period_unique",
+        "monthly_usage.user_id+period_start",
+        "SELECT COUNT(*) AS n FROM (SELECT 1 FROM monthly_usage GROUP BY user_id, period_start HAVING COUNT(*) > 1)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_usage_user_period_unique ON monthly_usage(user_id, period_start)",
+      );
+    },
+  },
 ];
+
+/** Partial unique index (static SQL), created only when the existing rows have no duplicates. */
+async function createGuardedUniqueIndex(
+  index: string,
+  label: string,
+  duplicateSql: string,
+  createSql: string,
+): Promise<void> {
+  const duplicate = await dbGet<{ n: number }>(duplicateSql);
+  if (duplicate && Number(duplicate.n) > 0) {
+    console.warn(
+      `[DB Migration] ${index} skipped: ${duplicate.n} duplicate ${label} value(s) exist; resolve them and re-create the index`,
+    );
+    return;
+  }
+  await execSchema(createSql);
+}
 
 async function applyMigrations(): Promise<void> {
   await execSchema(`CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -1208,10 +1302,26 @@ async function applyMigrations(): Promise<void> {
       console.log(
         `[DB Migration] Applying ${migration.version}: ${migration.description}...`,
       );
-      await migration.up();
-      await dbRun("INSERT INTO schema_migrations (version) VALUES (?)", [
-        migration.version,
-      ]);
+      // One transaction per step: a crash or error leaves either the whole step and its
+      // schema_migrations row, or neither (PostgreSQL does the same under an advisory lock).
+      if (migration.ownTransaction) {
+        await migration.up();
+        await dbRun("INSERT INTO schema_migrations (version) VALUES (?)", [
+          migration.version,
+        ]);
+      } else {
+        await dbRun("BEGIN IMMEDIATE");
+        try {
+          await migration.up();
+          await dbRun("INSERT INTO schema_migrations (version) VALUES (?)", [
+            migration.version,
+          ]);
+          await dbRun("COMMIT");
+        } catch (err) {
+          await dbRun("ROLLBACK").catch(() => {});
+          throw err;
+        }
+      }
       console.log(
         `[DB Migration] ✅ ${migration.version} successfully applied.`,
       );

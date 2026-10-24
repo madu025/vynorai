@@ -135,12 +135,18 @@ function toRecord(row: M365TenantRow): M365TenantRecord {
     consentedAt: row.consented_at,
     aiEnabled: row.ai_enabled === null || Number(row.ai_enabled) !== 0,
     planId: row.plan_id || null,
-    seatLimit: Number(row.seat_limit || 1),
+    seatLimit: sanitizeSeatLimit(row.seat_limit),
     activeSeats: Number(row.active_seats || 0),
     subscriptionValidUntil: row.subscription_valid_until || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** A missing, zero, negative or non-numeric stored seat limit reads as 1 seat, never as unlimited. */
+function sanitizeSeatLimit(value: number | string | null): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
 }
 
 function parseScopes(value: string): string[] {

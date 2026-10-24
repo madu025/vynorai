@@ -10,8 +10,17 @@ const { Pool, types } = pg;
 
 // Return numbers, not strings, for BIGINT/NUMERIC so credit math, COUNT(*)
 // and SUM() behave exactly as they did on SQLite.
-types.setTypeParser(20, (v) => Number(v)); // int8
+// An int8 above 2^53 would silently lose precision as a JS number (ids, counters), so those
+// stay exact strings; every value the application can produce today still arrives as a number.
+export function parseInt8(value: string): number | string {
+  const n = Number(value);
+  return Number.isSafeInteger(n) ? n : value;
+}
+types.setTypeParser(20, parseInt8); // int8
 types.setTypeParser(1700, (v) => Number(v)); // numeric
+// timestamptz would arrive as a Date object; hand back the ISO string so JSON output is stable
+// and matches the text timestamps used by every other column.
+types.setTypeParser(1184, (v) => new Date(v).toISOString());
 // DATE(created_at) must stay the plain "YYYY-MM-DD" string SQLite returned.
 types.setTypeParser(1082, (v) => v);
 
@@ -21,6 +30,40 @@ export const PG_NOW_TEXT =
 
 let pool: pg.Pool | null = null;
 let ready = false;
+
+/** True for hosts that never leave the machine or the private container network. */
+export function isPrivatePostgresHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!h) return true;
+  if (h === "localhost" || h === "::1") return true;
+  // Only real dotted IPv4 literals count as private; a name such as 10.example.com does not.
+  if (/^127(\.\d{1,3}){3}$/.test(h) || /^10(\.\d{1,3}){3}$/.test(h))
+    return true;
+  if (/^192\.168(\.\d{1,3}){2}$/.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}$/.test(h)) return true;
+  // A single-label name (a docker-compose service such as "postgres") or *.internal.
+  return !h.includes(".") || h.endsWith(".internal");
+}
+
+/**
+ * TLS policy: PG_SSL=disable is the only way to run without TLS against a remote host. An explicit
+ * sslmode in the URL is left to the driver. Loopback and the private container network need no TLS.
+ */
+export function postgresSslOption(
+  connectionString: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): { rejectUnauthorized: boolean } | undefined {
+  if (env.PG_SSL === "disable") return undefined;
+  if (env.PG_SSL === "require") return { rejectUnauthorized: true };
+  if (/[?&]sslmode=/i.test(connectionString ?? "")) return undefined;
+  let host = "";
+  try {
+    host = new URL(connectionString ?? "").hostname;
+  } catch {
+    return undefined;
+  }
+  return isPrivatePostgresHost(host) ? undefined : { rejectUnauthorized: true };
+}
 
 export function postgresConfigured(): boolean {
   return (
@@ -39,10 +82,7 @@ export function getPool(): pg.Pool {
       max: Number(process.env.PG_POOL_MAX || 20),
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 30_000,
-      ssl:
-        process.env.PG_SSL === "require"
-          ? { rejectUnauthorized: true }
-          : undefined,
+      ssl: postgresSslOption(process.env.DATABASE_URL),
     });
     pool.on("error", (err) =>
       console.error("[Postgres] idle client error:", err.message),

@@ -1,5 +1,6 @@
 import { z } from "../middleware/validate.js";
 import { proxyAnalysisRunner, M365AnalysisError } from "./m365Analysis.js";
+import { PiiMap } from "./piiShield.js";
 import type { AuthenticatedUser } from "./aiProxy.js";
 import type { AnalysisRunner } from "./m365Analysis.js";
 
@@ -143,8 +144,22 @@ export async function assistText(
   user: AuthenticatedUser,
   input: z.infer<typeof assistRequestSchema>,
 ): Promise<AssistResult> {
-  const messages = buildAssistMessages(input);
+  // The client is asked to mask personal data, but the server never relies on that: emails, phone
+  // numbers, NICs and card numbers are replaced before the provider sees the text, and restored in
+  // the reply the person reads.
+  const map = new PiiMap();
+  const messages = buildAssistMessages({
+    ...input,
+    text: map.mask(input.text),
+  });
   const chars = messages.reduce((sum, m) => sum + m.content.length, 0);
   const answer = await runner(user, messages, Math.ceil(chars / 4) + 3000);
-  return parseAssistResponse(answer, input.task === "report-email");
+  const parsed = parseAssistResponse(answer, input.task === "report-email");
+  return {
+    ...parsed,
+    text: map.restore(parsed.text),
+    ...(parsed.notes
+      ? { notes: parsed.notes.map((note) => map.restore(note)) }
+      : {}),
+  };
 }

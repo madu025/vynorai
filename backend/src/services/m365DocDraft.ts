@@ -1,5 +1,6 @@
 import { z } from "../middleware/validate.js";
 import { proxyAnalysisRunner, M365AnalysisError } from "./m365Analysis.js";
+import { PiiMap } from "./piiShield.js";
 import type { AuthenticatedUser } from "./aiProxy.js";
 import type { AnalysisRunner } from "./m365Analysis.js";
 
@@ -242,6 +243,21 @@ export function parseDraftResponse(text: string): DocumentDraft {
   return draft;
 }
 
+/** Puts the real values back into every string of the parsed draft. */
+function restoreDeep<T>(value: T, map: PiiMap): T {
+  if (typeof value === "string") return map.restore(value) as unknown as T;
+  if (Array.isArray(value))
+    return value.map((item) => restoreDeep(item, map)) as unknown as T;
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        restoreDeep(item, map),
+      ]),
+    ) as T;
+  return value;
+}
+
 let runner: AnalysisRunner = proxyAnalysisRunner;
 /** Test seam; production always goes through the existing AI proxy. */
 export function setDraftRunnerForTests(next?: AnalysisRunner): void {
@@ -252,10 +268,29 @@ export async function draftDocument(
   user: AuthenticatedUser,
   input: DraftRequest,
 ): Promise<DocumentDraft> {
-  const messages = buildDraftMessages(input);
+  // Server-side masking: the title, brief and memo header reach the provider with personal data
+  // replaced, whatever the client did; the draft the person reads has the real values back.
+  const map = new PiiMap();
+  const masked: DraftRequest = {
+    ...input,
+    title: map.mask(input.title),
+    brief: map.mask(input.brief),
+    ...(input.audience ? { audience: map.mask(input.audience) } : {}),
+    ...(input.memo
+      ? {
+          memo: {
+            ...input.memo,
+            to: map.mask(input.memo.to),
+            from: map.mask(input.memo.from),
+            subject: map.mask(input.memo.subject),
+          },
+        }
+      : {}),
+  };
+  const messages = buildDraftMessages(masked);
   const chars = messages.reduce((sum, m) => sum + m.content.length, 0);
   const answer = await runner(user, messages, Math.ceil(chars / 4) + 6000);
-  const draft = parseDraftResponse(answer);
+  const draft = restoreDeep(parseDraftResponse(answer), map);
   // The add-in fills the real date; the model only ever sees a placeholder.
   if (draft.memo && input.memo) {
     draft.memo = {

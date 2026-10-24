@@ -34,6 +34,7 @@ import {
 import {
   diagnoseM365Identity,
   findM365IdentityLink,
+  isM365LinkSuspended,
   getM365Capabilities,
 } from "../services/m365Diagnostics.js";
 import { resolveM365Entitlement } from "../services/m365Entitlements.js";
@@ -589,11 +590,28 @@ function requireM365Scope(requiredScope: M365Scope) {
         return res
           .status(403)
           .json({ error: { code: "M365_IDENTITY_NOT_LINKED" } });
+      // A suspended account fails closed on every path, including a still-valid 30 day session.
+      if (isM365LinkSuspended(link)) {
+        await logSecurityEvent({
+          eventType: "M365_SUSPENDED_USER_BLOCKED",
+          actor: m365Identity.objectId,
+          target: m365Identity.tenantId,
+          details: JSON.stringify({ requiredScope }),
+          ipAddress: req.ip,
+        });
+        return res.status(403).json({ error: { code: "M365_USER_SUSPENDED" } });
+      }
       (req as any).m365Identity = m365Identity;
       const entitlement = await resolveM365Entitlement(
         m365Identity.tenantId,
         m365Identity.objectId,
       );
+      if (entitlement.blockedReason === "user_suspended")
+        return res.status(403).json({ error: { code: "M365_USER_SUSPENDED" } });
+      if (entitlement.blockedReason === "seat_limit_exceeded")
+        return res
+          .status(403)
+          .json({ error: { code: "M365_SEAT_LIMIT_EXCEEDED" } });
       (req as any).user = {
         id: link.user_id,
         email: link.email,
@@ -684,7 +702,16 @@ m365Router.post(
     }
   },
   async (req: Request, res: Response) => {
-    const session = createM365SessionToken(identity(req));
+    let session: ReturnType<typeof createM365SessionToken>;
+    try {
+      // identity(req).authIat is set when the caller presented a session token, so renewing keeps
+      // the original Entra proof time; only a fresh Entra token starts a new 30 day window.
+      session = createM365SessionToken(identity(req));
+    } catch (error) {
+      return res.status(401).json({
+        error: { code: (error as Error).message || "m365_session_expired" },
+      });
+    }
     await logSecurityEvent({
       eventType: "M365_SESSION_ISSUED",
       actor: identity(req).objectId,

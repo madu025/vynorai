@@ -100,6 +100,17 @@ export interface AuthenticatedUser {
   hasActiveSubscription: boolean;
   subscriptionPlan?: string;
   validUntil?: string;
+  /**
+   * Set only by the M365 routes: the organisation seat this request is billed to. Its presence
+   * routes every credit hold to the tenant ledger (m365QuotaLedger.ts) instead of the user's own
+   * monthly_usage cycle. `subscriptionPlan` then holds the tenant-selected plan for this request
+   * only; it is never written back to the user's subscription.
+   */
+  m365Quota?: {
+    tenantId: string;
+    objectId: string;
+    planSource: "tenant" | "user" | "free";
+  };
 }
 
 // ── In-Memory High-Speed Auth Cache (Handles 1000+ Concurrent Requests / 0ms Latency) ──

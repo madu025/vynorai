@@ -114,6 +114,28 @@ export async function getEffectivePlan(
   return plans[planId] || plans["free"];
 }
 
+/** Columns `updatePlanField` may name in SQL. Anything else is refused, never spliced into a query. */
+export const PLAN_OVERRIDE_COLUMNS = new Set([
+  "display_name",
+  "monthly_tokens",
+  "monthly_requests",
+  "price_lkr",
+  "price_usd",
+  "discount_pct",
+  "context_window",
+  "default_chat_model",
+  "default_autocomplete_model",
+  "allowed_models",
+  "features",
+  "payhere_item_id",
+  "upgrade_url",
+  "background_enabled",
+  "background_tasks_per_month",
+  "background_max_concurrency",
+  "background_priority",
+  "is_active",
+]);
+
 // ─── Upsert a plan override field ─────────────────────────────────────────────
 export async function updatePlanField(
   planId: string,
@@ -138,6 +160,10 @@ export async function updatePlanField(
     is_active: number;
   }>,
 ): Promise<void> {
+  for (const column of Object.keys(fields))
+    if (!PLAN_OVERRIDE_COLUMNS.has(column))
+      throw new Error(`INVALID_PLAN_COLUMN:${column.slice(0, 40)}`);
+  if (Object.keys(fields).length === 0) return;
   const sets = Object.entries(fields)
     .map(([k]) => `${k} = ?`)
     .join(", ");

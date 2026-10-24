@@ -1,3 +1,4 @@
+import { idParam } from "../services/secureId.js";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "./auth.js";
 import { incrementRateLimit } from "../services/redisStore.js";
@@ -32,7 +33,7 @@ import {
 } from "../middleware/validate.js";
 
 export const TaskIdParamSchema = z.object({
-  id: z.string().min(1, "Task id is required"),
+  id: idParam("Task id"),
 });
 
 export const ListTasksQuerySchema = z.object({
@@ -349,11 +350,9 @@ backgroundRouter.post(
   validateBody(PushSubscriptionSchema, { shape: "nested" }),
   async (req, res) => {
     try {
-      return res
-        .status(201)
-        .json({
-          id: await savePushSubscription((req as any).user.id, req.body),
-        });
+      return res.status(201).json({
+        id: await savePushSubscription((req as any).user.id, req.body),
+      });
     } catch (error) {
       return sendBackgroundError(res, error);
     }

@@ -406,7 +406,9 @@ export async function getCloudDeliveryManifest(
 export async function listCloudDeliveryManifests(
   limit = 50,
 ): Promise<CloudDeliveryManifest[]> {
-  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+  const safeLimit = Number.isFinite(limit)
+    ? Math.min(Math.max(Math.trunc(limit), 1), 100)
+    : 50;
   const rows = await billingAll<any>(
     `SELECT * FROM cloud_delivery_manifests ORDER BY updated_at DESC LIMIT ${safeLimit}`,
   );

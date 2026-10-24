@@ -451,13 +451,36 @@ test("analysis is rate limited per user", async () => {
   assert.equal(limited.json.error.code, "AI_ANALYSIS_RATE_LIMITED");
 });
 
-test("the production runner refuses before any provider call when credits are exhausted", async () => {
-  const quota = await import("../src/services/monthlyQuota.js");
-  const usage = await quota.getOrInitMonthlyUsage("user-analysis", "free");
+test("the production runner refuses before any provider call when the tenant credits are exhausted", async () => {
+  const ledger = await import("../src/services/m365QuotaLedger.js");
+  const seat = ledger.m365Scope({
+    tenantId,
+    objectId,
+    userId: "user-analysis",
+  });
+  await ledger.getOrInitM365Usage(seat, { planId: "free", source: "free" });
   await dbm.dbRun(
-    "UPDATE monthly_usage SET used_tokens = max_tokens WHERE user_id = ?",
-    ["user-analysis"],
+    "UPDATE m365_tenant_usage SET used_tokens = max_tokens WHERE tenant_id = ? AND object_id = ?",
+    [tenantId, objectId],
   );
+  await assert.rejects(
+    () =>
+      analysis.proxyAnalysisRunner(
+        {
+          id: "user-analysis",
+          email: "owner@example.com",
+          hasActiveSubscription: false,
+          subscriptionPlan: "free",
+          m365Quota: { tenantId, objectId, planSource: "free" },
+        },
+        [{ role: "user", content: "x" }],
+        1000,
+      ),
+    (error: any) => error.code === "CREDITS_EXHAUSTED" && error.status === 403,
+  );
+});
+
+test("an M365 runner call without its tenant seat is refused and never falls back to the personal quota", async () => {
   await assert.rejects(
     () =>
       analysis.proxyAnalysisRunner(
@@ -470,9 +493,8 @@ test("the production runner refuses before any provider call when credits are ex
         [{ role: "user", content: "x" }],
         1000,
       ),
-    (error: any) => error.code === "CREDITS_EXHAUSTED" && error.status === 403,
+    (error: any) => error.code === "M365_QUOTA_SCOPE_MISSING",
   );
-  assert.ok(usage);
 });
 
 test("a Sinhala request and language reach the model as data and the call succeeds", async () => {
@@ -517,10 +539,10 @@ async function postPlan(chart: Record<string, unknown>) {
 }
 
 test("the plan route carries a chart's Summarize by and Top-N into the plan", async () => {
-  // An earlier test in this file used up the monthly credits on purpose.
+  // An earlier test in this file used up the tenant's monthly credits on purpose.
   await dbm.dbRun(
-    "UPDATE monthly_usage SET used_tokens = 0 WHERE user_id = ?",
-    ["user-analysis"],
+    "UPDATE m365_tenant_usage SET used_tokens = 0 WHERE tenant_id = ? AND object_id = ?",
+    [tenantId, objectId],
   );
   const { status, json } = await postPlan({
     aggregation: "average",

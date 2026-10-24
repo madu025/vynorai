@@ -1,3 +1,4 @@
+import { newId } from "../services/secureId.js";
 import fs from "fs";
 import crypto from "crypto";
 import os from "os";
@@ -54,7 +55,7 @@ async function prepareTask(
     `UPDATE background_tasks SET status = 'running', worker_id = ?, lease_id = ?,
      started_at = COALESCE(started_at, CURRENT_TIMESTAMP), heartbeat_at = CURRENT_TIMESTAMP,
      updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'queued'`,
-    [workerId, `${workerId}:${Date.now()}`, task.id],
+    [workerId, `${workerId}:${newId()}`, task.id],
   );
   if (claimed.changes === 0) throw new Error("TASK_NOT_CLAIMABLE");
   const root = path.resolve(

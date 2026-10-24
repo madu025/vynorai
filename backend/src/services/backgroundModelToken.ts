@@ -1,3 +1,4 @@
+import { newId } from "./secureId.js";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 
@@ -22,7 +23,7 @@ export function mintBackgroundModelToken(
     audience: "vynor-background-model",
     issuer: "vynor-background-worker",
     expiresIn: "50m",
-    jwtid: `${taskId}:${Date.now()}`,
+    jwtid: newId("bgm"),
   });
 }
 

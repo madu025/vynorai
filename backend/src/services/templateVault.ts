@@ -47,13 +47,24 @@ export const GOLDEN_TEMPLATES: GoldenTemplate[] = [
     id: "sl-mobile-validator",
     version: "2.1.0",
     category: "srilanka",
-    title: "Sri Lanka Mobile & Landline Validator, E.164 Normalizer & Operator Resolver",
-    description: "Validates, formats, and detects carriers for Sri Lankan Mobile (07X) and Landlines (011, 033, 081, etc.). Generates E.164, National, and RFC3966 formats.",
+    title:
+      "Sri Lanka Mobile & Landline Validator, E.164 Normalizer & Operator Resolver",
+    description:
+      "Validates, formats, and detects carriers for Sri Lankan Mobile (07X) and Landlines (011, 033, 081, etc.). Generates E.164, National, and RFC3966 formats.",
     languages: ["typescript", "javascript", "python", "php", "go"],
     keywords: [
-      "sri lanka phone", "sl phone", "srilanka mobile", "phone regex",
-      "dialog mobitel", "validate phone", "sl mobile number", "+94", "phone validation",
-      "sl landline", "telecom operator", "e164"
+      "sri lanka phone",
+      "sl phone",
+      "srilanka mobile",
+      "phone regex",
+      "dialog mobitel",
+      "validate phone",
+      "sl mobile number",
+      "+94",
+      "phone validation",
+      "sl landline",
+      "telecom operator",
+      "e164",
     ],
     dependencies: [],
     requiredEnv: [],
@@ -169,7 +180,7 @@ export function normalizeSLPhone(phone: string): SLPhoneInfo {
 
   return invalidResult;
 }`,
-    usageSnippet: `const phone = normalizeSLPhone("077 123 4567");`
+    usageSnippet: `const phone = normalizeSLPhone("077 123 4567");`,
   },
 
   // ── 2. Sri Lanka Dual-Format NIC Parser (Old 9-Digit & New 12-Digit) ──────────
@@ -178,12 +189,22 @@ export function normalizeSLPhone(phone: string): SLPhoneInfo {
     version: "2.1.0",
     category: "srilanka",
     title: "Sri Lanka NIC Dual-Standard Parser with DOB & Age Calculation",
-    description: "Parses old 9-digit (e.g. 951234567V) and new 12-digit (e.g. 199512304567) NICs. Calculates exact Date of Birth (YYYY-MM-DD), Age, Month, Gender, and Voter status.",
+    description:
+      "Parses old 9-digit (e.g. 951234567V) and new 12-digit (e.g. 199512304567) NICs. Calculates exact Date of Birth (YYYY-MM-DD), Age, Month, Gender, and Voter status.",
     languages: ["typescript", "javascript", "python", "php"],
     keywords: [
-      "sri lanka nic", "sl nic", "nic validator", "nic parser",
-      "identity card", "national id", "nic regex", "old nic new nic",
-      "date of birth", "dob", "calculate age nic", "age calculation"
+      "sri lanka nic",
+      "sl nic",
+      "nic validator",
+      "nic parser",
+      "identity card",
+      "national id",
+      "nic regex",
+      "old nic new nic",
+      "date of birth",
+      "dob",
+      "calculate age nic",
+      "age calculation",
     ],
     dependencies: [],
     requiredEnv: [],
@@ -323,7 +344,7 @@ export function parseSLNIC(nic: string): SLNICInfo {
     newFormatEquivalent: newEquivalent,
   };
 }`,
-    usageSnippet: `const info = parseSLNIC("951234567V");`
+    usageSnippet: `const info = parseSLNIC("951234567V");`,
   },
 
   // ── 3. PayHere LKR Secure Checkout & Webhook Signature Verifier ──────────────
@@ -332,24 +353,50 @@ export function parseSLNIC(nic: string): SLNICInfo {
     version: "2.1.0",
     category: "payments",
     title: "PayHere Sri Lanka Checkout Hash & IPN Webhook Verifier",
-    description: "Production PayHere MD5 checkout hash generator and IPN callback signature verification with strict status code validation (2=Success, 0=Pending, -1=Canceled, -2=Failed).",
+    description:
+      "Production PayHere MD5 checkout hash generator and IPN callback signature verification with strict status code validation (2=Success, 0=Pending, -1=Canceled, -2=Failed).",
     languages: ["typescript", "javascript", "php", "python"],
     keywords: [
-      "payhere", "payhere hash", "payhere signature", "payhere webhook",
-      "sri lanka payment", "lkr payment gateway", "payhere ipn", "merchant_secret",
-      "payment verification", "payhere checkout"
+      "payhere",
+      "payhere hash",
+      "payhere signature",
+      "payhere webhook",
+      "sri lanka payment",
+      "lkr payment gateway",
+      "payhere ipn",
+      "merchant_secret",
+      "payment verification",
+      "payhere checkout",
     ],
     dependencies: ["crypto"],
-    requiredEnv: ["PAYHERE_MERCHANT_ID", "PAYHERE_MERCHANT_SECRET", "PAYHERE_CURRENCY"],
+    requiredEnv: [
+      "PAYHERE_MERCHANT_ID",
+      "PAYHERE_MERCHANT_SECRET",
+      "PAYHERE_CURRENCY",
+    ],
     configSchema: {
-      merchantId: { type: "string", required: true, description: "PayHere Merchant ID from account dashboard" },
-      merchantSecret: { type: "string", required: true, description: "PayHere Secret Key", secret: true },
-      currency: { type: "string", required: false, default: "LKR", description: "Payment currency (LKR/USD)" }
+      merchantId: {
+        type: "string",
+        required: true,
+        description: "PayHere Merchant ID from account dashboard",
+      },
+      merchantSecret: {
+        type: "string",
+        required: true,
+        description: "PayHere Secret Key",
+        secret: true,
+      },
+      currency: {
+        type: "string",
+        required: false,
+        default: "LKR",
+        description: "Payment currency (LKR/USD)",
+      },
     },
     validationRules: [
       "Amount must be formatted to exactly 2 decimal places (toFixed(2))",
       "status_code === '2' required for fulfillment; status -1 or -2 must not deliver goods",
-      "Secret key must never be logged or exposed in frontend code"
+      "Secret key must never be logged or exposed in frontend code",
     ],
     securityLevel: "high",
     status: "verified",
@@ -425,7 +472,7 @@ export function verifyPayHereWebhook(body: Record<string, any>, merchantSecret: 
     .digest("hex")
     .toUpperCase();
 
-  const isValidSignature = calculatedSig === md5sig;
+  const isValidSignature = typeof md5sig === "string" && md5sig.length === calculatedSig.length && crypto.timingSafeEqual(Buffer.from(calculatedSig), Buffer.from(md5sig.toUpperCase()));
   if (!isValidSignature) {
     return failureResult("FAILED", "Signature mismatch / Potential tampering detected");
   }
@@ -476,7 +523,7 @@ export function verifyPayHereWebhook(body: Record<string, any>, merchantSecret: 
     customerEmail: body.email_address,
   };
 }`,
-    usageSnippet: `const result = verifyPayHereWebhook(req.body, process.env.PAYHERE_MERCHANT_SECRET!);`
+    usageSnippet: `const result = verifyPayHereWebhook(req.body, process.env.PAYHERE_MERCHANT_SECRET!);`,
   },
 
   // ── 4. Production JWT Authentication & Refresh Token Rotation ─────────────────
@@ -485,23 +532,43 @@ export function verifyPayHereWebhook(body: Record<string, any>, merchantSecret: 
     version: "2.1.0",
     category: "auth",
     title: "Secure JWT Authentication, Session Invalidation & Token Rotation",
-    description: "Production auth with access token (15m), refresh token (7d in HTTP-only cookie), token versioning for instant global logout, and bcrypt hashing with strict zero-fallback secret protection.",
+    description:
+      "Production auth with access token (15m), refresh token (7d in HTTP-only cookie), token versioning for instant global logout, and bcrypt hashing with strict zero-fallback secret protection.",
     languages: ["typescript", "javascript"],
     keywords: [
-      "jwt auth", "login auth", "refresh token", "bcrypt hash",
-      "authentication middleware", "auth route", "signup login", "password hash",
-      "token version", "session revocation"
+      "jwt auth",
+      "login auth",
+      "refresh token",
+      "bcrypt hash",
+      "authentication middleware",
+      "auth route",
+      "signup login",
+      "password hash",
+      "token version",
+      "session revocation",
     ],
     dependencies: ["jsonwebtoken", "bcrypt"],
     requiredEnv: ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"],
     configSchema: {
-      accessSecret: { type: "string", required: true, description: "Cryptographically strong access token secret (>=32 chars)", secret: true },
-      refreshSecret: { type: "string", required: true, description: "Cryptographically strong refresh token secret (>=32 chars)", secret: true }
+      accessSecret: {
+        type: "string",
+        required: true,
+        description:
+          "Cryptographically strong access token secret (>=32 chars)",
+        secret: true,
+      },
+      refreshSecret: {
+        type: "string",
+        required: true,
+        description:
+          "Cryptographically strong refresh token secret (>=32 chars)",
+        secret: true,
+      },
     },
     validationRules: [
       "No hardcoded fallback secrets allowed in production (throws startup error)",
       "Access token lifetime <= 15 minutes",
-      "Refresh token lifetime <= 7 days"
+      "Refresh token lifetime <= 7 days",
     ],
     securityLevel: "high",
     status: "verified",
@@ -560,7 +627,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     return res.status(401).json({ error: "INVALID_TOKEN", message: "Token is invalid or tampered." });
   }
 }`,
-    usageSnippet: `const { accessToken, refreshToken } = generateTokens({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion });`
+    usageSnippet: `const { accessToken, refreshToken } = generateTokens({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion });`,
   },
 
   // ── 5. Robust Multi-Instance Rate Limiter & Modern Security Headers ───────────
@@ -569,11 +636,20 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     version: "2.1.0",
     category: "security",
     title: "Express Modern CSP Security Headers & Multi-Instance Rate Limiter",
-    description: "Enterprise sliding window rate limiter with real-IP extraction behind Cloudflare/Nginx, standard X-RateLimit headers, modern Content-Security-Policy, and Redis cluster store interface.",
+    description:
+      "Enterprise sliding window rate limiter with real-IP extraction behind Cloudflare/Nginx, standard X-RateLimit headers, modern Content-Security-Policy, and Redis cluster store interface.",
     languages: ["typescript", "javascript"],
     keywords: [
-      "rate limit", "brute force", "security headers", "csp", "content security policy",
-      "login protection", "prevent ddos", "api rate limiter", "cloudflare ip", "redis rate limit"
+      "rate limit",
+      "brute force",
+      "security headers",
+      "csp",
+      "content security policy",
+      "login protection",
+      "prevent ddos",
+      "api rate limiter",
+      "cloudflare ip",
+      "redis rate limit",
     ],
     dependencies: [],
     requiredEnv: [],
@@ -668,7 +744,7 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   next();
 }`,
-    usageSnippet: `app.use("/api/auth/login", createSlidingRateLimiter(5, 60_000));`
+    usageSnippet: `app.use("/api/auth/login", createSlidingRateLimiter(5, 60_000));`,
   },
 
   // ── 6. Production Optimized Database Users Schema (SQL & Indexes) ────────────
@@ -677,12 +753,20 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
     version: "2.1.0",
     category: "database",
     title: "Production SQL Users, Subscriptions & Indexes Table Schema",
-    description: "Battle-tested schema for PostgreSQL / SQLite / MySQL with UUID primary keys, role-based access, token versioning, and lockout counters.",
+    description:
+      "Battle-tested schema for PostgreSQL / SQLite / MySQL with UUID primary keys, role-based access, token versioning, and lockout counters.",
     languages: ["sql", "sqlite", "postgresql", "mysql"],
     keywords: [
-      "user table", "users schema", "database migration", "sql schema",
-      "create table users", "postgres users", "sqlite users", "subscription schema",
-      "token version", "account lockout"
+      "user table",
+      "users schema",
+      "database migration",
+      "sql schema",
+      "create table users",
+      "postgres users",
+      "sqlite users",
+      "subscription schema",
+      "token version",
+      "account lockout",
     ],
     dependencies: [],
     requiredEnv: ["DATABASE_URL"],
@@ -723,7 +807,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_refresh_token_user ON refresh_tokens(user_id);`,
-    usageSnippet: `db.exec(schemaSQL);`
+    usageSnippet: `db.exec(schemaSQL);`,
   },
 
   // ── 7. Next.js 14/15 App Router Edge Auth & Middleware ───────────────────────
@@ -731,21 +815,31 @@ CREATE INDEX IF NOT EXISTS idx_refresh_token_user ON refresh_tokens(user_id);`,
     id: "nextjs-app-auth",
     version: "2.1.0",
     category: "auth",
-    title: "Next.js 14/15 App Router Edge-Compatible Auth Handler, UI & Middleware",
-    description: "Production auth for Next.js App Router featuring interactive React Login Page UI, Edge-compatible 'jose' JWT handler, and HTTP-only secure cookies with strict env validation.",
+    title:
+      "Next.js 14/15 App Router Edge-Compatible Auth Handler, UI & Middleware",
+    description:
+      "Production auth for Next.js App Router featuring interactive React Login Page UI, Edge-compatible 'jose' JWT handler, and HTTP-only secure cookies with strict env validation.",
     languages: ["typescript", "javascript"],
     frameworks: ["nextjs", "react"],
     keywords: [
-      "nextjs auth", "next.js auth", "next 14 auth", "next 15 auth",
-      "nextjs middleware auth", "app router auth", "nextjs jwt",
-      "login page", "login form", "login page ekak", "login hadanna"
+      "nextjs auth",
+      "next.js auth",
+      "next 14 auth",
+      "next 15 auth",
+      "nextjs middleware auth",
+      "app router auth",
+      "nextjs jwt",
+      "login page",
+      "login form",
+      "login page ekak",
+      "login hadanna",
     ],
     dependencies: ["jose", "bcryptjs"],
     requiredEnv: ["JWT_SECRET"],
     compatibleWith: {
       framework: "nextjs",
       nextjs: "14.0.0",
-      node: "18.0.0"
+      node: "18.0.0",
     },
     securityLevel: "high",
     status: "verified",
@@ -753,7 +847,8 @@ CREATE INDEX IF NOT EXISTS idx_refresh_token_user ON refresh_tokens(user_id);`,
     files: [
       {
         path: "app/login/page.tsx",
-        description: "Interactive Next.js Login UI Client Component with modern styling, validation, and error alert",
+        description:
+          "Interactive Next.js Login UI Client Component with modern styling, validation, and error alert",
         content: `'use client';
 
 import React, { useState } from 'react';
@@ -894,11 +989,12 @@ export default function LoginPage() {
       </div>
     </div>
   );
-}`
+}`,
       },
       {
         path: "app/api/auth/login/route.ts",
-        description: "Edge-compatible Next.js Server Route for user verification, bcrypt password checking, and HttpOnly session cookie issuance",
+        description:
+          "Edge-compatible Next.js Server Route for user verification, bcrypt password checking, and HttpOnly session cookie issuance",
         content: `import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import bcrypt from "bcryptjs";
@@ -933,11 +1029,12 @@ export async function POST(req: Request) {
   } catch (err: any) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-}`
+}`,
       },
       {
         path: "middleware.ts",
-        description: "Edge Runtime Next.js middleware for route protection on /dashboard and /admin",
+        description:
+          "Edge Runtime Next.js middleware for route protection on /dashboard and /admin",
         content: `import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
@@ -955,12 +1052,12 @@ export async function middleware(request: NextRequest) {
   }
 }
 
-export const config = { matcher: ["/dashboard/:path*", "/admin/:path*"] };`
-      }
+export const config = { matcher: ["/dashboard/:path*", "/admin/:path*"] };`,
+      },
     ],
     code: `// app/login/page.tsx
 export default function LoginPage() { /* Interactive UI in files section */ }`,
-    usageSnippet: `// Files scaffolded to app/login/page.tsx, app/api/auth/login/route.ts, and middleware.ts`
+    usageSnippet: `// Files scaffolded to app/login/page.tsx, app/api/auth/login/route.ts, and middleware.ts`,
   },
 
   // ── 8. Python FastAPI OAuth2 + JWT Auth Router ──────────────────────────────
@@ -968,19 +1065,26 @@ export default function LoginPage() { /* Interactive UI in files section */ }`,
     id: "fastapi-jwt-auth",
     version: "2.1.0",
     category: "auth",
-    title: "Python FastAPI Complete OAuth2 Bearer + JWT & Passlib Bcrypt Router",
-    description: "Production FastAPI authentication with access tokens, bcrypt hashing, and Depends(get_current_user).",
+    title:
+      "Python FastAPI Complete OAuth2 Bearer + JWT & Passlib Bcrypt Router",
+    description:
+      "Production FastAPI authentication with access tokens, bcrypt hashing, and Depends(get_current_user).",
     languages: ["python"],
     frameworks: ["fastapi"],
     keywords: [
-      "fastapi auth", "fastapi jwt", "python jwt", "fastapi login",
-      "oauth2passwordbearer", "fastapi authentication", "passlib bcrypt"
+      "fastapi auth",
+      "fastapi jwt",
+      "python jwt",
+      "fastapi login",
+      "oauth2passwordbearer",
+      "fastapi authentication",
+      "passlib bcrypt",
     ],
     dependencies: ["fastapi", "python-jose", "passlib"],
     requiredEnv: ["SECRET_KEY"],
     compatibleWith: {
       framework: "fastapi",
-      python: "3.10"
+      python: "3.10",
     },
     securityLevel: "high",
     status: "verified",
@@ -1039,7 +1143,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token = create_access_token(data={"sub": form_data.username})
     return {"access_token": access_token, "token_type": "bearer"}`,
-    usageSnippet: `app.include_router(auth_router)`
+    usageSnippet: `app.include_router(auth_router)`,
   },
 
   // ── 9. Prisma ORM Production Complete Schema ────────────────────────────────
@@ -1047,12 +1151,19 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     id: "prisma-production-schema",
     version: "2.1.0",
     category: "database",
-    title: "Prisma ORM Complete Production Schema with Users, Roles & Subscriptions",
-    description: "Fully-indexed Prisma schema with UUID IDs, relations, timestamps, and indexes.",
+    title:
+      "Prisma ORM Complete Production Schema with Users, Roles & Subscriptions",
+    description:
+      "Fully-indexed Prisma schema with UUID IDs, relations, timestamps, and indexes.",
     languages: ["prisma"],
     keywords: [
-      "prisma schema", "prisma users", "prisma model", "prisma auth",
-      "prisma postgresql", "prisma mysql", "prisma sqlite"
+      "prisma schema",
+      "prisma users",
+      "prisma model",
+      "prisma auth",
+      "prisma postgresql",
+      "prisma mysql",
+      "prisma sqlite",
     ],
     dependencies: ["@prisma/client"],
     requiredEnv: ["DATABASE_URL"],
@@ -1117,8 +1228,8 @@ model Subscription {
   @@index([userId, status])
   @@map("subscriptions")
 }`,
-    usageSnippet: `npx prisma db push`
-  }
+    usageSnippet: `npx prisma db push`,
+  },
 ];
 
 // Ensure 20-point enterprise fields (checksum, timestamps, riskLevel, dependencies, envVariables)
@@ -1126,7 +1237,8 @@ for (const t of GOLDEN_TEMPLATES) {
   if (!t.createdAt) t.createdAt = "2026-09-30T12:00:00Z";
   if (!t.updatedAt) t.updatedAt = "2026-09-30T12:00:00Z";
   if (!t.riskLevel) {
-    t.riskLevel = t.category === "payments" || t.category === "auth" ? "high" : "low";
+    t.riskLevel =
+      t.category === "payments" || t.category === "auth" ? "high" : "low";
   }
   if (!t.envVariables) {
     t.envVariables = (t.requiredEnv || []).map((name) => ({
@@ -1138,7 +1250,9 @@ for (const t of GOLDEN_TEMPLATES) {
   if (!t.dependencies || t.dependencies.length === 0) {
     t.dependencies = [];
   } else if (typeof t.dependencies[0] === "string") {
-    t.dependencies = (t.dependencies as any[]).map((d) => (typeof d === "string" ? { name: d, version: "^1.0.0" } : d));
+    t.dependencies = (t.dependencies as any[]).map((d) =>
+      typeof d === "string" ? { name: d, version: "^1.0.0" } : d,
+    );
   }
   if (!t.checksum) {
     t.checksum = computeTemplateChecksum(t);
@@ -1153,7 +1267,7 @@ for (const t of GOLDEN_TEMPLATES) {
  */
 export function detectTemplateIntent(
   query: string,
-  projectContext?: { framework?: string; language?: string }
+  projectContext?: { framework?: string; language?: string },
 ): GoldenTemplate | null {
   const result = scoreTemplateMatch(query, GOLDEN_TEMPLATES, projectContext);
   return result.template;
@@ -1164,7 +1278,7 @@ export function detectTemplateIntent(
  */
 export function detectTemplateIntentWithScore(
   query: string,
-  projectContext?: { framework?: string; language?: string }
+  projectContext?: { framework?: string; language?: string },
 ): IntentMatchResult {
   return scoreTemplateMatch(query, GOLDEN_TEMPLATES, projectContext);
 }
@@ -1185,7 +1299,7 @@ export function formatTemplateContext(t: GoldenTemplate): string {
     "```",
     `// Usage Example:`,
     t.usageSnippet,
-    `<!-- End Golden Scaffold -->`
+    `<!-- End Golden Scaffold -->`,
   ].join("\n");
 }
 
@@ -1195,9 +1309,19 @@ export function formatTemplateContext(t: GoldenTemplate): string {
  */
 export function checkInstantTemplateMatch(
   query: string,
-  projectContext?: { framework?: string; language?: string; moduleSystem?: "commonjs" | "esm"; dependencies?: Record<string, string> },
-  errorTrace?: string
-): { matched: boolean; template?: GoldenTemplate; responseMarkdown?: string; score?: number } {
+  projectContext?: {
+    framework?: string;
+    language?: string;
+    moduleSystem?: "commonjs" | "esm";
+    dependencies?: Record<string, string>;
+  },
+  errorTrace?: string,
+): {
+  matched: boolean;
+  template?: GoldenTemplate;
+  responseMarkdown?: string;
+  score?: number;
+} {
   if (!query || typeof query !== "string") return { matched: false };
   const q = query.trim().toLowerCase();
 
@@ -1206,36 +1330,56 @@ export function checkInstantTemplateMatch(
   if (!detectedContext.moduleSystem) {
     if (q.includes("commonjs") || q.includes("require") || q.includes("cjs")) {
       detectedContext.moduleSystem = "commonjs";
-    } else if (q.includes("esm") || q.includes("import ") || q.includes("mjs")) {
+    } else if (
+      q.includes("esm") ||
+      q.includes("import ") ||
+      q.includes("mjs")
+    ) {
       detectedContext.moduleSystem = "esm";
     }
   }
   if (!detectedContext.framework) {
-    if (q.includes("nextjs 15") || q.includes("next 15") || q.includes("react 19")) {
+    if (
+      q.includes("nextjs 15") ||
+      q.includes("next 15") ||
+      q.includes("react 19")
+    ) {
       detectedContext.framework = "nextjs";
       detectedContext.dependencies = { next: "15.0.0", react: "19.0.0" };
     }
   }
 
-  const detectedTrace = errorTrace || (
-    q.includes("error") || q.includes("is not defined") || q.includes("cannot find name") || q.includes("cannot find module")
+  const detectedTrace =
+    errorTrace ||
+    (q.includes("error") ||
+    q.includes("is not defined") ||
+    q.includes("cannot find name") ||
+    q.includes("cannot find module")
       ? query
-      : undefined
-  );
+      : undefined);
 
   const { healTemplateForContext } = require("./vault/selfHealer.js");
 
   // 1. Direct slash command
-  const slashMatch = q.match(/^\/(template|scaffold|golden)\s+([a-zA-Z0-9_-]+)/i);
+  const slashMatch = q.match(
+    /^\/(template|scaffold|golden)\s+([a-zA-Z0-9_-]+)/i,
+  );
   if (slashMatch) {
     const scored = scoreTemplateMatch(q, GOLDEN_TEMPLATES, detectedContext);
     if (scored.template) {
-      const healed = healTemplateForContext(scored.template, detectedContext, detectedTrace);
+      const healed = healTemplateForContext(
+        scored.template,
+        detectedContext,
+        detectedTrace,
+      );
       const adaptedTemplate = { ...scored.template, code: healed.code };
       return {
         matched: true,
         template: adaptedTemplate,
-        responseMarkdown: buildInstantMarkdown(adaptedTemplate, healed.corrections),
+        responseMarkdown: buildInstantMarkdown(
+          adaptedTemplate,
+          healed.corrections,
+        ),
         score: scored.score,
       };
     }
@@ -1263,12 +1407,19 @@ export function checkInstantTemplateMatch(
   if (isDirectCodeRequest) {
     const scored = scoreTemplateMatch(q, GOLDEN_TEMPLATES, detectedContext);
     if (scored.template && scored.confidence === "HIGH") {
-      const healed = healTemplateForContext(scored.template, detectedContext, detectedTrace);
+      const healed = healTemplateForContext(
+        scored.template,
+        detectedContext,
+        detectedTrace,
+      );
       const adaptedTemplate = { ...scored.template, code: healed.code };
       return {
         matched: true,
         template: adaptedTemplate,
-        responseMarkdown: buildInstantMarkdown(adaptedTemplate, healed.corrections),
+        responseMarkdown: buildInstantMarkdown(
+          adaptedTemplate,
+          healed.corrections,
+        ),
         score: scored.score,
       };
     }
@@ -1276,17 +1427,29 @@ export function checkInstantTemplateMatch(
 
   // 3. Fast In-Memory Database Index Match for Industry Boilerplates
   try {
-    const { matchTemplateIndex, INDUSTRY_BOILERPLATES } = require("./vaultStore.js");
+    const {
+      matchTemplateIndex,
+      INDUSTRY_BOILERPLATES,
+    } = require("./vaultStore.js");
     const indexMatch = matchTemplateIndex(q);
     if (indexMatch) {
-      const template = INDUSTRY_BOILERPLATES.find((t: any) => t.id === indexMatch.id);
+      const template = INDUSTRY_BOILERPLATES.find(
+        (t: any) => t.id === indexMatch.id,
+      );
       if (template) {
-        const healed = healTemplateForContext(template, detectedContext, detectedTrace);
+        const healed = healTemplateForContext(
+          template,
+          detectedContext,
+          detectedTrace,
+        );
         const adaptedTemplate = { ...template, code: healed.code };
         return {
           matched: true,
           template: adaptedTemplate,
-          responseMarkdown: buildInstantMarkdown(adaptedTemplate, healed.corrections),
+          responseMarkdown: buildInstantMarkdown(
+            adaptedTemplate,
+            healed.corrections,
+          ),
           score: 0.95,
         };
       }
@@ -1296,11 +1459,23 @@ export function checkInstantTemplateMatch(
   return { matched: false };
 }
 
-function buildInstantMarkdown(t: GoldenTemplate, corrections: string[] = []): string {
+function buildInstantMarkdown(
+  t: GoldenTemplate,
+  corrections: string[] = [],
+): string {
   const mainLang = t.languages[0] || "typescript";
-  const envNotice = t.requiredEnv.length > 0 ? `\n- **Required Environment Variables:** \`${t.requiredEnv.join("`, `")}\`` : "";
-  const depNotice = t.dependencies.length > 0 ? `\n- **Dependencies:** \`${t.dependencies.map((d: any) => typeof d === 'string' ? d : d.name).join("`, `")}\`` : "";
-  const selfHealNotice = corrections.length > 0 ? `\n> 🛡️ **Autonomous Self-Healing Active:** ${corrections.join("; ")}` : "";
+  const envNotice =
+    t.requiredEnv.length > 0
+      ? `\n- **Required Environment Variables:** \`${t.requiredEnv.join("`, `")}\``
+      : "";
+  const depNotice =
+    t.dependencies.length > 0
+      ? `\n- **Dependencies:** \`${t.dependencies.map((d: any) => (typeof d === "string" ? d : d.name)).join("`, `")}\``
+      : "";
+  const selfHealNotice =
+    corrections.length > 0
+      ? `\n> 🛡️ **Autonomous Self-Healing Active:** ${corrections.join("; ")}`
+      : "";
 
   return `### ⚡ VynorAI Verified Golden Scaffold: **${t.title}** (v${t.version})
 > **Zero-Token Instant Delivery** • Security Level: \`${t.securityLevel.toUpperCase()}\` • Status: \`${t.status.toUpperCase()}\`${selfHealNotice}
@@ -1334,23 +1509,46 @@ export interface SLPhoneInfo {
 }
 
 const RUNTIME_MOBILE_OPERATORS: Record<string, string> = {
-  "70": "Mobitel", "71": "Mobitel",
-  "72": "Hutch",   "78": "Hutch",
-  "74": "Dialog",  "76": "Dialog", "77": "Dialog",
-  "75": "Airtel"
+  "70": "Mobitel",
+  "71": "Mobitel",
+  "72": "Hutch",
+  "78": "Hutch",
+  "74": "Dialog",
+  "76": "Dialog",
+  "77": "Dialog",
+  "75": "Airtel",
 };
 
 const RUNTIME_LANDLINE_AREAS: Record<string, string> = {
-  "11": "Colombo",      "21": "Jaffna",       "23": "Mannar",
-  "24": "Vavuniya",     "25": "Anuradhapura", "26": "Trincomalee",
-  "27": "Polonnaruwa",  "31": "Negombo",      "32": "Puttalam",
-  "33": "Gampaha",      "34": "Kalutara",     "35": "Kegalle",
-  "36": "Avissawella",  "37": "Kurunegala",   "38": "Panadura",
-  "41": "Matara",       "45": "Ratnapura",    "47": "Hambantota",
-  "51": "Hatton",       "52": "Nuwara Eliya", "54": "Nawalapitiya",
-  "55": "Badulla",      "57": "Bandarawela",  "63": "Ampara",
-  "65": "Batticaloa",   "66": "Matale",       "67": "Kalmunai",
-  "81": "Kandy",        "91": "Galle"
+  "11": "Colombo",
+  "21": "Jaffna",
+  "23": "Mannar",
+  "24": "Vavuniya",
+  "25": "Anuradhapura",
+  "26": "Trincomalee",
+  "27": "Polonnaruwa",
+  "31": "Negombo",
+  "32": "Puttalam",
+  "33": "Gampaha",
+  "34": "Kalutara",
+  "35": "Kegalle",
+  "36": "Avissawella",
+  "37": "Kurunegala",
+  "38": "Panadura",
+  "41": "Matara",
+  "45": "Ratnapura",
+  "47": "Hambantota",
+  "51": "Hatton",
+  "52": "Nuwara Eliya",
+  "54": "Nawalapitiya",
+  "55": "Badulla",
+  "57": "Bandarawela",
+  "63": "Ampara",
+  "65": "Batticaloa",
+  "66": "Matale",
+  "67": "Kalmunai",
+  "81": "Kandy",
+  "91": "Galle",
 };
 
 export function normalizeSLPhone(phone: string): SLPhoneInfo {
@@ -1362,7 +1560,7 @@ export function normalizeSLPhone(phone: string): SLPhoneInfo {
     international: "",
     rfc3966: "",
     operator: "Unknown",
-    canReceiveSMS: false
+    canReceiveSMS: false,
   };
 
   if (!phone || typeof phone !== "string") return invalidResult;
@@ -1397,7 +1595,7 @@ export function normalizeSLPhone(phone: string): SLPhoneInfo {
       international: `+94 ${prefix} ${localPart1} ${localPart2}`,
       rfc3966: `tel:+94-${prefix}-${localPart1}-${localPart2}`,
       operator,
-      canReceiveSMS: true
+      canReceiveSMS: true,
     };
   }
 
@@ -1405,8 +1603,10 @@ export function normalizeSLPhone(phone: string): SLPhoneInfo {
   if (area) {
     const opDigit = cleaned[2];
     let operator = "Fixed Line";
-    if (opDigit === "2" || opDigit === "3") operator = "Sri Lanka Telecom (SLT)";
-    else if (opDigit === "4" || opDigit === "7") operator = "Dialog Broadband (DBN)";
+    if (opDigit === "2" || opDigit === "3")
+      operator = "Sri Lanka Telecom (SLT)";
+    else if (opDigit === "4" || opDigit === "7")
+      operator = "Dialog Broadband (DBN)";
     else if (opDigit === "5") operator = "Lanka Bell";
 
     return {
@@ -1418,7 +1618,7 @@ export function normalizeSLPhone(phone: string): SLPhoneInfo {
       rfc3966: `tel:+94-${prefix}-${localPart1}-${localPart2}`,
       operator,
       area,
-      canReceiveSMS: false
+      canReceiveSMS: false,
     };
   }
 
@@ -1496,7 +1696,9 @@ export function parseSLNIC(nic: string): SLNICInfo {
     rawDay = parseInt(clean.slice(4, 7), 10);
     isVoter = true;
   } else {
-    return invalidResult("Invalid NIC format. Must be 9 digits with V/X or 12 digits.");
+    return invalidResult(
+      "Invalid NIC format. Must be 9 digits with V/X or 12 digits.",
+    );
   }
 
   const isFemale = rawDay > 500;
@@ -1504,7 +1706,9 @@ export function parseSLNIC(nic: string): SLNICInfo {
   let dayOfYear = isFemale ? rawDay - 500 : rawDay;
 
   if (dayOfYear < 1 || dayOfYear > 366) {
-    return invalidResult(`Invalid day-of-year (${rawDay}) in NIC. Out of valid range (1-366).`);
+    return invalidResult(
+      `Invalid day-of-year (${rawDay}) in NIC. Out of valid range (1-366).`,
+    );
   }
 
   let month = 0;
@@ -1531,7 +1735,10 @@ export function parseSLNIC(nic: string): SLNICInfo {
   let age = today.getFullYear() - year;
   const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
-  if (currentMonth < month || (currentMonth === month && currentDay < dayOfMonth)) {
+  if (
+    currentMonth < month ||
+    (currentMonth === month && currentDay < dayOfMonth)
+  ) {
     age--;
   }
 
@@ -1557,18 +1764,33 @@ export function generatePayHereHash(
   orderId: string,
   amount: number,
   currency: string,
-  merchantSecret: string
+  merchantSecret: string,
 ): string {
   const formattedAmount = Number(amount).toFixed(2);
-  const hashedSecret = crypto.createHash("md5").update(merchantSecret).digest("hex").toUpperCase();
-  const hashString = merchantId + orderId + formattedAmount + currency + hashedSecret;
-  return crypto.createHash("md5").update(hashString).digest("hex").toUpperCase();
+  const hashedSecret = crypto
+    .createHash("md5")
+    .update(merchantSecret)
+    .digest("hex")
+    .toUpperCase();
+  const hashString =
+    merchantId + orderId + formattedAmount + currency + hashedSecret;
+  return crypto
+    .createHash("md5")
+    .update(hashString)
+    .digest("hex")
+    .toUpperCase();
 }
 
 export interface PayHereIPNResult {
   isValidSignature: boolean;
   isPaid: boolean;
-  status: "SUCCESS" | "PENDING" | "CANCELED" | "FAILED" | "CHARGEDBACK" | "UNKNOWN";
+  status:
+    | "SUCCESS"
+    | "PENDING"
+    | "CANCELED"
+    | "FAILED"
+    | "CHARGEDBACK"
+    | "UNKNOWN";
   statusCode: number;
   statusDescription: string;
   orderId: string;
@@ -1579,7 +1801,10 @@ export interface PayHereIPNResult {
   customerEmail?: string;
 }
 
-export function verifyPayHereWebhook(body: Record<string, any>, merchantSecret: string): PayHereIPNResult {
+export function verifyPayHereWebhook(
+  body: Record<string, any>,
+  merchantSecret: string,
+): PayHereIPNResult {
   const {
     merchant_id,
     order_id,
@@ -1589,10 +1814,13 @@ export function verifyPayHereWebhook(body: Record<string, any>, merchantSecret: 
     status_code,
     md5sig,
     method,
-    status_message
+    status_message,
   } = body;
 
-  const failureResult = (status: PayHereIPNResult["status"], desc: string): PayHereIPNResult => ({
+  const failureResult = (
+    status: PayHereIPNResult["status"],
+    desc: string,
+  ): PayHereIPNResult => ({
     isValidSignature: false,
     isPaid: false,
     status,
@@ -1604,19 +1832,47 @@ export function verifyPayHereWebhook(body: Record<string, any>, merchantSecret: 
     currency: String(payhere_currency || "LKR"),
   });
 
-  if (!merchant_id || !order_id || !payhere_amount || !payhere_currency || status_code === undefined || !md5sig) {
+  if (
+    !merchant_id ||
+    !order_id ||
+    !payhere_amount ||
+    !payhere_currency ||
+    status_code === undefined ||
+    !md5sig
+  ) {
     return failureResult("UNKNOWN", "Missing required IPN fields");
   }
 
-  const hashedSecret = crypto.createHash("md5").update(merchantSecret).digest("hex").toUpperCase();
-  const calculatedSig = crypto.createHash("md5")
-    .update(merchant_id + order_id + payhere_amount + payhere_currency + status_code + hashedSecret)
+  const hashedSecret = crypto
+    .createHash("md5")
+    .update(merchantSecret)
+    .digest("hex")
+    .toUpperCase();
+  const calculatedSig = crypto
+    .createHash("md5")
+    .update(
+      merchant_id +
+        order_id +
+        payhere_amount +
+        payhere_currency +
+        status_code +
+        hashedSecret,
+    )
     .digest("hex")
     .toUpperCase();
 
-  const isValidSignature = calculatedSig === md5sig;
+  const isValidSignature =
+    typeof md5sig === "string" &&
+    md5sig.length === calculatedSig.length &&
+    crypto.timingSafeEqual(
+      Buffer.from(calculatedSig),
+      Buffer.from(md5sig.toUpperCase()),
+    );
   if (!isValidSignature) {
-    return failureResult("FAILED", "Signature mismatch / Potential tampering detected");
+    return failureResult(
+      "FAILED",
+      "Signature mismatch / Potential tampering detected",
+    );
   }
 
   const code = parseInt(status_code, 10);

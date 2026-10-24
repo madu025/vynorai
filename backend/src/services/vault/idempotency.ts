@@ -1,3 +1,4 @@
+import { newId } from "../secureId.js";
 export interface ProjectSnapshot {
   id: string;
   timestamp: string;
@@ -8,7 +9,7 @@ export interface ProjectSnapshot {
 const snapshotStore = new Map<string, ProjectSnapshot>();
 
 export function createProjectSnapshot(files: Record<string, string>): string {
-  const snapshotId = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const snapshotId = newId("snap");
   snapshotStore.set(snapshotId, {
     id: snapshotId,
     timestamp: new Date().toISOString(),
@@ -17,7 +18,9 @@ export function createProjectSnapshot(files: Record<string, string>): string {
   return snapshotId;
 }
 
-export function restoreProjectSnapshot(snapshotId: string): Record<string, string> | null {
+export function restoreProjectSnapshot(
+  snapshotId: string,
+): Record<string, string> | null {
   const snap = snapshotStore.get(snapshotId);
   if (!snap) return null;
   return { ...snap.files };
@@ -29,13 +32,16 @@ export function restoreProjectSnapshot(snapshotId: string): Record<string, strin
  */
 export function isTemplateInstalled(
   templateId: string,
-  projectFiles: Record<string, string>
+  projectFiles: Record<string, string>,
 ): { installed: boolean; location?: string } {
   const cleanId = templateId.replace(/-/g, "_");
 
   for (const [filePath, content] of Object.entries(projectFiles)) {
     // Check marker comment or filename
-    if (content.includes(`@vynor:template(${templateId})`) || content.includes(`VynorAI Verified Scaffold: ${templateId}`)) {
+    if (
+      content.includes(`@vynor:template(${templateId})`) ||
+      content.includes(`VynorAI Verified Scaffold: ${templateId}`)
+    ) {
       return { installed: true, location: filePath };
     }
     if (filePath.includes(cleanId)) {

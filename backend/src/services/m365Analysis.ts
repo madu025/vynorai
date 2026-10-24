@@ -4,9 +4,9 @@ import { z } from "../middleware/validate.js";
 import { handleChatCompletions, type AuthenticatedUser } from "./aiProxy.js";
 import {
   releaseQuotaReservation,
-  reserveQuotaAtomic,
   type QuotaReservation,
 } from "./monthlyQuota.js";
+import { m365Scope, reserveM365Quota } from "./m365QuotaLedger.js";
 import { PiiMap } from "./piiShield.js";
 
 export const ANALYSIS_CONTRACT_VERSION =
@@ -433,6 +433,27 @@ class InProcessResponse {
   }
 }
 
+/**
+ * Reserves credits on the organisation's M365 ledger. A request that does not carry its tenant seat
+ * is refused: there is deliberately no fallback to the user's personal (VS Code) quota.
+ */
+export async function reserveM365ForUser(
+  user: AuthenticatedUser,
+  estimatedCredits: number,
+): Promise<QuotaReservation | null> {
+  const seat = user.m365Quota;
+  if (!seat) throw new M365AnalysisError("M365_QUOTA_SCOPE_MISSING", 500);
+  return reserveM365Quota(
+    m365Scope({
+      tenantId: seat.tenantId,
+      objectId: seat.objectId,
+      userId: user.id,
+    }),
+    { planId: user.subscriptionPlan || "free", source: seat.planSource },
+    estimatedCredits,
+  );
+}
+
 export interface AnalysisRunner {
   (
     user: AuthenticatedUser,
@@ -449,11 +470,7 @@ export const proxyAnalysisRunner: AnalysisRunner = async (
   estimatedCredits,
   maxTokens = 2000,
 ) => {
-  const reservation = await reserveQuotaAtomic(
-    user.id,
-    user.subscriptionPlan || "free",
-    estimatedCredits,
-  );
+  const reservation = await reserveM365ForUser(user, estimatedCredits);
   if (!reservation) throw new M365AnalysisError("CREDITS_EXHAUSTED", 403);
   const response = new InProcessResponse();
   const proxied = new Proxy(response, {
@@ -508,11 +525,7 @@ export const proxyAgentRunner: AgentRunner = async (
   estimatedCredits,
   maxTokens,
 ) => {
-  const reservation = await reserveQuotaAtomic(
-    user.id,
-    user.subscriptionPlan || "free",
-    estimatedCredits,
-  );
+  const reservation = await reserveM365ForUser(user, estimatedCredits);
   if (!reservation) throw new M365AnalysisError("CREDITS_EXHAUSTED", 403);
   const response = new InProcessResponse();
   const proxied = new Proxy(response, {

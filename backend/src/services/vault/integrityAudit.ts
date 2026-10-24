@@ -1,3 +1,4 @@
+import { newId } from "../secureId.js";
 import crypto from "crypto";
 import { AuditLogEntry, GoldenTemplate } from "./types.js";
 
@@ -20,7 +21,11 @@ export function computeTemplateChecksum(t: Partial<GoldenTemplate>): string {
 /**
  * Verify template integrity against stored checksum.
  */
-export function verifyTemplateIntegrity(t: GoldenTemplate): { valid: boolean; currentChecksum: string; storedChecksum: string } {
+export function verifyTemplateIntegrity(t: GoldenTemplate): {
+  valid: boolean;
+  currentChecksum: string;
+  storedChecksum: string;
+} {
   const currentChecksum = computeTemplateChecksum(t);
   return {
     valid: t.checksum ? currentChecksum === t.checksum : true,
@@ -32,9 +37,11 @@ export function verifyTemplateIntegrity(t: GoldenTemplate): { valid: boolean; cu
 /**
  * Log an audit entry into the immutable ledger.
  */
-export function logVaultAudit(entry: Omit<AuditLogEntry, "id" | "timestamp">): AuditLogEntry {
+export function logVaultAudit(
+  entry: Omit<AuditLogEntry, "id" | "timestamp">,
+): AuditLogEntry {
   const record: AuditLogEntry = {
-    id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id: newId("audit"),
     timestamp: new Date().toISOString(),
     ...entry,
   };

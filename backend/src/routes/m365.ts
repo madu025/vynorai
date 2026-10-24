@@ -1,6 +1,7 @@
+import { newId } from "../services/secureId.js";
 import crypto from "node:crypto";
 import { Router, Request, Response, NextFunction } from "express";
-import { getOrInitMonthlyUsage } from "../services/monthlyQuota.js";
+import { getOrInitM365Usage, m365Scope } from "../services/m365QuotaLedger.js";
 import { logSecurityEvent } from "../services/securityAudit.js";
 import {
   createM365ApprovalToken,
@@ -35,6 +36,7 @@ import {
   findM365IdentityLink,
   getM365Capabilities,
 } from "../services/m365Diagnostics.js";
+import { resolveM365Entitlement } from "../services/m365Entitlements.js";
 import {
   analyzeSchemaSummary,
   ANALYSIS_CONTRACT_VERSION,
@@ -588,15 +590,32 @@ function requireM365Scope(requiredScope: M365Scope) {
           .status(403)
           .json({ error: { code: "M365_IDENTITY_NOT_LINKED" } });
       (req as any).m365Identity = m365Identity;
+      const entitlement = await resolveM365Entitlement(
+        m365Identity.tenantId,
+        m365Identity.objectId,
+      );
       (req as any).user = {
         id: link.user_id,
         email: link.email,
-        subscriptionPlan: link.subscription_plan || "free",
+        // The tenant-selected plan, for this request only. It is never written to the user's
+        // subscription, and credits are held on the tenant ledger via `m365Quota`.
+        subscriptionPlan: entitlement.planId,
+        m365Entitlement: entitlement,
+        m365Quota: {
+          tenantId: m365Identity.tenantId,
+          objectId: m365Identity.objectId,
+          planSource: entitlement.source,
+        },
       };
       next();
     } catch (error) {
+      const code = (error as Error).message || "INVALID_OAUTH_TOKEN";
+      if (code === "m365_entitlement_lookup_failed")
+        return res
+          .status(500)
+          .json({ error: { code: "M365_TENANT_LOOKUP_FAILED" } });
       return res.status(401).json({
-        error: { code: (error as Error).message || "INVALID_OAUTH_TOKEN" },
+        error: { code },
       });
     }
   };
@@ -715,9 +734,16 @@ m365Router.post(
             "Select at most 100,000 cells and 2,000,000 text characters.",
         },
       });
-    const usage = await getOrInitMonthlyUsage(
-      user.id,
-      user.subscriptionPlan || "free",
+    const usage = await getOrInitM365Usage(
+      m365Scope({
+        tenantId: tenant.tenantId,
+        objectId: tenant.objectId,
+        userId: user.id,
+      }),
+      {
+        planId: user.subscriptionPlan || "free",
+        source: user.m365Quota?.planSource ?? "free",
+      },
     );
     if (usage.used_tokens >= usage.max_tokens)
       return res.status(403).json({ error: { code: "CREDITS_EXHAUSTED" } });
@@ -1305,7 +1331,7 @@ function safeCorrelationId(value: unknown): string {
   const text = Array.isArray(value) ? value[0] : value;
   return typeof text === "string" && /^[A-Za-z0-9._-]{8,64}$/.test(text)
     ? text
-    : cryptoId(String(Date.now()) + Math.random());
+    : newId("m365");
 }
 
 function cryptoId(value: string): string {

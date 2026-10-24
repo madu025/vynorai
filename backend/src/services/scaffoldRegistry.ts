@@ -906,7 +906,7 @@ export function verifyWebhookSignature(body: Record<string, any>, secret: string
   }
   const hashedSecret = crypto.createHash("md5").update(secret).digest("hex").toUpperCase();
   const check = crypto.createHash("md5").update(merchant_id + order_id + payhere_amount + payhere_currency + status_code + hashedSecret).digest("hex").toUpperCase();
-  const isValidSignature = check === md5sig;
+  const isValidSignature = typeof md5sig === "string" && md5sig.length === check.length && crypto.timingSafeEqual(Buffer.from(check), Buffer.from(md5sig.toUpperCase()));
   const isPaid = isValidSignature && parseInt(status_code, 10) === 2;
   return { isValidSignature, isPaid, statusCode: parseInt(status_code, 10) };
 }`,

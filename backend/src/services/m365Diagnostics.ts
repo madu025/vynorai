@@ -1,6 +1,11 @@
 import { dbGet } from "../db.js";
 import { validateM365Identity, type M365Identity } from "./m365Policy.js";
 import { getM365Tenant, requireM365TenantScope } from "./m365TenantRegistry.js";
+import { resolveM365Entitlement } from "./m365Entitlements.js";
+import {
+  summarizeM365Quota,
+  type M365QuotaSummary,
+} from "./m365QuotaLedger.js";
 import {
   baseCapabilityContext,
   resolveAllCapabilities,
@@ -54,6 +59,19 @@ export interface M365Capabilities {
     writableActionKinds: readonly string[];
   };
   aiAnalysis: boolean;
+  subscription: {
+    planId: string;
+    planDisplayName: string;
+    source: "tenant" | "user" | "free";
+    active: boolean;
+    seatLimit: number | null;
+    activeSeats: number;
+    seatsRemaining: number | null;
+    validUntil: string | null;
+    tenantPlanConfigured: boolean;
+  };
+  /** The tenant-scoped M365 credit ledger. Separate from the user's VS Code allowance. */
+  quota: M365QuotaSummary;
   /** Per-feature verdicts from the shared registry (m365Capabilities.ts). */
   advanced: AdvancedCapabilityReport;
 }
@@ -139,20 +157,47 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
   });
 
   if (link) {
-    const usage = await dbGet<{ used_tokens: number; max_tokens: number }>(
-      "SELECT used_tokens, max_tokens FROM monthly_usage WHERE user_id = ? AND period_end >= ? ORDER BY period_end DESC LIMIT 1",
-      [link.user_id, new Date().toISOString().slice(0, 10)],
+    const entitlement = await resolveM365Entitlement(
+      identity.tenantId,
+      identity.objectId,
     );
+    stages.push({
+      name: "subscription",
+      ok: entitlement.active,
+      code: entitlement.active ? undefined : "M365_SUBSCRIPTION_INACTIVE",
+      detail: {
+        planId: entitlement.planId,
+        source: entitlement.source,
+        seatLimit: entitlement.seatLimit,
+        activeSeats: entitlement.activeSeats,
+        seatsRemaining: entitlement.seatsRemaining,
+        validUntil: entitlement.validUntil,
+      },
+    });
+    // Credits come from the organisation's M365 ledger, never the user's VS Code monthly_usage.
+    const quota = await summarizeM365Quota(identity, {
+      planId: entitlement.planId,
+      source: entitlement.source,
+    });
     // No active row means the first billable request will initialise a fresh cycle.
-    const available = !usage || usage.used_tokens < usage.max_tokens;
+    const available = quota.freshCycle || quota.usedCredits < quota.maxCredits;
     stages.push({
       name: "credits",
       ok: available,
       code: available ? undefined : "CREDITS_EXHAUSTED",
-      detail: { plan: link.subscription_plan || "free" },
+      detail: {
+        scope: quota.scope,
+        plan: quota.planId,
+        planSource: quota.planSource,
+      },
     });
   } else {
     stages.push({ name: "credits", ok: false, code: "skipped_no_identity" });
+    stages.push({
+      name: "subscription",
+      ok: false,
+      code: "skipped_no_identity",
+    });
   }
 
   const shared = passed("identity") && passed("credits");
@@ -179,6 +224,10 @@ export async function getM365Capabilities(
 ): Promise<M365Capabilities> {
   const diagnostics = await diagnoseM365Identity(identity);
   const tenant = await getM365Tenant(identity.tenantId);
+  const subscription = await resolveM365Entitlement(
+    identity.tenantId,
+    identity.objectId,
+  );
   const actionKinds = diagnostics.ready.read ? M365_EXCEL_ACTION_KINDS : [];
   const writableActionKinds = diagnostics.ready.write
     ? M365_EXCEL_ACTION_KINDS
@@ -193,6 +242,11 @@ export async function getM365Capabilities(
       writableActionKinds,
     },
     aiAnalysis: diagnostics.ready.read && (tenant?.aiEnabled ?? false),
+    subscription,
+    quota: await summarizeM365Quota(identity, {
+      planId: subscription.planId,
+      source: subscription.source,
+    }),
     advanced: resolveAllCapabilities(
       baseCapabilityContext({
         canRead: diagnostics.ready.read,

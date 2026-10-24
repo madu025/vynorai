@@ -61,6 +61,9 @@ test("the tenant policy can enable text scopes and switch AI off, behind the adm
       allowedScopes: ["m365.excel.read", "m365.text.read", "m365.text.write"],
       consentedAt: "2026-10-15T00:00:00.000Z",
       aiEnabled: false,
+      planId: "pro",
+      seatLimit: 5,
+      subscriptionValidUntil: "2027-10-15T00:00:00.000Z",
     }),
   });
   assert.equal(saved.status, 200);
@@ -71,6 +74,17 @@ test("the tenant policy can enable text scopes and switch AI off, behind the adm
     "m365.text.read",
     "m365.text.write",
   ]);
+  assert.equal(body.tenant.planId, "pro");
+  assert.equal(body.tenant.seatLimit, 5);
+  assert.equal(body.tenant.subscriptionValidUntil, "2027-10-15T00:00:00.000Z");
+
+  const listed = await fetch(`${baseUrl}/admin/m365/tenants`, { headers });
+  assert.equal(listed.status, 200);
+  const listedBody: any = await listed.json();
+  assert.equal(listedBody.count, 1);
+  assert.equal(listedBody.tenants[0].planId, "pro");
+  assert.equal(listedBody.tenants[0].seatLimit, 5);
+  assert.equal(listedBody.tenants[0].activeSeats, 0);
 
   const unknownScope = await fetch(
     `${baseUrl}/admin/m365/tenants/${tenantId}`,
@@ -94,7 +108,10 @@ test("the tenant policy can enable text scopes and switch AI off, behind the adm
       allowedScopes: ["m365.excel.read"],
     }),
   });
-  assert.equal(((await resaved.json()) as any).tenant.aiEnabled, false);
+  const resavedBody: any = await resaved.json();
+  assert.equal(resavedBody.tenant.aiEnabled, false);
+  assert.equal(resavedBody.tenant.planId, "pro");
+  assert.equal(resavedBody.tenant.seatLimit, 5);
 });
 
 test("usage and audit views summarize metadata-only events per tenant", async () => {

@@ -435,8 +435,8 @@ export async function cancelBackgroundTask(userId: string, taskId: string) {
     return { task: publicTask(task), signaled: false };
   if (task.status === "running" || task.status === "cancel_requested") {
     await dbRun(
-      "UPDATE background_tasks SET status = 'cancel_requested', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [task.id],
+      "UPDATE background_tasks SET status = 'cancel_requested', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+      [task.id, userId],
     );
     await appendBackgroundEvent(
       task.id,
@@ -451,8 +451,8 @@ export async function cancelBackgroundTask(userId: string, taskId: string) {
   }
   await removeBackgroundTask(task.id).catch(() => {});
   await dbRun(
-    "UPDATE background_tasks SET status = 'canceled', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [task.id],
+    "UPDATE background_tasks SET status = 'canceled', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+    [task.id, userId],
   );
   await releaseTaskReservation(task);
   await appendBackgroundEvent(
@@ -478,8 +478,8 @@ export async function purgeBackgroundTask(userId: string, taskId: string) {
     if (id) await deleteBackgroundArtifact(id).catch(() => {});
   const now = new Date().toISOString();
   await dbRun(
-    "UPDATE background_tasks SET status = 'purged', prompt = NULL, proof = NULL, deleted_at = ?, purged_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [now, now, task.id],
+    "UPDATE background_tasks SET status = 'purged', prompt = NULL, proof = NULL, deleted_at = ?, purged_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
+    [now, now, task.id, userId],
   );
   return { taskId, purgedAt: now, workspaceDeletedAt: task.ended_at || now };
 }

@@ -1134,6 +1134,62 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "038_m365_tenant_entitlements",
+    description:
+      "Tenant subscription plan, seat limit, and expiry for M365 organization billing",
+    up: async () => {
+      await addColumnIfNotExists("m365_tenants", "plan_id VARCHAR(64)");
+      await addColumnIfNotExists(
+        "m365_tenants",
+        "seat_limit INTEGER NOT NULL DEFAULT 1",
+      );
+      await addColumnIfNotExists(
+        "m365_tenants",
+        "subscription_valid_until DATETIME",
+      );
+    },
+  },
+  {
+    version: "039_m365_tenant_quota_ledger",
+    description:
+      "Tenant-scoped M365 quota ledger and holds, separate from the personal monthly_usage and quota_reservations rows",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_tenant_usage (
+        id VARCHAR(36) PRIMARY KEY,
+        tenant_id VARCHAR(128) NOT NULL,
+        object_id VARCHAR(128) NOT NULL,
+        user_id TEXT NOT NULL,
+        plan_name VARCHAR(64) NOT NULL,
+        plan_source VARCHAR(16) NOT NULL DEFAULT 'free',
+        max_tokens INTEGER NOT NULL,
+        used_tokens INTEGER NOT NULL DEFAULT 0,
+        used_requests INTEGER NOT NULL DEFAULT 0,
+        bonus_tokens INTEGER NOT NULL DEFAULT 0,
+        bonus_requests INTEGER NOT NULL DEFAULT 0,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (tenant_id, object_id, period_start)
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_tenant_usage_period ON m365_tenant_usage(tenant_id, object_id, period_end)",
+      );
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_quota_reservations (
+        id VARCHAR(36) PRIMARY KEY,
+        tenant_id VARCHAR(128) NOT NULL,
+        object_id VARCHAR(128) NOT NULL,
+        user_id TEXT NOT NULL,
+        tokens INTEGER NOT NULL,
+        requests INTEGER NOT NULL,
+        created_at VARCHAR(32) NOT NULL
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_quota_reservations_created ON m365_quota_reservations(created_at)",
+      );
+    },
+  },
 ];
 
 async function applyMigrations(): Promise<void> {

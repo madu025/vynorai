@@ -13,6 +13,7 @@
  * Injection: prepended to system prompt on every request
  */
 
+import { newId } from "./secureId.js";
 import { dbGet, dbAll, dbRun, usingPostgres } from "../db.js";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -197,7 +198,12 @@ export async function processMemoryCommands(
       );
       remembered.push(fact);
     } else {
-      await setMemory(userId, `fact_${Date.now()}`, fact, 30);
+      await setMemory(
+        userId,
+        `fact_${Date.now()}_${newId().slice(0, 8)}`,
+        fact,
+        30,
+      );
       remembered.push(fact);
     }
   }

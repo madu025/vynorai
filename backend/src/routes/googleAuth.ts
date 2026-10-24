@@ -1,3 +1,4 @@
+import { safeEqual } from "../services/secureId.js";
 import {
   cleanDisplayName,
   PRIVACY_POLICY_VERSION,
@@ -155,7 +156,7 @@ export function validateGoogleIdToken(
     throw new Error("Sign-in token is for a different app.");
   if (!claims.exp || claims.exp < now)
     throw new Error("Google sign-in expired. Please try again.");
-  if (claims.nonce !== expected.nonce)
+  if (!safeEqual(claims.nonce, expected.nonce))
     throw new Error("Google sign-in could not be verified. Please try again.");
   const verified =
     claims.email_verified === true || claims.email_verified === "true";

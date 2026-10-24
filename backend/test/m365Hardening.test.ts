@@ -85,9 +85,32 @@ async function used() {
     ["user-hard"],
   );
 }
+/** The M365 request user: billed to this organisation seat, not to the personal VS Code cycle. */
+function seatUser() {
+  return {
+    id: "user-hard",
+    subscriptionPlan: "free",
+    m365Quota: { tenantId, objectId, planSource: "free" },
+  } as any;
+}
+async function usedSeat() {
+  const ledger = await import("../src/services/m365QuotaLedger.js");
+  await ledger.getOrInitM365Usage(
+    ledger.m365Scope({ tenantId, objectId, userId: "user-hard" }),
+    { planId: "free", source: "free" },
+  );
+  return dbm.dbGet(
+    "SELECT used_tokens, used_requests FROM m365_tenant_usage WHERE tenant_id = ? AND object_id = ?",
+    [tenantId, objectId],
+  );
+}
 function captureConsole() {
   const logged: string[] = [];
-  const original = { error: console.error, log: console.log, warn: console.warn };
+  const original = {
+    error: console.error,
+    log: console.log,
+    warn: console.warn,
+  };
   const sink = (...args: unknown[]) => {
     logged.push(args.map(String).join(" "));
   };
@@ -317,12 +340,9 @@ test("fuzz: the server plan builder only returns a plan or a structured spec err
   for (const chart of chartSpecs()) {
     const expected = expectedChartOutcome(chart);
     try {
-      const plan = createServerExcelPreviewPlan(
-        planInput,
-        ["chart"],
-        500,
-        { chart } as any,
-      );
+      const plan = createServerExcelPreviewPlan(planInput, ["chart"], 500, {
+        chart,
+      } as any);
       accepted++;
       assert.equal(
         expected,
@@ -332,7 +352,10 @@ test("fuzz: the server plan builder only returns a plan or a structured spec err
       const spec = plan.actions[0].spec;
       assert.ok(spec.chartType);
       // A chart that does not group never carries the grouping options.
-      if (chart.pivotResult || ["histogram", "waterfall"].includes(chart.chartType)) {
+      if (
+        chart.pivotResult ||
+        ["histogram", "waterfall"].includes(chart.chartType)
+      ) {
         assert.equal(spec.topN, undefined);
         assert.equal(spec.aggregation, undefined);
       }
@@ -344,7 +367,10 @@ test("fuzz: the server plan builder only returns a plan or a structured spec err
         error instanceof InvalidExcelRangeError,
         `unstructured error ${String(error)} for ${JSON.stringify(chart)}`,
       );
-      const want = expected === "NOT_NUMERIC" ? "EXCEL_SPEC_VALUE_NOT_NUMERIC" : "EXCEL_SPEC_INVALID";
+      const want =
+        expected === "NOT_NUMERIC"
+          ? "EXCEL_SPEC_VALUE_NOT_NUMERIC"
+          : "EXCEL_SPEC_INVALID";
       assert.notEqual(
         expected,
         "ok",
@@ -401,13 +427,18 @@ test("add-in vs server: every spec the add-in accepts but the server rejects is 
       (chart.aggregation !== undefined &&
         !VALID_AGG.includes(chart.aggregation)) ||
       (chart.topN !== undefined &&
-        (typeof chart.topN !== "number" || !Number.isInteger(chart.topN) || chart.topN < 1 || chart.topN > 100)) ||
+        (typeof chart.topN !== "number" ||
+          !Number.isInteger(chart.topN) ||
+          chart.topN < 1 ||
+          chart.topN > 100)) ||
       (chart.lowest !== undefined && typeof chart.lowest !== "boolean")
     )
       continue;
     let local = true;
     try {
-      createExcelPreviewPlan(planInput as any, ["chart"], 500, { chart } as any);
+      createExcelPreviewPlan(planInput as any, ["chart"], 500, {
+        chart,
+      } as any);
     } catch {
       local = false;
     }
@@ -418,7 +449,10 @@ test("add-in vs server: every spec the add-in accepts but the server rejects is 
       remote = false;
     }
     // The server must never accept what the add-in refuses.
-    assert.ok(!(remote && !local), `server accepts, add-in refuses: ${JSON.stringify(chart)}`);
+    assert.ok(
+      !(remote && !local),
+      `server accepts, add-in refuses: ${JSON.stringify(chart)}`,
+    );
     if (local && !remote) {
       const grouping =
         chart.pivotResult ||
@@ -465,24 +499,140 @@ test("agent route: malformed bodies get a 4xx, never reach the model and leave n
     function: { name: "get_workbook", arguments: args },
   });
   const cases: Array<[string, unknown, number]> = [
-    ["huge tool arguments", { consent: true, messages: [user, { role: "assistant", content: null, tool_calls: [call(1, "x".repeat(12_001))] }, { role: "tool", tool_call_id: "c1", content: "r" }] }, 422],
-    ["101 messages", { consent: true, messages: Array.from({ length: 101 }, () => user) }, 422],
-    ["81 messages", { consent: true, messages: Array.from({ length: 81 }, () => user) }, 422],
-    ["system role injection", { consent: true, messages: [{ role: "system", content: secret }, user] }, 422],
-    ["system role as last", { consent: true, messages: [user, { role: "system", content: secret }] }, 422],
-    ["developer role", { consent: true, messages: [{ role: "developer", content: secret }] }, 422],
-    ["extra key on message", { consent: true, messages: [{ ...user, name: "x" }] }, 422],
-    ["extra key on body", { consent: true, messages: [user], model: "gpt-9" }, 422],
-    ["tool result without call", { consent: true, messages: [user, { role: "tool", tool_call_id: "zz", content: "r" }] }, 422],
-    ["assistant first", { consent: true, messages: [{ role: "assistant", content: secret }] }, 422],
-    ["ends with assistant", { consent: true, messages: [user, { role: "assistant", content: "a" }] }, 422],
-    ["unknown tool", { consent: true, messages: [user, { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "rm_rf", arguments: "{}" } }] }, { role: "tool", tool_call_id: "c1", content: "r" }] }, 422],
-    ["duplicate call ids", { consent: true, messages: [user, { role: "assistant", content: null, tool_calls: [call(1), call(1)] }, { role: "tool", tool_call_id: "c1", content: "r" }] }, 422],
-    ["call without result", { consent: true, messages: [user, { role: "assistant", content: null, tool_calls: [call(1)] }, { role: "user", content: "again" }] }, 422],
-    ["too many chars", { consent: true, messages: Array.from({ length: 41 }, (_, i) => ({ role: "tool", tool_call_id: `t${i}`, content: "y".repeat(10) })) }, 422],
+    [
+      "huge tool arguments",
+      {
+        consent: true,
+        messages: [
+          user,
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [call(1, "x".repeat(12_001))],
+          },
+          { role: "tool", tool_call_id: "c1", content: "r" },
+        ],
+      },
+      422,
+    ],
+    [
+      "101 messages",
+      { consent: true, messages: Array.from({ length: 101 }, () => user) },
+      422,
+    ],
+    [
+      "81 messages",
+      { consent: true, messages: Array.from({ length: 81 }, () => user) },
+      422,
+    ],
+    [
+      "system role injection",
+      { consent: true, messages: [{ role: "system", content: secret }, user] },
+      422,
+    ],
+    [
+      "system role as last",
+      { consent: true, messages: [user, { role: "system", content: secret }] },
+      422,
+    ],
+    [
+      "developer role",
+      { consent: true, messages: [{ role: "developer", content: secret }] },
+      422,
+    ],
+    [
+      "extra key on message",
+      { consent: true, messages: [{ ...user, name: "x" }] },
+      422,
+    ],
+    [
+      "extra key on body",
+      { consent: true, messages: [user], model: "gpt-9" },
+      422,
+    ],
+    [
+      "tool result without call",
+      {
+        consent: true,
+        messages: [user, { role: "tool", tool_call_id: "zz", content: "r" }],
+      },
+      422,
+    ],
+    [
+      "assistant first",
+      { consent: true, messages: [{ role: "assistant", content: secret }] },
+      422,
+    ],
+    [
+      "ends with assistant",
+      { consent: true, messages: [user, { role: "assistant", content: "a" }] },
+      422,
+    ],
+    [
+      "unknown tool",
+      {
+        consent: true,
+        messages: [
+          user,
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "c1",
+                type: "function",
+                function: { name: "rm_rf", arguments: "{}" },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: "c1", content: "r" },
+        ],
+      },
+      422,
+    ],
+    [
+      "duplicate call ids",
+      {
+        consent: true,
+        messages: [
+          user,
+          { role: "assistant", content: null, tool_calls: [call(1), call(1)] },
+          { role: "tool", tool_call_id: "c1", content: "r" },
+        ],
+      },
+      422,
+    ],
+    [
+      "call without result",
+      {
+        consent: true,
+        messages: [
+          user,
+          { role: "assistant", content: null, tool_calls: [call(1)] },
+          { role: "user", content: "again" },
+        ],
+      },
+      422,
+    ],
+    [
+      "too many chars",
+      {
+        consent: true,
+        messages: Array.from({ length: 41 }, (_, i) => ({
+          role: "tool",
+          tool_call_id: `t${i}`,
+          content: "y".repeat(10),
+        })),
+      },
+      422,
+    ],
     ["empty messages", { consent: true, messages: [] }, 422],
     ["messages not array", { consent: true, messages: secret }, 422],
-    ["language not allowed", { consent: true, language: "xx", messages: [user] }, 422],
+    [
+      "language not allowed",
+      { consent: true, language: "xx", messages: [user] },
+      422,
+    ],
     ["consent as string", { consent: "true", messages: [user] }, 403],
     ["consent false", { consent: false, messages: [user] }, 403],
     ["no consent", { messages: [user] }, 403],
@@ -497,7 +647,14 @@ test("agent route: malformed bodies get a 4xx, never reach the model and leave n
       assert.doesNotMatch(JSON.stringify(response.json), /SECRET-HARD/, label);
     }
     // Not JSON at all, and a body of the wrong type.
-    for (const raw of ["{not json", "", "\u0000", `"${secret}"`, "null", "12"]) {
+    for (const raw of [
+      "{not json",
+      "",
+      "\u0000",
+      `"${secret}"`,
+      "null",
+      "12",
+    ]) {
       const response = await post(raw, true);
       assert.ok(
         response.status >= 400 && response.status < 500,
@@ -508,14 +665,19 @@ test("agent route: malformed bodies get a 4xx, never reach the model and leave n
     cap.restore();
   }
   assert.equal(calls, 0, "no malformed request reached the model");
-  const rows = JSON.stringify(await dbm.dbAll("SELECT * FROM security_audit_logs"));
+  const rows = JSON.stringify(
+    await dbm.dbAll("SELECT * FROM security_audit_logs"),
+  );
   assert.doesNotMatch(rows + cap.logged.join("\n"), /SECRET-HARD/);
   assert.equal((await used()).used_requests >= 0, true);
 });
 
 test("agent route: oversized payloads are a 4xx (413/422), not a crash", async () => {
   analysis.setM365AgentRunnerForTests(okRunner);
-  const big = { consent: true, messages: [{ role: "user", content: "q".repeat(2_000_000) }] };
+  const big = {
+    consent: true,
+    messages: [{ role: "user", content: "q".repeat(2_000_000) }],
+  };
   const response = await post(big);
   assert.ok([413, 422].includes(response.status), String(response.status));
 });
@@ -573,11 +735,27 @@ test("agent route: provider failures map to stable statuses and codes without le
   const secret = "LEAK-ME-9988";
   const body = { consent: true, messages: [{ role: "user", content: secret }] };
   const failures: Array<[unknown, number, string]> = [
-    [new analysis.M365AnalysisError("CREDITS_EXHAUSTED", 403, secret), 403, "CREDITS_EXHAUSTED"],
-    [new analysis.M365AnalysisError("AI_PROVIDER_UNAVAILABLE", 502, secret), 502, "AI_PROVIDER_UNAVAILABLE"],
-    [new analysis.M365AnalysisError("AI_ANALYSIS_RATE_LIMITED", 429, secret), 429, "AI_ANALYSIS_RATE_LIMITED"],
+    [
+      new analysis.M365AnalysisError("CREDITS_EXHAUSTED", 403, secret),
+      403,
+      "CREDITS_EXHAUSTED",
+    ],
+    [
+      new analysis.M365AnalysisError("AI_PROVIDER_UNAVAILABLE", 502, secret),
+      502,
+      "AI_PROVIDER_UNAVAILABLE",
+    ],
+    [
+      new analysis.M365AnalysisError("AI_ANALYSIS_RATE_LIMITED", 429, secret),
+      429,
+      "AI_ANALYSIS_RATE_LIMITED",
+    ],
     [new Error("upstream timeout " + secret), 500, "AI_AGENT_FAILED"],
-    [Object.assign(new Error("ETIMEDOUT " + secret), { code: "ETIMEDOUT" }), 500, "AI_AGENT_FAILED"],
+    [
+      Object.assign(new Error("ETIMEDOUT " + secret), { code: "ETIMEDOUT" }),
+      500,
+      "AI_AGENT_FAILED",
+    ],
     ["a thrown string " + secret, 500, "AI_AGENT_FAILED"],
     [undefined, 500, "AI_AGENT_FAILED"],
     [null, 500, "AI_AGENT_FAILED"],
@@ -600,7 +778,9 @@ test("agent route: provider failures map to stable statuses and codes without le
     const failed = await events("M365_EXCEL_AGENT_FAILED");
     assert.equal(failed.length, 1);
     assert.doesNotMatch(
-      JSON.stringify(failed) + cap.logged.join("\n") + JSON.stringify(response.json),
+      JSON.stringify(failed) +
+        cap.logged.join("\n") +
+        JSON.stringify(response.json),
       /LEAK-ME/,
     );
   }
@@ -625,38 +805,72 @@ test("agent route: the audit event of a good turn carries counts only", async ()
   analysis.setM365AgentRunnerForTests(async () => ({
     content: "reply " + secret,
     tool_calls: [
-      { id: "a", type: "function", function: { name: "get_workbook", arguments: `{"q":"${secret}"}` } },
+      {
+        id: "a",
+        type: "function",
+        function: { name: "get_workbook", arguments: `{"q":"${secret}"}` },
+      },
     ],
   }));
-  const response = await post({ consent: true, messages: [{ role: "user", content: secret }] });
+  const response = await post({
+    consent: true,
+    messages: [{ role: "user", content: secret }],
+  });
   assert.equal(response.status, 200);
   const rows = await events("M365_EXCEL_AGENT_TURN");
   assert.equal(rows.length, 1);
   assert.doesNotMatch(JSON.stringify(rows), /AUDIT-SECRET/);
-  assert.deepEqual(Object.keys(JSON.parse(rows[0].details)).sort(), ["correlationId", "messages", "toolCalls"]);
+  assert.deepEqual(Object.keys(JSON.parse(rows[0].details)).sort(), [
+    "correlationId",
+    "messages",
+    "toolCalls",
+  ]);
 });
 
 test("agent route: a provider answer with duplicate or colliding tool call ids stays usable on the next turn", async () => {
   analysis.setM365AgentRunnerForTests(async () => ({
     content: "",
     tool_calls: [
-      { id: "dup", type: "function", function: { name: "get_workbook", arguments: "{}" } },
-      { id: "dup", type: "function", function: { name: "get_details", arguments: "{}" } },
+      {
+        id: "dup",
+        type: "function",
+        function: { name: "get_workbook", arguments: "{}" },
+      },
+      {
+        id: "dup",
+        type: "function",
+        function: { name: "get_details", arguments: "{}" },
+      },
       { type: "function", function: { name: "get_workbook", arguments: "{}" } },
-      { id: "call_2", type: "function", function: { name: "get_workbook", arguments: "{}" } },
+      {
+        id: "call_2",
+        type: "function",
+        function: { name: "get_workbook", arguments: "{}" },
+      },
     ],
   }));
-  const first = await post({ consent: true, messages: [{ role: "user", content: "go" }] });
+  const first = await post({
+    consent: true,
+    messages: [{ role: "user", content: "go" }],
+  });
   assert.equal(first.status, 200);
   const calls = first.json.reply.tool_calls;
-  assert.equal(new Set(calls.map((c: any) => c.id)).size, calls.length, "ids are unique");
+  assert.equal(
+    new Set(calls.map((c: any) => c.id)).size,
+    calls.length,
+    "ids are unique",
+  );
   // The add-in answers every call and asks again: the server must accept its own output.
   const next = await post({
     consent: true,
     messages: [
       { role: "user", content: "go" },
       { role: "assistant", content: null, tool_calls: calls },
-      ...calls.map((c: any) => ({ role: "tool", tool_call_id: c.id, content: "r" })),
+      ...calls.map((c: any) => ({
+        role: "tool",
+        tool_call_id: c.id,
+        content: "r",
+      })),
     ],
   });
   assert.equal(next.status, 200, JSON.stringify(next.json));
@@ -673,11 +887,15 @@ test("agent: the credit estimate counts tool call arguments, tool definitions an
   await agent.agentTurn(u, { consent: true, messages: small });
   const base = estimates[0];
   const tools = agent.agentToolTokenEstimate();
-  const prompt = Math.ceil(
-    (agent.AGENT_SYSTEM_PROMPT.length + 2 + 3 + 24) / 4,
+  const prompt = Math.ceil((agent.AGENT_SYSTEM_PROMPT.length + 2 + 3 + 24) / 4);
+  assert.ok(
+    base >= tools + 2500,
+    "tools and the output cap are in the estimate",
   );
-  assert.ok(base >= tools + 2500, "tools and the output cap are in the estimate");
-  assert.ok(base >= tools + 2500 + prompt - 40, "the system prompt is in the estimate");
+  assert.ok(
+    base >= tools + 2500 + prompt - 40,
+    "the system prompt is in the estimate",
+  );
   // Twenty big tool calls (the cap is 29): their arguments are sent to the model, so they are paid for.
   const args = "a".repeat(11_000);
   const calls = Array.from({ length: 12 }, (_, i) => ({
@@ -691,7 +909,11 @@ test("agent: the credit estimate counts tool call arguments, tool definitions an
     messages: [
       ...small,
       { role: "assistant", content: null, tool_calls: calls },
-      ...calls.map((c) => ({ role: "tool" as const, tool_call_id: c.id, content: "ok" })),
+      ...calls.map((c) => ({
+        role: "tool" as const,
+        tool_call_id: c.id,
+        content: "ok",
+      })),
     ],
   });
   const withCalls = estimates[1];
@@ -705,7 +927,17 @@ test("agent: turn limit counts model turns since the latest person request", asy
   analysis.setM365AgentRunnerForTests(okRunner);
   const u: any = { id: "turn-user", subscriptionPlan: "pro" };
   const turn = (i: number) => [
-    { role: "assistant" as const, content: null, tool_calls: [{ id: `t${i}`, type: "function" as const, function: { name: "get_workbook", arguments: "{}" } }] },
+    {
+      role: "assistant" as const,
+      content: null,
+      tool_calls: [
+        {
+          id: `t${i}`,
+          type: "function" as const,
+          function: { name: "get_workbook", arguments: "{}" },
+        },
+      ],
+    },
     { role: "tool" as const, tool_call_id: `t${i}`, content: "r" },
   ];
   const history = (n: number) => [
@@ -727,10 +959,15 @@ test("agent: turn limit counts model turns since the latest person request", asy
 test("agent: the rate limit sweep keeps active users and drops idle ones", () => {
   const t0 = 1_000_000_000_000;
   // User A uses the whole allowance in the first seconds of the window.
-  for (let i = 0; i < 40; i++) agent.assertAgentRateLimit("active", t0 + i * 10);
-  assert.throws(() => agent.assertAgentRateLimit("active", t0 + 500), (e: any) => e.status === 429);
+  for (let i = 0; i < 40; i++)
+    agent.assertAgentRateLimit("active", t0 + i * 10);
+  assert.throws(
+    () => agent.assertAgentRateLimit("active", t0 + 500),
+    (e: any) => e.status === 429,
+  );
   // 6000 other users arrive (the size guard forces sweeps) while A is still inside its window.
-  for (let i = 0; i < 6000; i++) agent.assertAgentRateLimit(`bulk-${i}`, t0 + 1000 + i);
+  for (let i = 0; i < 6000; i++)
+    agent.assertAgentRateLimit(`bulk-${i}`, t0 + 1000 + i);
   assert.throws(
     () => agent.assertAgentRateLimit("active", t0 + 30_000),
     (e: any) => e.code === "AI_ANALYSIS_RATE_LIMITED",
@@ -738,7 +975,10 @@ test("agent: the rate limit sweep keeps active users and drops idle ones", () =>
   );
   // Much later every record is idle and the map is emptied by the next call.
   agent.assertAgentRateLimit("late", t0 + 10 * 60_000);
-  assert.ok(agent.agentRateLimitSizeForTests() <= 2, String(agent.agentRateLimitSizeForTests()));
+  assert.ok(
+    agent.agentRateLimitSizeForTests() <= 2,
+    String(agent.agentRateLimitSizeForTests()),
+  );
   // The limiter is per user and recovers after the window.
   agent.assertAgentRateLimit("active", t0 + 10 * 60_000 + 1);
 });
@@ -749,7 +989,10 @@ test("agent: a user's sliding window is not reset by the sweep running in the mi
   // A sweep fires on another user's call once the window elapsed since the last sweep.
   agent.assertAgentRateLimit("other", t0 + 59_999);
   agent.assertAgentRateLimit("burst", t0 + 59_999); // the 40th inside the window
-  assert.throws(() => agent.assertAgentRateLimit("burst", t0 + 59_999), (e: any) => e.status === 429);
+  assert.throws(
+    () => agent.assertAgentRateLimit("burst", t0 + 59_999),
+    (e: any) => e.status === 429,
+  );
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -757,27 +1000,41 @@ test("agent: a user's sliding window is not reset by the sweep running in the mi
 // ---------------------------------------------------------------------------------------------
 
 test("quota: an in-process gateway failure releases the reservation exactly once (agent runner)", async () => {
-  const before = await used();
+  const before = await usedSeat();
   const cap = captureConsole();
   try {
     // No provider key in the test environment: the gateway answers with an error status or throws.
     const outcome = await analysis
-      .proxyAgentRunner({ id: "user-hard", subscriptionPlan: "free" } as any, [{ role: "user", content: "hi" }], [], 800, 100)
-      .then(() => "ok", (e: any) => e.code);
+      .proxyAgentRunner(
+        seatUser(),
+        [{ role: "user", content: "hi" }],
+        [],
+        800,
+        100,
+      )
+      .then(
+        () => "ok",
+        (e: any) => e.code,
+      );
     assert.notEqual(outcome, "ok");
   } finally {
     cap.restore();
   }
-  assert.deepEqual(await used(), before);
+  assert.deepEqual(await usedSeat(), before);
 });
 
 test("quota: an in-process gateway failure releases the reservation exactly once (analysis runner)", async () => {
-  const before = await used();
+  const before = await usedSeat();
   const cap = captureConsole();
   let leaked = "";
   try {
     const outcome = await analysis
-      .proxyAnalysisRunner({ id: "user-hard", subscriptionPlan: "free" } as any, [{ role: "user", content: "hi" }], 800, 100)
+      .proxyAnalysisRunner(
+        seatUser(),
+        [{ role: "user", content: "hi" }],
+        800,
+        100,
+      )
       .then(
         () => "ok",
         (e: any) => {
@@ -789,30 +1046,50 @@ test("quota: an in-process gateway failure releases the reservation exactly once
   } finally {
     cap.restore();
   }
-  assert.deepEqual(await used(), before, "credits and requests are back after a failed call");
-  assert.equal(leaked, "", "provider error text is not kept in the error detail");
+  assert.deepEqual(
+    await usedSeat(),
+    before,
+    "credits and requests are back after a failed call",
+  );
+  assert.equal(
+    leaked,
+    "",
+    "provider error text is not kept in the error detail",
+  );
 });
 
 test("quota: an error status from the gateway (not a throw) also releases the reservation (analysis runner)", async () => {
-  const before = await used();
+  const before = await usedSeat();
   const cap = captureConsole();
   try {
     // An empty message list is refused by the gateway with a 4xx response.
     const outcome = await analysis
-      .proxyAnalysisRunner({ id: "user-hard", subscriptionPlan: "free" } as any, [], 800, 100)
-      .then(() => "ok", (e: any) => `${e.status}`);
+      .proxyAnalysisRunner(seatUser(), [], 800, 100)
+      .then(
+        () => "ok",
+        (e: any) => `${e.status}`,
+      );
     assert.match(outcome, /^(4|5)\d\d$/);
   } finally {
     cap.restore();
   }
-  assert.deepEqual(await used(), before);
+  assert.deepEqual(await usedSeat(), before);
 });
 
 test("agent reply: oversized or odd tool call arguments are cut to what the next request may carry", () => {
   const reply = agent.cleanAgentReply({
     tool_calls: [
-      { id: "a", function: { name: "get_workbook", arguments: { big: "x".repeat(20_000) } } },
-      { id: "b".repeat(100), function: { name: "get_workbook", arguments: "z".repeat(20_000) } },
+      {
+        id: "a",
+        function: {
+          name: "get_workbook",
+          arguments: { big: "x".repeat(20_000) },
+        },
+      },
+      {
+        id: "b".repeat(100),
+        function: { name: "get_workbook", arguments: "z".repeat(20_000) },
+      },
       { id: "b".repeat(100), function: { name: "get_workbook" } },
     ],
   });
@@ -837,10 +1114,20 @@ test("quota: release is idempotent and never goes below zero", async () => {
   await quota.releaseQuotaReservation(reservation!);
   assert.deepEqual(await used(), start);
   // Status codes map to stable error codes.
-  for (const [statusCode, status] of [[400, 400], [404, 404], [429, 429], [500, 502], [503, 502], [599, 502]] as const) {
+  for (const [statusCode, status] of [
+    [400, 400],
+    [404, 404],
+    [429, 429],
+    [500, 502],
+    [503, 502],
+    [599, 502],
+  ] as const) {
     const r = await quota.reserveQuotaAtomic("user-hard", "free", 50);
     await assert.rejects(
-      analysis.failIfErrorResponse({ statusCode, body: { error: { code: "bad code with spaces" } } }, r!),
+      analysis.failIfErrorResponse(
+        { statusCode, body: { error: { code: "bad code with spaces" } } },
+        r!,
+      ),
       (e: any) => e.status === status && e.code === "AI_PROVIDER_UNAVAILABLE",
     );
   }

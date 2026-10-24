@@ -684,6 +684,48 @@ CREATE TABLE IF NOT EXISTS m365_sandbox_jobs (
 CREATE INDEX IF NOT EXISTS idx_m365_sandbox_owner ON m365_sandbox_jobs(tenant_id, object_id, created_at_ms);
 CREATE INDEX IF NOT EXISTS idx_m365_sandbox_state ON m365_sandbox_jobs(state, expires_at_ms);
 CREATE INDEX IF NOT EXISTS idx_m365_sandbox_user ON m365_sandbox_jobs(user_id, created_at_ms);
+    `,
+  },
+  {
+    version: "038_m365_tenant_entitlements",
+    sql: `
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS plan_id VARCHAR(64);
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS seat_limit INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS subscription_valid_until TEXT;
+`,
+  },
+  {
+    version: "039_m365_tenant_quota_ledger",
+    sql: `
+CREATE TABLE IF NOT EXISTS m365_tenant_usage (
+  id VARCHAR(36) PRIMARY KEY,
+  tenant_id VARCHAR(128) NOT NULL,
+  object_id VARCHAR(128) NOT NULL,
+  user_id TEXT NOT NULL,
+  plan_name VARCHAR(64) NOT NULL,
+  plan_source VARCHAR(16) NOT NULL DEFAULT 'free',
+  max_tokens BIGINT NOT NULL,
+  used_tokens BIGINT NOT NULL DEFAULT 0,
+  used_requests BIGINT NOT NULL DEFAULT 0,
+  bonus_tokens BIGINT NOT NULL DEFAULT 0,
+  bonus_requests BIGINT NOT NULL DEFAULT 0,
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  created_at TEXT DEFAULT ${NOW},
+  updated_at TEXT DEFAULT ${NOW},
+  UNIQUE (tenant_id, object_id, period_start)
+);
+CREATE INDEX IF NOT EXISTS idx_m365_tenant_usage_period ON m365_tenant_usage(tenant_id, object_id, period_end);
+CREATE TABLE IF NOT EXISTS m365_quota_reservations (
+  id VARCHAR(36) PRIMARY KEY,
+  tenant_id VARCHAR(128) NOT NULL,
+  object_id VARCHAR(128) NOT NULL,
+  user_id TEXT NOT NULL,
+  tokens BIGINT NOT NULL,
+  requests INTEGER NOT NULL,
+  created_at VARCHAR(32) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_m365_quota_reservations_created ON m365_quota_reservations(created_at);
 `,
   },
 ];

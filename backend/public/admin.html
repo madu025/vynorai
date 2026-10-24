@@ -188,6 +188,9 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
     <div class="nav-item" onclick="showPage('users')" id="nav-users">
       <span class="nav-icon">👥</span>Users & Subs
     </div>
+    <div class="nav-item" onclick="showPage('m365')" id="nav-m365">
+      <span class="nav-icon">▦</span>Microsoft 365 Orgs
+    </div>
     <div class="nav-item" onclick="showPage('plans')" id="nav-plans">
       <span class="nav-icon">📦</span>Plans & Pricing
     </div>
@@ -319,6 +322,53 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
               <tr><td colspan="7" class="loading">Loading user records...</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MICROSOFT 365 ORGANIZATIONS -->
+    <div class="page" id="page-m365">
+      <h1>Microsoft 365 Organizations</h1>
+      <p class="subtitle">Control tenant access, organization plans, seat limits and consent without exposing workbook data or tokens.</p>
+      <div class="alert alert-info">Tenant plans are the organization entitlement. If no tenant plan is configured, an already-linked user subscription can be used as a compatibility fallback. This page does not create a payment or Entra consent.</div>
+      <div class="cards" id="m365TenantCards"><div class="loading">Loading Microsoft 365 tenants...</div></div>
+      <div class="panel">
+        <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+          <div class="panel-title">Microsoft 365 tenant registry (<span id="m365TenantCount">0</span>)</div>
+          <button class="btn btn-ghost" onclick="loadM365Tenants()">↻ Refresh</button>
+        </div>
+        <div class="panel-body" style="padding:0;overflow-x:auto">
+          <table class="model-table">
+            <thead><tr><th>Organization</th><th>Access</th><th>Plan</th><th>Seats</th><th>Valid until</th><th>Scopes</th><th>Action</th></tr></thead>
+            <tbody id="m365TenantBody"><tr><td colspan="7" class="loading">Loading tenant records...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel" id="m365TenantEditor" style="display:none;margin-top:1.5rem">
+        <div class="panel-header"><div class="panel-title">Edit organization entitlement</div></div>
+        <div class="panel-body">
+          <input type="hidden" id="m365EditTenantId"/>
+          <div class="field-group">
+            <div><label>Tenant ID</label><input id="m365EditTenantIdDisplay" readonly/></div>
+            <div><label>Display name</label><input id="m365EditDisplayName" maxlength="256" placeholder="Customer organization"/></div>
+          </div>
+          <div class="field-group">
+            <div><label>Access</label><select id="m365EditStatus"><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></div>
+            <div><label>Organization plan</label><select id="m365EditPlan"><option value="">User plan fallback</option><option value="free">Free</option><option value="starter">Starter</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option><option value="ultra">Ultra</option></select></div>
+          </div>
+          <div class="field-group">
+            <div><label>Seat limit</label><input id="m365EditSeatLimit" type="number" min="1" max="10000" step="1"/></div>
+            <div><label>Subscription valid until (UTC)</label><input id="m365EditValidUntil" type="datetime-local"/></div>
+          </div>
+          <label style="display:flex;align-items:center;gap:.5rem;margin:.8rem 0"><input id="m365EditAiEnabled" type="checkbox" style="width:auto;margin:0"/> Allow AI-assisted features for this tenant</label>
+          <div style="font-size:.8rem;color:var(--muted);margin:.8rem 0 .4rem">Allowed scopes</div>
+          <div id="m365EditScopes" style="display:flex;gap:.8rem;flex-wrap:wrap">
+            <label><input type="checkbox" value="m365.excel.read" style="width:auto;margin:0"/> Excel read</label>
+            <label><input type="checkbox" value="m365.excel.write" style="width:auto;margin:0"/> Excel write</label>
+            <label><input type="checkbox" value="m365.text.read" style="width:auto;margin:0"/> Text read</label>
+            <label><input type="checkbox" value="m365.text.write" style="width:auto;margin:0"/> Text write</label>
+          </div>
+          <div style="display:flex;gap:.6rem;margin-top:1.2rem"><button class="btn btn-primary" onclick="saveM365Tenant()">Save organization settings</button><button class="btn btn-ghost" onclick="closeM365TenantEditor()">Cancel</button></div>
         </div>
       </div>
     </div>
@@ -948,6 +998,7 @@ function showPage(id) {
   if (id === 'overview')  loadOverview();
   if (id === 'security')  loadSecurity();
   if (id === 'users')     loadUsers();
+  if (id === 'm365')      loadM365Tenants();
   if (id === 'plans')     loadPlans();
   if (id === 'models')    loadModels();
   if (id === 'providers') loadProviders();
@@ -965,6 +1016,92 @@ function showPage(id) {
 
 let admissionPollTimer = null;
 let currentBriefings = [];
+let allM365Tenants = [];
+
+function m365Date(value) {
+  if (!value) return 'No expiry';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
+}
+
+function m365DateInput(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
+}
+
+function m365PlanLabel(planId) {
+  return planId ? String(planId).toUpperCase() : 'USER FALLBACK';
+}
+
+async function loadM365Tenants() {
+  const data = await api('GET', '/admin/m365/tenants');
+  if (!data) return;
+  allM365Tenants = Array.isArray(data.tenants) ? data.tenants : [];
+  document.getElementById('m365TenantCount').textContent = String(allM365Tenants.length);
+  const enabled = allM365Tenants.filter(t => t.status === 'enabled').length;
+  const configured = allM365Tenants.filter(t => t.planId).length;
+  const seats = allM365Tenants.reduce((total, t) => total + Number(t.seatLimit || 0), 0);
+  document.getElementById('m365TenantCards').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Registered tenants</div><div class="stat-value purple">${allM365Tenants.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Enabled tenants</div><div class="stat-value green">${enabled}</div></div>
+    <div class="stat-card"><div class="stat-label">Tenant plans configured</div><div class="stat-value amber">${configured}</div></div>
+    <div class="stat-card"><div class="stat-label">Configured seats</div><div class="stat-value purple">${seats.toLocaleString()}</div></div>`;
+  document.getElementById('m365TenantBody').innerHTML = allM365Tenants.length
+    ? allM365Tenants.map(t => `
+      <tr>
+        <td><strong>${escHtml(t.displayName || 'Unnamed organization')}</strong><br/><code style="font-size:.72rem;color:var(--muted)">${escHtml(t.tenantId)}</code></td>
+        <td><span class="status-dot ${t.status === 'enabled' ? 'on' : 'off'}"></span>${escHtml(t.status)}</td>
+        <td><span class="tag">${escHtml(m365PlanLabel(t.planId))}</span></td>
+        <td>${Number(t.activeSeats ?? 0).toLocaleString()} / ${Number(t.seatLimit || 1).toLocaleString()}</td>
+        <td>${escHtml(m365Date(t.subscriptionValidUntil))}</td>
+        <td style="max-width:220px;font-size:.75rem">${escHtml((t.allowedScopes || []).join(', ') || 'None')}</td>
+        <td><button class="btn btn-primary" style="padding:.3rem .7rem;font-size:.75rem" onclick="openM365TenantEditor('${escId(t.tenantId)}')">Edit</button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No Microsoft 365 tenants registered yet.</td></tr>';
+}
+
+function openM365TenantEditor(tenantId) {
+  const tenant = allM365Tenants.find(item => item.tenantId === tenantId);
+  if (!tenant) return;
+  document.getElementById('m365EditTenantId').value = tenant.tenantId;
+  document.getElementById('m365EditTenantIdDisplay').value = tenant.tenantId;
+  document.getElementById('m365EditDisplayName').value = tenant.displayName || '';
+  document.getElementById('m365EditStatus').value = tenant.status;
+  document.getElementById('m365EditPlan').value = tenant.planId || '';
+  document.getElementById('m365EditSeatLimit').value = String(tenant.seatLimit || 1);
+  document.getElementById('m365EditValidUntil').value = m365DateInput(tenant.subscriptionValidUntil);
+  document.getElementById('m365EditAiEnabled').checked = Boolean(tenant.aiEnabled);
+  document.querySelectorAll('#m365EditScopes input[type="checkbox"]').forEach(box => { box.checked = (tenant.allowedScopes || []).includes(box.value); });
+  document.getElementById('m365TenantEditor').style.display = 'block';
+  document.getElementById('m365TenantEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeM365TenantEditor() {
+  document.getElementById('m365TenantEditor').style.display = 'none';
+}
+
+async function saveM365Tenant() {
+  const tenantId = document.getElementById('m365EditTenantId').value;
+  const validUntil = document.getElementById('m365EditValidUntil').value;
+  const scopes = [...document.querySelectorAll('#m365EditScopes input[type="checkbox"]:checked')].map(box => box.value);
+  if (!scopes.length) { showToast('Select at least one allowed scope', 'err'); return; }
+  const seatLimit = Number(document.getElementById('m365EditSeatLimit').value);
+  if (!Number.isInteger(seatLimit) || seatLimit < 1 || seatLimit > 10000) { showToast('Seat limit must be between 1 and 10,000', 'err'); return; }
+  const result = await api('PUT', `/admin/m365/tenants/${encodeURIComponent(tenantId)}`, {
+    status: document.getElementById('m365EditStatus').value,
+    displayName: document.getElementById('m365EditDisplayName').value.trim() || null,
+    allowedScopes: scopes,
+    aiEnabled: document.getElementById('m365EditAiEnabled').checked,
+    planId: document.getElementById('m365EditPlan').value || null,
+    seatLimit,
+    subscriptionValidUntil: validUntil ? new Date(validUntil + ':00Z').toISOString() : null,
+  });
+  if (result?.tenant) { showToast('Microsoft 365 organization settings saved'); closeM365TenantEditor(); await loadM365Tenants(); }
+  else showToast(result?.error?.message || result?.error || 'Failed to save organization settings', 'err');
+}
 
 function toggleAdmissionPolling() {
   const auto = document.getElementById('admAutoPoll')?.checked;

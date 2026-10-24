@@ -14,6 +14,12 @@ import {
 import { canPlanUseModel } from "./modelRegistry.js";
 import { creditWeight, isoDate, TOKEN_TYPE_WEIGHTS } from "./billingPolicy.js";
 import { sliceFimContext } from "./fimContext.js";
+import {
+  reconcileStaleM365Reservations,
+  releaseM365Reservation,
+  settleM365Reservation,
+  topUpM365Reservation,
+} from "./m365QuotaLedger.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = 30;
@@ -37,10 +43,21 @@ export interface MonthlyUsageRow {
   updated_at: string;
 }
 
+/**
+ * Which ledger a hold belongs to. Absent or "personal" means the user's own monthly_usage cycle (VS
+ * Code and every non-M365 surface). "m365_tenant" means the organisation seat's row in
+ * m365_tenant_usage; such a hold never touches subscriptions or monthly_usage.
+ */
+export type QuotaScope =
+  | { kind: "personal" }
+  | { kind: "m365_tenant"; tenantId: string; objectId: string };
+
 export interface QuotaReservation {
-  /** Row in quota_reservations while the hold is open. */
+  /** Row in quota_reservations (or m365_quota_reservations) while the hold is open. */
   id?: string;
+  /** The real user the request is attributed to (audit and economics), whatever the scope. */
   userId: string;
+  scope?: QuotaScope;
   reservedTokens: number;
   reservedRequests: number;
   settled: boolean;
@@ -127,6 +144,8 @@ export async function reconcileStaleReservations(
     );
     released++;
   }
+  // Tenant-scoped M365 holds are recovered against their own ledger, never the user's cycle.
+  released += await reconcileStaleM365Reservations(now);
   if (released > 0) {
     console.warn(`[Quota] released ${released} stale hold(s)`);
   }
@@ -518,6 +537,8 @@ export async function topUpReservation(
   if (!reservation || reservation.settled) return false;
   const extra = Math.max(0, Math.ceil(extraCredits));
   if (extra === 0) return true;
+  if (reservation.scope?.kind === "m365_tenant")
+    return topUpM365Reservation(reservation, extra);
   const result = await dbRun(
     `UPDATE monthly_usage
      SET used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP
@@ -542,6 +563,8 @@ export async function settleQuotaReservation(
 ): Promise<void> {
   if (!reservation || reservation.settled) return;
   reservation.settled = true;
+  if (reservation.scope?.kind === "m365_tenant")
+    return settleM365Reservation(reservation, actualCredits);
   await closeReservationRecord(reservation);
   const credits = Math.max(0, Math.floor(actualCredits));
   const delta = credits - reservation.reservedTokens;
@@ -564,6 +587,8 @@ export async function releaseQuotaReservation(
 ): Promise<void> {
   if (!reservation || reservation.settled) return;
   reservation.settled = true;
+  if (reservation.scope?.kind === "m365_tenant")
+    return releaseM365Reservation(reservation);
   await closeReservationRecord(reservation);
   await dbRun(
     `UPDATE monthly_usage

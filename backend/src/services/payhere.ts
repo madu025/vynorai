@@ -1,3 +1,4 @@
+import { safeEqual } from "./secureId.js";
 import crypto from "crypto";
 import { config } from "../config.js";
 
@@ -8,7 +9,7 @@ import { config } from "../config.js";
 export function generatePayhereHash(
   orderId: string,
   amount: number,
-  currency: string = "LKR"
+  currency: string = "LKR",
 ): string {
   const formattedAmount = amount.toFixed(2);
   const hashedSecret = crypto
@@ -18,7 +19,11 @@ export function generatePayhereHash(
     .toUpperCase();
 
   const hashString = `${config.payhere.merchantId}${orderId}${formattedAmount}${currency}${hashedSecret}`;
-  return crypto.createHash("md5").update(hashString).digest("hex").toUpperCase();
+  return crypto
+    .createHash("md5")
+    .update(hashString)
+    .digest("hex")
+    .toUpperCase();
 }
 
 /**
@@ -44,7 +49,14 @@ export function verifyPayhereIpn(body: Record<string, any>): boolean {
     .toUpperCase();
 
   const hashString = `${merchantId}${orderId}${payhereAmount}${payhereCurrency}${statusCode}${hashedSecret}`;
-  const localMd5sig = crypto.createHash("md5").update(hashString).digest("hex").toUpperCase();
+  const localMd5sig = crypto
+    .createHash("md5")
+    .update(hashString)
+    .digest("hex")
+    .toUpperCase();
 
-  return receivedMd5sig.toUpperCase() === localMd5sig;
+  return (
+    typeof receivedMd5sig === "string" &&
+    safeEqual(receivedMd5sig.toUpperCase(), localMd5sig)
+  );
 }

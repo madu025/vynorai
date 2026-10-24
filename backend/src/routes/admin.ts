@@ -1,3 +1,4 @@
+import { idParam, nameParam, newId, safeEqual } from "../services/secureId.js";
 import {
   FeedbackRow,
   RoutingRow,
@@ -54,23 +55,23 @@ import {
 } from "../services/cloudArtifactProvenance.js";
 
 export const AdminProviderParamSchema = z.object({
-  provider: z.string().min(1),
+  provider: nameParam("provider"),
 });
 
 export const AdminUserParamSchema = z.object({
-  userId: z.string().min(1),
+  userId: idParam("userId"),
 });
 
 export const AdminModelParamSchema = z.object({
-  id: z.string().min(1),
+  id: nameParam("id"),
 });
 
 export const AdminPlanParamSchema = z.object({
-  planId: z.string().min(1),
+  planId: idParam("planId"),
 });
 
 export const AdminPoolIdParamSchema = z.object({
-  id: z.string().min(1),
+  id: idParam("id"),
 });
 
 export const AdminGrantSubscriptionSchema = z.object({
@@ -294,12 +295,7 @@ export function verifyAdminAccess(req: Request): {
       : "";
   const expected = process.env.ADMIN_SECRET || "";
   const minLength = process.env.NODE_ENV === "production" ? 32 : 16;
-  if (
-    expected &&
-    expected.length >= minLength &&
-    secret.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(expected))
-  ) {
+  if (expected && expected.length >= minLength && safeEqual(secret, expected)) {
     return {
       ok: true,
       authMethod: "secret_key",
@@ -512,6 +508,7 @@ import {
   listM365Tenants,
   upsertM365Tenant,
 } from "../services/m365TenantRegistry.js";
+import { assertM365SeatAvailable } from "../services/m365Entitlements.js";
 
 const AdminM365TenantParamSchema = z.object({
   tenantId: z.string().regex(/^[A-Za-z0-9-]{1,128}$/),
@@ -536,9 +533,19 @@ const AdminM365TenantSchema = z.object({
     .max(4),
   consentedAt: z.string().datetime({ offset: true }).nullable().optional(),
   aiEnabled: z.boolean().optional(),
+  planId: z
+    .enum(["free", "starter", "pro", "enterprise", "ultra"])
+    .nullable()
+    .optional(),
+  seatLimit: z.number().int().min(1).max(10000).optional(),
+  subscriptionValidUntil: z
+    .string()
+    .datetime({ offset: true })
+    .nullable()
+    .optional(),
 });
 const AdminM365IdentitySchema = z.object({
-  userId: z.string().min(1),
+  userId: idParam("userId"),
   enabled: z.boolean().default(true),
 });
 
@@ -664,7 +671,7 @@ adminRouter.post(
 
     // Insert newly granted subscription
     const subId = uuidv4();
-    const orderId = `MANUAL_GRANT_${Date.now()}_${userId.slice(0, 6)}`;
+    const orderId = `MANUAL_GRANT_${newId()}`;
     await dbRun(
       `INSERT INTO subscriptions (id, user_id, plan_name, status, order_id, payment_id, amount, currency, valid_until)
      VALUES (?, ?, ?, 'active', ?, 'ADMIN_MANUAL_GRANT', ?, 'LKR', ?)`,
@@ -1920,15 +1927,13 @@ adminRouter.post(
     } catch (error) {
       if (!(error instanceof GraphMailError)) {
         await audit("ADMIN_EMAIL_TEST_FAILED", "WARN", "Unexpected error");
-        return res
-          .status(500)
-          .json({
-            ok: false,
-            error: {
-              code: "M365_GRAPH_UNAVAILABLE",
-              message: "Test email failed.",
-            },
-          });
+        return res.status(500).json({
+          ok: false,
+          error: {
+            code: "M365_GRAPH_UNAVAILABLE",
+            message: "Test email failed.",
+          },
+        });
       }
       await audit(
         "ADMIN_EMAIL_TEST_FAILED",
@@ -2044,6 +2049,9 @@ adminRouter.put(
         allowedScopes: tenant.allowedScopes,
         hasConsentEvidence: Boolean(tenant.consentedAt),
         aiEnabled: tenant.aiEnabled,
+        planId: tenant.planId,
+        seatLimit: tenant.seatLimit,
+        subscriptionValidUntil: tenant.subscriptionValidUntil,
       }),
       ipAddress: req.ip,
     });
@@ -2057,6 +2065,21 @@ adminRouter.put(
   validateParams(AdminM365IdentityParamSchema),
   validateBody(AdminM365IdentitySchema),
   async (req: Request, res: Response) => {
+    if (req.body.enabled) {
+      try {
+        await assertM365SeatAvailable(
+          String(req.params.tenantId),
+          String(req.params.objectId),
+        );
+      } catch (error) {
+        const code = (error as Error).message;
+        if (code === "m365_seat_limit_reached")
+          return res.status(409).json({ error: { code } });
+        if (code === "tenant_disabled")
+          return res.status(403).json({ error: { code } });
+        throw error;
+      }
+    }
     const user = await dbGet<{ id: string }>(
       "SELECT id FROM users WHERE id = ?",
       [req.body.userId],

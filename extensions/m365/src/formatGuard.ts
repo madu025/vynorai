@@ -17,3 +17,30 @@ export function percentMisfit(
     row.some((cell) => typeof cell === "number" && Math.abs(cell) > 10),
   );
 }
+
+export interface RowBlock {
+  start: number;
+  count: number;
+}
+
+/**
+ * Rows to read when a range is too big to read whole: a block at the start, the middle and the
+ * end, each small enough that the three together stay within `budget` cells.
+ */
+export function percentSampleBlocks(
+  rowCount: number,
+  columnCount: number,
+  budget = 30_000,
+): RowBlock[] {
+  const perBlock = Math.max(
+    1,
+    Math.min(100, Math.floor(budget / 3 / Math.max(1, columnCount))),
+  );
+  if (rowCount <= perBlock * 3) return [{ start: 0, count: rowCount }];
+  const middle = Math.floor((rowCount - perBlock) / 2);
+  return [
+    { start: 0, count: perBlock },
+    { start: middle, count: perBlock },
+    { start: rowCount - perBlock, count: perBlock },
+  ];
+}

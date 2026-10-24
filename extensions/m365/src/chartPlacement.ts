@@ -70,8 +70,22 @@ export function clearPosition(
   return { ...box, row: box.row + last + 2 };
 }
 
-/** How far below its columns' data a chart may sit before it goes beside the data instead (rows). */
-export const MAX_ROWS_BELOW = 200;
+/** Every chart limit in one place, so they are easy to change. */
+export const CHART_LIMITS = {
+  /** How far below its columns' data a chart may sit before it goes beside the data instead (rows). */
+  maxRowsBelow: 200,
+  /** Most rows a chart source may have. */
+  maxRows: 5000,
+  /** Most columns a chart source may have. */
+  maxCols: 30,
+  /** A used range wider than this is refused before any cell is read. */
+  maxSampleCols: 200,
+  /** Rows (header included) read to decide which columns to chart. */
+  sampleRows: 50,
+};
+export const MAX_ROWS_BELOW = CHART_LIMITS.maxRowsBelow;
+export const CHART_MAX_ROWS = CHART_LIMITS.maxRows;
+export const CHART_MAX_COLS = CHART_LIMITS.maxCols;
 /** Largest requested box that is read cell by cell. */
 const MAX_BOX_CELLS = 20_000;
 

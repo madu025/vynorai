@@ -5,8 +5,9 @@
  * new sheets are deleted, overwritten cells get their old formulas back, and an in-place edit of a
  * large range (sort, a big format) works on a hidden backup copy of the sheet made first.
  */
-import { percentMisfit } from "./formatGuard.js";
+import { percentMisfit, percentSampleBlocks } from "./formatGuard.js";
 import { resolveChartPosition } from "./chartPlacement.js";
+import { resolveChartSource } from "./chartSource.js";
 import {
   CALC_MAX_COLUMNS,
   CALC_MAX_ROWS,
@@ -45,7 +46,6 @@ const BACKUP_MARK = "vynorai-backup";
 const SNAPSHOT_CELLS = 50_000;
 /** Rows per request when undo writes old formulas back. */
 const RESTORE_ROWS = 20_000;
-const CHART_MAX_ROWS = 5000;
 /** Cells per read when run_code loads a large range. */
 const RUN_CODE_CHUNK_CELLS = 50_000;
 /** A hidden backup copy has its own recognisable name, so the agent never mistakes it for the person's sheet. */
@@ -781,21 +781,35 @@ export async function applyAgentChanges(
           };
         }
         if (change.kind === "create_chart") {
-          const source = change.address
-            ? sheet.getRange(change.address)
-            : sheet.getUsedRange(true);
-          source.load(["address", "rowCount"]);
+          const plan = await resolveChartSource(
+            sheet,
+            () => context.sync(),
+            change.address,
+          );
+          const source = sheet.getRangeByIndexes(
+            plan.box.row,
+            plan.box.column,
+            plan.box.rows,
+            plan.box.columns,
+          );
+          source.load("address");
           await context.sync();
-          if (Number(source.rowCount) > CHART_MAX_ROWS)
-            throw new Error(
-              `${source.rowCount} rows is too many for a chart; chart a summary table (GROUPBY) instead`,
-            );
           const chart = sheet.charts.add(
             CHART_TYPES[change.chartType],
             source,
             "Auto",
           );
-          if (change.title) chart.title.text = change.title;
+          const title = change.title || plan.title;
+          if (title) chart.title.text = title;
+          if (plan.axisFormat) {
+            // Older hosts lack the axis API: the chart is still made.
+            try {
+              chart.axes.valueAxis.numberFormat = plan.axisFormat;
+              await context.sync();
+            } catch {
+              /* optional polish */
+            }
+          }
           if (change.position) {
             // The formulas written before this chart have spilled by now: keep the chart off their cells.
             const place = await resolveChartPosition(
@@ -816,6 +830,7 @@ export async function applyAgentChanges(
           return {
             chart: String(chart.name),
             source: String(source.address).split("!").pop(),
+            ...(plan.note ? { note: plan.note } : {}),
           };
         }
         if (change.kind === "sort_range" || change.kind === "format_range") {
@@ -958,14 +973,29 @@ export async function applyAgentChanges(
             if (
               String(change.numberFormat)
                 .replace(/"[^"]*"/g, "")
-                .includes("%") &&
-              cells <= SNAPSHOT_CELLS
+                .includes("%")
             ) {
-              range.load("values");
-              await context.sync();
-              if (
-                percentMisfit(change.numberFormat, range.values as unknown[][])
-              )
+              // A range too big to read whole is judged from its start, middle and end.
+              let checked: unknown[][];
+              if (cells <= SNAPSHOT_CELLS) {
+                range.load("values");
+                await context.sync();
+                checked = range.values as unknown[][];
+              } else {
+                const parts = percentSampleBlocks(
+                  Number(range.rowCount),
+                  Number(range.columnCount),
+                ).map((block) => {
+                  const part = range
+                    .getRow(block.start)
+                    .getResizedRange(block.count - 1, 0);
+                  part.load("values");
+                  return part;
+                });
+                await context.sync();
+                checked = parts.flatMap((part) => part.values as unknown[][]);
+              }
+              if (percentMisfit(change.numberFormat, checked))
                 skippedFormat =
                   "The percent format was not applied: these cells hold amounts, not fractions.";
             }

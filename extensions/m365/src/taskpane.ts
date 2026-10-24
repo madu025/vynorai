@@ -3500,7 +3500,11 @@ function setupLayout() {
       closeMenu();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeMenu();
+    if (event.key !== "Escape") return;
+    // Escape from an open menu gives the keyboard back to the button that opened it.
+    const wasOpen = Boolean(menu && !menu.hidden);
+    closeMenu();
+    if (wasOpen) menuToggle?.focus();
   });
   advancedWorkbookOptions?.addEventListener("click", () => {
     if (!prefsCard) return;

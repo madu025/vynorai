@@ -31,6 +31,7 @@
         --line: #dde3ee;
         --brand: #2563ff;
         --brand-hover: #1d4fd6;
+        --brand-ink: #1a44b8;
         --on-brand: #ffffff;
         --tint: #e9f0ff;
         --success: #0b7a55;
@@ -56,6 +57,7 @@
           --line: #26334d;
           --brand: #5b8cff;
           --brand-hover: #7aa3ff;
+          --brand-ink: #8fb2ff;
           --on-brand: #071230;
           --tint: #1a2a4d;
           --success: #4fd69f;
@@ -4429,6 +4431,205 @@
         }
       }
     </style>
+    <style id="polish-fixes-2">
+      /* Second polish pass, after polish-fixes: long-script text, contrast, motion, empty states, hit areas. */
+
+      /* 1. Sinhala and Tamil run longer and taller than English: nothing is cut, lines have room */
+      :lang(si) body {
+        font-family: system-ui, "Nirmala UI", "Noto Sans Sinhala", "Iskoola Pota", sans-serif;
+      }
+      :lang(ta) body {
+        font-family: system-ui, "Nirmala UI", "Noto Sans Tamil", Latha, sans-serif;
+      }
+      :is(:lang(si), :lang(ta)) body {
+        line-height: 1.55;
+      }
+      :is(:lang(si), :lang(ta)) :is(button, .pill, select, label, summary, .badge, .noticed-tile) {
+        line-height: 1.5;
+        height: auto;
+        white-space: normal;
+        overflow-wrap: break-word;
+      }
+      :is(:lang(si), :lang(ta)) body .workspace-nav button {
+        padding-inline: 2px;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      :is(:lang(si), :lang(ta)) #starter-suggestions.quick-start .pill {
+        min-height: 44px;
+        white-space: normal;
+      }
+
+      /* 2. Contrast: text on tinted surfaces uses the darker brand ink; disabled tabs stay readable */
+      body .workspace-nav button.active,
+      body .workspace > .chat-bar .new-chat-action,
+      body[data-auth="in"] .workspace > .chat-bar .new-chat-action,
+      .noticed-tile i {
+        color: var(--brand-ink);
+      }
+      .workspace-nav button:disabled,
+      body .workspace-nav button:disabled {
+        opacity: 1;
+        color: var(--muted);
+        font-weight: 500;
+        cursor: not-allowed;
+      }
+
+      /* 3. Soft fade above the pinned bar: content slides under it on purpose */
+      .apply-dock::before {
+        content: "";
+        position: absolute;
+        right: 0;
+        bottom: 100%;
+        left: 0;
+        height: 18px;
+        background: linear-gradient(to top, var(--bg), transparent);
+        pointer-events: none;
+      }
+
+      /* 4. Reduced motion: no shimmer, no pulse, no lift on hover */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+        :hover,
+        :active {
+          transform: none !important;
+        }
+        body[data-auth="in"] .agent-checked[data-state="working"] {
+          background: var(--surface-muted);
+        }
+      }
+
+      /* 5. Empty states and the loading skeleton */
+      .empty-card,
+      .history-skeleton {
+        display: none;
+      }
+      .empty-card h2 {
+        margin: 0 0 4px;
+        font-size: var(--fs-md);
+      }
+      .empty-card p {
+        margin: 0;
+      }
+      body[data-workspace-view="results"] #results-empty {
+        display: block;
+      }
+      body[data-workspace-view="results"]:has(
+          #result-card:not([hidden]),
+          #result-gallery:not([hidden]),
+          #insights-card:not([hidden]),
+          #verified-result-banner:not([hidden])
+        )
+        #results-empty {
+        display: none;
+      }
+      body[data-workspace-view="share"] #share-empty {
+        display: block;
+      }
+      body[data-workspace-view="share"]:has(#selection-chip:not([hidden])) #share-empty {
+        display: none;
+      }
+      body[data-history-loading] .history-skeleton {
+        display: grid;
+        gap: 8px;
+        padding: 4px 0;
+      }
+      body[data-history-loading] .history-skeleton span {
+        display: block;
+        height: 44px;
+        border-radius: var(--r-md);
+        background: var(--surface-muted);
+        border: 1px solid var(--line);
+      }
+      body[data-history-loading] .history-skeleton span:nth-child(2) {
+        width: 78%;
+      }
+      body[data-history-loading] .history-skeleton span:nth-child(3) {
+        width: 56%;
+      }
+
+      /* 6. A short pane folds the Noticed card to one line */
+      .noticed-toggle {
+        display: none;
+      }
+      @media (max-height: 640px) {
+        #noticed {
+          position: relative;
+        }
+        .noticed-toggle {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: var(--muted);
+          cursor: pointer;
+        }
+        .noticed-toggle::before {
+          content: "▾";
+          font-size: 16px;
+        }
+        .noticed-toggle[aria-expanded="false"]::before {
+          content: "▸";
+        }
+        #noticed.collapsed > p,
+        #noticed.collapsed .noticed-tiles {
+          display: none;
+        }
+        #noticed.collapsed {
+          padding-block: 4px;
+        }
+        #noticed.collapsed h2 {
+          margin: 0;
+          padding-right: 44px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      /* 7. 44px hit areas and one focus ring everywhere */
+      body .workspace-nav button,
+      body .workspace > .chat-bar .pill,
+      body .workspace > .chat-bar select {
+        min-height: 44px;
+      }
+      body :is(button, select, input, textarea, summary, a, [tabindex]):focus-visible {
+        outline: 2px solid var(--focus) !important;
+        outline-offset: 2px !important;
+      }
+      body .apply-dock :focus-visible {
+        outline-color: var(--bar-ink) !important;
+      }
+
+      /* 8. At 320 px Delete is an icon; its name stays for screen readers */
+      @media (max-width: 360px) {
+        #delete-chat {
+          width: 44px;
+          padding: 0;
+          font-size: 0;
+        }
+        #delete-chat::before {
+          content: "×";
+          font-size: 20px;
+          line-height: 1;
+        }
+      }
+    </style>
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -4580,6 +4781,8 @@
             class="pill"
             type="button"
             data-i18n="delete_chat"
+            aria-label="Delete"
+            data-i18n-aria-label="delete_chat"
             hidden
           >
             Delete
@@ -4689,6 +4892,15 @@
           aria-labelledby="noticed-heading"
           hidden
         >
+          <button
+            id="noticed-toggle"
+            class="noticed-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="noticed-tiles"
+            aria-label="Show or hide what was noticed"
+            data-i18n-aria-label="noticed_toggle"
+          ></button>
           <h2 id="noticed-heading" data-i18n="noticed_title">Noticed in your data</h2>
           <p class="muted" data-i18n="noticed_note">
             Checked on this device. Nothing was sent.
@@ -4826,6 +5038,9 @@
               </p>
               <div id="idle-cards" class="idle-cards" hidden></div>
             </div>
+            <div id="history-skeleton" class="history-skeleton" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
             <div
               id="conversation-history"
               aria-live="polite"
@@ -4833,6 +5048,16 @@
             ></div>
           </section>
 
+          <section
+            id="results-empty"
+            class="card empty-card"
+            data-workspace-panel="results"
+          >
+            <h2 data-i18n="results_empty">Nothing applied yet</h2>
+            <p class="muted" data-i18n="results_empty_note">
+              Results show here after you approve a change.
+            </p>
+          </section>
           <section
             id="result-card"
             class="card"
@@ -4960,7 +5185,7 @@
                 ></label
               >
             </div>
-            <div class="apply-dock">
+            <div class="apply-dock" role="group" aria-label="Result actions" data-i18n-aria-label="dock_actions">
               <button
                 id="apply"
                 class="primary"
@@ -5026,6 +5251,16 @@
               </div>
               <div id="result-gallery-list"></div>
             </section>
+          <section
+            id="share-empty"
+            class="card empty-card"
+            data-workspace-panel="share"
+          >
+            <h2 data-i18n="share_empty">Select your data</h2>
+            <p class="muted" data-i18n="share_empty_note">
+              Select the data in the sheet before you share.
+            </p>
+          </section>
           <section
             id="share-card"
             class="card"
@@ -5359,7 +5594,7 @@
             <p id="agent-note" class="muted" hidden data-i18n="agent_note">
               Nothing changed yet.
             </p>
-            <div class="apply-dock" title="Nothing changed yet.">
+            <div class="apply-dock" role="group" aria-label="Result actions" data-i18n-aria-label="dock_actions" title="Nothing changed yet.">
               <button
                 id="agent-approve"
                 class="primary"

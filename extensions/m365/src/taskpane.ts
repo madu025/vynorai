@@ -760,6 +760,11 @@ function renderConversationHistory() {
 }
 
 function restoreConversationHistory() {
+  // The skeleton shows for a frame while the saved chats are read, then gives way to the chat.
+  document.body.dataset.historyLoading = "1";
+  window.requestAnimationFrame(
+    () => delete document.body.dataset.historyLoading,
+  );
   const chatsKey = chatsStorageKey();
   const key = conversationStorageKey();
   conversationMessages = [];
@@ -4707,6 +4712,7 @@ overviewButton?.addEventListener("click", async () => {
 const languageHooks: Array<() => void> = [];
 function refreshLanguage() {
   applyLanguage(document, language);
+  document.documentElement.lang = language;
   for (const hook of languageHooks) hook();
   renderConversationHistory();
   renderResultGallery();
@@ -5087,6 +5093,20 @@ function renderNoticed(tiles: NoticedTile[]) {
     }),
   );
   show(noticedCard, tiles.length > 0);
+}
+
+/** On a short pane the "Noticed" card folds to one line; the toggle is keyboard reachable. */
+const noticedToggle =
+  document.querySelector<HTMLButtonElement>("#noticed-toggle");
+if (noticedCard && noticedToggle) {
+  const fold = (collapsed: boolean) => {
+    noticedCard.classList.toggle("collapsed", collapsed);
+    noticedToggle.setAttribute("aria-expanded", String(!collapsed));
+  };
+  fold(window.matchMedia?.("(max-height: 640px)").matches ?? false);
+  noticedToggle.addEventListener("click", () =>
+    fold(!noticedCard.classList.contains("collapsed")),
+  );
 }
 
 /** Looks at the first rows of the selection on this device; changes nothing and sends nothing. */

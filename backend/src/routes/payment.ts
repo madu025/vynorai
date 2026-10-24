@@ -28,6 +28,7 @@ import {
   getEffectivePlans,
 } from "../services/planManager.js";
 import { z, validateBody } from "../middleware/validate.js";
+import { safeEqual } from "../services/secureId.js";
 
 export const CheckoutBodySchema = z.object({
   plan: z.string().optional().default("starter"),
@@ -106,11 +107,37 @@ paymentRouter.get("/plans", async (_req: Request, res: Response) => {
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Unfinished checkouts one account may hold at once. */
+export const MAX_PENDING_ORDERS_PER_USER = 10;
 
 interface OrderRow extends StoredOrder {
   id: string;
   order_id: string;
   valid_until: string;
+}
+
+/** Orders a verified paid IPN may still activate (a late success after a failure or cancel). */
+const CLAIMABLE_ORDER_STATUSES = "('pending', 'failed', 'cancelled')";
+
+/**
+ * Activations for one user run one at a time inside this process, so two paid IPNs for the same
+ * tier read each other's result and stack, instead of both extending from the same stale expiry.
+ */
+const userActivationQueue = new Map<string, Promise<unknown>>();
+
+async function withUserActivationLock<T>(
+  userId: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  const previous = userActivationQueue.get(userId) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(task);
+  userActivationQueue.set(userId, run);
+  try {
+    return await run;
+  } finally {
+    if (userActivationQueue.get(userId) === run)
+      userActivationQueue.delete(userId);
+  }
 }
 
 /**
@@ -119,54 +146,73 @@ interface OrderRow extends StoredOrder {
  * fresh cycle and adds the old plan's unused paid time, prorated by price.
  */
 async function activatePlan(order: OrderRow, paymentId: string): Promise<void> {
-  const plan = getPlan(order.plan_name);
-  const current = await getActiveSubscription<{
-    id: string;
-    plan_name: string;
-    valid_until: string;
-  }>(order.user_id);
-  const isRenewal =
-    !!current && planTier(getPlan(current.plan_name).id) === planTier(plan.id);
-  const now = Date.now();
-  let validUntil: Date;
-  if (isRenewal) {
-    validUntil = new Date(
-      new Date(current!.valid_until).getTime() +
-        planDurationDays(plan.id) * DAY_MS,
-    );
-  } else {
-    const previous = current ? getPlan(current.plan_name) : undefined;
-    const carried = previous
-      ? proratedCreditMs(
-          previous.priceLKR / planDurationDays(previous.id),
-          plan.priceLKR / planDurationDays(plan.id),
-          new Date(current!.valid_until).getTime() - now,
-        )
-      : 0;
-    validUntil = new Date(now + planDurationDays(plan.id) * DAY_MS + carried);
-  }
+  return withUserActivationLock(order.user_id, () =>
+    activatePlanLocked(order, paymentId),
+  );
+}
 
+async function activatePlanLocked(
+  order: OrderRow,
+  paymentId: string,
+): Promise<void> {
+  const plan = getPlan(order.plan_name);
+  // Claim first. The renewal base is read AFTER the claim, so it already contains every paid order
+  // that finished before this one, and a replayed IPN stops here without touching anything.
   const claimed = await dbRun(
-    `UPDATE subscriptions SET status = 'active', payment_id = ?, valid_until = ?
-     WHERE order_id = ? AND status = 'pending'`,
-    [paymentId, validUntil.toISOString(), order.order_id],
+    `UPDATE subscriptions SET status = 'active', payment_id = ?
+     WHERE order_id = ? AND status IN ${CLAIMABLE_ORDER_STATUSES}`,
+    [paymentId, order.order_id],
   );
   if (claimed.changes === 0) return; // Already processed by a concurrent/retried IPN.
 
   try {
+    const current = await getActiveSubscription<{
+      id: string;
+      plan_name: string;
+      valid_until: string;
+    }>(order.user_id, order.order_id);
+    const isRenewal =
+      !!current &&
+      planTier(getPlan(current.plan_name).id) === planTier(plan.id);
+    const now = Date.now();
+    let validUntil: Date;
+    if (isRenewal) {
+      validUntil = new Date(
+        new Date(current!.valid_until).getTime() +
+          planDurationDays(plan.id) * DAY_MS,
+      );
+    } else {
+      const previous = current ? getPlan(current.plan_name) : undefined;
+      const carried = previous
+        ? proratedCreditMs(
+            previous.priceLKR / planDurationDays(previous.id),
+            plan.priceLKR / planDurationDays(plan.id),
+            new Date(current!.valid_until).getTime() - now,
+          )
+        : 0;
+      validUntil = new Date(now + planDurationDays(plan.id) * DAY_MS + carried);
+    }
+    await dbRun("UPDATE subscriptions SET valid_until = ? WHERE order_id = ?", [
+      validUntil.toISOString(),
+      order.order_id,
+    ]);
+
     if (isRenewal) {
       // Current cycle stays; the next cycle starts automatically when it ends.
       await getOrInitMonthlyUsage(order.user_id, plan.id);
     } else {
+      // The new cycle starts first (idempotent upsert); only then is the old plan retired, so a
+      // failure in between never leaves the user with the old plan gone and no new cycle.
+      await startPaidCycle(order.user_id, plan.id, validUntil);
       await dbRun(
         `UPDATE subscriptions SET status = 'superseded'
          WHERE user_id = ? AND status = 'active' AND order_id != ? AND plan_name NOT LIKE 'topup%'`,
         [order.user_id, order.order_id],
       );
-      await startPaidCycle(order.user_id, plan.id, validUntil);
     }
   } catch (err) {
-    // Re-open the order so PayHere's retry can complete activation.
+    // Re-open the order so PayHere's retry can complete activation. The old plan was not
+    // superseded unless the cycle start already succeeded, so nothing is lost meanwhile.
     await dbRun(
       "UPDATE subscriptions SET status = 'pending' WHERE order_id = ?",
       [order.order_id],
@@ -180,7 +226,7 @@ async function applyTopup(order: OrderRow, paymentId: string): Promise<void> {
   // Top-up orders end as 'credited', never 'active', so they cannot become a tier.
   const claimed = await dbRun(
     `UPDATE subscriptions SET status = 'credited', payment_id = ?
-     WHERE order_id = ? AND status = 'pending'`,
+     WHERE order_id = ? AND status IN ${CLAIMABLE_ORDER_STATUSES}`,
     [paymentId, order.order_id],
   );
   if (claimed.changes === 0) return;
@@ -233,6 +279,19 @@ paymentRouter.post(
         return res
           .status(400)
           .json({ error: "Invalid subscription plan selected for payment" });
+      }
+
+      // An abandoned checkout leaves a pending row; cap how many one account can hold so the
+      // table cannot be filled from a logged-in session.
+      const pending = await dbGet<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM subscriptions WHERE user_id = ? AND status = 'pending'",
+        [user.id],
+      );
+      if (Number(pending?.n || 0) >= MAX_PENDING_ORDERS_PER_USER) {
+        return res.status(429).json({
+          error:
+            "Too many unfinished checkouts. Complete or wait for the earlier ones to expire, then try again.",
+        });
       }
 
       const orderId = `vynor_${uuidv4().replace(/-/g, "")}`;
@@ -380,14 +439,19 @@ paymentRouter.post(
   requireAuth,
   validateBody(TestActivateSchema),
   async (req: Request, res: Response) => {
+    // Never available in production, whatever secret is sent: a mis-set secret must not be able to
+    // mint a free plan on the live system.
+    if (config.nodeEnv === "production") {
+      return res.status(404).json({ error: "Not found" });
+    }
     // Hardened security: Require ADMIN_SECRET or enforce development environment
     const adminSecret = req.headers["x-admin-secret"];
     const isDev = config.nodeEnv === "development";
     const configuredAdminSecret = process.env.ADMIN_SECRET;
     const isValidAdmin = Boolean(
       configuredAdminSecret &&
-        adminSecret &&
-        adminSecret === configuredAdminSecret,
+        typeof adminSecret === "string" &&
+        safeEqual(adminSecret, configuredAdminSecret),
     );
 
     if (!isDev && !isValidAdmin) {

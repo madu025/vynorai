@@ -96,10 +96,19 @@ async function persistReservation(r: QuotaReservation): Promise<void> {
   }
 }
 
-async function closeReservationRecord(r: QuotaReservation): Promise<void> {
-  if (!r.id) return;
+/**
+ * Close a hold by deleting its row, which doubles as the claim: true when this call owns the hold
+ * (settle/release must then move the credits), false when the stale-hold sweeper already refunded
+ * it (nothing may be refunded a second time). A hold that was never recorded (no id) is treated as
+ * owned, as before.
+ */
+async function closeReservationRecord(r: QuotaReservation): Promise<boolean> {
+  if (!r.id) return true;
   try {
-    await dbRun("DELETE FROM quota_reservations WHERE id = ?", [r.id]);
+    const result = await dbRun("DELETE FROM quota_reservations WHERE id = ?", [
+      r.id,
+    ]);
+    return result.changes > 0;
   } catch (err) {
     // Rare (the DB just served this request). A row left behind would be
     // refunded again by the reconcile job, so make it visible.
@@ -107,6 +116,7 @@ async function closeReservationRecord(r: QuotaReservation): Promise<void> {
       `[Quota] could not close hold ${r.id}:`,
       (err as Error).message,
     );
+    return true;
   }
 }
 
@@ -146,10 +156,41 @@ export async function reconcileStaleReservations(
   }
   // Tenant-scoped M365 holds are recovered against their own ledger, never the user's cycle.
   released += await reconcileStaleM365Reservations(now);
+  await reapStalePendingOrders(now).catch(() => {});
   if (released > 0) {
     console.warn(`[Quota] released ${released} stale hold(s)`);
   }
   return released;
+}
+
+/** A checkout that was never paid stops being "pending" after this long. */
+export const PENDING_ORDER_TTL_MS = 24 * 60 * 60 * 1000;
+/** Unpaid failed orders (no payment id) are deleted after this long. */
+export const FAILED_ORDER_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Keep the subscriptions table from filling with abandoned checkouts. Old pending orders become
+ * 'failed' (never deleted outright: a late but valid IPN may still claim a failed order), and
+ * unpaid failed orders are removed after a month. Returns the rows changed.
+ */
+export async function reapStalePendingOrders(
+  now: Date = new Date(),
+): Promise<number> {
+  const pendingCutoff = new Date(
+    now.getTime() - PENDING_ORDER_TTL_MS,
+  ).toISOString();
+  const failedCutoff = new Date(
+    now.getTime() - FAILED_ORDER_RETENTION_MS,
+  ).toISOString();
+  const aged = await dbRun(
+    "UPDATE subscriptions SET status = 'failed' WHERE status = 'pending' AND created_at < ?",
+    [pendingCutoff],
+  );
+  const removed = await dbRun(
+    "DELETE FROM subscriptions WHERE status = 'failed' AND payment_id IS NULL AND created_at < ?",
+    [failedCutoff],
+  );
+  return (aged.changes || 0) + (removed.changes || 0);
 }
 
 export function scheduleReservationReconcile(): void {
@@ -164,13 +205,23 @@ export function scheduleReservationReconcile(): void {
  */
 export async function getActiveSubscription<T = any>(
   userId: string,
+  excludeOrderId?: string,
 ): Promise<T | undefined> {
-  return dbGet<T>(
+  const nowIso = new Date().toISOString();
+  const rows = await dbAll<T & { valid_until: unknown }>(
     `SELECT * FROM subscriptions
      WHERE user_id = ? AND status = 'active' AND valid_until > ? AND plan_name NOT LIKE 'topup%'
-     ORDER BY valid_until DESC LIMIT 1`,
-    [userId, new Date().toISOString()],
+       AND (CAST(? AS TEXT) IS NULL OR order_id != ?)
+     ORDER BY valid_until DESC LIMIT 10`,
+    [userId, nowIso, excludeOrderId ?? null, excludeOrderId ?? null],
   );
+  // The SQL compare is textual, so a malformed expiry such as "garbage" sorts after any date and
+  // would look active. Only a parseable, future date counts; anything else fails closed.
+  const now = Date.now();
+  return rows.find((row) => {
+    const until = Date.parse(String(row.valid_until));
+    return Number.isFinite(until) && until > now;
+  }) as T | undefined;
 }
 
 function requestLimit(plan: PlanDefinition, usage: MonthlyUsageRow): number {
@@ -322,10 +373,18 @@ export async function startPaidCycle(
     "UPDATE monthly_usage SET period_end = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND period_end >= ?",
     [yesterday, userId, today],
   );
+  // UNIQUE(user_id, period_start): a concurrent request may have created today's row between the
+  // read above and this write. Upsert so activation never fails (and is never half-done) on that race.
   await dbRun(
     `INSERT INTO monthly_usage
      (id, user_id, plan_name, max_tokens, used_tokens, used_requests, bonus_tokens, bonus_requests, period_start, period_end)
-     VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+     ON CONFLICT(user_id, period_start) DO UPDATE SET
+       plan_name = excluded.plan_name, max_tokens = excluded.max_tokens,
+       used_tokens = 0, used_requests = 0,
+       bonus_tokens = excluded.bonus_tokens, bonus_requests = excluded.bonus_requests,
+       period_end = excluded.period_end,
+       last_reset_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP`,
     [
       uuidv4(),
       userId,
@@ -385,12 +444,15 @@ export async function reverseTopup(
   credits: number,
   requests: number,
 ): Promise<void> {
+  // The plan allowance (max_tokens) loses only what is really taken out of the bonus: an old
+  // top-up that was already used up or carried over must not eat into the current plan allowance.
   await dbRun(
     `UPDATE monthly_usage
-     SET max_tokens = MAX(0, max_tokens - ?), bonus_tokens = MAX(0, bonus_tokens - ?),
+     SET max_tokens = MAX(0, max_tokens - CASE WHEN bonus_tokens < ? THEN bonus_tokens ELSE ? END),
+         bonus_tokens = MAX(0, bonus_tokens - ?),
          bonus_requests = MAX(0, bonus_requests - ?), updated_at = CURRENT_TIMESTAMP
      WHERE user_id = ? AND period_end >= ?`,
-    [credits, credits, requests, userId, isoDate(new Date())],
+    [credits, credits, credits, requests, userId, isoDate(new Date())],
   );
 }
 
@@ -539,20 +601,30 @@ export async function topUpReservation(
   if (extra === 0) return true;
   if (reservation.scope?.kind === "m365_tenant")
     return topUpM365Reservation(reservation, extra);
+  // A hold the stale sweeper already refunded cannot be grown: its credits are no longer reserved,
+  // so growing the usage would charge credits no hold row backs.
+  if (reservation.id) {
+    const grown = await dbRun(
+      "UPDATE quota_reservations SET tokens = tokens + ? WHERE id = ?",
+      [extra, reservation.id],
+    ).catch(() => undefined);
+    if (grown && grown.changes === 0) return false;
+  }
   const result = await dbRun(
     `UPDATE monthly_usage
      SET used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP
      WHERE user_id = ? AND period_end >= ? AND used_tokens + ? <= max_tokens`,
     [extra, reservation.userId, isoDate(new Date()), extra],
   );
-  if (result.changes === 0) return false;
-  reservation.reservedTokens += extra;
-  if (reservation.id) {
-    await dbRun("UPDATE quota_reservations SET tokens = ? WHERE id = ?", [
-      reservation.reservedTokens,
-      reservation.id,
-    ]).catch(() => {});
+  if (result.changes === 0) {
+    if (reservation.id)
+      await dbRun(
+        "UPDATE quota_reservations SET tokens = MAX(0, tokens - ?) WHERE id = ?",
+        [extra, reservation.id],
+      ).catch(() => {});
+    return false;
   }
+  reservation.reservedTokens += extra;
   return true;
 }
 
@@ -565,8 +637,30 @@ export async function settleQuotaReservation(
   reservation.settled = true;
   if (reservation.scope?.kind === "m365_tenant")
     return settleM365Reservation(reservation, actualCredits);
-  await closeReservationRecord(reservation);
-  const credits = Math.max(0, Math.floor(actualCredits));
+  const claimed = await closeReservationRecord(reservation);
+  // A cost that is not a finite number must never reach SQL (NaN would write NULL): settle at the
+  // reserved amount instead, which is the conservative charge.
+  const credits = Number.isFinite(actualCredits)
+    ? Math.max(0, Math.floor(actualCredits))
+    : reservation.reservedTokens;
+  if (!claimed) {
+    // The sweeper already gave the whole hold back, so the actual cost is charged in full, once.
+    if (credits === 0) return;
+    await dbRun(
+      `UPDATE monthly_usage
+       SET used_tokens = used_tokens + ?,
+           used_requests = used_requests + ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND period_end >= ?`,
+      [
+        credits,
+        reservation.reservedRequests,
+        reservation.userId,
+        isoDate(new Date()),
+      ],
+    );
+    return;
+  }
   const delta = credits - reservation.reservedTokens;
   // A free answer (cache, template) doesn't count as a request either.
   const requestRefund = credits === 0 ? reservation.reservedRequests : 0;
@@ -589,7 +683,8 @@ export async function releaseQuotaReservation(
   reservation.settled = true;
   if (reservation.scope?.kind === "m365_tenant")
     return releaseM365Reservation(reservation);
-  await closeReservationRecord(reservation);
+  // Already refunded by the stale-hold sweeper: nothing is left to give back.
+  if (!(await closeReservationRecord(reservation))) return;
   await dbRun(
     `UPDATE monthly_usage
      SET used_tokens = MAX(0, used_tokens - ?),

@@ -4886,3 +4886,379 @@ body[data-auth="in"] #preview-tweaks .tweak-check > span {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* Screen redesign v3 -------------------------------------------------------
+   This is intentionally a presentation layer: the existing Office.js controls, ids, hidden
+   states and approval handlers stay untouched. The pane now reads as four calm product screens
+   rather than a stack of legacy controls. */
+body[data-auth="in"] main {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: 14px clamp(14px, 4vw, 28px) 16px;
+  background:
+    radial-gradient(circle at 100% -4%, rgb(0 122 255 / 13%), transparent 31%),
+    linear-gradient(180deg, #fbfdff 0%, #f5f8fc 52%, #f8fafc 100%);
+}
+body[data-auth="in"] .brand-bar {
+  min-height: 46px;
+  margin: 0;
+  padding: 0 2px 8px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+}
+body[data-auth="in"] .brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #0ea5e9, #2563eb 58%, #4338ca);
+  box-shadow: 0 9px 18px rgb(37 99 235 / 24%);
+  font-size: 19px;
+}
+body[data-auth="in"] .brand-copy strong {
+  color: #10213f;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+body[data-auth="in"] .brand-copy span {
+  margin-top: 1px;
+  color: #66758d;
+  font-size: 11px;
+}
+body[data-auth="in"] #status {
+  min-height: 38px;
+  margin: 0 0 10px;
+  padding: 8px 11px;
+  border: 1px solid rgb(16 185 129 / 20%);
+  border-radius: 12px;
+  background: rgb(236 253 245 / 78%);
+  box-shadow: none;
+}
+/* The signed-in idle copy was intentionally removed from the landing screen. Keep only its
+   overflow-menu anchor; a blank green strip is neither context nor useful feedback. */
+body[data-auth="in"] #status[data-mode="signed-in-idle"] {
+  position: relative;
+  min-height: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+body[data-auth="in"] #status[data-mode="signed-in-idle"] .status-actions {
+  position: absolute;
+  right: 1px;
+  bottom: 8px;
+  z-index: 5;
+}
+body[data-auth="in"]
+  #status[data-mode="signed-in-idle"]:has(#menu:not([hidden])) {
+  height: auto;
+  margin-bottom: 10px;
+  padding-top: 5px;
+  border-color: rgb(83 105 134 / 16%);
+  background: rgb(255 255 255 / 96%);
+}
+body[data-auth="in"]
+  #status[data-mode="signed-in-idle"]:has(#menu:not([hidden]))
+  .status-actions {
+  position: static;
+}
+body[data-auth="in"] #status[data-tone="error"] {
+  border-color: rgb(239 68 68 / 24%);
+  background: rgb(254 242 242 / 92%);
+}
+body[data-auth="in"] .workspace {
+  gap: 14px;
+}
+body[data-auth="in"] .workspace > .context-chip {
+  order: 0;
+  min-height: 42px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(37 99 235 / 18%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 4px 16px rgb(26 53 93 / 5%);
+  color: #4b5c73;
+  font-size: 12px;
+}
+body[data-auth="in"] .workspace > .context-chip::before {
+  width: 9px;
+  height: 9px;
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgb(16 185 129 / 10%);
+}
+/* A blank workbook starts directly with the prompt. History controls only appear once there is
+   a real saved chat to choose, so they never consume the mock-style landing screen. */
+body[data-auth="in"][data-workspace-view="work"]
+  .workspace
+  > .chat-bar:has(#chat-history-select[hidden]) {
+  display: none;
+}
+body[data-auth="in"][data-workspace-view="results"] .workspace > .chat-bar,
+body[data-auth="in"][data-workspace-view="share"] .workspace > .chat-bar {
+  display: none;
+}
+body[data-auth="in"] .workspace > .chat-bar {
+  order: 1;
+  padding: 4px;
+  border: 1px solid rgb(83 105 134 / 16%);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 5px 16px rgb(31 52 76 / 6%);
+}
+body[data-auth="in"] .workspace > .composer {
+  order: 2;
+  padding: 15px;
+  border: 1px solid rgb(37 99 235 / 18%);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 12px 30px rgb(37 99 235 / 9%);
+}
+body[data-auth="in"] .composer textarea {
+  min-height: 68px;
+  padding: 1px 1px 8px;
+  color: #12233e;
+  font-size: 14px;
+  line-height: 1.55;
+}
+body[data-auth="in"] .composer textarea::placeholder {
+  color: #708098;
+}
+body[data-auth="in"] .composer-bar {
+  margin-top: 7px;
+  padding-top: 10px;
+  border-top: 1px solid rgb(83 105 134 / 12%);
+}
+body[data-auth="in"] .composer select {
+  min-height: 38px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+body[data-auth="in"] .composer #smart-run {
+  min-width: 76px;
+  min-height: 40px;
+  border-radius: 11px;
+  box-shadow: 0 7px 14px rgb(37 99 235 / 22%);
+}
+body[data-auth="in"] .scroll-area {
+  gap: 18px;
+  padding: 0 1px 18px;
+}
+body[data-auth="in"] .welcome {
+  padding: 2px 2px 0;
+}
+body[data-auth="in"] .welcome h1 {
+  margin: 0;
+  color: #10213f;
+  font-size: clamp(20px, 5vw, 26px);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+}
+body[data-auth="in"] .welcome p {
+  max-width: 480px;
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+body[data-auth="in"] .idle-cards,
+body[data-auth="in"] .smart-suggestion-list {
+  gap: 12px;
+}
+body[data-auth="in"] .idle-card,
+body[data-auth="in"] .smart-suggestion {
+  min-height: 144px;
+  padding: 15px;
+  border: 1px solid rgb(83 105 134 / 16%);
+  border-radius: 17px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 7px 20px rgb(31 52 76 / 6%);
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    border-color 140ms ease;
+}
+body[data-auth="in"] .idle-card:hover,
+body[data-auth="in"] .smart-suggestion:hover {
+  border-color: rgb(37 99 235 / 35%);
+  box-shadow: 0 12px 24px rgb(37 99 235 / 12%);
+  transform: translateY(-2px);
+}
+body[data-auth="in"] .idle-card .idle-icon,
+body[data-auth="in"] .smart-suggestion::before {
+  border-radius: 10px;
+  background: #eaf3ff;
+}
+body[data-auth="in"] .idle-card strong,
+body[data-auth="in"] .smart-suggestion strong {
+  color: #15243d;
+  font-size: 14px;
+}
+body[data-auth="in"] .idle-card p,
+body[data-auth="in"] .smart-suggestion .suggestion-reason {
+  color: #66758d;
+  font-size: 12px;
+  line-height: 1.42;
+}
+/* Results: preview reads like a review studio, with one clear approval control. */
+body[data-auth="in"][data-workspace-view="results"] .scroll-area {
+  gap: 14px;
+}
+body[data-auth="in"] #result-card,
+body[data-auth="in"] #result-gallery,
+body[data-auth="in"] .operation-history,
+body[data-auth="in"] #share-card,
+body[data-auth="in"] #email-card {
+  border-color: rgb(83 105 134 / 16%);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 10px 26px rgb(31 52 76 / 7%);
+}
+body[data-auth="in"] #result-card .card-head,
+body[data-auth="in"] #result-gallery .card-head,
+body[data-auth="in"] #share-card .card-head,
+body[data-auth="in"] #email-card .card-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgb(83 105 134 / 11%);
+}
+body[data-auth="in"] #result-card h2,
+body[data-auth="in"] #result-gallery h2,
+body[data-auth="in"] #share-card h2,
+body[data-auth="in"] #email-card h2 {
+  color: #10213f;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+body[data-auth="in"] .impact-grid > * {
+  border-radius: 13px;
+  background: linear-gradient(145deg, #f5f8fc, #eef4fb);
+}
+body[data-auth="in"] .outcome,
+body[data-auth="in"] .result-item {
+  border-color: rgb(83 105 134 / 15%);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #fbfdff, #f4f8fc);
+}
+body[data-auth="in"] .apply-dock {
+  padding-top: 12px;
+  border-top: 1px solid rgb(83 105 134 / 14%);
+}
+body[data-auth="in"] .apply-dock #apply {
+  min-height: 46px;
+  border-radius: 13px;
+  box-shadow: 0 9px 18px rgb(37 99 235 / 22%);
+}
+body[data-auth="in"] .verified-banner {
+  border-radius: 14px;
+  box-shadow: 0 5px 15px rgb(16 185 129 / 8%);
+}
+/* Share: source choice, generated card and mail review become a deliberate sequence. */
+body[data-auth="in"][data-workspace-view="share"] #share-card,
+body[data-auth="in"][data-workspace-view="share"] #email-card {
+  gap: 15px;
+  padding: 18px;
+}
+body[data-auth="in"] #share-card .email-options .ghost {
+  border-radius: 11px;
+  background: #f8fafc;
+}
+body[data-auth="in"] #share-card .email-options .ghost:hover {
+  border-color: rgb(37 99 235 / 42%);
+  background: #eff6ff;
+}
+body[data-auth="in"] #share-main,
+body[data-auth="in"] #email-send {
+  border-radius: 13px;
+  box-shadow: 0 9px 18px rgb(37 99 235 / 18%);
+}
+/* The four screen tabs are the quiet navigation frame, not an extra card competing with content. */
+body[data-auth="in"] .workspace-nav {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgb(83 105 134 / 15%);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 8px 20px rgb(31 52 76 / 7%);
+}
+body[data-auth="in"] .workspace-nav button {
+  min-height: 40px;
+  border-radius: 12px;
+  color: #66758d;
+  font-weight: 700;
+}
+body[data-auth="in"] .workspace-nav button.active {
+  background: linear-gradient(145deg, #e8f3ff, #e9efff);
+  color: #2563eb;
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 10%);
+}
+@media (max-width: 380px) {
+  body[data-auth="in"] main {
+    padding-inline: 10px;
+  }
+  body[data-auth="in"] .brand-bar {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+  body[data-auth="in"] .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+  body[data-auth="in"] .workspace > .composer {
+    padding: 12px;
+    border-radius: 17px;
+  }
+  body[data-auth="in"] .idle-card,
+  body[data-auth="in"] .smart-suggestion {
+    min-height: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-auth="in"] .idle-card,
+  body[data-auth="in"] .smart-suggestion {
+    transition: none;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  body[data-auth="in"] main {
+    background:
+      radial-gradient(
+        circle at 100% -4%,
+        rgb(37 99 235 / 22%),
+        transparent 31%
+      ),
+      linear-gradient(180deg, #171a22 0%, #11141b 55%, #151821 100%);
+  }
+  body[data-auth="in"] .brand-copy strong,
+  body[data-auth="in"] .welcome h1,
+  body[data-auth="in"] #result-card h2,
+  body[data-auth="in"] #result-gallery h2,
+  body[data-auth="in"] #share-card h2,
+  body[data-auth="in"] #email-card h2,
+  body[data-auth="in"] .idle-card strong,
+  body[data-auth="in"] .smart-suggestion strong {
+    color: #f2f6ff;
+  }
+  body[data-auth="in"] .workspace > .context-chip,
+  body[data-auth="in"] .workspace > .chat-bar,
+  body[data-auth="in"] .workspace > .composer,
+  body[data-auth="in"] .idle-card,
+  body[data-auth="in"] .smart-suggestion,
+  body[data-auth="in"] #result-card,
+  body[data-auth="in"] #result-gallery,
+  body[data-auth="in"] .operation-history,
+  body[data-auth="in"] #share-card,
+  body[data-auth="in"] #email-card,
+  body[data-auth="in"] .workspace-nav {
+    border-color: rgb(148 163 184 / 20%);
+    background: rgb(30 34 43 / 94%);
+    box-shadow: 0 10px 26px rgb(0 0 0 / 22%);
+  }
+  body[data-auth="in"] .composer select,
+  body[data-auth="in"] #share-card .email-options .ghost,
+  body[data-auth="in"] .outcome,
+  body[data-auth="in"] .result-item,
+  body[data-auth="in"] .impact-grid > * {
+    background: rgb(38 43 54 / 95%);
+  }
+}

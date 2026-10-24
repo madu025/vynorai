@@ -359,6 +359,9 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   await page.waitForSelector('#context-suggestion-list[data-count="3"]', {
     timeout: 8000,
   });
+  await page.$eval("#status", (element) => {
+    element.dataset.mode = "signed-in-idle";
+  });
   assert.equal(
     await page.$eval(
       "#selection-text",
@@ -435,6 +438,11 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     `the open menu must push the pane down instead of covering the prompt: ${JSON.stringify(menuLayout)}`,
   );
   await assertReachable(page, "#language");
+  assert.equal(
+    await page.$eval("#chat-bar", (element) => element.getClientRects().length),
+    0,
+    "a new workbook must start with the focused request screen, not empty chat controls",
+  );
   await page.click("#menu-toggle");
   await page.waitForSelector("#menu[hidden]");
   for (const selector of [

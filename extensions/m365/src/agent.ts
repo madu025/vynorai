@@ -13,6 +13,13 @@ import {
   type RelationTable,
 } from "./relationships.js";
 import { PERSONAL_PATTERNS } from "./analysis.js";
+import {
+  AI_TEXT_FEATURES,
+  baseCapabilityContext,
+  refuseNativeRequest,
+  type AiTextFeature,
+  type NativeFeatureRefusal,
+} from "./capabilityRegistry.js";
 import { guardCombine } from "./combineGuard.js";
 import { ACTION_TOOLS, CHART_TYPE_NAMES } from "./agentActions.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
@@ -145,7 +152,7 @@ export interface AgentHost {
   calculate(formula: string): Promise<unknown>;
   /** Consent-gated, masked and bounded AI text analysis; this is read-only until a write tool is staged. */
   analyzeTextBatch?(input: {
-    feature: "sentiment" | "keywords" | "classification";
+    feature: AiTextFeature;
     texts: string[];
     categories?: string[];
   }): Promise<unknown>;
@@ -647,6 +654,8 @@ export interface AgentRun {
   phase: AgentPhase;
   /** Set when the loop stopped at the turn limit. */
   stoppedAtLimit?: boolean;
+  /** Set when the request needs a native or Python feature: nothing was sent and nothing is staged. */
+  unsupported?: NativeFeatureRefusal;
 }
 
 /**
@@ -687,6 +696,27 @@ export async function runAgent(options: {
 }): Promise<AgentRun> {
   const { host, model, mask } = options;
   const readOnlyQuestion = isReadOnlyQuestion(options.request);
+  // Power Pivot, Solver, VBA/COM, sparklines and Python are never faked: the person's own request is
+  // answered with the closest supported alternative, before any model call.
+  if (!options.request.startsWith("[Report from the add-in")) {
+    const refusal = refuseNativeRequest(
+      options.request,
+      baseCapabilityContext(),
+    );
+    if (refusal)
+      return {
+        messages: [
+          ...(options.history ?? []),
+          { role: "user", content: mask.mask(options.request) },
+          { role: "assistant", content: refusal.message },
+        ],
+        reply: refusal.message,
+        changes: [],
+        turns: 0,
+        phase: "final",
+        unsupported: refusal,
+      };
+  }
   // After an apply the add-in's own report comes back as the request; it is not the person's words.
   const fromPerson = !options.request.startsWith("[Report from the add-in");
   // A target or audience read locally from the request goes after it (the prefix stays fixed).
@@ -777,7 +807,14 @@ export async function runAgent(options: {
         content = JSON.stringify(
           await (async () => {
             const before = changes.length;
-            const result = await runTool(call, args, host, mask, changes, counts);
+            const result = await runTool(
+              call,
+              args,
+              host,
+              mask,
+              changes,
+              counts,
+            );
             if (readOnlyQuestion && changes.length > before) {
               changes.length = before;
               throw new AgentToolError(
@@ -984,7 +1021,9 @@ async function runTool(
         },
       );
       if (lastRow >= box.lastRow) return result;
-      const firstColumn = Array.isArray(args.columns) ? args.columns[0] : undefined;
+      const firstColumn = Array.isArray(args.columns)
+        ? args.columns[0]
+        : undefined;
       // Outliers over every row: one formula calculate can run to get the exact sheet rows.
       const outlierColumn =
         kind === "anomalies"
@@ -1087,11 +1126,8 @@ async function runTool(
         throw new AgentToolError(
           "Text analysis is not available in this host.",
         );
-      const feature = String(args.feature ?? "") as
-        | "sentiment"
-        | "keywords"
-        | "classification";
-      if (!["sentiment", "keywords", "classification"].includes(feature))
+      const feature = String(args.feature ?? "") as AiTextFeature;
+      if (!(AI_TEXT_FEATURES as readonly string[]).includes(feature))
         throw new AgentToolError(
           "feature must be sentiment, keywords or classification.",
         );

@@ -1,3 +1,4 @@
+import { AI_TEXT_FEATURES } from "./m365Capabilities.js";
 import { z } from "../middleware/validate.js";
 import type { AuthenticatedUser } from "./aiProxy.js";
 import {
@@ -13,7 +14,7 @@ export const TEXT_ANALYSIS_CONTRACT_VERSION =
 export const textAnalysisRequestSchema = z
   .object({
     contractVersion: z.literal(TEXT_ANALYSIS_CONTRACT_VERSION).optional(),
-    feature: z.enum(["sentiment", "keywords", "classification"]),
+    feature: z.enum(AI_TEXT_FEATURES),
     language: z.enum(["en", "si", "ta"]).default("en"),
     consent: z.literal(true),
     texts: z.array(z.string().max(1000)).min(1).max(100),

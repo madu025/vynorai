@@ -10,6 +10,11 @@ import { z } from "../middleware/validate.js";
 import type { AuthenticatedUser } from "./aiProxy.js";
 import { M365AnalysisError, runAgentModel } from "./m365Analysis.js";
 import { STEP_FORMS } from "./m365Script.js";
+import {
+  AI_TEXT_FEATURES,
+  baseCapabilityContext,
+  refuseNativeRequest,
+} from "./m365Capabilities.js";
 
 export const AGENT_MAX_TURNS = 12;
 export const AGENT_MAX_CHANGES = 25;
@@ -118,7 +123,7 @@ export const AGENT_TOOLS = [
     "analyze_text_batch",
     "Read-only, consent-gated masked text analysis. Send only a bounded batch from the selected text column; results are labels and keywords that must be staged with write_values after review.",
     {
-      feature: en("sentiment", "keywords", "classification"),
+      feature: en(...AI_TEXT_FEATURES),
       texts: {
         type: "array",
         items: { type: "string", maxLength: 1000 },
@@ -1101,6 +1106,21 @@ export function agentToolTokenEstimate(): number {
   return toolTokenEstimate;
 }
 
+/**
+ * The honest answer for a new person request that can only be a native desktop or Python feature.
+ * Add-in reports and tool results are not the person's words and are never screened.
+ */
+export function nativeFeatureReply(
+  messages: AgentMessage[],
+): AgentReply | undefined {
+  const last = messages[messages.length - 1] as any;
+  if (last?.role !== "user" || typeof last.content !== "string")
+    return undefined;
+  if (last.content.startsWith("[Report from the add-in")) return undefined;
+  const refusal = refuseNativeRequest(last.content, baseCapabilityContext());
+  return refusal ? { content: refusal.message, tool_calls: [] } : undefined;
+}
+
 /** One model turn: the fixed system prompt and tools, then the conversation. */
 export async function agentTurn(
   user: AuthenticatedUser,
@@ -1117,6 +1137,10 @@ export async function agentTurn(
         .join(", "),
     );
   checkAgentConversation(parsed.data.messages);
+  // A request that needs Power Pivot, Solver, VBA/COM, sparklines or Python is answered here, before
+  // any model call or charge: the closest supported alternative, never a made-up success.
+  const refusal = nativeFeatureReply(parsed.data.messages);
+  if (refusal) return refusal;
   assertAgentRateLimit(user.id);
   // The language line goes after the fixed prompt in its own message, so the long prefix stays identical.
   const messages = [

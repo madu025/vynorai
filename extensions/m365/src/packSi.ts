@@ -117,6 +117,7 @@ registerLanguagePack("si", {
     request_change: "වැඩපොතේ වෙනසක් ඉල්ලන්න",
     new_chat: "+ නව කතාබහ",
     chat_history: "කතාබහ ඉතිහාසය",
+    close_chat_history: "කතාබහ ඉතිහාසය වසන්න",
     delete_chat: "මකන්න",
     chat_actions: "කතාබහ ක්‍රියා",
     change_history: "වෙනස්කම් ඉතිහාසය",

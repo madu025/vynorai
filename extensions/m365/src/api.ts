@@ -1,4 +1,7 @@
-import type { AdvancedCapability } from "./diagnostics.js";
+import type {
+  AdvancedCapabilityReport,
+  AiTextFeature,
+} from "./capabilityRegistry.js";
 
 export interface M365AccessDiagnostics {
   stages: Array<{
@@ -20,7 +23,7 @@ export interface M365Capabilities {
     writableActionKinds: string[];
   };
   aiAnalysis: boolean;
-  advanced?: Record<string, AdvancedCapability>;
+  advanced?: AdvancedCapabilityReport;
 }
 
 export interface M365ApiClient {
@@ -91,7 +94,7 @@ export interface M365ApiClient {
   analyzeTextBatch(
     input: {
       contractVersion?: string;
-      feature: "sentiment" | "keywords" | "classification";
+      feature: AiTextFeature;
       language?: "en" | "si" | "ta";
       texts: string[];
       categories?: string[];

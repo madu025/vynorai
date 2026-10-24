@@ -73,6 +73,7 @@ import {
   interpretInstruction,
   looksLikeQuestion,
 } from "./intent.js";
+import { refuseNativeRequest } from "./capabilityRegistry.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import { chooseInstructionRoute } from "./taskpaneRouting.js";
 import { createPreviewController } from "./taskpanePreviewControl.js";
@@ -187,6 +188,7 @@ import {
   describeError,
   describeOfficeHost,
   buildAdvancedCapabilityReport,
+  hostCapabilityContext,
   formatEntry,
   stableStorageFingerprint,
 } from "./diagnostics.js";
@@ -1545,7 +1547,11 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
       ...capabilities,
       advanced: buildAdvancedCapabilityReport(
         capabilities.advanced,
-        supportsExcelApi,
+        hostCapabilityContext({
+          office: office(),
+          server: capabilities,
+          graphScopes: config?.graphScopes,
+        }),
       ),
     };
     updateAuthenticationUi(true);
@@ -6231,6 +6237,24 @@ async function startAgentRun() {
     return setStatus(
       "The AI is still working on the last request. Try again when it finishes.",
     );
+  // Power Pivot, Solver, VBA/COM, sparklines and Python are never sent anywhere or faked: the person
+  // gets the closest supported alternative at once, with no consent card and no model call.
+  const nativeRefusal = refuseNativeRequest(
+    request,
+    hostCapabilityContext({
+      office: office(),
+      server: capabilities,
+      graphScopes: config?.graphScopes,
+    }),
+  );
+  if (nativeRefusal) {
+    const answer = localizeMessage(language, nativeRefusal.message);
+    renderConversation("user", request, false);
+    if (instruction) instruction.value = "";
+    renderConversation("assistant", answer);
+    log.record("agent:native-feature", "info", nativeRefusal.feature);
+    return setStatus(answer);
+  }
   // A payroll sheet is a local template: nothing is sent for it.
   if (
     isPayrollRequest(request) &&

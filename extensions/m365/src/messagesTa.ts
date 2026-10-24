@@ -7,6 +7,22 @@
 import { localizeAction } from "./messagesActions.js";
 
 const EXACT: Record<string, string> = {
+  "Power Pivot is not available in this add-in. Use a regular PivotTable or a formula report on a new sheet instead.":
+    "இந்த add-in-இல் Power Pivot கிடைக்காது. அதற்குப் பதிலாக புதிய தாளில் சாதாரண PivotTable அல்லது சூத்திர அறிக்கையைப் பயன்படுத்தவும்.",
+  "The Excel Data Model is not available in this add-in. Use a regular PivotTable or a formula report with lookups across sheets instead.":
+    "இந்த add-in-இல் Excel Data Model கிடைக்காது. அதற்குப் பதிலாக சாதாரண PivotTable அல்லது தாள்களுக்கு இடையே lookup கொண்ட சூத்திர அறிக்கையைப் பயன்படுத்தவும்.",
+  "PivotTables on an OLAP or Data Model source are not available in this add-in. Use a regular PivotTable on a table, or a formula report, instead.":
+    "OLAP அல்லது Data Model மூலத்தின் மீதான PivotTable இந்த add-in-இல் கிடைக்காது. அதற்குப் பதிலாக அட்டவணையின் மீது சாதாரண PivotTable அல்லது சூத்திர அறிக்கையைப் பயன்படுத்தவும்.",
+  "Running VBA or COM automation is not available in this add-in. I can write the macro as text for you to review and run yourself.":
+    "இந்த add-in-இல் VBA அல்லது COM automation-ஐ இயக்க முடியாது. macro-வை உரையாக எழுதித் தருகிறேன்; நீங்களே சரிபார்த்து இயக்கவும்.",
+  "Solver is not available in this add-in. Use a what-if sensitivity table that tries each value and shows the results instead.":
+    "இந்த add-in-இல் Solver கிடைக்காது. அதற்குப் பதிலாக ஒவ்வொரு மதிப்பையும் முயன்று முடிவுகளைக் காட்டும் what-if உணர்திறன் அட்டவணையைப் பயன்படுத்தவும்.",
+  "Scenario Manager is not available in this add-in. Use a what-if sensitivity table with the scenarios side by side instead.":
+    "இந்த add-in-இல் Scenario Manager கிடைக்காது. அதற்குப் பதிலாக சூழ்நிலைகளை அருகருகே காட்டும் what-if உணர்திறன் அட்டவணையைப் பயன்படுத்தவும்.",
+  "Python is not run in this add-in, and nothing needs to be installed on your computer. Use a formula, a PivotTable or the built-in analysis instead.":
+    "இந்த add-in-இல் Python இயங்காது; உங்கள் கணினியில் எதையும் நிறுவ வேண்டியதுமில்லை. அதற்குப் பதிலாக சூத்திரம், PivotTable அல்லது உள்ளமைந்த பகுப்பாய்வைப் பயன்படுத்தவும்.",
+  "This runs outside the workbook only after you approve it. Nothing has been run.":
+    "இது நீங்கள் ஒப்புக்கொண்ட பின்பே பணிப்புத்தகத்திற்கு வெளியே இயங்கும். எதுவும் இயக்கப்படவில்லை.",
   "Checking the result…": "முடிவைச் சரிபார்க்கிறது…",
   "Checking safety…": "பாதுகாப்பைச் சரிபார்க்கிறது…",
   "Preview ready. Nothing changed yet.":

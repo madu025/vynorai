@@ -6,6 +6,7 @@ import {
   describeError,
   describeOfficeHost,
   buildAdvancedCapabilityReport,
+  hostCapabilityContext,
   redactDiagnostic,
   stableStorageFingerprint,
 } from "./diagnostics.js";
@@ -127,16 +128,55 @@ test("office host description reports requirement sets", () => {
 });
 
 test("advanced capability report downgrades unsupported host APIs explicitly", () => {
+  const office = {
+    context: {
+      platform: "OfficeOnline",
+      requirements: {
+        isSetSupported: (name: string, version: string) =>
+          name === "ExcelApi" && ["1.1", "1.4"].includes(version),
+      },
+    },
+  };
+  const context = hostCapabilityContext({
+    office,
+    server: {
+      excel: { canInspect: true, canApply: true },
+      aiAnalysis: true,
+    },
+    graphScopes: ["https://graph.microsoft.com/Mail.Send"],
+  });
+  assert.equal(context.platform, "web");
   const report = buildAdvancedCapabilityReport(
     {
-      dashboard: { status: "available" },
-      slicer: { status: "available" },
-      forecast: { status: "available_with_fallback" },
+      dashboard: {
+        status: "available",
+        execution: "office_js",
+        requirement: { hosts: [], needs: [] },
+        observed: { platform: "unknown", excelApi: null },
+      },
+      forecast: {
+        status: "available_with_fallback",
+        execution: "deterministic_local",
+        requirement: { hosts: [], needs: [] },
+        observed: { platform: "unknown", excelApi: null },
+      },
     },
-    (version) => version === "1.4",
+    context,
   );
   assert.equal(report.forecast.status, "available_with_fallback");
   assert.equal(report.dashboard.status, "available_with_fallback");
   assert.equal(report.slicer.status, "available_with_fallback");
   assert.match(report.slicer.reason!, /slicers/i);
+  // A feature the server never reported is decided by the host, not assumed.
+  assert.equal(report["email-share"].status, "consent_required");
+  assert.equal(report["power-pivot"].status, "unsupported");
+  assert.equal(report["python-sandbox"].status, "unsupported");
+  assert.equal(report["power-pivot"].observed.platform, "web");
+});
+
+test("without a server answer the host never reports more than it can run", () => {
+  const context = hostCapabilityContext({ office: undefined });
+  const report = buildAdvancedCapabilityReport(undefined, context);
+  assert.equal(report.forecast.status, "unsupported");
+  assert.equal(report.chart.status, "unsupported");
 });

@@ -118,6 +118,7 @@ registerLanguagePack("ta", {
     request_change: "பணிப்புத்தக மாற்றத்தைக் கோரு",
     new_chat: "+ புதிய அரட்டை",
     chat_history: "அரட்டை வரலாறு",
+    close_chat_history: "அரட்டை வரலாற்றை மூடு",
     delete_chat: "நீக்கு",
     chat_actions: "அரட்டை செயல்கள்",
     change_history: "மாற்ற வரலாறு",

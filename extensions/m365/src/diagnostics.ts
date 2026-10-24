@@ -1,15 +1,15 @@
 export type DiagnosticStatus = "pass" | "fail" | "skip" | "info";
 
-export type AdvancedCapabilityStatus =
-  | "available"
-  | "available_with_fallback"
-  | "unsupported"
-  | "consent_required";
-
-export interface AdvancedCapability {
-  status: AdvancedCapabilityStatus;
-  reason?: string;
-}
+import {
+  CAPABILITY_FEATURES,
+  hostPlatformFromOffice,
+  resolveCapability,
+  stricterCapability,
+  supportedApiSets,
+  baseCapabilityContext,
+  type AdvancedCapabilityReport,
+  type CapabilityContext,
+} from "./capabilityRegistry.js";
 
 export interface DiagnosticEntry {
   at: string;
@@ -205,25 +205,54 @@ export function describeOfficeHost(office: any): Record<string, unknown> {
   };
 }
 
-/** Merges server policy with local Office.js requirements without exposing workbook data. */
+/**
+ * What this host and account can do, for the shared capability resolver. Optional layers that do not
+ * exist yet (the Windows companion, the managed Python sandbox) are always reported as missing.
+ */
+export function hostCapabilityContext(input: {
+  office?: any;
+  /** The server's account facts (`/capabilities`), when it answered. */
+  server?: {
+    excel: { canInspect: boolean; canApply: boolean };
+    aiAnalysis: boolean;
+  };
+  /** Delegated Graph scopes configured for this add-in (full URIs or short names). */
+  graphScopes?: readonly string[];
+  aiConsent?: boolean;
+}): CapabilityContext {
+  const host = describeOfficeHost(input.office);
+  return baseCapabilityContext({
+    platform: hostPlatformFromOffice(
+      input.office?.context?.platform ?? host.platform,
+    ),
+    apiSets: supportedApiSets(
+      host.excelApi as Record<string, boolean> | undefined,
+    ),
+    companion: "not_installed",
+    sandbox: "unavailable",
+    canRead: input.server?.excel.canInspect ?? false,
+    canWrite: input.server?.excel.canApply ?? false,
+    aiEnabled: input.server?.aiAnalysis ?? false,
+    aiConsent: input.aiConsent ?? false,
+    graphScopes: input.graphScopes ?? [],
+  });
+}
+
+/**
+ * Merges the server's per-feature verdicts with the host's own: for every feature in the shared
+ * registry the stricter answer wins, so a label is never kinder than what can really run here.
+ * A feature the server did not report is decided by the host alone (never assumed available).
+ */
 export function buildAdvancedCapabilityReport(
-  server: Record<string, AdvancedCapability> | undefined,
-  supports: (version: string) => boolean,
-): Record<string, AdvancedCapability> {
-  const report = { ...(server ?? {}) };
-  const slicer = report.slicer;
-  if (slicer && !supports("1.10"))
-    report.slicer = {
-      status: "available_with_fallback",
-      reason:
-        "This Excel host does not support slicers; use a filtered result instead.",
-    };
-  if (report.dashboard && !supports("1.8"))
-    report.dashboard = {
-      status: "available_with_fallback",
-      reason:
-        "This Excel host supports the report sheet but not every dashboard object.",
-    };
+  server: AdvancedCapabilityReport | undefined,
+  context: CapabilityContext,
+): AdvancedCapabilityReport {
+  const report: AdvancedCapabilityReport = {};
+  for (const feature of CAPABILITY_FEATURES) {
+    const local = resolveCapability(feature, context);
+    const remote = server?.[feature];
+    report[feature] = remote ? stricterCapability(remote, local) : local;
+  }
   return report;
 }
 

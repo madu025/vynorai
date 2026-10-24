@@ -2,6 +2,10 @@ import {
   detectBusinessKey,
   suggestDashboardColumns,
 } from "./businessContext.js";
+import {
+  baseCapabilityContext,
+  refuseNativeRequest,
+} from "./capabilityRegistry.js";
 import { parseExpression } from "./expression.js";
 import {
   CLEAN_OPERATIONS,
@@ -303,6 +307,14 @@ export function interpretInstruction(
     problems: [],
   };
   const text = rewriteColumnWishes(instruction.replace(/[_]+/g, " "), headers);
+  // Power Pivot, the Data Model, OLAP, Solver, Scenario Manager, VBA/COM, sparklines and Python are
+  // native features this add-in cannot run. Say so and name the closest supported alternative; never
+  // fall through to a near-miss plan that could look like it succeeded.
+  const native = refuseNativeRequest(text, baseCapabilityContext());
+  if (native) {
+    result.problems.push(native.message);
+    return result;
+  }
   // "sorted by A then B": two keys on one view (never a separate, meaningless "B" step).
   const twoKeySort =
     /\bsort(?:ed)?\s+(?:the\s+(?:rows|data|sheet)\s+)?by\s+(.+?)[\s,]+(?:and\s+)?then\s+(?:by\s+)?(.+)$/i.exec(
@@ -340,12 +352,6 @@ export function interpretInstruction(
   // current permission and Office.js safety boundary. Return an actionable
   // refusal instead of falling through to the generic "unsupported action"
   // hint, and never invent a plan that could appear to have succeeded.
-  if (/\bsparklines?\b/i.test(text)) {
-    result.problems.push(
-      "Sparklines are not available in this Excel add-in yet. Use a line chart on a new result sheet instead.",
-    );
-    return result;
-  }
   if (
     /\b(?:refresh|update)\b.*\b(?:every|each|on)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|day)/i.test(
       text,
@@ -1618,8 +1624,22 @@ export function readRank(
   const found: Array<{ at: number; n: number; lowest: boolean; end: number }> =
     [];
   const patterns: Array<[RegExp, boolean, boolean]> = [
-    [new RegExp(`\\b(${RANK_HIGH})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`, "gi"), false, false],
-    [new RegExp(`(?<!\\bat\\s)\\b(${RANK_LOW})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`, "gi"), true, false],
+    [
+      new RegExp(
+        `\\b(${RANK_HIGH})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`,
+        "gi",
+      ),
+      false,
+      false,
+    ],
+    [
+      new RegExp(
+        `(?<!\\bat\\s)\\b(${RANK_LOW})\\s+(${RANK_NUMBER})\\b(?!\\s*(?:%|percent))`,
+        "gi",
+      ),
+      true,
+      false,
+    ],
     [new RegExp(`\\b(${RANK_NUMBER})\\s+(${RANK_HIGH})\\b`, "gi"), false, true],
     [new RegExp(`\\b(${RANK_NUMBER})\\s+(${RANK_LOW})\\b`, "gi"), true, true],
   ];
@@ -1648,10 +1668,11 @@ function rankedCategory(
   headers: string[],
   isLabel: (index: number) => boolean,
 ): number | undefined {
-  const phrase = /^\s+([^,.;]+?)(?:\s+(?:by|per|of|in|for|from|with|on|as|and|then)\b|[,.;]|$)/i
-    .exec(text.slice(end))?.[1]
-    ?.toLowerCase()
-    .trim();
+  const phrase =
+    /^\s+([^,.;]+?)(?:\s+(?:by|per|of|in|for|from|with|on|as|and|then)\b|[,.;]|$)/i
+      .exec(text.slice(end))?.[1]
+      ?.toLowerCase()
+      .trim();
   if (!phrase) return undefined;
   const candidates = [
     phrase,
@@ -1768,7 +1789,9 @@ function interpretChartAndPivot(
       ...(rank &&
       !isHistogram &&
       !/^(?:line|area|combo|waterfall)/i.test(String(chartType)) &&
-      !/\bpivot(?:\s*table)?\s+result\b|\bchart\s+(?:the\s+)?pivot\b/i.test(text)
+      !/\bpivot(?:\s*table)?\s+result\b|\bchart\s+(?:the\s+)?pivot\b/i.test(
+        text,
+      )
         ? { topN: rank.topN, ...(rank.lowest ? { lowest: true } : {}) }
         : {}),
       ...(isHistogram

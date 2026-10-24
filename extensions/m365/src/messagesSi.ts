@@ -6,6 +6,22 @@
 import { localizeAction } from "./messagesActions.js";
 
 const EXACT: Record<string, string> = {
+  "Power Pivot is not available in this add-in. Use a regular PivotTable or a formula report on a new sheet instead.":
+    "මෙම add-in එකේ Power Pivot ලබාගත නොහැක. ඒ වෙනුවට අලුත් පත්‍රිකාවක සාමාන්‍ය PivotTable එකක් හෝ සූත්‍ර වාර්තාවක් භාවිතා කරන්න.",
+  "The Excel Data Model is not available in this add-in. Use a regular PivotTable or a formula report with lookups across sheets instead.":
+    "මෙම add-in එකේ Excel Data Model ලබාගත නොහැක. ඒ වෙනුවට සාමාන්‍ය PivotTable එකක් හෝ පත්‍රිකා අතර lookup සහිත සූත්‍ර වාර්තාවක් භාවිතා කරන්න.",
+  "PivotTables on an OLAP or Data Model source are not available in this add-in. Use a regular PivotTable on a table, or a formula report, instead.":
+    "OLAP හෝ Data Model මූලාශ්‍රයක් මත PivotTable මෙම add-in එකේ ලබාගත නොහැක. ඒ වෙනුවට වගුවක් මත සාමාන්‍ය PivotTable එකක් හෝ සූත්‍ර වාර්තාවක් භාවිතා කරන්න.",
+  "Running VBA or COM automation is not available in this add-in. I can write the macro as text for you to review and run yourself.":
+    "මෙම add-in එකේ VBA හෝ COM automation ධාවනය කළ නොහැක. macro එක පෙළක් ලෙස ලියා දිය හැක; ඔබ එය පරීක්ෂා කර ඔබම ධාවනය කරන්න.",
+  "Solver is not available in this add-in. Use a what-if sensitivity table that tries each value and shows the results instead.":
+    "මෙම add-in එකේ Solver ලබාගත නොහැක. ඒ වෙනුවට එක් එක් අගය උත්සාහ කර ප්‍රතිඵල පෙන්වන what-if සංවේදිතා වගුවක් භාවිතා කරන්න.",
+  "Scenario Manager is not available in this add-in. Use a what-if sensitivity table with the scenarios side by side instead.":
+    "මෙම add-in එකේ Scenario Manager ලබාගත නොහැක. ඒ වෙනුවට අවස්ථා එකිනෙක අසල තබන what-if සංවේදිතා වගුවක් භාවිතා කරන්න.",
+  "Python is not run in this add-in, and nothing needs to be installed on your computer. Use a formula, a PivotTable or the built-in analysis instead.":
+    "මෙම add-in එකේ Python ධාවනය නොකරයි; ඔබේ පරිගණකයේ කිසිවක් ස්ථාපනය කිරීමද අවශ්‍ය නැත. ඒ වෙනුවට සූත්‍රයක්, PivotTable එකක් හෝ ඇතුළත විශ්ලේෂණය භාවිතා කරන්න.",
+  "This runs outside the workbook only after you approve it. Nothing has been run.":
+    "මෙය වැඩපොතෙන් පිටත ක්‍රියාත්මක වන්නේ ඔබ අනුමත කිරීමෙන් පසුවය. කිසිවක් ධාවනය කර නැත.",
   "Checking the result…": "ප්‍රතිඵලය පරීක්ෂා කරමින්…",
   "Checking safety…": "ආරක්ෂාව පරීක්ෂා කරමින්…",
   "Preview ready. Nothing changed yet.":

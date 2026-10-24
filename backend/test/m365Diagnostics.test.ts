@@ -91,6 +91,22 @@ test("M365 diagnostics names each failing gate, then reports ready once onboarde
       capabilities.excel.actionKinds,
     );
     assert.equal(capabilities.aiAnalysis, true);
+    // Every verdict comes from the shared registry, with its layer and host evidence.
+    assert.equal(
+      capabilities.advanced.forecast.status,
+      "available_with_fallback",
+    );
+    assert.equal(
+      capabilities.advanced.forecast.execution,
+      "deterministic_local",
+    );
+    assert.equal(capabilities.advanced.sentiment.status, "consent_required");
+    assert.equal(capabilities.advanced["python-sandbox"].status, "unsupported");
+    assert.equal(capabilities.advanced["power-pivot"].status, "unsupported");
+    assert.equal(
+      capabilities.advanced["power-pivot"].fallbackFeature,
+      "pivot-table",
+    );
     assert.doesNotMatch(
       JSON.stringify(capabilities),
       /owner@example\.com|key-a/,

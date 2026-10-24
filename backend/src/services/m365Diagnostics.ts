@@ -1,6 +1,11 @@
 import { dbGet } from "../db.js";
 import { validateM365Identity, type M365Identity } from "./m365Policy.js";
 import { getM365Tenant, requireM365TenantScope } from "./m365TenantRegistry.js";
+import {
+  baseCapabilityContext,
+  resolveAllCapabilities,
+  type AdvancedCapabilityReport,
+} from "./m365Capabilities.js";
 
 const M365_SCOPES = ["m365.excel.read", "m365.excel.write"] as const;
 
@@ -49,17 +54,8 @@ export interface M365Capabilities {
     writableActionKinds: readonly string[];
   };
   aiAnalysis: boolean;
-  advanced: Record<
-    string,
-    {
-      status:
-        | "available"
-        | "available_with_fallback"
-        | "unsupported"
-        | "consent_required";
-      reason?: string;
-    }
-  >;
+  /** Per-feature verdicts from the shared registry (m365Capabilities.ts). */
+  advanced: AdvancedCapabilityReport;
 }
 
 /** Enabled link from a validated Entra identity to a VynorAI account; email is never the key. */
@@ -197,132 +193,16 @@ export async function getM365Capabilities(
       writableActionKinds,
     },
     aiAnalysis: diagnostics.ready.read && (tenant?.aiEnabled ?? false),
-    advanced: {
-      forecast: {
-        status: diagnostics.ready.read
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      financial: {
-        status: diagnostics.ready.read ? "available" : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      anomaly: {
-        status: diagnostics.ready.read ? "available" : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      cohort: {
-        status: diagnostics.ready.read
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      sensitivity: {
-        status: diagnostics.ready.write ? "available" : "unsupported",
-        ...(diagnostics.ready.write
-          ? {}
-          : { reason: "Excel write access is unavailable." }),
-      },
-      "fuzzy-match": {
-        status: diagnostics.ready.read
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      split: {
-        status: diagnostics.ready.write ? "available" : "unsupported",
-        ...(diagnostics.ready.write
-          ? {}
-          : { reason: "Excel write access is unavailable." }),
-      },
-      "fraud-risk": {
-        status: diagnostics.ready.write
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.write
-          ? {}
-          : { reason: "Excel write access is unavailable." }),
-      },
-      "root-cause": {
-        status: diagnostics.ready.read
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      dashboard: {
-        status: diagnostics.ready.write ? "available" : "unsupported",
-        ...(diagnostics.ready.write
-          ? {}
-          : { reason: "Excel write access is unavailable." }),
-      },
-      slicer: {
-        status: diagnostics.ready.write
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.write
-          ? {}
-          : { reason: "Excel write access is unavailable." }),
-      },
-      sentiment: {
-        status:
-          diagnostics.ready.read && (tenant?.aiEnabled ?? false)
-            ? "consent_required"
-            : "unsupported",
-        ...(diagnostics.ready.read && (tenant?.aiEnabled ?? false)
-          ? {}
-          : { reason: "AI analysis is disabled or unavailable." }),
-      },
-      keywords: {
-        status:
-          diagnostics.ready.read && (tenant?.aiEnabled ?? false)
-            ? "consent_required"
-            : "unsupported",
-        ...(diagnostics.ready.read && (tenant?.aiEnabled ?? false)
-          ? {}
-          : { reason: "AI analysis is disabled or unavailable." }),
-      },
-      classification: {
-        status:
-          diagnostics.ready.read && (tenant?.aiEnabled ?? false)
-            ? "consent_required"
-            : "unsupported",
-        ...(diagnostics.ready.read && (tenant?.aiEnabled ?? false)
-          ? {}
-          : { reason: "AI analysis is disabled or unavailable." }),
-      },
-      clustering: {
-        status: diagnostics.ready.read
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      similarity: {
-        status: diagnostics.ready.read
-          ? "available_with_fallback"
-          : "unsupported",
-        ...(diagnostics.ready.read
-          ? {}
-          : { reason: "Excel read access is unavailable." }),
-      },
-      python: {
-        status: "unsupported",
-        reason: "Python execution is not enabled.",
-      },
-    },
+    advanced: resolveAllCapabilities(
+      baseCapabilityContext({
+        canRead: diagnostics.ready.read,
+        canWrite: diagnostics.ready.write,
+        aiEnabled: tenant?.aiEnabled ?? false,
+        // Host facts (platform, Excel API sets, companion) are added by the pane; the server only
+        // knows the account. Optional layers are reported honestly as not provisioned.
+        companion: "not_installed",
+        sandbox: "unavailable",
+      }),
+    ),
   };
 }

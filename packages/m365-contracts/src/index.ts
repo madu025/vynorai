@@ -59,29 +59,15 @@ export const M365_ANALYSIS_CONTRACT_VERSION =
 export const M365_ADVANCED_ANALYSIS_CONTRACT_VERSION =
   "2026-10-19.excel-advanced-analysis.v1" as const;
 
-export type AnalysisFeature =
-  | "forecast"
-  | "cohort"
-  | "sensitivity"
-  | "financial"
-  | "fuzzy-match"
-  | "split"
-  | "anomaly"
-  | "fraud-risk"
-  | "root-cause"
-  | "dashboard"
-  | "slicer"
-  | "sentiment"
-  | "keywords"
-  | "classification"
-  | "clustering"
-  | "similarity";
+import type { CapabilityFeature, CapabilityStatus } from "./capabilities.js";
 
-export type CapabilityStatus =
-  | "available"
-  | "available_with_fallback"
-  | "unsupported"
-  | "consent_required";
+export type {
+  AnalysisCapability,
+  CapabilityStatus,
+  ExecutionLayer as AnalysisExecutionLayer,
+} from "./capabilities.js";
+/** The feature keys are owned by capabilities.ts (one registry for the contract, backend, pane and agent). */
+export type AnalysisFeature = CapabilityFeature;
 
 export interface AnalysisEvidence {
   source: "excel_formula" | "deterministic_local" | "masked_ai" | "model";
@@ -157,3 +143,4 @@ export interface AnalysisRecommendation {
   confidence: number;
   reason: string;
 }
+export * from "./capabilities.js";

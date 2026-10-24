@@ -605,19 +605,27 @@ test("answer sources list the ranges read and formulas computed, restored and wi
       ],
     },
   ];
-  assert.deepEqual(answerSources(messages, (text) => mask.unmask(text)), [
-    { kind: "range", sheet: "Data", address: "A1:J50" },
-    { kind: "formula", text: `=COUNTIF('Data'!J2:J520126,"0112005016")` },
-    { kind: "range", sheet: "Data", address: "A1:J520126", note: "anomalies" },
-    { kind: "check", text: "formula_audit" },
-  ]);
+  assert.deepEqual(
+    answerSources(messages, (text) => mask.unmask(text)),
+    [
+      { kind: "range", sheet: "Data", address: "A1:J50" },
+      { kind: "formula", text: `=COUNTIF('Data'!J2:J520126,"0112005016")` },
+      {
+        kind: "range",
+        sheet: "Data",
+        address: "A1:J520126",
+        note: "anomalies",
+      },
+      { kind: "check", text: "formula_audit" },
+    ],
+  );
 });
 
 test("an empty answer is asked for once, and never reaches the person as nothing", async () => {
   let turns = 0;
   const asked: string[] = [];
   const run = await runAgent({
-    request: "add sparklines next to each total",
+    request: "describe the trend next to each total",
     host: host(),
     mask: new PersonalMask(),
     model: async (messages) => {
@@ -625,7 +633,10 @@ test("an empty answer is asked for once, and never reaches the person as nothing
       asked.push(String((messages.at(-1) as any).content ?? ""));
       return turns === 1
         ? { content: "", tool_calls: [] }
-        : { content: "- Sparklines are not available; a line chart is.", tool_calls: [] };
+        : {
+            content: "- Sparklines are not available; a line chart is.",
+            tool_calls: [],
+          };
     },
   });
   assert.equal(run.reply, "- Sparklines are not available; a line chart is.");
@@ -634,7 +645,7 @@ test("an empty answer is asked for once, and never reaches the person as nothing
 
   // A model that stays silent gets a plain, honest line instead of an empty pane.
   const silent = await runAgent({
-    request: "add sparklines next to each total",
+    request: "describe the trend next to each total",
     host: host(),
     mask: new PersonalMask(),
     model: async () => ({ content: "  ", tool_calls: [] }),
@@ -654,8 +665,17 @@ test("map_relationships reads each range and returns the join, never the rows", 
           address,
           values:
             sheet === "Orders"
-              ? [["CustomerID", "Amount"], ["C1", 5.5], ["C2", 7.5], ["C1", 2.5]]
-              : [["CustomerID", "Region"], ["C1", "N"], ["C2", "S"]],
+              ? [
+                  ["CustomerID", "Amount"],
+                  ["C1", 5.5],
+                  ["C2", 7.5],
+                  ["C1", 2.5],
+                ]
+              : [
+                  ["CustomerID", "Region"],
+                  ["C1", "N"],
+                  ["C2", "S"],
+                ],
         };
       },
     }),
@@ -694,20 +714,32 @@ test("map_relationships reads each range and returns the join, never the rows", 
 
 test("get_workbook adds the relationship hint only when several sheets hold data", async () => {
   const hinted = withRelationshipHint({
-    sheets: [{ name: "A", rows: 10 }, { name: "B", rows: 5 }],
+    sheets: [
+      { name: "A", rows: 10 },
+      { name: "B", rows: 5 },
+    ],
   }) as any;
   assert.match(hinted.hint, /map_relationships/);
   const single = withRelationshipHint({
-    sheets: [{ name: "A", rows: 10 }, { name: "B", rows: 0 }],
+    sheets: [
+      { name: "A", rows: 10 },
+      { name: "B", rows: 0 },
+    ],
   }) as any;
   assert.equal(single.hint, undefined);
 });
 
 test("a plain question stages nothing, but a request for a sheet still can", async () => {
-  assert.equal(isReadOnlyQuestion("are there any unusual Amount values?"), true);
+  assert.equal(
+    isReadOnlyQuestion("are there any unusual Amount values?"),
+    true,
+  );
   assert.equal(isReadOnlyQuestion("which rows have no customer"), true);
   assert.equal(isReadOnlyQuestion("can you add a Total column?"), false);
-  assert.equal(isReadOnlyQuestion("which items sold most? put it on a new sheet"), false);
+  assert.equal(
+    isReadOnlyQuestion("which items sold most? put it on a new sheet"),
+    false,
+  );
   assert.equal(isReadOnlyQuestion("sort by amount"), false);
 
   let turn = 0;

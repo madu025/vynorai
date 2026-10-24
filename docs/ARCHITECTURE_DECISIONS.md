@@ -18,7 +18,7 @@ anything about production environment values is marked "not verified".
   `pr_only`; staging/canary/production actions remain blocked unless the manifest is approved and
   advances through the ordered state machine.
 - Staging/canary promotion is evidence-driven: readiness and smoke must pass, canary exposure is
-  deterministically bounded to 1–5%, false-verified results always roll back, and inconclusive
+  deterministically bounded to 1â€“5%, false-verified results always roll back, and inconclusive
   samples never promote. The deployment gate does not itself hold provider or VPS credentials.
 - Non-dry cloud PR workers must mirror each manifest creation, approval and transition through the
   HTTPS server-control client. A missing client is a hard failure; local JSON is only an evidence
@@ -177,3 +177,9 @@ anything about production environment values is marked "not verified".
 - The database holds job metadata only (owner, state, counts, fingerprint, expiry) plus the bounded result of a finished job until it expires. The script and input table are never stored. Another tenant's or user's job is a 404.
 - Limits: one active job per user, five per tenant, 20 jobs per user per hour, 15 minute expiry. Audit events carry codes, states and counts only.
 - The worker's own isolation (separate host, ephemeral per-job container, no network, resource limits, encrypted short-lived artifacts) is a deployment requirement listed in `docs/PYTHON_SANDBOX_DEPLOYMENT.md`; it is not claimed by this code.
+
+## Windows companion boundary
+
+- Companion-only Excel features (VBA/COM, Solver, Scenario Manager, Power Pivot authoring, Sparklines authoring) are exposed only on Excel desktop on Windows with a verified, signed, tenant-allowed companion. Web, Mac and every other host never see them, so there is no false parity.
+- This repository ships the contract, the pure state function and a transport that always answers `not_installed`; the pane never probes localhost or any network address. The companion, its signing and its update channel are unbuilt (see `docs/WINDOWS_COMPANION_DESIGN.md`).
+- Discovery carries no workbook data; `rawWorkbookExport` must be `false` or the reply is rejected.

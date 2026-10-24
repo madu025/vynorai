@@ -146,3 +146,5 @@ export interface AnalysisRecommendation {
 export * from "./capabilities.js";
 
 export * from "./sandbox.js";
+
+export * from "./companion.js";

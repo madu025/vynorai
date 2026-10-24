@@ -6,7 +6,7 @@
  * large range (sort, a big format) works on a hidden backup copy of the sheet made first.
  */
 import { percentMisfit } from "./formatGuard.js";
-import { boxAddress, clearPosition, parseBox } from "./chartPlacement.js";
+import { resolveChartPosition } from "./chartPlacement.js";
 import {
   CALC_MAX_COLUMNS,
   CALC_MAX_ROWS,
@@ -798,29 +798,11 @@ export async function applyAgentChanges(
           if (change.title) chart.title.text = change.title;
           if (change.position) {
             // The formulas written before this chart have spilled by now: keep the chart off their cells.
-            let place = change.position;
-            const box = parseBox(place);
-            if (box) {
-              const used = sheet.getUsedRangeOrNullObject(true);
-              used.load(["isNullObject", "rowIndex", "rowCount"]);
-              await context.sync();
-              const last = used.isNullObject
-                ? 0
-                : Number(used.rowIndex) + Number(used.rowCount);
-              if (last > box.row) {
-                const below = sheet.getRangeByIndexes(
-                  box.row,
-                  box.column,
-                  Math.min(last - box.row, 5000),
-                  box.columns,
-                );
-                below.load("values");
-                await context.sync();
-                place = boxAddress(
-                  clearPosition(box, below.values as unknown[][]),
-                );
-              }
-            }
+            const place = await resolveChartPosition(
+              sheet,
+              () => context.sync(),
+              change.position,
+            );
             const [start, end = start] = place.split(":");
             chart.setPosition(start, end);
           }

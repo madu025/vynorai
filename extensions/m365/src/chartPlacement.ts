@@ -69,3 +69,96 @@ export function clearPosition(
   });
   return { ...box, row: box.row + last + 2 };
 }
+
+/** How far below its columns' data a chart may sit before it goes beside the data instead (rows). */
+export const MAX_ROWS_BELOW = 200;
+/** Largest requested box that is read cell by cell. */
+const MAX_BOX_CELLS = 20_000;
+
+export interface PlacementFacts {
+  /** The requested box already holds values. */
+  blocked: boolean;
+  /** 0-based row of the last filled cell in the box's columns from the box's first row down, -1 if none. */
+  lastFilledRow: number;
+  /** 0-based column just after the sheet's last used column. */
+  usedEndColumn: number;
+}
+
+/**
+ * Where a chart goes when it is asked for `box`: the same place when that is empty, else one blank
+ * row under the data of its columns, and for data longer than MAX_ROWS_BELOW rows (the chart would
+ * land thousands of rows down) one blank column to the right of everything the sheet uses.
+ */
+export function placeChart(box: Box, facts: PlacementFacts): Box {
+  if (!facts.blocked) return box;
+  const below = facts.lastFilledRow + 2;
+  if (below - box.row > MAX_ROWS_BELOW)
+    return { ...box, column: Math.max(box.column, facts.usedEndColumn + 1) };
+  return { ...box, row: Math.max(box.row, below) };
+}
+
+/** The slice of Excel's worksheet this needs; the real worksheet satisfies it. */
+export interface PlacementSheet {
+  getUsedRangeOrNullObject(valuesOnly?: boolean): any;
+  getRangeByIndexes(
+    row: number,
+    column: number,
+    rows: number,
+    columns: number,
+  ): any;
+}
+
+/**
+ * Reads only what is needed (the requested box, then the used extent of its columns, never the
+ * data itself) and returns the A1 position to use. `sync` is the context's sync.
+ */
+export async function resolveChartPosition(
+  sheet: PlacementSheet,
+  sync: () => Promise<void>,
+  position: string,
+): Promise<string> {
+  const box = parseBox(position);
+  if (!box || box.rows * box.columns > MAX_BOX_CELLS) return position;
+  const used = sheet.getUsedRangeOrNullObject(true);
+  used.load([
+    "isNullObject",
+    "rowIndex",
+    "rowCount",
+    "columnIndex",
+    "columnCount",
+  ]);
+  await sync();
+  if (used.isNullObject) return position;
+  const end = Number(used.rowIndex) + Number(used.rowCount);
+  if (end <= box.row) return position;
+  const own = sheet.getRangeByIndexes(
+    box.row,
+    box.column,
+    box.rows,
+    box.columns,
+  );
+  own.load("values");
+  await sync();
+  if (!(own.values as unknown[][]).some((row) => row.some(filled)))
+    return position;
+  // The used extent of the box's columns, below the box's first row: no cell values are read.
+  const columns = sheet.getRangeByIndexes(
+    box.row,
+    box.column,
+    end - box.row,
+    box.columns,
+  );
+  const extent = columns.getUsedRangeOrNullObject(true);
+  extent.load(["isNullObject", "rowIndex", "rowCount"]);
+  await sync();
+  const lastFilledRow = extent.isNullObject
+    ? box.row
+    : Number(extent.rowIndex) + Number(extent.rowCount) - 1;
+  return boxAddress(
+    placeChart(box, {
+      blocked: true,
+      lastFilledRow,
+      usedEndColumn: Number(used.columnIndex) + Number(used.columnCount),
+    }),
+  );
+}

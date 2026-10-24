@@ -5608,49 +5608,117 @@
     <script>
       (function () {
         var openingId = Date.now().toString(36);
-        function add(src, done, onFail, ordered) {
+        function loading() {
+          var status = document.getElementById("status-text");
+          return (
+            !window.__VYNOR_BOOTED__ &&
+            status &&
+            (status.textContent === "Loading…" ||
+              status.textContent === "Still loading… slow connection.")
+          );
+        }
+        function add(src, onload, onerror) {
           var script = document.createElement("script");
           script.src = src;
-          // Download in parallel, run in the order added (config before the bundle). A retry is not
-          // ordered: it must not wait behind a request that is stuck.
-          script.async = ordered === false;
-          script.onload = done;
-          script.onerror = onFail || done;
+          // Every copy waits for its own prerequisites before it is added, so none needs ordering.
+          script.async = true;
+          script.onload = onload;
+          script.onerror = onerror;
           document.body.appendChild(script);
         }
         // Cloudflare to the server sometimes stalls or answers 5xx for a file it has not cached yet.
-        // Ask for the bundle again (up to four tries); the bundle itself ignores a second copy.
+        // Load a small script until its value exists: a failed or stalled try is asked for again with a
+        // different query (up to `max` tries), then `finish(ok)` runs once.
+        function load(url, ready, max, finish) {
+          var tries = 0;
+          var finished = false;
+          function end(ok) {
+            if (finished) return;
+            finished = true;
+            finish(ok);
+          }
+          function again() {
+            if (finished) return;
+            if (ready()) return end(true);
+            if (tries >= max) return end(false);
+            attempt();
+          }
+          function attempt() {
+            var n = tries;
+            tries += 1;
+            add(
+              n ? url + (url.indexOf("?") < 0 ? "?" : "&") + "try=" + n : url,
+              function () {
+                if (ready()) end(true);
+                else window.setTimeout(again, 300);
+              },
+              function () {
+                window.setTimeout(again, 600 * tries);
+              },
+            );
+            window.setTimeout(again, 8000);
+          }
+          attempt();
+        }
+        // The bundle is requested again (up to four tries) when it stalls or fails; a second copy that
+        // arrives later stops in bootGuard, so the pane starts once.
         function loadBundle(suffix) {
           var tries = 0;
-          var loading = function () {
-            var status = document.getElementById("status-text");
-            return (
-              !window.__VYNOR_BOOTED__ &&
-              status &&
-              (status.textContent === "Loading…" ||
-                status.textContent === "Still loading… slow connection.")
-            );
-          };
-          var attempt = function () {
-            var url = "./dist/taskpane.bundle.js?v=" + suffix;
-            if (tries) url += "&try=" + tries;
+          var url = "./dist/taskpane.bundle.js?v=" + suffix;
+          function attempt() {
+            var n = tries;
             tries += 1;
-            add(url, function () {}, function () {
-              if (loading() && tries < 4) window.setTimeout(attempt, 800 * tries);
-            }, tries === 1);
+            add(
+              n ? url + "&try=" + n : url,
+              function () {},
+              function () {
+                if (loading() && tries < 4)
+                  window.setTimeout(attempt, 800 * tries);
+              },
+            );
             if (tries < 4)
               window.setTimeout(function () {
                 if (loading()) attempt();
               }, 12000);
-          };
+          }
           attempt();
         }
-        add("./build-id.js?open=" + openingId, function () {
-          var buildId = window.__VYNOR_M365_BUILD_ID__ || "dev";
-          var suffix = encodeURIComponent(buildId);
-          add("./runtime-config.js?v=" + suffix, function () {});
-          loadBundle(suffix);
-        });
+        function config() {
+          return window.__VYNORAI_M365_CONFIG__;
+        }
+        load(
+          "./build-id.js?open=" + openingId,
+          function () {
+            return Boolean(window.__VYNOR_M365_BUILD_ID__);
+          },
+          3,
+          function (found) {
+            // Without a build id the URL must still be unique for this opening: bundle URLs are cached.
+            var buildId = found
+              ? window.__VYNOR_M365_BUILD_ID__
+              : "open-" + openingId;
+            var suffix = encodeURIComponent(buildId);
+            var bundleUrl = "./dist/taskpane.bundle.js?v=" + suffix;
+            // Download the bundle while the (tiny) config loads; it runs only after the config exists.
+            try {
+              var hint = document.createElement("link");
+              hint.rel = "preload";
+              hint.as = "script";
+              hint.href = bundleUrl;
+              (document.head || document.body).appendChild(hint);
+            } catch (error) {}
+            load(
+              "./runtime-config.js?v=" + suffix,
+              function () {
+                return Boolean(config());
+              },
+              3,
+              function () {
+                loadBundle(suffix);
+              },
+            );
+          },
+        );
       })();
     </script>
   </body>

@@ -79,9 +79,9 @@ export function idleSuggestions(
     columns.map((c) => c.name),
   );
   const merged = [
-    ...out.slice(0, 3),
+    ...out.slice(0, MAX - 2),
     ...cross.slice(0, 1),
-    ...out.slice(3),
+    ...out.slice(MAX - 2),
     ...cross.slice(1),
   ];
   // The generic suggestion is always the last one.

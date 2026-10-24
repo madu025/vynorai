@@ -5088,6 +5088,7 @@ body[data-auth="in"] .brand-actions {
   grid-column: 3;
   gap: 4px;
   align-items: center;
+  position: relative;
 }
 body:not([data-auth="in"]) .brand-actions {
   display: none;
@@ -5126,6 +5127,49 @@ body[data-auth="in"] .header-action svg {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
+}
+body[data-auth="in"] .brand-actions > #menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: min(292px, calc(100vw - 32px));
+  margin: 0;
+  padding: 6px;
+}
+body[data-auth="in"] .brand-actions > #menu[hidden] {
+  display: none;
+}
+body[data-auth="in"] .brand-actions > #menu button {
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: var(--fs-sm);
+}
+/* History is a temporary header picker, never a persistent chat-control row. */
+body[data-auth="in"] .workspace > .chat-bar {
+  display: none !important;
+}
+body[data-auth="in"] .brand-actions > #chat-history-select {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 32px;
+  z-index: 31;
+  width: min(252px, calc(100vw - 64px));
+  min-height: 36px;
+  padding-inline: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+body[data-auth="in"] .header-action[hidden],
+body[data-auth="in"] .brand-actions > #chat-history-select[hidden] {
+  display: none;
+}
+body[data-auth="in"] #delete-chat.header-action svg {
+  width: 16px;
+  height: 16px;
 }
 /* During execution, keep the Agent visible as one honest, animated process line. Details and
    Stop remain available without pushing the preview/result below the fold. */

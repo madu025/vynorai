@@ -119,6 +119,12 @@ registerLanguagePack("ta", {
     new_chat: "+ புதிய அரட்டை",
     chat_history: "அரட்டை வரலாறு",
     delete_chat: "நீக்கு",
+    chat_actions: "அரட்டை செயல்கள்",
+    change_history: "மாற்ற வரலாறு",
+    workbook_log: "பணிப்புத்தக பதிவு",
+    change_history_note:
+      "பயன்படுத்திய மற்றும் செயல்தவிர்த்த VynorAI மாற்றங்கள் இந்தப் பணிப்புத்தகத்தில் பதிவாகும். முடிவு தாள்களால் மூலத் தரவு மாறாது.",
+    open_change_log: "VynorAI பதிவைத் திற",
     new_chat_option: "புதிய அரட்டை",
     new_chat_ready:
       "புதிய அரட்டை. தரவைத் தேர்ந்தெடுத்து உங்களுக்கு என்ன வேண்டும் என்று விவரிக்கவும்.",

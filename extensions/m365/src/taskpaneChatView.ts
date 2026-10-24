@@ -54,15 +54,15 @@ export function renderChatListView(options: ChatViewOptions): void {
   select.value = saved.some((entry) => entry.id === store.activeId)
     ? store.activeId
     : "";
-  select.hidden = saved.length === 0;
+  // The history picker is a transient header popover. It opens only from the history icon;
+  // keeping it hidden here prevents a second, full-width chat-control row from returning.
+  select.hidden = true;
   if (openHistory) {
     openHistory.disabled = saved.length === 0;
     openHistory.setAttribute("aria-disabled", String(saved.length === 0));
   }
-  // Chat controls are a top-level workspace affordance. Keep New chat visible even for a
-  // brand-new workbook; history and delete remain conditional on saved conversations.
-  document.querySelector<HTMLElement>("#chat-bar")?.removeAttribute("hidden");
-  document.querySelector<HTMLElement>("#new-chat")?.removeAttribute("hidden");
+  // New chat and history are header actions. The legacy row stays in the DOM for its stable
+  // controller ids, but it must never consume result/preview space.
   if (remove)
     remove.hidden = !saved.some((entry) => entry.id === store.activeId);
 }

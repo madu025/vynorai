@@ -260,6 +260,12 @@ const EXACT: Record<string, string> = {
     "மீளமைப்பு முடியவில்லை. கண்டறிதல் விவரங்களைப் பார்க்கவும்.",
   "Could not load that language. Check the connection and try again.":
     "அந்த மொழியை ஏற்ற முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்.",
+  "No VynorAI Log exists for this workbook yet.":
+    "இந்தப் பணிப்புத்தகத்திற்கு இன்னும் VynorAI பதிவு இல்லை.",
+  "Opened VynorAI Log. It records applied and undone changes.":
+    "VynorAI பதிவு திறக்கப்பட்டது. பயன்படுத்திய மற்றும் செயல்தவிர்த்த மாற்றங்கள் இதில் பதிவாகும்.",
+  "VynorAI Log could not be opened. Check workbook permissions.":
+    "VynorAI பதிவைத் திறக்க முடியவில்லை. பணிப்புத்தக அனுமதிகளைச் சரிபார்க்கவும்.",
   "Undo did not finish. Press Undo again.":
     "மீளமைப்பு முடியவில்லை. மீண்டும் மீளமை அழுத்தவும்.",
   "Forgot the saved choices for this workbook.":

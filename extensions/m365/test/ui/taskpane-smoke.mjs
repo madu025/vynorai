@@ -292,7 +292,8 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     mode: element.dataset.mode,
     statusTextVisible:
       (element.querySelector("#status-text"))?.getClientRects().length > 0,
-    menuVisible: (element.querySelector("#menu-toggle"))?.getClientRects().length > 0,
+    menuVisible:
+      document.querySelector("#menu-toggle")?.getClientRects().length > 0,
   }));
   assert.equal(
     idleStatus.mode,
@@ -380,19 +381,19 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "the pane has horizontal overflow",
   );
   assert.equal(
-    await page.$eval("#chat-bar", (element) => element.hidden),
-    false,
-    "a new signed-in pane should keep New chat controls visible",
+    await page.$eval("#chat-bar", (element) => element.getClientRects().length),
+    0,
+    "the legacy chat row must not consume a signed-in pane row",
   );
   assert.equal(
-    await page.$eval("#new-chat", (element) => element.hidden),
-    false,
-    "New chat must be available before the first request",
+    await page.$eval("#header-new-chat", (element) => element.getClientRects().length),
+    1,
+    "New chat must remain available from the header",
   );
   assert.equal(
     await page.$eval("#chat-history-select", (element) => element.hidden),
     true,
-    "empty workbooks should hide only the empty history picker",
+    "empty workbooks should keep the history picker closed",
   );
   assert.equal(
     await page.$eval(".brand-bar", (element) => element.getClientRects().length > 0),
@@ -435,21 +436,22 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   await page.waitForSelector("#menu:not([hidden])");
   const menuLayout = await page.evaluate(() => {
     const menu = document.querySelector("#menu")?.getBoundingClientRect();
-    const composer = document
-      .querySelector(".composer")
-      ?.getBoundingClientRect();
+    const actions = document.querySelector(".brand-actions");
     return {
       menuTop: menu?.top,
       menuBottom: menu?.bottom,
-      composerTop: composer?.top,
-      composerBottom: composer?.bottom,
-      correct: Boolean(menu && composer && menu.bottom <= composer.top),
+      correct: Boolean(
+        menu &&
+          actions?.contains(document.querySelector("#menu")) &&
+          menu.left >= 0 &&
+          menu.right <= window.innerWidth,
+      ),
     };
   });
   assert.equal(
     menuLayout.correct,
     true,
-    `the open menu must push the pane down instead of covering the prompt: ${JSON.stringify(menuLayout)}`,
+    `the open menu must stay anchored to the header and inside the pane: ${JSON.stringify(menuLayout)}`,
   );
   await assertReachable(page, "#language");
   assert.equal(

@@ -1861,6 +1861,9 @@ function startFreshChat() {
   persistConversation();
   chatStore = startNewChat(chatStore);
   delete document.body.dataset.chatHistoryOpen;
+  document
+    .querySelector<HTMLSelectElement>("#chat-history-select")
+    ?.setAttribute("hidden", "");
   showChat([]);
   setStatus(translate(language, "new_chat_ready", NEW_CHAT_READY_STATUS));
   instruction?.focus();
@@ -1877,12 +1880,27 @@ document
     persistConversation();
     chatStore = openChat(chatStore, id);
     showChat(activeMessages(chatStore));
+    delete document.body.dataset.chatHistoryOpen;
+    (event.target as HTMLSelectElement).setAttribute("hidden", "");
   });
 document
   .querySelector<HTMLButtonElement>("#open-chat-history")
   ?.addEventListener("click", () => {
+    const select = document.querySelector<HTMLSelectElement>(
+      "#chat-history-select",
+    );
+    if (!select || select.disabled) return;
     document.body.dataset.chatHistoryOpen = "true";
     workspaceNavigation.activate("work");
+    select.removeAttribute("hidden");
+    requestAnimationFrame(() => {
+      select.focus();
+      try {
+        select.showPicker?.();
+      } catch {
+        select.click();
+      }
+    });
   });
 document.querySelector("#delete-chat")?.addEventListener("click", async () => {
   if (!chatStore.activeId) return;
@@ -3482,6 +3500,25 @@ clearDiagnostics?.addEventListener("click", () => {
 function setupLayout() {
   const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle");
   const menu = document.querySelector<HTMLElement>("#menu");
+  const brandActions = document.querySelector<HTMLElement>(".brand-actions");
+  const chatHistorySelect = document.querySelector<HTMLSelectElement>(
+    "#chat-history-select",
+  );
+  const deleteChat = document.querySelector<HTMLButtonElement>("#delete-chat");
+  // The signed-in status strip intentionally collapses. Keep its settings trigger with the
+  // other header actions instead of leaving a detached ellipsis in an otherwise empty row.
+  if (menuToggle && menu && brandActions) {
+    menuToggle.classList.add("header-action");
+    brandActions.append(menuToggle, menu);
+  }
+  if (chatHistorySelect && brandActions) brandActions.append(chatHistorySelect);
+  if (deleteChat && brandActions) {
+    deleteChat.classList.add("header-action");
+    deleteChat.removeAttribute("data-i18n");
+    deleteChat.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M7 7l1 13h8l1-13" /></svg>';
+    brandActions.append(deleteChat);
+  }
   const advancedWorkbookOptions = document.querySelector<HTMLButtonElement>(
     "#advanced-workbook-options",
   );
@@ -3516,7 +3553,7 @@ function setupLayout() {
     if (
       menu &&
       !menu.hidden &&
-      !(event.target as HTMLElement).closest("#status")
+      !(event.target as HTMLElement).closest(".brand-actions, #status")
     )
       closeMenu();
   });

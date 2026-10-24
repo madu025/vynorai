@@ -251,6 +251,12 @@ const EXACT: Record<string, string> = {
     "ආපසු හැරවීම අවසන් නොවීය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
   "Could not load that language. Check the connection and try again.":
     "එම භාෂාව පූරණය කළ නොහැකි විය. සම්බන්ධතාව පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
+  "No VynorAI Log exists for this workbook yet.":
+    "මෙම වැඩපොතට තවම VynorAI ලොගයක් නැත.",
+  "Opened VynorAI Log. It records applied and undone changes.":
+    "VynorAI ලොගය විවෘත කළා. එහි යෙදූ සහ ආපසු හැරවූ වෙනස්කම් සටහන් වේ.",
+  "VynorAI Log could not be opened. Check workbook permissions.":
+    "VynorAI ලොගය විවෘත කළ නොහැකි විය. වැඩපොතේ අවසර පරීක්ෂා කරන්න.",
   "Undo did not finish. Press Undo again.":
     "ආපසු හැරවීම අවසන් නොවීය. නැවත ආපසු හරවන්න ඔබන්න.",
   "Forgot the saved choices for this workbook.":

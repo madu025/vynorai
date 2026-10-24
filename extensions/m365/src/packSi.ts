@@ -118,6 +118,12 @@ registerLanguagePack("si", {
     new_chat: "+ නව කතාබහ",
     chat_history: "කතාබහ ඉතිහාසය",
     delete_chat: "මකන්න",
+    chat_actions: "කතාබහ ක්‍රියා",
+    change_history: "වෙනස්කම් ඉතිහාසය",
+    workbook_log: "වැඩපොත් ලොගය",
+    change_history_note:
+      "යෙදූ සහ ආපසු හැරවූ VynorAI වෙනස්කම් මෙම වැඩපොතේ සටහන් වේ. ප්‍රතිඵල පත්‍ර මගින් මූල දත්ත වෙනස් නොවේ.",
+    open_change_log: "VynorAI ලොගය විවෘත කරන්න",
     new_chat_option: "නව කතාබහ",
     new_chat_ready: "නව කතාබහ. දත්ත තෝරා ඔබට අවශ්‍ය දේ විස්තර කරන්න.",
     delete_chat_confirm: "මෙම කතාබහ ඉතිහාසයෙන් මකන්නද? ඔබේ වැඩපොත වෙනස් නොවේ.",

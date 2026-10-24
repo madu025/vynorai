@@ -15,9 +15,9 @@
         color: CanvasText;
       }
     </style>
-    <link rel="stylesheet" href="pane.css?v=20261024.05" onerror="this.onerror=null;this.href='pane.css?v=20261024.05&amp;try=1'" />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261024.05" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261024.05" />
+    <link rel="stylesheet" href="pane.css?v=20261024.06" onerror="this.onerror=null;this.href='pane.css?v=20261024.06&amp;try=1'" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261024.06" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261024.06" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -30,7 +30,11 @@
           <strong>VynorAI Excel</strong>
           <span data-i18n="brand_tagline">Ask. Preview. Apply.</span>
         </div>
-        <div class="brand-actions" aria-label="Chat actions">
+        <div
+          class="brand-actions"
+          aria-label="Chat actions"
+          data-i18n-aria-label="chat_actions"
+        >
           <button
             id="header-new-chat"
             class="header-action new-chat-action"
@@ -151,7 +155,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261024.05</p>
+          <p class="menu-version" id="build-id">Build 20261024.06</p>
         </div>
       </div>
 
@@ -669,14 +673,21 @@
             aria-labelledby="operation-history-heading"
           >
             <div class="card-head">
-              <h2 id="operation-history-heading">Change history</h2>
-              <span class="badge">workbook log</span>
+              <h2 id="operation-history-heading" data-i18n="change_history">
+                Change history
+              </h2>
+              <span class="badge" data-i18n="workbook_log">workbook log</span>
             </div>
-            <p>
+            <p data-i18n="change_history_note">
               Applied and undone VynorAI changes are recorded in this workbook.
               Original source data is not changed by result-sheet operations.
             </p>
-            <button id="open-change-log" class="ghost" type="button">
+            <button
+              id="open-change-log"
+              class="ghost"
+              type="button"
+              data-i18n="open_change_log"
+            >
               Open VynorAI Log
             </button>
           </section>
@@ -1328,7 +1339,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261024.05";
+        var BUILD = "20261024.06";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");

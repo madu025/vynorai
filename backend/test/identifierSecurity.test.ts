@@ -172,6 +172,13 @@ test("SQL text is never built by interpolating request-controlled values", () =>
     'services/backgroundTasks.ts|ACTIVE_STATUSES.map(()=>"?").join(",")',
     "services/cloudDeliveryControl.ts|safeLimit",
     "services/m365Sandbox.ts|column",
+    // One-time carry-over: table and column names come from the reviewed table list or the new
+    // database's own catalog, and quoteIdent() rejects anything outside [a-z0-9_].
+    "services/pgCarryOver.ts|quoteIdent(table)",
+    "services/pgCarryOver.ts|quoteIdent(spec.table)",
+    "services/pgCarryOver.ts|quoteIdent(t.table)",
+    'services/pgCarryOver.ts|names.map(quoteIdent).join(",")',
+    "services/pgCarryOver.ts|placeholders",
     "services/retention.ts|table",
     "services/planManager.ts|sets",
     'services/planManager.ts|Object.keys(fields).join(",")',

@@ -15,9 +15,9 @@
         color: CanvasText;
       }
     </style>
-    <link rel="stylesheet" href="pane.css?v=20261024.07" onerror="this.onerror=null;this.href='pane.css?v=20261024.07&amp;try=1'" />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261024.07" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261024.07" />
+    <link rel="stylesheet" href="pane.css?v=20261024.08" onerror="this.onerror=null;this.href='pane.css?v=20261024.08&amp;try=1'" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261024.08" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261024.08" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -55,6 +55,19 @@
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.67M4 4v4.67h4.67M12 7v5l3.5 2" /></svg>
           </button>
+          <section
+            id="chat-history-popover"
+            class="chat-history-popover"
+            aria-label="Chat history"
+            data-i18n-aria-label="chat_history"
+            hidden
+          >
+            <header>
+              <strong data-i18n="chat_history">Chat history</strong>
+              <button id="close-chat-history" class="header-action" type="button" aria-label="Close chat history" title="Close">&#215;</button>
+            </header>
+            <div id="chat-history-list" role="list"></div>
+          </section>
         </div>
       </header>
       <div
@@ -155,7 +168,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261024.07</p>
+          <p class="menu-version" id="build-id">Build 20261024.08</p>
         </div>
       </div>
 
@@ -1339,7 +1352,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261024.07";
+        var BUILD = "20261024.08";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");

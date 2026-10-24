@@ -171,6 +171,7 @@ import {
   activeMessages,
   deleteChat,
   emptyChatStore,
+  historyList,
   openChat,
   parseChatStore,
   saveActiveChat,
@@ -669,6 +670,46 @@ function renderChatList() {
     contextSuggestionCount: contextSuggestionList?.children.length ?? 0,
     setStatus,
   });
+  renderChatHistoryPopover();
+}
+
+/** A bounded, responsive history panel: one row opens a chat, its adjacent × removes only it. */
+function renderChatHistoryPopover() {
+  const list = document.querySelector<HTMLElement>("#chat-history-list");
+  const trigger =
+    document.querySelector<HTMLButtonElement>("#open-chat-history");
+  if (!list) return;
+  const entries = historyList(chatStore);
+  if (trigger) {
+    trigger.disabled = entries.length === 0;
+    trigger.setAttribute("aria-disabled", String(entries.length === 0));
+  }
+  list.replaceChildren(
+    ...entries.map((entry) => {
+      const row = document.createElement("div");
+      row.className = "chat-history-entry";
+      row.setAttribute("role", "listitem");
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "chat-history-open";
+      open.dataset.chatId = entry.id;
+      open.title = entry.title || "Untitled chat";
+      const title = document.createElement("strong");
+      title.textContent = entry.title || "Untitled chat";
+      const date = document.createElement("small");
+      date.textContent = new Date(entry.updatedAt).toLocaleDateString();
+      open.append(title, date);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "chat-history-remove";
+      remove.dataset.deleteChatId = entry.id;
+      remove.setAttribute("aria-label", `Delete ${entry.title || "chat"}`);
+      remove.title = "Delete chat";
+      remove.textContent = "×";
+      row.append(open, remove);
+      return row;
+    }),
+  );
 }
 
 /** A different chat starts clean: no preview, no follow-up memory from the one before. */
@@ -1888,6 +1929,9 @@ function closeChatHistoryPicker() {
   document
     .querySelector<HTMLSelectElement>("#chat-history-select")
     ?.setAttribute("hidden", "");
+  document
+    .querySelector<HTMLElement>("#chat-history-popover")
+    ?.setAttribute("hidden", "");
 }
 document
   .querySelector<HTMLSelectElement>("#chat-history-select")
@@ -1904,21 +1948,56 @@ document
 document
   .querySelector<HTMLButtonElement>("#open-chat-history")
   ?.addEventListener("click", () => {
-    const select = document.querySelector<HTMLSelectElement>(
-      "#chat-history-select",
+    const popover = document.querySelector<HTMLElement>(
+      "#chat-history-popover",
     );
-    if (!select || select.disabled) return;
+    const entries = historyList(chatStore);
+    if (!popover || !entries.length) return;
     document.body.dataset.chatHistoryOpen = "true";
     workspaceNavigation.activate("work");
-    select.removeAttribute("hidden");
-    requestAnimationFrame(() => {
-      select.focus();
-      try {
-        select.showPicker?.();
-      } catch {
-        select.click();
-      }
-    });
+    renderChatHistoryPopover();
+    popover.removeAttribute("hidden");
+    document.querySelector<HTMLButtonElement>("#close-chat-history")?.focus();
+  });
+document
+  .querySelector<HTMLButtonElement>("#close-chat-history")
+  ?.addEventListener("click", () => {
+    closeChatHistoryPicker();
+    document.querySelector<HTMLButtonElement>("#open-chat-history")?.focus();
+  });
+document
+  .querySelector<HTMLElement>("#chat-history-list")
+  ?.addEventListener("click", async (event) => {
+    const target = event.target as HTMLElement;
+    const remove = target.closest<HTMLButtonElement>("[data-delete-chat-id]");
+    if (remove) {
+      const id = remove.dataset.deleteChatId;
+      if (!id) return;
+      const confirmed = await askInPane(
+        translate(
+          language,
+          "delete_chat_confirm",
+          "Delete this chat from the history? Your workbook is not changed.",
+        ),
+        translate(language, "delete_chat", "Delete"),
+        translate(language, "cancel", "Cancel"),
+      );
+      if (!confirmed) return;
+      const wasActive = chatStore.activeId === id;
+      chatStore = deleteChat(chatStore, id);
+      writeChatStore();
+      if (wasActive) showChat([]);
+      else renderChatList();
+      if (!historyList(chatStore).length) closeChatHistoryPicker();
+      return;
+    }
+    const open = target.closest<HTMLButtonElement>("[data-chat-id]");
+    const id = open?.dataset.chatId;
+    if (!id) return;
+    persistConversation();
+    chatStore = openChat(chatStore, id);
+    closeChatHistoryPicker();
+    showChat(activeMessages(chatStore));
   });
 document.querySelector("#delete-chat")?.addEventListener("click", async () => {
   if (!chatStore.activeId) return;

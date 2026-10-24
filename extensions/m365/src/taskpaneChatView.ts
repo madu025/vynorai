@@ -63,8 +63,9 @@ export function renderChatListView(options: ChatViewOptions): void {
   }
   // New chat and history are header actions. The legacy row stays in the DOM for its stable
   // controller ids, but it must never consume result/preview space.
-  if (remove)
-    remove.hidden = !saved.some((entry) => entry.id === store.activeId);
+  // Each row in the custom history panel owns its own delete affordance. Do not add a competing
+  // global delete icon to the header.
+  if (remove) remove.hidden = true;
 }
 
 /** Renders bounded conversation messages and the edit action for the latest user request. */

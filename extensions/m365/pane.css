@@ -4991,10 +4991,18 @@ body[data-auth="in"] .workspace > .context-chip::before {
 }
 /* A blank workbook starts directly with the prompt. History controls only appear once there is
    a real saved chat to choose, so they never consume the mock-style landing screen. */
-body[data-auth="in"][data-workspace-view="work"]
-  .workspace
-  > .chat-bar:has(#chat-history-select[hidden]) {
+body[data-auth="in"][data-workspace-view="work"] .workspace > .chat-bar {
   display: none;
+}
+/* Saved chats are available from the overflow-menu's Chat history entry. After a real
+   conversation begins, the same controls return in the work screen for fast switching. */
+body[data-auth="in"][data-workspace-view="work"]:has(#conversation-history > *)
+  .workspace
+  > .chat-bar,
+body[data-auth="in"][data-workspace-view="work"][data-chat-history-open="true"]
+  .workspace
+  > .chat-bar {
+  display: flex;
 }
 body[data-auth="in"][data-workspace-view="results"] .workspace > .chat-bar,
 body[data-auth="in"][data-workspace-view="share"] .workspace > .chat-bar {

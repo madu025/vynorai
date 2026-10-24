@@ -868,6 +868,8 @@ function signInDialogMessage(code: unknown): string {
 
 let lastStatus = "";
 const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
+const NEW_CHAT_READY_STATUS =
+  "New chat. Select your data and describe what you want.";
 /** The preview card's badge: "No changes yet" before Apply, "Applied" after it, so it never contradicts the status line. */
 function setPreviewBadge(applied: boolean) {
   const badge = document.querySelector<HTMLElement>(
@@ -906,7 +908,10 @@ function setStatus(message: string) {
     // overflow menu reachable, but collapse the status copy so it does not consume
     // the first-use workspace.
     statusContainer.dataset.mode =
-      accessToken && message === SIGNED_IN_IDLE_STATUS
+      accessToken &&
+      (message === SIGNED_IN_IDLE_STATUS ||
+        message ===
+          translate(language, "new_chat_ready", NEW_CHAT_READY_STATUS))
         ? "signed-in-idle"
         : "message";
   }
@@ -1855,14 +1860,9 @@ signOut?.addEventListener("click", signOutOfMicrosoft);
 function startFreshChat() {
   persistConversation();
   chatStore = startNewChat(chatStore);
+  delete document.body.dataset.chatHistoryOpen;
   showChat([]);
-  setStatus(
-    translate(
-      language,
-      "new_chat_ready",
-      "New chat. Select your data and describe what you want.",
-    ),
-  );
+  setStatus(translate(language, "new_chat_ready", NEW_CHAT_READY_STATUS));
   instruction?.focus();
 }
 
@@ -1877,6 +1877,12 @@ document
     persistConversation();
     chatStore = openChat(chatStore, id);
     showChat(activeMessages(chatStore));
+  });
+document
+  .querySelector<HTMLButtonElement>("#open-chat-history")
+  ?.addEventListener("click", () => {
+    document.body.dataset.chatHistoryOpen = "true";
+    workspaceNavigation.activate("work");
   });
 document.querySelector("#delete-chat")?.addEventListener("click", async () => {
   if (!chatStore.activeId) return;

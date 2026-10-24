@@ -1,3 +1,5 @@
+import "./packSi.js";
+import "./packTa.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createExcelPreviewPlan } from "./excel.js";

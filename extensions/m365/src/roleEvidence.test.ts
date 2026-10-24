@@ -1,20 +1,35 @@
+import "./packSi.js";
+import "./packTa.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { localizeMessage } from "./i18n.js";
 import { mapRelationships } from "./relationships.js";
-import { finalRoleStates, readBackLine, relationshipLine, reviewerLine } from "./roleEvidence.js";
+import {
+  finalRoleStates,
+  readBackLine,
+  relationshipLine,
+  reviewerLine,
+} from "./roleEvidence.js";
 
 test("the relationship line names both columns, the join and the problems", () => {
   const { links } = mapRelationships([
     {
       label: "Orders!A1:B5",
       headers: ["CustomerID", "Amount"],
-      rows: [["C1", 5.5], ["C2", 7.5], ["C1", 1.5], ["C9", 2.5]],
+      rows: [
+        ["C1", 5.5],
+        ["C2", 7.5],
+        ["C1", 1.5],
+        ["C9", 2.5],
+      ],
     },
     {
       label: "Customers!A1:B3",
       headers: ["CustomerID", "Region"],
-      rows: [["C1", "N"], ["C2", "S"]],
+      rows: [
+        ["C1", "N"],
+        ["C2", "S"],
+      ],
     },
   ]);
   assert.equal(
@@ -24,13 +39,22 @@ test("the relationship line names both columns, the join and the problems", () =
 });
 
 test("a reviewer line shows its calculations, or its first issue", () => {
-  assert.equal(reviewerLine({ ok: true, issues: [] }, 4), "checks passed · 4 calculation(s)");
+  assert.equal(
+    reviewerLine({ ok: true, issues: [] }, 4),
+    "checks passed · 4 calculation(s)",
+  );
   assert.equal(reviewerLine({ ok: true, issues: [] }, 0), "checks passed");
   assert.equal(
-    reviewerLine({ ok: false, issues: ["C12  sums C2:C10 but the data ends at C11", "b"] }, 2),
+    reviewerLine(
+      { ok: false, issues: ["C12  sums C2:C10 but the data ends at C11", "b"] },
+      2,
+    ),
     "2 issue(s): C12 sums C2:C10 but the data ends at C11",
   );
-  assert.equal(readBackLine([{ status: "applied" }, { status: "failed" }]), "2 change(s) read back, 1 failed");
+  assert.equal(
+    readBackLine([{ status: "applied" }, { status: "failed" }]),
+    "2 change(s) read back, 1 failed",
+  );
 });
 
 test("the evidence lines are Sinhala", () => {
@@ -39,14 +63,30 @@ test("the evidence lines are Sinhala", () => {
   assert.match(si("2 issue(s): range is short"), /ගැටලු 2/);
   assert.match(si("3 change(s) read back"), /නැවත කියවූ/);
   assert.match(
-    si("Orders.CustomerID → Customers.CustomerID · many-to-one · 1 unmatched rows · 0 duplicate keys"),
+    si(
+      "Orders.CustomerID → Customers.CustomerID · many-to-one · 1 unmatched rows · 0 duplicate keys",
+    ),
     /බොහෝ-එක.*පේළි 1ක්.*යතුරු 0ක්/,
   );
 });
 
 const joinLink = mapRelationships([
-  { label: "Orders!A1:B3", headers: ["CustomerID", "Amount"], rows: [["C1", 5.5], ["C2", 7.5]] },
-  { label: "Customers!A1:B3", headers: ["CustomerID", "Region"], rows: [["C1", "N"], ["C2", "S"]] },
+  {
+    label: "Orders!A1:B3",
+    headers: ["CustomerID", "Amount"],
+    rows: [
+      ["C1", 5.5],
+      ["C2", 7.5],
+    ],
+  },
+  {
+    label: "Customers!A1:B3",
+    headers: ["CustomerID", "Region"],
+    rows: [
+      ["C1", "N"],
+      ["C2", "S"],
+    ],
+  },
 ]).links[0];
 
 test("a change request with a join and two reviewers ends with every role done and evidence", () => {
@@ -61,8 +101,14 @@ test("a change request with a join and two reviewers ends with every role done a
     ],
     calculations: { accuracy: 2, safety: 0 },
   });
-  assert.deepEqual(states.map((s) => s.state), ["done", "done", "done", "done", "done"]);
-  assert.match(states[1].evidence, /^Orders\.CustomerID → Customers\.CustomerID/);
+  assert.deepEqual(
+    states.map((s) => s.state),
+    ["done", "done", "done", "done", "done"],
+  );
+  assert.match(
+    states[1].evidence,
+    /^Orders\.CustomerID → Customers\.CustomerID/,
+  );
   assert.equal(states[3].evidence, "checks passed · 2 calculation(s)");
   assert.equal(states[4].evidence, "1 issue(s): Sheet1 is overwritten");
 });
@@ -112,10 +158,18 @@ test("every final role line has Sinhala and Tamil wording", () => {
   const lines = new Set<string>();
   for (const input of [
     { planSteps: 0, changes: 0, reviewers: [] },
-    { planSteps: 2, mapperRan: true, changes: 1, reviewers: [{ focus: "accuracy", ok: true, issues: [] }] },
+    {
+      planSteps: 2,
+      mapperRan: true,
+      changes: 1,
+      reviewers: [{ focus: "accuracy", ok: true, issues: [] }],
+    },
     { planSteps: 0, changes: 1, reviewers: [] },
   ])
-    for (const s of finalRoleStates({ ...input, calculations: { accuracy: 0, safety: 0 } }))
+    for (const s of finalRoleStates({
+      ...input,
+      calculations: { accuracy: 0, safety: 0 },
+    }))
       lines.add(s.evidence);
   for (const line of lines)
     for (const lang of ["si", "ta"] as const)
@@ -128,18 +182,28 @@ test("the reviewer that really runs (focus coverage) fills the safety role", () 
     changes: 2,
     reviewers: [
       { focus: "accuracy", ok: true, issues: [] },
-      { focus: "coverage", ok: false, issues: ["The Summary sheet name is unclear"] },
+      {
+        focus: "coverage",
+        ok: false,
+        issues: ["The Summary sheet name is unclear"],
+      },
     ],
     calculations: { accuracy: 1, safety: 3 },
   });
   const safety = states.find((s) => s.role === "safety")!;
   assert.equal(safety.state, "done");
-  assert.equal(safety.evidence, "1 issue(s): The Summary sheet name is unclear");
+  assert.equal(
+    safety.evidence,
+    "1 issue(s): The Summary sheet name is unclear",
+  );
   const passed = finalRoleStates({
     planSteps: 0,
     changes: 1,
     reviewers: [{ focus: "coverage", ok: true, issues: [] }],
     calculations: { accuracy: 0, safety: 2 },
   });
-  assert.equal(passed.find((s) => s.role === "safety")!.evidence, "checks passed · 2 calculation(s)");
+  assert.equal(
+    passed.find((s) => s.role === "safety")!.evidence,
+    "checks passed · 2 calculation(s)",
+  );
 });

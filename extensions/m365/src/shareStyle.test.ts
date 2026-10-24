@@ -1,3 +1,5 @@
+import "./packSi.js";
+import "./packTa.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -40,15 +42,20 @@ test("a card with bars and a headline offers all three styles", () => {
 });
 
 test("a style the card cannot show is not offered, so no picture is empty", () => {
-  assert.deepEqual(availableShareStyles({ bars: [], headline: "" }), ["summary"]);
+  assert.deepEqual(availableShareStyles({ bars: [], headline: "" }), [
+    "summary",
+  ]);
   assert.deepEqual(
-    availableShareStyles({ bars: [{ name: "a", value: 1, text: "1" }], headline: "  " }),
+    availableShareStyles({
+      bars: [{ name: "a", value: 1, text: "1" }],
+      headline: "  ",
+    }),
     ["summary"],
   );
-  assert.deepEqual(availableShareStyles({ bars: [], headline: "Western brings 67%." }), [
-    "summary",
-    "insight",
-  ]);
+  assert.deepEqual(
+    availableShareStyles({ bars: [], headline: "Western brings 67%." }),
+    ["summary", "insight"],
+  );
   assert.deepEqual(availableShareStyles(pairs), ["summary"]);
 });
 
@@ -153,13 +160,18 @@ test("the picker shows only the styles the card can draw, marks the chosen one a
   clicks[0]({ target: buttons[1] });
   clicks[0]({ target: buttons[2] });
   assert.deepEqual(picked, ["chart"], "a hidden style cannot be picked");
-  assert.doesNotThrow(() => updateStylePicker(null, ["summary"], "summary", {}));
+  assert.doesNotThrow(() =>
+    updateStylePicker(null, ["summary"], "summary", {}),
+  );
   updateStylePicker(root, ["summary"], "summary", {});
   assert.equal(root.hidden, true, "a single style needs no picker");
 });
 
 test("the picker is in the page with a Sinhala and Tamil label for each style", () => {
-  const html = readFileSync(new URL("../taskpane.html", import.meta.url), "utf8");
+  const html =
+    readFileSync(new URL("../taskpane.html", import.meta.url), "utf8") +
+    "\n" +
+    readFileSync(new URL("../pane.css", import.meta.url), "utf8");
   for (const style of SHARE_STYLES) {
     assert.match(html, new RegExp(`data-style="${style}"`));
     const key = `share_style_${style}`;

@@ -42,6 +42,7 @@ import {
 import {
   LANGUAGE_NAMES,
   applyLanguage,
+  ensureLanguagePack,
   localizeMessage,
   responseLanguage,
   translate,
@@ -1968,8 +1969,10 @@ inspect?.addEventListener("click", async () => {
   if (dupFix) dupFix.hidden = true;
   cleanFirstRequest = "";
   const instructionText = normalizeInstruction(instruction?.value || "");
-  if (instructionText)
+  if (instructionText) {
     requestLanguage = responseLanguage(instruction?.value || "", language);
+    await ensureLanguagePack(requestLanguage).catch(() => undefined);
+  }
   if (instructionText && instructionText !== lastConversationRequest) {
     renderConversation("user", instruction?.value?.trim() || instructionText);
     lastConversationRequest = instructionText;
@@ -3244,6 +3247,9 @@ consentCancel?.addEventListener("click", () => {
 consentSend?.addEventListener("click", async () => {
   if (!config || !accessToken || !pendingSummary) return;
   let request;
+  await ensureLanguagePack(
+    responseLanguage(instruction?.value || "", language),
+  ).catch(() => undefined);
   try {
     request = createAnalysisRequest(
       pendingSummary,
@@ -4753,13 +4759,27 @@ aiFirstButton?.addEventListener("click", (event) => {
 });
 languageButton?.addEventListener("click", (event) => {
   event.stopPropagation();
-  language = nextLanguage(language);
-  saveLanguage(language);
+  const chosen = nextLanguage(language);
   // Choosing a language in the pane is the person's answer for everything that follows.
   requestLanguage = undefined;
-  refreshLanguage();
+  void switchLanguage(chosen);
 });
+/** Sinhala and Tamil are downloaded on first use; if that fails the pane stays in English. */
+async function switchLanguage(chosen: Language) {
+  try {
+    await ensureLanguagePack(chosen);
+  } catch {
+    chosen = "en";
+    setStatus(
+      "Could not load that language. Check the connection and try again.",
+    );
+  }
+  language = chosen;
+  saveLanguage(language);
+  refreshLanguage();
+}
 refreshLanguage();
+if (language !== "en") void switchLanguage(language);
 
 const selectionChip = document.querySelector<HTMLElement>("#selection-chip");
 const selectionText = document.querySelector<HTMLElement>("#selection-text");

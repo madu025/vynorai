@@ -74,7 +74,7 @@ export type ExcelActionStatus =
 
 import { plannedSheetName } from "./outcome.js";
 import { chartNeedsGrouping, groupChartRows } from "./chartGroups.js";
-import { responseLanguage, type Language } from "./i18n.js";
+import { ensureLanguagePack, responseLanguage, type Language } from "./i18n.js";
 import { workbookText } from "./workbookText.js";
 import {
   audienceWithPreference,
@@ -1190,6 +1190,7 @@ export async function applyApprovedExcelPlan(
     throw new Error("The previewed source fingerprint is required");
   const sheetLanguage =
     options.language ?? responseLanguage(options.request ?? "", "en");
+  await ensureLanguagePack(sheetLanguage).catch(() => undefined);
   const words = workbookText(sheetLanguage);
   return runtime.run(async (context) => {
     if (

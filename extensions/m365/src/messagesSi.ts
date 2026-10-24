@@ -249,6 +249,8 @@ const EXACT: Record<string, string> = {
     "ආපසු හැරවිණි. වැඩපොත කලින් පරිදිම ය.",
   "Undo did not finish. See Diagnostics.":
     "ආපසු හැරවීම අවසන් නොවීය. දෝෂ විමර්ශන තොරතුරු බලන්න.",
+  "Could not load that language. Check the connection and try again.":
+    "එම භාෂාව පූරණය කළ නොහැකි විය. සම්බන්ධතාව පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
   "Undo did not finish. Press Undo again.":
     "ආපසු හැරවීම අවසන් නොවීය. නැවත ආපසු හරවන්න ඔබන්න.",
   "Forgot the saved choices for this workbook.":

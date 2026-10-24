@@ -1,3 +1,5 @@
+import "./packSi.js";
+import "./packTa.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -26,7 +28,9 @@ import {
 
 const at = (y: number, m: number, d: number) => new Date(y, m - 1, d, 10);
 
-function memoryStorage(initial?: string): StorageLike & { value: string | null } {
+function memoryStorage(
+  initial?: string,
+): StorageLike & { value: string | null } {
   const store = { value: initial ?? null } as StorageLike & {
     value: string | null;
   };
@@ -71,7 +75,10 @@ test("a classic apply counts only when the source is unchanged and nothing faile
 });
 
 test("a result that already existed and an unknown kind add nothing", () => {
-  assert.deepEqual(classicApplyKinds([{ kind: "chart", status: "exists" }], true), []);
+  assert.deepEqual(
+    classicApplyKinds([{ kind: "chart", status: "exists" }], true),
+    [],
+  );
   assert.deepEqual(
     classicApplyKinds([{ kind: "future-kind", status: "created" }], true),
     [],
@@ -158,14 +165,21 @@ test("the streak counts days in a row, ends after a missed day and survives a mo
   // Today is not over yet: yesterday keeps the streak alive.
   assert.equal(streakDays(ledger, at(2026, 11, 2)), 3);
   assert.equal(streakDays(ledger, at(2026, 11, 3)), 0);
-  const gap = addToLedger(addToLedger(emptyLedger(), 2, at(2026, 3, 1)), 2, at(2026, 3, 3));
+  const gap = addToLedger(
+    addToLedger(emptyLedger(), 2, at(2026, 3, 1)),
+    2,
+    at(2026, 3, 3),
+  );
   assert.equal(streakDays(gap, at(2026, 3, 3)), 1);
   assert.equal(streakDays(emptyLedger(), at(2026, 3, 3)), 0);
 });
 
 test("the footer shows nothing until an apply was recorded, and says it is an estimate", () => {
   const now = at(2026, 10, 22);
-  assert.deepEqual(savedFooterText(emptyLedger(), now), { month: "", streak: "" });
+  assert.deepEqual(savedFooterText(emptyLedger(), now), {
+    month: "",
+    streak: "",
+  });
   const one = addToLedger(emptyLedger(), 25, now);
   assert.deepEqual(savedFooterText(one, now), {
     month: "About 25 min saved this month (estimate)",
@@ -218,22 +232,31 @@ test("a blocked or broken store never throws", () => {
   writeOnly.setItem = () => {
     throw new Error("quota");
   };
-  assert.deepEqual(recordVerifiedApply(writeOnly, ["chart"], now), emptyLedger());
+  assert.deepEqual(
+    recordVerifiedApply(writeOnly, ["chart"], now),
+    emptyLedger(),
+  );
 });
 
 test("a damaged ledger is ignored, bad keys and numbers are dropped", () => {
   assert.deepEqual(parseLedger("not json"), emptyLedger());
   assert.deepEqual(parseLedger(null), emptyLedger());
-  assert.deepEqual(parseLedger('{"v":2,"months":{"2026-10":5}}'), emptyLedger());
+  assert.deepEqual(
+    parseLedger('{"v":2,"months":{"2026-10":5}}'),
+    emptyLedger(),
+  );
   const mixed = parseLedger(
     JSON.stringify({
       v: 1,
-      months: { "2026-10": 7, "bad": 3, "2026-09": -4, "2026-08": "9" },
-      days: { "2026-10-22": 1, "yesterday": 1, "2026-10-21": 1e99 },
+      months: { "2026-10": 7, bad: 3, "2026-09": -4, "2026-08": "9" },
+      days: { "2026-10-22": 1, yesterday: 1, "2026-10-21": 1e99 },
     }),
   );
   assert.deepEqual(mixed.months, { "2026-10": 7 });
-  assert.deepEqual(Object.keys(mixed.days).sort(), ["2026-10-21", "2026-10-22"]);
+  assert.deepEqual(Object.keys(mixed.days).sort(), [
+    "2026-10-21",
+    "2026-10-22",
+  ]);
   assert.equal(mixed.days["2026-10-21"], 100_000);
 });
 
@@ -251,7 +274,10 @@ test("old days and months are dropped so the stored ledger stays small", () => {
 });
 
 test("both apply paths record only through the verified-kind helpers, and the footer is run-time text", () => {
-  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(
     source,
     /noteVerifiedApply\(\s*classicApplyKinds\(report\.results, report\.sourceUnchangedAfterApply\)/,
@@ -262,8 +288,12 @@ test("both apply paths record only through the verified-kind helpers, and the fo
   );
   // Nothing else writes the ledger.
   assert.equal(source.match(/recordVerifiedApply\(/g)?.length, 1);
-  const html = readFileSync(new URL("../taskpane.html", import.meta.url), "utf8");
-  const footer = /<p id="saved-footer"[^>]*>[\s\S]*?<\/p>/.exec(html)?.[0] ?? "";
+  const html =
+    readFileSync(new URL("../taskpane.html", import.meta.url), "utf8") +
+    "\n" +
+    readFileSync(new URL("../pane.css", import.meta.url), "utf8");
+  const footer =
+    /<p id="saved-footer"[^>]*>[\s\S]*?<\/p>/.exec(html)?.[0] ?? "";
   assert.match(footer, /hidden/);
   assert.doesNotMatch(
     footer,
@@ -273,7 +303,10 @@ test("both apply paths record only through the verified-kind helpers, and the fo
 });
 
 test("the footer sends nothing anywhere", () => {
-  const source = readFileSync(new URL("./timeSaved.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("./timeSaved.ts", import.meta.url),
+    "utf8",
+  );
   assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|sendBeacon|WebSocket/);
 });
 

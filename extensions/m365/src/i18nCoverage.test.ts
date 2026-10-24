@@ -1,9 +1,14 @@
+import "./packSi.js";
+import "./packTa.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { applyLanguage, translate } from "./i18n.js";
 
-const html = readFileSync(new URL("../taskpane.html", import.meta.url), "utf8");
+const html =
+  readFileSync(new URL("../taskpane.html", import.meta.url), "utf8") +
+  "\n" +
+  readFileSync(new URL("../pane.css", import.meta.url), "utf8");
 const body = html
   .slice(html.indexOf("<body"))
   .replace(/<script[\s\S]*?<\/script>/g, "")
@@ -33,7 +38,12 @@ const ALLOWED = new Set([
   "AED",
   "JPY",
 ]);
-const SET_BY_CODE = [/^AI reads every request:/, /^Agent \(preview\):/, /^Build /, /^Loading/];
+const SET_BY_CODE = [
+  /^AI reads every request:/,
+  /^Agent \(preview\):/,
+  /^Build /,
+  /^Loading/,
+];
 
 test("every visible word in the task pane has a Sinhala translation", () => {
   const missing: string[] = [];
@@ -73,12 +83,18 @@ test("switching the language does not leave an English default behind", () => {
 test("the pane's grids cannot be stretched past the pane by long unbroken text", () => {
   // A grid column of "auto" grows to the longest unbroken word (a formula, a long chat title),
   // which pushed the pane wider than the task pane and cut messages off on the right.
-  assert.match(html, /\.conversation \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(
+    html,
+    /\.conversation \{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
+  );
   assert.match(
     html,
     /#conversation-history \{[^}]*grid-template-columns: minmax\(0, 1fr\)/,
   );
-  assert.match(html, /#conversation-history > article \{[^}]*overflow-wrap: anywhere/);
+  assert.match(
+    html,
+    /#conversation-history > article \{[^}]*overflow-wrap: anywhere/,
+  );
   assert.match(html, /main \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
 });
 
@@ -98,7 +114,10 @@ test("the chat scrolls in its own area and the request box never covers it", () 
   const conversation = html.indexOf('class="conversation"');
   const agent = html.indexOf('id="agent-card"');
   assert.ok(area > 0 && composer > 0 && conversation > area && agent > area);
-  assert.ok(composer < area, "the request box must come before the scroll area, not inside it");
+  assert.ok(
+    composer < area,
+    "the request box must come before the scroll area, not inside it",
+  );
 });
 
 test("a chat message keeps its line breaks, so a reply can be a bullet list", () => {
@@ -107,24 +126,36 @@ test("a chat message keeps its line breaks, so a reply can be a bullet list", ()
 
 test("every status message the pane sets has a Sinhala wording", async () => {
   const { localizeMessage } = await import("./i18n.js");
-  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
   const missing = new Set<string>();
   // Every sentence passed to setStatus, including both sides of a ternary.
   for (const call of source.matchAll(/setStatus\(([^;]*?)\);/gs)) {
-    for (const match of call[1].matchAll(/"((?:[^"\\]|\\.)+)"|`((?:[^`\\]|\\.)+)`/g)) {
+    for (const match of call[1].matchAll(
+      /"((?:[^"\\]|\\.)+)"|`((?:[^`\\]|\\.)+)`/g,
+    )) {
       const text = (match[1] ?? match[2]).replace(/\$\{[^}]*\}/g, "1");
       // A fragment that ends in a space is joined to another sentence before it is shown.
-      if (!/[A-Za-z]+ [A-Za-z]+/.test(text) || text.length < 12 || text.endsWith(" ")) continue;
+      if (
+        !/[A-Za-z]+ [A-Za-z]+/.test(text) ||
+        text.length < 12 ||
+        text.endsWith(" ")
+      )
+        continue;
       if (localizeMessage("si", text) === text) missing.add(text);
     }
   }
   assert.deepEqual([...missing], []);
 });
 
-
 test("buttons wrap at spaces only, so a Sinhala label never breaks letter by letter", () => {
   assert.match(html, /\.apply-dock \{\s*flex-wrap: wrap;/);
-  assert.match(html, /\n\s*button \{\s*min-width: 0;\s*overflow-wrap: normal;\s*word-break: normal;/);
+  assert.match(
+    html,
+    /\n\s*button \{\s*min-width: 0;\s*overflow-wrap: normal;\s*word-break: normal;/,
+  );
 });
 
 test("an empty status strip is not drawn as a coloured bar", () => {
@@ -132,8 +163,13 @@ test("an empty status strip is not drawn as a coloured bar", () => {
 });
 
 test("a stored chat message keeps a whole reply, and a role name is not broken mid-word", () => {
-  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
-  const limit = Number(/const MAX_CONVERSATION_CHARS = (\d+);/.exec(source)?.[1]);
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
+  const limit = Number(
+    /const MAX_CONVERSATION_CHARS = (\d+);/.exec(source)?.[1],
+  );
   assert.ok(limit >= 1500, `chat message limit is ${limit}`);
   assert.match(
     html,
@@ -142,15 +178,27 @@ test("a stored chat message keeps a whole reply, and a role name is not broken m
 });
 
 test("the plan and the sources are drawn as cards and a long formula is collapsed", () => {
-  assert.match(html, /#agent-plan-steps li,\s*#agent-sources-list li \{[^}]*border: 1px solid/);
-  assert.match(html, /#agent-plan-steps li::before \{\s*content: counter\(plan-step\)/);
-  const view = readFileSync(new URL("./taskpaneAgentView.ts", import.meta.url), "utf8");
+  assert.match(
+    html,
+    /#agent-plan-steps li,\s*#agent-sources-list li \{[^}]*border: 1px solid/,
+  );
+  assert.match(
+    html,
+    /#agent-plan-steps li::before \{\s*content: counter\(plan-step\)/,
+  );
+  const view = readFileSync(
+    new URL("./taskpaneAgentView.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(view, /createElement\("details"\)/);
 });
 
 test("the noticed card is in the Work panel and its tiles are localized", () => {
   assert.match(html, /id="noticed"[\s\S]{0,200}data-workspace-panel="work"/);
-  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /localizeMessage\(language, tile\.label\)/);
 });
 
@@ -160,18 +208,47 @@ test("buttons, selects and text boxes never fall back to the browser's plain loo
   assert.match(html, /#share-paste,\s*#share-message \{[^}]*border: 1px solid/);
   // The run-mode select and the chart tweaks keep room for their words in a narrow pane.
   assert.match(html, /\.mode-control \{[^}]*flex: 1 1 120px/);
-  assert.match(html, /\.tweaks \{[^}]*repeat\(auto-fit, minmax\(118px, 1fr\)\)/);
+  assert.match(
+    html,
+    /\.tweaks \{[^}]*repeat\(auto-fit, minmax\(118px, 1fr\)\)/,
+  );
   // Secondary buttons use the shared "ghost" style.
-  for (const id of ["dup-fix-btn", "share-use-result", "share-use-selection", "share-copy-text", "email-ai-write", "prefs-holidays", "prefs-payroll"])
-    assert.match(html, new RegExp(`<button[^>]*id="${id}"[^>]*class="[^"]*ghost|<button[^>]*class="[^"]*ghost[^"]*"[^>]*id="${id}"`), id);
+  for (const id of [
+    "dup-fix-btn",
+    "share-use-result",
+    "share-use-selection",
+    "share-copy-text",
+    "email-ai-write",
+    "prefs-holidays",
+    "prefs-payroll",
+  ])
+    assert.match(
+      html,
+      new RegExp(
+        `<button[^>]*id="${id}"[^>]*class="[^"]*ghost|<button[^>]*class="[^"]*ghost[^"]*"[^>]*id="${id}"`,
+      ),
+      id,
+    );
 });
 
 test("agent role rows wrap the status under the name at 320px instead of squeezing it", () => {
-  assert.match(html, /\.agent-activity-list > div \{[^}]*display: flex[^}]*flex-wrap: wrap/);
-  assert.match(html, /\.agent-activity-list > div \.agent-role-status \{[^}]*flex: 1 1 120px[^}]*min-width: 120px/);
-  assert.match(html, /\.agent-activity-list > div strong \{[^}]*text-overflow: ellipsis/);
+  assert.match(
+    html,
+    /\.agent-activity-list > div \{[^}]*display: flex[^}]*flex-wrap: wrap/,
+  );
+  assert.match(
+    html,
+    /\.agent-activity-list > div \.agent-role-status \{[^}]*flex: 1 1 120px[^}]*min-width: 120px/,
+  );
+  assert.match(
+    html,
+    /\.agent-activity-list > div strong \{[^}]*text-overflow: ellipsis/,
+  );
   assert.match(html, /data-state="skipped"\] \.agent-role-status/);
-  const view = readFileSync(new URL("./taskpaneAgentView.ts", import.meta.url), "utf8");
+  const view = readFileSync(
+    new URL("./taskpaneAgentView.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(view, /table\.title = /);
   assert.match(view, /name\.title = /);
 });
@@ -183,21 +260,36 @@ test("the agent badge is a polite live region and every button has a name", () =
   for (const match of body.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)) {
     const [, attrs, inner] = match;
     const text = inner.replace(/<[^>]+>/g, "").trim();
-    if (!/aria-label=|data-i18n-aria-label=/.test(attrs) && !/[A-Za-z0-9]{2}/.test(text))
+    if (
+      !/aria-label=|data-i18n-aria-label=/.test(attrs) &&
+      !/[A-Za-z0-9]{2}/.test(text)
+    )
       unnamed.push(attrs.replace(/\s+/g, " ").slice(0, 80));
   }
   assert.deepEqual(unnamed, []);
 });
 
 test("result glyphs have a text alternative and the tiles show a keyboard focus outline", () => {
-  const source = readFileSync(new URL("./taskpane.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /glyph\.setAttribute\("aria-hidden", "true"\)/);
   assert.match(source, /word\.className = "sr-only"/);
   assert.match(html, /\.sr-only \{/);
   // Both tile kinds are real buttons (focusable, Enter and Space work) with a visible outline.
-  assert.match(source, /createElement\("button"\);\s+button\.type = "button";\s+button\.className = "noticed-tile"/);
-  assert.match(source, /createElement\("button"\);\s+button\.type = "button";\s+button\.className = "explore-chip"/);
-  assert.match(html, /\.noticed-tile:focus-visible,\s*\.explore-chip:focus-visible \{[^}]*outline: 3px solid/);
+  assert.match(
+    source,
+    /createElement\("button"\);\s+button\.type = "button";\s+button\.className = "noticed-tile"/,
+  );
+  assert.match(
+    source,
+    /createElement\("button"\);\s+button\.type = "button";\s+button\.className = "explore-chip"/,
+  );
+  assert.match(
+    html,
+    /\.noticed-tile:focus-visible,\s*\.explore-chip:focus-visible \{[^}]*outline: 3px solid/,
+  );
 });
 
 test("every aria-label in the page has a Sinhala and a Tamil string (a screen reader reads it)", () => {

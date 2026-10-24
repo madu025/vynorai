@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const html = readFileSync(new URL("../taskpane.html", import.meta.url), "utf8");
+const html = readFileSync(new URL("../pane.css", import.meta.url), "utf8");
 
 function tokens(block: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -69,6 +69,6 @@ for (const [name, theme] of [
 }
 
 test("disabled workspace tabs keep readable text instead of fading it", () => {
-  const fixes = html.slice(html.indexOf('<style id="polish-fixes-2">'));
+  const fixes = html.slice(html.indexOf("/* polish-fixes-2 */"));
   assert.match(fixes, /\.workspace-nav button:disabled\s*\{[^}]*opacity: 1/);
 });

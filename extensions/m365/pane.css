@@ -2147,8 +2147,31 @@ body[data-auth="in"] .workspace {
   .email-options {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+  /* At a usable Excel task-pane width, suggestions become the three visual next-action cards
+     from the product design. The narrow layout above remains a readable one-column list. */
+  .smart-suggestion-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+  .smart-suggestion,
+  .smart-suggestion-list[data-count="1"] .smart-suggestion {
+    min-height: 134px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    gap: 6px;
+    align-items: start;
+    padding: var(--sp-3);
+  }
+  .smart-suggestion::before,
+  .smart-suggestion-list[data-count="1"] .smart-suggestion::before {
+    grid-row: auto;
+  }
+  .smart-suggestion > *,
+  .smart-suggestion-list[data-count="1"] .smart-suggestion > * {
+    grid-column: auto;
+  }
   #result-gallery-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   }
 }
 @media (prefers-color-scheme: dark) {
@@ -2917,6 +2940,99 @@ body[data-auth="in"] .result-item-actions button {
   border-radius: var(--r-pill);
   font-size: var(--fs-sm);
 }
+/* Results Hub keeps one clear next action; secondary and destructive actions remain available
+   in an accessible disclosure without changing their existing button handlers. */
+body[data-auth="in"] .result-item-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+body[data-auth="in"] .result-item-actions {
+  align-items: center;
+}
+body[data-auth="in"] .result-primary-action {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+  font-weight: 700;
+}
+body[data-auth="in"] .result-primary-action:hover {
+  background: var(--brand-strong, var(--brand));
+}
+body[data-auth="in"] .result-more-actions {
+  position: relative;
+}
+body[data-auth="in"] .result-more-actions > summary {
+  min-height: 32px;
+  padding: 7px var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface-solid);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  list-style: none;
+}
+body[data-auth="in"] .result-more-actions > summary::-webkit-details-marker {
+  display: none;
+}
+body[data-auth="in"] .result-more-actions > summary::after {
+  margin-left: 6px;
+  color: var(--muted);
+  content: "⌄";
+}
+body[data-auth="in"] .result-more-actions[open] > summary::after {
+  content: "⌃";
+}
+body[data-auth="in"] .result-more-actions-list {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 5px);
+  left: 0;
+  display: grid;
+  min-width: 148px;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-solid);
+  box-shadow: 0 10px 24px rgb(24 39 75 / 16%);
+}
+body[data-auth="in"] .result-more-actions-list button {
+  width: 100%;
+  justify-content: flex-start;
+  background: var(--surface-solid);
+  text-align: left;
+}
+body[data-auth="in"] .result-more-actions-list button:hover:not(:disabled) {
+  border-color: var(--brand);
+  background: var(--tint);
+}
+body[data-auth="in"] .operation-history {
+  display: grid;
+  gap: var(--sp-2);
+}
+body[data-auth="in"] .operation-history[hidden] {
+  display: none;
+}
+body[data-auth="in"] .operation-history p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+body[data-auth="in"] .operation-history .ghost {
+  justify-self: start;
+  min-height: 34px;
+}
+@media (max-width: 360px) {
+  body[data-auth="in"] .result-more-actions-list {
+    right: 0;
+    left: auto;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   body[data-auth="in"] .agent-checked[data-state="working"] {
     animation: none;
@@ -2972,7 +3088,8 @@ body[data-auth="in"]
   #status-text {
   font-size: 11px;
 }
-/* layout: a column whose scroll area grows; the composer sits at the bottom */
+/* layout: request first, then the scrollable work surface. Keeping the composer above the
+   workspace matches the Excel task-pane flow and preserves it while results grow below. */
 body[data-auth="in"] .workspace {
   gap: 6px;
 }
@@ -3036,18 +3153,18 @@ body[data-auth="in"] .workspace {
   white-space: nowrap;
 }
 .workspace > #noticed {
+  order: 3;
+}
+.workspace > .composer {
   order: 2;
 }
 /* the room for the pinned bar belongs to the end of the scroll area, not to the workspace */
 .workspace > .scroll-area {
-  order: 3;
+  order: 4;
   padding-bottom: 12px;
   scroll-padding-bottom: 12px;
 }
 .workspace > #starter-suggestions {
-  order: 4;
-}
-.workspace > .composer {
   order: 5;
 }
 .workspace > .saved-footer {
@@ -4169,19 +4286,20 @@ body #status[data-mode="signed-in-idle"] .status-actions {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
-/* the menu is a popover over the page; it no longer pushes the chat down */
+/* The menu joins normal pane flow while open. A task-pane menu must never cover the request
+   box or leave an invisible click-blocking layer over it. */
 body #status[data-mode="signed-in-idle"]:has(#menu:not([hidden])) {
-  height: 0;
+  height: auto;
   min-height: 0;
-  padding: 0;
+  padding-top: 5px;
 }
 body #status[data-mode="signed-in-idle"]:has(#menu:not([hidden])) #menu {
-  position: absolute;
-  top: 6px;
-  right: 0;
+  position: relative;
+  top: auto;
+  right: auto;
   left: auto;
-  z-index: 30;
-  width: min(100%, 300px);
+  z-index: 1;
+  width: 100%;
   margin: 0;
 }
 body #menu {
@@ -4669,5 +4787,102 @@ body .apply-dock :focus-visible {
     content: "×";
     font-size: 20px;
     line-height: 1;
+  }
+}
+
+/* 9. Wide task panes use the polished three-card suggestion layout. Compact panes retain the
+   readable one-row cards above, so no action label is squeezed or clipped. */
+@container (min-width: 460px) {
+  .idle-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .idle-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    align-items: start;
+    min-height: 126px;
+  }
+  .idle-card .idle-icon {
+    grid-row: auto;
+  }
+  .smart-suggestion-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-2);
+  }
+  .smart-suggestion,
+  .smart-suggestion-list[data-count="1"] .smart-suggestion {
+    min-height: 134px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    gap: 6px;
+    align-items: start;
+    padding: var(--sp-3);
+  }
+  .smart-suggestion::before,
+  .smart-suggestion-list[data-count="1"] .smart-suggestion::before {
+    grid-row: auto;
+  }
+  .smart-suggestion > *,
+  .smart-suggestion-list[data-count="1"] .smart-suggestion > * {
+    grid-column: auto;
+  }
+  #result-gallery-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  }
+}
+
+@container (min-width: 640px) {
+  .idle-cards,
+  .smart-suggestion-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Preview Studio: these are existing safe re-plan controls. Grouping them visually makes it
+   obvious that they adjust only the preview; apply remains a separate approval action below. */
+body[data-auth="in"] #preview-tweaks {
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-muted);
+}
+body[data-auth="in"] #preview-tweaks .tweak {
+  min-width: 0;
+  padding: 6px 7px 7px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  border-radius: var(--r-sm);
+  background: var(--surface-solid);
+}
+body[data-auth="in"] #preview-tweaks .tweak > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body[data-auth="in"] #preview-tweaks .tweak:has(select:focus-visible) {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--tint);
+}
+body[data-auth="in"] #preview-tweaks .tweak-check {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  padding: 7px;
+}
+body[data-auth="in"] #preview-tweaks .tweak-check > span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+@container (min-width: 460px) and (max-width: 639px) {
+  body[data-auth="in"] #preview-tweaks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (min-width: 640px) {
+  body[data-auth="in"] #preview-tweaks {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

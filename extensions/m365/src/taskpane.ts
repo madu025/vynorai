@@ -243,7 +243,11 @@ import {
   isFormulaInspectionRequest,
   isFormulaRepairRequest,
 } from "./formulaInspector.js";
-import { changeLogRows, type ChangeLogEntry } from "./changeLog.js";
+import {
+  CHANGE_LOG_SHEET,
+  changeLogRows,
+  type ChangeLogEntry,
+} from "./changeLog.js";
 import {
   appendChangeLog,
   writeHolidaySheet,
@@ -4344,6 +4348,8 @@ async function replaceOlderResultSheets(keepSheet: string) {
 function renderResultGallery() {
   const gallery = document.querySelector<HTMLElement>("#result-gallery");
   const list = document.querySelector<HTMLElement>("#result-gallery-list");
+  const operationHistory =
+    document.querySelector<HTMLElement>("#operation-history");
   const verifiedBanner = document.querySelector<HTMLElement>(
     "#verified-result-banner",
   );
@@ -4353,6 +4359,7 @@ function renderResultGallery() {
     (result) => result.status === "created" || result.status === "exists",
   );
   gallery.hidden = visible.length === 0;
+  if (operationHistory) operationHistory.hidden = visible.length === 0;
   if (verifiedBanner) verifiedBanner.hidden = visible.length === 0;
   // The safety note is for the first preview; once a result exists the person has seen it.
   const safetySummary = document.querySelector<HTMLElement>(".safety-summary");
@@ -4368,10 +4375,14 @@ function renderResultGallery() {
     target.className = "verified-badge";
     target.textContent = `Verified · ${result.targetSheet}`;
     head.append(title, target);
+    const summary = document.createElement("p");
+    summary.className = "result-item-summary";
+    summary.textContent = `Saved on ${result.targetSheet}. Verified by reading the result back from Excel.`;
     const actions = document.createElement("div");
     actions.className = "result-item-actions";
     const show = document.createElement("button");
     show.type = "button";
+    show.className = "result-primary-action";
     show.textContent = translate(language, "show_result", "Show result");
     show.addEventListener("click", () => {
       void revealExcelResult(officeRuntime(), result.targetSheet);
@@ -4397,11 +4408,21 @@ function renderResultGallery() {
       evidenceList.appendChild(row);
     }
     evidence.append(evidenceSummary, evidenceList);
+    const more = document.createElement("details");
+    more.className = "result-more-actions";
+    const moreSummary = document.createElement("summary");
+    moreSummary.textContent = "More actions";
+    const moreActions = document.createElement("div");
+    moreActions.className = "result-more-actions-list";
     const share = document.createElement("button");
     share.type = "button";
     share.textContent = translate(language, "email_report", "Email report");
-    share.addEventListener("click", () => prepareEmailComposer());
-    actions.appendChild(share);
+    share.addEventListener("click", () => {
+      // Email the result that was selected in this card, rather than a stale active sheet.
+      lastRevealSheet = result.targetSheet;
+      prepareEmailComposer();
+    });
+    moreActions.appendChild(share);
     const refresh = document.createElement("button");
     refresh.type = "button";
     refresh.textContent = translate(language, "refresh_result", "Refresh");
@@ -4422,7 +4443,7 @@ function renderResultGallery() {
       instruction.focus();
       void inspect?.click();
     });
-    actions.appendChild(refresh);
+    moreActions.appendChild(refresh);
     if (result.status === "created") {
       const undo = document.createElement("button");
       undo.type = "button";
@@ -4476,7 +4497,7 @@ function renderResultGallery() {
           handleApiError("gallery:undo", error);
         }
       });
-      actions.appendChild(undo);
+      moreActions.appendChild(undo);
     }
     const replace = document.createElement("button");
     replace.type = "button";
@@ -4484,11 +4505,29 @@ function renderResultGallery() {
     replace.addEventListener("click", () => {
       void replaceOlderResultSheets(result.targetSheet);
     });
-    actions.appendChild(replace);
-    item.append(head, actions, evidence);
+    moreActions.appendChild(replace);
+    more.append(moreSummary, moreActions);
+    actions.appendChild(more);
+    item.append(head, summary, actions, evidence);
     list.appendChild(item);
   }
 }
+
+document
+  .querySelector<HTMLButtonElement>("#open-change-log")
+  ?.addEventListener("click", async () => {
+    const sheets = await listWorksheetNames(officeRuntime());
+    if (!sheets.includes(CHANGE_LOG_SHEET)) {
+      setStatus("No VynorAI Log exists for this workbook yet.");
+      return;
+    }
+    const shown = await revealExcelResult(officeRuntime(), CHANGE_LOG_SHEET);
+    setStatus(
+      shown
+        ? "Opened VynorAI Log. It records applied and undone changes."
+        : "VynorAI Log could not be opened. Check workbook permissions.",
+    );
+  });
 
 /** One checkbox per planned action; changing it re-plans with only the chosen steps. */
 function renderSteps(

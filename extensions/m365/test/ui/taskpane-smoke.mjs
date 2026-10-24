@@ -202,6 +202,13 @@ async function assertReachable(page, selector) {
       box.top + box.height / 2,
     );
     return {
+      top: box.top,
+      bottom: box.bottom,
+      width: box.width,
+      height: box.height,
+      display: getComputedStyle(element).display,
+      hiddenParent: Boolean(element.closest("[hidden]")),
+      workspaceView: document.body.dataset.workspaceView,
       visible:
         box.width > 0 &&
         box.height > 0 &&
@@ -213,7 +220,11 @@ async function assertReachable(page, selector) {
         top?.contains(element) === true,
     };
   });
-  assert.equal(result.visible, true, `${selector} is not visible in the pane`);
+  assert.equal(
+    result.visible,
+    true,
+    `${selector} is not visible in the pane: ${JSON.stringify(result)}`,
+  );
   assert.equal(
     result.unobscured,
     true,
@@ -425,9 +436,10 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   );
   await assertReachable(page, "#language");
   await page.click("#menu-toggle");
+  await page.waitForSelector("#menu[hidden]");
   for (const selector of [
     "#menu-toggle",
-    ".smart-suggestion",
+    ".idle-card",
     "#instruction",
     "#smart-run",
   ]) {
@@ -436,21 +448,21 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   await page.waitForSelector('#context-suggestion-list[data-count="3"]');
   if (viewport.width <= 360) {
     assert.equal(
-      await page.$eval("#context-suggestion-list", (element) => {
+      await page.$eval("#idle-cards", (element) => {
         const columns = getComputedStyle(element).gridTemplateColumns.trim();
         return columns.split(/\s+/).length === 1;
       }),
       true,
-      "compact panes must show contextual suggestions in one column",
+      "compact panes must show the real-column suggestions in one column",
     );
   } else if (viewport.width >= 500) {
     assert.equal(
-      await page.$eval("#context-suggestion-list", (element) => {
+      await page.$eval("#idle-cards", (element) => {
         const columns = getComputedStyle(element).gridTemplateColumns.trim();
-        return columns.split(/\s+/).length === 3;
+        return columns.split(/\s+/).length === 2;
       }),
       true,
-      "wide panes must auto-place the three contextual suggestions in one row",
+      "medium panes must use two readable suggestion cards per row",
     );
   }
   await page.$eval("#scroll-area", (area) => {
@@ -583,8 +595,9 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     const gallery = document.querySelector("#result-gallery");
     gallery.removeAttribute("hidden");
     document.querySelector("#verified-result-banner").removeAttribute("hidden");
+    document.querySelector("#operation-history").removeAttribute("hidden");
     document.querySelector("#result-gallery-list").innerHTML =
-      '<article class="result-item"><div class="result-item-head"><strong>Chart</strong><span class="verified-badge">Verified · Net Amount by Category</span></div><div class="result-item-actions"><button>Show result</button><button>Email report</button><button>Refresh</button><button>Undo</button></div><details class="result-evidence"><summary>Show evidence</summary><ul><li>Source: Orders!A1:K301</li><li>Result read back from Excel</li></ul></details></article>';
+      '<article class="result-item"><div class="result-item-head"><strong>Chart</strong><span class="verified-badge">Verified · Net Amount by Category</span></div><p class="result-item-summary">Saved on Net Amount by Category. Verified by reading the result back from Excel.</p><div class="result-item-actions"><button class="result-primary-action">Show result</button><details class="result-more-actions"><summary>More actions</summary><div class="result-more-actions-list"><button>Email report</button><button>Refresh</button><button>Undo</button><button>Replace older</button></div></details></div><details class="result-evidence"><summary>Show evidence</summary><ul><li>Source: Orders!A1:K301</li><li>Result read back from Excel</li></ul></details></article>';
     const analysis = document.querySelector("#ai-result");
     analysis.dataset.workspacePanel = "results";
     analysis.className = "analysis-card";
@@ -598,8 +611,13 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     gallery.scrollIntoView({ block: "start" });
   });
   await assertReachable(page, "#result-gallery");
+  await assertReachable(page, "#operation-history");
+  await assertReachable(page, "#open-change-log");
   await assertReachable(page, "#ai-result");
   await assertReachable(page, "#insights-card");
+  await page.click(".result-more-actions > summary");
+  await assertReachable(page, ".result-more-actions-list button:first-child");
+  await page.click(".result-more-actions > summary");
   await page.screenshot({
     path: path.join(artifactDirectory, `taskpane-${label}-results.png`),
     fullPage: true,

@@ -3257,6 +3257,262 @@
         }
       }
     </style>
+    <style id="share-polish">
+      /* Share tab: "Share as a picture" and the Share Centre read as two calm cards. Labels sit above the
+         fields, the main action is one full-width button, the attachment is a chip, and every colour
+         comes from the tokens (the old email fields used a fixed light background that broke dark mode). */
+      #share-card,
+      #email-card {
+        display: grid;
+        gap: var(--sp-3);
+        align-content: start;
+      }
+      #share-card .card-head,
+      #email-card .card-head {
+        margin: 0;
+      }
+      #share-card .card-head h2,
+      #email-card .card-head h2 {
+        font-size: var(--fs-lg);
+        letter-spacing: -0.01em;
+      }
+      #share-card-note,
+      #email-note,
+      #share-card .hint {
+        margin: 0;
+        color: var(--muted);
+        font-size: var(--fs-xs);
+        line-height: 1.45;
+      }
+      /* labels above fields, one look for both cards */
+      #share-card label,
+      .email-form label {
+        display: grid;
+        gap: var(--sp-1);
+        color: var(--muted);
+        font-size: var(--fs-xs);
+        font-weight: 600;
+      }
+      #share-card .email-options {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--sp-2);
+      }
+      #share-card .email-options .ghost {
+        min-height: 40px;
+        padding: 0 var(--sp-2);
+      }
+      /* fields: tokens only, 40px high, a clear focus ring */
+      .email-form input,
+      .email-form select,
+      .email-form textarea,
+      #share-paste,
+      #share-message {
+        width: 100%;
+        min-height: 40px;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        background: var(--surface-solid);
+        box-shadow: none;
+        color: var(--ink);
+        font-size: var(--fs-sm);
+      }
+      .email-form input::placeholder,
+      .email-form textarea::placeholder,
+      #share-paste::placeholder {
+        color: var(--muted);
+        opacity: 0.75;
+      }
+      .email-form input:focus,
+      .email-form select:focus,
+      .email-form textarea:focus,
+      #share-paste:focus,
+      #share-message:focus {
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px var(--tint);
+      }
+      .email-form textarea,
+      #share-paste {
+        min-height: 64px;
+        resize: vertical;
+      }
+      #share-message {
+        min-height: 120px;
+        line-height: 1.5;
+      }
+      .email-form {
+        gap: var(--sp-3);
+      }
+      /* two columns that never overflow; in the three-field row the long "Delivery format" takes the whole
+         first line (its option names are long) and Body format and Delivery share the next one */
+      .email-form .email-options {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--sp-2);
+      }
+      .email-form .email-options > label:first-child:nth-last-child(3) {
+        grid-column: 1 / -1;
+      }
+      .email-form select {
+        padding: 8px 20px 8px 8px;
+        font-size: 12px;
+        text-overflow: ellipsis;
+      }
+      /* style picker: three small tiles, the chosen one rings in the brand colour */
+      .share-styles {
+        gap: var(--sp-2);
+      }
+      .share-style {
+        gap: var(--sp-1);
+        padding: 4px 4px 6px;
+        border: 1.5px solid var(--line);
+        border-radius: var(--r-sm);
+        background: var(--surface-solid);
+        font-size: var(--fs-xs);
+        font-weight: 600;
+      }
+      .share-style img {
+        aspect-ratio: 4 / 3;
+        border-radius: 6px;
+        background: var(--surface-muted);
+      }
+      .share-style[aria-pressed="true"] {
+        border-color: var(--brand);
+        background: var(--tint);
+        box-shadow: 0 0 0 3px var(--tint);
+      }
+      #share-card-img {
+        max-height: 280px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        background: var(--surface-muted);
+        object-fit: contain;
+      }
+      #share-message-block {
+        display: grid;
+        gap: var(--sp-2);
+      }
+      #share-message-block[hidden] {
+        display: none;
+      }
+      /* buttons: one filled main action per card, the rest are quiet outlines, all easy to hit */
+      #share-main,
+      #email-send {
+        width: 100%;
+        min-height: 44px;
+        font-size: var(--fs-md);
+      }
+      #share-copy-text,
+      #email-ai-write {
+        width: 100%;
+        min-height: 40px;
+      }
+      #email-ai-write {
+        color: var(--brand);
+      }
+      /* attachment: a chip with an icon, the file name and its size under it */
+      .attachment-summary {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        column-gap: var(--sp-3);
+        row-gap: 1px;
+        align-items: center;
+        padding: var(--sp-2) var(--sp-3);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        background: var(--surface-muted);
+      }
+      .attachment-summary::before {
+        grid-row: 1 / span 2;
+        width: 34px;
+        height: 34px;
+        border-radius: var(--r-sm);
+        background: var(--tint)
+          url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563ff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5'/%3E%3C/svg%3E")
+          center / 18px no-repeat;
+        content: "";
+      }
+      .attachment-summary strong {
+        overflow: hidden;
+        font-size: var(--fs-sm);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .attachment-summary span {
+        grid-column: 2;
+        color: var(--muted);
+        font-size: var(--fs-xs);
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
+      /* the include-charts option: a real checkbox with its words beside it */
+      .email-check {
+        justify-content: flex-start;
+        gap: var(--sp-2) !important;
+        min-height: 32px;
+        color: var(--ink) !important;
+        font-size: var(--fs-sm) !important;
+        font-weight: 500 !important;
+      }
+      .email-form input[type="checkbox"],
+      .email-check input {
+        flex: 0 0 auto;
+        width: 18px;
+        min-height: 0;
+        height: 18px;
+        padding: 0;
+        accent-color: var(--brand);
+      }
+      /* status line: a dot and a sentence, coloured by what happened */
+      .delivery-status {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--sp-2);
+        padding: var(--sp-2) var(--sp-3);
+        border-radius: var(--r-sm);
+        background: var(--warning-bg);
+        color: var(--warning);
+        font-size: var(--fs-xs);
+        line-height: 1.4;
+      }
+      .delivery-status::before {
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        margin-top: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        content: "";
+      }
+      .delivery-status:empty {
+        display: none;
+      }
+      .delivery-status.sent {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+      .delivery-status.failed {
+        background: var(--danger-bg);
+        color: var(--danger);
+      }
+      #email-draft-fallback {
+        margin: 0;
+        font-size: var(--fs-sm);
+      }
+      #email-draft-fallback a {
+        color: var(--brand);
+        font-weight: 600;
+      }
+      /* the last card is never tight against the bottom of the scroll area */
+      body[data-workspace-view="share"] .workspace > .scroll-area {
+        padding-bottom: var(--sp-4);
+      }
+      @media (forced-colors: active) {
+        .share-style[aria-pressed="true"],
+        .attachment-summary {
+          border: 2px solid Highlight;
+        }
+      }
+    </style>
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"

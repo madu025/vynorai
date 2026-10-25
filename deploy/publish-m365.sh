@@ -9,6 +9,7 @@
 #   VYNOR_M365_DIR=/opt/vynor/extensions/m365 ./deploy/publish-m365.sh
 #
 # VYNOR_HOST / VYNOR_KEY follow deploy/release-extension.sh. Run it only after approval.
+# Keep this script LF-terminated: it is commonly invoked from Git Bash on Windows as well as Linux.
 # VYNOR_M365_URL (default https://vynor.lk/m365) is used for the cache warm-up after publishing.
 set -euo pipefail
 

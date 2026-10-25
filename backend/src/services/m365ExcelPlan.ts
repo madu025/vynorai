@@ -44,12 +44,20 @@ function sampledKindAllowed(
   if (kind === "unpivot") return true;
   // A dashboard is totals, a category table and a PivotTable, all calculated by Excel over every row.
   if (kind === "dashboard") return true;
-  // Describe and correlation are live formulas over whole columns; Excel computes them.
+  // Statistics reports are live formulas over whole columns; Excel computes them.
   if (kind === "statistics")
     return (
       specs?.statistics?.mode === "describe" ||
       specs?.statistics?.mode === "correlation" ||
+      specs?.statistics?.mode === "spearman" ||
+      specs?.statistics?.mode === "correlation-matrix" ||
       specs?.statistics?.mode === "forecast" ||
+      specs?.statistics?.mode === "advanced-forecast" ||
+      specs?.statistics?.mode === "financial" ||
+      specs?.statistics?.mode === "anomaly" ||
+      specs?.statistics?.mode === "regression" ||
+      specs?.statistics?.mode === "t-test" ||
+      specs?.statistics?.mode === "anova" ||
       specs?.statistics?.mode === "insights"
     );
   // A histogram is ten COUNTIFS bins over the whole column.
@@ -120,6 +128,16 @@ export type ExcelChartType =
   | "combo"
   | "histogram"
   | "waterfall";
+
+export type ExcelTableStyle =
+  | "TableStyleLight2"
+  | "TableStyleLight9"
+  | "TableStyleMedium2"
+  | "TableStyleMedium4"
+  | "TableStyleMedium9"
+  | "TableStyleDark2";
+
+export type ExcelChartLegendPosition = "Top" | "Bottom" | "Left" | "Right";
 export type ExcelAggregation = "sum" | "count" | "average" | "min" | "max";
 export type ExcelFilterOperator =
   | ">"
@@ -141,10 +159,15 @@ export interface ExcelColumnSpecs {
     mode:
       | "describe"
       | "correlation"
+      | "spearman"
+      | "correlation-matrix"
       | "forecast"
       | "advanced-forecast"
       | "financial"
       | "anomaly"
+      | "regression"
+      | "t-test"
+      | "anova"
       | "insights";
     columns?: number[];
     pair?: [number, number];
@@ -161,12 +184,16 @@ export interface ExcelColumnSpecs {
     usage?: { item: number; unit?: number };
   };
   quality?: { mode?: "data" | "formula" | "repair" };
+  table?: { showTotals?: boolean; style?: ExcelTableStyle };
   namedRange?: { source: number; name?: string };
   slicer?: { source: number };
   chart?: {
     category: number;
     value: number;
     chartType: ExcelChartType;
+    title?: string;
+    axisTitles?: { category?: string; value?: string };
+    legend?: { visible?: boolean; position?: ExcelChartLegendPosition };
     extraValues?: number[];
     showDataLabels?: boolean;
     pivotResult?: boolean;
@@ -191,6 +218,9 @@ export interface ExcelColumnSpecs {
   };
   format?: {
     freezeHeader?: boolean;
+    freezeColumns?: number;
+    freezeRows?: number;
+    showGridlines?: boolean;
     autofit?: boolean;
     numberFormats?: boolean;
     totalRow?: boolean;
@@ -293,10 +323,15 @@ export interface ExcelActionSpec {
     mode:
       | "describe"
       | "correlation"
+      | "spearman"
+      | "correlation-matrix"
       | "forecast"
       | "advanced-forecast"
       | "financial"
       | "anomaly"
+      | "regression"
+      | "t-test"
+      | "anova"
       | "insights";
     columns?: Array<{ column: string; index: number }>;
     pair?: Array<{ column: string; index: number }>;
@@ -315,6 +350,8 @@ export interface ExcelActionSpec {
     };
   };
   qualityMode?: "data" | "formula" | "repair";
+  tableShowTotals?: boolean;
+  tableStyle?: ExcelTableStyle;
   categoryColumn?: string;
   categoryIndex?: number;
   valueColumn?: string;
@@ -326,6 +363,11 @@ export interface ExcelActionSpec {
   slicerIndex?: number;
   slicerName?: string;
   chartType?: ExcelChartType;
+  chartTitle?: string;
+  chartCategoryAxisTitle?: string;
+  chartValueAxisTitle?: string;
+  chartLegendVisible?: boolean;
+  chartLegendPosition?: ExcelChartLegendPosition;
   showDataLabels?: boolean;
   pivotSourceName?: string;
   extraValueColumns?: string[];
@@ -358,6 +400,9 @@ export interface ExcelActionSpec {
   filterColumn?: string;
   filterIndex?: number;
   freezeHeader?: boolean;
+  freezeColumns?: number;
+  freezeRows?: number;
+  showGridlines?: boolean;
   autofit?: boolean;
   totalRow?: boolean;
   columnFormats?: Array<{ index: number; column: string; format: string }>;
@@ -483,6 +528,7 @@ function resolveColumnSpecs(
   view?: ExcelActionSpec;
   statistics?: ExcelActionSpec;
   quality?: ExcelActionSpec;
+  table?: ExcelActionSpec;
   dashboard?: ExcelActionSpec;
   namedRange?: ExcelActionSpec;
   slicer?: ExcelActionSpec;
@@ -521,6 +567,7 @@ function resolveColumnSpecs(
     view?: ExcelActionSpec;
     statistics?: ExcelActionSpec;
     quality?: ExcelActionSpec;
+    table?: ExcelActionSpec;
     dashboard?: ExcelActionSpec;
     namedRange?: ExcelActionSpec;
     slicer?: ExcelActionSpec;
@@ -534,6 +581,33 @@ function resolveColumnSpecs(
     if (mode !== "data" && mode !== "formula" && mode !== "repair")
       fail("EXCEL_SPEC_INVALID", "Choose a valid quality report mode.");
     resolved.quality = { qualityMode: mode };
+  }
+  if (specs.table) {
+    if (!requested.has("table"))
+      fail("EXCEL_SPEC_UNUSED", "Table options need a table action.");
+    const allowedTableStyles = [
+      "TableStyleLight2",
+      "TableStyleLight9",
+      "TableStyleMedium2",
+      "TableStyleMedium4",
+      "TableStyleMedium9",
+      "TableStyleDark2",
+    ] as const;
+    if (
+      specs.table.style !== undefined &&
+      !allowedTableStyles.includes(
+        specs.table.style as (typeof allowedTableStyles)[number],
+      )
+    )
+      fail("EXCEL_SPEC_INVALID", "Choose a supported Excel table style.");
+    resolved.table = {
+      ...(specs.table.showTotals !== undefined
+        ? { tableShowTotals: specs.table.showTotals }
+        : {}),
+      ...(specs.table.style !== undefined
+        ? { tableStyle: specs.table.style }
+        : {}),
+    };
   }
   if (requested.has("dashboard") && !specs.dashboard)
     fail("EXCEL_SPEC_INVALID", "A dashboard needs explicit column choices.");
@@ -658,6 +732,25 @@ function resolveColumnSpecs(
           })
         : [];
     const { aggregation: chartAggregation, topN: chartTopN } = specs.chart;
+    const chartTitle = specs.chart.title?.trim();
+    if (chartTitle !== undefined && (!chartTitle || chartTitle.length > 80))
+      fail(
+        "EXCEL_SPEC_INVALID",
+        "A chart title must contain 1 to 80 characters.",
+      );
+    const axisTitles = specs.chart.axisTitles;
+    for (const title of [axisTitles?.category, axisTitles?.value])
+      if (title !== undefined && (!title.trim() || title.trim().length > 80))
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "A chart axis title must contain 1 to 80 characters.",
+        );
+    const legendPosition = specs.chart.legend?.position;
+    if (
+      legendPosition !== undefined &&
+      !["Top", "Bottom", "Left", "Right"].includes(legendPosition)
+    )
+      fail("EXCEL_SPEC_INVALID", "Choose a supported chart legend position.");
     if (
       chartAggregation !== undefined &&
       !["sum", "count", "average", "min", "max"].includes(chartAggregation)
@@ -704,6 +797,17 @@ function resolveColumnSpecs(
       valueColumn: headers[value],
       valueIndex: value,
       chartType,
+      ...(chartTitle ? { chartTitle } : {}),
+      ...(axisTitles?.category?.trim()
+        ? { chartCategoryAxisTitle: axisTitles.category.trim() }
+        : {}),
+      ...(axisTitles?.value?.trim()
+        ? { chartValueAxisTitle: axisTitles.value.trim() }
+        : {}),
+      ...(specs.chart.legend?.visible !== undefined
+        ? { chartLegendVisible: specs.chart.legend.visible }
+        : {}),
+      ...(legendPosition ? { chartLegendPosition: legendPosition } : {}),
       ...(specs.chart.showDataLabels ? { showDataLabels: true } : {}),
       ...(!chartGrouping && chartAggregation && chartAggregation !== "sum"
         ? { aggregation: chartAggregation }
@@ -1703,6 +1807,30 @@ function resolveColumnSpecs(
     }
     resolved.format = {
       freezeHeader: options.freezeHeader !== false,
+      ...(options.freezeColumns !== undefined &&
+      (!Number.isInteger(options.freezeColumns) ||
+        options.freezeColumns < 1 ||
+        options.freezeColumns > headers.length)
+        ? fail(
+            "EXCEL_SPEC_INVALID",
+            `Freeze columns must be between 1 and ${headers.length}.`,
+          )
+        : {}),
+      ...(options.freezeColumns !== undefined
+        ? { freezeColumns: options.freezeColumns }
+        : {}),
+      ...(options.freezeRows !== undefined &&
+      (!Number.isInteger(options.freezeRows) ||
+        options.freezeRows < 1 ||
+        options.freezeRows > 100)
+        ? fail("EXCEL_SPEC_INVALID", "Freeze rows must be between 1 and 100.")
+        : {}),
+      ...(options.freezeRows !== undefined
+        ? { freezeRows: options.freezeRows }
+        : {}),
+      ...(options.showGridlines !== undefined
+        ? { showGridlines: options.showGridlines }
+        : {}),
       autofit: options.autofit !== false,
       totalRow: options.totalRow === true,
       columnFormats,
@@ -1723,10 +1851,15 @@ function resolveColumnSpecs(
       ![
         "describe",
         "correlation",
+        "spearman",
+        "correlation-matrix",
         "forecast",
         "advanced-forecast",
         "financial",
         "anomaly",
+        "regression",
+        "t-test",
+        "anova",
         "insights",
       ].includes(stats.mode)
     )
@@ -1762,7 +1895,7 @@ function resolveColumnSpecs(
       if (columns.length > 8)
         fail("EXCEL_SPEC_INVALID", "Choose at most 8 columns.");
       out.statistics!.columns = columns.map(named);
-    } else if (stats.mode === "correlation") {
+    } else if (stats.mode === "correlation" || stats.mode === "spearman") {
       const pair = stats.pair ?? [];
       if (pair.length !== 2 || pair[0] === pair[1])
         fail("EXCEL_SPEC_INVALID", "Choose two different numeric columns.");
@@ -1797,6 +1930,35 @@ function resolveColumnSpecs(
       out.statistics!.columns = columns.map(named);
     } else if (stats.mode === "anomaly") {
       out.statistics!.value = named(checkNumeric(stats.value));
+    } else if (stats.mode === "regression" || stats.mode === "t-test") {
+      const pair = stats.pair ?? [];
+      if (pair.length !== 2 || pair[0] === pair[1])
+        fail(
+          "EXCEL_SPEC_INVALID",
+          stats.mode === "regression"
+            ? "Regression needs two different numeric columns."
+            : "A paired t-test needs two different numeric columns.",
+        );
+      out.statistics!.pair = pair.map(checkNumeric).map(named);
+    } else if (stats.mode === "correlation-matrix") {
+      const columns = (stats.columns ?? []).map(checkNumeric);
+      if (columns.length < 2 || columns.length > 8)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "A correlation matrix needs 2 to 8 numeric columns.",
+        );
+      if (new Set(columns).size !== columns.length)
+        fail(
+          "EXCEL_SPEC_INVALID",
+          "Correlation matrix columns must be different.",
+        );
+      out.statistics!.columns = columns.map(named);
+    } else if (stats.mode === "anova") {
+      const value = checkNumeric(stats.value);
+      if (!inRange(stats.category) || stats.category === value)
+        fail("EXCEL_SPEC_INVALID", "ANOVA needs a different category column.");
+      out.statistics!.value = named(value);
+      out.statistics!.category = named(stats.category as number);
     } else {
       const value = checkNumeric(stats.value);
       const checkOptional = (
@@ -2162,6 +2324,7 @@ export function createServerExcelPreviewPlan(
   requestedActions: string[],
   chunkRows = 500,
   specs?: ExcelColumnSpecs,
+  options?: { resultSheetPrefix?: string },
 ): any {
   if (!Number.isInteger(chunkRows) || chunkRows < 1 || chunkRows > 5000)
     throw new Error("chunkRows must be an integer between 1 and 5000");
@@ -2205,6 +2368,56 @@ export function createServerExcelPreviewPlan(
     ...(sample ? { sample } : {}),
   };
   const baseName = excelSafeBaseName(input.worksheetName);
+  const requestedPrefix = options?.resultSheetPrefix?.trim() ?? "";
+  if (
+    requestedPrefix &&
+    !/^[A-Za-z][A-Za-z0-9 _-]{0,11}$/.test(requestedPrefix)
+  )
+    throw new InvalidExcelRangeError(
+      "EXCEL_SPEC_INVALID",
+      "The result-sheet prefix must start with a letter and contain at most 12 safe characters.",
+    );
+  const prefix = requestedPrefix ? `${requestedPrefix}_` : "";
+  const outputName = (suffix: string) => {
+    const tag = `_Vynor_${suffix}`;
+    const room = Math.max(1, 31 - prefix.length - tag.length);
+    return `${prefix}${baseName.slice(0, room)}${tag}`;
+  };
+  const resultSheet = outputName("Result");
+  const targetFor = (kind: string) =>
+    kind === "clean"
+      ? outputName("Clean")
+      : kind === "add-column"
+        ? outputName("Calc")
+        : kind === "lookup-columns"
+          ? outputName("Lookup")
+          : kind === "split-column"
+            ? outputName("Split")
+            : kind === "unpivot"
+              ? outputName("Unpivot")
+              : kind === "format"
+                ? outputName("Format")
+                : kind === "quality"
+                  ? outputName("Report")
+                  : kind === "summary"
+                    ? outputName("Totals")
+                    : kind === "view"
+                      ? outputName("View")
+                      : kind === "statistics"
+                        ? outputName("Stats")
+                        : kind === "named-range"
+                          ? outputName("Names")
+                          : kind === "slicer"
+                            ? outputName("Slicer")
+                            : kind === "dashboard"
+                              ? outputName("Dashboard")
+                              : kind === "export-csv"
+                                ? outputName("CSV")
+                                : kind === "export-pdf"
+                                  ? requested.has("dashboard")
+                                    ? outputName("Dashboard")
+                                    : outputName("PDF")
+                                  : resultSheet;
   const requested = new Set(requestedActions);
   if (
     sample &&
@@ -2248,40 +2461,7 @@ export function createServerExcelPreviewPlan(
         : kind === "slicer" && resolved.slicer
           ? (resolved.slicer.slicerName ?? `${baseName}_Vynor_slicer`)
           : `${baseName}_Vynor_${kind.replace("-", "_")}`,
-    targetSheet:
-      kind === "clean"
-        ? `${baseName}_Vynor_Clean`
-        : kind === "add-column"
-          ? `${baseName}_Vynor_Calc`
-          : kind === "lookup-columns"
-            ? `${baseName}_Vynor_Lookup`
-            : kind === "split-column"
-              ? `${baseName}_Vynor_Split`
-              : kind === "unpivot"
-                ? `${baseName}_Vynor_Unpivot`
-                : kind === "format"
-                  ? `${baseName}_Vynor_Format`
-                  : kind === "quality"
-                    ? `${baseName}_Vynor_Report`
-                    : kind === "summary"
-                      ? `${baseName}_Vynor_Totals`
-                      : kind === "view"
-                        ? `${baseName}_Vynor_View`
-                        : kind === "statistics"
-                          ? `${baseName}_Vynor_Stats`
-                          : kind === "named-range"
-                            ? `${baseName}_Vynor_Names`
-                            : kind === "slicer"
-                              ? `${baseName}_Vynor_Slicer`
-                              : kind === "dashboard"
-                                ? `${baseName}_Vynor_Dashboard`
-                                : kind === "export-csv"
-                                  ? `${baseName}_Vynor_CSV`
-                                  : kind === "export-pdf"
-                                    ? requested.has("dashboard")
-                                      ? `${baseName}_Vynor_Dashboard`
-                                      : `${baseName}_Vynor_PDF`
-                                    : `${baseName}_Vynor_Result`,
+    targetSheet: targetFor(kind),
     preservesSource: true,
     description: layout.normalization
       ? `Preview ${kind} using a normalized copy of ${input.address} on ${baseName}_Vynor_Result; source data remains unchanged.`
@@ -2291,7 +2471,7 @@ export function createServerExcelPreviewPlan(
           spec: {
             ...resolved.chart,
             ...(requested.has("pivot-table") && specs?.chart?.pivotResult
-              ? { pivotSourceName: `${baseName}_Vynor_pivot_table` }
+              ? { pivotSourceName: outputName("pivot_table") }
               : {}),
           },
         }
@@ -2326,6 +2506,7 @@ export function createServerExcelPreviewPlan(
     ...(kind === "dashboard" && resolved.dashboard
       ? { spec: resolved.dashboard }
       : {}),
+    ...(kind === "table" && resolved.table ? { spec: resolved.table } : {}),
     ...(kind === "named-range" && resolved.namedRange
       ? { spec: resolved.namedRange }
       : {}),

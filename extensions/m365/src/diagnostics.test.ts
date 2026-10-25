@@ -192,3 +192,25 @@ test("the companion layer is never available from the pane: Web and Mac are unsu
     "unsupported_host",
   );
 });
+
+test("a real verified companion probe can upgrade only a Windows desktop capability report", () => {
+  const ready = {
+    state: "ready" as const,
+    reason: "verified",
+    features: ["solver" as const],
+  };
+  assert.equal(
+    hostCapabilityContext({
+      office: { context: { platform: "PC" } } as any,
+      companionStatus: ready,
+    }).companion,
+    "ready",
+  );
+  assert.equal(
+    hostCapabilityContext({
+      office: { context: { platform: "OfficeOnline" } } as any,
+      companionStatus: ready,
+    }).companion,
+    "unsupported_host",
+  );
+});

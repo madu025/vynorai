@@ -379,7 +379,7 @@ test("plans for clean and computed column carry validated specs and their own re
 function fakeWorkbook(
   sourceValues: any[][] = input.values as any[][],
   // Simulates Excel converting what was written when it is read back (for the result check).
-  readBack?: (values: any[][]) => any[][],
+  readBack: (values: any[][]) => any[][] = (values) => values,
 ) {
   const written: Record<string, any> = {};
   const fullSheet = new Map<string, any[][]>();

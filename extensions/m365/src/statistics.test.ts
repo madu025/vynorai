@@ -6,14 +6,25 @@ import { buildOutcomes } from "./outcome.js";
 import {
   buildDescribeCells,
   buildAdvancedForecastCells,
+  buildAnovaCells,
+  buildCorrelationMatrixCells,
   buildAnomalyCells,
   buildFinancialCells,
   buildForecastCells,
   buildInsightReportCells,
   buildInsightReportPreview,
+  buildPairedTTestCells,
+  buildRegressionCells,
+  buildSpearmanCells,
   correlation,
+  correlationMatrix,
   describeColumns,
   linearForecast,
+  anovaOneWay,
+  anovaGroupSummary,
+  pairedTTest,
+  regression,
+  spearmanCorrelation,
 } from "./statistics.js";
 
 const headers = ["Month", "Region", "Sales", "Cost"];
@@ -52,6 +63,138 @@ test("correlation and linear forecast agree with the arithmetic", () => {
   assert.deepEqual(linearForecast([1, 2], 2), []);
 });
 
+test("correlation matrix reports pairwise coefficients and live formulas", () => {
+  const matrix = correlationMatrix(rows as any, [2, 3]);
+  assert.deepEqual(matrix, [
+    [1, 1],
+    [1, 1],
+  ]);
+  const cells = buildCorrelationMatrixCells(
+    { sheetName: "Sheet1", startColumn: 0, startRow: 1, endRow: 4 },
+    headers,
+    [2, 3],
+  );
+  assert.equal(cells[0][0], "Column");
+  assert.match(cells[1][2], /CORREL/);
+});
+
+test("regression reports complete numeric pairs and explainable coefficients", () => {
+  const result = regression(
+    [
+      [1, 3],
+      [2, 5],
+      [3, 7],
+      ["missing", 9],
+    ] as any,
+    0,
+    1,
+  );
+  assert.equal(result.pairs, 3);
+  assert.equal(result.correlation, 1);
+  assert.equal(result.rSquared, 1);
+  assert.equal(result.slope, 2);
+  assert.equal(result.intercept, 1);
+  assert.equal(result.residualStdError, 0);
+  assert.equal(result.relationship, "positive");
+  assert.equal(
+    regression(
+      [
+        [1, 2],
+        [1, 3],
+        [1, 4],
+      ] as any,
+      0,
+      1,
+    ).relationship,
+    "insufficient",
+  );
+});
+
+test("paired t-test uses only complete pairs and returns a bounded p-value", () => {
+  const result = pairedTTest(
+    [
+      [10, 9],
+      [11, 9],
+      [12, 9],
+      [13, 9],
+      [14, 9],
+      ["missing", 9],
+    ] as any,
+    0,
+    1,
+  );
+  assert.equal(result.pairs, 5);
+  assert.equal(result.meanDifference, 3);
+  assert.equal(result.degreesOfFreedom, 4);
+  assert.equal(result.interpretation, "significant");
+  assert.ok(
+    typeof result.pValue === "number" &&
+      result.pValue > 0 &&
+      result.pValue < 0.05,
+  );
+});
+
+test("one-way ANOVA compares category means with transparent degrees of freedom", () => {
+  const result = anovaOneWay(
+    [
+      ["A", 1],
+      ["A", 2],
+      ["B", 5],
+      ["B", 6],
+      ["C", 10],
+      ["C", 11],
+      ["C", "bad"],
+    ] as any,
+    0,
+    1,
+  );
+  assert.equal(result.groups, 3);
+  assert.equal(result.observations, 6);
+  assert.equal(result.betweenDf, 2);
+  assert.equal(result.withinDf, 3);
+  assert.equal(result.interpretation, "significant");
+  assert.ok(typeof result.fStatistic === "number" && result.fStatistic > 0);
+  assert.ok(typeof result.pValue === "number" && result.pValue < 0.05);
+  assert.ok(
+    typeof result.etaSquared === "number" &&
+      result.etaSquared > 0 &&
+      result.etaSquared < 1,
+  );
+  assert.deepEqual(
+    anovaGroupSummary(
+      [
+        ["B", 5],
+        ["A", 1],
+        ["A", 3],
+        ["B", 7],
+      ] as any,
+      0,
+      1,
+    ),
+    [
+      { group: "A", observations: 2, mean: 2, standardDeviation: 1.41 },
+      { group: "B", observations: 2, mean: 6, standardDeviation: 1.41 },
+    ],
+  );
+});
+
+test("Spearman correlation ranks numeric pairs and handles ties deterministically", () => {
+  const result = spearmanCorrelation(
+    [
+      [1, 10],
+      [2, 20],
+      [2, 30],
+      [4, 40],
+      ["bad", 50],
+    ] as any,
+    0,
+    1,
+  );
+  assert.equal(result.pairs, 4);
+  assert.equal(result.rho, 0.95);
+  assert.equal(result.rhoSquared, 0.9);
+});
+
 test("formulas reference the source range and never contain model text", () => {
   const range = { sheetName: "Sheet1", startColumn: 0, startRow: 1, endRow: 5 };
   const cells = buildDescribeCells(range, headers, [2]);
@@ -80,6 +223,24 @@ test("advanced reports use source formulas with explicit fallbacks and evidence"
   const anomaly = buildAnomalyCells(range, headers, 2);
   assert.match(anomaly[7][2], /outside the fences/);
   assert.match(anomaly[8][2], /not proof of fraud/);
+  const regressionCells = buildRegressionCells(range, headers, 2, 3);
+  assert.match(regressionCells[3][1], /SUMPRODUCT.*ISNUMBER/);
+  assert.match(regressionCells[5][1], /RSQ/);
+  assert.match(regressionCells[8][1], /STEYX/);
+  const tTestCells = buildPairedTTestCells(range, headers, 2, 3);
+  assert.match(tTestCells[4][1], /AVERAGE\(FILTER/);
+  assert.match(tTestCells[8][1], /T\.TEST/);
+  const anovaCells = buildAnovaCells(range, headers, 1, 2);
+  assert.match(anovaCells[3][1], /COUNTA\(UNIQUE\(FILTER/);
+  assert.match(anovaCells[11][1], /F\.DIST\.RT/);
+  assert.equal(anovaCells[9][0], "Eta-squared");
+  assert.match(anovaCells[9][1], /B8\/\(B8\+B9\)/);
+  assert.equal(anovaCells[14][0], "Group summary");
+  assert.match(anovaCells[15][0], /SORT\(UNIQUE\(FILTER/);
+  assert.match(anovaCells[15][3], /STDEV\.S\(FILTER/);
+  const spearmanCells = buildSpearmanCells(range, headers, 2, 3);
+  assert.match(spearmanCells[1][1], /RANK\.AVG/);
+  assert.match(spearmanCells[1][3], /SUMPRODUCT/);
 });
 
 test("instructions are understood and planned like any other action", () => {
@@ -96,6 +257,37 @@ test("instructions are understood and planned like any other action", () => {
     rows as any,
   );
   assert.equal(corr.specs.statistics?.mode, "correlation");
+  const spearman = interpretInstruction(
+    "Calculate Spearman correlation between Sales and Cost",
+    headers,
+    rows as any,
+  );
+  assert.deepEqual(spearman.specs.statistics, {
+    mode: "spearman",
+    pair: [2, 3],
+  });
+  const reg = interpretInstruction(
+    "Run a linear regression of Cost on Sales and show the R squared and slope",
+    headers,
+    rows as any,
+  );
+  assert.deepEqual(reg.specs.statistics, { mode: "regression", pair: [2, 3] });
+  const tTest = interpretInstruction(
+    "Run a paired t-test to see whether Sales and Cost are statistically different",
+    headers,
+    rows as any,
+  );
+  assert.deepEqual(tTest.specs.statistics, { mode: "t-test", pair: [2, 3] });
+  const anova = interpretInstruction(
+    "Run a one-way ANOVA of Sales by Region",
+    headers,
+    rows as any,
+  );
+  assert.deepEqual(anova.specs.statistics, {
+    mode: "anova",
+    value: 2,
+    category: 1,
+  });
   const fore = interpretInstruction(
     "Forecast Sales for the next 4 periods",
     headers,
@@ -110,6 +302,50 @@ test("instructions are understood and planned like any other action", () => {
   );
   assert.equal(plan.actions[0].targetSheet, "Sheet1_Vynor_Stats");
   assert.equal(plan.actions[0].spec?.statistics?.value?.column, "Sales");
+  const regressionPlan = createExcelPreviewPlan(
+    input,
+    ["statistics"],
+    500,
+    reg.specs as any,
+  );
+  assert.equal(regressionPlan.actions[0].spec?.statistics?.mode, "regression");
+  assert.deepEqual(
+    regressionPlan.actions[0].spec?.statistics?.pair?.map(
+      (entry) => entry.column,
+    ),
+    ["Sales", "Cost"],
+  );
+  const [regressionOutcome] = buildOutcomes(
+    regressionPlan.actions as any,
+    headers,
+    rows as any,
+  );
+  assert.deepEqual(regressionOutcome.table?.rows.slice(2, 6), [
+    ["Observations", "4"],
+    ["Correlation (r)", "1"],
+    ["R squared", "1"],
+    ["Slope", "0.5"],
+  ]);
+  const tTestPlan = createExcelPreviewPlan(
+    input,
+    ["statistics"],
+    500,
+    tTest.specs as any,
+  );
+  assert.equal(tTestPlan.actions[0].spec?.statistics?.mode, "t-test");
+  const anovaPlan = createExcelPreviewPlan(
+    input,
+    ["statistics"],
+    500,
+    anova.specs as any,
+  );
+  assert.equal(anovaPlan.actions[0].spec?.statistics?.mode, "anova");
+  const [anovaOutcome] = buildOutcomes(
+    anovaPlan.actions as any,
+    headers,
+    rows as any,
+  );
+  assert.equal(anovaOutcome.table?.rows[0][0], "Category");
   const [outcome] = buildOutcomes(plan.actions as any, headers, rows as any);
   assert.deepEqual(outcome.table?.rows[0], ["5", "500"]);
   assert.throws(

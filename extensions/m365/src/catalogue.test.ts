@@ -24,9 +24,19 @@ test("PDF export is an explicit, fully served action", () => {
   assert.deepEqual(interpreted.problems, []);
 });
 
+test("Sparkline requests use the real chart fallback", () => {
+  const interpreted = interpretInstruction(
+    "Add sparklines for monthly Sales",
+    HEADERS,
+    ROWS,
+  );
+  assert.deepEqual(interpreted.actions, ["chart"]);
+  assert.deepEqual(interpreted.problems, []);
+  assert.equal(interpreted.specs.chart?.chartType, "line");
+});
+
 test("unsupported or gated automation requests explain the safe boundary", () => {
   for (const prompt of [
-    "Add sparklines for monthly Sales",
     "Refresh this result every Monday",
     "Email the result sheet to the finance team",
   ]) {

@@ -162,6 +162,24 @@ test("format instructions become explicit options, and 'format as a table' stays
   assert.equal(table.specs.format, undefined);
   assert.deepEqual(table.actions, ["table"]);
   assert.ok(!table.actions.includes("format"));
+  const tableWithTotals = interpretInstruction(
+    "Format as a table with a totals row",
+    headers,
+    rows,
+  );
+  assert.deepEqual(tableWithTotals.actions, ["table"]);
+  assert.deepEqual(tableWithTotals.specs.table, { showTotals: true });
+  const styledTable = interpretInstruction(
+    "Create an Excel table with a blue table style",
+    headers,
+    rows,
+  );
+  assert.deepEqual(styledTable.actions, ["table"]);
+  assert.deepEqual(styledTable.specs.table, { style: "TableStyleMedium2" });
+  const styledPlan = createExcelPreviewPlan(input as any, ["table"], 500, {
+    table: styledTable.specs.table,
+  });
+  assert.equal(styledPlan.actions[0].spec?.tableStyle, "TableStyleMedium2");
 
   const dependent = interpretInstruction(
     "Create a dependent drop-down for Status based on Region",
@@ -182,6 +200,51 @@ test("format instructions become explicit options, and 'format as a table' stays
     },
     problems: [],
   });
+});
+
+test("format instructions can freeze a bounded number of leading columns", () => {
+  const interpreted = interpretInstruction(
+    "Freeze the first 2 columns and format the data",
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.specs.format, {
+    freezeHeader: true,
+    freezeColumns: 2,
+  });
+  const plan = createExcelPreviewPlan(input as any, ["format"], 500, {
+    format: interpreted.specs.format,
+  });
+  assert.equal(plan.actions[0].spec?.freezeColumns, 2);
+});
+
+test("format instructions can freeze a bounded number of leading rows", () => {
+  const interpreted = interpretInstruction(
+    "Freeze the first 3 rows and format the data",
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.specs.format, {
+    freezeHeader: true,
+    freezeRows: 3,
+  });
+  const plan = createExcelPreviewPlan(input as any, ["format"], 500, {
+    format: interpreted.specs.format,
+  });
+  assert.equal(plan.actions[0].spec?.freezeRows, 3);
+});
+
+test("format instructions can explicitly control result-sheet gridlines", () => {
+  const interpreted = interpretInstruction(
+    "Format the data and hide the gridlines",
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.specs.format?.showGridlines, false);
+  const plan = createExcelPreviewPlan(input as any, ["format"], 500, {
+    format: interpreted.specs.format,
+  });
+  assert.equal(plan.actions[0].spec?.showGridlines, false);
 });
 
 test("a multi-step instruction becomes one safe reviewable plan", () => {
@@ -220,6 +283,42 @@ test("chart data-label requests are explicit and planner-safe", () => {
     chart: interpreted.specs.chart,
   });
   assert.equal(plan.actions[0].spec?.showDataLabels, true);
+});
+
+test("quoted chart axis titles are carried into the chart plan", () => {
+  const interpreted = interpretInstruction(
+    'Create a column chart of Sales by Region with category axis title "Sales region" and value axis title "Revenue (LKR)"',
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.actions, ["chart"]);
+  assert.deepEqual(interpreted.specs.chart?.axisTitles, {
+    category: "Sales region",
+    value: "Revenue (LKR)",
+  });
+  const plan = createExcelPreviewPlan(input as any, ["chart"], 500, {
+    chart: interpreted.specs.chart,
+  });
+  assert.equal(plan.actions[0].spec?.chartCategoryAxisTitle, "Sales region");
+  assert.equal(plan.actions[0].spec?.chartValueAxisTitle, "Revenue (LKR)");
+});
+
+test("chart legend visibility and position are carried into the chart plan", () => {
+  const interpreted = interpretInstruction(
+    "Create a column chart of Sales by Region without the legend, legend at bottom",
+    headers,
+    rows,
+  );
+  assert.deepEqual(interpreted.actions, ["chart"]);
+  assert.deepEqual(interpreted.specs.chart?.legend, {
+    visible: false,
+    position: "Bottom",
+  });
+  const plan = createExcelPreviewPlan(input as any, ["chart"], 500, {
+    chart: interpreted.specs.chart,
+  });
+  assert.equal(plan.actions[0].spec?.chartLegendVisible, false);
+  assert.equal(plan.actions[0].spec?.chartLegendPosition, "Bottom");
 });
 
 test("pivot-result chart requests compose pivot before chart", () => {

@@ -48,8 +48,10 @@ test("the server reports every registry key and only the registry keys", () => {
   assert.equal("python" in server, false);
   assert.equal(server["python-sandbox"].status, "unsupported");
   assert.match(server["python-sandbox"].reason!, /not provisioned/);
-  // The server does not know the host, so host-only checks are left to the pane.
-  assert.equal(server["pivot-table"].status, "available");
+  // The server does not know the host/API sets, so Office.js capabilities must use
+  // their declared fallback until the pane provides verified host evidence.
+  assert.equal(server["pivot-table"].status, "available_with_fallback");
+  assert.equal(server["pivot-table"].fallbackFeature, "formula-report");
   assert.equal(server["email-share"].status, "consent_required");
 });
 
@@ -99,16 +101,13 @@ test("the AI text features of the schema and the agent tool are the registry's",
   ]);
 });
 
-test("the agent turn answers native requests itself: no model call, no tools, no charge", async () => {
+test("native runtime requests are refused, while real fallback requests reach the planner", async () => {
   const { agentTurn, nativeFeatureReply } = await import(
     "../src/services/m365Agent.js"
   );
   const user: any = { id: "user-a", email: "a@example.com" };
   for (const [text, feature] of [
-    ["Create a Power Pivot model of the tables", "power-pivot"],
-    ["use Solver to maximize profit", "solver"],
     ["run python with pandas on this sheet", "python-sandbox"],
-    ["add sparklines per row", "sparklines"],
   ] as const) {
     // agentTurn would call the model for an ordinary request; here it returns first.
     const reply = await agentTurn(user, {
@@ -120,6 +119,18 @@ test("the agent turn answers native requests itself: no model call, no tools, no
     assert.deepEqual(reply.tool_calls, []);
     assert.equal(reply.usage, undefined);
   }
+  assert.equal(
+    nativeFeatureReply([
+      { role: "user", content: "use Solver to maximize profit" },
+    ]),
+    undefined,
+  );
+  assert.equal(
+    nativeFeatureReply([
+      { role: "user", content: "Create a Power Pivot model" },
+    ]),
+    undefined,
+  );
   // An ordinary request, a report from the add-in and a tool answer are never screened.
   assert.equal(
     nativeFeatureReply([{ role: "user", content: "pivot Sales by Region" }]),

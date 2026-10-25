@@ -125,10 +125,22 @@ test("server and add-in both refuse a chart Top-N or aggregation out of range", 
 
 test("the server refuses chart summary options that would be silently dropped", () => {
   const cases: Array<[string, any, string[]]> = [
-    ["pivotResult aggregation", { chartType: "column", pivotResult: true, aggregation: "max" }, ["chart", "pivot-table"]],
-    ["pivotResult topN", { chartType: "column", pivotResult: true, topN: 1 }, ["chart", "pivot-table"]],
+    [
+      "pivotResult aggregation",
+      { chartType: "column", pivotResult: true, aggregation: "max" },
+      ["chart", "pivot-table"],
+    ],
+    [
+      "pivotResult topN",
+      { chartType: "column", pivotResult: true, topN: 1 },
+      ["chart", "pivot-table"],
+    ],
     ["histogram topN", { chartType: "histogram", topN: 3 }, ["chart"]],
-    ["waterfall aggregation", { chartType: "waterfall", aggregation: "average" }, ["chart"]],
+    [
+      "waterfall aggregation",
+      { chartType: "waterfall", aggregation: "average" },
+      ["chart"],
+    ],
     ["lowest without topN", { chartType: "bar", lowest: true }, ["chart"]],
     ["line topN", { chartType: "line", topN: 3 }, ["chart"]],
     ["area topN", { chartType: "area", topN: 3 }, ["chart"]],
@@ -751,6 +763,145 @@ test("server and add-in agree on a validated input-message format plan", () => {
     title: "Status guidance",
     message: "Choose a valid status.",
   });
+});
+
+test("server and add-in preserve native table totals-row intent", () => {
+  const specs = { table: { showTotals: true } };
+  const local = createExcelPreviewPlan(input, ["table"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["table"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.tableShowTotals, true);
+});
+
+test("server and add-in preserve an allowlisted native table style", () => {
+  const specs = { table: { style: "TableStyleMedium2" as const } };
+  const local = createExcelPreviewPlan(input, ["table"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["table"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.tableStyle, "TableStyleMedium2");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["table"], 500, {
+        table: { style: "TableStyleBogus" as never },
+      }),
+    /supported Excel table style/,
+  );
+});
+
+test("server and add-in preserve a bounded custom chart title", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "column" as const,
+      title: "Revenue by Region",
+    },
+  };
+  const local = createExcelPreviewPlan(input as any, ["chart"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["chart"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec.chartTitle, "Revenue by Region");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["chart"], 500, {
+        chart: { category: 1, value: 2, chartType: "column", title: "" },
+      } as any),
+    /chart title/i,
+  );
+});
+
+test("server and add-in preserve bounded chart axis titles", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "column" as const,
+      axisTitles: { category: "Sales region", value: "Revenue (LKR)" },
+    },
+  };
+  const local = createExcelPreviewPlan(input as any, ["chart"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["chart"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.chartCategoryAxisTitle, "Sales region");
+  assert.equal(server.actions[0].spec?.chartValueAxisTitle, "Revenue (LKR)");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["chart"], 500, {
+        chart: {
+          category: 1,
+          value: 2,
+          chartType: "column",
+          axisTitles: { value: "" },
+        },
+      } as any),
+    /axis title/i,
+  );
+});
+
+test("server and add-in preserve bounded chart legend options", () => {
+  const specs = {
+    chart: {
+      category: 1,
+      value: 2,
+      chartType: "column" as const,
+      legend: { visible: false, position: "Bottom" as const },
+    },
+  };
+  const local = createExcelPreviewPlan(input as any, ["chart"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["chart"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.chartLegendVisible, false);
+  assert.equal(server.actions[0].spec?.chartLegendPosition, "Bottom");
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["chart"], 500, {
+        chart: {
+          category: 1,
+          value: 2,
+          chartType: "column",
+          legend: { position: "Center" as never },
+        },
+      } as any),
+    /legend position/i,
+  );
+});
+
+test("server and add-in agree on freezing leading columns", () => {
+  const specs = { format: { freezeHeader: true, freezeColumns: 2 } };
+  const client = createExcelPreviewPlan(input, ["format"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["format"], 500, specs);
+  assert.equal(excelPlansMatch(client, server), true);
+  assert.equal(client.actions[0].spec?.freezeColumns, 2);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["format"], 500, {
+        format: { freezeColumns: 101 },
+      } as any),
+    /freeze columns|column/i,
+  );
+});
+
+test("server and add-in agree on freezing leading rows", () => {
+  const specs = { format: { freezeHeader: true, freezeRows: 3 } };
+  const client = createExcelPreviewPlan(input, ["format"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["format"], 500, specs);
+  assert.equal(excelPlansMatch(client, server), true);
+  assert.equal(client.actions[0].spec?.freezeRows, 3);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["format"], 500, {
+        format: { freezeRows: 101 },
+      } as any),
+    /freeze rows/i,
+  );
+});
+
+test("server and add-in preserve explicit result-sheet gridline intent", () => {
+  const specs = { format: { showGridlines: false } };
+  const local = createExcelPreviewPlan(input as any, ["format"], 500, specs);
+  const server = createServerExcelPreviewPlan(input, ["format"], 500, specs);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec?.showGridlines, false);
 });
 
 test("server and add-in agree on a dependent dropdown plan", () => {
@@ -1422,7 +1573,26 @@ test("server and add-in agree on statistics plans and the server refuses bad one
         pair: [2, 3] as [number, number],
       },
     },
+    {
+      statistics: {
+        mode: "correlation-matrix" as const,
+        columns: [2, 3],
+      },
+    },
     { statistics: { mode: "forecast" as const, value: 2, periods: 4 } },
+    {
+      statistics: {
+        mode: "regression" as const,
+        pair: [2, 3] as [number, number],
+      },
+    },
+    {
+      statistics: {
+        mode: "t-test" as const,
+        pair: [2, 3] as [number, number],
+      },
+    },
+    { statistics: { mode: "anova" as const, value: 2, category: 1 } },
   ]) {
     const server = createServerExcelPreviewPlan(
       input,
@@ -1552,6 +1722,29 @@ test("server and add-in agree on a sampled chart over a PivotTable and on descri
     statSpecs,
   );
   assert.equal(excelPlansMatch(localStats, serverStats), true);
+  const prefixedServer = createServerExcelPreviewPlan(
+    input,
+    ["statistics"],
+    500,
+    statSpecs,
+    { resultSheetPrefix: "Finance" },
+  );
+  const prefixedLocal = createExcelPreviewPlan(
+    input as any,
+    ["statistics"],
+    500,
+    statSpecs,
+    { resultSheetPrefix: "Finance" },
+  );
+  assert.equal(excelPlansMatch(prefixedLocal, prefixedServer), true);
+  assert.match(prefixedServer.actions[0].targetSheet, /^Finance_/);
+  assert.throws(
+    () =>
+      createServerExcelPreviewPlan(input, ["statistics"], 500, statSpecs, {
+        resultSheetPrefix: "bad/name",
+      }),
+    /result-sheet prefix/,
+  );
   assert.throws(
     () =>
       createServerExcelPreviewPlan(input, ["chart"], 500, {
@@ -1644,4 +1837,59 @@ test("server and add-in agree on a usage dashboard and refuse bad column choices
         } as any),
       pattern,
     );
+});
+
+test("server and add-in preserve Spearman rank-correlation intent", () => {
+  const specs = {
+    statistics: { mode: "spearman" as const, pair: [2, 3] as [number, number] },
+  };
+  const local = createExcelPreviewPlan(
+    input as any,
+    ["statistics"],
+    500,
+    specs,
+  );
+  const server = createServerExcelPreviewPlan(
+    input,
+    ["statistics"],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(server.actions[0].spec.statistics.mode, "spearman");
+  assert.deepEqual(
+    server.actions[0].spec.statistics.pair.map(
+      (entry: { column: string }) => entry.column,
+    ),
+    ["Sales", "Cost"],
+  );
+});
+
+test("sampled Spearman reports remain an Excel-computed operation", () => {
+  const sampledInput = {
+    ...input,
+    address: "Sheet1!A1:D600000",
+    sample: { totalRows: 600000, sampledRows: 5 },
+  };
+  const specs = {
+    statistics: { mode: "spearman" as const, pair: [2, 3] as [number, number] },
+  };
+  const server = createServerExcelPreviewPlan(
+    sampledInput,
+    ["statistics"],
+    500,
+    specs,
+  );
+  const local = createExcelPreviewPlan(
+    sampledInput as any,
+    ["statistics"],
+    500,
+    specs,
+  );
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.ok(
+    server.warnings.some((warning: string) =>
+      /sample|full range/i.test(warning),
+    ),
+  );
 });

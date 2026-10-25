@@ -23,6 +23,8 @@ export interface WorkbookPreferences {
   changeLog?: boolean;
   /** The LK_Holidays table was added to this workbook. */
   holidays?: boolean;
+  /** Optional bounded prefix for result sheets, for example "Finance" (at most 12 safe chars). */
+  resultSheetPrefix?: string;
 }
 
 export const PREFERENCES_KEY = "vynorai.preferences";
@@ -54,6 +56,11 @@ export function parsePreferences(raw: unknown): WorkbookPreferences {
     out.audience = input.audience as Audience;
   if (typeof input.changeLog === "boolean") out.changeLog = input.changeLog;
   if (typeof input.holidays === "boolean") out.holidays = input.holidays;
+  if (
+    typeof input.resultSheetPrefix === "string" &&
+    /^[A-Za-z][A-Za-z0-9 _-]{0,11}$/.test(input.resultSheetPrefix.trim())
+  )
+    out.resultSheetPrefix = input.resultSheetPrefix.trim();
   return out;
 }
 
@@ -163,6 +170,10 @@ export function preferenceFacts(prefs: WorkbookPreferences): string {
     facts.push(
       "the workbook has a holiday table named LK_Holidays: pass it as the holidays argument of NETWORKDAYS and WORKDAY",
     );
+  if (prefs.resultSheetPrefix)
+    facts.push(
+      `new result sheets start with the prefix ${prefs.resultSheetPrefix}`,
+    );
   return facts.length
     ? `[Saved preferences of this workbook] ${facts.join("; ")}.`
     : "";
@@ -179,6 +190,8 @@ export function describePreferences(prefs: WorkbookPreferences): string {
   if (prefs.audience && prefs.audience !== "general")
     parts.push(`${prefs.audience} view`);
   if (prefs.holidays) parts.push("Sri Lanka holidays");
+  if (prefs.resultSheetPrefix)
+    parts.push(`result sheets prefixed ${prefs.resultSheetPrefix}`);
   if (prefs.changeLog === false) parts.push("change log off");
   return parts.length
     ? `Remembered for this workbook: ${parts.join(", ")}.`

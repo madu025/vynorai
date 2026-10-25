@@ -7,7 +7,10 @@ import {
   companionOnlyFeatures,
   compareVersions,
   deriveCompanionState,
+  executeApprovedCompanionOperation,
+  isValidCompanionDispatchRequest,
   noCompanionTransport,
+  noCompanionExecutionTransport,
   probeCompanion,
   type CompanionHelloRequest,
   type CompanionHelloResponse,
@@ -55,6 +58,21 @@ test("host classification: Web, Windows, Mac and unknown", () => {
     surface: "desktop",
   });
   assert.equal(classifyHost(undefined).platform, "unknown");
+});
+
+test("host aliases are normalized consistently before companion routing", () => {
+  for (const value of ["Universal", " windows ", "Windows"]) {
+    assert.deepEqual(classifyHost(value), {
+      platform: "windows",
+      surface: "desktop",
+    });
+  }
+  for (const value of ["ONLINE", " web "]) {
+    assert.deepEqual(classifyHost(value), {
+      platform: "web",
+      surface: "web",
+    });
+  }
 });
 
 test("Web and Mac are unsupported hosts even with a perfect reply", () => {
@@ -168,6 +186,187 @@ test("this repository's transport reports not_installed; a throwing transport fa
     "unsupported_host",
   );
   assert.equal(called, false, "no probe is made on an unsupported host");
+});
+
+test("native execution requires a ready Windows companion and explicit approval", async () => {
+  const status = deriveCompanionState(WINDOWS, ok(), POLICY);
+  const request = {
+    contractVersion: "2026-10-24.windows-companion.v1",
+    type: "execute" as const,
+    requestId: "request-1234567890",
+    tenantId: "tenant-1",
+    objectId: "user-1",
+    feature: "solver" as const,
+    operation: "run-solver" as const,
+    workbook: {
+      sessionId: "session-1234567890",
+      workbookFingerprint: "workbook-1234567890",
+      sourceFingerprint: "source-1234567890",
+      origin: "excel-desktop-addin" as const,
+    },
+    approval: {
+      approved: true as const,
+      grantId: "grant-1234567890",
+      expiresAt: "2099-10-25T12:00:00.000Z",
+    },
+    parameters: { objective: "maximize" },
+    requestedAt: "2026-10-25T11:00:00.000Z",
+  };
+  const missing = await executeApprovedCompanionOperation(
+    WINDOWS,
+    { ...status, state: "not_installed", features: [] },
+    noCompanionExecutionTransport,
+    request,
+  );
+  assert.deepEqual(missing, {
+    status: "unsupported",
+    errorCode: "UNSUPPORTED_NATIVE_FEATURE",
+  });
+  const noApproval = await executeApprovedCompanionOperation(
+    WINDOWS,
+    status,
+    noCompanionExecutionTransport,
+    { ...request, approval: { ...request.approval, approved: false as never } },
+  );
+  assert.deepEqual(noApproval, {
+    status: "failed",
+    errorCode: "APPROVAL_INVALID",
+  });
+});
+
+test("native execution validates the dispatch contract before calling a transport", async () => {
+  const status = deriveCompanionState(WINDOWS, ok(), POLICY);
+  const request = {
+    contractVersion: "2026-10-24.windows-companion.v1",
+    type: "execute" as const,
+    requestId: "request-1234567890",
+    tenantId: "tenant-1",
+    objectId: "user-1",
+    feature: "solver" as const,
+    operation: "run-solver" as const,
+    workbook: {
+      sessionId: "session-1234567890",
+      workbookFingerprint: "workbook-1234567890",
+      sourceFingerprint: "source-1234567890",
+      origin: "excel-desktop-addin" as const,
+    },
+    approval: {
+      approved: true as const,
+      grantId: "grant-1234567890",
+      expiresAt: "2099-10-25T12:00:00.000Z",
+    },
+    parameters: { objective: "maximize" },
+    requestedAt: "2026-10-25T11:00:00.000Z",
+  };
+  assert.equal(isValidCompanionDispatchRequest(request), true);
+  let called = false;
+  const transport = {
+    ...noCompanionExecutionTransport,
+    async execute() {
+      called = true;
+      return await noCompanionExecutionTransport.execute(request);
+    },
+  };
+  const malformed = {
+    ...request,
+    feature: "vba-com" as const,
+    parameters: { command: "not allowed" },
+  };
+  assert.equal(isValidCompanionDispatchRequest(malformed), false);
+  assert.deepEqual(
+    await executeApprovedCompanionOperation(
+      WINDOWS,
+      status,
+      transport,
+      malformed,
+    ),
+    { status: "failed", errorCode: "WORKBOOK_BINDING_INVALID" },
+  );
+  assert.equal(called, false);
+});
+
+test("a companion result is not accepted as success unless it is verified and bound", async () => {
+  const status = deriveCompanionState(WINDOWS, ok(), POLICY);
+  const request = {
+    contractVersion: "2026-10-24.windows-companion.v1",
+    type: "execute" as const,
+    requestId: "request-1234567890",
+    tenantId: "tenant-1",
+    objectId: "user-1",
+    feature: "solver" as const,
+    operation: "run-solver" as const,
+    workbook: {
+      sessionId: "session-1234567890",
+      workbookFingerprint: "workbook-1234567890",
+      sourceFingerprint: "source-1234567890",
+      origin: "excel-desktop-addin" as const,
+    },
+    approval: {
+      approved: true as const,
+      grantId: "grant-1234567890",
+      expiresAt: "2099-10-25T12:00:00.000Z",
+    },
+    parameters: {},
+    requestedAt: "2026-10-25T11:00:00.000Z",
+  };
+  const transport = {
+    ...noCompanionExecutionTransport,
+    async execute() {
+      return {
+        contractVersion: request.contractVersion,
+        type: "execute-result" as const,
+        requestId: request.requestId,
+        status: "completed" as const,
+        feature: request.feature,
+        operation: request.operation,
+        workbook: request.workbook,
+        verification: {
+          status: "failed" as const,
+          changedCells: 1,
+          evidence: [],
+        },
+      };
+    },
+  };
+  const result = await executeApprovedCompanionOperation(
+    WINDOWS,
+    status,
+    transport,
+    request,
+  );
+  assert.equal(result.status, "failed");
+  assert.equal(result.errorCode, "NATIVE_EXECUTION_FAILED");
+
+  const wrongWorkbookTransport = {
+    ...noCompanionExecutionTransport,
+    async execute() {
+      return {
+        contractVersion: request.contractVersion,
+        type: "execute-result" as const,
+        requestId: request.requestId,
+        status: "completed" as const,
+        feature: request.feature,
+        operation: request.operation,
+        workbook: {
+          ...request.workbook,
+          sourceFingerprint: "different-source-1234567890",
+        },
+        verification: {
+          status: "verified" as const,
+          changedCells: 1,
+          evidence: [],
+        },
+      };
+    },
+  };
+  const mismatched = await executeApprovedCompanionOperation(
+    WINDOWS,
+    status,
+    wrongWorkbookTransport,
+    request,
+  );
+  assert.equal(mismatched.status, "failed");
+  assert.equal(mismatched.errorCode, "NATIVE_EXECUTION_FAILED");
 });
 
 test("vocabulary matches packages/m365-contracts/src/companion.ts", () => {

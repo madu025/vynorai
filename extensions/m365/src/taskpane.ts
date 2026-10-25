@@ -81,7 +81,10 @@ import {
   linkPollOutcome,
   type LinkPollOutcome,
 } from "./linkPolling.js";
-import { refuseNativeRequest } from "./capabilityRegistry.js";
+import {
+  hasNativeFallback,
+  refuseNativeRequest,
+} from "./capabilityRegistry.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import { chooseInstructionRoute } from "./taskpaneRouting.js";
 import { createPreviewController } from "./taskpanePreviewControl.js";
@@ -2887,7 +2890,10 @@ inspect?.addEventListener("click", async () => {
     }
     const localPreview = await log.step(
       "local:preview",
-      () => createExcelPreviewPlan(input, actions, undefined, specs),
+      () =>
+        createExcelPreviewPlan(input, actions, undefined, specs, {
+          resultSheetPrefix: workbookPrefs.resultSheetPrefix,
+        }),
       (value) => ({
         actions: value.actions.length,
         warnings: value.warnings.length,
@@ -2899,6 +2905,9 @@ inspect?.addEventListener("click", async () => {
         ...input,
         actions,
         ...(Object.keys(specs).length ? { specs } : {}),
+        ...(workbookPrefs.resultSheetPrefix
+          ? { resultSheetPrefix: workbookPrefs.resultSheetPrefix }
+          : {}),
       },
       abortController.signal,
     );
@@ -5729,7 +5738,7 @@ async function askAiForIdeas() {
       request,
       host: createOfficeAgentHost(
         officeRuntime(),
-        checkStepWith(agentInputReader()),
+        checkStepWith(agentInputReader(), workbookPrefs),
         apiClient(),
       ),
       model: agentModel,
@@ -6394,7 +6403,7 @@ async function agentLoop(request: string) {
   const readInput = agentInputReader();
   const host = createOfficeAgentHost(
     officeRuntime(),
-    checkStepWith(readInput),
+    checkStepWith(readInput, workbookPrefs),
     apiClient(),
   );
   try {
@@ -6606,8 +6615,8 @@ async function startAgentRun() {
     return setStatus(
       "The AI is still working on the last request. Try again when it finishes.",
     );
-  // Power Pivot, Solver, VBA/COM, sparklines and Python are never sent anywhere or faked: the person
-  // gets the closest supported alternative at once, with no consent card and no model call.
+  // Native-only features are never faked. Features with a real local/workbook fallback continue
+  // through the normal staged flow; Python and VBA/COM remain fail-closed before any model call.
   const nativeRefusal = refuseNativeRequest(
     request,
     hostCapabilityContext({
@@ -6616,7 +6625,7 @@ async function startAgentRun() {
       graphScopes: config?.graphScopes,
     }),
   );
-  if (nativeRefusal) {
+  if (nativeRefusal && !hasNativeFallback(nativeRefusal.feature)) {
     const answer = localizeMessage(language, nativeRefusal.message);
     renderConversation("user", request, false);
     if (instruction) instruction.value = "";
@@ -7052,6 +7061,9 @@ const prefsCurrency =
   document.querySelector<HTMLSelectElement>("#prefs-currency");
 const prefsAudience =
   document.querySelector<HTMLSelectElement>("#prefs-audience");
+const prefsResultPrefix = document.querySelector<HTMLInputElement>(
+  "#prefs-result-prefix",
+);
 const prefsChangeLog =
   document.querySelector<HTMLInputElement>("#prefs-changelog");
 
@@ -7110,6 +7122,8 @@ function renderPreferences() {
     prefsFiscal.value = String(workbookPrefs.fiscalYearStart ?? "");
   if (prefsCurrency) prefsCurrency.value = workbookPrefs.currency ?? "";
   if (prefsAudience) prefsAudience.value = workbookPrefs.audience ?? "";
+  if (prefsResultPrefix)
+    prefsResultPrefix.value = workbookPrefs.resultSheetPrefix ?? "";
   if (prefsChangeLog)
     prefsChangeLog.checked = workbookPrefs.changeLog !== false;
 }
@@ -7134,6 +7148,11 @@ prefsCurrency?.addEventListener("change", () =>
 );
 prefsAudience?.addEventListener("change", () =>
   updatePreference({ audience: (prefsAudience.value || undefined) as any }),
+);
+prefsResultPrefix?.addEventListener("change", () =>
+  updatePreference({
+    resultSheetPrefix: prefsResultPrefix.value.trim() || undefined,
+  }),
 );
 prefsChangeLog?.addEventListener("change", () =>
   updatePreference({ changeLog: prefsChangeLog.checked }),

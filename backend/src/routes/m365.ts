@@ -109,8 +109,28 @@ const excelPlanSchema = z.object({
     .min(1)
     .max(10),
   chunkRows: z.number().int().min(1).max(5000).optional(),
+  resultSheetPrefix: z
+    .string()
+    .regex(/^[A-Za-z][A-Za-z0-9 _-]{0,11}$/)
+    .optional(),
   specs: z
     .object({
+      table: z
+        .object({
+          showTotals: z.boolean().optional(),
+          style: z
+            .enum([
+              "TableStyleLight2",
+              "TableStyleLight9",
+              "TableStyleMedium2",
+              "TableStyleMedium4",
+              "TableStyleMedium9",
+              "TableStyleDark2",
+            ])
+            .optional(),
+        })
+        .strict()
+        .optional(),
       namedRange: z
         .object({
           source: z.number().int().min(0).max(99),
@@ -138,6 +158,21 @@ const excelPlanSchema = z.object({
             "histogram",
             "waterfall",
           ]),
+          title: z.string().trim().min(1).max(80).optional(),
+          axisTitles: z
+            .object({
+              category: z.string().trim().min(1).max(80).optional(),
+              value: z.string().trim().min(1).max(80).optional(),
+            })
+            .strict()
+            .optional(),
+          legend: z
+            .object({
+              visible: z.boolean().optional(),
+              position: z.enum(["Top", "Bottom", "Left", "Right"]).optional(),
+            })
+            .strict()
+            .optional(),
           extraValues: z
             .array(z.number().int().min(0).max(99))
             .max(4)
@@ -203,10 +238,15 @@ const excelPlanSchema = z.object({
           mode: z.enum([
             "describe",
             "correlation",
+            "spearman",
+            "correlation-matrix",
             "forecast",
             "advanced-forecast",
             "financial",
             "anomaly",
+            "regression",
+            "t-test",
+            "anova",
             "insights",
           ]),
           columns: z.array(z.number().int().min(0).max(99)).max(8).optional(),
@@ -286,6 +326,9 @@ const excelPlanSchema = z.object({
       format: z
         .object({
           freezeHeader: z.boolean().optional(),
+          freezeColumns: z.number().int().min(1).max(100).optional(),
+          freezeRows: z.number().int().min(1).max(100).optional(),
+          showGridlines: z.boolean().optional(),
           autofit: z.boolean().optional(),
           numberFormats: z.boolean().optional(),
           totalRow: z.boolean().optional(),
@@ -898,6 +941,9 @@ m365Router.post(
         req.body.actions,
         req.body.chunkRows,
         req.body.specs,
+        req.body.resultSheetPrefix
+          ? { resultSheetPrefix: req.body.resultSheetPrefix }
+          : undefined,
       );
     } catch (error) {
       if (error instanceof InvalidExcelRangeError)

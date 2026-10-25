@@ -16,6 +16,8 @@ import { PERSONAL_PATTERNS } from "./analysis.js";
 import {
   AI_TEXT_FEATURES,
   baseCapabilityContext,
+  hasNativeFallback,
+  nativeFallbackGuidance,
   refuseNativeRequest,
   type AiTextFeature,
   type NativeFeatureRefusal,
@@ -696,14 +698,16 @@ export async function runAgent(options: {
 }): Promise<AgentRun> {
   const { host, model, mask } = options;
   const readOnlyQuestion = isReadOnlyQuestion(options.request);
-  // Power Pivot, Solver, VBA/COM, sparklines and Python are never faked: the person's own request is
-  // answered with the closest supported alternative, before any model call.
+  // Native-only features are never faked. Features with a real deterministic or workbook-level
+  // fallback are passed to the planner with an explicit instruction; Python and VBA/COM remain
+  // fail-closed because they need a separately reviewed runtime or native companion.
+  let nativeFallbackNote = "";
   if (!options.request.startsWith("[Report from the add-in")) {
     const refusal = refuseNativeRequest(
       options.request,
       baseCapabilityContext(),
     );
-    if (refusal)
+    if (refusal && !hasNativeFallback(refusal.feature))
       return {
         messages: [
           ...(options.history ?? []),
@@ -716,12 +720,17 @@ export async function runAgent(options: {
         phase: "final",
         unsupported: refusal,
       };
+    if (refusal) nativeFallbackNote = nativeFallbackGuidance(refusal.feature);
   }
   // After an apply the add-in's own report comes back as the request; it is not the person's words.
   const fromPerson = !options.request.startsWith("[Report from the add-in");
   // A target or audience read locally from the request goes after it (the prefix stays fixed).
   const meaning = fromPerson
-    ? [describeRequestMeaning(options.request), options.facts ?? ""]
+    ? [
+        describeRequestMeaning(options.request),
+        options.facts ?? "",
+        nativeFallbackNote,
+      ]
         .filter(Boolean)
         .join("\n")
     : "";

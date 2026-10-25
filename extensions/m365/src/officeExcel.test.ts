@@ -14,7 +14,32 @@ import {
   rollbackItemsFromApplyReport,
   sampleBlocks,
   sampleRowBudget,
+  verifyWrittenRange,
 } from "./officeExcel.js";
+
+test("a failed Office.js write read-back is a failed result, not a silent success", async () => {
+  const result: any = { status: "created" };
+  const verified = await verifyWrittenRange(
+    {
+      workbook: {},
+      sync: async () => {
+        throw new Error("read-back unavailable");
+      },
+    },
+    {
+      getRangeByIndexes: () => ({ load() {} }),
+    },
+    [["value"]],
+    ["Value"],
+    result,
+  );
+  assert.equal(verified, false);
+  assert.equal(result.status, "failed");
+  assert.match(result.error, /Write verification failed/);
+  assert.deepEqual(result.warnings, [
+    "The result was written, but Excel did not provide a reliable read-back.",
+  ]);
+});
 
 test("CSV export quotes cells and neutralizes formula injection", () => {
   assert.equal(

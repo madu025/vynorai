@@ -104,6 +104,37 @@ export const NATIVE_ONLY_FEATURES = [
 ] as const satisfies readonly CapabilityFeature[];
 export type NativeOnlyFeature = (typeof NATIVE_ONLY_FEATURES)[number];
 
+/** Native requests that have a real, reviewable add-in fallback. */
+export const NATIVE_FALLBACK_FEATURES = [
+  "power-pivot",
+  "data-model",
+  "olap-pivot",
+  "solver",
+  "scenario-manager",
+  "sparklines",
+] as const satisfies readonly NativeOnlyFeature[];
+
+export function hasNativeFallback(feature: NativeOnlyFeature): boolean {
+  return (NATIVE_FALLBACK_FEATURES as readonly string[]).includes(feature);
+}
+
+/** Guidance passed to the planner so a fallback is explicit and never presented as native Excel. */
+export function nativeFallbackGuidance(feature: NativeOnlyFeature): string {
+  switch (feature) {
+    case "power-pivot":
+    case "data-model":
+    case "olap-pivot":
+      return "Native Power Pivot/Data Model/OLAP is unavailable. Map relationships first, then use combine_tables, a normal PivotTable, or a formula report on a new sheet. Label the result as a formula/Pivot fallback; never claim a native model was created.";
+    case "solver":
+      return "Native Solver is unavailable. Use goal_seek, what_if, or a bounded sensitivity/optimisation report. Stage it for approval and label it as a deterministic fallback; do not claim Solver ran.";
+    case "scenario-manager":
+      return "Native Scenario Manager is unavailable. Use what_if with named scenarios and put the comparison on a new result sheet. Label it as a scenario-table fallback.";
+    case "sparklines":
+      return "Native Sparklines are unavailable. Use a line chart on a new result sheet or a compact trend report, and label it as a chart fallback.";
+  }
+  return "This native feature is unavailable; use the capability report to choose a supported fallback.";
+}
+
 type Need = "read" | "write" | "ai" | "graph_mail";
 
 interface CapabilitySpec {
@@ -502,6 +533,20 @@ export function resolveCapability(
     )
   )
     return refuse("Microsoft Graph Mail.Send consent has not been granted.");
+
+  if (spec.excelApi && context.apiSets === undefined)
+    return spec.fallback
+      ? {
+          status: "available_with_fallback",
+          execution: spec.execution,
+          reason: `ExcelApi ${spec.excelApi} support was not evaluated; using the declared fallback until host capability evidence is available.`,
+          fallbackFeature: spec.fallback,
+          requirement,
+          observed,
+        }
+      : refuse(
+          `ExcelApi ${spec.excelApi} support was not evaluated, so this host capability is unavailable until Excel reports its API sets.`,
+        );
 
   if (spec.excelApi && context.apiSets && observed.excelApi === false) {
     if (spec.fallback)

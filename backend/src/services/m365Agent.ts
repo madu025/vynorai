@@ -14,6 +14,7 @@ import { PiiMap } from "./piiShield.js";
 import {
   AI_TEXT_FEATURES,
   baseCapabilityContext,
+  hasNativeFallback,
   refuseNativeRequest,
 } from "./m365Capabilities.js";
 
@@ -868,7 +869,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Excel also has FORECAST.ETS, T.TEST, F.TEST, LINEST and, where the version has them, REGEXTEST/REGEXEXTRACT/REGEXREPLACE (check with calculate first). A what-if data table is a MAKEARRAY or LET formula on a new sheet.",
   "Advanced reports include forecast confidence intervals, cohorts and retention, sensitivity matrices, financial KPIs, fuzzy candidates, structured splits, IQR anomalies, explainable fraud-risk screening and period/category contribution comparisons. Never merge fuzzy matches, call an anomaly fraud, or call a contribution causal without approval and evidence.",
   "If a host capability is unavailable, return an explicit unsupported or fallback result. Never pretend a slicer, Python execution or another unsupported Office.js feature succeeded.",
-  "Not possible here (say so and offer the closest thing): sparklines, Solver, Scenario Manager, PivotTable calculated fields, changing a PivotTable's source, opening other files, images, VBA. You may write an Office Script as text in the reply for the person to review and run themselves; never run it yourself.",
+  "Native fallback policy: Power Pivot/Data Model/OLAP are not available through this add-in; call map_relationships first, then use combine_tables, a normal PivotTable, or a formula report and label it as a fallback. Native Solver is unavailable; use goal_seek, what_if, or a bounded sensitivity/optimisation report. Native Scenario Manager is unavailable; use what_if with named scenarios. Native Sparklines are unavailable; use a line chart on a new result sheet. Never claim any native feature succeeded. VBA/COM, arbitrary Python, PivotTable calculated fields, changing a PivotTable source, opening other files and images remain unsupported; offer text-only guidance where appropriate and never run code or scripts.",
   `Stage at most ${AGENT_MAX_CHANGES} changes per request. Do only what was asked.`,
   "Never use WEBSERVICE, RTD, CALL, REGISTER.ID, DDE, links to other workbooks or web addresses. Never write macros, VBA or scripts into the workbook.",
   "Use calculate for one number or one table; use run_code when the answer needs several steps over the rows (for example totals by two groupings, a median and outliers, or matching two columns). Return only the summary you need. Numbers from run_code are exact too.",
@@ -1130,7 +1131,9 @@ export function nativeFeatureReply(
       candidate.content,
       baseCapabilityContext(),
     );
-    return refusal ? { content: refusal.message, tool_calls: [] } : undefined;
+    if (!refusal) return undefined;
+    if (hasNativeFallback(refusal.feature)) return undefined;
+    return { content: refusal.message, tool_calls: [] };
   }
   return undefined;
 }
@@ -1214,8 +1217,8 @@ export async function agentTurn(
         .join(", "),
     );
   checkAgentConversation(parsed.data.messages);
-  // A request that needs Power Pivot, Solver, VBA/COM, sparklines or Python is answered here, before
-  // any model call or charge: the closest supported alternative, never a made-up success.
+  // Requests with a real add-in fallback are allowed into the normal staged agent flow. Requests
+  // requiring a native companion or managed runtime are refused before any model call or charge.
   const refusal = nativeFeatureReply(parsed.data.messages);
   if (refusal) return refusal;
   assertAgentRateLimit(user.id);

@@ -10,7 +10,11 @@ import {
   isAllowedCorsOrigin,
 } from "./services/httpHygiene.js";
 import { scheduleReservationReconcile } from "./services/monthlyQuota.js";
-import { scheduleSandboxSweep } from "./services/m365Sandbox.js";
+import {
+  SANDBOX_LIMITS,
+  scheduleSandboxSweep,
+} from "./services/m365Sandbox.js";
+import { registerConfiguredSandboxWorker } from "./services/m365SandboxWorker.js";
 import { releasesRouter } from "./routes/releases.js";
 import express, { NextFunction, Request, Response } from "express";
 import fs from "fs";
@@ -138,7 +142,22 @@ app.use(
     },
   }),
 );
-app.use(express.json({ limit: "10mb" }));
+const M365_SANDBOX_BODY_LIMIT = SANDBOX_LIMITS.maxInputBytes + 200_000;
+// Keep the broad API limit for existing endpoints, but never let the sandbox parser allocate its
+// 10 MB general allowance before the sandbox route's much smaller bounded-input contract runs.
+app.use(
+  express.json({
+    limit: "10mb",
+    type: (req) =>
+      !String(req.url ?? "")
+        .split("?", 1)[0]
+        .startsWith("/v1/m365/sandbox"),
+  }),
+);
+app.use(
+  "/v1/m365/sandbox",
+  express.json({ limit: `${M365_SANDBOX_BODY_LIMIT}b` }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Track real-time in-flight HTTP connections for Admin Live Traffic radar
@@ -274,6 +293,13 @@ app.use((req: Request, res: Response) => {
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   console.error(`[Error] ${req.method} ${req.path}: ${describeError(err)}`);
   if (res.headersSent) return;
+  if (
+    req.path.startsWith("/v1/m365/sandbox") &&
+    (err?.type === "entity.too.large" || err?.status === 413)
+  )
+    return res.status(413).json({
+      error: { code: "SANDBOX_INPUT_INVALID", message: "Request is too large" },
+    });
   if (req.path.startsWith("/api/") || req.path.startsWith("/v1")) {
     return res
       .status(err?.status || 500)
@@ -414,6 +440,7 @@ async function start() {
   void warmUpLocalSlm();
   scheduleRetention();
   scheduleReservationReconcile();
+  registerConfiguredSandboxWorker();
   scheduleSandboxSweep();
   scheduleBackgroundReconciliation();
 

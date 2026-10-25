@@ -5,7 +5,9 @@ import {
   AI_TEXT_FEATURES,
   CAPABILITY_FEATURES,
   CAPABILITY_REGISTRY,
+  hasNativeFallback,
   NATIVE_FEATURE_ADVICE,
+  NATIVE_FALLBACK_FEATURES,
   NATIVE_ONLY_FEATURES,
   baseCapabilityContext,
   classifyNativeRequest,
@@ -20,7 +22,12 @@ import {
 import { ACTION_REQUIREMENTS } from "./diagnostics.js";
 import { SINHALA_MESSAGE_KEYS } from "./messagesSi.js";
 import { TAMIL_MESSAGE_KEYS } from "./messagesTa.js";
-import { AgentToolError, runAgent, type AgentHost } from "./agent.js";
+import {
+  AgentToolError,
+  PersonalMask,
+  runAgent,
+  type AgentHost,
+} from "./agent.js";
 import { interpretInstruction } from "./intent.js";
 
 const ALL_API = ["1.1", "1.4", "1.7", "1.8", "1.9", "1.10"];
@@ -219,6 +226,23 @@ test("a missing host API gives a real fallback or an honest refusal", () => {
   );
 });
 
+test("unevaluated host APIs fail closed instead of claiming Office.js availability", () => {
+  const unevaluated = ready({ apiSets: undefined });
+  assert.equal(
+    resolveCapability("pivot-table", unevaluated).status,
+    "available_with_fallback",
+  );
+  assert.equal(
+    resolveCapability("pivot-table", unevaluated).fallbackFeature,
+    "formula-report",
+  );
+  assert.equal(resolveCapability("chart", unevaluated).status, "unsupported");
+  assert.match(
+    resolveCapability("chart", unevaluated).reason!,
+    /not evaluated/i,
+  );
+});
+
 test("account limits and unknown keys fail closed", () => {
   assert.equal(
     resolveCapability("forecast", ready({ canRead: false })).status,
@@ -343,14 +367,26 @@ test("refusals are structured, name the alternative and never claim success", ()
   );
 });
 
-test("the local reader answers a Power Pivot request with the alternative and plans nothing", () => {
+test("fallback-capable native requests are not treated like hard refusals", () => {
+  for (const feature of NATIVE_FALLBACK_FEATURES)
+    assert.equal(hasNativeFallback(feature), true, feature);
+  assert.equal(hasNativeFallback("python-sandbox"), false);
+  assert.equal(hasNativeFallback("vba-com"), false);
+});
+
+test("the local reader routes Sparklines to a real line-chart fallback", () => {
   const result = interpretInstruction(
-    "build a Power Pivot data model of these tables",
+    "add sparklines per Region",
     ["Region", "Sales"],
     [["N", 1]],
   );
-  assert.deepEqual(result.actions, []);
-  assert.deepEqual(result.problems, [NATIVE_FEATURE_ADVICE["power-pivot"]]);
+  assert.deepEqual(result.actions, ["chart"]);
+  assert.deepEqual(result.specs.chart, {
+    category: 0,
+    value: 1,
+    chartType: "line",
+  });
+  assert.deepEqual(result.problems, []);
   const python = interpretInstruction(
     "run python on Sales",
     ["Region", "Sales"],
@@ -367,12 +403,12 @@ test("the local reader answers a Power Pivot request with the alternative and pl
   assert.deepEqual(pivot.actions, ["pivot-table"]);
   assert.deepEqual(
     interpretInstruction("add sparklines", ["Region", "Sales"], [["N", 1]])
-      .problems,
-    [NATIVE_FEATURE_ADVICE.sparklines],
+      .actions,
+    ["chart"],
   );
 });
 
-test("the agent loop refuses native requests before any model call or workbook access", async () => {
+test("the agent loop refuses native runtime requests before any model call or workbook access", async () => {
   let touched = false;
   const touch = async () => {
     touched = true;
@@ -389,7 +425,7 @@ test("the agent loop refuses native requests before any model call or workbook a
     unmask: (text: string) => text,
   } as any;
   const run = await runAgent({
-    request: "Create a Power Pivot model",
+    request: "run python on this sheet",
     host,
     mask,
     model: async () => {
@@ -400,8 +436,42 @@ test("the agent loop refuses native requests before any model call or workbook a
   assert.equal(touched, false);
   assert.equal(run.turns, 0);
   assert.deepEqual(run.changes, []);
-  assert.equal(run.unsupported?.feature, "power-pivot");
-  assert.equal(run.reply, NATIVE_FEATURE_ADVICE["power-pivot"]);
+  assert.equal(run.unsupported?.feature, "python-sandbox");
+  assert.equal(run.reply, NATIVE_FEATURE_ADVICE["python-sandbox"]);
+});
+
+test("the agent loop allows a native fallback request to reach the planner with guidance", async () => {
+  let touched = false;
+  const run = await runAgent({
+    request: "use Solver to maximize profit",
+    host: {
+      getWorkbook: async () => {
+        touched = true;
+        return { sheets: [{ name: "Data", rows: 2, columns: 2 }] };
+      },
+      readRange: async () => ({
+        address: "A1:B2",
+        values: [
+          ["A", "B"],
+          [1, 2],
+        ],
+      }),
+      calculate: async () => [[42]],
+      checkStep: async () => ({ ok: false, error: "no action" }),
+    },
+    mask: new PersonalMask(),
+    model: async (messages) => ({
+      content: messages.at(-1)?.content ?? "",
+      tool_calls: [],
+    }),
+    maxTurns: 1,
+  });
+  assert.equal(run.unsupported, undefined);
+  assert.equal(touched, false);
+  assert.match(
+    run.messages[0]?.content ?? "",
+    /goal_seek|what_if|deterministic fallback/i,
+  );
 });
 
 test("every local analytics feature is backed by real TypeScript, never Python", async () => {

@@ -89,6 +89,283 @@ export function correlation(
   return { r: round(r), rSquared: round(r * r), pairs: n };
 }
 
+export interface SpearmanResult {
+  pairs: number;
+  rho: number | "";
+  rhoSquared: number | "";
+}
+
+function averageRanks(values: number[]): number[] {
+  const ordered = values
+    .map((value, index) => ({ value, index }))
+    .sort((left, right) => left.value - right.value);
+  const ranks = Array<number>(values.length);
+  for (let start = 0; start < ordered.length; ) {
+    let end = start + 1;
+    while (end < ordered.length && ordered[end].value === ordered[start].value)
+      end += 1;
+    const rank = (start + 1 + end) / 2;
+    for (let at = start; at < end; at += 1) ranks[ordered[at].index] = rank;
+    start = end;
+  }
+  return ranks;
+}
+
+/** Spearman rank correlation, using average ranks for ties and complete numeric pairs. */
+export function spearmanCorrelation(
+  rows: Cell[][],
+  left: number,
+  right: number,
+): SpearmanResult {
+  const pairs = rows
+    .map((row) => [row[left], row[right]] as const)
+    .filter(
+      (pair): pair is readonly [number, number] =>
+        typeof pair[0] === "number" &&
+        Number.isFinite(pair[0]) &&
+        typeof pair[1] === "number" &&
+        Number.isFinite(pair[1]),
+    );
+  if (pairs.length < 3) return { pairs: pairs.length, rho: "", rhoSquared: "" };
+  const x = averageRanks(pairs.map(([value]) => value));
+  const y = averageRanks(pairs.map(([, value]) => value));
+  const rankRows = x.map((value, index) => [value, y[index]] as Cell[]);
+  const result = correlation(rankRows, 0, 1);
+  return { pairs: pairs.length, rho: result.r, rhoSquared: result.rSquared };
+}
+
+/** Pearson correlation matrix for selected numeric columns using complete pairs per cell. */
+export function correlationMatrix(
+  rows: Cell[][],
+  indexes: number[],
+): Array<Array<number | "">> {
+  return indexes.map((left) =>
+    indexes.map((right) => correlation(rows, left, right).r),
+  );
+}
+
+export interface RegressionResult {
+  pairs: number;
+  correlation: number | "";
+  rSquared: number | "";
+  slope: number | "";
+  intercept: number | "";
+  residualStdError: number | "";
+  relationship: "positive" | "negative" | "flat" | "insufficient";
+}
+
+/**
+ * Least-squares regression of the second selected column on the first.
+ * Only rows with two finite numeric values participate; text and blanks are not
+ * silently coerced.  The preview uses this same calculation as the live report
+ * formulas written by buildRegressionCells.
+ */
+export function regression(
+  rows: Cell[][],
+  predictor: number,
+  response: number,
+): RegressionResult {
+  const pairs = rows
+    .map((row) => [row[predictor], row[response]] as const)
+    .filter(
+      (pair): pair is readonly [number, number] =>
+        typeof pair[0] === "number" &&
+        Number.isFinite(pair[0]) &&
+        typeof pair[1] === "number" &&
+        Number.isFinite(pair[1]),
+    );
+  const empty = {
+    pairs: pairs.length,
+    correlation: "" as const,
+    rSquared: "" as const,
+    slope: "" as const,
+    intercept: "" as const,
+    residualStdError: "" as const,
+    relationship: "insufficient" as const,
+  };
+  if (pairs.length < 3) return empty;
+  const n = pairs.length;
+  const meanX = pairs.reduce((total, [x]) => total + x, 0) / n;
+  const meanY = pairs.reduce((total, [, y]) => total + y, 0) / n;
+  let sxx = 0;
+  let syy = 0;
+  let sxy = 0;
+  for (const [x, y] of pairs) {
+    const dx = x - meanX;
+    const dy = y - meanY;
+    sxx += dx * dx;
+    syy += dy * dy;
+    sxy += dx * dy;
+  }
+  if (sxx === 0 || syy === 0) return empty;
+  const slope = sxy / sxx;
+  const intercept = meanY - slope * meanX;
+  const r = sxy / Math.sqrt(sxx * syy);
+  const residualStdError =
+    n > 2
+      ? Math.sqrt(
+          pairs.reduce((total, [x, y]) => {
+            const residual = y - (intercept + slope * x);
+            return total + residual * residual;
+          }, 0) /
+            (n - 2),
+        )
+      : NaN;
+  return {
+    pairs: n,
+    correlation: round(r),
+    rSquared: round(r * r),
+    slope: round(slope),
+    intercept: round(intercept),
+    residualStdError: round(residualStdError),
+    relationship: slope > 0 ? "positive" : slope < 0 ? "negative" : "flat",
+  };
+}
+
+export interface PairedTTestResult {
+  pairs: number;
+  meanDifference: number | "";
+  differenceStdDev: number | "";
+  tStatistic: number | "";
+  degreesOfFreedom: number | "";
+  pValue: number | "";
+  interpretation: "significant" | "not-significant" | "insufficient";
+}
+
+// Lanczos approximation and a continued fraction are sufficient for the
+// bounded preview p-value; Excel's T.TEST remains the live-sheet authority.
+function logGamma(value: number): number {
+  const coefficients = [
+    676.5203681218851, -1259.1392167224028, 771.3234287776531,
+    -176.6150291621406, 12.507343278686905, -0.13857109526572012,
+    9.984369578019572e-6, 1.5056327351493116e-7,
+  ];
+  if (value < 0.5)
+    return (
+      Math.log(Math.PI) -
+      Math.log(Math.sin(Math.PI * value)) -
+      logGamma(1 - value)
+    );
+  const shifted = value - 1;
+  let sum = 0.9999999999998099;
+  coefficients.forEach((coefficient, index) => {
+    sum += coefficient / (shifted + index + 1);
+  });
+  const t = shifted + coefficients.length - 0.5;
+  return (
+    0.5 * Math.log(2 * Math.PI) +
+    (shifted + 0.5) * Math.log(t) -
+    t +
+    Math.log(sum)
+  );
+}
+
+function betaContinuedFraction(x: number, a: number, b: number): number {
+  const maxIterations = 200;
+  const epsilon = 3e-14;
+  const tiny = 1e-300;
+  let c = 1;
+  let d = 1 - ((a + b) * x) / (a + 1);
+  d = Math.abs(d) < tiny ? tiny : d;
+  d = 1 / d;
+  let h = d;
+  for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    const m = iteration;
+    const m2 = 2 * m;
+    let numerator = (m * (b - m) * x) / ((a + m2 - 1) * (a + m2));
+    d = 1 + numerator * d;
+    d = Math.abs(d) < tiny ? tiny : d;
+    c = 1 + numerator / c;
+    c = Math.abs(c) < tiny ? tiny : c;
+    d = 1 / d;
+    h *= d * c;
+    numerator = -((a + m) * (a + b + m) * x) / ((a + m2) * (a + m2 + 1));
+    d = 1 + numerator * d;
+    d = Math.abs(d) < tiny ? tiny : d;
+    c = 1 + numerator / c;
+    c = Math.abs(c) < tiny ? tiny : c;
+    d = 1 / d;
+    const delta = d * c;
+    h *= delta;
+    if (Math.abs(delta - 1) < epsilon) break;
+  }
+  return h;
+}
+
+function regularizedBeta(x: number, a: number, b: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const factor = Math.exp(
+    a * Math.log(x) +
+      b * Math.log(1 - x) +
+      logGamma(a + b) -
+      logGamma(a) -
+      logGamma(b),
+  );
+  if (x < (a + 1) / (a + b + 2))
+    return Math.min(
+      1,
+      Math.max(0, (factor * betaContinuedFraction(x, a, b)) / a),
+    );
+  return Math.min(
+    1,
+    Math.max(0, 1 - (factor * betaContinuedFraction(1 - x, b, a)) / b),
+  );
+}
+
+function twoTailedPValue(t: number, degreesOfFreedom: number): number {
+  if (!Number.isFinite(t) || degreesOfFreedom <= 0) return NaN;
+  const x = degreesOfFreedom / (degreesOfFreedom + t * t);
+  return regularizedBeta(x, degreesOfFreedom / 2, 0.5);
+}
+
+/** Paired two-tailed t-test over rows with two finite numeric values. */
+export function pairedTTest(
+  rows: Cell[][],
+  left: number,
+  right: number,
+): PairedTTestResult {
+  const differences = rows
+    .map((row) => [row[left], row[right]] as const)
+    .filter(
+      (pair): pair is readonly [number, number] =>
+        typeof pair[0] === "number" &&
+        Number.isFinite(pair[0]) &&
+        typeof pair[1] === "number" &&
+        Number.isFinite(pair[1]),
+    )
+    .map(([a, b]) => a - b);
+  const empty: PairedTTestResult = {
+    pairs: differences.length,
+    meanDifference: "",
+    differenceStdDev: "",
+    tStatistic: "",
+    degreesOfFreedom: "",
+    pValue: "",
+    interpretation: "insufficient",
+  };
+  if (differences.length < 2) return empty;
+  const n = differences.length;
+  const mean = differences.reduce((total, value) => total + value, 0) / n;
+  const variance =
+    differences.reduce((total, value) => total + (value - mean) ** 2, 0) /
+    (n - 1);
+  const standardDeviation = Math.sqrt(variance);
+  const degreesOfFreedom = n - 1;
+  if (standardDeviation === 0) return empty;
+  const t = mean / (standardDeviation / Math.sqrt(n));
+  const p = twoTailedPValue(t, degreesOfFreedom);
+  return {
+    pairs: n,
+    meanDifference: round(mean),
+    differenceStdDev: round(standardDeviation),
+    tStatistic: round(t),
+    degreesOfFreedom,
+    pValue: Number.isFinite(p) ? Math.round(p * 10000) / 10000 : "",
+    interpretation: p < 0.05 ? "significant" : "not-significant",
+  };
+}
+
 /** Least-squares line through (1..n, values); returns the next `periods` values. */
 export function linearForecast(values: number[], periods: number): number[] {
   const n = values.length;
@@ -177,6 +454,338 @@ export function buildCorrelationCells(
       `=IFERROR(RSQ(${b},${a}),"")`,
       `=IFERROR(SLOPE(${b},${a}),"")`,
       `=IFERROR(INTERCEPT(${b},${a}),"")`,
+    ],
+  ];
+}
+
+export function buildSpearmanCells(
+  range: RangeInfo,
+  headers: string[],
+  left: number,
+  right: number,
+): string[][] {
+  const a = columnRange(range, left);
+  const b = columnRange(range, right);
+  const valid = `ISNUMBER(${a})*ISNUMBER(${b})`;
+  return [
+    ["Pair", "Spearman rho", "Rho squared", "Observations"],
+    [
+      `${headers[left]} and ${headers[right]}`,
+      `=IFERROR(LET(x,FILTER(${a},${valid}),y,FILTER(${b},${valid}),CORREL(RANK.AVG(x,x,1),RANK.AVG(y,y,1))),"")`,
+      `=IFERROR(B2^2,"")`,
+      `=SUMPRODUCT(--${valid})`,
+    ],
+  ];
+}
+
+export function buildCorrelationMatrixCells(
+  range: RangeInfo,
+  headers: string[],
+  indexes: number[],
+): string[][] {
+  return [
+    ["Column", ...indexes.map((index) => headers[index])],
+    ...indexes.map((left) => [
+      headers[left],
+      ...indexes.map((right) => {
+        const a = columnRange(range, left);
+        const b = columnRange(range, right);
+        return `=IFERROR(CORREL(${a},${b}),"")`;
+      }),
+    ]),
+  ];
+}
+
+export function buildRegressionCells(
+  range: RangeInfo,
+  headers: string[],
+  predictor: number,
+  response: number,
+): string[][] {
+  const x = columnRange(range, predictor);
+  const y = columnRange(range, response);
+  return [
+    ["Regression metric", "Value", "Evidence"],
+    ["Predictor", headers[predictor], "X variable"],
+    ["Response", headers[response], "Y variable"],
+    [
+      "Observations",
+      `=SUMPRODUCT(--ISNUMBER(${x}),--ISNUMBER(${y}))`,
+      "Rows with numeric X and Y",
+    ],
+    [
+      "Correlation (r)",
+      `=IFERROR(CORREL(${x},${y}),"")`,
+      "Pearson correlation",
+    ],
+    ["R squared", `=IFERROR(RSQ(${y},${x}),"")`, "Explained variance"],
+    ["Slope", `=IFERROR(SLOPE(${y},${x}),"")`, "Change in Y per X"],
+    [
+      "Intercept",
+      `=IFERROR(INTERCEPT(${y},${x}),"")`,
+      "Expected Y when X is zero",
+    ],
+    [
+      "Residual std. error",
+      `=IFERROR(STEYX(${y},${x}),"")`,
+      "Typical unexplained Y error",
+    ],
+    [
+      "Interpretation",
+      '=IF(B7>0,"Positive relationship",IF(B7<0,"Negative relationship","Flat relationship"))',
+      "Association is not causation",
+    ],
+  ];
+}
+
+export function buildPairedTTestCells(
+  range: RangeInfo,
+  headers: string[],
+  left: number,
+  right: number,
+): string[][] {
+  const a = columnRange(range, left);
+  const b = columnRange(range, right);
+  const differences = `FILTER(${a}-${b},ISNUMBER(${a})*ISNUMBER(${b}))`;
+  const observations = `SUMPRODUCT(--ISNUMBER(${a}),--ISNUMBER(${b}))`;
+  return [
+    ["Paired t-test metric", "Value", "Evidence"],
+    ["First sample", headers[left], "Paired observations"],
+    ["Second sample", headers[right], "Paired observations"],
+    [
+      "Observations",
+      `=${observations}`,
+      "Rows with numeric values in both columns",
+    ],
+    [
+      "Mean difference",
+      `=IFERROR(AVERAGE(${differences}),"")`,
+      `${headers[left]} - ${headers[right]}`,
+    ],
+    [
+      "Difference std. dev.",
+      `=IFERROR(STDEV.S(${differences}),"")`,
+      "Sample standard deviation of paired differences",
+    ],
+    [
+      "t statistic",
+      `=IFERROR(B5/(B6/SQRT(B4)),"")`,
+      "Mean difference / standard error",
+    ],
+    ["Degrees of freedom", "=MAX(0,B4-1)", "Observations - 1"],
+    [
+      "Two-tailed p-value",
+      `=IFERROR(T.TEST(${a},${b},2,1),"")`,
+      "Excel paired t-test",
+    ],
+    [
+      "Interpretation",
+      '=IF(B9<0.05,"Statistically significant at 5%","Not statistically significant at 5%")',
+      "Evidence of a mean difference; not a causal claim",
+    ],
+  ];
+}
+
+export interface AnovaResult {
+  groups: number;
+  observations: number;
+  betweenDf: number | "";
+  withinDf: number | "";
+  betweenSumSquares: number | "";
+  withinSumSquares: number | "";
+  fStatistic: number | "";
+  pValue: number | "";
+  etaSquared: number | "";
+  interpretation: "significant" | "not-significant" | "insufficient";
+}
+
+export interface AnovaGroupSummary {
+  group: string;
+  observations: number;
+  mean: number | "";
+  standardDeviation: number | "";
+}
+
+function collectAnovaGroups(
+  rows: Cell[][],
+  category: number,
+  value: number,
+): Map<string, number[]> {
+  const groups = new Map<string, number[]>();
+  for (const row of rows) {
+    const label = String(row[category] ?? "").trim();
+    const amount = row[value];
+    if (label && typeof amount === "number" && Number.isFinite(amount)) {
+      const values = groups.get(label) ?? [];
+      values.push(amount);
+      groups.set(label, values);
+    }
+  }
+  return groups;
+}
+
+/** Per-category evidence for ANOVA; blanks and non-numeric measures are excluded. */
+export function anovaGroupSummary(
+  rows: Cell[][],
+  category: number,
+  value: number,
+): AnovaGroupSummary[] {
+  return [...collectAnovaGroups(rows, category, value).entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([group, values]) => {
+      const mean =
+        values.reduce((total, amount) => total + amount, 0) / values.length;
+      const standardDeviation =
+        values.length > 1
+          ? Math.sqrt(
+              values.reduce(
+                (total, amount) => total + (amount - mean) ** 2,
+                0,
+              ) /
+                (values.length - 1),
+            )
+          : NaN;
+      return {
+        group,
+        observations: values.length,
+        mean: round(mean),
+        standardDeviation: round(standardDeviation),
+      };
+    });
+}
+
+/** One-way ANOVA over a categorical column and a numeric measure column. */
+export function anovaOneWay(
+  rows: Cell[][],
+  category: number,
+  value: number,
+): AnovaResult {
+  const groups = collectAnovaGroups(rows, category, value);
+  const usable = [...groups.values()];
+  const observations = usable.reduce(
+    (total, values) => total + values.length,
+    0,
+  );
+  const empty: AnovaResult = {
+    groups: usable.length,
+    observations,
+    betweenDf: "",
+    withinDf: "",
+    betweenSumSquares: "",
+    withinSumSquares: "",
+    fStatistic: "",
+    pValue: "",
+    etaSquared: "",
+    interpretation: "insufficient",
+  };
+  if (usable.length < 2 || observations <= usable.length) return empty;
+  const grandMean =
+    usable.flat().reduce((total, amount) => total + amount, 0) / observations;
+  const betweenSumSquares = usable.reduce((total, values) => {
+    const mean =
+      values.reduce((sum, amount) => sum + amount, 0) / values.length;
+    return total + values.length * (mean - grandMean) ** 2;
+  }, 0);
+  const withinSumSquares = usable.reduce((total, values) => {
+    const mean =
+      values.reduce((sum, amount) => sum + amount, 0) / values.length;
+    return (
+      total + values.reduce((sum, amount) => sum + (amount - mean) ** 2, 0)
+    );
+  }, 0);
+  const betweenDf = usable.length - 1;
+  const withinDf = observations - usable.length;
+  if (withinSumSquares === 0) {
+    const fStatistic = betweenSumSquares > 0 ? Infinity : 0;
+    return {
+      ...empty,
+      betweenDf,
+      withinDf,
+      betweenSumSquares: round(betweenSumSquares),
+      withinSumSquares: 0,
+      fStatistic: betweenSumSquares > 0 ? "" : 0,
+      pValue: betweenSumSquares > 0 ? 0 : 1,
+      etaSquared: betweenSumSquares + 0 > 0 ? 1 : 0,
+      interpretation: fStatistic > 0 ? "significant" : "not-significant",
+    };
+  }
+  const fStatistic =
+    betweenSumSquares / betweenDf / (withinSumSquares / withinDf);
+  const pValue = regularizedBeta(
+    withinDf / (withinDf + betweenDf * fStatistic),
+    withinDf / 2,
+    betweenDf / 2,
+  );
+  return {
+    groups: usable.length,
+    observations,
+    betweenDf,
+    withinDf,
+    betweenSumSquares: round(betweenSumSquares),
+    withinSumSquares: round(withinSumSquares),
+    fStatistic: round(fStatistic),
+    pValue: Number.isFinite(pValue) ? Math.round(pValue * 10000) / 10000 : "",
+    etaSquared:
+      betweenSumSquares + withinSumSquares > 0
+        ? round(betweenSumSquares / (betweenSumSquares + withinSumSquares))
+        : "",
+    interpretation: pValue < 0.05 ? "significant" : "not-significant",
+  };
+}
+
+export function buildAnovaCells(
+  range: RangeInfo,
+  headers: string[],
+  category: number,
+  value: number,
+): string[][] {
+  const categories = columnRange(range, category);
+  const values = columnRange(range, value);
+  const usableCategories = `FILTER(${categories},ISNUMBER(${values})*(${categories}<>""))`;
+  const usableValues = `FILTER(${values},ISNUMBER(${values})*(${categories}<>""))`;
+  const groups = `UNIQUE(${usableCategories})`;
+  const counts = `MAP(${groups},LAMBDA(group,COUNTIF(${usableCategories},group)))`;
+  const means = `MAP(${groups},LAMBDA(group,AVERAGEIF(${usableCategories},group,${usableValues})))`;
+  const grandMean = `AVERAGE(${usableValues})`;
+  const between = `SUM(${counts}*(${means}-${grandMean})^2)`;
+  const within = `SUM(MAP(${groups},LAMBDA(group,SUMPRODUCT(--(${usableCategories}=group),(${usableValues}-AVERAGEIF(${usableCategories},group,${usableValues}))^2))))`;
+  return [
+    ["ANOVA metric", "Value", "Evidence"],
+    ["Category", headers[category], "Grouping column"],
+    ["Measure", headers[value], "Numeric response"],
+    ["Groups", `=COUNTA(${groups})`, "Distinct non-blank categories"],
+    ["Observations", `=COUNT(${usableValues})`, "Numeric rows with a category"],
+    ["Between-group df", "=B4-1", "Groups - 1"],
+    ["Within-group df", "=B5-B4", "Observations - groups"],
+    [
+      "Between-group SS",
+      `=IFERROR(${between},"")`,
+      "Variation between group means",
+    ],
+    ["Within-group SS", `=IFERROR(${within},"")`, "Variation within groups"],
+    [
+      "Eta-squared",
+      '=IFERROR(B8/(B8+B9),"")',
+      "Share of numeric variation associated with the category; effect size, not causation",
+    ],
+    ["F statistic", '=IFERROR((B8/B6)/(B9/B7),"")', "Between MS / within MS"],
+    [
+      "p-value",
+      '=IFERROR(F.DIST.RT(B11,INDEX($B:$B,6),INDEX($B:$B,7)),"")',
+      "Right-tail F probability",
+    ],
+    [
+      "Interpretation",
+      '=IF(B12<0.05,"Group means differ significantly at 5%","No significant group-mean difference at 5%")',
+      "Association test; not proof of causation",
+    ],
+    [],
+    ["Group summary", "Observations", "Mean", "Std dev"],
+    [
+      `=IFERROR(SORT(UNIQUE(FILTER(${usableCategories},ISNUMBER(${usableValues})*(${usableCategories}<>"")))),"")`,
+      `=IFERROR(COUNTIF(${usableCategories},A16#),"")`,
+      `=IFERROR(AVERAGEIF(${usableCategories},A16#,${usableValues}),"")`,
+      `=IFERROR(MAP(A16#,LAMBDA(group,STDEV.S(FILTER(${usableValues},(${usableCategories}=group)*ISNUMBER(${usableValues}))))),"")`,
     ],
   ];
 }

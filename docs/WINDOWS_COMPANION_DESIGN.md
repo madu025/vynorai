@@ -1,6 +1,6 @@
 # Windows companion design
 
-Status: **not built.** This repository contains only the contract
+Status: **contract and routing only.** This repository contains the handshake and bounded native-dispatch contract
 ([packages/m365-contracts/src/companion.ts](../packages/m365-contracts/src/companion.ts)) and the pure routing
 logic ([extensions/m365/src/companionState.ts](../extensions/m365/src/companionState.ts)). There is no VSTO, COM,
 VBA or Solver code, no installer and no local service. In this repository the transport always reports
@@ -38,8 +38,10 @@ PivotTable, formula report, deterministic local analytics) stay the answer there
    VynorAI session, so another program on the machine cannot drive it.
 4. `rawWorkbookExport` is always `false` in the handshake; a reply that says otherwise is rejected.
 
-No workbook values travel in discovery. Later operations (not defined yet) must send ranges only after the
-usual preview and explicit approval, bounded and masked as for the managed sandbox.
+No workbook values travel in discovery or native dispatch. A native dispatch uses an allow-listed
+`CompanionOperation`, a workbook/session fingerprint, bounded settings and a short-lived
+`CompanionApprovalGrant`; it never carries a Microsoft bearer token or workbook export. The signed companion
+must still verify the binding and return verification evidence before the add-in can complete the operation.
 
 ## Packaging and signing
 
@@ -71,14 +73,17 @@ The pane's `minCompanionVersion` lets the server require an upgrade.
 
 ## Threat model
 
-| Threat                                   | Mitigation                                                                                |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Local malware impersonates the companion | publisher pin plus signature over a fresh nonce; per-user pipe ACL                        |
-| Malware drives the real companion        | mutual authentication and a short-lived session token; per-operation approval in the pane |
-| Replay of an old reply                   | nonce echoed inside the signature                                                         |
-| Old, vulnerable companion                | `minCompanionVersion`, kill switch                                                        |
-| Data exfiltration                        | no raw export by default, no network except VynorAI endpoints, masked bounded payloads    |
-| Feature leak to Web/Mac                  | `companionOnlyFeatures` returns nothing unless Windows desktop and `ready` (tested)       |
+| Threat                                   | Mitigation                                                                                            |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Local malware impersonates the companion | publisher pin plus signature over a fresh nonce; per-user pipe ACL                                    |
+| Malware drives the real companion        | mutual authentication and a short-lived session token; per-operation approval in the pane             |
+| Replay of an old reply                   | nonce echoed inside the signature                                                                     |
+| Old, vulnerable companion                | `minCompanionVersion`, kill switch                                                                    |
+| Data exfiltration                        | no raw export by default, no network except VynorAI endpoints, masked bounded payloads                |
+| Feature leak to Web/Mac                  | `companionOnlyFeatures` returns nothing unless Windows desktop and `ready` (tested)                   |
+| Arbitrary local execution                | `CompanionOperation` is an explicit allow-list; there is no shell, macro text or arbitrary COM member |
+| Unapproved native writes                 | Dispatch requires a short-lived `CompanionApprovalGrant` and workbook binding                         |
+| Raw workbook/token exposure              | Dispatch contains fingerprints/settings only; raw values and Microsoft bearer tokens are excluded     |
 
 ## Remaining work (not done)
 

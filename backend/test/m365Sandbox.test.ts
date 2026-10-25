@@ -140,6 +140,7 @@ test("the backend limits equal the shared contract", async () => {
     [...sbx.SANDBOX_ERROR_CODES],
     [...contract.M365_SANDBOX_ERROR_CODES],
   );
+  assert.equal(contract.M365_SANDBOX_WORKER_MAX_CLOCK_SKEW_SECONDS, 90);
 });
 
 test("without an isolated worker preview and submit fail closed and store nothing", async () => {
@@ -168,6 +169,70 @@ test("without an isolated worker preview and submit fail closed and store nothin
     (await dbm.dbAll("SELECT jti FROM m365_approval_uses")).length,
     0,
   );
+});
+
+test("the configured HTTPS adapter authenticates the bounded request and accepts only a bound result", async () => {
+  const workerModule = await import("../src/services/m365SandboxWorker.js");
+  const secret = "w".repeat(32);
+  let received: any;
+  const server = http.createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const body = Buffer.concat(chunks).toString("utf8");
+    const timestamp = String(req.headers["x-vynorai-worker-timestamp"] ?? "");
+    const signature = String(req.headers["x-vynorai-worker-signature"] ?? "");
+    received = {
+      body: JSON.parse(body),
+      authenticated:
+        signature ===
+        workerModule.sandboxWorkerSignature(secret, timestamp, body),
+    };
+    const responseBody = JSON.stringify({
+      contractVersion: "2026-10-24.python-sandbox.v1",
+      requestId: received.body.requestId,
+      jobId: received.body.jobId,
+      status: "completed",
+      result: {
+        tables: [],
+        metrics: { rows: received.body.rows.length },
+        notes: [],
+      },
+    });
+    const responseTimestamp = String(Math.floor(Date.now() / 1000));
+    res.setHeader("x-vynorai-worker-timestamp", responseTimestamp);
+    res.setHeader(
+      "x-vynorai-worker-signature",
+      workerModule.sandboxWorkerSignature(
+        secret,
+        responseTimestamp,
+        responseBody,
+      ),
+    );
+    res.setHeader("content-type", "application/json");
+    res.end(responseBody);
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(0, "127.0.0.1", () => resolve()),
+  );
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  sbx.registerSandboxWorker(
+    workerModule.createHttpSandboxWorker({
+      url: `http://127.0.0.1:${address.port}/run`,
+      secret,
+      allowInsecureHttp: true,
+    }),
+  );
+  const view = await approvedSubmit(alice, request("http"));
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  assert.equal(view.state, "succeeded");
+  assert.equal(received.authenticated, true);
+  assert.equal(received.body.network, false);
+  assert.match(received.body.requestId, /^[0-9a-f-]{36}$/);
+  assert.equal(received.body.tenantId, alice.tenantId);
+  assert.equal(received.body.objectId, alice.objectId);
 });
 
 test("no approval means no dispatch and no job row", async () => {

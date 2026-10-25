@@ -105,7 +105,7 @@ test("preferences: only valid fields survive", () => {
   assert.deepEqual(parsePreferences(null), {});
   assert.deepEqual(
     parsePreferences(
-      '{"currency":"LKR","numberStyle":"lakh","fiscalYearStart":4,"audience":"management","changeLog":false,"holidays":true,"x":1}',
+      '{"currency":"LKR","numberStyle":"lakh","fiscalYearStart":4,"audience":"management","changeLog":false,"holidays":true,"resultSheetPrefix":"Finance","x":1}',
     ),
     {
       currency: "LKR",
@@ -114,8 +114,10 @@ test("preferences: only valid fields survive", () => {
       audience: "management",
       changeLog: false,
       holidays: true,
+      resultSheetPrefix: "Finance",
     },
   );
+  assert.deepEqual(parsePreferences({ resultSheetPrefix: "bad/name" }), {});
   assert.deepEqual(
     parsePreferences({
       currency: "rupees",

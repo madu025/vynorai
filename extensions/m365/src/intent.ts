@@ -35,6 +35,12 @@ export interface InstructionSpecs {
       | "combo"
       | "histogram"
       | "waterfall";
+    title?: string;
+    axisTitles?: { category?: string; value?: string };
+    legend?: {
+      visible?: boolean;
+      position?: "Top" | "Bottom" | "Left" | "Right";
+    };
     extraValues?: number[];
     showDataLabels?: boolean;
     pivotResult?: boolean;
@@ -100,10 +106,15 @@ export interface InstructionSpecs {
     mode:
       | "describe"
       | "correlation"
+      | "spearman"
+      | "correlation-matrix"
       | "forecast"
       | "advanced-forecast"
       | "financial"
       | "anomaly"
+      | "regression"
+      | "t-test"
+      | "anova"
       | "insights";
     columns?: number[];
     pair?: [number, number];
@@ -119,6 +130,16 @@ export interface InstructionSpecs {
     usage?: { item: number; unit?: number };
   };
   quality?: { mode?: "data" | "formula" | "repair" };
+  table?: {
+    showTotals?: boolean;
+    style?:
+      | "TableStyleLight2"
+      | "TableStyleLight9"
+      | "TableStyleMedium2"
+      | "TableStyleMedium4"
+      | "TableStyleMedium9"
+      | "TableStyleDark2";
+  };
   clean?: {
     operations: CleanOperation[];
     fillBlanks?: string | number;
@@ -126,6 +147,8 @@ export interface InstructionSpecs {
   };
   format?: {
     freezeHeader?: boolean;
+    freezeColumns?: number;
+    freezeRows?: number;
     totalRow?: boolean;
     conditional?: Array<{
       column: number;
@@ -307,11 +330,31 @@ export function interpretInstruction(
     problems: [],
   };
   const text = rewriteColumnWishes(instruction.replace(/[_]+/g, " "), headers);
-  // Power Pivot, the Data Model, OLAP, Solver, Scenario Manager, VBA/COM, sparklines and Python are
-  // native features this add-in cannot run. Say so and name the closest supported alternative; never
-  // fall through to a near-miss plan that could look like it succeeded.
+  // Native-only features are never faked. Real fallbacks are handled explicitly below; otherwise
+  // return the structured unsupported message instead of falling through to a near-miss plan.
   const native = refuseNativeRequest(text, baseCapabilityContext());
   if (native) {
+    // Excel has no Sparkline object in this add-in boundary, but a line chart is a real,
+    // reviewable substitute. Choose columns deterministically from the selected data and let the
+    // normal preview/apply/verify/undo path handle it. Never write a fake sparkline or claim that
+    // Excel's native Sparkline object was created.
+    if (native.feature === "sparklines") {
+      const numeric = headers.findIndex((_, index) =>
+        isNumericColumn(rows, index),
+      );
+      const category = headers.findIndex(
+        (_, index) => index !== numeric && !isNumericColumn(rows, index),
+      );
+      if (numeric >= 0 && category >= 0) {
+        result.actions.push("chart");
+        result.specs.chart = {
+          category,
+          value: numeric,
+          chartType: "line",
+        };
+        return result;
+      }
+    }
     result.problems.push(native.message);
     return result;
   }
@@ -509,6 +552,21 @@ export function interpretInstruction(
     )
   )
     result.actions.push("table");
+  if (result.actions.includes("table")) {
+    const style = /\bblue\s+(?:excel\s+)?table\s+style\b/i.test(text)
+      ? "TableStyleMedium2"
+      : /\bgreen\s+(?:excel\s+)?table\s+style\b/i.test(text)
+        ? "TableStyleMedium4"
+        : /\bdark\s+(?:excel\s+)?table\s+style\b/i.test(text)
+          ? "TableStyleDark2"
+          : undefined;
+    const showTotals = /\btotals?\s+row\b/i.test(text);
+    if (showTotals || style)
+      result.specs.table = {
+        ...(showTotals ? { showTotals: true } : {}),
+        ...(style ? { style } : {}),
+      };
+  }
 
   const dependentDropdownMatch =
     /\b(?:create|add|make)\s+(?:a\s+)?dependent\s+drop-?down\s+for\s+["']?([^"'\n]+?)["']?\s+based\s+on\s+["']?([^"'\n.]+?)["']?\s*\.?$/i.exec(
@@ -1772,11 +1830,69 @@ function interpretChartAndPivot(
     const [first, ...rest] = numericEntries.map((entry) => entry.index);
     const isHistogram = chartType === "histogram";
     const histogramValue = numeric[0]?.index ?? first;
+    const quotedTitle =
+      /\b(?:chart\s+)?title\s*(?:is|:)?\s*(?:"([^"]{1,80})"|'([^']{1,80})')/i.exec(
+        text,
+      );
+    const categoryAxisTitle =
+      /\b(?:category|x)\s+axis\s+title\s*(?:is|:)?\s*(?:"([^"]{1,80})"|'([^']{1,80})')/i.exec(
+        text,
+      );
+    const valueAxisTitle =
+      /\b(?:value|y)\s+axis\s+title\s*(?:is|:)?\s*(?:"([^"]{1,80})"|'([^']{1,80})')/i.exec(
+        text,
+      );
+    const legendHidden =
+      /\b(?:hide|remove|without|no)\s+(?:the\s+)?(?:chart\s+)?legend\b/i.test(
+        text,
+      );
+    const legendShown =
+      /\b(?:show|include|with)\s+(?:the\s+)?(?:chart\s+)?legend\b/i.test(text);
+    const legendAt =
+      /\blegend\s+(?:at|on|position(?:ed)?\s*(?:is|:)?)[ \t]*(top|bottom|left|right)\b/i.exec(
+        text,
+      );
+    const legendPosition = legendAt
+      ? ((legendAt[1].charAt(0).toUpperCase() +
+          legendAt[1].slice(1).toLowerCase()) as
+          | "Top"
+          | "Bottom"
+          | "Left"
+          | "Right")
+      : undefined;
     result.actions.push("chart");
     result.specs.chart = {
       category: isHistogram ? histogramValue : chartCategoryEntry.index,
       value: isHistogram ? histogramValue : first,
       chartType,
+      ...(quotedTitle
+        ? { title: (quotedTitle[1] ?? quotedTitle[2]).trim() }
+        : {}),
+      ...(categoryAxisTitle || valueAxisTitle
+        ? {
+            axisTitles: {
+              ...(categoryAxisTitle
+                ? {
+                    category: (
+                      categoryAxisTitle[1] ?? categoryAxisTitle[2]
+                    ).trim(),
+                  }
+                : {}),
+              ...(valueAxisTitle
+                ? { value: (valueAxisTitle[1] ?? valueAxisTitle[2]).trim() }
+                : {}),
+            },
+          }
+        : {}),
+      ...(legendHidden || legendShown || legendAt
+        ? {
+            legend: {
+              ...(legendHidden ? { visible: false } : {}),
+              ...(legendShown ? { visible: true } : {}),
+              ...(legendAt ? { position: legendPosition } : {}),
+            },
+          }
+        : {}),
       ...(/\b(?:data\s*labels?|show\s+(?:the\s+)?values?)\b/i.test(text)
         ? { showDataLabels: true }
         : {}),
@@ -2368,8 +2484,100 @@ function interpretStatistics(
     };
     return;
   }
+  if (
+    /\b(?:linear\s+)?regression\b|\br[-\s]?squared\b|\b(?:predictor|coefficient|slope\s+and\s+intercept)\b/i.test(
+      text,
+    )
+  ) {
+    const mentionedPair = mentioned.length >= 2 ? mentioned : numericAll;
+    // In statistical wording, "Y on X" means X is the predictor and Y is the response.
+    // Keep the explicit order so the report's slope/intercept have an unambiguous meaning.
+    const pair =
+      /\bon\b/i.test(text) && mentionedPair.length >= 2
+        ? [mentionedPair[1], mentionedPair[0]]
+        : mentionedPair;
+    if (pair.length >= 2) {
+      result.actions.push("statistics");
+      result.specs.statistics = {
+        mode: "regression",
+        pair: [pair[0], pair[1]],
+      };
+    } else result.problems.push("Regression needs two numeric columns.");
+    return;
+  }
+  if (
+    /\b(?:paired\s+)?t[-\s]?test\b|\btest\s+(?:whether|if)\b.*\b(?:different|equal)\b|\bstatistically\s+different\b/i.test(
+      text,
+    )
+  ) {
+    const pair = mentioned.length >= 2 ? mentioned : numericAll;
+    if (pair.length >= 2) {
+      result.actions.push("statistics");
+      result.specs.statistics = {
+        mode: "t-test",
+        pair: [pair[0], pair[1]],
+      };
+    } else result.problems.push("A paired t-test needs two numeric columns.");
+    return;
+  }
+  if (
+    /\b(?:one[-\s]?way\s+)?anova\b|\banalysis\s+of\s+variance\b/i.test(text)
+  ) {
+    const anyMentioned = headerPositions(headers, text).map(
+      (entry) => entry.index,
+    );
+    const value = mentioned[0] ?? numericAll[0];
+    const category =
+      anyMentioned.find(
+        (index) => index !== value && !isNumericColumn(rows, index),
+      ) ??
+      headers.findIndex(
+        (_, index) => index !== value && !isNumericColumn(rows, index),
+      );
+    if (value === undefined || category < 0)
+      result.problems.push(
+        "ANOVA needs one numeric measure and one category column.",
+      );
+    else {
+      result.actions.push("statistics");
+      result.specs.statistics = { mode: "anova", value, category };
+    }
+    return;
+  }
+  if (/\bspearman\b|\brank\s+correlation\b/i.test(text)) {
+    const pair = mentioned.length >= 2 ? mentioned : numericAll;
+    if (pair.length >= 2) {
+      result.actions.push("statistics");
+      result.specs.statistics = { mode: "spearman", pair: [pair[0], pair[1]] };
+    } else
+      result.problems.push("Spearman correlation needs two numeric columns.");
+    return;
+  }
   if (/\bcorrelat(?:e|ion|ions)\b|\brelationship\s+between\b/i.test(text)) {
     const pair = mentioned.length >= 2 ? mentioned : numericAll;
+    if (
+      /correlation\s+matrix|matrix\s+of\s+correlations|correlations?\s+among/i.test(
+        text,
+      )
+    ) {
+      // “and the numeric columns” explicitly asks for the detected numeric set,
+      // even when the request also names one representative measure.
+      const columns = (
+        /\bnumeric\s+columns?\b/i.test(text)
+          ? numericAll
+          : mentioned.length
+            ? mentioned
+            : numericAll
+      ).slice(0, 8);
+      if (columns.length >= 2) {
+        result.actions.push("statistics");
+        result.specs.statistics = { mode: "correlation-matrix", columns };
+      } else
+        result.problems.push(
+          "A correlation matrix needs at least two numeric columns.",
+        );
+      return;
+    }
     if (pair.length >= 2) {
       result.actions.push("statistics");
       result.specs.statistics = {
@@ -2444,7 +2652,7 @@ function interpretFormatAndQuality(
   }
   if (/format\s+as\s+(?:a\s+)?table/i.test(text)) return;
   const wants =
-    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:allow|only|accept|valid)\b[^.\n]{0,40}\bfrom\s+-?\d[\d,]*(?:\.\d+)?\s+to\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\b(?:allow|accept|require|ensure)\b[^.\n]{0,20}\bdates?\s+(?:in|for|on)\b|\btotals?\s+row\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\bdata\s*bars?\b|\bicon\s*sets?\b|\barrows?\b|\bbetween\s+-?\d|\b(?:allow|only|accept|valid)\b[^.\n]{0,40}\bfrom\s+-?\d[\d,]*(?:\.\d+)?\s+to\s+-?\d|\b(?:at\s+most|maximum|up\s+to)\s+\d+\s+characters\b|\blimit\b[^.\n]{0,80}\bcharacters\b|\b(?:non[- ]negative|zero\s+or\s+positive)\b|\bcolou?r\s*scale\b|\bconditional\s+formatting\b|\bcustom\s+formula\b|\bhighlight\s+(?:the\s+)?(?:negative|duplicates?)\b|\bhighlight\b[^.\n]{0,80}(?:>=|<=|<>|>|<|\bgreater\s+than\b|\bless\s+than\b|\bequal\s+to\b)|\b(?:top|bottom)\s+\d{1,3}\b[^.\n]{0,80}\bconditional\s+format(?:ting)?\b|\b(?:highlight|format)\b[^.\n]{0,80}\bcontain(?:s|ing)\b|\b(?:date|dates)\b[^.\n]{0,80}\b(?:between|from)\s+\d{4}-\d{2}-\d{2}\b|\bdrop-?\s?down\b|\bvalidation\b|\b(?:allow|accept|require|ensure)\b[^.\n]{0,20}\bdates?\s+(?:in|for|on)\b|\btotals?\s+row\b|\bgridlines?\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
       text,
     );
   if (!wants) return;
@@ -2667,10 +2875,33 @@ function interpretFormatAndQuality(
   }
   const format: NonNullable<InstructionSpecs["format"]> = {
     freezeHeader: true,
+    ...(() => {
+      const match =
+        /\b(?:freeze|lock)\s+(?:the\s+)?(?:first\s+)?(\d+)\s+columns?\b/i.exec(
+          text,
+        );
+      const count = match ? Number(match[1]) : 0;
+      return count >= 1 && count <= 100 ? { freezeColumns: count } : {};
+    })(),
+    ...(() => {
+      const match =
+        /\b(?:freeze|lock)\s+(?:the\s+)?(?:first\s+)?(\d+)\s+rows?\b/i.exec(
+          text,
+        );
+      const count = match ? Number(match[1]) : 0;
+      return count >= 1 && count <= 100 ? { freezeRows: count } : {};
+    })(),
     ...(/\btotals?\s+row\b/i.test(text) ? { totalRow: true } : {}),
     ...(conditional.length ? { conditional } : {}),
     ...(validation.length ? { validation } : {}),
     ...(inputMessage ? { inputMessage } : {}),
+    ...(/\b(?:hide|remove|turn\s+off|without)\s+(?:the\s+)?gridlines?\b/i.test(
+      text,
+    )
+      ? { showGridlines: false }
+      : /\b(?:show|turn\s+on|with)\s+(?:the\s+)?gridlines?\b/i.test(text)
+        ? { showGridlines: true }
+        : {}),
   };
   result.actions.push("format");
   result.specs.format = format;

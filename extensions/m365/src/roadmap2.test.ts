@@ -187,6 +187,8 @@ function fakeWorkbook() {
           {},
           {
             get(_t, prop) {
+              if (prop === "load") return () => undefined;
+              if (prop === "values") return input.values;
               if (prop === "format")
                 return {
                   fill: new Proxy(

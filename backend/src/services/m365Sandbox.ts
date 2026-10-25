@@ -12,9 +12,9 @@ import { logSecurityEvent } from "./securityAudit.js";
  * Managed Python sandbox: job ledger, validation, approval, quota and fail-closed dispatch.
  *
  * This module never runs Python, never starts a process and never touches the filesystem. A job
- * only ever reaches an isolated worker through the SandboxWorker interface below. No worker
- * adapter exists in this repository, so every submission ends in SANDBOX_UNAVAILABLE until an
- * administrator provisions one (docs/PYTHON_SANDBOX_DEPLOYMENT.md). The database holds job
+ * only ever reaches an isolated worker through the SandboxWorker interface below. The optional
+ * HTTPS adapter is registered at startup only when an administrator provisions its endpoint and
+ * secret (docs/PYTHON_SANDBOX_DEPLOYMENT.md). The database holds job
  * metadata and, for a finished job, the bounded masked result until it expires. It never
  * holds the script or the input table.
  *
@@ -128,7 +128,7 @@ export interface SandboxWorker {
 
 let registeredWorker: SandboxWorker | null = null;
 
-/** Registers the adapter for a provisioned isolated worker. Nothing in this repository calls it. */
+/** Registers the adapter for a provisioned isolated worker. Startup uses the HTTPS adapter. */
 export function registerSandboxWorker(worker: SandboxWorker | null): void {
   registeredWorker = worker;
 }

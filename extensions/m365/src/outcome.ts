@@ -9,11 +9,18 @@ import { chartNeedsGrouping, groupChartRows } from "./chartGroups.js";
 import { UsageAccumulator } from "./usageDashboard.js";
 import { parseExpression } from "./expression.js";
 import { previewExpressionValue } from "./previewValue.js";
+import { excelSafeBaseName } from "./excel.js";
 import {
   correlation,
+  spearmanCorrelation,
+  correlationMatrix,
   describeColumns,
   linearForecast,
   numericSeries,
+  anovaOneWay,
+  anovaGroupSummary,
+  pairedTTest,
+  regression,
   buildInsightReportPreview,
 } from "./statistics.js";
 import {
@@ -1372,6 +1379,150 @@ export function buildOutcomes(
               `${strength === "strong" ? "வலுவான" : strength === "moderate" ? "மிதமான" : "பலவீனமான"} ${(result.r as number) > 0 ? "நேர்மறை" : "எதிர்மறை"} தொடர்பு`,
             ),
           );
+      } else if (stats.mode === "spearman") {
+        const pair = (stats.pair ?? []) as Array<{
+          column: string;
+          index: number;
+        }>;
+        const result = spearmanCorrelation(
+          rows as any,
+          pair[0].index,
+          pair[1].index,
+        );
+        item.title = `Spearman correlation: ${pair[0].column} and ${pair[1].column}`;
+        item.table = {
+          headers: ["Pair", "Spearman rho", "Rho squared", "Observations"],
+          rows: [
+            [
+              `${pair[0].column} and ${pair[1].column}`,
+              String(result.rho),
+              String(result.rhoSquared),
+              String(result.pairs),
+            ],
+          ],
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          "Ranks are used with average ranks for ties; this measures monotonic association, not causation.",
+        );
+      } else if (stats.mode === "correlation-matrix") {
+        const columns = (stats.columns ?? []) as Array<{
+          column: string;
+          index: number;
+        }>;
+        const matrix = correlationMatrix(
+          rows as any,
+          columns.map((entry) => entry.index),
+        );
+        item.title = "Correlation matrix";
+        item.table = {
+          headers: ["Column", ...columns.map((entry) => entry.column)],
+          rows: columns.map((entry, rowIndex) => [
+            entry.column,
+            ...matrix[rowIndex].map((value) => String(value)),
+          ]),
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          "Pearson correlations are computed for each selected numeric-column pair; correlation is association, not causation.",
+        );
+      } else if (stats.mode === "regression") {
+        const pair = (stats.pair ?? []) as Array<{
+          column: string;
+          index: number;
+        }>;
+        const result = regression(rows as any, pair[0].index, pair[1].index);
+        item.title = `Regression of ${pair[1].column} on ${pair[0].column}`;
+        item.table = {
+          headers: ["Metric", "Value"],
+          rows: [
+            ["Predictor", pair[0].column],
+            ["Response", pair[1].column],
+            ["Observations", String(result.pairs)],
+            ["Correlation (r)", String(result.correlation)],
+            ["R squared", String(result.rSquared)],
+            ["Slope", String(result.slope)],
+            ["Intercept", String(result.intercept)],
+            ["Residual std. error", String(result.residualStdError)],
+          ],
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          `A ${result.relationship} linear relationship is reported using complete numeric pairs. Regression describes association; it does not prove causation.`,
+        );
+      } else if (stats.mode === "t-test") {
+        const pair = (stats.pair ?? []) as Array<{
+          column: string;
+          index: number;
+        }>;
+        const result = pairedTTest(rows as any, pair[0].index, pair[1].index);
+        item.title = `Paired t-test: ${pair[0].column} vs ${pair[1].column}`;
+        item.table = {
+          headers: ["Metric", "Value"],
+          rows: [
+            ["First sample", pair[0].column],
+            ["Second sample", pair[1].column],
+            ["Observations", String(result.pairs)],
+            ["Mean difference", String(result.meanDifference)],
+            ["Difference std. dev.", String(result.differenceStdDev)],
+            ["t statistic", String(result.tStatistic)],
+            ["Degrees of freedom", String(result.degreesOfFreedom)],
+            ["Two-tailed p-value", String(result.pValue)],
+          ],
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          result.interpretation === "significant"
+            ? "The paired mean difference is statistically significant at the 5% level."
+            : result.interpretation === "not-significant"
+              ? "The paired mean difference is not statistically significant at the 5% level."
+              : "There are not enough variable numeric pairs for a paired t-test.",
+          "This is an association test on paired rows, not proof of causation.",
+        );
+      } else if (stats.mode === "anova") {
+        const value = stats.value as { column: string; index: number };
+        const category = stats.category as { column: string; index: number };
+        const result = anovaOneWay(rows as any, category.index, value.index);
+        item.title = `ANOVA of ${value.column} by ${category.column}`;
+        item.table = {
+          headers: ["Metric", "Value"],
+          rows: [
+            ["Category", category.column],
+            ["Measure", value.column],
+            ["Groups", String(result.groups)],
+            ["Observations", String(result.observations)],
+            ["Between-group df", String(result.betweenDf)],
+            ["Within-group df", String(result.withinDf)],
+            ["Between-group SS", String(result.betweenSumSquares)],
+            ["Within-group SS", String(result.withinSumSquares)],
+            ["Eta-squared", String(result.etaSquared)],
+            ["F statistic", String(result.fStatistic)],
+            ["p-value", String(result.pValue)],
+          ],
+          barColumns: [],
+          dropdownColumns: [],
+        };
+        item.details.push(
+          result.interpretation === "significant"
+            ? "At least one group mean differs significantly at the 5% level."
+            : result.interpretation === "not-significant"
+              ? "The group means are not significantly different at the 5% level."
+              : "There are not enough groups and observations for one-way ANOVA.",
+          "This is an association test; it does not prove that the category causes the measure.",
+          "Eta-squared is the share of numeric variation associated with the category; it is not a causal effect size.",
+        );
+        for (const group of anovaGroupSummary(
+          rows as any,
+          category.index,
+          value.index,
+        ).slice(0, 8))
+          item.details.push(
+            `${group.group}: n=${group.observations}, mean=${group.mean}, std dev=${group.standardDeviation}`,
+          );
       } else if (stats.mode === "forecast") {
         const value = stats.value as { column: string; index: number };
         const periods = Number(stats.periods ?? 3);
@@ -1626,6 +1777,20 @@ export function friendlySheetName(
     label = `Anomaly report for ${spec.statistics.value?.column ?? sourceSheet}`;
   else if (action.kind === "statistics" && spec.statistics?.mode === "insights")
     label = `Insights of ${spec.statistics.value?.column ?? sourceSheet}`;
+  else if (
+    action.kind === "statistics" &&
+    spec.statistics?.mode === "regression"
+  )
+    label = `Regression ${spec.statistics.pair?.map((entry: any) => entry.column).join(" on ") ?? ""}`;
+  else if (action.kind === "statistics" && spec.statistics?.mode === "t-test")
+    label = `T-test ${spec.statistics.pair?.map((entry: any) => entry.column).join(" vs ") ?? ""}`;
+  else if (action.kind === "statistics" && spec.statistics?.mode === "anova")
+    label = `ANOVA ${spec.statistics.value?.column ?? ""} by ${spec.statistics.category?.column ?? ""}`;
+  else if (
+    action.kind === "statistics" &&
+    spec.statistics?.mode === "correlation-matrix"
+  )
+    label = `Correlation matrix ${spec.statistics.columns?.map((entry: any) => entry.column).join(", ") ?? ""}`;
   else if (action.kind === "dashboard" && spec.dashboard)
     label = `Dashboard ${spec.dashboard.values?.map((entry: any) => entry.column).join("-") ?? sourceSheet} ${spec.dashboard.category?.column ?? sourceSheet}`;
   else if (
@@ -1633,6 +1798,8 @@ export function friendlySheetName(
     spec.statistics?.mode === "correlation"
   )
     label = `Correlation ${spec.statistics.pair?.map((entry: any) => entry.column).join(" and ") ?? ""}`;
+  else if (action.kind === "statistics" && spec.statistics?.mode === "spearman")
+    label = `Spearman ${spec.statistics.pair?.map((entry: any) => entry.column).join(" and ") ?? ""}`;
   else if (action.kind === "chart") label = `Chart of ${sourceSheet}`;
   else if (action.kind === "pivot-table") label = `Pivot of ${sourceSheet}`;
   else label = `${KIND_PREFIX[action.kind] ?? "Result of"} ${sourceSheet}`;
@@ -1650,6 +1817,20 @@ export function plannedSheetName(
   taken: Set<string>,
   maxLength = 31,
 ): string {
+  const planned = String(action.targetSheet ?? "");
+  // A workbook preference may intentionally prefix generated sheets. Preserve that
+  // explicit name instead of replacing it with the friendly default label.
+  if (
+    /_Vynor_[A-Za-z]+$/.test(planned) &&
+    !planned.startsWith(`${excelSafeBaseName(sourceSheet)}_Vynor_`)
+  )
+    return resolveSheetName(
+      planned,
+      action.kind,
+      sourceSheet,
+      taken,
+      maxLength,
+    );
   const base = friendlySheetName(action, sourceSheet);
   if (
     base === sourceSheet ||

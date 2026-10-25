@@ -26,6 +26,7 @@ type RangeInput = Parameters<typeof createExcelPreviewPlan>[0];
 export function prepareStep(
   input: RangeInput,
   text: string,
+  preferences?: WorkbookPreferences,
 ):
   | { ok: true; actions: any[]; specs: any; preview: any }
   | { ok: false; error: string } {
@@ -60,16 +61,21 @@ export function prepareStep(
     specs = adapted.specs;
   }
   try {
-    const preview = createExcelPreviewPlan(input, actions, undefined, specs);
+    const preview = createExcelPreviewPlan(input, actions, undefined, specs, {
+      resultSheetPrefix: preferences?.resultSheetPrefix,
+    });
     return { ok: true, actions, specs, preview };
   } catch (error) {
     return { ok: false, error: String((error as Error)?.message ?? error) };
   }
 }
 
-export function checkStepWith(readInput: () => Promise<RangeInput>) {
+export function checkStepWith(
+  readInput: () => Promise<RangeInput>,
+  preferences?: WorkbookPreferences,
+) {
   return async (text: string) => {
-    const prepared = prepareStep(await readInput(), text);
+    const prepared = prepareStep(await readInput(), text, preferences);
     return prepared.ok
       ? ({ ok: true, understood: prepared.actions.join(", ") } as const)
       : ({ ok: false, error: prepared.error } as const);
@@ -89,13 +95,16 @@ export function runStepWith(deps: {
 }) {
   return async (text: string) => {
     const input = await deps.readInput();
-    const prepared = prepareStep(input, text);
+    const prepared = prepareStep(input, text, deps.preferences);
     if (!prepared.ok)
       return { ok: false, detail: prepared.error, error: prepared.error };
     const plan = await deps.api.planExcel({
       ...input,
       actions: prepared.actions,
       ...(Object.keys(prepared.specs).length ? { specs: prepared.specs } : {}),
+      ...(deps.preferences?.resultSheetPrefix
+        ? { resultSheetPrefix: deps.preferences.resultSheetPrefix }
+        : {}),
     });
     if (!excelPlansMatch(prepared.preview, plan))
       return {

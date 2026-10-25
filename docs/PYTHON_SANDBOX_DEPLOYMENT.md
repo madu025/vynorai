@@ -1,6 +1,11 @@
 ﻿# Python sandbox deployment requirements
 
-Status: **no live sandbox exists.** The repository contains the job contract, the API, the ledger and the fail-closed dispatch boundary only. Until an administrator provisions the worker below and registers its adapter (`registerSandboxWorker` in `backend/src/services/m365Sandbox.ts`), every Python request returns `SANDBOX_UNAVAILABLE` and nothing runs. Formulas, PivotTables and the built-in local analytics remain the supported path.
+Status: **adapter implemented; worker infrastructure remains external.** The repository contains the job contract,
+API, ledger, fail-closed dispatch boundary and an HTTPS worker adapter
+(`backend/src/services/m365SandboxWorker.ts`). It registers automatically only when
+`M365_SANDBOX_WORKER_URL` and `M365_SANDBOX_WORKER_SECRET` are both configured. Without both, every Python
+request returns `SANDBOX_UNAVAILABLE` and nothing runs. Formulas, PivotTables and the built-in local analytics
+remain the supported path.
 
 ## What the API guarantees today
 
@@ -15,7 +20,7 @@ Status: **no live sandbox exists.** The repository contains the job contract, th
 
 | Requirement                     | Detail                                                                                                                                                                               |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Separate worker host            | A dedicated VPS or container host with no shared filesystem, database or secrets with the API. The API reaches it only through the adapter.                                          |
+| Separate worker host            | A dedicated VPS or container host with no shared filesystem, database or secrets with the API. The API reaches it only through the HTTPS adapter.                                    |
 | Per-job ephemeral isolation     | A fresh container or microVM per job, destroyed after the job, with a read-only root filesystem and a small tmpfs scratch area.                                                      |
 | Non-root execution              | Unprivileged user, all capabilities dropped, `no-new-privileges`, a seccomp profile, no privileged mode.                                                                             |
 | No host mounts                  | No bind mounts, no Docker socket, no cloud metadata endpoint reachable.                                                                                                              |
@@ -28,11 +33,30 @@ Status: **no live sandbox exists.** The repository contains the job contract, th
 
 ## Adapter contract
 
-The adapter implements `SandboxWorker.dispatch(job)` and `SandboxWorker.cancel(jobId)`. A result is accepted only in the strict result-only shape: up to five tables of 1,000 rows by 50 columns, scalar metrics and short notes, within 1 MB. Anything else fails the job with `SANDBOX_RUN_FAILED`.
+The adapter implements `SandboxWorker.dispatch(job)` and `SandboxWorker.cancel(jobId)`. It sends a JSON envelope to
+the configured HTTPS URL with the contract version, job id, tenant/object binding, masked bounded rows, script and
+`network:false`. The body is authenticated with `HMAC-SHA256(timestamp + "." + body)` in
+`x-vynorai-worker-signature`; the worker must reject timestamps older than 90 seconds, invalid HMACs, replayed job
+ids and any request that tries to enable networking. The worker must authenticate its response with the same
+timestamp/HMAC headers; the API rejects an unsigned, stale or mismatched response before parsing it. No Microsoft
+token is sent. The API bounds the response body before parsing it and accepts only a matching job id and the strict result-only shape: up to five tables of 1,000
+rows by 50 columns, scalar metrics and short notes, within 1 MB. Anything else fails the job with
+`SANDBOX_RUN_FAILED`.
+
+Each dispatch also contains a fresh adapter-generated `requestId`, which the worker must echo in its response
+alongside the job id. This prevents a valid response for an earlier dispatch from being accepted for a later
+attempt on the same job.
+
+Cancellation uses the same authenticated endpoint with a separate
+`{ type: "cancel", requestId, jobId, requestedAt }` envelope. It contains no script, rows, workbook handle or token.
+The worker must return an authenticated `cancel-result` for the same job id with `accepted`,
+`already_finished` or `not_found`. Local cancellation remains authoritative if the worker is unreachable;
+the worker's own wall-clock limit remains the final safety boundary.
 
 ## Not yet provided
 
-- The worker, the queue and the adapter.
-- A worker-authenticated callback endpoint. Results currently enter only through the in-process functions above, so a remote worker needs its own authenticated channel before it can be wired in.
-- A scheduled call to `sweepSandboxJobs`.
+- The isolated worker, queue, image, deployment and secret rotation. The API adapter is present but remains
+  unavailable until the endpoint is provisioned.
+- A separate callback/queue mode. The first adapter intentionally waits for the bounded worker response, so it does
+  not invent asynchronous completion semantics.
 - A pane flow for approving a Python job.

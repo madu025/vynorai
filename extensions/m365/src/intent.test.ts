@@ -56,6 +56,29 @@ test("a pivot or chart can group by a date column", () => {
   assert.equal(chart.specs.chart.chartType, "line");
 });
 
+test("a quoted chart title is carried into the chart plan", () => {
+  const result: any = interpretInstruction(
+    'column chart of Requested Quantity by RTOM with chart title "Requests by region"',
+    BATCH_HEADERS,
+    BATCH_ROWS,
+  );
+  assert.deepEqual(result.actions, ["chart"]);
+  assert.equal(result.specs.chart.title, "Requests by region");
+});
+
+test("a correlation matrix request selects multiple numeric columns", () => {
+  const headers = [...BATCH_HEADERS, "Completed Quantity"];
+  const rows = BATCH_ROWS.map((row) => [...row, Number(row[5]) + 1]);
+  const result: any = interpretInstruction(
+    "Create a correlation matrix for Requested Quantity and the numeric columns",
+    headers,
+    rows,
+  );
+  assert.deepEqual(result.actions, ["statistics"]);
+  assert.equal(result.specs.statistics.mode, "correlation-matrix");
+  assert.ok(result.specs.statistics.columns.length >= 2);
+});
+
 test("a pivot can count a text column", () => {
   const result: any = interpretInstruction(
     "pivot table counting Service ID by Status",
@@ -288,9 +311,18 @@ test("top N / bottom N in a chart or summary request: digits or words, 1..100", 
     run("pivot table of revenue by product, bottom three").specs.pivot.lowest,
     true,
   );
-  assert.equal(run("chart revenue by region, top 101").specs.chart.topN, undefined);
-  assert.equal(run("chart revenue by region, top 0").specs.chart.topN, undefined);
-  assert.equal(run("chart top 5% of revenue by region").specs.chart.topN, undefined);
+  assert.equal(
+    run("chart revenue by region, top 101").specs.chart.topN,
+    undefined,
+  );
+  assert.equal(
+    run("chart revenue by region, top 0").specs.chart.topN,
+    undefined,
+  );
+  assert.equal(
+    run("chart top 5% of revenue by region").specs.chart.topN,
+    undefined,
+  );
   assert.equal(run("chart revenue by region").specs.chart.topN, undefined);
   // Not a chart or summary: a plain ranking question is left alone.
   assert.equal(run("top 5 regions").specs.chart, undefined);
@@ -353,15 +385,30 @@ test("duplicate checks with no column named use the business key", () => {
 
 test("'at least five' is not a bottom-5 rank", async () => {
   const { readRank } = await import("./intent.js");
-  assert.equal(readRank("pivot of customers with at least five orders by revenue"), undefined);
+  assert.equal(
+    readRank("pivot of customers with at least five orders by revenue"),
+    undefined,
+  );
   assert.equal(readRank("bottom 5 customers")?.lowest, true);
 });
 
 test("a top N is not put on a chart type the server rejects", () => {
   const headers = ["Region", "Product", "Customer", "Revenue"];
-  const rows = [["N", "A", "C1", 10], ["S", "B", "C2", 20]];
+  const rows = [
+    ["N", "A", "C1", 10],
+    ["S", "B", "C2", 20],
+  ];
   const run = (text: string): any => interpretInstruction(text, headers, rows);
-  assert.equal(run("waterfall of the top 5 products by revenue").specs.chart?.topN, undefined);
-  assert.equal(run("line chart of the top 3 regions by revenue").specs.chart?.topN, undefined);
-  assert.equal(run("column chart of the top 3 regions by revenue").specs.chart?.topN, 3);
+  assert.equal(
+    run("waterfall of the top 5 products by revenue").specs.chart?.topN,
+    undefined,
+  );
+  assert.equal(
+    run("line chart of the top 3 regions by revenue").specs.chart?.topN,
+    undefined,
+  );
+  assert.equal(
+    run("column chart of the top 3 regions by revenue").specs.chart?.topN,
+    3,
+  );
 });

@@ -10,7 +10,12 @@ import {
   type AdvancedCapabilityReport,
   type CapabilityContext,
 } from "./capabilityRegistry.js";
-import { classifyHost, deriveCompanionState } from "./companionState.js";
+import {
+  classifyHost,
+  deriveCompanionState,
+  isSupportedCompanionHost,
+  type CompanionStatus,
+} from "./companionState.js";
 
 export interface DiagnosticEntry {
   at: string;
@@ -212,11 +217,19 @@ export function describeOfficeHost(office: any): Record<string, unknown> {
  */
 function companionForPane(
   officePlatform: unknown,
+  discovered?: CompanionStatus,
 ): CapabilityContext["companion"] {
+  const host = classifyHost(
+    typeof officePlatform === "string" ? officePlatform : undefined,
+  );
+  if (discovered && isSupportedCompanionHost(host)) {
+    if (discovered.state === "ready") return "ready";
+    if (discovered.state === "not_signed") return "unsigned";
+    if (discovered.state === "unsupported_host") return "unsupported_host";
+    return "not_installed";
+  }
   const status = deriveCompanionState(
-    classifyHost(
-      typeof officePlatform === "string" ? officePlatform : undefined,
-    ),
+    host,
     { kind: "no_response" },
     { trustedSignerThumbprints: [], minCompanionVersion: "0.0.0", nonce: "" },
   );
@@ -240,6 +253,8 @@ export function hostCapabilityContext(input: {
   /** Delegated Graph scopes configured for this add-in (full URIs or short names). */
   graphScopes?: readonly string[];
   aiConsent?: boolean;
+  /** Result of a real signed-companion probe, when the caller has one. */
+  companionStatus?: CompanionStatus;
 }): CapabilityContext {
   const host = describeOfficeHost(input.office);
   const platformRaw = input.office?.context?.platform ?? host.platform;
@@ -250,7 +265,7 @@ export function hostCapabilityContext(input: {
     apiSets: supportedApiSets(
       host.excelApi as Record<string, boolean> | undefined,
     ),
-    companion: companionForPane(platformRaw),
+    companion: companionForPane(platformRaw, input.companionStatus),
     sandbox: "unavailable",
     canRead: input.server?.excel.canInspect ?? false,
     canWrite: input.server?.excel.canApply ?? false,

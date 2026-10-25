@@ -38,11 +38,16 @@ import {
   buildAdvancedForecastCells,
   buildAnomalyCells,
   buildCorrelationCells,
+  buildSpearmanCells,
+  buildCorrelationMatrixCells,
   buildDescribeCells,
   buildFinancialCells,
   buildForecastCells,
   buildForecastCellsLarge,
   buildInsightReportCells,
+  buildAnovaCells,
+  buildPairedTTestCells,
+  buildRegressionCells,
 } from "./statistics.js";
 import { inspectFormulas, type FormulaSelection } from "./formulaInspector.js";
 
@@ -1153,6 +1158,44 @@ function errorText(error: unknown): string {
   );
 }
 
+/** Reads back a bounded prefix of a written result and fails closed when Excel cannot answer. */
+export async function verifyWrittenRange(
+  context: ExcelContextLike,
+  sheet: any,
+  expected: any[][],
+  headers: any[],
+  result: ExcelActionResult,
+): Promise<boolean> {
+  try {
+    const checked = Math.min(expected.length, 200);
+    if (checked === 0) return true;
+    const readBack = sheet.getRangeByIndexes(1, 0, checked, headers.length);
+    readBack.load("values");
+    await context.sync();
+    const found = compareWrittenRows(
+      expected.slice(0, checked),
+      readBack.values,
+      headers.map(String),
+    );
+    if (found.length) result.warnings = found.map((issue) => issue.message);
+    return true;
+  } catch (error) {
+    // A write that cannot be read back is not verified. Marking it failed prevents the
+    // approval/apply pipeline from presenting the action as completed or auto-repairing it.
+    const message = String(
+      (error as { message?: unknown })?.message ??
+        error ??
+        "read-back unavailable",
+    ).slice(0, 200);
+    result.status = "failed";
+    result.error = `Write verification failed: ${message}`;
+    result.warnings = [
+      "The result was written, but Excel did not provide a reliable read-back.",
+    ];
+    return false;
+  }
+}
+
 /**
  * Applies an approved plan one action at a time. The source cells must still match the
  * previewed fingerprint before anything is written, and are checked again afterwards.
@@ -1406,31 +1449,6 @@ export async function applyApprovedExcelPlan(
       typeof cell === "string" && cell.startsWith("=") ? `'${cell}` : cell;
     // Copied source text that Excel would convert on write ("007", "1/2", "TRUE") keeps its text prefix.
     const textSafe = (cell: any) => literal(guardText(cell));
-    // Reads a bounded part of a written result back and records any difference as a warning on the
-    // result. Advisory: when Excel cannot be read back, the result stands without a warning.
-    const verifyWritten = async (
-      sheet: any,
-      expected: any[][],
-      headers: any[],
-      result: ExcelActionResult,
-    ) => {
-      try {
-        const checked = Math.min(expected.length, 200);
-        if (checked === 0) return;
-        const readBack = sheet.getRangeByIndexes(1, 0, checked, headers.length);
-        readBack.load("values");
-        await context.sync();
-        const found = compareWrittenRows(
-          expected.slice(0, checked),
-          readBack.values,
-          headers.map(String),
-        );
-        if (found.length) result.warnings = found.map((issue) => issue.message);
-      } catch {
-        // Advisory only.
-      }
-    };
-
     for (const planned of plan.actions) {
       const resolvedSheet = resolveTarget(planned);
       const objectName =
@@ -1499,7 +1517,12 @@ export async function applyApprovedExcelPlan(
               }
             }
             await writeSourceCopy(targetSheet);
-            targetSheet.tables.add(normalizedSource, true).name = action.name;
+            const table = targetSheet.tables.add(normalizedSource, true);
+            table.name = action.name;
+            if (action.spec?.tableShowTotals !== undefined)
+              table.showTotals = action.spec.tableShowTotals;
+            if (action.spec?.tableStyle !== undefined)
+              table.style = action.spec.tableStyle;
             await context.sync();
           }
         } else {
@@ -1974,7 +1997,8 @@ export async function applyApprovedExcelPlan(
               "Columns",
             );
             chart.name = action.name;
-            chart.title.text = words.distribution(spec.valueColumn);
+            chart.title.text =
+              spec.chartTitle ?? words.distribution(spec.valueColumn);
             chart.setPosition("F2");
             await context.sync();
           } else if (action.kind === "chart") {
@@ -2023,16 +2047,33 @@ export async function applyApprovedExcelPlan(
                 );
                 chart.name = action.name;
                 chart.setPosition("H3");
-                chart.title.text = words.pivotChart(
-                  spec.valueColumn,
-                  spec.categoryColumn,
-                );
+                chart.title.text =
+                  spec.chartTitle ??
+                  words.pivotChart(spec.valueColumn, spec.categoryColumn);
                 if (spec.showDataLabels) {
                   try {
                     chart.dataLabels.showValue = true;
                   } catch {
                     // Older hosts may not expose chart data labels; keep the chart itself.
                   }
+                }
+                try {
+                  if (
+                    spec.chartType !== "pie" &&
+                    spec.chartType !== "histogram"
+                  ) {
+                    chart.axes.categoryAxis.title.text =
+                      spec.chartCategoryAxisTitle ??
+                      String(spec.categoryColumn);
+                    chart.axes.valueAxis.title.text =
+                      spec.chartValueAxisTitle ?? String(spec.valueColumn);
+                  }
+                  if (spec.chartLegendVisible !== undefined)
+                    chart.legend.visible = spec.chartLegendVisible;
+                  if (spec.chartLegendPosition)
+                    chart.legend.position = spec.chartLegendPosition;
+                } catch {
+                  // Older hosts may not expose axis titles; keep the chart itself.
                 }
                 await context.sync();
               } else if (spec?.categoryColumn) {
@@ -2126,7 +2167,8 @@ export async function applyApprovedExcelPlan(
                 chart.name = action.name;
                 chart.setPosition("H3");
                 chart.title.text =
-                  spec.chartType === "histogram"
+                  spec.chartTitle ??
+                  (spec.chartType === "histogram"
                     ? words.distribution(spec.valueColumn)
                     : spec.aggregation
                       ? words.aggregateOfBy(
@@ -2140,7 +2182,7 @@ export async function applyApprovedExcelPlan(
                       : words.chartBy(
                           [spec.valueColumn, ...(spec.extraValueColumns ?? [])],
                           spec.categoryColumn,
-                        );
+                        ));
                 if (spec.showDataLabels) {
                   try {
                     chart.dataLabels.showValue = true;
@@ -2446,7 +2488,13 @@ export async function applyApprovedExcelPlan(
               }
               if (cleaned.dateColumns.length > 0 && cleaned.rows.length > 0)
                 await context.sync();
-              await verifyWritten(sheet, cleaned.rows, headers, result);
+              await verifyWrittenRange(
+                context,
+                sheet,
+                cleaned.rows,
+                headers,
+                result,
+              );
               cleanedRange = sheet.getRangeByIndexes(
                 0,
                 0,
@@ -2547,7 +2595,13 @@ export async function applyApprovedExcelPlan(
                 sheet,
                 headers.map((_header, index) => index),
               );
-              await verifyWritten(sheet, view.rows, headers, result);
+              await verifyWrittenRange(
+                context,
+                sheet,
+                view.rows,
+                headers,
+                result,
+              );
               for (const rowIndex of view.highlighted.slice(0, 500))
                 sheet.getRangeByIndexes(
                   rowIndex + 1,
@@ -2600,6 +2654,40 @@ export async function applyApprovedExcelPlan(
                   headers,
                   spec.pair?.[0]?.index ?? 0,
                   spec.pair?.[1]?.index ?? 0,
+                );
+              else if (spec.mode === "spearman")
+                cells = buildSpearmanCells(
+                  range,
+                  headers,
+                  spec.pair?.[0]?.index ?? 0,
+                  spec.pair?.[1]?.index ?? 0,
+                );
+              else if (spec.mode === "correlation-matrix")
+                cells = buildCorrelationMatrixCells(
+                  range,
+                  headers,
+                  (spec.columns ?? []).map((entry: any) => entry.index),
+                );
+              else if (spec.mode === "regression")
+                cells = buildRegressionCells(
+                  range,
+                  headers,
+                  spec.pair?.[0]?.index ?? 0,
+                  spec.pair?.[1]?.index ?? 0,
+                );
+              else if (spec.mode === "t-test")
+                cells = buildPairedTTestCells(
+                  range,
+                  headers,
+                  spec.pair?.[0]?.index ?? 0,
+                  spec.pair?.[1]?.index ?? 0,
+                );
+              else if (spec.mode === "anova")
+                cells = buildAnovaCells(
+                  range,
+                  headers,
+                  spec.category?.index ?? 0,
+                  spec.value?.index ?? 0,
                 );
               else if (spec.mode === "advanced-forecast")
                 cells = buildAdvancedForecastCells(
@@ -2936,7 +3024,15 @@ export async function applyApprovedExcelPlan(
               headerRange.format.font.bold = true;
               headerRange.format.font.color = "#FFFFFF";
               headerRange.format.fill.color = "#123A6B";
-              if (spec.freezeHeader !== false) sheet.freezePanes.freezeRows(1);
+              if (spec.showGridlines !== undefined)
+                sheet.showGridlines = spec.showGridlines;
+              if (spec.freezeRows)
+                sheet.freezePanes.freezeRows(spec.freezeRows);
+              else if (spec.freezeHeader !== false)
+                sheet.freezePanes.freezeRows(1);
+              if (spec.freezeColumns) {
+                sheet.freezePanes.freezeColumns(spec.freezeColumns);
+              }
               if (rows.length > 0) {
                 for (const entry of spec.columnFormats ?? [])
                   if (!keptFormat.has(entry.index))
@@ -3435,7 +3531,7 @@ export async function applyApprovedExcelPlan(
                 sheet,
                 headers.map((_header, index) => index),
               );
-              await verifyWritten(sheet, rows, headers, result);
+              await verifyWrittenRange(context, sheet, rows, headers, result);
               if (rows.length > 0) {
                 sheet.getRangeByIndexes(
                   1,
@@ -3609,7 +3705,7 @@ export async function applyApprovedExcelPlan(
                   sheet,
                   headers.map((_header, index) => index),
                 );
-                await verifyWritten(sheet, rows, headers, result);
+                await verifyWrittenRange(context, sheet, rows, headers, result);
                 if (rows.length > 0) {
                   sheet.getRangeByIndexes(
                     1,
@@ -3964,7 +4060,7 @@ export async function applyApprovedExcelPlan(
                   sheet,
                   headers.map((_header, index) => index),
                 );
-                await verifyWritten(sheet, rows, headers, result);
+                await verifyWrittenRange(context, sheet, rows, headers, result);
                 if (rows.length > 0) {
                   sheet.getRangeByIndexes(
                     1,

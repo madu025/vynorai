@@ -714,6 +714,67 @@ test("map_relationships reads each range and returns the join, never the rows", 
   });
 });
 
+test("build_semantic_model is a bounded read-only alternative and exposes evidence", async () => {
+  const reads: string[] = [];
+  const run = await runAgent({
+    request: "build a reusable data model for Orders and Customers",
+    host: host({
+      readRange: async (sheet, address) => {
+        reads.push(`${sheet}!${address}`);
+        return {
+          address,
+          values:
+            sheet === "Orders"
+              ? [
+                  ["Order ID", "Customer ID", "Amount"],
+                  ["O1", "C1", 10],
+                  ["O2", "C1", 12],
+                  ["O3", "C2", 8],
+                ]
+              : [
+                  ["Customer ID", "Region"],
+                  ["C1", "North"],
+                  ["C2", "South"],
+                ],
+        };
+      },
+    }),
+    mask: new PersonalMask(),
+    model: (() => {
+      let turn = 0;
+      return async () => {
+        turn += 1;
+        return turn === 1
+          ? {
+              content: "",
+              tool_calls: [
+                call("model", "build_semantic_model", {
+                  ranges: ["Orders!A1:C4", "Customers!A1:B3"],
+                }),
+              ],
+            }
+          : {
+              content: "- Local semantic model built from the two ranges.",
+              tool_calls: [],
+            };
+      };
+    })(),
+  });
+  assert.deepEqual(reads, ["Orders!A1:C4", "Customers!A1:B3"]);
+  const result = JSON.parse(
+    String(run.messages.find((message) => message.role === "tool")?.content),
+  );
+  assert.equal(result.implementation, "deterministic-local-metadata");
+  assert.equal(result.relationships[0].cardinality, "many-to-one");
+  assert.equal(run.changes.length, 0);
+  assert.deepEqual(answerSources(run.messages, (text) => text)[0], {
+    kind: "range",
+    sheet: "Orders",
+    address: "A1:C4",
+    note: "semantic model",
+  });
+});
+
 test("get_workbook adds the relationship hint only when several sheets hold data", async () => {
   const hinted = withRelationshipHint({
     sheets: [

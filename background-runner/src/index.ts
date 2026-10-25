@@ -14,6 +14,15 @@ import { TaskRuntime } from "../../core/agent/TaskRuntime.js";
 import type { AgentPlanStep } from "../../core/agent/types.js";
 import { redactSecrets } from "../../core/agent/redactSecrets.js";
 import { VYNORAI_XML_SYSTEM_PROMPT } from "../../core/llm/vynorai-system-prompt.js";
+import {
+  DEVELOPMENT_STAGE_INSTRUCTIONS,
+  DEVELOPMENT_STAGES,
+  assertSafeDevelopmentCommand,
+  createDevelopmentSupervisorState,
+  recordDevelopmentStage,
+  type DevelopmentStage,
+  type DevelopmentSupervisorState,
+} from "./developmentSupervisor.js";
 
 const openZip = promisify<string, yauzl.Options, yauzl.ZipFile>(yauzl.open);
 const taskId = requiredEnv("VYNOR_TASK_ID");
@@ -29,6 +38,9 @@ const maxExpandedBytes = 1024 * 1024 * 1024;
 let workspaceRevision = 0;
 let finalSummary = "Task finished.";
 const verification: VerificationRecord[] = [];
+let activeStage: DevelopmentStage | undefined;
+let supervisorState: DevelopmentSupervisorState =
+  createDevelopmentSupervisorState();
 
 interface VerificationRecord {
   command: string;
@@ -216,6 +228,13 @@ function tool(name: string, description: string, parameters: any) {
 }
 
 async function invokeTool(name: string, args: any): Promise<string> {
+  if (
+    (name === "edit_file" || name === "write_file") &&
+    activeStage !== "implement"
+  )
+    throw new Error("DEVELOPMENT_STAGE_READ_ONLY");
+  if (name === "run_terminal_command" && activeStage !== "verify")
+    throw new Error("DEVELOPMENT_STAGE_COMMANDS_ONLY_DURING_VERIFY");
   if (name === "view_repo_map") return listFiles().join("\n");
   if (name === "read_file_range") {
     const lines = (
@@ -288,8 +307,8 @@ async function runCommand(
   cwd: string,
   timeoutMs: number,
 ): Promise<VerificationRecord> {
-  if (!command || command.length > 2_000 || /\bsudo\b/.test(command))
-    throw new Error("COMMAND_DENIED");
+  assertSafeDevelopmentCommand(command);
+  if (/\bsudo\b/.test(command)) throw new Error("COMMAND_DENIED");
   const started = Date.now();
   const childEnv = { ...process.env };
   delete childEnv.VYNOR_MODEL_TOKEN;
@@ -344,72 +363,139 @@ async function runCommand(
 
 class Adapter implements HeadlessAgentAdapter {
   async plan() {
-    return [
-      {
-        id: "implement",
-        summary: "Inspect, implement, and verify the requested change",
-        kind: "edit" as const,
-        risk: "R2" as const,
-        verificationRequired: true,
-        maxAttempts: 1,
-      },
-    ];
+    return DEVELOPMENT_STAGES.map((stage) => ({
+      id: stage,
+      summary: `${stage[0].toUpperCase()}${stage.slice(1)} stage`,
+      kind:
+        stage === "implement"
+          ? ("edit" as const)
+          : stage === "verify"
+            ? ("test" as const)
+            : ("review" as const),
+      risk: stage === "implement" ? ("R2" as const) : ("R1" as const),
+      verificationRequired: stage === "verify" || stage === "review",
+      maxAttempts: 1,
+    }));
   }
-  async execute(_step: AgentPlanStep): Promise<HeadlessStepResult> {
+  async execute(step: AgentPlanStep): Promise<HeadlessStepResult> {
     const prompt = await fs.promises.readFile("/input/prompt.txt", "utf8");
+    const stage = step.id as DevelopmentStage;
+    if (!DEVELOPMENT_STAGES.includes(stage))
+      throw new Error("UNKNOWN_DEVELOPMENT_STAGE");
+    activeStage = stage;
+    supervisorState = { ...supervisorState, current: stage };
+    const prior = supervisorState.stages
+      .map((item) => `${item.stage}: ${item.summary}`)
+      .join("\n");
     const messages: any[] = [
       { role: "system", content: VYNORAI_XML_SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ];
-    for (let round = 0; round < 80; round++) {
-      const assistant = await model(messages);
-      if (!assistant) throw new Error("EMPTY_MODEL_RESPONSE");
-      messages.push(assistant);
-      if (!assistant.tool_calls?.length) {
-        finalSummary = redactSecrets(
-          String(assistant.content || "Task completed."),
-        ).slice(0, 4_000);
-        break;
-      }
-      for (const call of assistant.tool_calls) {
-        let content: string;
-        try {
-          content = await invokeTool(
-            call.function.name,
-            JSON.parse(call.function.arguments || "{}"),
-          );
-        } catch (error) {
-          content = `ERROR: ${error instanceof Error ? error.message : "TOOL_FAILED"}`;
-        }
-        messages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: content.slice(0, 100_000),
-        });
-      }
-      if (round === 79) throw new Error("AGENT_ROUND_LIMIT");
-    }
-    await automaticVerification();
-    const hasTests = detectedTestCommands().length > 0;
-    const passed = verification.some(
-      (item) => item.classification === "passed",
-    );
-    return {
-      ok: !hasTests || passed,
-      summary: finalSummary,
-      workspaceRevision,
-      verification: {
-        kind: hasTests ? "test" : "review",
-        status: !hasTests ? "passed" : passed ? "passed" : "failed",
-        summary: !hasTests
-          ? "Diff review passed; no project verification command was detected"
-          : passed
-            ? "At least one verification command passed"
-            : "No detected verification command passed",
+      {
+        role: "user",
+        content: [
+          `You are the ${stage} specialist in a bounded VynorAI development supervisor.`,
+          DEVELOPMENT_STAGE_INSTRUCTIONS[stage],
+          "The outer supervisor controls the stage. Follow its tool permissions exactly.",
+          prior
+            ? `Evidence from completed stages:\n${prior}`
+            : "No earlier stage evidence exists.",
+          `Original task:\n${prompt}`,
+        ].join("\n\n"),
       },
-      failureCode: hasTests && !passed ? "NO_PASSING_VERIFICATION" : undefined,
-    };
+    ];
+    try {
+      for (let round = 0; round < 24; round++) {
+        const assistant = await model(messages);
+        if (!assistant) throw new Error("EMPTY_MODEL_RESPONSE");
+        messages.push(assistant);
+        if (!assistant.tool_calls?.length) {
+          const summary = redactSecrets(
+            String(assistant.content || `${stage} stage completed.`),
+          ).slice(0, 4_000);
+          const changedFiles = await changedFilesSinceBaseline();
+          let stageVerification: "not-run" | "passed" | "failed" = "not-run";
+          if (stage === "verify") {
+            const before = verification.length;
+            await automaticVerification();
+            const records = verification.slice(before);
+            const commands = detectedTestCommands().slice(0, 4);
+            stageVerification = commands.length
+              ? records.length === commands.length &&
+                records.every((item) => item.classification === "passed")
+                ? "passed"
+                : "failed"
+              : "not-run";
+          }
+          supervisorState = recordDevelopmentStage(supervisorState, {
+            stage,
+            summary,
+            changedFiles,
+            verification: stageVerification,
+          });
+          finalSummary = summary;
+          return {
+            ok: stage !== "verify" || stageVerification !== "failed",
+            summary,
+            workspaceRevision,
+            verification: {
+              kind: stage === "verify" ? "test" : "inspection",
+              status:
+                stage === "verify" && stageVerification === "failed"
+                  ? "failed"
+                  : stage === "verify" && stageVerification === "not-run"
+                    ? "skipped"
+                    : "passed",
+              summary:
+                stage === "verify"
+                  ? stageVerification === "not-run"
+                    ? "No supported project verification command was detected"
+                    : `Verification ${stageVerification}`
+                  : `${stage} evidence recorded`,
+            },
+            failureCode:
+              stage === "verify" && stageVerification === "failed"
+                ? "NO_PASSING_VERIFICATION"
+                : undefined,
+          };
+        }
+        for (const call of assistant.tool_calls) {
+          let content: string;
+          try {
+            content = await invokeTool(
+              call.function.name,
+              JSON.parse(call.function.arguments || "{}"),
+            );
+          } catch (error) {
+            content = `ERROR: ${error instanceof Error ? error.message : "TOOL_FAILED"}`;
+          }
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: content.slice(0, 100_000),
+          });
+        }
+      }
+      throw new Error("DEVELOPMENT_STAGE_ROUND_LIMIT");
+    } finally {
+      activeStage = undefined;
+    }
   }
+}
+
+async function changedFilesSinceBaseline(): Promise<string[]> {
+  const before = new Set(listFiles(baseline));
+  const after = new Set(listFiles(workspace));
+  const paths = [...new Set([...before, ...after])].sort();
+  const changed: string[] = [];
+  for (const relative of paths) {
+    const oldBuffer = before.has(relative)
+      ? await fs.promises.readFile(path.join(baseline, relative))
+      : Buffer.alloc(0);
+    const newBuffer = after.has(relative)
+      ? await fs.promises.readFile(path.join(workspace, relative))
+      : Buffer.alloc(0);
+    if (!oldBuffer.equals(newBuffer)) changed.push(relative);
+  }
+  return changed.slice(0, 200);
 }
 
 function detectedTestCommands(): string[] {
@@ -525,6 +611,7 @@ async function main() {
   const proof = {
     version: 1,
     taskId,
+    developmentSupervisor: supervisorState,
     status,
     language: /[\u0D80-\u0DFF]/.test(
       await fs.promises.readFile("/input/prompt.txt", "utf8"),

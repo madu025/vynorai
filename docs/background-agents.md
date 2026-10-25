@@ -37,6 +37,16 @@ The implementation must preserve these user-visible guarantees:
 8. Sinhala prompts are accepted. Human-language summaries use the detected
    task language; code, paths, identifiers, and commands remain unchanged.
 
+The sandbox runner now uses a bounded development supervisor for approved
+development tasks. It creates fresh model contexts for `research`, `plan`,
+`implement`, `verify`, and `review`. Only the implement stage may write files;
+only the verify stage may run commands. The runner blocks commit, push, deploy,
+SSH, credential, and destructive commands, and records stage evidence in the
+Proof Pack. This is a single bounded task workflow; it is not an unattended
+24-hour production deploy loop. Cross-task chaining remains an explicit future
+control-plane feature and must retain the same isolated workspace and approval
+gates.
+
 ## 3. Scope and non-goals
 
 ### In scope

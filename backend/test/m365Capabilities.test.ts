@@ -107,7 +107,7 @@ test("native runtime requests are refused, while real fallback requests reach th
   );
   const user: any = { id: "user-a", email: "a@example.com" };
   for (const [text, feature] of [
-    ["run python with pandas on this sheet", "python-sandbox"],
+    ["run the VBA macro on this sheet", "vba-com"],
   ] as const) {
     // agentTurn would call the model for an ordinary request; here it returns first.
     const reply = await agentTurn(user, {

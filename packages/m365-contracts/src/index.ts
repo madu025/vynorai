@@ -153,6 +153,71 @@ export interface AdvancedAnalysisResult {
     | "SOURCE_CHANGED";
 }
 
+/** Versioned read-only contract for the deterministic Power Pivot/Data Model/OLAP alternative. */
+export const M365_SEMANTIC_MODEL_CONTRACT_VERSION =
+  "2026-10-25.excel-semantic-model.v1" as const;
+
+export type SemanticModelColumnRole =
+  | "key"
+  | "dimension"
+  | "measure"
+  | "date"
+  | "text";
+
+export interface SemanticModelColumn {
+  name: string;
+  role: SemanticModelColumnRole;
+  nonBlank: number;
+  distinct: number;
+  sampleType: "number" | "date" | "text" | "empty";
+  measures?: ("sum" | "average" | "min" | "max")[];
+}
+
+export interface SemanticModelTable {
+  label: string;
+  rows: number;
+  columns: SemanticModelColumn[];
+}
+
+export interface SemanticModelLink {
+  from: {
+    table: string;
+    column: string;
+    distinct: number;
+    duplicateKeys: number;
+  };
+  to: {
+    table: string;
+    column: string;
+    distinct: number;
+    duplicateKeys: number;
+  };
+  cardinality: "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
+  fromRowsMatched: number;
+  fromRowsWithoutPartner: number;
+  toKeysUsed: number;
+  nameMatch: boolean;
+  needsCleaning: boolean;
+  advice: string[];
+}
+
+export interface SemanticModelResult {
+  contractVersion: typeof M365_SEMANTIC_MODEL_CONTRACT_VERSION;
+  modelType: "vynorai-semantic-model";
+  nativeFeature: "power-pivot-data-model-olap";
+  implementation: "deterministic-local-metadata";
+  tables: SemanticModelTable[];
+  relationships: SemanticModelLink[];
+  warnings: string[];
+  limitations: string[];
+  evidence: {
+    tables: number;
+    sampledRows: number;
+    columns: number;
+    relationshipCandidates: number;
+  };
+}
+
 export type AnalysisRecommendationKind =
   | "chart"
   | "pivot-table"

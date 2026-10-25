@@ -915,7 +915,8 @@ export const ACTION_TOOLS: Record<string, ActionDef> = {
         right_key: header(args.right_key),
         columns: columns?.length ? columns : undefined,
         amount: mode === "reconcile" ? header(args.amount) : undefined,
-        right_amount: mode === "reconcile" ? header(args.right_amount) : undefined,
+        right_amount:
+          mode === "reconcile" ? header(args.right_amount) : undefined,
         sheet: checkSheetName(restore(String(args.sheet ?? ""))),
         cell: args.cell ? checkCell(args.cell) : "A1",
       });
@@ -947,7 +948,12 @@ export const ACTION_TOOLS: Record<string, ActionDef> = {
         principal: optionalNumber(args.principal, "principal", 0, 1e13),
         annual_rate: optionalNumber(args.annual_rate, "annual_rate", 0, 1),
         years: optionalNumber(args.years, "years", 0, 50),
-        payments_per_year: optionalNumber(args.payments_per_year, "payments_per_year", 1, 365),
+        payments_per_year: optionalNumber(
+          args.payments_per_year,
+          "payments_per_year",
+          1,
+          365,
+        ),
         rate: optionalNumber(args.rate, "rate", -0.99, 10),
         cash_flows: range("cash_flows"),
         dates: range("dates"),
@@ -991,6 +997,8 @@ export const ACTION_TOOLS: Record<string, ActionDef> = {
       const args = raw as unknown as WhatIfArgs & Record<string, string>;
       const outputs = `'${args.model_sheet}'!${args.outputs.join(", ")}`;
       const into = `into '${args.sheet}'!${args.cell} as values (inputs are put back)`;
+      if (args.mode === "optimisation")
+        return `Bounded ${args.direction} optimisation of ${outputs} over ${(args.variables as any[]).map((variable) => `${variable.cell} ${variable.min}..${variable.max} by ${variable.step}`).join(" and ")}${(args.constraints as any[])?.length ? ` with ${(args.constraints as any[]).length} constraints` : ""} ${into}`;
       if (args.mode === "scenarios")
         return `Compare ${args.scenarios!.length} scenarios (${args.scenarios!.map((s: Scenario) => s.name).join(", ")}) on ${outputs} ${into}`;
       return args.second_input_cell

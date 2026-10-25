@@ -12,7 +12,15 @@ test("a one-input data table tries each value and lists every output", () => {
   assert.deepEqual(args.outputs, ["B5", "B6"]);
   assert.deepEqual(whatIfRuns(args), [{ B1: 8 }, { B1: 10 }, { B1: 12 }]);
   assert.deepEqual(
-    whatIfTable(args, [[100, 1], [200, 2], [300, 3]], ["Profit", "Margin"]),
+    whatIfTable(
+      args,
+      [
+        [100, 1],
+        [200, 2],
+        [300, 3],
+      ],
+      ["Profit", "Margin"],
+    ),
     [
       ["B1", "Profit", "Margin"],
       [8, 100, 1],
@@ -64,10 +72,61 @@ test("scenarios name their inputs and compare the outputs side by side", () => {
   ]);
 });
 
-test("bad what-if arguments come back as messages the model can act on", () => {
-  assert.throws(() => checkWhatIf({ mode: "solver", outputs: ["B5"] }), /mode must be one of/);
+test("bounded optimisation generates a finite grid and selects the best feasible candidate", () => {
+  const args = checkWhatIf({
+    mode: "optimisation",
+    outputs: ["B5"],
+    direction: "maximize",
+    variables: [{ cell: "B1", min: 0, max: 2, step: 1 }],
+    constraints: [{ cell: "B6", operator: ">=", value: 0 }],
+  });
+  assert.deepEqual(whatIfRuns(args), [{ B1: 0 }, { B1: 1 }, { B1: 2 }]);
+  assert.deepEqual(
+    whatIfTable(
+      args,
+      [
+        [1, -1],
+        [7, 2],
+        [5, 3],
+      ],
+      ["Profit", "Capacity"],
+    ),
+    [
+      ["Status", "B1", "Profit", "Capacity"],
+      ["BEST", 1, 7, 2],
+      ["rejected", 0, 1, -1],
+      ["feasible", 1, 7, 2],
+      ["feasible", 2, 5, 3],
+    ],
+  );
   assert.throws(
-    () => checkWhatIf({ mode: "data_table", outputs: ["B5"], input_cell: "B1", values: [] }),
+    () =>
+      checkWhatIf({
+        mode: "optimisation",
+        outputs: ["B5"],
+        direction: "maximize",
+        variables: [
+          { cell: "B1", min: 0, max: 100, step: 0.1 },
+          { cell: "B2", min: 0, max: 100, step: 0.1 },
+        ],
+      }),
+    /at most 400/,
+  );
+});
+
+test("bad what-if arguments come back as messages the model can act on", () => {
+  assert.throws(
+    () => checkWhatIf({ mode: "solver", outputs: ["B5"] }),
+    /mode must be one of/,
+  );
+  assert.throws(
+    () =>
+      checkWhatIf({
+        mode: "data_table",
+        outputs: ["B5"],
+        input_cell: "B1",
+        values: [],
+      }),
     /values needs 1 to 50 numbers/,
   );
   assert.throws(

@@ -184,11 +184,12 @@ test("the companion is exposed only on Windows, signed, installed and approved",
   );
 });
 
-test("Python fails closed without a worker and never tells the person to install it", () => {
+test("Python requests use the local alternative without a worker and never require installation", () => {
   const verdict = resolveCapability("python-sandbox", ready());
   assert.equal(verdict.status, "unsupported");
   assert.equal(verdict.execution, "managed_python");
   assert.equal(verdict.fallbackFeature, "local-code");
+  assert.equal(hasNativeFallback("python-sandbox"), true);
   assert.doesNotMatch(
     `${verdict.reason} ${NATIVE_FEATURE_ADVICE["python-sandbox"]}`,
     /\b(?:pip|download|install (?:python|pandas))\b/i,
@@ -370,7 +371,6 @@ test("refusals are structured, name the alternative and never claim success", ()
 test("fallback-capable native requests are not treated like hard refusals", () => {
   for (const feature of NATIVE_FALLBACK_FEATURES)
     assert.equal(hasNativeFallback(feature), true, feature);
-  assert.equal(hasNativeFallback("python-sandbox"), false);
   assert.equal(hasNativeFallback("vba-com"), false);
 });
 
@@ -408,8 +408,9 @@ test("the local reader routes Sparklines to a real line-chart fallback", () => {
   );
 });
 
-test("the agent loop refuses native runtime requests before any model call or workbook access", async () => {
+test("the agent routes Python requests to the local alternative without running Python", async () => {
   let touched = false;
+  let modelCalled = false;
   const touch = async () => {
     touched = true;
     throw new AgentToolError("must not run");
@@ -428,16 +429,23 @@ test("the agent loop refuses native runtime requests before any model call or wo
     request: "run python on this sheet",
     host,
     mask,
-    model: async () => {
-      touched = true;
-      throw new Error("the model must not be called");
+    model: async (messages) => {
+      modelCalled = true;
+      return {
+        content: messages.at(-1)?.content ?? "",
+        tool_calls: [],
+      };
     },
+    maxTurns: 1,
   });
   assert.equal(touched, false);
-  assert.equal(run.turns, 0);
+  assert.equal(modelCalled, true);
+  assert.equal(run.unsupported, undefined);
   assert.deepEqual(run.changes, []);
-  assert.equal(run.unsupported?.feature, "python-sandbox");
-  assert.equal(run.reply, NATIVE_FEATURE_ADVICE["python-sandbox"]);
+  assert.match(
+    run.messages[0]?.content ?? "",
+    /local JavaScript\/WASM|Python is not run/i,
+  );
 });
 
 test("the agent loop allows a native fallback request to reach the planner with guidance", async () => {

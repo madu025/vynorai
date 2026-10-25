@@ -8,6 +8,14 @@
 
 ## 1. High-Level Architecture Overview
 
+The M365 semantic-model alternative is implemented in `extensions/m365/src/semanticModel.ts`: it profiles bounded on-device ranges, classifies dimensions/measures/keys/dates, reuses relationship evidence, and reports native Power Pivot/Data Model/OLAP limitations without writing or pretending to create a native cube.
+
+Background development tasks use `background-runner/src/developmentSupervisor.ts`
+for bounded research, planning, implementation, verification and review stages;
+stage-specific write/command permissions and production-command blocking are
+enforced by `background-runner/src/index.ts`, with stage evidence included in
+the Proof Pack.
+
 ### 1.1 Microsoft 365 add-in first Excel slice
 
 The M365 sub-product remains under `extensions/m365/`. Its first safe Excel slice is implemented by

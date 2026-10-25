@@ -109,7 +109,9 @@ async function hiddenBefore(
   context: any,
   range: any,
   rows: boolean,
-): Promise<{ hidden: boolean } | { parts: { address: string; hidden: boolean }[] }> {
+): Promise<
+  { hidden: boolean } | { parts: { address: string; hidden: boolean }[] }
+> {
   const whole = rows ? range.getEntireRow() : range.getEntireColumn();
   whole.load(rows ? "rowHidden" : "columnHidden");
   await context.sync();
@@ -1491,9 +1493,16 @@ export async function runExcelAction(
       const runs = whatIfRuns(args);
       const inputCells = [...new Set(runs.flatMap((set) => Object.keys(set)))];
       const inputs = inputCells.map((cell) => model.getRange(cell));
-      const outputs = (args.outputs as string[]).map((cell) =>
-        model.getRange(cell),
-      );
+      const constraintCells =
+        args.mode === "optimisation"
+          ? (args.constraints as { cell: string }[]).map(
+              (constraint) => constraint.cell,
+            )
+          : [];
+      const observedCells = [
+        ...new Set([...(args.outputs as string[]), ...constraintCells]),
+      ];
+      const outputs = observedCells.map((cell) => model.getRange(cell));
       for (const range of inputs) range.load("formulas");
       for (const range of outputs) range.load("formulas");
       await context.sync();
@@ -1501,10 +1510,10 @@ export async function runExcelAction(
         (range) => !String(range.formulas[0][0]).startsWith("="),
       );
       if (missing >= 0)
-        throw new Error(`${args.outputs[missing]} holds no formula`);
+        throw new Error(`${observedCells[missing]} holds no formula`);
       // The label of each output: the text in the cell to its left, else its address.
       const labels = await Promise.all(
-        (args.outputs as string[]).map(async (cell) => {
+        observedCells.map(async (cell) => {
           const { column, row } = parseA1(cell);
           if (column === 0) return cell;
           const left = model.getCell(row - 1, column - 1);
@@ -1654,7 +1663,8 @@ export async function restoreFromBackup(
     const blockBottom = row0 + rows;
     const blockRight = col0 + columns;
     const strips: [number, number, number, number][] = [];
-    if (top < row0) strips.push([top, left, Math.min(bottom, row0) - top, right - left]);
+    if (top < row0)
+      strips.push([top, left, Math.min(bottom, row0) - top, right - left]);
     if (bottom > blockBottom) {
       const from = Math.max(top, blockBottom);
       strips.push([from, left, bottom - from, right - left]);
@@ -1662,7 +1672,12 @@ export async function restoreFromBackup(
     const beside = [Math.max(top, row0), Math.min(bottom, blockBottom)];
     if (beside[1] > beside[0]) {
       if (left < col0)
-        strips.push([beside[0], left, beside[1] - beside[0], Math.min(right, col0) - left]);
+        strips.push([
+          beside[0],
+          left,
+          beside[1] - beside[0],
+          Math.min(right, col0) - left,
+        ]);
       if (right > blockRight) {
         const from = Math.max(left, blockRight);
         strips.push([beside[0], from, beside[1] - beside[0], right - from]);
@@ -1806,12 +1821,14 @@ export async function undoJournalEntry(
         copy.visibility = "Visible";
         copy.position = data.position;
         // A second Undo finds the mark already gone, and deleting a missing property fails.
-        const mark = copy.customProperties.getItemOrNullObject("vynorai-backup");
+        const mark =
+          copy.customProperties.getItemOrNullObject("vynorai-backup");
         mark.load("isNullObject");
         await context.sync();
         if (!mark.isNullObject) mark.delete();
         // Earlier changes to this sheet name its old id; the restored copy has a new one.
-        if (data.oldId) sheetAliases.set(String(data.oldId), String(data.restoreId));
+        if (data.oldId)
+          sheetAliases.set(String(data.oldId), String(data.restoreId));
         break;
       }
       if (!sheet) return;

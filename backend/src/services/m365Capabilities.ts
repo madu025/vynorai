@@ -112,6 +112,7 @@ export const NATIVE_FALLBACK_FEATURES = [
   "solver",
   "scenario-manager",
   "sparklines",
+  "python-sandbox",
 ] as const satisfies readonly NativeOnlyFeature[];
 
 export function hasNativeFallback(feature: NativeOnlyFeature): boolean {
@@ -131,6 +132,8 @@ export function nativeFallbackGuidance(feature: NativeOnlyFeature): string {
       return "Native Scenario Manager is unavailable. Use what_if with named scenarios and put the comparison on a new result sheet. Label it as a scenario-table fallback.";
     case "sparklines":
       return "Native Sparklines are unavailable. Use a line chart on a new result sheet or a compact trend report, and label it as a chart fallback.";
+    case "python-sandbox":
+      return "Python is not executed and nothing needs to be installed. Use VynorAI's bounded local JavaScript/WASM analysis alternative, or request the separately approved managed sandbox when it is provisioned. Label the result as a VynorAI local alternative.";
   }
   return "This native feature is unavailable; use the capability report to choose a supported fallback.";
 }

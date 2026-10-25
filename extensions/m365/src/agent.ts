@@ -8,9 +8,7 @@
 import {
   mapRelationships,
   RELATION_MAX_ROWS,
-  RELATION_MAX_TABLES,
   type KeyCell,
-  type RelationTable,
 } from "./relationships.js";
 import { PERSONAL_PATTERNS } from "./analysis.js";
 import {
@@ -38,6 +36,11 @@ import {
   type AnalysisKind,
   runColumnAnalysis,
 } from "./analyzeColumns.js";
+import {
+  buildSemanticModel,
+  SEMANTIC_MODEL_MAX_TABLES,
+  type SemanticModelInput,
+} from "./semanticModel.js";
 
 export const AGENT_MAX_TURNS = 12;
 export const AGENT_MAX_CHANGES = 25;
@@ -926,6 +929,45 @@ export function coveredKinds(
   return [...kinds];
 }
 
+async function readQualifiedTables(
+  rawRanges: unknown,
+  host: AgentHost,
+  restore: (text: string) => string,
+): Promise<SemanticModelInput[]> {
+  if (!Array.isArray(rawRanges))
+    throw new AgentToolError(
+      'ranges must be a list like ["Orders!A1:F900", "Customers!A1:C40"].',
+    );
+  if (rawRanges.length < 2 || rawRanges.length > SEMANTIC_MODEL_MAX_TABLES)
+    throw new AgentToolError(
+      `Give between 2 and ${SEMANTIC_MODEL_MAX_TABLES} ranges, each with its header row.`,
+    );
+  const tables: SemanticModelInput[] = [];
+  for (const entry of rawRanges) {
+    const text = restore(String(entry ?? "")).trim();
+    const cut = text.lastIndexOf("!");
+    if (cut < 1)
+      throw new AgentToolError(`"${text}" must look like Sheet!A1:F900.`);
+    const sheet = checkSheetName(
+      text
+        .slice(0, cut)
+        .replace(/^'(.*)'$/, "$1")
+        .replace(/''/g, "'"),
+    );
+    const box = parseA1(checkRange(text.slice(cut + 1)));
+    const lastRow = Math.min(box.lastRow, box.row + RELATION_MAX_ROWS);
+    const address = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${lastRow}`;
+    const read = await host.readRange(sheet, address, false);
+    const [headerRow = [], ...rows] = read.values as KeyCell[][];
+    tables.push({
+      label: `${sheet}!${address}`,
+      headers: headerRow.map((value) => String(value ?? "")),
+      rows,
+    });
+  }
+  return tables;
+}
+
 async function runTool(
   call: ToolCall,
   args: Record<string, unknown>,
@@ -1064,38 +1106,19 @@ async function runTool(
         throw new AgentToolError(
           `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
         );
-      if (!Array.isArray(args.ranges))
+      return mapRelationships(
+        await readQualifiedTables(args.ranges, host, restore),
+      );
+    }
+    case "build_semantic_model": {
+      counts.calculate += 1;
+      if (counts.calculate > CALC_PER_REQUEST)
         throw new AgentToolError(
-          'ranges must be a list like ["Orders!A1:F900", "Customers!A1:C40"].',
+          `You already ran ${CALC_PER_REQUEST} calculations for this request. Stage the changes now, or answer with what you have.`,
         );
-      if (args.ranges.length < 2 || args.ranges.length > RELATION_MAX_TABLES)
-        throw new AgentToolError(
-          `Give between 2 and ${RELATION_MAX_TABLES} ranges, each with its header row.`,
-        );
-      const tables: RelationTable[] = [];
-      for (const entry of args.ranges.slice(0, RELATION_MAX_TABLES + 1)) {
-        const text = restore(String(entry ?? "")).trim();
-        const cut = text.lastIndexOf("!");
-        if (cut < 1)
-          throw new AgentToolError(`"${text}" must look like Sheet!A1:F900.`);
-        const sheet = checkSheetName(
-          text
-            .slice(0, cut)
-            .replace(/^'(.*)'$/, "$1")
-            .replace(/''/g, "'"),
-        );
-        const box = parseA1(checkRange(text.slice(cut + 1)));
-        const lastRow = Math.min(box.lastRow, box.row + RELATION_MAX_ROWS);
-        const address = `${columnLetters(box.column)}${box.row}:${columnLetters(box.lastColumn)}${lastRow}`;
-        const read = await host.readRange(sheet, address, false);
-        const [headerRow = [], ...rows] = read.values as KeyCell[][];
-        tables.push({
-          label: `${sheet}!${address}`,
-          headers: headerRow.map((value) => String(value ?? "")),
-          rows,
-        });
-      }
-      return mapRelationships(tables);
+      return buildSemanticModel(
+        await readQualifiedTables(args.ranges, host, restore),
+      );
     }
     case "run_code": {
       if (!host.runCode)
@@ -1259,6 +1282,19 @@ export function answerSources(
                 sheet: text.slice(0, cut).replace(/^'(.*)'$/, "$1"),
                 address: text.slice(cut + 1),
                 note: "relationships",
+              });
+          }
+          break;
+        case "build_semantic_model":
+          for (const range of Array.isArray(args.ranges) ? args.ranges : []) {
+            const text = restore(String(range ?? ""));
+            const cut = text.lastIndexOf("!");
+            if (cut > 0)
+              add({
+                kind: "range",
+                sheet: text.slice(0, cut).replace(/^'(.*)'$/, "$1"),
+                address: text.slice(cut + 1),
+                note: "semantic model",
               });
           }
           break;

@@ -797,9 +797,9 @@ export const AGENT_TOOLS = [
   ),
   fn(
     "what_if",
-    "STAGED. What-if on a model's own formulas: the add-in sets input cells, lets Excel recalculate, reads the output cells and always puts the inputs back, then writes a labelled table of the results (values, not live). data_table: input_cell with values (up to 50; with second_input_cell and second_values, a grid of one output, up to 20 x 20). scenarios: 2 to 6 named sets of inputs, e.g. [{name:'Base',inputs:{B1:10}},{name:'Price +10%',inputs:{B1:11}}]. For one target value use goal_seek instead.",
+    "STAGED. What-if on a model's own formulas: the add-in sets input cells, lets Excel recalculate, reads the output cells and always puts the inputs back, then writes a labelled table of the results (values, not live). data_table: input_cell with values (up to 50; with second_input_cell and second_values, a grid of one output, up to 20 x 20). scenarios: 2 to 6 named sets of inputs, e.g. [{name:'Base',inputs:{B1:10}},{name:'Price +10%',inputs:{B1:11}}]. optimisation: bounded deterministic Solver alternative with 1-2 variables, explicit min/max/step, at most 400 candidates, optional formula-cell constraints, and maximize/minimize direction. Inputs are restored after evaluation; the result is labelled as a fallback, never as native Solver. For one target value use goal_seek instead.",
     {
-      mode: en("data_table", "scenarios"),
+      mode: en("data_table", "scenarios", "optimisation"),
       model_sheet: str("Sheet with the model's input and output cells"),
       outputs: list("Output formula cells, 1 to 5 (one for a two-input table)"),
       input_cell: str("data_table: input cell"),
@@ -822,6 +822,34 @@ export const AGENT_TOOLS = [
           required: ["name", "inputs"],
         },
       },
+      direction: en("maximize", "minimize"),
+      variables: {
+        type: "array",
+        maxItems: 2,
+        items: {
+          type: "object",
+          properties: {
+            cell: str("Input value cell"),
+            min: num("Minimum candidate value"),
+            max: num("Maximum candidate value"),
+            step: num("Positive candidate step"),
+          },
+          required: ["cell", "min", "max", "step"],
+        },
+      },
+      constraints: {
+        type: "array",
+        maxItems: 6,
+        items: {
+          type: "object",
+          properties: {
+            cell: str("Formula cell to constrain"),
+            operator: en(">=", "<=", "=", ">", "<"),
+            value: num("Constraint target"),
+          },
+          required: ["cell", "operator", "value"],
+        },
+      },
       sheet: str("Result sheet"),
       cell: str("Top-left result cell, default A1"),
     },
@@ -830,6 +858,14 @@ export const AGENT_TOOLS = [
   fn(
     "map_relationships",
     "READ-ONLY. Finds how 2 to 10 sheets or tables relate, computed on the device from the header names and the values (up to 20,000 rows each). ranges: sheet-qualified ranges that include the header row, e.g. 'Orders!A1:F900'. Returns the join columns, the cardinality (one-to-many etc.), how many rows have no partner, repeated keys and keys that match only after cleaning. Call it first for any question that needs columns from more than one sheet or table, then answer with calculate (SUMIFS/XLOOKUP/GROUPBY over the real ranges) or stage combine_tables.",
+    {
+      ranges: list("Sheet-qualified ranges with their header row, 2 to 10"),
+    },
+    ["ranges"],
+  ),
+  fn(
+    "build_semantic_model",
+    "READ-ONLY deterministic local alternative to Power Pivot/Data Model/OLAP. Profiles 2 to 10 bounded sheet ranges on the device, classifies keys, dimensions, dates, text and numeric measures, and returns relationship/cardinality/unmatched/duplicate/cleaning evidence plus explicit limitations. It does not create a native Data Model, cube or DAX measure. Call it before a cross-sheet report when the person asks for a model, OLAP-style analysis or reusable measures.",
     {
       ranges: list("Sheet-qualified ranges with their header row, 2 to 10"),
     },
@@ -866,6 +902,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Avoid INDIRECT and OFFSET on large data (they recalculate on every change); use XLOOKUP, CHOOSECOLS or sheet-qualified ranges. PivotTables cannot group dates here: for a month or quarter summary write GROUPBY on DATE(YEAR(dates),MONTH(dates),1) (or a quarter key; it also works when the dates are stored as text, which EOMONTH does not) on a new sheet. For a trend or month-by-month request do not explore the dates with calculate: the date column is in the get_workbook sample, so stage create_sheet, the GROUPBY formula and create_chart in your first three turns.",
   "If a written result shows #SPILL!, the cells it needs are not empty: stage the formula on a new sheet instead. Identifiers with leading zeros (0112005016) are text: always quote them.",
   "For a regression or a statistical test, build a small report sheet: labels in column A, LINEST/RSQ/SLOPE/INTERCEPT or T.TEST/F.TEST formulas in column B, then explain the result in plain words.",
+  "For a Power Pivot, Data Model or OLAP-style request, call build_semantic_model first. It is a bounded on-device semantic metadata alternative; use its measured relationships and roles to stage normal PivotTable/formula/report outputs, and state clearly that no native cube or DAX model was created.",
   "Excel also has FORECAST.ETS, T.TEST, F.TEST, LINEST and, where the version has them, REGEXTEST/REGEXEXTRACT/REGEXREPLACE (check with calculate first). A what-if data table is a MAKEARRAY or LET formula on a new sheet.",
   "Advanced reports include forecast confidence intervals, cohorts and retention, sensitivity matrices, financial KPIs, fuzzy candidates, structured splits, IQR anomalies, explainable fraud-risk screening and period/category contribution comparisons. Never merge fuzzy matches, call an anomaly fraud, or call a contribution causal without approval and evidence.",
   "If a host capability is unavailable, return an explicit unsupported or fallback result. Never pretend a slicer, Python execution or another unsupported Office.js feature succeeded.",

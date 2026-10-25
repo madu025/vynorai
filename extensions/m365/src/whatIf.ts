@@ -7,17 +7,37 @@
  */
 import { AgentToolError, checkCell } from "./agent.js";
 
-export const WHAT_IF_MODES = ["data_table", "scenarios"] as const;
+export const WHAT_IF_MODES = [
+  "data_table",
+  "scenarios",
+  "optimisation",
+] as const;
 export type WhatIfMode = (typeof WHAT_IF_MODES)[number];
 
 export const WHAT_IF_MAX_VALUES = 50;
 export const WHAT_IF_MAX_SECOND = 20;
 export const WHAT_IF_MAX_SCENARIOS = 6;
 export const WHAT_IF_MAX_OUTPUTS = 5;
+export const OPTIMISATION_MAX_VARIABLES = 2;
+export const OPTIMISATION_MAX_RUNS = 400;
+export const OPTIMISATION_MAX_CONSTRAINTS = 6;
 
 export interface Scenario {
   name: string;
   inputs: Record<string, number>;
+}
+
+export interface OptimisationVariable {
+  cell: string;
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface OptimisationConstraint {
+  cell: string;
+  operator: ">=" | "<=" | "=" | ">" | "<";
+  value: number;
 }
 
 export interface WhatIfArgs {
@@ -28,6 +48,9 @@ export interface WhatIfArgs {
   second_input_cell?: string;
   second_values?: number[];
   scenarios?: Scenario[];
+  direction?: "maximize" | "minimize";
+  variables?: OptimisationVariable[];
+  constraints?: OptimisationConstraint[];
 }
 
 const numbers = (value: unknown, what: string, max: number): number[] => {
@@ -43,9 +66,13 @@ const numbers = (value: unknown, what: string, max: number): number[] => {
 
 /** Checks and normalises the what-if part of the arguments. */
 export function checkWhatIf(args: Record<string, unknown>): WhatIfArgs {
-  const mode = String(args.mode ?? "").trim().toLowerCase() as WhatIfMode;
+  const mode = String(args.mode ?? "")
+    .trim()
+    .toLowerCase() as WhatIfMode;
   if (!WHAT_IF_MODES.includes(mode))
-    throw new AgentToolError(`mode must be one of: ${WHAT_IF_MODES.join(", ")}.`);
+    throw new AgentToolError(
+      `mode must be one of: ${WHAT_IF_MODES.join(", ")}.`,
+    );
   if (
     !Array.isArray(args.outputs) ||
     !args.outputs.length ||
@@ -55,15 +82,83 @@ export function checkWhatIf(args: Record<string, unknown>): WhatIfArgs {
       `outputs needs 1 to ${WHAT_IF_MAX_OUTPUTS} formula cells.`,
     );
   const outputs = args.outputs.map((cell) => checkCell(cell));
+  if (mode === "optimisation") {
+    if (outputs.length !== 1)
+      throw new AgentToolError(
+        "optimisation needs exactly one objective formula cell.",
+      );
+    const direction = String(args.direction ?? "")
+      .trim()
+      .toLowerCase();
+    if (direction !== "maximize" && direction !== "minimize")
+      throw new AgentToolError(
+        "optimisation direction must be maximize or minimize.",
+      );
+    if (
+      !Array.isArray(args.variables) ||
+      args.variables.length < 1 ||
+      args.variables.length > OPTIMISATION_MAX_VARIABLES
+    )
+      throw new AgentToolError(
+        `optimisation needs 1 to ${OPTIMISATION_MAX_VARIABLES} bounded variables.`,
+      );
+    const variables = args.variables.map((raw: any, index) => {
+      const cell = checkCell(raw?.cell);
+      const min = Number(raw?.min);
+      const max = Number(raw?.max);
+      const step = Number(raw?.step);
+      if (![min, max, step].every(Number.isFinite) || min > max || step <= 0)
+        throw new AgentToolError(
+          `optimisation variable ${index + 1} needs finite min, max and positive step.`,
+        );
+      const count = Math.floor((max - min) / step) + 1;
+      if (count < 1)
+        throw new AgentToolError(
+          `optimisation variable ${cell} has no candidates.`,
+        );
+      return { cell, min, max, step };
+    });
+    const runs = variables.reduce(
+      (total, variable) =>
+        total * (Math.floor((variable.max - variable.min) / variable.step) + 1),
+      1,
+    );
+    if (runs > OPTIMISATION_MAX_RUNS)
+      throw new AgentToolError(
+        `optimisation would evaluate ${runs} candidates; reduce bounds or step to at most ${OPTIMISATION_MAX_RUNS}.`,
+      );
+    const rawConstraints = args.constraints ?? [];
+    if (
+      !Array.isArray(rawConstraints) ||
+      rawConstraints.length > OPTIMISATION_MAX_CONSTRAINTS
+    )
+      throw new AgentToolError(
+        `optimisation supports at most ${OPTIMISATION_MAX_CONSTRAINTS} constraints.`,
+      );
+    const constraints = rawConstraints.map((raw: any) => {
+      const operator = String(
+        raw?.operator ?? "",
+      ) as OptimisationConstraint["operator"];
+      if (![">=", "<=", "=", ">", "<"].includes(operator))
+        throw new AgentToolError(
+          "optimisation constraint operator must be >=, <=, =, > or <.",
+        );
+      const value = Number(raw?.value);
+      if (!Number.isFinite(value))
+        throw new AgentToolError(
+          "optimisation constraint value must be finite.",
+        );
+      return { cell: checkCell(raw?.cell), operator, value };
+    });
+    return { mode, outputs, direction, variables, constraints };
+  }
   if (mode === "data_table") {
     const input = checkCell(args.input_cell);
     const values = numbers(args.values, "values", WHAT_IF_MAX_VALUES);
     if (!args.second_input_cell)
       return { mode, outputs, input_cell: input, values };
     if (outputs.length !== 1)
-      throw new AgentToolError(
-        "A two-input data table shows one output cell.",
-      );
+      throw new AgentToolError("A two-input data table shows one output cell.");
     const second = checkCell(args.second_input_cell);
     if (second === input)
       throw new AgentToolError("The two input cells must differ.");
@@ -101,7 +196,9 @@ export function checkWhatIf(args: Record<string, unknown>): WhatIfArgs {
         entries.map(([cell, value]) => {
           const number = Number(value);
           if (!Number.isFinite(number))
-            throw new AgentToolError(`Scenario "${name}": ${cell} needs a number.`);
+            throw new AgentToolError(
+              `Scenario "${name}": ${cell} needs a number.`,
+            );
           return [checkCell(cell), number];
         }),
       ),
@@ -112,6 +209,27 @@ export function checkWhatIf(args: Record<string, unknown>): WhatIfArgs {
 
 /** Every set of input values to try, in table order. */
 export function whatIfRuns(args: WhatIfArgs): Record<string, number>[] {
+  if (args.mode === "optimisation") {
+    const variables = args.variables!;
+    const values = variables.map((variable) => {
+      const result: number[] = [];
+      for (
+        let value = variable.min;
+        value <= variable.max + variable.step / 1000;
+        value += variable.step
+      )
+        result.push(Number(value.toFixed(12)));
+      return result;
+    });
+    return values[0].flatMap((first) =>
+      values.length === 1
+        ? [{ [variables[0].cell]: first }]
+        : values[1].map((second) => ({
+            [variables[0].cell]: first,
+            [variables[1].cell]: second,
+          })),
+    );
+  }
   if (args.mode === "scenarios")
     return args.scenarios!.map((scenario) => scenario.inputs);
   if (!args.second_input_cell)
@@ -133,6 +251,56 @@ export function whatIfTable(
   results: (number | string)[][],
   labels: string[],
 ): (string | number)[][] {
+  if (args.mode === "optimisation") {
+    const variables = args.variables!;
+    const constraints = args.constraints ?? [];
+    const rows = whatIfRuns(args).map((run, index) => {
+      const result = results[index] ?? [];
+      const feasible = constraints.every((constraint, constraintIndex) => {
+        const value = Number(result[constraintIndex + 1]);
+        if (!Number.isFinite(value)) return false;
+        switch (constraint.operator) {
+          case ">=":
+            return value >= constraint.value;
+          case "<=":
+            return value <= constraint.value;
+          case "=":
+            return Math.abs(value - constraint.value) <= 1e-9;
+          case ">":
+            return value > constraint.value;
+          case "<":
+            return value < constraint.value;
+        }
+      });
+      return [
+        feasible ? "feasible" : "rejected",
+        ...variables.map((variable) => run[variable.cell]),
+        ...result,
+      ];
+    });
+    const objectiveIndex = variables.length;
+    const candidates = rows.filter((row) => row[0] === "feasible");
+    if (!candidates.length)
+      throw new AgentToolError(
+        "No optimisation candidate satisfies the constraints.",
+      );
+    const best = candidates.reduce((winner, row) => {
+      const current = Number(row[objectiveIndex + 1]);
+      const previous = Number(winner[objectiveIndex + 1]);
+      return args.direction === "maximize"
+        ? current > previous
+          ? row
+          : winner
+        : current < previous
+          ? row
+          : winner;
+    });
+    return [
+      ["Status", ...variables.map((variable) => variable.cell), ...labels],
+      ["BEST", ...best.slice(1)],
+      ...rows,
+    ];
+  }
   if (args.mode === "scenarios")
     return [
       ["Scenario", ...labels],
@@ -145,7 +313,10 @@ export function whatIfTable(
     ];
   const width = args.second_values!.length;
   return [
-    [`${labels[0]} (${args.input_cell} down, ${args.second_input_cell} across)`, ...args.second_values!],
+    [
+      `${labels[0]} (${args.input_cell} down, ${args.second_input_cell} across)`,
+      ...args.second_values!,
+    ],
     ...args.values!.map((value, i) => [
       value,
       ...results.slice(i * width, (i + 1) * width).map((row) => row[0]),

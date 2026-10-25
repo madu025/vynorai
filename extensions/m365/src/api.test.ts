@@ -195,3 +195,47 @@ test("M365 API exchanges the current token for a 30 day session", async () => {
     },
   ]);
 });
+
+test("M365 API starts and polls the secure VynorAI account handoff", async () => {
+  const calls: Array<{ url: string; method?: string; auth?: string }> = [];
+  const client = createM365ApiClient(
+    "https://api.example",
+    "entra-token",
+    async (url, init) => {
+      calls.push({
+        url: String(url),
+        method: init?.method,
+        auth: (init?.headers as Record<string, string>)?.authorization,
+      });
+      return new Response(
+        String(url).endsWith("/link/start")
+          ? JSON.stringify({
+              code: "ABCD-EFGH",
+              expiresAt: "2026-10-24T10:10:00.000Z",
+            })
+          : JSON.stringify({ linked: false, state: "pending" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  );
+  assert.deepEqual(await client.startM365Link(), {
+    code: "ABCD-EFGH",
+    expiresAt: "2026-10-24T10:10:00.000Z",
+  });
+  assert.deepEqual(await client.m365LinkStatus(), {
+    linked: false,
+    state: "pending",
+  });
+  assert.deepEqual(calls, [
+    {
+      url: "https://api.example/v1/m365/link/start",
+      method: "POST",
+      auth: "Bearer entra-token",
+    },
+    {
+      url: "https://api.example/v1/m365/link/status",
+      method: "GET",
+      auth: "Bearer entra-token",
+    },
+  ]);
+});

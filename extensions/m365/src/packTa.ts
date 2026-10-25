@@ -174,6 +174,7 @@ registerLanguagePack("ta", {
     menu_copy: "கண்டறிதலை நகலெடு",
     menu_clear: "கண்டறிதலை அழி",
     menu_signout: "வெளியேறு",
+    connect_vynorai: "VynorAI கணக்கை இணைக்கவும்",
     menu_overview: "பணிப்புத்தக மேலோட்டம்",
     menu_advanced_workbook_options: "மேம்பட்ட பணிப்புத்தக விருப்பங்கள்",
     menu_language: "மொழி",

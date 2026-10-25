@@ -170,6 +170,7 @@ registerLanguagePack("si", {
     menu_copy: "දෝෂ විමර්ශන තොරතුරු පිටපත් කරන්න",
     menu_clear: "දෝෂ විමර්ශන තොරතුරු මකන්න",
     menu_signout: "ඉවත් වන්න",
+    connect_vynorai: "VynorAI ගිණුම සම්බන්ධ කරන්න",
     menu_overview: "වැඩපොතේ සාරාංශය",
     menu_advanced_workbook_options: "උසස් වැඩපොත් විකල්ප",
     menu_language: "භාෂාව",

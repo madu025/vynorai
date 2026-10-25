@@ -71,6 +71,14 @@ export interface M365ApiClient {
   capabilities(): Promise<M365Capabilities>;
   /** Exchange the current token for a 30 day VynorAI session (also renews one). */
   createSession(): Promise<{ sessionToken: string; expiresInSeconds: number }>;
+  /** Start the secure browser handoff that connects this Microsoft identity to VynorAI. */
+  startM365Link(): Promise<{ code: string; expiresAt: string }>;
+  /** Check whether the browser handoff has completed. */
+  m365LinkStatus(): Promise<{
+    linked: boolean;
+    state: "pending" | "linked" | "expired" | "none";
+    expiresAt?: string;
+  }>;
   assistText(input: {
     host: "word" | "powerpoint" | "outlook" | "excel";
     task: string;
@@ -214,6 +222,8 @@ export function createM365ApiClient(
     diagnose: () => request("GET", "/v1/m365/diagnostics"),
     capabilities: () => request("GET", "/v1/m365/excel/capabilities"),
     createSession: () => request("POST", "/v1/m365/session", {}),
+    startM365Link: () => request("POST", "/v1/m365/link/start", {}),
+    m365LinkStatus: () => request("GET", "/v1/m365/link/status"),
     assistText: (input) => request("POST", "/v1/m365/text/assist", input),
     draftDocument: (input) => request("POST", "/v1/m365/text/draft", input),
     reportRollback: (input) =>

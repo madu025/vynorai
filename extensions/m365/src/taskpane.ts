@@ -73,6 +73,12 @@ import {
   interpretInstruction,
   looksLikeQuestion,
 } from "./intent.js";
+import {
+  LINK_POLL_INTERVAL_MS,
+  LINK_POLL_MAX_ATTEMPTS,
+  linkPollOutcome,
+  type LinkPollOutcome,
+} from "./linkPolling.js";
 import { refuseNativeRequest } from "./capabilityRegistry.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import { chooseInstructionRoute } from "./taskpaneRouting.js";
@@ -354,6 +360,7 @@ skipLink?.addEventListener("blur", () => {
 const preview = document.querySelector<HTMLElement>("#preview");
 const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
+const linkVynorai = document.querySelector<HTMLButtonElement>("#link-vynorai");
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const smartRun = document.querySelector<HTMLButtonElement>("#smart-run");
@@ -430,6 +437,8 @@ const diagnostics = document.querySelector<HTMLElement>("#diagnostics");
 const summary = document.querySelector<HTMLElement>("#diagnostics-summary");
 const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
+/** Short-lived Microsoft proof retained in memory for the account-link handoff only. */
+let microsoftAccessToken = "";
 let capabilities: M365Capabilities | undefined;
 let currentPlan: any;
 let cachedHeaderLayout:
@@ -1011,6 +1020,159 @@ function apiClient() {
     traceRequest,
   );
 }
+
+function microsoftApiClient() {
+  if (!config || !microsoftAccessToken)
+    throw new Error("Microsoft sign-in is required to connect VynorAI.");
+  return createM365ApiClient(
+    config.apiBaseUrl,
+    microsoftAccessToken,
+    fetch,
+    traceRequest,
+  );
+}
+
+function setLinkActionVisible(visible: boolean) {
+  if (linkVynorai) linkVynorai.hidden = !visible;
+}
+
+function linkPageUrl(code: string): string {
+  if (!config) throw new Error("M365 OAuth configuration is missing.");
+  const url = new URL("/link", config.apiBaseUrl);
+  // Keep the one-time code out of HTTP request and proxy logs. The link page reads the fragment.
+  url.hash = `code=${encodeURIComponent(code)}`;
+  return url.toString();
+}
+
+function openLinkPage(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const host = office();
+    if (host?.context?.ui?.displayDialogAsync) {
+      host.context.ui.displayDialogAsync(
+        url,
+        { height: 70, width: 45 },
+        (result: any) => {
+          if (result.status === host.AsyncResultStatus.Succeeded) {
+            log.record("m365-link:dialog-open", "pass");
+            resolve();
+            return;
+          }
+          log.record(
+            "m365-link:dialog-open",
+            "fail",
+            `${result.error?.code || "unknown"} ${result.error?.message || ""}`,
+          );
+          const browser = window.open(url, "_blank", "noopener,noreferrer");
+          if (browser) {
+            resolve();
+            return;
+          }
+          reject(new Error("The VynorAI connection window was blocked."));
+        },
+      );
+      return;
+    }
+    const browser = window.open(url, "_blank", "noopener,noreferrer");
+    if (browser) resolve();
+    else reject(new Error("The VynorAI connection window was blocked."));
+  });
+}
+
+async function acquireMicrosoftTokenForLink(): Promise<string> {
+  if (microsoftAccessToken) return microsoftAccessToken;
+  if (!config) throw new Error("M365 OAuth configuration is missing.");
+  const attemptValues = new Map<string, string>();
+  const attemptStorage = {
+    getItem: (key: string) => attemptValues.get(key) ?? null,
+    setItem: (key: string, value: string) => void attemptValues.set(key, value),
+    removeItem: (key: string) => void attemptValues.delete(key),
+  };
+  const authorizeUrl = await beginM365OAuth(config, attemptStorage);
+  const callbackUrl = await signInWithOfficeDialog(authorizeUrl);
+  const tokens = await completeM365OAuth(callbackUrl, config, attemptStorage);
+  microsoftAccessToken = tokens.accessToken;
+  return microsoftAccessToken;
+}
+
+async function connectVynoraiAccount() {
+  if (!config || !linkVynorai) return;
+  linkVynorai.disabled = true;
+  setStatus("Preparing the secure VynorAI connection...");
+  try {
+    let token = await acquireMicrosoftTokenForLink();
+    let result: { code: string; expiresAt: string };
+    try {
+      result = await createM365ApiClient(
+        config.apiBaseUrl,
+        token,
+        fetch,
+        traceRequest,
+      ).startM365Link();
+    } catch (error) {
+      // The in-memory proof may have expired while the pane stayed open. Re-authenticate once.
+      if (!(error instanceof M365ApiError) || error.status !== 401) throw error;
+      microsoftAccessToken = "";
+      token = await acquireMicrosoftTokenForLink();
+      result = await createM365ApiClient(
+        config.apiBaseUrl,
+        token,
+        fetch,
+        traceRequest,
+      ).startM365Link();
+    }
+    await openLinkPage(linkPageUrl(result.code));
+    setStatus(
+      "VynorAI connection page opened. Sign in there and confirm the Microsoft account.",
+    );
+    renderConversation(
+      "assistant",
+      "A secure VynorAI connection page is open. Sign in with your VynorAI account, review the Microsoft account shown, and confirm.",
+    );
+    // The one-time code remains valid for ten minutes. Keep the pane in sync long enough for a
+    // normal sign-in + email-confirmation round trip, without polling forever.
+    let outcome: LinkPollOutcome = "continue";
+    for (let attempt = 0; attempt < LINK_POLL_MAX_ATTEMPTS; attempt += 1) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, LINK_POLL_INTERVAL_MS),
+      );
+      const state = await microsoftApiClient().m365LinkStatus();
+      outcome = linkPollOutcome(state);
+      if (outcome === "linked") {
+        setLinkActionVisible(false);
+        await extendSession("sign-in");
+        await refreshCapabilities("oauth");
+        setStatus(SIGNED_IN_IDLE_STATUS);
+        renderConversation(
+          "assistant",
+          "Microsoft account connected. You can now use this VynorAI subscription in Excel.",
+        );
+        return;
+      }
+      if (outcome === "expired") break;
+    }
+    setStatus(
+      outcome === "expired"
+        ? "The connection code expired. Start Connect VynorAI account again."
+        : "The connection is still waiting for confirmation. Finish the browser page, then try Connect VynorAI account again.",
+    );
+  } catch (error) {
+    log.record("m365-link", "fail", describeError(error));
+    if (error instanceof M365ApiError && error.code === "tenant_disabled") {
+      setStatus(
+        "Your organization is not enabled in VynorAI yet. The access request was recorded; ask the administrator to enable this tenant.",
+      );
+    } else {
+      // Static (translatable) status first, then the reason appended, like the Undo status.
+      setStatus("VynorAI account connection failed.");
+      if (status)
+        status.textContent =
+          `${status.textContent ?? ""} ${describeError(error).slice(0, 240)}`.trim();
+    }
+  } finally {
+    linkVynorai.disabled = false;
+  }
+}
+
 function supportsExcelApi(version: string): boolean {
   try {
     return Boolean(
@@ -1518,6 +1680,7 @@ emailSend?.addEventListener("click", async () => {
 
 function updateAuthenticationUi(signedIn: boolean) {
   if (signIn) signIn.disabled = signedIn;
+  if (linkVynorai) linkVynorai.disabled = !signedIn;
   if (signOut) signOut.disabled = !signedIn;
   if (inspect)
     inspect.disabled = !signedIn || capabilities?.excel.canInspect === false;
@@ -1564,6 +1727,15 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
   } catch (error) {
     capabilities = undefined;
     log.record("api:capabilities", "fail", describeError(error));
+    if (
+      error instanceof M365ApiError &&
+      error.code === "M365_IDENTITY_NOT_LINKED"
+    ) {
+      setLinkActionVisible(true);
+      setStatus(
+        "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.",
+      );
+    }
     updateAuthenticationUi(true);
   }
 }
@@ -1606,6 +1778,15 @@ async function extendSession(reason: "sign-in" | "renew") {
     });
   } catch (error) {
     log.record("session:extend", "fail", describeError(error));
+    if (
+      error instanceof M365ApiError &&
+      error.code === "M365_IDENTITY_NOT_LINKED"
+    ) {
+      setLinkActionVisible(true);
+      setStatus(
+        "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.",
+      );
+    }
   }
 }
 
@@ -1639,6 +1820,7 @@ function signOutOfMicrosoft() {
   previewController.cancel();
   cachedHeaderLayout = undefined;
   accessToken = "";
+  microsoftAccessToken = "";
   capabilities = undefined;
   currentPlan = undefined;
   previewFingerprint = "";
@@ -1657,6 +1839,7 @@ function signOutOfMicrosoft() {
   renderResultGallery();
   lastConversationRequest = "";
   updateAuthenticationUi(false);
+  setLinkActionVisible(false);
   log.record("session:sign-out", "pass", "local session removed");
   setStatus("Signed out. Sign in to inspect selected Excel data.");
 }
@@ -1681,7 +1864,7 @@ const API_MESSAGES: Record<string, string> = {
   tenant_scope_disabled:
     "Your organization is enabled in VynorAI, but not for this Excel action.",
   M365_IDENTITY_NOT_LINKED:
-    "Your Microsoft account must be linked to a VynorAI account by an administrator.",
+    "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.",
   insufficient_scope:
     "Microsoft consent is missing a required Excel permission.",
   CREDITS_EXHAUSTED: "The linked VynorAI account has no credits available.",
@@ -1773,6 +1956,14 @@ function handleApiError(step: string, error: unknown) {
     signOutOfMicrosoft();
     const message =
       "Microsoft session changed or expired. Sign in again to continue.";
+    setStatus(message);
+    renderConversation("error", message);
+    return;
+  }
+  if (error.code === "M365_IDENTITY_NOT_LINKED") {
+    setLinkActionVisible(true);
+    const message =
+      "This Microsoft account is not connected to a VynorAI account yet. Use Connect VynorAI account to continue.";
     setStatus(message);
     renderConversation("error", message);
     return;
@@ -1894,6 +2085,8 @@ signIn?.addEventListener("click", async () => {
       (value) => ({ expiresIn: value.expiresIn, tokenType: value.tokenType }),
     );
     accessToken = tokens.accessToken;
+    microsoftAccessToken = tokens.accessToken;
+    setLinkActionVisible(false);
     saveSession(tokens);
     void extendSession("sign-in");
     restoreConversationHistory();
@@ -1906,6 +2099,10 @@ signIn?.addEventListener("click", async () => {
     log.record("oauth:sign-in", "fail", describeError(error));
     setStatus((error as Error).message);
   }
+});
+
+linkVynorai?.addEventListener("click", () => {
+  void connectVynoraiAccount();
 });
 
 signOut?.addEventListener("click", signOutOfMicrosoft);

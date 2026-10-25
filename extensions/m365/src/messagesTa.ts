@@ -282,6 +282,17 @@ const EXACT: Record<string, string> = {
     "VynorAI பதிவு திறக்கப்பட்டது. பயன்படுத்திய மற்றும் செயல்தவிர்த்த மாற்றங்கள் இதில் பதிவாகும்.",
   "VynorAI Log could not be opened. Check workbook permissions.":
     "VynorAI பதிவைத் திறக்க முடியவில்லை. பணிப்புத்தக அனுமதிகளைச் சரிபார்க்கவும்.",
+  "Preparing the secure VynorAI connection...":
+    "பாதுகாப்பான VynorAI இணைப்பைத் தயாரிக்கிறது...",
+  "VynorAI connection page opened. Sign in there and confirm the Microsoft account.":
+    "VynorAI இணைப்புப் பக்கம் திறக்கப்பட்டது. அங்கு உள்நுழைந்து Microsoft கணக்கை உறுதிப்படுத்தவும்.",
+  "The connection code expired. Start Connect VynorAI account again.":
+    "இணைப்புக் குறியீடு காலாவதியானது. VynorAI கணக்கை இணை என்பதை மீண்டும் தொடங்கவும்.",
+  "The connection is still waiting for confirmation. Finish the browser page, then try Connect VynorAI account again.":
+    "இணைப்பு இன்னும் உறுதிப்படுத்தலுக்காகக் காத்திருக்கிறது. உலாவிப் பக்கத்தை முடித்து, மீண்டும் VynorAI கணக்கை இணை என்பதை அழுத்தவும்.",
+  "VynorAI account connection failed.": "VynorAI கணக்கை இணைக்க முடியவில்லை.",
+  "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.":
+    "இந்த Microsoft கணக்கு இன்னும் VynorAI கணக்குடன் இணைக்கப்படவில்லை. தொடர ஒன்றை இணைக்கவும்.",
   "Undo did not finish. Press Undo again.":
     "மீளமைப்பு முடியவில்லை. மீண்டும் மீளமை அழுத்தவும்.",
   "Forgot the saved choices for this workbook.":

@@ -811,6 +811,15 @@ VynorAI is an independent product built from a pinned Continue-derived foundatio
 - `extensions/m365/src/companionState.ts`: pure routing (`classifyHost`, `deriveCompanionState`, `companionOnlyFeatures`, `probeCompanion`) and the `noCompanionTransport` that always reports `not_installed`. No network, socket or file access. Test: `companionState.test.ts`.
 - `docs/WINDOWS_COMPANION_DESIGN.md`: packaging, signing, update channel, local authentication, audit and threat model. The companion itself is not built.
 
+## M365 account linking and organization onboarding
+
+- `extensions/m365/src/taskpane.ts`: starts the short-lived Microsoft identity handoff, opens the secure `/link` page, polls for confirmation and renews the M365 session without storing the Entra proof permanently.
+- `backend/src/routes/m365Link.ts`: separates Entra-authenticated Excel endpoints (`start`, `status`) from VynorAI web-session endpoints (`preview`, `confirm`, `mine`, `unlink`). Disabled tenants are logged as access requests with actionable admin metadata.
+- `backend/src/services/m365Linking.ts` and `backend/src/services/m365Label.ts`: hashed one-time codes, bounded retries, masked account labels, seat checks, self-link audit events and safe unlinking.
+- `extensions/m365/src/linkPolling.ts`: pure polling rules for the pane hand-off (2 s interval, bounded by the 10 minute code lifetime, countdown helper); tests in `linkPolling.test.ts`.
+- `backend/public/link.html`: browser handoff page; the fragment/session-storage code survives VynorAI sign-in and registration, while the code never enters the HTTP query string.
+- `backend/src/routes/admin.ts`: tenant enablement, identity management and metadata-only `/admin/m365/access-requests` review. Admin changes always mark the identity as `linked_via = 'admin'`.
+
 ## Identifier security
 
 - `backend/src/services/secureId.ts`: the one place that mints identifiers and compares secrets: `newId(prefix?)` (128 bits from the CSPRNG), `newToken(bytes)`, `safeEqual` (constant-time, length-safe), and the `idParam` / `nameParam` validators for ids that arrive in a URL. Weak ids built from `Date.now()` or `Math.random()` are replaced (M365 correlation id, manual-grant order id, background model token `jti`, worker lease id, vault snapshot and audit ids, memory fact keys). Existing stored ids are never rewritten.

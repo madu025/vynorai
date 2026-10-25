@@ -93,6 +93,14 @@ export async function incrementRateLimit(
   return { count: Number(result[0]), ttlMs: Math.max(1, Number(result[1])) };
 }
 
+/** Current value of a fixed-window counter without changing it (null when Redis is unavailable). */
+export async function peekRateLimit(key: string): Promise<number | null> {
+  const redis = await getRedis();
+  if (!redis) return null;
+  const value = await redis.get(`vynor:ratelimit:${key}`);
+  return value === null ? 0 : Number(value) || 0;
+}
+
 export async function getDistributedCache(key: string): Promise<string | null> {
   const redis = await getRedis();
   return redis ? redis.get(`vynor:response:${key}`) : null;

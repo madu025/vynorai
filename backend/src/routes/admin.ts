@@ -2127,6 +2127,75 @@ adminRouter.get(
   },
 );
 
+/**
+ * Identity links, newest first. `linkedVia` tells an administrator link from one the person made
+ * themselves (self-service code flow). Ids and flags only: no tokens, labels, codes or emails.
+ */
+adminRouter.get(
+  "/m365/identities",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const tenantId =
+      typeof req.query.tenantId === "string" ? req.query.tenantId : "";
+    if (tenantId && !/^[A-Za-z0-9_.-]{1,128}$/.test(tenantId))
+      return res.status(400).json({ error: "INVALID_TENANT_ID" });
+    const columns =
+      "SELECT tenant_id, object_id, user_id, enabled, linked_via, created_at FROM m365_identity_links";
+    const rows = await dbAll<{
+      tenant_id: string;
+      object_id: string;
+      user_id: string;
+      enabled: number | string;
+      linked_via: string | null;
+      created_at: string | null;
+    }>(
+      tenantId
+        ? `${columns} WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 500`
+        : `${columns} ORDER BY created_at DESC LIMIT 500`,
+      tenantId ? [tenantId] : [],
+    );
+    res.json({
+      identities: rows.map((row) => ({
+        tenantId: row.tenant_id,
+        objectId: row.object_id,
+        userId: row.user_id,
+        enabled: Number(row.enabled) === 1,
+        linkedVia: row.linked_via || "admin",
+        createdAt: row.created_at
+          ? new Date(row.created_at).toISOString()
+          : null,
+      })),
+    });
+  },
+);
+
+/**
+ * Microsoft 365 tenants that asked for access before an administrator enabled them.
+ * The audit payload contains only the tenant/object references; no email, token or workbook data.
+ */
+adminRouter.get(
+  "/m365/access-requests",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    const tenantId =
+      typeof req.query.tenantId === "string" &&
+      /^[A-Za-z0-9-]{1,128}$/.test(req.query.tenantId)
+        ? req.query.tenantId
+        : undefined;
+    const events = await dbAll(
+      `SELECT id, event_type, severity, actor, target, details, created_at
+       FROM security_audit_logs
+       WHERE event_type = 'M365_TENANT_ACCESS_REQUESTED'${
+         tenantId ? " AND target = ?" : ""
+       }
+       ORDER BY created_at DESC LIMIT ?`,
+      tenantId ? [tenantId, limit] : [limit],
+    );
+    res.json({ requests: events, count: events.length });
+  },
+);
+
 adminRouter.put(
   "/m365/tenants/:tenantId",
   requireAdmin,
@@ -2197,10 +2266,10 @@ adminRouter.put(
       const tenant = await getM365Tenant(tenantId);
       const seatLimit = Number(tenant?.seatLimit);
       const written = await dbRun(
-        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
-       SELECT ?, ?, ?, 1
+        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+       SELECT ?, ?, ?, 1, 'admin'
        WHERE (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1 AND object_id <> ?) < ?
-       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = excluded.enabled`,
+       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = excluded.enabled, linked_via = 'admin'`,
         [
           tenantId,
           objectId,
@@ -2216,9 +2285,9 @@ adminRouter.put(
           .json({ error: { code: "m365_seat_limit_reached" } });
     } else {
       await dbRun(
-        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
-       VALUES (?, ?, ?, 0)
-       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 0`,
+        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+       VALUES (?, ?, ?, 0, 'admin')
+       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 0, linked_via = 'admin'`,
         [tenantId, objectId, req.body.userId],
       );
     }

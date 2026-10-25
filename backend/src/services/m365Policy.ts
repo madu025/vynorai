@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 import { dbRun } from "../db.js";
+import { buildIdentityLabel } from "./m365Label.js";
 
 export const M365_SCOPES = [
   "m365.excel.read",
@@ -20,9 +21,18 @@ export interface M365Identity {
    * read from a VynorAI session token; a fresh Entra token has none (it IS the proof).
    */
   authIat?: number;
+  /**
+   * Masked display label of the Microsoft account ("Prasad P. (p***@slts.lk)") for the self-service
+   * link page. Set only for a fresh Entra token; the full name and address are never kept.
+   */
+  label?: string;
 }
 
 interface EntraClaims {
+  name?: string;
+  preferred_username?: string;
+  upn?: string;
+  email?: string;
   tid: string;
   oid: string;
   scp?: string;
@@ -114,6 +124,10 @@ export async function validateEntraAccessToken(
     tenantId: claims.tid,
     objectId: claims.oid,
     scopes: (claims.scp || "").split(" ").filter(Boolean),
+    label: buildIdentityLabel({
+      name: claims.name,
+      address: claims.preferred_username || claims.upn || claims.email,
+    }),
   };
 }
 

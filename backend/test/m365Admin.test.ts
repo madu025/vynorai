@@ -147,3 +147,65 @@ test("usage and audit views summarize metadata-only events per tenant", async ()
   const unauthenticated = await fetch(`${baseUrl}/admin/m365/usage`);
   assert.equal(unauthenticated.status, 401);
 });
+
+test("admin relinking marks a self-service identity as admin-managed and exposes access requests", async () => {
+  const objectId = "admin-relink-object-1";
+  await dbm.dbRun(
+    "INSERT INTO users (id, email, password_hash, api_key, api_key_hash) VALUES (?, ?, 'x', ?, ?)",
+    ["m365-admin-user-a", "m365-admin-a@example.com", "key-a", "hash-a"],
+  );
+  await dbm.dbRun(
+    "INSERT INTO users (id, email, password_hash, api_key, api_key_hash) VALUES (?, ?, 'x', ?, ?)",
+    ["m365-admin-user-b", "m365-admin-b@example.com", "key-b", "hash-b"],
+  );
+  await dbm.dbRun(
+    "INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via) VALUES (?, ?, ?, 1, 'self')",
+    [tenantId, objectId, "m365-admin-user-a"],
+  );
+
+  const relinked = await fetch(
+    `${baseUrl}/admin/m365/identities/${tenantId}/${objectId}`,
+    {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ userId: "m365-admin-user-b", enabled: true }),
+    },
+  );
+  assert.equal(relinked.status, 200);
+
+  const identities: any = await (
+    await fetch(`${baseUrl}/admin/m365/identities?tenantId=${tenantId}`, {
+      headers,
+    })
+  ).json();
+  const identity = identities.identities.find(
+    (item: any) => item.objectId === objectId,
+  );
+  assert.deepEqual(
+    {
+      userId: identity.userId,
+      linkedVia: identity.linkedVia,
+      enabled: identity.enabled,
+    },
+    { userId: "m365-admin-user-b", linkedVia: "admin", enabled: true },
+  );
+
+  const { logSecurityEvent } = await import("../src/services/securityAudit.js");
+  await logSecurityEvent({
+    eventType: "M365_TENANT_ACCESS_REQUESTED",
+    actor: objectId,
+    target: "tenant-awaiting-admin",
+    details: JSON.stringify({ requiredScope: "m365.excel.read" }),
+  });
+  const requests: any = await (
+    await fetch(
+      `${baseUrl}/admin/m365/access-requests?tenantId=tenant-awaiting-admin`,
+      {
+        headers,
+      },
+    )
+  ).json();
+  assert.equal(requests.count, 1);
+  assert.equal(requests.requests[0].target, "tenant-awaiting-admin");
+  assert.equal(requests.requests[0].actor, objectId);
+});

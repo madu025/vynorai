@@ -110,6 +110,9 @@ export function sanitizeReturnQuery(raw: unknown): string {
     const value = input.get(key);
     if (value && value.length <= 512) out.set(key, value);
   }
+  // The Microsoft account link page is the only page a sign-in may return to; any other `next` is
+  // dropped (no open redirect). login.html applies the same allow-list.
+  if (input.get("next") === "/link") out.set("next", "/link");
   return out.toString();
 }
 

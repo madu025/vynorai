@@ -192,20 +192,20 @@ export async function linkIdentityWithSeatCheck(input: {
       : undefined;
   if (!input.enabled) {
     await dbRun(
-      `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
-       VALUES (?, ?, ?, 0)
-       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 0`,
+      `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+       VALUES (?, ?, ?, 0, 'admin')
+       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 0, linked_via = 'admin'`,
       [input.tenantId, input.objectId, input.userId],
     );
     return { ok: true, ...(previousUserId ? { previousUserId } : {}) };
   }
   const result = await dbRun(
-    `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled)
-     SELECT ?, ?, ?, 1
+    `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+     SELECT ?, ?, ?, 1, 'admin'
      WHERE (SELECT seat_limit FROM m365_tenants WHERE tenant_id = ? AND status = 'enabled') >= 1
        AND (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1 AND object_id <> ?)
          < (SELECT seat_limit FROM m365_tenants WHERE tenant_id = ? AND status = 'enabled')
-     ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 1`,
+     ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 1, linked_via = 'admin'`,
     [
       input.tenantId,
       input.objectId,

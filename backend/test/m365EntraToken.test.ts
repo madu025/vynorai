@@ -83,11 +83,28 @@ after(() => {
 
 test("a correctly signed Entra v2 token yields the tenant, object and scopes", async () => {
   const identity = await policy.validateEntraAccessToken(sign());
-  assert.deepEqual(identity, {
-    tenantId,
-    objectId,
-    scopes: ["m365.excel.read", "m365.text.read"],
-  });
+  assert.deepEqual(
+    {
+      tenantId: identity.tenantId,
+      objectId: identity.objectId,
+      scopes: identity.scopes,
+    },
+    {
+      tenantId,
+      objectId,
+      scopes: ["m365.excel.read", "m365.text.read"],
+    },
+  );
+  // Without a name or address in the token the label is the neutral fallback.
+  assert.equal(identity.label, "a Microsoft work or school account");
+});
+
+test("the identity carries only a masked display label, never the raw name or address", async () => {
+  const identity = await policy.validateEntraAccessToken(
+    sign({ name: "Prasad Perera", preferred_username: "prasad@slts.lk" }),
+  );
+  assert.equal(identity.label, "Prasad P. (p***@slts.lk)");
+  assert.ok(!JSON.stringify(identity).includes("prasad@slts.lk"));
 });
 
 test("the bearer check sends RS256 tokens to Entra validation", async () => {
@@ -147,7 +164,9 @@ test("a token from another issuer is rejected", async () => {
 
 test("a token for another tenant passes signature checks but fails the tenant policy", async () => {
   const stranger = "55555555-5555-4555-8555-555555555555";
-  const identity = await policy.validateEntraAccessToken(sign({ tid: stranger }));
+  const identity = await policy.validateEntraAccessToken(
+    sign({ tid: stranger }),
+  );
   assert.equal(identity.tenantId, stranger);
   assert.throws(
     () => policy.validateM365Identity(identity, "m365.excel.read"),

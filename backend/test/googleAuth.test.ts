@@ -88,6 +88,15 @@ test("only known login parameters survive the round trip (no open redirect)", ()
   );
 });
 
+test("the Microsoft account link page is the one page sign-in may return to", () => {
+  assert.equal(
+    g.sanitizeReturnQuery("next=/link&mode=register"),
+    "mode=register&next=%2Flink",
+  );
+  assert.equal(g.sanitizeReturnQuery("next=/link/evil"), "");
+  assert.equal(g.sanitizeReturnQuery("next=//evil.example"), "");
+});
+
 test("start redirects to Google with PKCE and sets a signed, HttpOnly state cookie", async () => {
   const res = await fetch(`${baseUrl}/api/auth/google?return=source%3Dvscode`, {
     redirect: "manual",

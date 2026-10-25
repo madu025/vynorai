@@ -5,6 +5,7 @@
  */
 import { dbAll, dbRun } from "../db.js";
 import { deleteBackgroundArtifact } from "./backgroundArtifacts.js";
+import { sweepLinkCodes } from "./m365Linking.js";
 
 export const RETENTION_DAYS = {
   // Exact responses are usable for 24 hours; keep the fallback table bounded.
@@ -68,6 +69,12 @@ export async function runRetention(): Promise<Record<string, number | null>> {
   } catch (err: any) {
     console.warn(`[Retention] background artifacts: ${err.message}`);
     removed.background_artifacts = null;
+  }
+  try {
+    removed.m365_link_codes = await sweepLinkCodes();
+  } catch (err: any) {
+    console.warn(`[Retention] m365_link_codes: ${err.message}`);
+    removed.m365_link_codes = null;
   }
   console.log("[Retention] removed:", JSON.stringify(removed));
   return removed;

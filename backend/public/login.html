@@ -397,7 +397,7 @@
         }
 
         // Redirect to dashboard — token shown there
-        window.location.href = '/';
+        window.location.href = safeNext();
       } catch(err) { showError(err.message || 'Network error. Please try again.'); }
       finally { setLoading(false); }
     }
@@ -503,9 +503,14 @@
             showVsCodeAuthCard(redirectUri, ideCode, meData.user.email);
             return;
           }
-          window.location.href = '/';
+          window.location.href = safeNext();
         }
       } catch(_) { /* keep token during temporary network glitches */ }
+    }
+    // Only an allow-listed same-site page may be returned to after sign-in (no open redirect).
+    function safeNext() {
+      var next = new URLSearchParams(window.location.search).get('next');
+      return next === '/link' ? '/link' : '/';
     }
     function getValidatedIdeScheme(value) {
       return ['vscode', 'vscode-insiders', 'cursor', 'antigravity'].includes(value || '') ? value : '';

@@ -51,6 +51,7 @@ import {
   TEXT_ANALYSIS_CONTRACT_VERSION,
   textAnalysisRequestSchema,
 } from "../services/m365TextAnalysis.js";
+import { createM365LinkRouter } from "./m365Link.js";
 import { createSandboxRouter } from "./m365Sandbox.js";
 import { z, validateBody } from "../middleware/validate.js";
 
@@ -643,6 +644,9 @@ const requireM365Auth = requireM365Scope("m365.excel.read");
 const requireM365TextAuth = requireM365Scope("m365.text.read");
 
 export const m365Router = Router();
+
+/** Self-service linking of a Microsoft account to a VynorAI account (code flow, see m365Linking.ts). */
+m365Router.use("/link", createM365LinkRouter());
 
 /** Managed Python sandbox: preview, approval, job status and cancel. Fails closed without a worker. */
 m365Router.use(

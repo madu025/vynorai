@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex" />
+    <title>VynorAI - Connect Microsoft account</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --bg: #07090f;
+        --card: #0e111c;
+        --border: rgba(255, 255, 255, 0.09);
+        --primary: #00e5ff;
+        --text: #eef1f8;
+        --muted: #9aa3b8;
+        --danger: #ff6b81;
+        --ok: #3ddc97;
+        --input: #141827;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          "Noto Sans Sinhala",
+          "Noto Sans Tamil",
+          sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        line-height: 1.55;
+      }
+      main {
+        width: 100%;
+        max-width: 460px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 28px 24px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 18px;
+        gap: 12px;
+      }
+      .brand {
+        font-weight: 700;
+        font-size: 18px;
+      }
+      select {
+        background: var(--input);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 6px 8px;
+        font-size: 13px;
+      }
+      h1 {
+        font-size: 22px;
+        margin-bottom: 6px;
+      }
+      p {
+        color: var(--muted);
+        font-size: 14px;
+        margin-bottom: 14px;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        margin: 14px 0;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .label {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 4px;
+      }
+      .value {
+        font-size: 17px;
+        font-weight: 600;
+        word-break: break-word;
+      }
+      input {
+        width: 100%;
+        background: var(--input);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        color: var(--text);
+        font-size: 24px;
+        letter-spacing: 0.2em;
+        text-align: center;
+        padding: 12px;
+        text-transform: uppercase;
+        font-family: ui-monospace, Consolas, monospace;
+      }
+      input:focus {
+        outline: 2px solid var(--primary);
+        outline-offset: 1px;
+      }
+      button {
+        width: 100%;
+        min-height: 46px;
+        border: 0;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 10px;
+        background: var(--primary);
+        color: #001;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      button.danger {
+        background: transparent;
+        color: var(--danger);
+        border: 1px solid var(--danger);
+        min-height: 38px;
+        width: auto;
+        padding: 0 12px;
+        margin: 0;
+        font-size: 13px;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 2px;
+      }
+      .msg {
+        font-size: 14px;
+        margin-top: 12px;
+        min-height: 20px;
+      }
+      .msg.err {
+        color: var(--danger);
+      }
+      .msg.ok {
+        color: var(--ok);
+      }
+      ul {
+        list-style: none;
+      }
+      li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 0;
+        border-top: 1px solid var(--border);
+        font-size: 14px;
+      }
+      li:first-child {
+        border-top: 0;
+      }
+      .small {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        main {
+          transition: opacity 0.15s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="top">
+        <span class="brand">VynorAI</span>
+        <select id="lang" aria-label="Language">
+          <option value="en">English</option>
+          <option value="si">සිංහල</option>
+          <option value="ta">தமிழ்</option>
+        </select>
+      </div>
+
+      <section id="loading"><p data-i="loading">Loading…</p></section>
+
+      <section id="signin" hidden>
+        <h1 data-i="signinTitle">Sign in to VynorAI</h1>
+        <p data-i="signinBody">
+          Sign in with your VynorAI account. Excel opened this secure connection
+          page for you.
+        </p>
+        <button id="signinBtn" type="button" data-i="signinBtn">Sign in</button>
+        <button
+          id="registerBtn"
+          type="button"
+          class="secondary"
+          data-i="registerBtn"
+        >
+          Create a VynorAI account
+        </button>
+      </section>
+
+      <section id="enter" hidden>
+        <h1 data-i="enterTitle">Connect your Microsoft account</h1>
+        <p data-i="enterBody">
+          Excel normally fills the secure one-time code for you. If it does not,
+          enter the code shown in Excel.
+        </p>
+        <p class="small">
+          <span data-i="signedInAs">Signed in as</span>
+          <strong id="who"></strong>
+        </p>
+        <label class="label" for="code" data-i="codeLabel"
+          >Code from Excel</label
+        >
+        <input
+          id="code"
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          maxlength="9"
+          placeholder="ABCD-EFGH"
+        />
+        <button id="checkBtn" type="button" data-i="checkBtn">Continue</button>
+        <div class="msg" id="enterMsg" role="status" aria-live="polite"></div>
+        <div class="card" id="mineCard" hidden>
+          <div class="label" data-i="mineTitle">
+            Microsoft accounts connected to your VynorAI account
+          </div>
+          <ul id="mine"></ul>
+        </div>
+      </section>
+
+      <section id="confirm" hidden>
+        <h1 data-i="confirmTitle">Connect this Microsoft account?</h1>
+        <div class="card">
+          <div class="label" data-i="msAccount">Microsoft account</div>
+          <div class="value" id="msLabel"></div>
+          <div class="label" style="margin-top: 10px" data-i="msOrg">
+            Organisation
+          </div>
+          <div class="value" id="msTenant"></div>
+        </div>
+        <p data-i="confirmWarn">
+          This lets that Microsoft account use your VynorAI plan in Excel.
+          Continue only if you asked for this code in Excel just now.
+        </p>
+        <button id="confirmBtn" type="button" data-i="confirmBtn">
+          Connect
+        </button>
+        <button
+          id="cancelBtn"
+          type="button"
+          class="secondary"
+          data-i="cancelBtn"
+        >
+          Cancel
+        </button>
+        <div class="msg" id="confirmMsg" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="done" hidden>
+        <h1 data-i="doneTitle">Connected</h1>
+        <p data-i="doneBody">
+          Go back to Excel. The VynorAI pane continues on its own in a few
+          seconds.
+        </p>
+        <button id="againBtn" type="button" class="secondary" data-i="againBtn">
+          Connect another account
+        </button>
+      </section>
+    </main>
+    <script>
+      (function () {
+        "use strict";
+        var T = {
+          en: {
+            loading: "Loading…",
+            signinTitle: "Sign in to VynorAI",
+            signinBody:
+              "Sign in with your VynorAI account. Excel opened this secure connection page for you.",
+            signinBtn: "Sign in",
+            registerBtn: "Create a VynorAI account",
+            enterTitle: "Connect your Microsoft account",
+            enterBody:
+              "Excel normally fills the secure one-time code for you. If it does not, enter the code shown in Excel.",
+            signedInAs: "Signed in as",
+            codeLabel: "Code from Excel",
+            checkBtn: "Continue",
+            mineTitle: "Microsoft accounts connected to your VynorAI account",
+            confirmTitle: "Connect this Microsoft account?",
+            msAccount: "Microsoft account",
+            msOrg: "Organisation",
+            confirmWarn:
+              "This lets that Microsoft account use your VynorAI plan in Excel. Continue only if you asked for this code in Excel just now.",
+            confirmBtn: "Connect",
+            cancelBtn: "Cancel",
+            doneTitle: "Connected",
+            doneBody:
+              "Go back to Excel. The VynorAI pane continues on its own in a few seconds.",
+            againBtn: "Connect another account",
+            disconnect: "Disconnect",
+            byAdmin: "set by your administrator",
+            noOrg: "Not named",
+            e_invalid_or_expired_code:
+              "That code is not valid or has expired. Ask Excel for a new one.",
+            e_too_many_attempts:
+              "Too many wrong codes. Please wait 15 minutes and try again.",
+            e_email_not_verified:
+              "Verify your VynorAI email address first, then try again.",
+            e_tenant_disabled:
+              "Your organisation is not enabled for VynorAI yet. Ask your administrator.",
+            e_m365_already_linked:
+              "This Microsoft account is already connected.",
+            e_m365_link_disabled:
+              "This Microsoft account was disabled by an administrator.",
+            e_m365_linked_to_another_account:
+              "This Microsoft account is connected to a different VynorAI account.",
+            e_m365_seat_limit_reached:
+              "Your organisation has no free seats left. Ask your administrator.",
+            e_m365_user_link_limit:
+              "You have reached the limit of connected Microsoft accounts. Disconnect one first.",
+            e_confirmation_required: "Please confirm to continue.",
+            e_generic: "Something went wrong. Please try again.",
+            e_network: "Network problem. Please try again.",
+            okDisconnected: "Disconnected.",
+          },
+          si: {
+            loading: "පූරණය වෙමින්…",
+            signinTitle: "VynorAI වෙත පිවිසෙන්න",
+            signinBody:
+              "ඔබේ VynorAI ගිණුමෙන් පිවිසෙන්න. Excel ඔබ සඳහා මෙම ආරක්ෂිත සම්බන්ධතා පිටුව විවෘත කළේය.",
+            signinBtn: "පිවිසෙන්න",
+            enterTitle: "ඔබේ Microsoft ගිණුම සම්බන්ධ කරන්න",
+            enterBody:
+              "Excel සාමාන්‍යයෙන් ආරක්ෂිත එක්වර කේතය ඔබ වෙනුවෙන් පුරවයි. එසේ නොවුණහොත් Excel හි පෙන්වන කේතය ඇතුළත් කරන්න.",
+            signedInAs: "පිවිසී ඇත්තේ",
+            codeLabel: "Excel හි කේතය",
+            checkBtn: "ඉදිරියට",
+            mineTitle: "ඔබේ VynorAI ගිණුමට සම්බන්ධ Microsoft ගිණුම්",
+            confirmTitle: "මෙම Microsoft ගිණුම සම්බන්ධ කරන්නද?",
+            msAccount: "Microsoft ගිණුම",
+            msOrg: "ආයතනය",
+            confirmWarn:
+              "මෙමගින් එම Microsoft ගිණුමට Excel හිදී ඔබේ VynorAI සැලැස්ම භාවිතා කළ හැකි වේ. ඔබ මේ මොහොතේ Excel හිදී මෙම කේතය ඉල්ලුවේ නම් පමණක් ඉදිරියට යන්න.",
+            confirmBtn: "සම්බන්ධ කරන්න",
+            cancelBtn: "අවලංගු කරන්න",
+            doneTitle: "සම්බන්ධ විය",
+            doneBody:
+              "Excel වෙත ආපසු යන්න. VynorAI කොටස තත්පර කිහිපයකින් ස්වයංක්‍රීයව ඉදිරියට යයි.",
+            againBtn: "තවත් ගිණුමක් සම්බන්ධ කරන්න",
+            disconnect: "විසන්ධි කරන්න",
+            byAdmin: "ඔබේ පරිපාලකයා සකසා ඇත",
+            noOrg: "නම නොමැත",
+            e_invalid_or_expired_code:
+              "එම කේතය වලංගු නැත, නැතහොත් කල් ඉකුත් වී ඇත. Excel වෙතින් අලුත් එකක් ඉල්ලන්න.",
+            e_too_many_attempts:
+              "වැරදි කේත ඕනෑවට වඩා ඇතුළත් කළා. විනාඩි 15කට පසු නැවත උත්සාහ කරන්න.",
+            e_email_not_verified:
+              "පළමුව ඔබේ VynorAI ඊමේල් ලිපිනය තහවුරු කර නැවත උත්සාහ කරන්න.",
+            e_tenant_disabled:
+              "ඔබේ ආයතනය තවම VynorAI සඳහා සක්‍රීය කර නැත. ඔබේ පරිපාලකයාගෙන් අසන්න.",
+            e_m365_already_linked: "මෙම Microsoft ගිණුම දැනටමත් සම්බන්ධ කර ඇත.",
+            e_m365_link_disabled:
+              "මෙම Microsoft ගිණුම පරිපාලකයෙකු විසින් අක්‍රීය කර ඇත.",
+            e_m365_linked_to_another_account:
+              "මෙම Microsoft ගිණුම වෙනත් VynorAI ගිණුමකට සම්බන්ධ කර ඇත.",
+            e_m365_seat_limit_reached:
+              "ඔබේ ආයතනයට ඉතිරි ආසන නැත. ඔබේ පරිපාලකයාගෙන් අසන්න.",
+            e_m365_user_link_limit:
+              "සම්බන්ධ කළ හැකි Microsoft ගිණුම් සීමාවට ළඟා වී ඇත. පළමුව එකක් විසන්ධි කරන්න.",
+            e_confirmation_required: "ඉදිරියට යාමට තහවුරු කරන්න.",
+            e_generic: "යම් දෝෂයක් සිදු විය. නැවත උත්සාහ කරන්න.",
+            e_network: "ජාල ගැටලුවක්. නැවත උත්සාහ කරන්න.",
+            okDisconnected: "විසන්ධි කළා.",
+          },
+          ta: {
+            loading: "ஏற்றப்படுகிறது…",
+            signinTitle: "VynorAI இல் உள்நுழையவும்",
+            signinBody:
+              "உங்கள் VynorAI கணக்கில் உள்நுழையவும். Excel உங்களுக்காக இந்தப் பாதுகாப்பான இணைப்புப் பக்கத்தைத் திறந்தது.",
+            signinBtn: "உள்நுழை",
+            enterTitle: "உங்கள் Microsoft கணக்கை இணைக்கவும்",
+            enterBody:
+              "Excel பொதுவாக பாதுகாப்பான ஒருமுறை குறியீட்டை உங்களுக்காக நிரப்பும். இல்லையெனில் Excel இல் காட்டப்படும் குறியீட்டை உள்ளிடவும்.",
+            signedInAs: "உள்நுழைந்தவர்",
+            codeLabel: "Excel இல் உள்ள குறியீடு",
+            checkBtn: "தொடர்க",
+            mineTitle:
+              "உங்கள் VynorAI கணக்குடன் இணைக்கப்பட்ட Microsoft கணக்குகள்",
+            confirmTitle: "இந்த Microsoft கணக்கை இணைக்கவா?",
+            msAccount: "Microsoft கணக்கு",
+            msOrg: "நிறுவனம்",
+            confirmWarn:
+              "இதன் மூலம் அந்த Microsoft கணக்கு Excel இல் உங்கள் VynorAI திட்டத்தைப் பயன்படுத்த முடியும். இப்போதுதான் Excel இல் இந்தக் குறியீட்டைக் கேட்டிருந்தால் மட்டும் தொடரவும்.",
+            confirmBtn: "இணை",
+            cancelBtn: "ரத்து செய்",
+            doneTitle: "இணைக்கப்பட்டது",
+            doneBody:
+              "Excel க்குத் திரும்பவும். VynorAI பலகம் சில விநாடிகளில் தானாகத் தொடரும்.",
+            againBtn: "மற்றொரு கணக்கை இணை",
+            disconnect: "இணைப்பை நீக்கு",
+            byAdmin: "உங்கள் நிர்வாகி அமைத்தது",
+            noOrg: "பெயர் இல்லை",
+            e_invalid_or_expired_code:
+              "அந்தக் குறியீடு செல்லாது அல்லது காலாவதியாகிவிட்டது. Excel இல் புதியதைக் கேட்கவும்.",
+            e_too_many_attempts:
+              "தவறான குறியீடுகள் அதிகம். 15 நிமிடங்கள் கழித்து மீண்டும் முயற்சிக்கவும்.",
+            e_email_not_verified:
+              "முதலில் உங்கள் VynorAI மின்னஞ்சலைச் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.",
+            e_tenant_disabled:
+              "உங்கள் நிறுவனம் இன்னும் VynorAI க்கு இயக்கப்படவில்லை. உங்கள் நிர்வாகியிடம் கேளுங்கள்.",
+            e_m365_already_linked:
+              "இந்த Microsoft கணக்கு ஏற்கனவே இணைக்கப்பட்டுள்ளது.",
+            e_m365_link_disabled:
+              "இந்த Microsoft கணக்கை நிர்வாகி முடக்கியுள்ளார்.",
+            e_m365_linked_to_another_account:
+              "இந்த Microsoft கணக்கு வேறு VynorAI கணக்குடன் இணைக்கப்பட்டுள்ளது.",
+            e_m365_seat_limit_reached:
+              "உங்கள் நிறுவனத்தில் காலி இருக்கைகள் இல்லை. உங்கள் நிர்வாகியிடம் கேளுங்கள்.",
+            e_m365_user_link_limit:
+              "இணைக்கக்கூடிய Microsoft கணக்குகளின் வரம்பை அடைந்துவிட்டீர்கள். முதலில் ஒன்றை நீக்கவும்.",
+            e_confirmation_required: "தொடர உறுதிப்படுத்தவும்.",
+            e_generic: "ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.",
+            e_network: "நெட்வொர்க் சிக்கல். மீண்டும் முயற்சிக்கவும்.",
+            okDisconnected: "இணைப்பு நீக்கப்பட்டது.",
+          },
+        };
+
+        var $ = function (id) {
+          return document.getElementById(id);
+        };
+        var lang = "en";
+        try {
+          var saved = localStorage.getItem("vynor_link_lang");
+          var guess = (navigator.language || "en").slice(0, 2);
+          lang = T[saved] ? saved : T[guess] ? guess : "en";
+        } catch (_) {
+          /* storage may be blocked */
+        }
+
+        function t(key) {
+          return (T[lang] && T[lang][key]) || T.en[key] || key;
+        }
+        function applyLang() {
+          document.documentElement.lang = lang;
+          $("lang").value = lang;
+          document.querySelectorAll("[data-i]").forEach(function (el) {
+            el.textContent = t(el.getAttribute("data-i"));
+          });
+          $("code").placeholder = "ABCD-EFGH";
+        }
+
+        var token = "";
+        var pendingCode = "";
+        var shown = null;
+
+        function handoffCode() {
+          try {
+            var fragment = new URLSearchParams(
+              (window.location.hash || "").slice(1),
+            );
+            var fromHash = (fragment.get("code") || "").trim();
+            if (fromHash) {
+              sessionStorage.setItem("vynor_m365_link_code", fromHash);
+              return fromHash;
+            }
+            return (
+              sessionStorage.getItem("vynor_m365_link_code") || ""
+            ).trim();
+          } catch (_) {
+            return "";
+          }
+        }
+
+        function clearHandoffCode() {
+          try {
+            sessionStorage.removeItem("vynor_m365_link_code");
+          } catch (_) {
+            /* ignore */
+          }
+          if (window.history && window.location.hash)
+            window.history.replaceState(
+              null,
+              document.title,
+              window.location.pathname + window.location.search,
+            );
+        }
+
+        function token_() {
+          try {
+            return (
+              localStorage.getItem("vynor_jwt") ||
+              localStorage.getItem("vynorai_token") ||
+              ""
+            );
+          } catch (_) {
+            return "";
+          }
+        }
+        function show(id) {
+          ["loading", "signin", "enter", "confirm", "done"].forEach(
+            function (s) {
+              $(s).hidden = s !== id;
+            },
+          );
+          shown = id;
+        }
+        function setMsg(id, kind, text) {
+          var el = $(id);
+          el.className = "msg " + kind;
+          el.textContent = text;
+        }
+        function errText(code) {
+          return t("e_" + code) === "e_" + code
+            ? t("e_generic")
+            : t("e_" + code);
+        }
+
+        async function api(path, options) {
+          var response;
+          try {
+            response = await fetch(
+              path,
+              Object.assign(
+                {
+                  headers: {
+                    Authorization: "Bearer " + token,
+                    "Content-Type": "application/json",
+                  },
+                  cache: "no-store",
+                },
+                options || {},
+              ),
+            );
+          } catch (_) {
+            return { ok: false, status: 0, body: null };
+          }
+          var body = null;
+          try {
+            body = await response.json();
+          } catch (_) {
+            /* empty body */
+          }
+          return { ok: response.ok, status: response.status, body: body };
+        }
+
+        function code(res) {
+          return res.status === 0
+            ? "network"
+            : (res.body && res.body.error && res.body.error.code) || "generic";
+        }
+
+        async function loadMine() {
+          var res = await api("/v1/m365/link/mine");
+          var list = $("mine");
+          list.textContent = "";
+          var links = (res.ok && res.body && res.body.links) || [];
+          $("mineCard").hidden = links.length === 0;
+          links.forEach(function (link) {
+            var li = document.createElement("li");
+            var text = document.createElement("span");
+            text.textContent =
+              (link.tenantName || t("noOrg")) +
+              (link.linkedVia === "admin" ? " (" + t("byAdmin") + ")" : "") +
+              (link.enabled ? "" : " - off");
+            li.appendChild(text);
+            if (link.enabled && link.linkedVia === "self") {
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "danger";
+              btn.textContent = t("disconnect");
+              btn.addEventListener("click", async function () {
+                btn.disabled = true;
+                var r = await api("/v1/m365/link/unlink", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    tenantId: link.tenantId,
+                    objectId: link.objectId,
+                  }),
+                });
+                setMsg(
+                  "enterMsg",
+                  r.ok ? "ok" : "err",
+                  r.ok ? t("okDisconnected") : errText(code(r)),
+                );
+                loadMine();
+              });
+              li.appendChild(btn);
+            }
+            list.appendChild(li);
+          });
+        }
+
+        async function start() {
+          applyLang();
+          var handoff = handoffCode();
+          token = token_();
+          if (!token) {
+            show("signin");
+            return;
+          }
+          var me = await api("/api/auth/me");
+          if (me.status === 401 || !me.ok) {
+            show("signin");
+            return;
+          }
+          var user = me.body && me.body.user;
+          $("who").textContent = (user && (user.email || user.name)) || "";
+          show("enter");
+          loadMine();
+          if (handoff) {
+            $("code").value = handoff;
+            setTimeout(function () {
+              $("checkBtn").click();
+            }, 0);
+          }
+          $("code").focus();
+        }
+
+        $("lang").addEventListener("change", function () {
+          lang = $("lang").value;
+          try {
+            localStorage.setItem("vynor_link_lang", lang);
+          } catch (_) {
+            /* ignore */
+          }
+          applyLang();
+        });
+        $("signinBtn").addEventListener("click", function () {
+          window.location.href = "/login?next=/link";
+        });
+        $("registerBtn").addEventListener("click", function () {
+          window.location.href = "/login?next=/link&mode=register";
+        });
+
+        $("checkBtn").addEventListener("click", async function () {
+          var value = $("code").value.trim();
+          if (!value) return;
+          $("checkBtn").disabled = true;
+          setMsg("enterMsg", "", "");
+          var res = await api("/v1/m365/link/preview", {
+            method: "POST",
+            body: JSON.stringify({ code: value }),
+          });
+          $("checkBtn").disabled = false;
+          if (!res.ok) {
+            setMsg("enterMsg", "err", errText(code(res)));
+            return;
+          }
+          pendingCode = value;
+          clearHandoffCode();
+          $("msLabel").textContent = res.body.label || "";
+          $("msTenant").textContent = res.body.tenantName || t("noOrg");
+          setMsg("confirmMsg", "", "");
+          show("confirm");
+        });
+        $("code").addEventListener("keydown", function (event) {
+          if (event.key === "Enter") $("checkBtn").click();
+        });
+
+        $("cancelBtn").addEventListener("click", function () {
+          pendingCode = "";
+          $("code").value = "";
+          show("enter");
+        });
+        $("confirmBtn").addEventListener("click", async function () {
+          $("confirmBtn").disabled = true;
+          var res = await api("/v1/m365/link/confirm", {
+            method: "POST",
+            body: JSON.stringify({ code: pendingCode, confirm: true }),
+          });
+          $("confirmBtn").disabled = false;
+          if (!res.ok) {
+            setMsg("confirmMsg", "err", errText(code(res)));
+            return;
+          }
+          pendingCode = "";
+          $("code").value = "";
+          show("done");
+        });
+        $("againBtn").addEventListener("click", function () {
+          show("enter");
+          loadMine();
+          $("code").focus();
+        });
+
+        start();
+      })();
+    </script>
+  </body>
+</html>

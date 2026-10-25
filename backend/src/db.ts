@@ -1267,6 +1267,36 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "042_m365_link_codes",
+    description:
+      "Self-service Microsoft 365 identity linking: short-lived one-time codes (stored as keyed hashes) and the link source",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_link_codes (
+        id TEXT PRIMARY KEY,
+        tenant_id VARCHAR(128) NOT NULL,
+        object_id VARCHAR(128) NOT NULL,
+        code_hash VARCHAR(64) NOT NULL UNIQUE,
+        label VARCHAR(160) NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+        consumed_at TEXT
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_link_codes_identity ON m365_link_codes(tenant_id, object_id)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_link_codes_expires ON m365_link_codes(expires_at)",
+      );
+      // 'admin' (linked by an administrator) or 'self' (the person proved both accounts). Existing
+      // links are all administrator links.
+      await addColumnIfNotExists(
+        "m365_identity_links",
+        "linked_via VARCHAR(16) NOT NULL DEFAULT 'admin'",
+      );
+    },
+  },
 ];
 
 /** Partial unique index (static SQL), created only when the existing rows have no duplicates. */

@@ -734,8 +734,31 @@ CREATE TRIGGER trg_monthly_usage_updated_at BEFORE UPDATE ON monthly_usage
   FOR EACH ROW EXECUTE FUNCTION vynor_touch_updated_at();
 `;
 
+/** 042: self-service Microsoft 365 identity linking (SQLite twin: 042_m365_link_codes). */
+const LINK_CODES_SQL = `
+CREATE TABLE IF NOT EXISTS m365_link_codes (
+  id vynor_id NOT NULL,
+  tenant_id VARCHAR(128) NOT NULL,
+  object_id VARCHAR(128) NOT NULL,
+  code_hash VARCHAR(64) NOT NULL,
+  label VARCHAR(160) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts INTEGER DEFAULT 0 NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  CONSTRAINT m365_link_codes_attempts_check CHECK (attempts >= 0),
+  CONSTRAINT m365_link_codes_hash_check CHECK (code_hash ~ '^[0-9a-f]{64}$'),
+  PRIMARY KEY (id),
+  UNIQUE (code_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_m365_link_codes_identity ON m365_link_codes(tenant_id, object_id);
+CREATE INDEX IF NOT EXISTS idx_m365_link_codes_expires ON m365_link_codes(expires_at);
+ALTER TABLE m365_identity_links ADD COLUMN IF NOT EXISTS linked_via VARCHAR(16) DEFAULT 'admin' NOT NULL;
+`;
+
 export const PG_MIGRATIONS: PgMigration[] = [
   { version: PG_BASELINE_VERSION, sql: BASELINE_SQL },
+  { version: "042_m365_link_codes", sql: LINK_CODES_SQL },
 ];
 
 /** Thrown when the connected database was built by the retired text-timestamp schema. */

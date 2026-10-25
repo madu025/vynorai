@@ -376,6 +376,55 @@ main {
   font-size: 12px;
   line-height: 1.45;
 }
+.capability-report-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.capability-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--line));
+}
+.capability-row strong {
+  display: block;
+  font-size: 13px;
+}
+.capability-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.capability-status {
+  align-self: start;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.capability-status[data-status="available"] {
+  color: #087443;
+  background: #dff7ea;
+}
+.capability-status[data-status="available_with_fallback"] {
+  color: #855500;
+  background: #fff1cf;
+}
+.capability-status[data-status="consent_required"] {
+  color: #2d5b9e;
+  background: #e2efff;
+}
+.capability-status[data-status="unsupported"] {
+  color: #9d2c2c;
+  background: #fde5e5;
+}
 #signin-card h1 {
   margin: 0 0 6px;
   font-size: 20px;
@@ -4873,19 +4922,7 @@ body .apply-dock :focus-visible {
   outline-color: var(--bar-ink) !important;
 }
 
-/* 8. At 320 px Delete is an icon; its name stays for screen readers */
-@media (max-width: 360px) {
-  #delete-chat {
-    width: 44px;
-    padding: 0;
-    font-size: 0;
-  }
-  #delete-chat::before {
-    content: "×";
-    font-size: 20px;
-    line-height: 1;
-  }
-}
+/* 8. (removed) The header Delete pill is gone: each history row has its own delete button. */
 
 /* 9. Wide task panes use the polished three-card suggestion layout. Compact panes retain the
    readable one-row cards above, so no action label is squeezed or clipped. */
@@ -5180,17 +5217,25 @@ body[data-auth="in"] .brand-copy strong {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-body[data-auth="in"] .brand-actions {
+body[data-auth] .brand-actions {
   display: inline-flex;
   grid-column: 3;
   gap: 4px;
   align-items: center;
   position: relative;
 }
-body:not([data-auth="in"]) .brand-actions {
+/* Signed out, or signed in but not linked yet: only the settings menu is useful (language,
+   diagnostics, advanced options); chat actions need a linked account. */
+body[data-auth]:not([data-auth="in"])
+  .brand-actions
+  > :not(#menu-toggle):not(#menu) {
   display: none;
 }
-body[data-auth="in"] .header-action {
+body[data-auth]:not([data-auth="in"]) .brand-bar {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+}
+body[data-auth] .header-action {
   display: inline-grid;
   width: 32px;
   height: 32px;
@@ -5202,21 +5247,21 @@ body[data-auth="in"] .header-action {
   color: var(--muted);
   cursor: pointer;
 }
-body[data-auth="in"] .header-action:hover {
+body[data-auth] .header-action:hover {
   border-color: rgb(83 105 134 / 18%);
   background: rgb(255 255 255 / 72%);
   color: var(--brand);
 }
-body[data-auth="in"] .header-action:disabled {
+body[data-auth] .header-action:disabled {
   cursor: default;
   opacity: 0.38;
 }
-body[data-auth="in"] .header-action:disabled:hover {
+body[data-auth] .header-action:disabled:hover {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
 }
-body[data-auth="in"] .header-action svg {
+body[data-auth] .header-action svg {
   width: 17px;
   height: 17px;
   fill: none;
@@ -5225,7 +5270,7 @@ body[data-auth="in"] .header-action svg {
   stroke-linejoin: round;
   stroke-width: 1.8;
 }
-body[data-auth="in"] .brand-actions > #menu {
+body[data-auth] .brand-actions > #menu {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
@@ -5234,10 +5279,10 @@ body[data-auth="in"] .brand-actions > #menu {
   margin: 0;
   padding: 6px;
 }
-body[data-auth="in"] .brand-actions > #menu[hidden] {
+body[data-auth] .brand-actions > #menu[hidden] {
   display: none;
 }
-body[data-auth="in"] .brand-actions > #menu button {
+body[data-auth] .brand-actions > #menu button {
   min-height: 36px;
   padding: 7px 10px;
   font-size: var(--fs-sm);
@@ -5246,16 +5291,8 @@ body[data-auth="in"] .brand-actions > #menu button {
 body[data-auth="in"] .workspace > .chat-bar {
   display: none !important;
 }
-body[data-auth="in"] .brand-actions > #chat-history-select {
+body[data-auth] .header-action[hidden] {
   display: none;
-}
-body[data-auth="in"] .header-action[hidden],
-body[data-auth="in"] .brand-actions > #chat-history-select[hidden] {
-  display: none;
-}
-body[data-auth="in"] #delete-chat.header-action svg {
-  width: 16px;
-  height: 16px;
 }
 body[data-auth="in"] .chat-history-popover {
   position: absolute;

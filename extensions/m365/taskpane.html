@@ -128,6 +128,13 @@
             Advanced workbook options
           </button>
           <button
+            id="capability-report"
+            type="button"
+            role="menuitem"
+          >
+            Review Excel capabilities
+          </button>
+          <button
             id="language"
             type="button"
             role="menuitem"
@@ -195,19 +202,19 @@
 
       <section id="account-link-card" class="account-link-card" aria-labelledby="account-link-title" hidden>
         <div class="account-link-icon" aria-hidden="true">V</div>
-        <h1 id="account-link-title">Connect your VynorAI account</h1>
-        <p id="account-link-copy">
+        <h1 id="account-link-title" data-i18n="account_link_title">Connect your VynorAI account</h1>
+        <p id="account-link-copy" data-i18n="account_link_copy">
           Microsoft sign-in is complete. Connect your VynorAI account to continue to Excel.
         </p>
         <ol class="account-link-steps">
-          <li>Sign in or register on the secure VynorAI page.</li>
-          <li>Verify your email and review the Microsoft account shown.</li>
-          <li>Confirm the connection to unlock your VynorAI workspace.</li>
+          <li data-i18n="account_link_step1">Sign in or register on the secure VynorAI page.</li>
+          <li data-i18n="account_link_step2">Verify your email and review the Microsoft account shown.</li>
+          <li data-i18n="account_link_step3">Confirm the connection to unlock your VynorAI workspace.</li>
         </ol>
-        <button id="account-link-button" class="primary" type="button">
+        <button id="account-link-button" class="primary" type="button" data-i18n="connect_vynorai">
           Connect VynorAI account
         </button>
-        <p id="account-link-status" class="account-link-status" role="status" aria-live="polite">
+        <p id="account-link-status" class="account-link-status" role="status" aria-live="polite" data-i18n="account_link_hidden_note">
           Your workbook and other features stay hidden until both sign-ins are complete.
         </p>
       </section>
@@ -1209,6 +1216,14 @@
               Forget these choices
             </button>
           </details>
+          <section id="capabilities-card" class="card" data-workspace-panel="work" hidden aria-labelledby="capabilities-title">
+            <h2 id="capabilities-title">Excel capability report</h2>
+            <p id="capabilities-summary" class="muted">
+              These results combine the current Excel host, Office.js API sets, account permissions and safe fallbacks.
+            </p>
+            <button id="capability-refresh" class="ghost" type="button">Refresh capability report</button>
+            <div id="capability-report-list" class="capability-report-list"></div>
+          </section>
           <section
             id="explore-panel"
             class="explore-panel"

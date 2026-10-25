@@ -371,6 +371,11 @@ const accountLinkButton = document.querySelector<HTMLButtonElement>(
 const accountLinkStatus = document.querySelector<HTMLElement>(
   "#account-link-status",
 );
+const capabilitiesCard =
+  document.querySelector<HTMLElement>("#capabilities-card");
+const capabilityReportList = document.querySelector<HTMLElement>(
+  "#capability-report-list",
+);
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const smartRun = document.querySelector<HTMLButtonElement>("#smart-run");
@@ -722,9 +727,10 @@ function renderChatHistoryPopover() {
       open.type = "button";
       open.className = "chat-history-open";
       open.dataset.chatId = entry.id;
-      open.title = entry.title || "Untitled chat";
+      const untitled = translate(language, "untitled_chat", "Untitled chat");
+      open.title = entry.title || untitled;
       const title = document.createElement("strong");
-      title.textContent = entry.title || "Untitled chat";
+      title.textContent = entry.title || untitled;
       const date = document.createElement("small");
       date.textContent = new Date(entry.updatedAt).toLocaleDateString();
       open.append(title, date);
@@ -732,8 +738,12 @@ function renderChatHistoryPopover() {
       remove.type = "button";
       remove.className = "chat-history-remove";
       remove.dataset.deleteChatId = entry.id;
-      remove.setAttribute("aria-label", `Delete ${entry.title || "chat"}`);
-      remove.title = "Delete chat";
+      const deleteWord = translate(language, "delete_chat", "Delete");
+      remove.setAttribute(
+        "aria-label",
+        `${deleteWord} ${entry.title || untitled}`,
+      );
+      remove.title = deleteWord;
       remove.textContent = "×";
       row.append(open, remove);
       return row;
@@ -1051,6 +1061,55 @@ function setLinkActionVisible(visible: boolean) {
 
 function setAccountLinkStatus(message: string) {
   if (accountLinkStatus) accountLinkStatus.textContent = message;
+}
+
+function renderCapabilityReport() {
+  if (!capabilityReportList) return;
+  capabilityReportList.replaceChildren();
+  const report = capabilities?.advanced;
+  if (!report) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Sign in and refresh capabilities to review this host.";
+    capabilityReportList.append(empty);
+    return;
+  }
+  const entries = Object.entries(report).sort(([a], [b]) => a.localeCompare(b));
+  const counts = new Map<string, number>();
+  for (const [, value] of entries)
+    counts.set(value.status, (counts.get(value.status) ?? 0) + 1);
+  for (const [feature, value] of entries) {
+    const row = document.createElement("div");
+    row.className = "capability-row";
+    const body = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = feature.replaceAll("-", " ");
+    body.append(title);
+    const detail = document.createElement("small");
+    const requirements = [
+      value.requirement?.hosts?.length
+        ? `Hosts: ${value.requirement.hosts.join(", ")}`
+        : "",
+      value.requirement?.excelApi
+        ? `ExcelApi ${value.requirement.excelApi}`
+        : "",
+      value.fallbackFeature
+        ? `Fallback: ${value.fallbackFeature.replaceAll("-", " ")}`
+        : "",
+      value.reason ?? "",
+    ].filter(Boolean);
+    detail.textContent = requirements.join(" · ") || "No extra requirements.";
+    body.append(detail);
+    const status = document.createElement("span");
+    status.className = "capability-status";
+    status.dataset.status = value.status;
+    status.textContent = value.status.replaceAll("_", " ");
+    row.append(body, status);
+    capabilityReportList.append(row);
+  }
+  const summary = document.querySelector<HTMLElement>("#capabilities-summary");
+  if (summary)
+    summary.textContent = `${entries.length} features checked · ${counts.get("available") ?? 0} available · ${counts.get("available_with_fallback") ?? 0} with fallback · ${counts.get("consent_required") ?? 0} needing approval · ${counts.get("unsupported") ?? 0} unavailable.`;
 }
 
 function needsVynorAccountLink(error: unknown): boolean {
@@ -1805,6 +1864,7 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
     };
     vynoraiAccountConnected = true;
     updateAuthenticationUi(true);
+    renderCapabilityReport();
     setStatus(SIGNED_IN_IDLE_STATUS);
   } catch (error) {
     capabilities = undefined;
@@ -3890,6 +3950,11 @@ function setupLayout() {
   const advancedWorkbookOptions = document.querySelector<HTMLButtonElement>(
     "#advanced-workbook-options",
   );
+  const capabilityReportButton =
+    document.querySelector<HTMLButtonElement>("#capability-report");
+  const capabilityRefreshButton = document.querySelector<HTMLButtonElement>(
+    "#capability-refresh",
+  );
   const prefsCard = document.querySelector<HTMLDetailsElement>("#prefs-card");
   const diagnosticsPanel =
     document.querySelector<HTMLElement>("#diagnostics-panel");
@@ -3944,6 +4009,21 @@ function setupLayout() {
     window.setTimeout(() =>
       prefsCard.querySelector<HTMLElement>("select")?.focus(),
     );
+  });
+  capabilityReportButton?.addEventListener("click", () => {
+    if (!capabilitiesCard) return;
+    renderCapabilityReport();
+    capabilitiesCard.hidden = false;
+    closeMenu();
+    capabilitiesCard.scrollIntoView({ block: "start" });
+  });
+  capabilityRefreshButton?.addEventListener("click", () => {
+    if (!accessToken) return setStatus("Sign in to refresh capabilities.");
+    capabilityRefreshButton.disabled = true;
+    setStatus("Refreshing Excel capability report...");
+    void refreshCapabilities("restore").finally(() => {
+      capabilityRefreshButton.disabled = false;
+    });
   });
   toggleDiagnostics?.addEventListener("click", () => {
     if (!diagnosticsPanel) return;

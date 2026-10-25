@@ -1,3 +1,4 @@
+import { randomFillSync } from "crypto";
 import { ToolCallDelta } from "../..";
 
 export function closeTag(openingTag: string): string {
@@ -16,7 +17,7 @@ function randomLettersAndNumbers(length: number): string {
   let result = "";
   const bytes = new Uint8Array(length * 2);
   while (result.length < length) {
-    globalThis.crypto.getRandomValues(bytes);
+    randomFillSync(bytes);
     for (const byte of bytes) {
       if (byte >= 248) continue;
       result += characters.charAt(byte % characters.length);

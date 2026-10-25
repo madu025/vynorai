@@ -4,7 +4,7 @@
 # routes its users to the other worker, and the next worker is only replaced
 # once the new one reports healthy.
 #
-#   cd /opt/vynor && ./deploy/rolling-deploy.sh
+#   cd /opt/vynor && bash ./deploy/rolling-deploy.sh
 set -euo pipefail
 
 COMPOSE="docker compose -f docker-compose.vps.yml"
@@ -31,7 +31,12 @@ wait_healthy() {
 
 git pull -q
 # Pick up Caddyfile changes without dropping connections.
-docker exec vynor-caddy caddy reload --config /etc/caddy/deploy/Caddyfile --adapter caddyfile >/dev/null
+if ! reload_output=$(docker exec vynor-caddy caddy reload --config /etc/caddy/deploy/Caddyfile --adapter caddyfile 2>&1); then
+  echo "Caddy reload failed; stopping before the build:" >&2
+  echo "$reload_output" | tail -20 >&2
+  exit 1
+fi
+echo "$reload_output" | tail -3
 echo "Building image…"
 $COMPOSE build vynor-backend
 
@@ -54,6 +59,13 @@ done
 if [ "$BACKGROUND_RUNNING" -eq 1 ]; then
   echo "Replacing vynor-background-worker..."
   $COMPOSE up -d --no-deps --no-build vynor-background-worker
+  sleep 5
+  worker_running=$(docker inspect -f '{{.State.Running}}' vynor-background-worker 2>/dev/null || echo false)
+  if [ "$worker_running" != "true" ]; then
+    echo "  vynor-background-worker is not running after the rollout" >&2
+    docker logs --tail 40 vynor-background-worker >&2 || true
+    exit 1
+  fi
 fi
 
 echo "Rollout complete: $(git log --oneline -1)"

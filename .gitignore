@@ -213,3 +213,6 @@ research_notes/
 extensions/vscode/e2e/.test-extensions-base/
 extensions/vscode/e2e/storage/
 extensions/vscode/e2e/_output/
+
+# Scratch scripts
+*.tmp.ts

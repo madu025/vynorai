@@ -33,7 +33,8 @@ db_exists() { [ "$(psql_admin -c "SELECT 1 FROM pg_database WHERE datname = '$1'
 # The live DATABASE_URL, read from the running backend (never printed).
 live_url() {
   if [ -n "${OLD_DATABASE_URL:-}" ]; then printf '%s' "$OLD_DATABASE_URL"; return; fi
-  docker exec "$BACKEND_CONTAINER" printenv DATABASE_URL
+  # docker inspect reads the container config, so it also works after the backends are stopped.
+  docker inspect "$BACKEND_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^DATABASE_URL=//p'
 }
 # Same server and credentials, different database name (query string kept).
 with_db() { printf '%s' "$1" | sed -E "s#^([a-z]+://[^/]+)/[^?]*#\1/$2#"; }

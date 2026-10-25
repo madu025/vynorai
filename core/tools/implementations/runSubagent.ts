@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import type { ContextItem, Tool, ToolCall, ToolExtras } from "../..";
 import {
   runExploreSubagent,
@@ -51,7 +52,7 @@ export async function runSubagentImpl(
     };
     agentLabel = agent.name;
   }
-  const id = extras.toolCallId ?? `subagent-${globalThis.crypto.randomUUID()}`;
+  const id = extras.toolCallId ?? `subagent-${randomUUID()}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SUBAGENT_TIMEOUT_MS);
   running.set(id, controller);

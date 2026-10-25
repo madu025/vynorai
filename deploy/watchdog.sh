@@ -10,6 +10,8 @@
 # Everything else is reported to Telegram: public health failures, low
 # memory, DeepSeek balance, TLS expiry, plus a daily summary at 08:00.
 #
+# Cron line: `* * * * * bash /opt/vynor/deploy/watchdog.sh >> /var/log/vynor-watchdog.log 2>&1`
+# (run through bash so a lost mode bit cannot stop monitoring: that happened once).
 # Config: /etc/vynor-watchdog.env (root only)
 #   TELEGRAM_BOT_TOKEN=...   TELEGRAM_CHAT_ID=...
 set -uo pipefail

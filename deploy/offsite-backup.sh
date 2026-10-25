@@ -11,7 +11,9 @@
 # Config: /etc/vynor-backup.env (root only)
 #   R2_ACCOUNT_ID=...  R2_ACCESS_KEY_ID=...  R2_SECRET_ACCESS_KEY=...
 #   R2_BUCKET=vynor-backups  BACKUP_ENCRYPTION_KEY=<64 hex chars>
-# Restore: ./deploy/offsite-backup.sh restore-latest /tmp/vynor.dump
+# Restore: bash ./deploy/offsite-backup.sh restore-latest /tmp/vynor.dump
+# Cron: call it as `bash /opt/vynor/deploy/offsite-backup.sh` so a lost mode bit (a git pull on a
+# filesystem without file modes recreates scripts as 644) cannot silently stop the backups.
 set -uo pipefail
 
 ENV_FILE=/etc/vynor-backup.env

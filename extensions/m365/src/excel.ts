@@ -2334,7 +2334,8 @@ function sha256Hex(value: string): string {
 
 /** SHA-256 fingerprint of the exact source cells used by the local mutation gate. */
 export function fingerprintExcelRange(input: ExcelRangeInput): string {
-  // A sampled range cannot be re-read in full cheaply: it is pinned by its size and header rows.
+  // A sampled range cannot be re-read in full cheaply, so hash every deterministic sampled block
+  // rather than only the first rows. A later sampled block changing must invalidate the approval.
   const serialized = JSON.stringify(
     input.sample
       ? {
@@ -2342,7 +2343,7 @@ export function fingerprintExcelRange(input: ExcelRangeInput): string {
           worksheetName: input.worksheetName,
           address: input.address,
           sample: input.sample,
-          values: input.values.slice(0, SAMPLED_FINGERPRINT_ROWS),
+          values: input.values,
         }
       : {
           workbookId: input.workbookId,

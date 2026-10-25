@@ -42,7 +42,7 @@ vynor.lk {
 		# its URL, so those (and the content-hashed chunks) are cached at the edge and in the browser for a
 		# year: only the first open of a build reaches the origin (Cloudflare to origin was intermittently
 		# slow or failing, and a 1 MB miss is where the pane used to hang).
-		@live expression `!path('/dist/*') && !((path('/pane.css') || path('/runtime-config.js')) && {http.request.uri.query.v} != "")`
+		@live expression `!(((path('/dist/*') || path('/pane.css') || path('/runtime-config.js')) && {http.request.uri.query.v} != "") || path('/dist/chunks/*'))`
 		header @live Cache-Control "no-cache"
 		@versioned expression `((path('/dist/*') || path('/pane.css') || path('/runtime-config.js')) && {http.request.uri.query.v} != "") || path('/dist/chunks/*')`
 		header @versioned Cache-Control "public, max-age=31536000, immutable"

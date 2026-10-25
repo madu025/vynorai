@@ -656,7 +656,7 @@ adminRouter.get("/users", requireAdmin, async (req: Request, res: Response) => {
   const { limit, offset, like } = adminPaging(req);
   const params: unknown[] = [like, like, like];
   const total = await dbGet<{ n: number | string }>(
-    "SELECT COUNT(*) AS n FROM users u WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\'))",
+    "SELECT COUNT(*) AS n FROM users u WHERE (CAST(? AS TEXT) IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\'))",
     params,
   );
   // One row per user: latest active subscription and latest usage cycle.
@@ -677,7 +677,7 @@ adminRouter.get("/users", requireAdmin, async (req: Request, res: Response) => {
       SELECT m2.id FROM monthly_usage m2
       WHERE m2.user_id = u.id
       ORDER BY m2.period_start DESC LIMIT 1)
-    WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\'))
+    WHERE (CAST(? AS TEXT) IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\'))
     ORDER BY u.created_at DESC, u.id DESC
     LIMIT ? OFFSET ?
   `,
@@ -703,7 +703,7 @@ adminRouter.get(
     const { limit, offset, like } = adminPaging(req);
     const params: unknown[] = [like, like, like, like];
     const total = await dbGet<{ n: number | string }>(
-      "SELECT COUNT(*) AS n FROM subscriptions s JOIN users u ON s.user_id = u.id WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(s.order_id) LIKE ? ESCAPE '\\' OR LOWER(s.plan_name) LIKE ? ESCAPE '\\'))",
+      "SELECT COUNT(*) AS n FROM subscriptions s JOIN users u ON s.user_id = u.id WHERE (CAST(? AS TEXT) IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(s.order_id) LIKE ? ESCAPE '\\' OR LOWER(s.plan_name) LIKE ? ESCAPE '\\'))",
       params,
     );
     const subs = await dbAll<any>(
@@ -711,7 +711,7 @@ adminRouter.get(
     SELECT s.*, u.email, u.name
     FROM subscriptions s
     JOIN users u ON s.user_id = u.id
-    WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(s.order_id) LIKE ? ESCAPE '\\' OR LOWER(s.plan_name) LIKE ? ESCAPE '\\'))
+    WHERE (CAST(? AS TEXT) IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(s.order_id) LIKE ? ESCAPE '\\' OR LOWER(s.plan_name) LIKE ? ESCAPE '\\'))
     ORDER BY s.created_at DESC, s.id DESC
     LIMIT ? OFFSET ?
   `,

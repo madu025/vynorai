@@ -1254,8 +1254,8 @@ test("a sampled very large range plans only a PivotTable and pins the source by 
     () => createExcelPreviewPlan(base, ["chart"]),
     /too large to read in full/,
   );
-  // Only the first rows pin the source; later rows are not re-read at apply time.
-  assert.equal(
+  // Every deterministic sampled block pins the source; a changed later block invalidates apply.
+  assert.notEqual(
     fingerprintExcelRange({
       ...base,
       values: [...base.values.slice(0, 3), ["x", 1, "N"]],

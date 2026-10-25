@@ -1421,70 +1421,105 @@ authRouter.post(
         error: "Type your account email exactly to confirm deletion.",
       });
 
-    const artifacts = await dbAll<{ id: string }>(
-      `SELECT a.id FROM background_artifacts a
+    // Irreversible, so a stolen session alone is not enough: the current password must match.
+    const credentials = await dbGet<{ password_hash: string }>(
+      "SELECT password_hash FROM users WHERE id = ?",
+      [user.id],
+    );
+    const passwordOk =
+      !!credentials?.password_hash &&
+      (await bcrypt.compare(req.body.password, credentials.password_hash));
+    if (!passwordOk) {
+      await logSecurityEvent({
+        eventType: "ACCOUNT_DELETE_FAILED",
+        severity: "WARN",
+        actor: user.id,
+        target: user.id,
+        details: "Account deletion refused: current password incorrect",
+        ipAddress: getClientIp(req),
+      }).catch(() => {});
+      return res.status(403).json({
+        error:
+          "The password is incorrect. Signed in with Google? Use Forgot password to set one first.",
+        code: "PASSWORD_REQUIRED",
+      });
+    }
+
+    // Every step below is idempotent and the users row is deleted last, so if anything fails the
+    // account is still there and the person can simply press Delete again.
+    try {
+      const artifacts = await dbAll<{ id: string }>(
+        `SELECT a.id FROM background_artifacts a
        JOIN background_tasks t ON t.id = a.task_id
        WHERE t.user_id = ? AND a.deleted_at IS NULL`,
-      [user.id],
-    ).catch(() => []);
-    for (const artifact of artifacts)
-      await deleteBackgroundArtifact(artifact.id).catch(() => {});
-    await dbRun(
-      "UPDATE background_billing_ledger SET user_id = ? WHERE user_id = ?",
-      [`deleted:${sha256(user.id).slice(0, 24)}`, user.id],
-    ).catch(() => {});
-
-    // Identities this person had in Microsoft 365 tenants: needed to scrub audit `details` JSON.
-    const objectIds = (
-      await dbAll<{ object_id: string }>(
-        "SELECT object_id FROM m365_identity_links WHERE user_id = ?",
         [user.id],
-      ).catch(ignoreMissingTable([] as Array<{ object_id: string }>))
-    ).map((row) => row.object_id);
-
-    await dbRun(
-      `UPDATE security_audit_logs SET actor = 'deleted-user' WHERE actor = ? OR actor = ?`,
-      [user.id, user.email],
-    ).catch(() => {});
-    await dbRun(
-      `UPDATE security_audit_logs SET target = 'deleted-user' WHERE target = ? OR target = ?`,
-      [user.id, user.email],
-    ).catch(() => {});
-    // `details` is free text/JSON and can carry the user id, the email or an Entra object id.
-    for (const value of [user.id, String(user.email), ...objectIds]) {
-      if (!value || value.length < 6) continue;
+      ).catch(() => []);
+      for (const artifact of artifacts)
+        await deleteBackgroundArtifact(artifact.id).catch(() => {});
       await dbRun(
-        `UPDATE security_audit_logs SET details = REPLACE(details, ?, '[deleted-user]') WHERE details LIKE ? ESCAPE '\\'`,
-        [value, `%${escapeLike(value)}%`],
-      );
+        "UPDATE background_billing_ledger SET user_id = ? WHERE user_id = ?",
+        [`deleted:${sha256(user.id).slice(0, 24)}`, user.id],
+      ).catch(() => {});
+
+      // Identities this person had in Microsoft 365 tenants: needed to scrub audit `details` JSON.
+      const objectIds = (
+        await dbAll<{ object_id: string }>(
+          "SELECT object_id FROM m365_identity_links WHERE user_id = ?",
+          [user.id],
+        ).catch(ignoreMissingTable([] as Array<{ object_id: string }>))
+      ).map((row) => row.object_id);
+
+      await dbRun(
+        `UPDATE security_audit_logs SET actor = 'deleted-user' WHERE actor = ? OR actor = ?`,
+        [user.id, user.email],
+      ).catch(() => {});
+      await dbRun(
+        `UPDATE security_audit_logs SET target = 'deleted-user' WHERE target = ? OR target = ?`,
+        [user.id, user.email],
+      ).catch(() => {});
+      // `details` is free text/JSON and can carry the user id, the email or an Entra object id.
+      for (const value of [user.id, String(user.email), ...objectIds]) {
+        if (!value || value.length < 6) continue;
+        await dbRun(
+          `UPDATE security_audit_logs SET details = REPLACE(details, ?, '[deleted-user]') WHERE details LIKE ? ESCAPE '\\'`,
+          [value, `%${escapeLike(value)}%`],
+        );
+      }
+      // Rows keyed by user id that have no foreign key (they predate or deliberately avoid one):
+      // transient holds and job rows are deleted, usage ledger rows keep their counts but lose identity.
+      await dbRun("DELETE FROM quota_reservations WHERE user_id = ?", [
+        user.id,
+      ]).catch(ignoreMissingTable(undefined));
+      await dbRun("DELETE FROM m365_quota_reservations WHERE user_id = ?", [
+        user.id,
+      ]).catch(ignoreMissingTable(undefined));
+      await dbRun("DELETE FROM m365_sandbox_jobs WHERE user_id = ?", [
+        user.id,
+      ]).catch(ignoreMissingTable(undefined));
+      await dbRun(
+        "UPDATE m365_tenant_usage SET user_id = ? WHERE user_id = ?",
+        [`deleted:${sha256(user.id).slice(0, 24)}`, user.id],
+      ).catch(ignoreMissingTable(undefined));
+      // Cache rows are keyed by a one-way prompt hash, so they need an explicit
+      // tenant index rather than relying on the users-table cascade.
+      await purgeUserCache(user.id);
+      semanticPurgeUser(user.id);
+      await dbRun(`DELETE FROM users WHERE id = ?`, [user.id]);
+      await logSecurityEvent({
+        eventType: "ACCOUNT_DELETED",
+        severity: "INFO",
+        actor: "deleted-user",
+        details: "User deleted their account and personal data.",
+        ipAddress: getClientIp(req),
+      }).catch(() => {});
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error("Account deletion failed:", describeError(error));
+      return res.status(500).json({
+        error:
+          "Account deletion did not finish. Your account is still active; please try again.",
+        code: "ACCOUNT_DELETE_INCOMPLETE",
+      });
     }
-    // Rows keyed by user id that have no foreign key (they predate or deliberately avoid one):
-    // transient holds and job rows are deleted, usage ledger rows keep their counts but lose identity.
-    await dbRun("DELETE FROM quota_reservations WHERE user_id = ?", [
-      user.id,
-    ]).catch(ignoreMissingTable(undefined));
-    await dbRun("DELETE FROM m365_quota_reservations WHERE user_id = ?", [
-      user.id,
-    ]).catch(ignoreMissingTable(undefined));
-    await dbRun("DELETE FROM m365_sandbox_jobs WHERE user_id = ?", [
-      user.id,
-    ]).catch(ignoreMissingTable(undefined));
-    await dbRun("UPDATE m365_tenant_usage SET user_id = ? WHERE user_id = ?", [
-      `deleted:${sha256(user.id).slice(0, 24)}`,
-      user.id,
-    ]).catch(ignoreMissingTable(undefined));
-    // Cache rows are keyed by a one-way prompt hash, so they need an explicit
-    // tenant index rather than relying on the users-table cascade.
-    await purgeUserCache(user.id);
-    semanticPurgeUser(user.id);
-    await dbRun(`DELETE FROM users WHERE id = ?`, [user.id]);
-    await logSecurityEvent({
-      eventType: "ACCOUNT_DELETED",
-      severity: "INFO",
-      actor: "deleted-user",
-      details: "User deleted their account and personal data.",
-      ipAddress: getClientIp(req),
-    }).catch(() => {});
-    res.json({ ok: true });
   },
 );

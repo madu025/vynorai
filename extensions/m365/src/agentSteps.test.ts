@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServerExcelPreviewPlan } from "../../../backend/src/services/m365ExcelPlan.js";
 import { runStepWith } from "./agentSteps.js";
-import { readBackMismatches } from "./officeAgentHost.js";
+import { readBackMismatches, verifyReadBack } from "./officeAgentHost.js";
 import { gridWorkbook } from "../test/batch/gridWorkbook.js";
 
 const headers = ["Order No", "Region", "Net Amount"];
@@ -96,4 +96,23 @@ test("written values are read back and Excel's changes are named", async () => {
     ),
     [],
   );
+});
+
+test("a failed read-back is an explicit verification failure", async () => {
+  const verification = await verifyReadBack(
+    {
+      sync: async () => {
+        throw new Error("Excel read-back unavailable");
+      },
+    },
+    {
+      getCell: () => ({
+        getResizedRange: () => ({ load() {} }),
+      }),
+    },
+    [["value"]],
+  );
+  assert.equal(verification.verified, false);
+  assert.equal(verification.mismatches.length, 0);
+  assert.match(verification.error ?? "", /read-back unavailable/);
 });

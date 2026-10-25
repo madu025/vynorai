@@ -95,12 +95,13 @@ async function requireEntraIdentity(
           details: JSON.stringify({ requiredScope: "m365.excel.read" }),
           ipAddress: clientIp(req),
         });
+      // The "ask an administrator" hint and the claim that a request was recorded are true only for
+      // a disabled tenant; any other refusal (for example a missing scope) recorded nothing.
       return res.status(403).json({
-        error: {
-          code,
-          action: "admin_enable_tenant",
-          requestRecorded: true,
-        },
+        error:
+          code === "tenant_disabled"
+            ? { code, action: "admin_enable_tenant", requestRecorded: true }
+            : { code },
       });
     }
     (req as any).m365LinkIdentity = identity;

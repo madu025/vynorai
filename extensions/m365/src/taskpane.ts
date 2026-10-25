@@ -1127,14 +1127,15 @@ function linkPageUrl(code: string): string {
   return url.toString();
 }
 
-function openLinkPage(url: string): Promise<void> {
-  // A blocked tab cannot be told apart from an opened one reliably inside Excel's web view, and the
-  // person can still open the page from the code shown in the pane, so this never rejects.
-  const openTab = () => {
+function openLinkPage(url: string): Promise<boolean> {
+  // Report whether the browser actually accepted the hand-off. The caller must not tell the person
+  // that linking started when Excel or the browser blocked both the dialog and the fallback tab.
+  const openTab = (): boolean => {
     const opened = openExternalPage(window, url);
     log.record("m365-link:tab-open", opened ? "pass" : "fail");
+    return opened;
   };
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const host = office();
     if (host?.context?.ui?.displayDialogAsync) {
       host.context.ui.displayDialogAsync(
@@ -1143,7 +1144,7 @@ function openLinkPage(url: string): Promise<void> {
         (result: any) => {
           if (result.status === host.AsyncResultStatus.Succeeded) {
             log.record("m365-link:dialog-open", "pass");
-            resolve();
+            resolve(true);
             return;
           }
           log.record(
@@ -1151,14 +1152,12 @@ function openLinkPage(url: string): Promise<void> {
             "fail",
             `${result.error?.code || "unknown"} ${result.error?.message || ""}`,
           );
-          openTab();
-          resolve();
+          resolve(openTab());
         },
       );
       return;
     }
-    openTab();
-    resolve();
+    resolve(openTab());
   });
 }
 
@@ -1210,7 +1209,15 @@ async function connectVynoraiAccount() {
         traceRequest,
       ).startM365Link();
     }
-    await openLinkPage(linkPageUrl(result.code));
+    const linkPageOpened = await openLinkPage(linkPageUrl(result.code));
+    if (!linkPageOpened) {
+      const blockedMessage =
+        "The VynorAI connection window was blocked. Allow pop-ups for this page, then press Connect VynorAI account again.";
+      setStatus(blockedMessage);
+      setAccountLinkStatus(blockedMessage);
+      renderConversation("assistant", blockedMessage);
+      return;
+    }
     setStatus(
       "VynorAI connection page opened. Sign in there and confirm the Microsoft account.",
     );
@@ -4002,6 +4009,7 @@ function setupLayout() {
   });
   advancedWorkbookOptions?.addEventListener("click", () => {
     if (!prefsCard) return;
+    workspaceNavigation.activate("work");
     prefsCard.hidden = false;
     prefsCard.open = true;
     closeMenu();
@@ -4012,6 +4020,7 @@ function setupLayout() {
   });
   capabilityReportButton?.addEventListener("click", () => {
     if (!capabilitiesCard) return;
+    workspaceNavigation.activate("work");
     renderCapabilityReport();
     capabilitiesCard.hidden = false;
     closeMenu();

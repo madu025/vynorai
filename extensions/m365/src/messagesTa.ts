@@ -7,6 +7,10 @@
 import { localizeAction } from "./messagesActions.js";
 
 const EXACT: Record<string, string> = {
+  "Sign in to refresh capabilities.":
+    "திறன்களைப் புதுப்பிக்க முதலில் உள்நுழையவும்.",
+  "Refreshing Excel capability report...":
+    "Excel திறன் அறிக்கை புதுப்பிக்கப்படுகிறது...",
   "Power Pivot is not available in this add-in. Use a regular PivotTable or a formula report on a new sheet instead.":
     "இந்த add-in-இல் Power Pivot கிடைக்காது. அதற்குப் பதிலாக புதிய தாளில் சாதாரண PivotTable அல்லது சூத்திர அறிக்கையைப் பயன்படுத்தவும்.",
   "The Excel Data Model is not available in this add-in. Use a regular PivotTable or a formula report with lookups across sheets instead.":
@@ -286,6 +290,8 @@ const EXACT: Record<string, string> = {
     "பாதுகாப்பான VynorAI இணைப்பைத் தயாரிக்கிறது...",
   "VynorAI connection page opened. Sign in there and confirm the Microsoft account.":
     "VynorAI இணைப்புப் பக்கம் திறக்கப்பட்டது. அங்கு உள்நுழைந்து Microsoft கணக்கை உறுதிப்படுத்தவும்.",
+  "The VynorAI connection window was blocked. Allow pop-ups for this page, then press Connect VynorAI account again.":
+    "VynorAI இணைப்பு சாளரம் தடுக்கப்பட்டது. இந்தப் பக்கத்திற்கு pop-ups-ஐ அனுமதித்து Connect VynorAI account-ஐ மீண்டும் அழுத்தவும்.",
   "The connection code expired. Start Connect VynorAI account again.":
     "இணைப்புக் குறியீடு காலாவதியானது. VynorAI கணக்கை இணை என்பதை மீண்டும் தொடங்கவும்.",
   "The connection is still waiting for confirmation. Finish the browser page, then try Connect VynorAI account again.":
@@ -293,6 +299,9 @@ const EXACT: Record<string, string> = {
   "VynorAI account connection failed.": "VynorAI கணக்கை இணைக்க முடியவில்லை.",
   "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.":
     "இந்த Microsoft கணக்கு இன்னும் VynorAI கணக்குடன் இணைக்கப்படவில்லை. தொடர ஒன்றை இணைக்கவும்.",
+  "VynorAI account connection required.": "VynorAI கணக்கு இணைப்பு தேவை.",
+  "Checking your VynorAI account connection...":
+    "உங்கள் VynorAI கணக்கு இணைப்பைச் சரிபார்க்கிறது...",
   "Undo did not finish. Press Undo again.":
     "மீளமைப்பு முடியவில்லை. மீண்டும் மீளமை அழுத்தவும்.",
   "Forgot the saved choices for this workbook.":

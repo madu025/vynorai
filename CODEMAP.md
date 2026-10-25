@@ -836,4 +836,11 @@ VynorAI is an independent product built from a pinned Continue-derived foundatio
 - `backend/src/services/pgDriver.ts`: PostgreSQL driver; `parseTimestamptz`, UTC sessions, `CURRENT_TIMESTAMP` to `now()`, TLS rule, `int8` parsing.
 - `backend/src/services/pgCarryOver.ts`: one-time carry-over from the retired database into a typed one (`runCarryOver`, `parseLegacyTimestamp`, `convertValue`, `CARRY_OVER_TABLES`); CLI `backend/src/scripts/carryOver.ts`.
 - `deploy/typed-db-cutover.sh` and `docs/DB_CUTOVER_RUNBOOK.md`: the operator procedure (preflight, backup, prepare, copy, swap, rollback).
+- `.claude/skills/vynor-postgres-check/pg-vps-sync.sh` and `pg-vps-run.sh`: run the backend tests against a throwaway PostgreSQL container on the VPS (never the production database); see the skill's `SKILL.md`.
+
+## Session, admin-access and HTTP helpers
+
+- `backend/src/services/userSession.ts`: user session tokens (`signUserSession`, `verifyUserSession`): purpose-bound HS256 key via `deriveKey`, required `kind: "user_session"`, and `passwordFingerprint` so a password change ends older sessions.
+- `backend/src/services/cfAccess.ts`: verifies the Cloudflare Access assertion for the admin portal (`verifyCfAccessAssertion`, `readCfAccessConfig`); the e-mail header alone is never trusted and the path is off without `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`.
+- `backend/src/services/httpHygiene.ts`: explicit CORS allow-list (`isAllowedCorsOrigin`), `maskEmail` and `describeError` for logs that must not carry request bodies or addresses.
 - Tests: `backend/test/carryOver.test.ts` (needs PostgreSQL; uses `backend/test/fixtures/legacyPgSchema.sql` as the old layout), `schemaParity.test.ts`, `pgDriver.test.ts`.

@@ -549,6 +549,24 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     path: path.join(artifactDirectory, `taskpane-${label}-settings.png`),
     fullPage: true,
   });
+  await page.click("#menu-toggle");
+  await page.click("#capability-report");
+  await page.waitForSelector("#capabilities-card:not([hidden])");
+  await assertReachable(page, "#capabilities-card");
+  assert.equal(
+    await page.$eval(
+      "#capability-report-list .capability-row",
+      (row) => row.getClientRects().length > 0,
+    ),
+    true,
+    "the capability report must render real feature rows",
+  );
+  assert.match(
+    await page.$eval("#capabilities-summary", (element) => element.textContent ?? ""),
+    /features checked/,
+    "the capability report must summarize the host verdicts",
+  );
+  await assertNoMojibake(page, `${label} capabilities`);
   // Agent runs reveal their progress card before the first model response. Exercise that narrow
   // visual state independently of the network/model path.
   await page.$eval("#agent-card", (card) => {

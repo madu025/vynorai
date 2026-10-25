@@ -124,12 +124,12 @@ export const CAPABILITY_REGISTRY: Readonly<
 > = {
   forecast: {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["read"],
   },
   cohort: {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["read"],
   },
   sensitivity: {
@@ -144,7 +144,7 @@ export const CAPABILITY_REGISTRY: Readonly<
   },
   "fuzzy-match": {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["read"],
   },
   split: {
@@ -159,27 +159,27 @@ export const CAPABILITY_REGISTRY: Readonly<
   },
   "fraud-risk": {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["write"],
   },
   "root-cause": {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["read"],
   },
   clustering: {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["read"],
   },
   similarity: {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["read"],
   },
   optimisation: {
     execution: "deterministic_local",
-    base: "available_with_fallback",
+    base: "available",
     needs: ["write"],
   },
   relationships: {

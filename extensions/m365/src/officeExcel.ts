@@ -10,7 +10,6 @@ import {
 import {
   assertValidExcelTabularRange,
   fingerprintExcelRange,
-  SAMPLED_FINGERPRINT_ROWS,
 } from "./excel.js";
 import {
   addColumnFormula,
@@ -1110,16 +1109,21 @@ async function sourceFingerprint(
   range.load(["rowCount", "columnCount"]);
   await context.sync();
   const sample = plan.profile?.sample;
-  const values = await readValuesInChunks(
-    context,
-    range,
-    // A sampled range is pinned by its size and header rows, not by every row.
-    sample
-      ? Math.min(Number(range.rowCount), SAMPLED_FINGERPRINT_ROWS)
-      : Number(range.rowCount),
-    Number(range.columnCount),
-    500,
-  );
+  const values = sample
+    ? await readSampleRows(
+        context,
+        range,
+        Number(range.rowCount),
+        Number(range.columnCount),
+        Math.min(Number(sample.sampledRows), Number(range.rowCount)),
+      )
+    : await readValuesInChunks(
+        context,
+        range,
+        Number(range.rowCount),
+        Number(range.columnCount),
+        500,
+      );
   return fingerprintExcelRange({
     workbookId: plan.workbookId,
     worksheetName: plan.worksheetName,

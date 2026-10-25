@@ -42,6 +42,9 @@ const JWKS_TTL_MS = 10 * 60 * 1000;
 const JWKS_TIMEOUT_MS = 4000;
 const MAX_JWKS_BYTES = 64 * 1024;
 
+const FORCED_REFRESH_MIN_INTERVAL_MS = 30_000;
+let lastForcedRefreshAt = 0;
+
 let cache: { domain: string; keys: Jwk[]; fetchedAt: number } | undefined;
 let fetcherForTests: ((url: string) => Promise<{ keys: Jwk[] }>) | undefined;
 
@@ -51,6 +54,7 @@ export function setCfAccessJwksFetcherForTests(
 ): void {
   fetcherForTests = fetcher;
   cache = undefined;
+  lastForcedRefreshAt = 0;
 }
 
 export function readCfAccessConfig(
@@ -90,6 +94,17 @@ async function fetchJwks(domain: string): Promise<Jwk[]> {
 
 async function keysFor(domain: string, forceRefresh = false): Promise<Jwk[]> {
   const now = Date.now();
+  if (forceRefresh) {
+    // A forged assertion with a random `kid` forces a refetch: allow one forced refetch per window,
+    // otherwise an unauthenticated caller could turn every request into an outbound fetch.
+    if (
+      cache &&
+      cache.domain === domain &&
+      now - lastForcedRefreshAt < FORCED_REFRESH_MIN_INTERVAL_MS
+    )
+      return cache.keys;
+    lastForcedRefreshAt = now;
+  }
   if (
     !forceRefresh &&
     cache &&

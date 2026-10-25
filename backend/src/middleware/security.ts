@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Request, Response, NextFunction } from "express";
 import { incrementRateLimit } from "../services/redisStore.js";
 
@@ -138,7 +139,10 @@ export const proxyRateLimiter = createRateLimiter({
     const user = (req as any).user;
     if (user?.id) return `proxy_user_${user.id}`;
     const authHeader = req.headers.authorization;
-    if (authHeader) return `proxy_token_${authHeader}`;
+    // A one-way fingerprint: the raw Authorization value (API key or session JWT) must never become a
+    // Redis key name, where anyone who can list keys or read a dump would see live credentials.
+    if (authHeader)
+      return `proxy_token_${createHash("sha256").update(String(authHeader)).digest("hex").slice(0, 32)}`;
     const ip = req.headers["cf-connecting-ip"] || req.ip || "unknown";
     return `proxy_ip_${ip}`;
   },

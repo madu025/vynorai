@@ -40,9 +40,10 @@ for file in dist/taskpane.bundle.js dist/text.bundle.js pane.css runtime-config.
 done
 [ -d "$SRC/dist/chunks" ] || { echo "dist/chunks missing" >&2; exit 1; }
 
-# Fingerprint of everything cached under the pane build id. If the id was published before with
-# different bytes, stop: browsers and Cloudflare would keep serving the old copy.
-PANE_HASH=$(cd "$SRC" && { cat dist/taskpane.bundle.js pane.css; find dist/chunks -type f | LC_ALL=C sort | xargs cat; } | sha256sum | cut -d' ' -f1)
+# Fingerprint of everything cached under the pane build id (runtime-config.js is served immutable
+# under ?v= too). If the id was published before with different bytes, stop: browsers and Cloudflare
+# would keep serving the old copy.
+PANE_HASH=$(cd "$SRC" && { cat dist/taskpane.bundle.js pane.css runtime-config.production.js; find dist/chunks -type f | LC_ALL=C sort | xargs cat; } | sha256sum | cut -d' ' -f1)
 
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
@@ -71,11 +72,16 @@ done
 "${SCP[@]}" "$STAGE/build-id.js" "$HOST:$REMOTE_DIR/build-id.js.new"
 "${SCP[@]}" "$STAGE/pane-build.txt" "$HOST:$REMOTE_DIR/pane-build.txt.new"
 
-# One remote step: bring taskpane.html and pane.css to this commit, check it, then rename the files.
+# Fetch (do not change the checkout yet) and check the server would end up on this commit.
 SOURCE_COMMIT=$(git -C "$ROOT" rev-parse HEAD)
-REMOTE_COMMIT=$("${SSH[@]}" "git -C '$REMOTE_DIR' pull -q >/dev/null && git -C '$REMOTE_DIR' rev-parse HEAD")
+REMOTE_COMMIT=$("${SSH[@]}" "git -C '$REMOTE_DIR' fetch -q >/dev/null && git -C '$REMOTE_DIR' rev-parse '@{u}'")
 [ "$REMOTE_COMMIT" = "$SOURCE_COMMIT" ] || { echo "remote revision $REMOTE_COMMIT does not match local $SOURCE_COMMIT" >&2; exit 1; }
-"${SSH[@]}" "cd '$REMOTE_DIR' && mv -f dist/taskpane.bundle.js.new dist/taskpane.bundle.js && mv -f dist/text.bundle.js.new dist/text.bundle.js && mv -f runtime-config.js.new runtime-config.js && mv -f build-id.js.new build-id.js && mv -f pane-build.txt.new pane-build.txt && find dist/chunks -type f -mtime +30 -delete"
+# One remote step, assets BEFORE pages: the bundle, chunks and runtime-config are renamed into place
+# first and taskpane.html + pane.css (git) change last. A pane that still holds the old page and asks
+# for the old id in that instant can only get new bytes cached under the OLD id, which nothing asks
+# for afterwards; the other order could cache OLD bytes under the NEW id for a year.
+"${SSH[@]}" "cd '$REMOTE_DIR' && mv -f dist/taskpane.bundle.js.new dist/taskpane.bundle.js && mv -f dist/text.bundle.js.new dist/text.bundle.js && mv -f runtime-config.js.new runtime-config.js && mv -f build-id.js.new build-id.js && git merge -q --ff-only '@{u}' && mv -f pane-build.txt.new pane-build.txt && find dist/chunks -type f -mtime +30 -delete"
+[ "$("${SSH[@]}" "git -C '$REMOTE_DIR' rev-parse HEAD")" = "$SOURCE_COMMIT" ] || { echo "server checkout is not at $SOURCE_COMMIT after the update" >&2; exit 1; }
 echo "Published M365 build $BUILD_ID (pane $PANE_ID). The manifest was not changed."
 
 # Warm the edge: the first open of a build otherwise pays for the origin round trip. Failures are

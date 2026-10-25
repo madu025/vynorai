@@ -120,6 +120,7 @@ registerLanguagePack("ta", {
     chat_history: "அரட்டை வரலாறு",
     close_chat_history: "அரட்டை வரலாற்றை மூடு",
     delete_chat: "நீக்கு",
+    untitled_chat: "பெயரில்லா அரட்டை",
     chat_actions: "அரட்டை செயல்கள்",
     change_history: "மாற்ற வரலாறு",
     workbook_log: "பணிப்புத்தக பதிவு",
@@ -175,8 +176,24 @@ registerLanguagePack("ta", {
     menu_clear: "கண்டறிதலை அழி",
     menu_signout: "வெளியேறு",
     connect_vynorai: "VynorAI கணக்கை இணைக்கவும்",
+    account_link_title: "உங்கள் VynorAI கணக்கை இணைக்கவும்",
+    account_link_copy:
+      "Microsoft உள்நுழைவு முடிந்தது. Excel தொடர உங்கள் VynorAI கணக்கை இணைக்கவும்.",
+    account_link_step1:
+      "பாதுகாப்பான VynorAI பக்கத்தில் உள்நுழையவும் அல்லது பதிவு செய்யவும்.",
+    account_link_step2:
+      "உங்கள் மின்னஞ்சலை சரிபார்த்து, காட்டப்படும் Microsoft கணக்கை பார்வையிடவும்.",
+    account_link_step3:
+      "உங்கள் VynorAI பணியிடத்தைத் திறக்க இணைப்பை உறுதிப்படுத்தவும்.",
+    account_link_hidden_note:
+      "இரண்டு உள்நுழைவுகளும் முடியும் வரை உங்கள் பணிப்புத்தகமும் பிற அம்சங்களும் மறைந்திருக்கும்.",
     menu_overview: "பணிப்புத்தக மேலோட்டம்",
     menu_advanced_workbook_options: "மேம்பட்ட பணிப்புத்தக விருப்பங்கள்",
+    menu_capability_report: "Excel திறன்களைப் பாருங்கள்",
+    capability_report_title: "Excel திறன் அறிக்கை",
+    capability_report_copy:
+      "இந்த முடிவுகள் தற்போதைய Excel host, Office.js API நிலைகள், கணக்கு அனுமதிகள் மற்றும் பாதுகாப்பான fallback-களை இணைத்து காட்டுகின்றன.",
+    refresh_capability_report: "திறன் அறிக்கையைப் புதுப்பிக்கவும்",
     menu_language: "மொழி",
     preview_title: "முன்னோட்டம்",
     nothing_changed: "உங்கள் பணிப்புத்தகத்தில் இன்னும் எதுவும் மாறவில்லை.",

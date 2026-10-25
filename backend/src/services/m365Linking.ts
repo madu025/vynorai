@@ -376,7 +376,8 @@ export async function confirmLinkCode(input: {
            SELECT ?, ?, ?, 1, 'self'
            WHERE (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1)
              < ?
-             AND NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)`,
+             AND NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)
+             AND (SELECT COUNT(*) FROM m365_identity_links WHERE user_id = ? AND enabled = 1) < ?`,
           [
             row.tenant_id,
             row.object_id,
@@ -385,18 +386,23 @@ export async function confirmLinkCode(input: {
             tenantPlan.seatLimit,
             row.tenant_id,
             row.object_id,
+            input.userId,
+            MAX_IDENTITY_LINKS_PER_USER,
           ],
         )
       : await dbRun(
           `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
            SELECT ?, ?, ?, 1, 'self'
-           WHERE NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)`,
+           WHERE NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)
+             AND (SELECT COUNT(*) FROM m365_identity_links WHERE user_id = ? AND enabled = 1) < ?`,
           [
             row.tenant_id,
             row.object_id,
             input.userId,
             row.tenant_id,
             row.object_id,
+            input.userId,
+            MAX_IDENTITY_LINKS_PER_USER,
           ],
         );
     inserted = result?.changes ?? 0;
@@ -412,11 +418,19 @@ export async function confirmLinkCode(input: {
       [row.id],
     );
     const fresh = await getM365Tenant(row.tenant_id);
+    if (!fresh || fresh.status !== "enabled")
+      return { ok: false, code: "tenant_disabled" };
+    // Two simultaneous confirmations for different identities can both pass the early check; the
+    // guarded INSERT is what enforces the per-account cap, so name that cause when it was the one.
+    const nowOwned = await dbGet<{ count: number | string }>(
+      "SELECT COUNT(*) AS count FROM m365_identity_links WHERE user_id = ? AND enabled = 1",
+      [input.userId],
+    );
     return {
       ok: false,
       code:
-        !fresh || fresh.status !== "enabled"
-          ? "tenant_disabled"
+        Number(nowOwned?.count ?? 0) >= MAX_IDENTITY_LINKS_PER_USER
+          ? "m365_user_link_limit"
           : "m365_seat_limit_reached",
     };
   }

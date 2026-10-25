@@ -131,6 +131,7 @@
             id="capability-report"
             type="button"
             role="menuitem"
+            data-i18n="menu_capability_report"
           >
             Review Excel capabilities
           </button>
@@ -515,6 +516,7 @@
             id="results-empty"
             class="card empty-card"
             data-workspace-panel="results"
+            hidden
           >
             <h2 data-i18n="results_empty">Nothing applied yet</h2>
             <p class="muted" data-i18n="results_empty_note">
@@ -1217,11 +1219,11 @@
             </button>
           </details>
           <section id="capabilities-card" class="card" data-workspace-panel="work" hidden aria-labelledby="capabilities-title">
-            <h2 id="capabilities-title">Excel capability report</h2>
-            <p id="capabilities-summary" class="muted">
+            <h2 id="capabilities-title" data-i18n="capability_report_title">Excel capability report</h2>
+            <p id="capabilities-summary" class="muted" data-i18n="capability_report_copy">
               These results combine the current Excel host, Office.js API sets, account permissions and safe fallbacks.
             </p>
-            <button id="capability-refresh" class="ghost" type="button">Refresh capability report</button>
+            <button id="capability-refresh" class="ghost" type="button" data-i18n="refresh_capability_report">Refresh capability report</button>
             <div id="capability-report-list" class="capability-report-list"></div>
           </section>
           <section

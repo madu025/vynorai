@@ -119,6 +119,7 @@ registerLanguagePack("si", {
     chat_history: "කතාබහ ඉතිහාසය",
     close_chat_history: "කතාබහ ඉතිහාසය වසන්න",
     delete_chat: "මකන්න",
+    untitled_chat: "නම නැති කතාබහ",
     chat_actions: "කතාබහ ක්‍රියා",
     change_history: "වෙනස්කම් ඉතිහාසය",
     workbook_log: "වැඩපොත් ලොගය",
@@ -171,8 +172,23 @@ registerLanguagePack("si", {
     menu_clear: "දෝෂ විමර්ශන තොරතුරු මකන්න",
     menu_signout: "ඉවත් වන්න",
     connect_vynorai: "VynorAI ගිණුම සම්බන්ධ කරන්න",
+    account_link_title: "ඔබේ VynorAI ගිණුම සම්බන්ධ කරන්න",
+    account_link_copy:
+      "Microsoft පිවිසුම සම්පූර්ණයි. Excel වෙත ඉදිරියට යාමට ඔබේ VynorAI ගිණුම සම්බන්ධ කරන්න.",
+    account_link_step1: "ආරක්ෂිත VynorAI පිටුවේ පිවිසෙන්න හෝ ලියාපදිංචි වන්න.",
+    account_link_step2:
+      "ඔබේ ඊමේල් තහවුරු කර, පෙන්වන Microsoft ගිණුම පරීක්ෂා කරන්න.",
+    account_link_step3:
+      "ඔබේ VynorAI වැඩබිම විවෘත කිරීමට සම්බන්ධතාවය තහවුරු කරන්න.",
+    account_link_hidden_note:
+      "පිවිසුම් දෙකම සම්පූර්ණ වන තෙක් ඔබේ වැඩපොත සහ අනෙක් විශේෂාංග සැඟවී පවතී.",
     menu_overview: "වැඩපොතේ සාරාංශය",
     menu_advanced_workbook_options: "උසස් වැඩපොත් විකල්ප",
+    menu_capability_report: "Excel හැකියා වාර්තාව බලන්න",
+    capability_report_title: "Excel හැකියා වාර්තාව",
+    capability_report_copy:
+      "මෙම ප්‍රතිඵල වත්මන් Excel host එක, Office.js API මට්ටම්, ගිණුම් අවසර සහ ආරක්ෂිත fallback එකට සලකා පෙන්වයි.",
+    refresh_capability_report: "හැකියා වාර්තාව නැවත බලන්න",
     menu_language: "භාෂාව",
     preview_title: "පෙරදසුන",
     nothing_changed: "ඔබේ වැඩපොතේ තවමත් කිසිදු වෙනසක් සිදු කර නැත.",

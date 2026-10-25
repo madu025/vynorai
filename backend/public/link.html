@@ -632,6 +632,10 @@
           show("enter");
           loadMine();
           if (handoff) {
+            // Use the handed-off code exactly once, and only now that the person is signed in (it
+            // must survive the sign-in redirect): a stale or wrong code is not re-sent, and counted
+            // as a failure, on every reload.
+            clearHandoffCode();
             $("code").value = handoff;
             setTimeout(function () {
               $("checkBtn").click();

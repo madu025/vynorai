@@ -8,9 +8,12 @@ import { boxAddress, CHART_LIMITS, type Box } from "./chartPlacement.js";
 const blank = (cell: unknown) =>
   cell === "" || cell === null || cell === undefined;
 
-/** Headers that name an identifier, not a measure. */
+/**
+ * Headers that name an identifier, not a measure. "No", "Num" and "Number" count only as the LAST
+ * word ("Order No", "Invoice Number", "Phone #"): "Number of Orders" and "No. of Units" are measures.
+ */
 const ID_HEADER =
-  /(^|[^a-z])(id|no|num|number|code|ref|sku|phone|zip|postal|year)([^a-z]|$)/i;
+  /(^|[^a-z])(id|code|ref|sku|phone|zip|postal|year)([^a-z]|$)|(^|[^a-z])(no|num|number|#)\.?\s*$/i;
 
 export interface ChartColumns {
   /** 0-based column (within the sample) of the labels, if any. */

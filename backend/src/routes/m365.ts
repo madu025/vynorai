@@ -1,6 +1,12 @@
 import { newId } from "../services/secureId.js";
 import crypto from "node:crypto";
-import { Router, Request, Response, NextFunction } from "express";
+import {
+  Router,
+  Request,
+  RequestHandler,
+  Response,
+  NextFunction,
+} from "express";
 import { getOrInitM365Usage, m365Scope } from "../services/m365QuotaLedger.js";
 import { logSecurityEvent } from "../services/securityAudit.js";
 import {
@@ -554,6 +560,79 @@ function identity(req: Request) {
   return (req as any).m365Identity;
 }
 
+/** Errors that mean the token or session itself is not acceptable: the pane signs in again. */
+const M365_TOKEN_REJECTIONS = new Set([
+  "invalid_entra_token",
+  "entra_signing_key_not_found",
+  "invalid_entra_token_version",
+  "invalid_entra_identity",
+  "invalid_entra_issuer",
+  "untrusted_entra_client",
+  "invalid_m365_session",
+  "m365_session_expired",
+]);
+/** Policy answers about an organization account: a refusal, not a fault. */
+const M365_POLICY_REFUSALS = new Set([
+  "M365_ORG_BILLING_INACTIVE",
+  "m365_seat_limit_reached",
+  "M365_ORG_IDENTITY_REQUIRES_ADMIN_MIGRATION",
+  "m365_organization_provisioning_disabled",
+  "M365_ORG_PRINCIPAL_PROVISION_FAILED",
+]);
+
+/**
+ * Turns whatever the sign-in checks threw into a status and a FIXED code. Only a known token or
+ * policy answer keeps its own code; anything else (a database error, an unreachable key server, a
+ * missing setting) is a server-side fault and never reaches the client as its raw message.
+ */
+export function classifyM365AuthFailure(error: unknown): {
+  status: number;
+  code: string;
+} {
+  const message = error instanceof Error ? error.message : "";
+  const name = error instanceof Error ? error.name : "";
+  if (message === "m365_entitlement_lookup_failed")
+    return { status: 500, code: "M365_TENANT_LOOKUP_FAILED" };
+  if (M365_POLICY_REFUSALS.has(message)) return { status: 403, code: message };
+  if (M365_TOKEN_REJECTIONS.has(message)) return { status: 401, code: message };
+  if (name === "TokenExpiredError") return { status: 401, code: "jwt expired" };
+  if (name === "JsonWebTokenError" || name === "NotBeforeError")
+    return { status: 401, code: "invalid_entra_token" };
+  return { status: 503, code: "M365_AUTH_UNAVAILABLE" };
+}
+
+/** Logs what failed (class and code only: never a message, a body or a value) for a server fault. */
+function logM365Fault(where: string, error: unknown) {
+  const name = error instanceof Error ? error.name : "Error";
+  const code = (error as { code?: unknown })?.code;
+  console.error(
+    `[m365] ${where} failed: ${name}${typeof code === "string" ? ` (${code})` : ""}`,
+  );
+}
+
+/**
+ * Express 4 does not forward a rejected promise, and an unhandled rejection ends the process. Every
+ * handler of this router goes through here, so an unexpected error becomes a stable 500 and the
+ * worker (and its in-flight requests) stay up.
+ */
+function failSafe(handler: RequestHandler): RequestHandler {
+  const onError = (req: Request, res: Response, error: unknown) => {
+    logM365Fault(`${req.method} ${req.path}`, error);
+    if (!res.headersSent)
+      res.status(500).json({ error: { code: "M365_INTERNAL_ERROR" } });
+    else res.end();
+  };
+  return (req, res, next) => {
+    try {
+      const result = handler(req, res, next) as unknown;
+      if (result && typeof (result as Promise<unknown>).catch === "function")
+        (result as Promise<unknown>).catch((error) => onError(req, res, error));
+    } catch (error) {
+      onError(req, res, error);
+    }
+  };
+}
+
 function requireM365Scope(requiredScope: M365Scope) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const authorization = req.headers.authorization;
@@ -655,22 +734,9 @@ function requireM365Scope(requiredScope: M365Scope) {
       };
       next();
     } catch (error) {
-      const code = (error as Error).message || "INVALID_OAUTH_TOKEN";
-      if (code === "m365_entitlement_lookup_failed")
-        return res
-          .status(500)
-          .json({ error: { code: "M365_TENANT_LOOKUP_FAILED" } });
-      if (
-        code === "M365_ORG_BILLING_INACTIVE" ||
-        code === "m365_seat_limit_reached" ||
-        code === "M365_ORG_IDENTITY_REQUIRES_ADMIN_MIGRATION" ||
-        code === "m365_organization_provisioning_disabled" ||
-        code === "M365_ORG_PRINCIPAL_PROVISION_FAILED"
-      )
-        return res.status(403).json({ error: { code } });
-      return res.status(401).json({
-        error: { code },
-      });
+      const failure = classifyM365AuthFailure(error);
+      if (failure.status >= 500) logM365Fault("sign-in check", error);
+      return res.status(failure.status).json({ error: { code: failure.code } });
     }
   };
 }
@@ -679,6 +745,18 @@ const requireM365Auth = requireM365Scope("m365.excel.read");
 const requireM365TextAuth = requireM365Scope("m365.text.read");
 
 export const m365Router = Router();
+for (const method of ["get", "post", "put", "patch", "delete"] as const) {
+  const register = (m365Router as any)[method].bind(m365Router);
+  (m365Router as any)[method] = (path: unknown, ...handlers: unknown[]) =>
+    register(
+      path,
+      ...handlers.map((handler) =>
+        typeof handler === "function"
+          ? failSafe(handler as RequestHandler)
+          : handler,
+      ),
+    );
+}
 
 /** Self-service linking of a Microsoft account to a VynorAI account (code flow, see m365Linking.ts). */
 m365Router.use("/link", createM365LinkRouter());
@@ -708,7 +786,7 @@ m365Router.get("/diagnostics", async (req: Request, res: Response) => {
         {
           name: "token",
           ok: false,
-          code: (error as Error).message || "INVALID_OAUTH_TOKEN",
+          code: classifyM365AuthFailure(error).code,
         },
       ],
       ready: { read: false, write: false },
@@ -735,9 +813,9 @@ m365Router.post(
         "m365.excel.read";
       return requireM365Scope(scope)(req, res, next);
     } catch (error) {
-      return res.status(401).json({
-        error: { code: (error as Error).message || "INVALID_OAUTH_TOKEN" },
-      });
+      const failure = classifyM365AuthFailure(error);
+      if (failure.status >= 500) logM365Fault("session check", error);
+      return res.status(failure.status).json({ error: { code: failure.code } });
     }
   },
   async (req: Request, res: Response) => {
@@ -1029,15 +1107,10 @@ m365Router.post(
     } catch (error) {
       const known = error instanceof M365AnalysisError;
       const code = known ? error.code : "AI_ANALYSIS_FAILED";
+      // The code only: `detail` can be a workbook column name and provider messages echo prompts.
       console.error(
         "[m365] excel analysis failed",
-        JSON.stringify({
-          code,
-          detail: known
-            ? error.detail
-            : (error as Error)?.message?.slice(0, 120),
-          correlationId,
-        }),
+        JSON.stringify({ code, correlationId }),
       );
       await logSecurityEvent({
         eventType: "M365_EXCEL_ANALYSIS_FAILED",
@@ -1162,15 +1235,10 @@ m365Router.post(
     } catch (error) {
       const known = error instanceof M365AnalysisError;
       const code = known ? error.code : "AI_SCRIPT_FAILED";
+      // The code only: `detail` can be a workbook column name and provider messages echo prompts.
       console.error(
         "[m365] excel script failed",
-        JSON.stringify({
-          code,
-          detail: known
-            ? error.detail
-            : (error as Error)?.message?.slice(0, 120),
-          correlationId,
-        }),
+        JSON.stringify({ code, correlationId }),
       );
       await logSecurityEvent({
         eventType: "M365_EXCEL_SCRIPT_FAILED",

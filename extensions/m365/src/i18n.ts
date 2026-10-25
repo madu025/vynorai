@@ -57,7 +57,6 @@ export function translate(
 export function localizeMessage(language: Language, text: string): string {
   if (language === "en") return text;
   return languagePack(language)?.localize(text) ?? text;
-  return text;
 }
 
 const ASKS_SINHALA =

@@ -92,10 +92,7 @@ test("M365 diagnostics names each failing gate, then reports ready once onboarde
     );
     assert.equal(capabilities.aiAnalysis, true);
     // Every verdict comes from the shared registry, with its layer and host evidence.
-    assert.equal(
-      capabilities.advanced.forecast.status,
-      "available_with_fallback",
-    );
+    assert.equal(capabilities.advanced.forecast.status, "available");
     assert.equal(
       capabilities.advanced.forecast.execution,
       "deterministic_local",

@@ -6,6 +6,9 @@
 import { localizeAction } from "./messagesActions.js";
 
 const EXACT: Record<string, string> = {
+  "Sign in to refresh capabilities.": "හැකියා නැවත බලන්න පළමුව පිවිසෙන්න.",
+  "Refreshing Excel capability report...":
+    "Excel හැකියා වාර්තාව නැවත බලමින්...",
   "Power Pivot is not available in this add-in. Use a regular PivotTable or a formula report on a new sheet instead.":
     "මෙම add-in එකේ Power Pivot ලබාගත නොහැක. ඒ වෙනුවට අලුත් පත්‍රිකාවක සාමාන්‍ය PivotTable එකක් හෝ සූත්‍ර වාර්තාවක් භාවිතා කරන්න.",
   "The Excel Data Model is not available in this add-in. Use a regular PivotTable or a formula report with lookups across sheets instead.":
@@ -277,6 +280,8 @@ const EXACT: Record<string, string> = {
     "VynorAI සුරක්ෂිත සම්බන්ධතාව සූදානම් කරමින්...",
   "VynorAI connection page opened. Sign in there and confirm the Microsoft account.":
     "VynorAI සම්බන්ධතා පිටුව විවෘත විය. එහි පිවිස Microsoft ගිණුම තහවුරු කරන්න.",
+  "The VynorAI connection window was blocked. Allow pop-ups for this page, then press Connect VynorAI account again.":
+    "VynorAI සම්බන්ධතා කවුළුව අවහිර විය. මෙම පිටුවට pop-ups ඉඩ දී Connect VynorAI account නැවත ඔබන්න.",
   "The connection code expired. Start Connect VynorAI account again.":
     "සම්බන්ධතා කේතය කල් ඉකුත් විය. VynorAI ගිණුම සම්බන්ධ කරන්න නැවත ආරම්භ කරන්න.",
   "The connection is still waiting for confirmation. Finish the browser page, then try Connect VynorAI account again.":
@@ -285,6 +290,10 @@ const EXACT: Record<string, string> = {
     "VynorAI ගිණුම සම්බන්ධ කිරීම අසාර්ථක විය.",
   "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.":
     "මෙම Microsoft ගිණුම තවම VynorAI ගිණුමකට සම්බන්ධ කර නැත. ඉදිරියට යාමට එකක් සම්බන්ධ කරන්න.",
+  "VynorAI account connection required.":
+    "VynorAI ගිණුම සම්බන්ධ කිරීම අවශ්‍යයි.",
+  "Checking your VynorAI account connection...":
+    "ඔබේ VynorAI ගිණුම් සම්බන්ධතාවය පරීක්ෂා කරමින්...",
   "Undo did not finish. Press Undo again.":
     "ආපසු හැරවීම අවසන් නොවීය. නැවත ආපසු හරවන්න ඔබන්න.",
   "Forgot the saved choices for this workbook.":

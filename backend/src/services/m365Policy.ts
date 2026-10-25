@@ -48,7 +48,26 @@ interface JwksResponse {
   keys: Array<Record<string, unknown>>;
 }
 
-let jwksCache: { expiresAt: number; keys: JwksResponse["keys"] } | undefined;
+const JWKS_TTL_MS = 10 * 60_000;
+const JWKS_TIMEOUT_MS = 5_000;
+/** An unknown key id may trigger a refetch, but never more often than this (a forged kid is free). */
+const JWKS_MIN_REFRESH_MS = 30_000;
+
+let jwksCache:
+  | {
+      url: string;
+      expiresAt: number;
+      fetchedAt: number;
+      keys: JwksResponse["keys"];
+    }
+  | undefined;
+let jwksInflight: Promise<JwksResponse["keys"]> | undefined;
+
+/** Test helper: forgets the cached signing keys. */
+export function resetM365JwksCache(): void {
+  jwksCache = undefined;
+  jwksInflight = undefined;
+}
 
 export function entraConfiguration(): {
   tenantId: string;
@@ -98,10 +117,7 @@ export async function validateEntraAccessToken(
       : undefined;
   if (!header?.kid || header.alg !== "RS256")
     throw new Error("invalid_entra_token");
-  const keys = await getJwks(settings.jwksUrl);
-  const jwk = keys.find(
-    (candidate) => candidate.kid === header.kid && candidate.kty === "RSA",
-  );
+  const jwk = await findSigningKey(settings.jwksUrl, header.kid);
   if (!jwk) throw new Error("entra_signing_key_not_found");
   const publicKey = crypto.createPublicKey({
     key: jwk as crypto.JsonWebKey,
@@ -229,17 +245,73 @@ export async function validateM365BearerToken(
   return validateEntraAccessToken(token);
 }
 
-async function getJwks(url: string): Promise<JwksResponse["keys"]> {
-  if (jwksCache && jwksCache.expiresAt > Date.now()) return jwksCache.keys;
-  const response = await fetch(url, {
-    headers: { accept: "application/json" },
-  });
+async function fetchJwks(url: string): Promise<JwksResponse["keys"]> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(JWKS_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error("entra_jwks_unavailable");
+  }
   if (!response.ok) throw new Error("entra_jwks_unavailable");
-  const body = (await response.json()) as JwksResponse;
+  let body: JwksResponse;
+  try {
+    body = (await response.json()) as JwksResponse;
+  } catch {
+    throw new Error("entra_jwks_invalid");
+  }
   if (!Array.isArray(body.keys) || body.keys.length === 0)
     throw new Error("entra_jwks_invalid");
-  jwksCache = { keys: body.keys, expiresAt: Date.now() + 10 * 60_000 };
+  const now = Date.now();
+  jwksCache = {
+    url,
+    keys: body.keys,
+    fetchedAt: now,
+    expiresAt: now + JWKS_TTL_MS,
+  };
   return body.keys;
+}
+
+/**
+ * The signing keys. One fetch is shared by every request that needs it at the same moment, it is
+ * bounded by a timeout, and when Microsoft cannot be reached the last good keys keep serving (a
+ * token is still checked against its signature, so stale keys cannot let a forged token in).
+ */
+async function getJwks(
+  url: string,
+  options: { refresh?: boolean } = {},
+): Promise<JwksResponse["keys"]> {
+  const cached = jwksCache && jwksCache.url === url ? jwksCache : undefined;
+  if (cached && cached.expiresAt > Date.now() && !options.refresh)
+    return cached.keys;
+  if (!jwksInflight) {
+    jwksInflight = fetchJwks(url)
+      .catch((error) => {
+        if (cached) return cached.keys;
+        throw error;
+      })
+      .finally(() => {
+        jwksInflight = undefined;
+      });
+  }
+  return jwksInflight;
+}
+
+/** The key for a token's kid. An unknown kid refreshes the key set once (rate limited), then fails. */
+async function findSigningKey(
+  url: string,
+  kid: string,
+): Promise<Record<string, unknown> | undefined> {
+  const match = (keys: JwksResponse["keys"]) =>
+    keys.find((candidate) => candidate.kid === kid && candidate.kty === "RSA");
+  const found = match(await getJwks(url));
+  if (found) return found;
+  const fetchedAt =
+    jwksCache && jwksCache.url === url ? jwksCache.fetchedAt : 0;
+  if (Date.now() - fetchedAt < JWKS_MIN_REFRESH_MS) return undefined;
+  return match(await getJwks(url, { refresh: true }));
 }
 
 export function validateM365Identity(

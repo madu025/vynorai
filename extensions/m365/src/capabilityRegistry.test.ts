@@ -70,6 +70,11 @@ test("one key set: registry, resolver, native advice and AI text features agree"
   for (const feature of AI_TEXT_FEATURES)
     assert.equal(CAPABILITY_REGISTRY[feature].execution, "masked_ai");
   for (const [feature, spec] of Object.entries(CAPABILITY_REGISTRY)) {
+    if (spec.base === "available_with_fallback")
+      assert.ok(
+        spec.fallback,
+        `${feature} claims a fallback status without a fallback`,
+      );
     if (spec.fallback) {
       assert.ok(CAPABILITY_FEATURES.includes(spec.fallback), feature);
       // A fallback must be something that really runs without a companion or a sandbox.

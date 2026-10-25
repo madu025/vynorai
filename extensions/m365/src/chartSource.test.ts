@@ -168,3 +168,14 @@ test("axis number format follows the sampled numbers", () => {
   assert.equal(axisNumberFormat([3, 5, 9]), undefined);
   assert.equal(axisNumberFormat([]), undefined);
 });
+
+test("headers such as 'Number of Orders' and 'No. of Units' are measures; 'Order No' is an identifier", () => {
+  const picked = pickChartColumns([
+    ["Region", "Order No", "Number of Orders", "No. of Units", "Net Amount"],
+    ["North", 101, 12, 40, 5000.5],
+    ["South", 205, 7, 22, 3100.25],
+    ["East", 377, 15, 51, 6400.75],
+  ]);
+  assert.equal(picked?.label, 0);
+  assert.deepEqual(picked?.values, [2, 3, 4]);
+});

@@ -122,18 +122,25 @@ const READ_BACK_ROWS = 200;
 
 /**
  * Reads the top of a write_values target back and names what Excel changed on the way in, such as
- * an ID that lost its leading zeros or text Excel turned into a number or date. Advisory: a failed
- * read never fails the write. Formulas written as values are skipped, since they read back as results.
+ * an ID that lost its leading zeros or text Excel turned into a number or date. A failed read is
+ * reported as an explicit verification failure; it is never presented as verified. Formulas
+ * written as values are skipped, since they read back as results.
  */
-export async function readBackMismatches(
+export interface ReadBackVerification {
+  verified: boolean;
+  mismatches: string[];
+  error?: string;
+}
+
+export async function verifyReadBack(
   context: any,
   target: any,
   values: unknown[][],
-): Promise<string[]> {
+): Promise<ReadBackVerification> {
   try {
     const rows = Math.min(values.length, READ_BACK_ROWS);
     const columns = values[0]?.length ?? 0;
-    if (!rows || !columns) return [];
+    if (!rows || !columns) return { verified: true, mismatches: [] };
     const back = target.getCell(0, 0).getResizedRange(rows - 1, columns - 1);
     back.load("values");
     await context.sync();
@@ -152,12 +159,31 @@ export async function readBackMismatches(
       row.map((cell, c) => (isFormula(values[r]?.[c]) ? null : cell)),
     );
     // Columns are named by their place in the written range ("column 1" is its first column).
-    return compareWrittenRows(expected, actual, [], expected.length).map(
-      (issue) => issue.message,
-    );
-  } catch {
-    return [];
+    return {
+      verified: true,
+      mismatches: compareWrittenRows(expected, actual, [], expected.length).map(
+        (issue) => issue.message,
+      ),
+    };
+  } catch (error) {
+    return {
+      verified: false,
+      mismatches: [],
+      error: String((error as { message?: unknown })?.message ?? error).slice(
+        0,
+        240,
+      ),
+    };
   }
+}
+
+/** Compatibility helper for callers that need only cell mismatch messages. */
+export async function readBackMismatches(
+  context: any,
+  target: any,
+  values: unknown[][],
+): Promise<string[]> {
+  return (await verifyReadBack(context, target, values)).mismatches;
 }
 
 export function createOfficeAgentHost(
@@ -761,10 +787,10 @@ export async function applyAgentChanges(
           top.load("values");
           await context.sync();
           const firstValues = (top.values as any[][]).map((row) => row[0]);
-          const mismatches =
+          const readBack =
             change.kind === "write_values"
-              ? await readBackMismatches(context, target, change.values)
-              : [];
+              ? await verifyReadBack(context, target, change.values)
+              : { verified: true, mismatches: [] as string[] };
           return {
             address: spill.isNullObject
               ? ((change.kind === "write_formula"
@@ -773,11 +799,18 @@ export async function applyAgentChanges(
               : String(spill.address).split("!").pop(),
             rows,
             first: firstValues,
-            errors: firstValues.filter(
-              (value) =>
-                typeof value === "string" && /^#[A-Z/0!?]+/.test(value),
-            ),
-            ...(mismatches.length ? { mismatches } : {}),
+            errors: [
+              ...firstValues.filter(
+                (value) =>
+                  typeof value === "string" && /^#[A-Z/0!?]+/.test(value),
+              ),
+              ...(readBack.verified ? [] : ["#READ_BACK_VERIFICATION_FAILED"]),
+            ],
+            verification: readBack.verified ? "verified" : "failed",
+            ...(readBack.error ? { verificationError: readBack.error } : {}),
+            ...(readBack.mismatches.length
+              ? { mismatches: readBack.mismatches }
+              : {}),
           };
         }
         if (change.kind === "create_chart") {

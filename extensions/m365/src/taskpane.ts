@@ -363,6 +363,8 @@ const preview = document.querySelector<HTMLElement>("#preview");
 const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const linkVynorai = document.querySelector<HTMLButtonElement>("#link-vynorai");
+const accountLinkCard =
+  document.querySelector<HTMLElement>("#account-link-card");
 const accountLinkButton = document.querySelector<HTMLButtonElement>(
   "#account-link-button",
 );
@@ -1745,6 +1747,8 @@ function updateAuthenticationUi(signedIn: boolean) {
     : vynoraiAccountConnected
       ? "in"
       : "link-required";
+  if (accountLinkCard)
+    accountLinkCard.hidden = !signedIn || vynoraiAccountConnected;
   if (accountLinkButton)
     accountLinkButton.disabled =
       !signedIn || vynoraiAccountConnected || linking;
@@ -1808,9 +1812,7 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
     log.record("api:capabilities", "fail", describeError(error));
     if (needsVynorAccountLink(error)) {
       setLinkActionVisible(true);
-      setStatus(
-        "Connect a VynorAI account to continue with this Microsoft account.",
-      );
+      setStatus("VynorAI account connection required.");
       setAccountLinkStatus(
         "Microsoft sign-in is complete. Connect and confirm your VynorAI account to unlock the workspace.",
       );
@@ -1860,9 +1862,7 @@ async function extendSession(reason: "sign-in" | "renew") {
     if (needsVynorAccountLink(error)) {
       vynoraiAccountConnected = false;
       setLinkActionVisible(true);
-      setStatus(
-        "Connect a VynorAI account to continue with this Microsoft account.",
-      );
+      setStatus("VynorAI account connection required.");
     }
   }
 }
@@ -2039,9 +2039,13 @@ function handleApiError(step: string, error: unknown) {
     return;
   }
   if (["M365_IDENTITY_NOT_LINKED", "tenant_disabled"].includes(error.code)) {
+    vynoraiAccountConnected = false;
     setLinkActionVisible(true);
-    const message =
-      "Connect a VynorAI account to continue with this Microsoft account.";
+    updateAuthenticationUi(Boolean(accessToken));
+    setAccountLinkStatus(
+      "Microsoft sign-in is complete. Connect and confirm your VynorAI account to unlock the workspace.",
+    );
+    const message = "VynorAI account connection required.";
     setStatus(message);
     renderConversation("error", message);
     return;

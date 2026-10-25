@@ -70,6 +70,28 @@ export async function getM365Tenant(
   return row ? toRecord(row) : undefined;
 }
 
+/**
+ * Prepare the policy row needed to start individual-account linking.
+ * This grants no workbook access: the identity still needs an explicit,
+ * verified VynorAI account link before protected Excel routes succeed.
+ * Existing disabled or organization tenants are never changed.
+ */
+export async function ensureIndividualM365TenantForLinking(
+  tenantId: string,
+): Promise<M365TenantRecord> {
+  const existing = await getM365Tenant(tenantId);
+  if (existing) return existing;
+  return upsertM365Tenant({
+    tenantId,
+    status: "enabled",
+    allowedScopes: ["m365.excel.read", "m365.excel.write"],
+    billingMode: "individual",
+    billingStatus: "not_configured",
+    quotaMode: "per_seat",
+    autoProvisionMembers: false,
+  });
+}
+
 export async function listM365Tenants(): Promise<M365TenantRecord[]> {
   const rows = await dbAll<M365TenantRow>(
     "SELECT tenant_id, status, display_name, allowed_scopes, consented_at, ai_enabled, plan_id, seat_limit, subscription_valid_until, billing_mode, billing_status, quota_mode, auto_provision_members, created_at, updated_at, (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = m365_tenants.tenant_id AND enabled = 1) AS active_seats FROM m365_tenants ORDER BY updated_at DESC",

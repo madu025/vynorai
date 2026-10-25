@@ -16,8 +16,10 @@
  *   database copy alone cannot be used to forge or recover a code.
  * - A code is bound to (tenant, object) at creation; whoever redeems it links THAT Microsoft
  *   account, which is why the confirm page shows the masked name and address first.
- * - The tenant must already be enabled by an administrator and have a free seat; an identity linked
- *   to another account (or disabled by an administrator) is never re-pointed or re-enabled.
+ * - A first-time individual tenant gets a non-billed policy row when the Entra proof asks to start
+ *   linking. This grants no workbook access; the identity still needs an explicit verified VynorAI
+ *   account link. Existing disabled tenants and organization tenants are never auto-enabled. An
+ *   identity linked to another account is never re-pointed or re-enabled.
  * - Wrong codes are rate limited per account and per address (lockout), previews per code are capped.
  * - Audit rows carry ids and a short hash of the object id only: no email, code or label.
  */

@@ -349,6 +349,24 @@ test("an Entra identity gets a code, the VynorAI account confirms it, and the pa
   assert.equal(again.json.error.code, "m365_already_linked");
 });
 
+test("a first-time individual tenant can start linking without a tenant admin row", async () => {
+  await dbm.dbRun("DELETE FROM m365_tenants WHERE tenant_id = ?", [tenantId]);
+
+  const start = await call("POST", "/link/start", entraToken());
+  assert.equal(start.status, 200);
+  assert.match(start.json.code, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
+
+  const tenant = await registry.getM365Tenant(tenantId);
+  assert.equal(tenant?.status, "enabled");
+  assert.equal(tenant?.billingMode, "individual");
+  assert.equal(tenant?.billingStatus, "not_configured");
+  assert.equal(tenant?.planId, null);
+  assert.deepEqual(tenant?.allowedScopes, [
+    "m365.excel.read",
+    "m365.excel.write",
+  ]);
+});
+
 test("status polling stays below the action limiter during a normal sign-in wait", async () => {
   await startCode();
   const responses = await Promise.all(

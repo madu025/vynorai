@@ -1040,6 +1040,13 @@ function setLinkActionVisible(visible: boolean) {
   if (linkVynorai) linkVynorai.hidden = !visible;
 }
 
+function needsVynorAccountLink(error: unknown): boolean {
+  return (
+    error instanceof M365ApiError &&
+    ["M365_IDENTITY_NOT_LINKED", "tenant_disabled"].includes(error.code)
+  );
+}
+
 function linkPageUrl(code: string): string {
   if (!config) throw new Error("M365 OAuth configuration is missing.");
   const url = new URL("/link", config.apiBaseUrl);
@@ -1760,13 +1767,10 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
   } catch (error) {
     capabilities = undefined;
     log.record("api:capabilities", "fail", describeError(error));
-    if (
-      error instanceof M365ApiError &&
-      error.code === "M365_IDENTITY_NOT_LINKED"
-    ) {
+    if (needsVynorAccountLink(error)) {
       setLinkActionVisible(true);
       setStatus(
-        "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.",
+        "Connect a VynorAI account to continue with this Microsoft account.",
       );
     }
     updateAuthenticationUi(true);
@@ -1811,13 +1815,10 @@ async function extendSession(reason: "sign-in" | "renew") {
     });
   } catch (error) {
     log.record("session:extend", "fail", describeError(error));
-    if (
-      error instanceof M365ApiError &&
-      error.code === "M365_IDENTITY_NOT_LINKED"
-    ) {
+    if (needsVynorAccountLink(error)) {
       setLinkActionVisible(true);
       setStatus(
-        "This Microsoft account is not connected to a VynorAI account yet. Connect one to continue.",
+        "Connect a VynorAI account to continue with this Microsoft account.",
       );
     }
   }
@@ -1993,10 +1994,10 @@ function handleApiError(step: string, error: unknown) {
     renderConversation("error", message);
     return;
   }
-  if (error.code === "M365_IDENTITY_NOT_LINKED") {
+  if (["M365_IDENTITY_NOT_LINKED", "tenant_disabled"].includes(error.code)) {
     setLinkActionVisible(true);
     const message =
-      "This Microsoft account is not connected to a VynorAI account yet. Use Connect VynorAI account to continue.";
+      "Connect a VynorAI account to continue with this Microsoft account.";
     setStatus(message);
     renderConversation("error", message);
     return;

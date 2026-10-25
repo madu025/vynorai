@@ -15,7 +15,10 @@ import {
   validateEntraAccessToken,
   validateM365Identity,
 } from "../services/m365Policy.js";
-import { requireM365TenantScope } from "../services/m365TenantRegistry.js";
+import {
+  ensureIndividualM365TenantForLinking,
+  requireM365TenantScope,
+} from "../services/m365TenantRegistry.js";
 import {
   LinkErrorCode,
   confirmLinkCode,
@@ -77,6 +80,10 @@ async function requireEntraIdentity(
     const identity = await validateEntraAccessToken(token);
     try {
       validateM365Identity(identity, "m365.excel.read");
+      // Individual onboarding must be able to show the VynorAI connection step
+      // for a first-time tenant. This row carries no plan and grants no Excel
+      // access; protected routes still require the explicit identity link.
+      await ensureIndividualM365TenantForLinking(identity.tenantId);
       await requireM365TenantScope(identity.tenantId, "m365.excel.read");
     } catch (error) {
       const code = (error as Error).message || "M365_POLICY_DENIED";

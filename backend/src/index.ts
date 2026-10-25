@@ -1,3 +1,6 @@
+// First import: makes a rejected async route handler reach the error middleware instead of
+// crashing the worker (Express 4). See services/asyncRoutes.ts.
+import "./services/asyncRoutes.js";
 import cors from "cors";
 import { warmUpLocalSlm } from "./services/localSlmRouter.js";
 import { scheduleRetention } from "./services/retention.js";

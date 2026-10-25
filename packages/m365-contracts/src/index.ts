@@ -59,6 +59,32 @@ export const M365_ANALYSIS_CONTRACT_VERSION =
 export const M365_ADVANCED_ANALYSIS_CONTRACT_VERSION =
   "2026-10-19.excel-advanced-analysis.v1" as const;
 
+/** Commercial boundary for the M365 product. Personal and organisation billing never silently
+ * switch into one another. */
+export type M365BillingMode = "individual" | "organization";
+export type M365BillingStatus =
+  | "not_configured"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "expired";
+export type M365QuotaMode = "per_seat" | "pooled";
+
+export interface M365CommercialStatus {
+  mode: M365BillingMode;
+  billingStatus: M365BillingStatus;
+  quotaMode: M365QuotaMode;
+  organizationName: string | null;
+  directProvisioning: boolean;
+  planId: string;
+  planSource: "tenant" | "user" | "free";
+  validUntil: string | null;
+  seatLimit: number | null;
+  activeSeats: number;
+  seatsRemaining: number | null;
+}
+
 import type { CapabilityFeature, CapabilityStatus } from "./capabilities.js";
 
 export type {

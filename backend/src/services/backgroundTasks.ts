@@ -381,6 +381,22 @@ export async function uploadBackgroundProject(
   }
 }
 
+/**
+ * A page cursor is "<created_at>|<task id>" where created_at is the database's own full-precision
+ * text (PostgreSQL microseconds, SQLite seconds). A bare timestamp from an older client is accepted
+ * too. Anything else is refused before it reaches a typed timestamptz column (a 400, not a 500).
+ */
+export const BACKGROUND_CURSOR_PATTERN =
+  /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}(:?\d{2})?)?(\|[A-Za-z0-9_-]{1,128})?$/;
+
+export function parseBackgroundCursor(
+  cursor: string | undefined,
+): { at: string; id?: string } | undefined {
+  if (!cursor || !BACKGROUND_CURSOR_PATTERN.test(cursor)) return undefined;
+  const [at, id] = cursor.split("|");
+  return id ? { at, id } : { at };
+}
+
 export async function listBackgroundTasks(
   userId: string,
   limit = 20,
@@ -395,19 +411,33 @@ export async function listBackgroundTasks(
     params.push(status);
   }
   if (cursor) {
-    where += " AND created_at < ?";
-    params.push(cursor);
+    const parsed = parseBackgroundCursor(cursor);
+    if (!parsed) throw new Error("BACKGROUND_INVALID_CURSOR");
+    if (parsed.id) {
+      // Same-instant rows are ordered by id, so a page boundary inside one instant loses nothing.
+      where += " AND (created_at < ? OR (created_at = ? AND id < ?))";
+      params.push(parsed.at, parsed.at, parsed.id);
+    } else {
+      where += " AND created_at < ?";
+      params.push(parsed.at);
+    }
   }
   params.push(safeLimit + 1);
-  const rows = await dbAll<TaskRow>(
-    `SELECT * FROM background_tasks WHERE ${where} ORDER BY created_at DESC LIMIT ?`,
+  // cursor_at is the exact stored value as text: the typed PostgreSQL driver returns timestamptz
+  // rounded to milliseconds, which would skip rows that share the last row's millisecond.
+  const rows = await dbAll<TaskRow & { cursor_at?: string }>(
+    `SELECT *, CAST(created_at AS TEXT) AS cursor_at FROM background_tasks WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ?`,
     params,
   );
   const hasMore = rows.length > safeLimit;
   const page = rows.slice(0, safeLimit);
+  const last = page[page.length - 1];
   return {
     tasks: page.map(publicTask),
-    nextCursor: hasMore ? page[page.length - 1]?.created_at : null,
+    nextCursor:
+      hasMore && last
+        ? `${last.cursor_at ?? last.created_at}|${last.id}`
+        : null,
   };
 }
 

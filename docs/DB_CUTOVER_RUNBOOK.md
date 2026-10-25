@@ -51,11 +51,11 @@ git pull -q
 docker compose -f docker-compose.vps.yml build vynor-backend
 
 # 4. Read-only checks, then a fresh verified dump of the live database.
-./deploy/typed-db-cutover.sh preflight
-./deploy/typed-db-cutover.sh backup        # backups/pre-typed-schema-<time>.dump, listed to prove it reads
+bash ./deploy/typed-db-cutover.sh preflight
+bash ./deploy/typed-db-cutover.sh backup        # backups/pre-typed-schema-<time>.dump, listed to prove it reads
 
 # 5. Create vynor_typed, apply the baseline, and dry-run the carry-over (rolled back).
-./deploy/typed-db-cutover.sh prepare
+bash ./deploy/typed-db-cutover.sh prepare
 ```
 
 Read the dry-run report from step 5:
@@ -77,10 +77,10 @@ cd /opt/vynor
 docker stop vynor-background-worker vynor-backend vynor-backend-2
 
 # 7. The real copy (writes only to vynor_typed, in one transaction). Re-running it is harmless.
-./deploy/typed-db-cutover.sh copy
+bash ./deploy/typed-db-cutover.sh copy
 
 # 8. Swap names: vynor -> vynor_old_<today>, vynor_typed -> vynor. DATABASE_URL does not change.
-./deploy/typed-db-cutover.sh swap --yes
+bash ./deploy/typed-db-cutover.sh swap --yes
 
 # 9. Start the new code (the image from step 3) and drop the watchdog guard.
 ./deploy/rolling-deploy.sh        # git pull is a no-op, the build is cached, workers start one by one
@@ -118,7 +118,7 @@ both the database and the code go back:
 ```bash
 cd /opt/vynor
 docker stop vynor-background-worker vynor-backend vynor-backend-2
-./deploy/typed-db-cutover.sh rollback --yes        # vynor -> vynor_typed_failed_<time>, vynor_old_<date> -> vynor
+bash ./deploy/typed-db-cutover.sh rollback --yes        # vynor -> vynor_typed_failed_<time>, vynor_old_<date> -> vynor
 
 # Previous code (rolling-deploy.sh would `git pull` straight back to the new code, so do it by hand):
 git fetch -q && git checkout "$(cat backups/pre-typed-schema.sha)"

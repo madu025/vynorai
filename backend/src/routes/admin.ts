@@ -572,7 +572,10 @@ import {
   listM365Tenants,
   upsertM365Tenant,
 } from "../services/m365TenantRegistry.js";
-import { assertM365SeatAvailable } from "../services/m365Entitlements.js";
+import {
+  assertM365SeatAvailable,
+  linkIdentityWithSeatCheck,
+} from "../services/m365Entitlements.js";
 
 const AdminM365TenantParamSchema = z.object({
   tenantId: z.string().regex(/^[A-Za-z0-9-]{1,128}$/),
@@ -607,23 +610,59 @@ const AdminM365TenantSchema = z.object({
     .datetime({ offset: true })
     .nullable()
     .optional(),
+  billingMode: z.enum(["individual", "organization"]).optional(),
+  billingStatus: z
+    .enum([
+      "not_configured",
+      "trialing",
+      "active",
+      "past_due",
+      "canceled",
+      "expired",
+    ])
+    .optional(),
+  quotaMode: z.enum(["per_seat", "pooled"]).optional(),
+  autoProvisionMembers: z.boolean().optional(),
 });
 const AdminM365IdentitySchema = z.object({
   userId: idParam("userId"),
   enabled: z.boolean().default(true),
 });
 
+/** Paging for admin lists: limit 1-500 (default 100), offset >= 0, optional search text. */
+function adminPaging(req: Request): {
+  limit: number;
+  offset: number;
+  like: string | null;
+} {
+  const limit = Math.min(
+    500,
+    Math.max(1, Math.floor(Number(req.query.limit)) || 100),
+  );
+  const offset = Math.max(0, Math.floor(Number(req.query.offset)) || 0);
+  const raw =
+    typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
+  // The search text is a parameter, and LIKE wildcards in it are escaped (ESCAPE backslash).
+  const like = raw ? `%${raw.toLowerCase().replace(/[\\%_]/g, "\\$&")}%` : null;
+  return { limit, offset, like };
+}
+
 /**
  * GET /admin/users
- * List all users with active subscription plan, suspension status, email verification, and token usage
+ * List users (newest first) with active subscription plan, suspension status, email verification and
+ * token usage. ?limit=&offset=&q= page and search by email or name; the defaults match the old 100.
  */
-adminRouter.get(
-  "/users",
-  requireAdmin,
-  async (_req: Request, res: Response) => {
-    // One row per user: latest active subscription and latest usage cycle.
-    // (Portable SQL — PostgreSQL rejects SQLite's loose GROUP BY.)
-    const users = await dbAll<any>(`
+adminRouter.get("/users", requireAdmin, async (req: Request, res: Response) => {
+  const { limit, offset, like } = adminPaging(req);
+  const params: unknown[] = [like, like, like];
+  const total = await dbGet<{ n: number | string }>(
+    "SELECT COUNT(*) AS n FROM users u WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\'))",
+    params,
+  );
+  // One row per user: latest active subscription and latest usage cycle.
+  // (Portable SQL — PostgreSQL rejects SQLite's loose GROUP BY.)
+  const users = await dbAll<any>(
+    `
     SELECT u.id, u.email, u.name, u.api_key_masked, u.created_at,
            COALESCE(u.is_suspended, 0) as is_suspended, u.allowed_ips,
            COALESCE(u.email_verified, 0) as email_verified,
@@ -638,12 +677,20 @@ adminRouter.get(
       SELECT m2.id FROM monthly_usage m2
       WHERE m2.user_id = u.id
       ORDER BY m2.period_start DESC LIMIT 1)
-    ORDER BY u.created_at DESC
-    LIMIT 100
-  `);
-    res.json({ users, count: users.length });
-  },
-);
+    WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\'))
+    ORDER BY u.created_at DESC, u.id DESC
+    LIMIT ? OFFSET ?
+  `,
+    [...params, limit, offset],
+  );
+  res.json({
+    users,
+    count: users.length,
+    total: Number(total?.n ?? users.length),
+    limit,
+    offset,
+  });
+});
 
 /**
  * GET /admin/subscriptions
@@ -652,15 +699,31 @@ adminRouter.get(
 adminRouter.get(
   "/subscriptions",
   requireAdmin,
-  async (_req: Request, res: Response) => {
-    const subs = await dbAll<any>(`
+  async (req: Request, res: Response) => {
+    const { limit, offset, like } = adminPaging(req);
+    const params: unknown[] = [like, like, like, like];
+    const total = await dbGet<{ n: number | string }>(
+      "SELECT COUNT(*) AS n FROM subscriptions s JOIN users u ON s.user_id = u.id WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(s.order_id) LIKE ? ESCAPE '\\' OR LOWER(s.plan_name) LIKE ? ESCAPE '\\'))",
+      params,
+    );
+    const subs = await dbAll<any>(
+      `
     SELECT s.*, u.email, u.name
     FROM subscriptions s
     JOIN users u ON s.user_id = u.id
-    ORDER BY s.created_at DESC
-    LIMIT 100
-  `);
-    res.json({ subscriptions: subs, count: subs.length });
+    WHERE (? IS NULL OR (LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(s.order_id) LIKE ? ESCAPE '\\' OR LOWER(s.plan_name) LIKE ? ESCAPE '\\'))
+    ORDER BY s.created_at DESC, s.id DESC
+    LIMIT ? OFFSET ?
+  `,
+      [...params, limit, offset],
+    );
+    res.json({
+      subscriptions: subs,
+      count: subs.length,
+      total: Number(total?.n ?? subs.length),
+      limit,
+      offset,
+    });
   },
 );
 
@@ -2202,10 +2265,25 @@ adminRouter.put(
   validateParams(AdminM365TenantParamSchema),
   validateBody(AdminM365TenantSchema),
   async (req: Request, res: Response) => {
-    const tenant = await upsertM365Tenant({
-      tenantId: String(req.params.tenantId),
-      ...req.body,
-    });
+    let tenant;
+    try {
+      tenant = await upsertM365Tenant({
+        tenantId: String(req.params.tenantId),
+        ...req.body,
+      });
+    } catch (error) {
+      const code = (error as Error).message;
+      if (
+        [
+          "invalid_m365_plan",
+          "invalid_m365_seat_limit",
+          "organization_billing_status_required",
+          "organization_plan_required",
+        ].includes(code)
+      )
+        return res.status(422).json({ error: { code } });
+      throw error;
+    }
     await logSecurityEvent({
       eventType:
         tenant.status === "enabled"
@@ -2221,6 +2299,10 @@ adminRouter.put(
         planId: tenant.planId,
         seatLimit: tenant.seatLimit,
         subscriptionValidUntil: tenant.subscriptionValidUntil,
+        billingMode: tenant.billingMode,
+        billingStatus: tenant.billingStatus,
+        quotaMode: tenant.quotaMode,
+        autoProvisionMembers: tenant.autoProvisionMembers,
       }),
       ipAddress: req.ip,
     });
@@ -2260,37 +2342,16 @@ adminRouter.put(
       "SELECT user_id, enabled FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?",
       [tenantId, objectId],
     );
-    if (req.body.enabled) {
-      // The seat check and the write are ONE statement: two admins racing for the last seat cannot
-      // both pass a stale count. Zero rows written means the limit was reached.
-      const tenant = await getM365Tenant(tenantId);
-      const seatLimit = Number(tenant?.seatLimit);
-      const written = await dbRun(
-        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
-       SELECT ?, ?, ?, 1, 'admin'
-       WHERE (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1 AND object_id <> ?) < ?
-       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = excluded.enabled, linked_via = 'admin'`,
-        [
-          tenantId,
-          objectId,
-          req.body.userId,
-          tenantId,
-          objectId,
-          Number.isInteger(seatLimit) && seatLimit >= 1 ? seatLimit : 0,
-        ],
-      );
-      if (!written.changes)
-        return res
-          .status(409)
-          .json({ error: { code: "m365_seat_limit_reached" } });
-    } else {
-      await dbRun(
-        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
-       VALUES (?, ?, ?, 0, 'admin')
-       ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 0, linked_via = 'admin'`,
-        [tenantId, objectId, req.body.userId],
-      );
-    }
+    const linked = await linkIdentityWithSeatCheck({
+      tenantId,
+      objectId,
+      userId: req.body.userId,
+      enabled: req.body.enabled,
+    });
+    if (!linked.ok)
+      return res.status(linked.code === "tenant_disabled" ? 403 : 409).json({
+        error: { code: linked.code },
+      });
     const repointed = Boolean(previous && previous.user_id !== req.body.userId);
     await logSecurityEvent({
       eventType: req.body.enabled

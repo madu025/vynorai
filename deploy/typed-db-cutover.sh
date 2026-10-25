@@ -3,12 +3,12 @@
 # baseline. Database steps only: stopping and starting the backend containers stays in
 # docs/DB_CUTOVER_RUNBOOK.md so every outage step is a deliberate human command.
 #
-#   ./deploy/typed-db-cutover.sh preflight   read-only checks
-#   ./deploy/typed-db-cutover.sh backup      final verified dump of the live database
-#   ./deploy/typed-db-cutover.sh prepare     create the new database, apply the baseline, dry-run the copy
-#   ./deploy/typed-db-cutover.sh copy        the real carry-over (run after the backends are stopped)
-#   ./deploy/typed-db-cutover.sh swap --yes  rename: live -> vynor_old_<date>, new -> live
-#   ./deploy/typed-db-cutover.sh rollback --yes   rename back
+#   bash ./deploy/typed-db-cutover.sh preflight   read-only checks
+#   bash ./deploy/typed-db-cutover.sh backup      final verified dump of the live database
+#   bash ./deploy/typed-db-cutover.sh prepare     create the new database, apply the baseline, dry-run the copy
+#   bash ./deploy/typed-db-cutover.sh copy        the real carry-over (run after the backends are stopped)
+#   bash ./deploy/typed-db-cutover.sh swap --yes  rename: live -> vynor_old_<date>, new -> live
+#   bash ./deploy/typed-db-cutover.sh rollback --yes   rename back
 #
 # Nothing here prints passwords, keys, emails or row values. Every name below can be overridden
 # through the environment, which is how the script is rehearsed against a throwaway PostgreSQL.
@@ -18,6 +18,9 @@ PG_CONTAINER="${PG_CONTAINER:-vynor-postgres}"
 PG_USER="${PG_USER:-vynor}"
 DB_LIVE="${DB_LIVE:-vynor}"
 DB_NEW="${DB_NEW:-vynor_typed}"
+# DB_OLD is today's name for preflight and swap; rollback runs on a later day, so it looks up the
+# newest vynor_old_* database unless DB_OLD is set explicitly (see cmd_rollback).
+DB_OLD_EXPLICIT="${DB_OLD:-}"
 DB_OLD="${DB_OLD:-vynor_old_$(date +%Y%m%d)}"
 BACKEND_CONTAINER="${BACKEND_CONTAINER:-vynor-backend}"
 IMAGE="${IMAGE:-vynor-backend:local}"
@@ -100,21 +103,41 @@ kill_connections() {
   psql_admin -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname IN ('$DB_LIVE', '$DB_NEW', '$DB_OLD') AND pid <> pg_backend_pid()" >/dev/null
 }
 
+# Two renames cannot be one atomic statement. Preconditions are checked first, and if the second
+# rename fails the exact command that restores the first one is printed.
+rename_pair() { # $1 = live now -> $2 ; $3 -> $1
+  local live="$1" aside="$2" incoming="$3"
+  psql_admin -c "ALTER DATABASE \"$live\" RENAME TO \"$aside\"" || die "first rename failed; nothing changed"
+  if ! psql_admin -c "ALTER DATABASE \"$incoming\" RENAME TO \"$live\""; then
+    echo "ERROR: the second rename failed AFTER $live was renamed to $aside. No database is named $live now." >&2
+    echo "Restore with: docker exec -i $PG_CONTAINER psql -U $PG_USER -d postgres -c 'ALTER DATABASE \"$aside\" RENAME TO \"$live\"'" >&2
+    exit 1
+  fi
+}
+
 cmd_swap() {
   [ "${1:-}" = "--yes" ] || die "swap renames databases; re-run with --yes once the backends are stopped"
   db_exists "$DB_NEW" || die "$DB_NEW not found; run prepare and copy first"
   db_exists "$DB_OLD" && die "$DB_OLD already exists"
+  db_exists "$DB_LIVE" || die "live database $DB_LIVE not found"
   kill_connections
-  psql_admin -c "ALTER DATABASE \"$DB_LIVE\" RENAME TO \"$DB_OLD\"" -c "ALTER DATABASE \"$DB_NEW\" RENAME TO \"$DB_LIVE\""
+  rename_pair "$DB_LIVE" "$DB_OLD" "$DB_NEW"
   echo "swapped: the typed database is now $DB_LIVE; the old one is kept as $DB_OLD"
 }
 
 cmd_rollback() {
   [ "${1:-}" = "--yes" ] || die "rollback renames databases; re-run with --yes once the backends are stopped"
+  if [ -z "$DB_OLD_EXPLICIT" ]; then
+    # The cutover day is not necessarily today: take the newest vynor_old_* database.
+    DB_OLD="$(psql_admin -c "SELECT datname FROM pg_database WHERE datname LIKE '${DB_LIVE}\_old\_%' ORDER BY datname DESC LIMIT 1")"
+    [ -n "$DB_OLD" ] || die "no ${DB_LIVE}_old_* database found; nothing to roll back to (set DB_OLD to override)"
+    echo "rolling back to $DB_OLD"
+  fi
   db_exists "$DB_OLD" || die "$DB_OLD not found; nothing to roll back to"
+  db_exists "$DB_LIVE" || die "live database $DB_LIVE not found"
   local failed="${DB_LIVE}_typed_failed_$(date +%Y%m%d%H%M%S)"
   kill_connections
-  psql_admin -c "ALTER DATABASE \"$DB_LIVE\" RENAME TO \"$failed\"" -c "ALTER DATABASE \"$DB_OLD\" RENAME TO \"$DB_LIVE\""
+  rename_pair "$DB_LIVE" "$failed" "$DB_OLD"
   echo "rolled back: $DB_LIVE is the old database again; the typed one is kept as $failed"
   echo "also redeploy the previous code (see docs/DB_CUTOVER_RUNBOOK.md): the new image refuses a legacy database"
 }

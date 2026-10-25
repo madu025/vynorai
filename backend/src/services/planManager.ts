@@ -53,6 +53,15 @@ export function invalidatePlanCache(): void {
   void getEffectivePlans().catch(() => {});
 }
 
+/** True only for "relation/table does not exist" (PostgreSQL 42P01, SQLite "no such table"). */
+function isMissingTable(error: unknown): boolean {
+  const e = error as { code?: string; message?: string };
+  return (
+    e?.code === "42P01" ||
+    /no such table|relation .* does not exist/i.test(String(e?.message ?? ""))
+  );
+}
+
 export async function getEffectivePlans(): Promise<
   Record<string, PlanDefinition>
 > {
@@ -64,25 +73,60 @@ export async function getEffectivePlans(): Promise<
     JSON.stringify(PLANS),
   );
 
+  let overrides: any[] = [];
   try {
-    const overrides = await dbAll<any>(
+    overrides = await dbAll<any>(
       "SELECT * FROM plan_overrides WHERE is_active = 1",
     );
+  } catch (error) {
+    if (!isMissingTable(error)) {
+      // A database blip must not wipe admin price and limit overrides: keep what was loaded last
+      // (retry in 10 s). With nothing loaded yet, use the defaults for this call only, uncached.
+      console.error(
+        "[planManager] plan_overrides read failed:",
+        (error as Error)?.name,
+        (error as Error)?.message,
+      );
+      if (_cache) {
+        _cacheTime = now - CACHE_TTL + 10_000;
+        return _cache;
+      }
+      return plans;
+    }
+  }
+  {
     for (const row of overrides) {
       if (!plans[row.plan_id]) continue;
       const p = plans[row.plan_id];
       if (row.display_name) p.displayName = row.display_name;
-      if (row.monthly_tokens) p.monthlyTokens = row.monthly_tokens;
-      if (row.monthly_requests) p.monthlyRequests = row.monthly_requests;
+      if (row.monthly_tokens != null) p.monthlyTokens = row.monthly_tokens;
+      if (row.monthly_requests != null)
+        p.monthlyRequests = row.monthly_requests;
       if (row.price_lkr != null) p.priceLKR = row.price_lkr;
       if (row.price_usd != null) p.priceUSD = row.price_usd;
       if (row.discount_pct != null) p.discountPct = row.discount_pct;
-      if (row.context_window) p.contextWindow = row.context_window;
+      if (row.context_window != null) p.contextWindow = row.context_window;
       if (row.default_chat_model) p.defaultChatModel = row.default_chat_model;
       if (row.default_autocomplete_model)
         p.defaultAutocompleteModel = row.default_autocomplete_model;
-      if (row.allowed_models) p.allowedModels = JSON.parse(row.allowed_models);
-      if (row.features) p.features = JSON.parse(row.features);
+      // One malformed JSON column skips only that field of that row, never the whole override set.
+      if (row.allowed_models) {
+        try {
+          p.allowedModels = JSON.parse(row.allowed_models);
+        } catch {
+          console.error(
+            "[planManager] bad allowed_models JSON for",
+            row.plan_id,
+          );
+        }
+      }
+      if (row.features) {
+        try {
+          p.features = JSON.parse(row.features);
+        } catch {
+          console.error("[planManager] bad features JSON for", row.plan_id);
+        }
+      }
       if (row.payhere_item_id) p.payhereItemId = row.payhere_item_id;
       if (row.upgrade_url) p.upgradeUrl = row.upgrade_url;
       if (row.background_enabled != null)
@@ -97,8 +141,6 @@ export async function getEffectivePlans(): Promise<
       )
         p.background.priority = row.background_priority;
     }
-  } catch {
-    /* table may not exist yet */
   }
 
   _cache = plans;

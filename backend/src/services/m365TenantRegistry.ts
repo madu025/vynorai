@@ -12,6 +12,15 @@ export const M365_TENANT_SCOPES = [
 ] as const;
 export type M365TenantScope = (typeof M365_TENANT_SCOPES)[number];
 export type M365TenantStatus = "enabled" | "disabled";
+export type M365BillingMode = "individual" | "organization";
+export type M365BillingStatus =
+  | "not_configured"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "expired";
+export type M365QuotaMode = "per_seat" | "pooled";
 
 export interface M365TenantRecord {
   tenantId: string;
@@ -24,6 +33,10 @@ export interface M365TenantRecord {
   seatLimit: number;
   activeSeats: number;
   subscriptionValidUntil: string | null;
+  billingMode: M365BillingMode;
+  billingStatus: M365BillingStatus;
+  quotaMode: M365QuotaMode;
+  autoProvisionMembers: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +52,10 @@ interface M365TenantRow {
   seat_limit: number | null;
   active_seats: number | string | null;
   subscription_valid_until: string | null;
+  billing_mode: M365BillingMode | null;
+  billing_status: M365BillingStatus | null;
+  quota_mode: M365QuotaMode | null;
+  auto_provision_members: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,7 +64,7 @@ export async function getM365Tenant(
   tenantId: string,
 ): Promise<M365TenantRecord | undefined> {
   const row = await dbGet<M365TenantRow>(
-    "SELECT tenant_id, status, display_name, allowed_scopes, consented_at, ai_enabled, plan_id, seat_limit, subscription_valid_until, created_at, updated_at, (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = m365_tenants.tenant_id AND enabled = 1) AS active_seats FROM m365_tenants WHERE tenant_id = ?",
+    "SELECT tenant_id, status, display_name, allowed_scopes, consented_at, ai_enabled, plan_id, seat_limit, subscription_valid_until, billing_mode, billing_status, quota_mode, auto_provision_members, created_at, updated_at, (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = m365_tenants.tenant_id AND enabled = 1) AS active_seats FROM m365_tenants WHERE tenant_id = ?",
     [tenantId],
   );
   return row ? toRecord(row) : undefined;
@@ -55,7 +72,7 @@ export async function getM365Tenant(
 
 export async function listM365Tenants(): Promise<M365TenantRecord[]> {
   const rows = await dbAll<M365TenantRow>(
-    "SELECT tenant_id, status, display_name, allowed_scopes, consented_at, ai_enabled, plan_id, seat_limit, subscription_valid_until, created_at, updated_at, (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = m365_tenants.tenant_id AND enabled = 1) AS active_seats FROM m365_tenants ORDER BY updated_at DESC",
+    "SELECT tenant_id, status, display_name, allowed_scopes, consented_at, ai_enabled, plan_id, seat_limit, subscription_valid_until, billing_mode, billing_status, quota_mode, auto_provision_members, created_at, updated_at, (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = m365_tenants.tenant_id AND enabled = 1) AS active_seats FROM m365_tenants ORDER BY updated_at DESC",
   );
   return rows.map(toRecord);
 }
@@ -70,6 +87,10 @@ export async function upsertM365Tenant(input: {
   planId?: string | null;
   seatLimit?: number;
   subscriptionValidUntil?: string | null;
+  billingMode?: M365BillingMode;
+  billingStatus?: M365BillingStatus;
+  quotaMode?: M365QuotaMode;
+  autoProvisionMembers?: boolean;
 }): Promise<M365TenantRecord> {
   const scopes = normalizeScopes(input.allowedScopes);
   const existing = await getM365Tenant(input.tenantId);
@@ -86,13 +107,30 @@ export async function upsertM365Tenant(input: {
     input.subscriptionValidUntil === undefined
       ? (existing?.subscriptionValidUntil ?? null)
       : input.subscriptionValidUntil;
+  const billingMode =
+    input.billingMode ?? existing?.billingMode ?? "individual";
+  const billingStatus =
+    input.billingStatus ?? existing?.billingStatus ?? "not_configured";
+  const quotaMode = input.quotaMode ?? existing?.quotaMode ?? "per_seat";
+  const autoProvisionMembers =
+    input.autoProvisionMembers ?? existing?.autoProvisionMembers ?? true;
+  if (billingMode === "organization" && billingStatus === "not_configured")
+    throw new Error("organization_billing_status_required");
+  if (
+    billingMode === "organization" &&
+    (billingStatus === "active" || billingStatus === "trialing") &&
+    !planId
+  )
+    throw new Error("organization_plan_required");
   await dbRun(
-    `INSERT INTO m365_tenants (tenant_id, status, display_name, allowed_scopes, consented_at, plan_id, seat_limit, subscription_valid_until)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO m365_tenants (tenant_id, status, display_name, allowed_scopes, consented_at, plan_id, seat_limit, subscription_valid_until, billing_mode, billing_status, quota_mode, auto_provision_members)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(tenant_id) DO UPDATE SET status = excluded.status, display_name = excluded.display_name,
        allowed_scopes = excluded.allowed_scopes, consented_at = excluded.consented_at,
        plan_id = excluded.plan_id, seat_limit = excluded.seat_limit,
-       subscription_valid_until = excluded.subscription_valid_until, updated_at = CURRENT_TIMESTAMP`,
+       subscription_valid_until = excluded.subscription_valid_until, billing_mode = excluded.billing_mode,
+       billing_status = excluded.billing_status, quota_mode = excluded.quota_mode,
+       auto_provision_members = excluded.auto_provision_members, updated_at = CURRENT_TIMESTAMP`,
     [
       input.tenantId,
       input.status,
@@ -102,6 +140,10 @@ export async function upsertM365Tenant(input: {
       planId,
       seatLimit,
       subscriptionValidUntil,
+      billingMode,
+      billingStatus,
+      quotaMode,
+      autoProvisionMembers ? 1 : 0,
     ],
   );
   if (input.aiEnabled !== undefined)
@@ -138,9 +180,29 @@ function toRecord(row: M365TenantRow): M365TenantRecord {
     seatLimit: sanitizeSeatLimit(row.seat_limit),
     activeSeats: Number(row.active_seats || 0),
     subscriptionValidUntil: row.subscription_valid_until || null,
+    billingMode:
+      row.billing_mode === "organization" ? "organization" : "individual",
+    billingStatus: normalizeBillingStatus(row.billing_status),
+    quotaMode: row.quota_mode === "pooled" ? "pooled" : "per_seat",
+    autoProvisionMembers:
+      row.auto_provision_members === null ||
+      Number(row.auto_provision_members) !== 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function normalizeBillingStatus(value: string | null): M365BillingStatus {
+  return [
+    "not_configured",
+    "trialing",
+    "active",
+    "past_due",
+    "canceled",
+    "expired",
+  ].includes(String(value))
+    ? (value as M365BillingStatus)
+    : "not_configured";
 }
 
 /** A missing, zero, negative or non-numeric stored seat limit reads as 1 seat, never as unlimited. */

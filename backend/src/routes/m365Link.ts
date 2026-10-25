@@ -141,19 +141,36 @@ export function createM365LinkRouter(): Router {
       return `m365link:start:${identity?.tenantId}:${identity?.objectId}`;
     },
   });
+  // The pane polls status every two seconds while the user completes the browser link flow.
+  // Keep this bounded by identity and address, but do not apply the normal 60-request link-action
+  // limit: that limit would reject a legitimate four-minute sign-in with HTTP 429.
+  const perStatusAddress = createRateLimiter({
+    windowMs: 10 * 60_000,
+    max: 420,
+    message: "Too many link status checks. Please wait and try again.",
+    keyGenerator: (req) => `m365link:status:address:${clientIp(req)}`,
+  });
+  const perStatusIdentity = createRateLimiter({
+    windowMs: 10 * 60_000,
+    max: 240,
+    message: "Too many link status checks. Please wait and try again.",
+    keyGenerator: (req) => {
+      const identity = (req as any).m365LinkIdentity;
+      return `m365link:status:${identity?.tenantId}:${identity?.objectId}`;
+    },
+  });
   const perAccount = createRateLimiter({
     windowMs: 15 * 60_000,
     max: 40,
     message: "Too many link attempts. Please try again later.",
     keyGenerator: (req) => `m365link:user:${(req as any).user?.id}`,
   });
-  router.use(perAddress);
-
   // --- Microsoft side (Excel add-in) -----------------------------------------------------------
   router.post(
     "/start",
     requireEntraIdentity,
     perIdentity,
+    perAddress,
     async (req: Request, res: Response) => {
       const identity = (req as any).m365LinkIdentity;
       try {
@@ -172,6 +189,8 @@ export function createM365LinkRouter(): Router {
   router.get(
     "/status",
     requireEntraIdentity,
+    perStatusAddress,
+    perStatusIdentity,
     async (req: Request, res: Response) => {
       const identity = (req as any).m365LinkIdentity;
       try {
@@ -186,6 +205,7 @@ export function createM365LinkRouter(): Router {
   router.post(
     "/preview",
     requireWebSession,
+    perAddress,
     perAccount,
     async (req: Request, res: Response) => {
       const body = codeBody.safeParse(req.body);
@@ -211,6 +231,7 @@ export function createM365LinkRouter(): Router {
   router.post(
     "/confirm",
     requireWebSession,
+    perAddress,
     perAccount,
     async (req: Request, res: Response) => {
       const body = codeBody.safeParse(req.body);
@@ -234,6 +255,7 @@ export function createM365LinkRouter(): Router {
   router.get(
     "/mine",
     requireWebSession,
+    perAddress,
     async (req: Request, res: Response) => {
       try {
         const links = await listOwnLinks(String((req as any).user.id));
@@ -272,8 +294,8 @@ export function createM365LinkRouter(): Router {
       return res.status(500).json({ error: { code: "link_failed" } });
     }
   };
-  router.delete("/", requireWebSession, perAccount, unlink);
-  router.post("/unlink", requireWebSession, perAccount, unlink);
+  router.delete("/", requireWebSession, perAddress, perAccount, unlink);
+  router.post("/unlink", requireWebSession, perAddress, perAccount, unlink);
 
   return router;
 }

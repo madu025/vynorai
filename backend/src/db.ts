@@ -1297,6 +1297,67 @@ const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: "043_m365_commercial_modes",
+    description:
+      "Separate individual and organization M365 products with direct Entra principal provisioning",
+    up: async () => {
+      await addColumnIfNotExists(
+        "users",
+        "account_kind VARCHAR(32) NOT NULL DEFAULT 'personal'",
+      );
+      await addColumnIfNotExists(
+        "m365_tenants",
+        "billing_mode VARCHAR(16) NOT NULL DEFAULT 'individual'",
+      );
+      await addColumnIfNotExists(
+        "m365_tenants",
+        "billing_status VARCHAR(24) NOT NULL DEFAULT 'not_configured'",
+      );
+      await addColumnIfNotExists(
+        "m365_tenants",
+        "quota_mode VARCHAR(16) NOT NULL DEFAULT 'per_seat'",
+      );
+      await addColumnIfNotExists(
+        "m365_tenants",
+        "auto_provision_members INTEGER NOT NULL DEFAULT 1",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_org_principal ON users(account_kind)",
+      );
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_tenant_billing ON m365_tenants(billing_mode, billing_status)",
+      );
+    },
+  },
+  {
+    version: "044_m365_organization_billing",
+    description:
+      "Tenant-scoped PayHere orders for organization M365 subscriptions",
+    up: async () => {
+      await execSchema(`CREATE TABLE IF NOT EXISTS m365_tenant_billing_orders (
+        id VARCHAR(128) PRIMARY KEY,
+        tenant_id VARCHAR(128) NOT NULL,
+        payer_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        plan_name VARCHAR(64) NOT NULL,
+        status VARCHAR(16) NOT NULL CHECK(status IN ('pending', 'active', 'cancelled', 'failed', 'chargedback')),
+        order_id VARCHAR(160) NOT NULL UNIQUE,
+        payment_id VARCHAR(128),
+        amount_minor BIGINT NOT NULL CHECK(amount_minor > 0),
+        amount NUMERIC NOT NULL CHECK(amount > 0),
+        currency VARCHAR(3) NOT NULL,
+        valid_until DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      await execSchema(
+        "CREATE INDEX IF NOT EXISTS idx_m365_org_billing_tenant ON m365_tenant_billing_orders(tenant_id, created_at DESC)",
+      );
+      await execSchema(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_m365_org_billing_payment ON m365_tenant_billing_orders(payment_id) WHERE payment_id IS NOT NULL",
+      );
+    },
+  },
 ];
 
 /** Partial unique index (static SQL), created only when the existing rows have no duplicates. */
@@ -1394,7 +1455,14 @@ function startVerificationCleanup(): void {
       await dbRun(
         "DELETE FROM password_reset_tokens WHERE expires_at < CURRENT_TIMESTAMP OR used_at IS NOT NULL",
       );
-    } catch (e) {}
+    } catch (e) {
+      // Cleanup is best effort, but a failing database must be visible (names only, no data).
+      console.warn(
+        "[DB] expired-token cleanup failed:",
+        (e as Error)?.name,
+        (e as Error)?.message,
+      );
+    }
   }, 3600_000).unref();
 }
 

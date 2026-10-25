@@ -73,9 +73,11 @@ import {
   interpretInstruction,
   looksLikeQuestion,
 } from "./intent.js";
+import { openExternalPage } from "./openExternalPage.js";
 import {
   LINK_POLL_INTERVAL_MS,
   LINK_POLL_MAX_ATTEMPTS,
+  checkLinkStatus,
   linkPollOutcome,
   type LinkPollOutcome,
 } from "./linkPolling.js";
@@ -435,6 +437,8 @@ const clearDiagnostics =
   document.querySelector<HTMLButtonElement>("#clear-diagnostics");
 const diagnostics = document.querySelector<HTMLElement>("#diagnostics");
 const summary = document.querySelector<HTMLElement>("#diagnostics-summary");
+const commercialStatus =
+  document.querySelector<HTMLElement>("#commercial-status");
 const DIAGNOSTICS_PLACEHOLDER = "No sign-in diagnostics yet.";
 let accessToken = "";
 /** Short-lived Microsoft proof retained in memory for the account-link handoff only. */
@@ -1045,6 +1049,12 @@ function linkPageUrl(code: string): string {
 }
 
 function openLinkPage(url: string): Promise<void> {
+  // A blocked tab cannot be told apart from an opened one reliably inside Excel's web view, and the
+  // person can still open the page from the code shown in the pane, so this never rejects.
+  const openTab = () => {
+    const opened = openExternalPage(window, url);
+    log.record("m365-link:tab-open", opened ? "pass" : "fail");
+  };
   return new Promise((resolve, reject) => {
     const host = office();
     if (host?.context?.ui?.displayDialogAsync) {
@@ -1062,19 +1072,14 @@ function openLinkPage(url: string): Promise<void> {
             "fail",
             `${result.error?.code || "unknown"} ${result.error?.message || ""}`,
           );
-          const browser = window.open(url, "_blank", "noopener,noreferrer");
-          if (browser) {
-            resolve();
-            return;
-          }
-          reject(new Error("The VynorAI connection window was blocked."));
+          openTab();
+          resolve();
         },
       );
       return;
     }
-    const browser = window.open(url, "_blank", "noopener,noreferrer");
-    if (browser) resolve();
-    else reject(new Error("The VynorAI connection window was blocked."));
+    openTab();
+    resolve();
   });
 }
 
@@ -1094,8 +1099,12 @@ async function acquireMicrosoftTokenForLink(): Promise<string> {
   return microsoftAccessToken;
 }
 
+/** True while a "Connect VynorAI account" hand-off runs, so a second click cannot start a second one. */
+let linking = false;
+
 async function connectVynoraiAccount() {
-  if (!config || !linkVynorai) return;
+  if (!config || !linkVynorai || linking) return;
+  linking = true;
   linkVynorai.disabled = true;
   setStatus("Preparing the secure VynorAI connection...");
   try {
@@ -1135,7 +1144,10 @@ async function connectVynoraiAccount() {
       await new Promise((resolve) =>
         setTimeout(resolve, LINK_POLL_INTERVAL_MS),
       );
-      const state = await microsoftApiClient().m365LinkStatus();
+      const state = await checkLinkStatus(() =>
+        microsoftApiClient().m365LinkStatus(),
+      );
+      if (!state) continue; // one bad answer does not end the wait
       outcome = linkPollOutcome(state);
       if (outcome === "linked") {
         setLinkActionVisible(false);
@@ -1169,6 +1181,7 @@ async function connectVynoraiAccount() {
           `${status.textContent ?? ""} ${describeError(error).slice(0, 240)}`.trim();
     }
   } finally {
+    linking = false;
     linkVynorai.disabled = false;
   }
 }
@@ -1680,7 +1693,7 @@ emailSend?.addEventListener("click", async () => {
 
 function updateAuthenticationUi(signedIn: boolean) {
   if (signIn) signIn.disabled = signedIn;
-  if (linkVynorai) linkVynorai.disabled = !signedIn;
+  if (linkVynorai) linkVynorai.disabled = !signedIn || linking;
   if (signOut) signOut.disabled = !signedIn;
   if (inspect)
     inspect.disabled = !signedIn || capabilities?.excel.canInspect === false;
@@ -1695,7 +1708,27 @@ function updateAuthenticationUi(signedIn: boolean) {
     smartRun.disabled = !signedIn || capabilities?.excel.canInspect === false;
   if (runMode) runMode.disabled = !signedIn;
   updateEmailUi(signedIn);
+  renderCommercialStatus(signedIn ? capabilities : undefined);
   document.body.dataset.auth = signedIn ? "in" : "out";
+}
+
+function renderCommercialStatus(value: M365Capabilities | undefined) {
+  if (!commercialStatus) return;
+  const commercial = value?.commercial;
+  const subscription = value?.subscription;
+  if (!commercial || !subscription) {
+    commercialStatus.hidden = true;
+    commercialStatus.textContent = "";
+    return;
+  }
+  const organization = commercial.mode === "organization";
+  const label = organization
+    ? `Organization workspace${commercial.organizationName ? ` · ${commercial.organizationName}` : ""}`
+    : "Individual workspace";
+  const quota =
+    commercial.quotaMode === "pooled" ? "shared quota" : "per-seat quota";
+  commercialStatus.textContent = `${label} · ${subscription.planDisplayName} · ${quota}`;
+  commercialStatus.hidden = false;
 }
 
 async function refreshCapabilities(reason: "oauth" | "restore") {
@@ -2110,10 +2143,7 @@ signOut?.addEventListener("click", signOutOfMicrosoft);
 function startFreshChat() {
   persistConversation();
   chatStore = startNewChat(chatStore);
-  delete document.body.dataset.chatHistoryOpen;
-  document
-    .querySelector<HTMLSelectElement>("#chat-history-select")
-    ?.setAttribute("hidden", "");
+  closeChatHistoryPicker();
   showChat([]);
   setStatus(translate(language, "new_chat_ready", NEW_CHAT_READY_STATUS));
   instruction?.focus();
@@ -2122,38 +2152,32 @@ function startFreshChat() {
 document
   .querySelectorAll<HTMLButtonElement>(".new-chat-action")
   .forEach((button) => button.addEventListener("click", startFreshChat));
-document
-  .querySelector<HTMLSelectElement>("#chat-history-select")
-  ?.addEventListener("change", (event) => {
-    const id = (event.target as HTMLSelectElement).value;
-    if (!id) return startFreshChat();
-    persistConversation();
-    chatStore = openChat(chatStore, id);
-    showChat(activeMessages(chatStore));
-    delete document.body.dataset.chatHistoryOpen;
-    (event.target as HTMLSelectElement).setAttribute("hidden", "");
-  });
-function closeChatHistoryPicker() {
+/** The history list is the custom popover; the old hidden <select> is only kept for the chat view's ids. */
+function chatHistoryOpen(): boolean {
+  const popover = document.querySelector<HTMLElement>("#chat-history-popover");
+  return Boolean(popover && !popover.hidden);
+}
+function closeChatHistoryPicker(restoreFocus = false) {
+  const wasOpen = chatHistoryOpen();
   delete document.body.dataset.chatHistoryOpen;
-  document
-    .querySelector<HTMLSelectElement>("#chat-history-select")
-    ?.setAttribute("hidden", "");
   document
     .querySelector<HTMLElement>("#chat-history-popover")
     ?.setAttribute("hidden", "");
-}
-document
-  .querySelector<HTMLSelectElement>("#chat-history-select")
-  ?.addEventListener("blur", () =>
-    window.setTimeout(closeChatHistoryPicker, 150),
-  );
-document
-  .querySelector<HTMLSelectElement>("#chat-history-select")
-  ?.addEventListener("keydown", (event) => {
-    if ((event as KeyboardEvent).key !== "Escape") return;
-    closeChatHistoryPicker();
+  if (restoreFocus && wasOpen)
     document.querySelector<HTMLButtonElement>("#open-chat-history")?.focus();
-  });
+}
+// Escape and a click outside close the list; Escape also hands the keyboard back to its button.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !chatHistoryOpen()) return;
+  event.preventDefault(); // the Escape that discards a preview must not also fire
+  closeChatHistoryPicker(true);
+});
+document.addEventListener("click", (event) => {
+  if (!chatHistoryOpen()) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("#chat-history-popover, #open-chat-history")) return;
+  closeChatHistoryPicker();
+});
 document
   .querySelector<HTMLButtonElement>("#open-chat-history")
   ?.addEventListener("click", () => {
@@ -2170,10 +2194,7 @@ document
   });
 document
   .querySelector<HTMLButtonElement>("#close-chat-history")
-  ?.addEventListener("click", () => {
-    closeChatHistoryPicker();
-    document.querySelector<HTMLButtonElement>("#open-chat-history")?.focus();
-  });
+  ?.addEventListener("click", () => closeChatHistoryPicker(true));
 document
   .querySelector<HTMLElement>("#chat-history-list")
   ?.addEventListener("click", async (event) => {
@@ -2197,7 +2218,7 @@ document
       writeChatStore();
       if (wasActive) showChat([]);
       else renderChatList();
-      if (!historyList(chatStore).length) closeChatHistoryPicker();
+      if (!historyList(chatStore).length) closeChatHistoryPicker(true);
       return;
     }
     const open = target.closest<HTMLButtonElement>("[data-chat-id]");
@@ -2205,7 +2226,7 @@ document
     if (!id) return;
     persistConversation();
     chatStore = openChat(chatStore, id);
-    closeChatHistoryPicker();
+    closeChatHistoryPicker(true);
     showChat(activeMessages(chatStore));
   });
 document.querySelector("#delete-chat")?.addEventListener("click", async () => {
@@ -3807,23 +3828,11 @@ function setupLayout() {
   const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle");
   const menu = document.querySelector<HTMLElement>("#menu");
   const brandActions = document.querySelector<HTMLElement>(".brand-actions");
-  const chatHistorySelect = document.querySelector<HTMLSelectElement>(
-    "#chat-history-select",
-  );
-  const deleteChat = document.querySelector<HTMLButtonElement>("#delete-chat");
   // The signed-in status strip intentionally collapses. Keep its settings trigger with the
   // other header actions instead of leaving a detached ellipsis in an otherwise empty row.
   if (menuToggle && menu && brandActions) {
     menuToggle.classList.add("header-action");
     brandActions.append(menuToggle, menu);
-  }
-  if (chatHistorySelect && brandActions) brandActions.append(chatHistorySelect);
-  if (deleteChat && brandActions) {
-    deleteChat.classList.add("header-action");
-    deleteChat.removeAttribute("data-i18n");
-    deleteChat.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M7 7l1 13h8l1-13" /></svg>';
-    brandActions.append(deleteChat);
   }
   const advancedWorkbookOptions = document.querySelector<HTMLButtonElement>(
     "#advanced-workbook-options",
@@ -3868,7 +3877,10 @@ function setupLayout() {
     // Escape from an open menu gives the keyboard back to the button that opened it.
     const wasOpen = Boolean(menu && !menu.hidden);
     closeMenu();
-    if (wasOpen) menuToggle?.focus();
+    if (wasOpen) {
+      event.preventDefault(); // closing the menu must not also discard a pending preview
+      menuToggle?.focus();
+    }
   });
   advancedWorkbookOptions?.addEventListener("click", () => {
     if (!prefsCard) return;
@@ -5154,16 +5166,19 @@ languageButton?.addEventListener("click", (event) => {
 });
 /** Sinhala and Tamil are downloaded on first use; if that fails the pane stays in English. */
 async function switchLanguage(chosen: Language) {
+  let loaded = true;
   try {
     await ensureLanguagePack(chosen);
   } catch {
+    loaded = false;
     chosen = "en";
     setStatus(
       "Could not load that language. Check the connection and try again.",
     );
   }
   language = chosen;
-  saveLanguage(language);
+  // A failed download is a network blip, not a choice: keep the saved language so the next open retries.
+  if (loaded) saveLanguage(language);
   refreshLanguage();
 }
 refreshLanguage();
@@ -5935,6 +5950,13 @@ function refreshAgentChecked() {
 // Escape discards an open preview or plan, unless the person is typing.
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.defaultPrevented) return;
+  // Escape belongs to whatever overlay is open first; only then may it discard a preview.
+  if (
+    chatHistoryOpen() ||
+    document.querySelector("#menu:not([hidden])") ||
+    document.querySelector('[role="dialog"][aria-modal="true"]')
+  )
+    return;
   const active = document.activeElement;
   if (
     active instanceof HTMLTextAreaElement ||
@@ -6113,7 +6135,9 @@ async function agentModel(messages: AgentMessage[]) {
         language: agentLanguage(),
         messages,
       }),
-    { shouldStop: () => agentStopped },
+    // The call is billed: a lost connection may have reached the server, so only an explicit
+    // "busy" answer (502/503/504/429/521-523/525) is retried, never a bare network error.
+    { shouldStop: () => agentStopped, retryNetworkErrors: false },
   );
   const reply = response?.reply;
   if (!reply || !Array.isArray(reply.tool_calls))

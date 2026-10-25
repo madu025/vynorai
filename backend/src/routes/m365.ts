@@ -38,6 +38,7 @@ import {
   getM365Capabilities,
 } from "../services/m365Diagnostics.js";
 import { resolveM365Entitlement } from "../services/m365Entitlements.js";
+import { ensureM365OrganizationPrincipal } from "../services/m365Organization.js";
 import {
   analyzeSchemaSummary,
   ANALYSIS_CONTRACT_VERSION,
@@ -567,9 +568,13 @@ function requireM365Scope(requiredScope: M365Scope) {
       const m365Identity = await validateM365BearerToken(
         authorization.slice("Bearer ".length).trim(),
       );
+      let tenantRecord: Awaited<ReturnType<typeof requireM365TenantScope>>;
       try {
         validateM365Identity(m365Identity, requiredScope);
-        await requireM365TenantScope(m365Identity.tenantId, requiredScope);
+        tenantRecord = await requireM365TenantScope(
+          m365Identity.tenantId,
+          requiredScope,
+        );
       } catch (error) {
         const code = (error as Error).message || "M365_POLICY_DENIED";
         if (code === "tenant_disabled") {
@@ -582,6 +587,17 @@ function requireM365Scope(requiredScope: M365Scope) {
           });
         }
         return res.status(403).json({ error: { code } });
+      }
+      const entitlementBeforeIdentity = await resolveM365Entitlement(
+        m365Identity.tenantId,
+        m365Identity.objectId,
+      );
+      if (tenantRecord.billingMode === "organization") {
+        await ensureM365OrganizationPrincipal(
+          m365Identity,
+          tenantRecord,
+          entitlementBeforeIdentity,
+        );
       }
       const link = await findM365IdentityLink(
         m365Identity.tenantId,
@@ -622,8 +638,19 @@ function requireM365Scope(requiredScope: M365Scope) {
         m365Entitlement: entitlement,
         m365Quota: {
           tenantId: m365Identity.tenantId,
-          objectId: m365Identity.objectId,
+          objectId:
+            tenantRecord.quotaMode === "pooled"
+              ? "__organization__"
+              : m365Identity.objectId,
           planSource: entitlement.source,
+        },
+        m365Commercial: {
+          mode: tenantRecord.billingMode,
+          billingStatus: tenantRecord.billingStatus,
+          quotaMode: tenantRecord.quotaMode,
+          isOrganizationPrincipal:
+            link.linked_via === "organization" &&
+            link.account_kind === "m365_org_principal",
         },
       };
       next();
@@ -633,6 +660,14 @@ function requireM365Scope(requiredScope: M365Scope) {
         return res
           .status(500)
           .json({ error: { code: "M365_TENANT_LOOKUP_FAILED" } });
+      if (
+        code === "M365_ORG_BILLING_INACTIVE" ||
+        code === "m365_seat_limit_reached" ||
+        code === "M365_ORG_IDENTITY_REQUIRES_ADMIN_MIGRATION" ||
+        code === "m365_organization_provisioning_disabled" ||
+        code === "M365_ORG_PRINCIPAL_PROVISION_FAILED"
+      )
+        return res.status(403).json({ error: { code } });
       return res.status(401).json({
         error: { code },
       });
@@ -768,7 +803,7 @@ m365Router.post(
     const usage = await getOrInitM365Usage(
       m365Scope({
         tenantId: tenant.tenantId,
-        objectId: tenant.objectId,
+        objectId: user.m365Quota?.objectId ?? tenant.objectId,
         userId: user.id,
       }),
       {

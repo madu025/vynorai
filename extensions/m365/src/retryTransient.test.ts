@@ -91,3 +91,29 @@ test("a refusal or a stop is never retried", async () => {
   );
   assert.equal(calls, 1, "pressing Stop ends the retries");
 });
+
+test("a billed call can opt out of retrying a lost connection but still retries a busy answer", async () => {
+  assert.equal(isTransient(coded("NETWORK_ERROR"), { network: false }), false);
+  assert.equal(isTransient(coded("HTTP_503"), { network: false }), true);
+  let calls = 0;
+  await assert.rejects(
+    retryTransient(
+      async () => {
+        calls += 1;
+        throw coded("NETWORK_ERROR");
+      },
+      { retryNetworkErrors: false, wait: async () => {} },
+    ),
+  );
+  assert.equal(calls, 1);
+  let busy = 0;
+  const value = await retryTransient(
+    async () => {
+      busy += 1;
+      if (busy < 2) throw coded("HTTP_503");
+      return "ok";
+    },
+    { retryNetworkErrors: false, wait: async () => {} },
+  );
+  assert.equal(value, "ok");
+});

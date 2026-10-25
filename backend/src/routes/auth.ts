@@ -17,6 +17,12 @@ import {
   billingRun as dbRun,
 } from "../services/billingDb.js";
 import { authRateLimiter } from "../middleware/security.js";
+import { describeError } from "../services/httpHygiene.js";
+import {
+  rotateUserApiKey,
+  windowCount,
+  windowHit,
+} from "../services/accountSecurity.js";
 import {
   sendPasswordResetEmail,
   sendVerificationEmail,
@@ -63,12 +69,25 @@ const ignoreMissingTable =
   };
 const getClientIp = (req: Request) =>
   (req.headers["cf-connecting-ip"] as string) || req.ip || "unknown";
+/** A real bcrypt hash (cost 12) of a random value: compared against when the account does not exist. */
+let cachedDummyHash: string | undefined;
+function dummyPasswordHash(): string {
+  cachedDummyHash ??= bcrypt.hashSync(
+    crypto.randomBytes(16).toString("hex"),
+    12,
+  );
+  return cachedDummyHash;
+}
 // Plain address characters only: no quotes, angle brackets or spaces, so an
 // email can never carry markup into the dashboards that display it.
 const EMAIL_RE =
   /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
 const MAX_EMAIL_LENGTH = 254;
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
+export const VERIFICATION_RESEND_COOLDOWN_MS = 60_000;
+export const VERIFICATION_DAILY_SEND_CAP = 5;
+/** 3 codes' worth of guesses per day: bounds brute force of the 6-digit code across resends. */
+export const VERIFICATION_DAILY_FAILURE_CAP = 15;
 
 const IDE_AUTH_VALUE_RE = /^[a-f0-9]{64}$/i;
 const ideAuthorizationCodes = new IdeAuthorizationCodeStore(getRedis, {
@@ -167,6 +186,18 @@ export const DeleteAccountBodySchema = z.object({
     .trim()
     .toLowerCase()
     .min(1, "Type your account email exactly to confirm deletion."),
+  // Deleting is irreversible, so a stolen session alone must not be enough: the current password
+  // is required. An account created with Google has no password it knows: it first uses
+  // "Forgot password" (the reset link proves the mailbox) to set one, then deletes.
+  password: z
+    .string({
+      error:
+        "Enter your current password to delete the account. Signed in with Google? Use Forgot password to set one first.",
+    })
+    .min(
+      1,
+      "Enter your current password to delete the account. Signed in with Google? Use Forgot password to set one first.",
+    ),
 });
 
 // Middleware to authenticate JWT or API Key
@@ -187,7 +218,7 @@ export async function requireAuth(
     try {
       const keyHash = sha256(token);
       const user = await dbGet<any>(
-        "SELECT id, email, name, api_key_masked, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE api_key_hash = ?",
+        "SELECT id, email, name, api_key_masked, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE api_key_hash = ? AND COALESCE(account_kind, 'personal') = 'personal'",
         [keyHash],
       );
       if (!user) {
@@ -206,33 +237,57 @@ export async function requireAuth(
     }
   }
 
-  // 2. Support JWT Bearer token authentication
+  // 2. Support JWT Bearer token authentication.
+  // A token that fails verification is a 401. A database failure is a server fault (5xx): answering
+  // 401 would make the web pages delete a perfectly good stored session on a transient outage.
+  let payload: ReturnType<typeof verifyUserSession>;
   try {
-    const payload = verifyUserSession(token);
-    const user = await dbGet<any>(
-      "SELECT id, email, name, api_key, api_key_encrypted, api_key_masked, password_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE id = ?",
-      [payload.userId],
-    );
-    if (!user) {
-      return res.status(401).json({ error: "User not found" });
-    }
-    // A password change or reset ends every older session.
-    if (sessionPredatesPasswordChange(payload, user.password_hash)) {
-      return res.status(401).json({ error: "Invalid or expired token" });
-    }
-    // The hash is only for the check above: it must never travel further on req.user.
-    delete user.password_hash;
-    if (user.is_suspended === 1) {
-      return res.status(403).json({
-        error:
-          "Your account has been suspended for security violations. Contact security@vynor.lk",
-      });
-    }
-    (req as any).user = user;
-    next();
-  } catch (err) {
+    payload = verifyUserSession(token);
+  } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+  let user: any;
+  try {
+    user = await dbGet<any>(
+      "SELECT id, email, name, api_key, api_key_encrypted, api_key_masked, password_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips, COALESCE(email_verified, 0) as email_verified FROM users WHERE id = ? AND COALESCE(account_kind, 'personal') = 'personal'",
+      [payload.userId],
+    );
+  } catch {
+    return res.status(503).json({ error: "Authentication check failed" });
+  }
+  if (!user) {
+    return res.status(401).json({ error: "User not found" });
+  }
+  // A password change or reset ends every older session.
+  if (sessionPredatesPasswordChange(payload, user.password_hash)) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+  // The hash is only for the check above: it must never travel further on req.user.
+  delete user.password_hash;
+  if (user.is_suspended === 1) {
+    return res.status(403).json({
+      error:
+        "Your account has been suspended for security violations. Contact security@vynor.lk",
+    });
+  }
+  (req as any).user = user;
+  next();
+}
+
+/** A web session (JWT) only: IDE API keys must not manage the account or its credentials. */
+export function requireWebSession(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const token = (req.headers.authorization || "")
+    .slice("Bearer ".length)
+    .trim();
+  if (token.startsWith("vynor_live_"))
+    return res.status(403).json({
+      error: "This action needs a signed-in web session, not an API key.",
+    });
+  return next();
 }
 
 // Always return the same response so this endpoint cannot enumerate accounts.
@@ -271,7 +326,12 @@ authRouter.post(
         "INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
         [uuidv4(), user.id, sha256(token), expiresAt],
       );
-      await sendPasswordResetEmail(user.email, user.name || "", token);
+      // The mail goes out after the response: awaiting it only for existing accounts would let the
+      // response time tell which addresses have an account.
+      void sendPasswordResetEmail(user.email, user.name || "", token).catch(
+        (error) =>
+          console.error("Password reset mail failed:", describeError(error)),
+      );
       await logSecurityEvent({
         eventType: "PASSWORD_RESET_REQUESTED",
         severity: "INFO",
@@ -281,7 +341,7 @@ authRouter.post(
         ipAddress: getClientIp(req),
       });
     } catch (error) {
-      console.error("Password reset request failed:", error);
+      console.error("Password reset request failed:", describeError(error));
     }
     return res.json(generic);
   },
@@ -319,6 +379,13 @@ authRouter.post(
       "UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND id != ? AND used_at IS NULL",
       [record.user_id, record.id],
     );
+    // Proving the mailbox makes the account its owner's: the API key a registrant (or a thief) saw
+    // must stop working together with the old password. The person signs in again to see the new key.
+    const rotatedKey = await rotateUserApiKey(dbRun, record.user_id);
+    if (!rotatedKey)
+      console.error(
+        "[Auth] Reset completed but the API key could not be rotated (key encryption unavailable)",
+      );
     invalidateAuthCache();
     await logSecurityEvent({
       eventType: "PASSWORD_RESET_COMPLETED",
@@ -467,6 +534,8 @@ export async function verifyTurnstileToken(
       {
         method: "POST",
         body: formData,
+        // A slow siteverify endpoint must not hang sign-up.
+        signal: AbortSignal.timeout(5000),
       },
     );
     const outcome = (await res.json()) as { success: boolean };
@@ -617,10 +686,13 @@ authRouter.post(
     try {
       const { email, password } = req.body;
 
-      const user = await dbGet<any>("SELECT * FROM users WHERE email = ?", [
-        email,
-      ]);
+      const user = await dbGet<any>(
+        "SELECT * FROM users WHERE email = ? AND COALESCE(account_kind, 'personal') = 'personal'",
+        [email],
+      );
       if (!user) {
+        // Run one bcrypt comparison anyway so an unknown address takes as long as a known one.
+        await bcrypt.compare(password, dummyPasswordHash());
         await logSecurityEvent({
           eventType: "AUTH_LOGIN_FAILED",
           severity: "WARN",
@@ -634,7 +706,20 @@ authRouter.post(
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      // Check account suspension
+      const isMatch = await bcrypt.compare(password, user.password_hash);
+      if (!isMatch) {
+        await logSecurityEvent({
+          eventType: "AUTH_LOGIN_FAILED",
+          severity: "WARN",
+          actor: user.id,
+          details: "Incorrect password entered",
+          ipAddress: clientIp,
+        });
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      // Suspension is reported only to someone who proved the password: otherwise the 403 would
+      // tell anyone which addresses are suspended accounts.
       if (user.is_suspended === 1) {
         await logSecurityEvent({
           eventType: "AUTH_LOGIN_BLOCKED_SUSPENDED",
@@ -647,18 +732,6 @@ authRouter.post(
           error:
             "Your account has been suspended for security policy violations. Contact security@vynor.lk",
         });
-      }
-
-      const isMatch = await bcrypt.compare(password, user.password_hash);
-      if (!isMatch) {
-        await logSecurityEvent({
-          eventType: "AUTH_LOGIN_FAILED",
-          severity: "WARN",
-          actor: user.id,
-          details: "Incorrect password entered",
-          ipAddress: clientIp,
-        });
-        return res.status(401).json({ error: "Invalid email or password" });
       }
 
       await logSecurityEvent({
@@ -853,6 +926,34 @@ authRouter.post(
         });
       }
 
+      // A new code starts 5 more guesses and sends a mail to the address, so requests are bounded:
+      // one per minute and a daily cap per account. A still-valid code keeps the guesses already
+      // spent on it, so asking again is not a way to reset the guess counter.
+      const previous = await dbGet<{ created_at: string; attempts: number }>(
+        "SELECT created_at, attempts FROM email_verifications WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
+        [user.id, new Date().toISOString()],
+      );
+      if (
+        previous?.created_at &&
+        Date.now() - new Date(previous.created_at).getTime() <
+          VERIFICATION_RESEND_COOLDOWN_MS
+      ) {
+        return res.status(429).json({
+          error: "Please wait a minute before requesting another code.",
+          code: "VERIFICATION_COOLDOWN",
+        });
+      }
+      const sentToday = await windowHit(
+        `verify:send:${user.id}`,
+        24 * 3600 * 1000,
+      );
+      if (sentToday > VERIFICATION_DAILY_SEND_CAP) {
+        return res.status(429).json({
+          error: "Too many verification codes were requested today.",
+          code: "VERIFICATION_DAILY_CAP",
+        });
+      }
+
       const otpCode = crypto.randomInt(100000, 1000000).toString();
       const verifyToken = uuidv4().replace(/-/g, "");
       const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
@@ -861,13 +962,14 @@ authRouter.post(
         user.id,
       ]);
       await dbRun(
-        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, otp_code, token, attempts, expires_at) VALUES (?, ?, ?, ?, ?, '', '', 0, ?)",
+        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, otp_code, token, attempts, expires_at) VALUES (?, ?, ?, ?, ?, '', '', ?, ?)",
         [
           uuidv4(),
           user.id,
           user.email,
           sha256(otpCode),
           sha256(verifyToken),
+          Math.max(0, Number(previous?.attempts ?? 0)),
           expiresAt,
         ],
       );
@@ -918,6 +1020,18 @@ authRouter.post(
         });
       }
 
+      // Wrong guesses are also counted per account per day, so deleting the record and asking for a
+      // fresh code never grants unlimited guesses.
+      if (
+        (await windowCount(`verify:fail:${user.id}`)) >=
+        VERIFICATION_DAILY_FAILURE_CAP
+      ) {
+        return res.status(429).json({
+          error: "Too many failed attempts. Try again tomorrow.",
+          code: "VERIFICATION_LOCKED",
+        });
+      }
+
       if (record.attempts >= 5) {
         await dbRun("DELETE FROM email_verifications WHERE user_id = ?", [
           user.id,
@@ -934,6 +1048,7 @@ authRouter.post(
         given.length === stored.length && crypto.timingSafeEqual(given, stored);
 
       if (!valid) {
+        await windowHit(`verify:fail:${user.id}`, 24 * 3600 * 1000);
         await dbRun(
           "UPDATE email_verifications SET attempts = attempts + 1 WHERE id = ?",
           [record.id],
@@ -1014,6 +1129,8 @@ authRouter.get("/verify-email", async (req: Request, res: Response) => {
 authRouter.post(
   "/rotate-key",
   requireAuth,
+  // A stolen key must not be able to rotate itself and lock the owner out of the extension.
+  requireWebSession,
   async (req: Request, res: Response) => {
     const clientIp = getClientIp(req);
     try {
@@ -1127,7 +1244,11 @@ authRouter.get(
 // Change Password
 authRouter.post(
   "/change-password",
+  authRateLimiter,
   requireAuth,
+  // The current password is checked below, so the endpoint must not be open to API-key callers
+  // that could try it without limit.
+  requireWebSession,
   validateBody(ChangePasswordBodySchema),
   async (req: Request, res: Response) => {
     const clientIp = getClientIp(req);
@@ -1157,7 +1278,7 @@ authRouter.post(
         return res.status(400).json({ error: "Incorrect current password" });
       }
 
-      const newHash = await bcrypt.hash(newPassword, 10);
+      const newHash = await bcrypt.hash(newPassword, 12);
       await dbRun("UPDATE users SET password_hash = ? WHERE id = ?", [
         newHash,
         user.id,

@@ -10,6 +10,7 @@ import {
 } from "../services/backgroundQuote.js";
 import { BACKGROUND_POLICY_VERSION } from "../services/backgroundTypes.js";
 import {
+  BACKGROUND_CURSOR_PATTERN,
   cancelBackgroundTask,
   createBackgroundTask,
   getBackgroundEntitlement,
@@ -39,7 +40,13 @@ export const TaskIdParamSchema = z.object({
 export const ListTasksQuerySchema = z.object({
   limit: z.coerce.number().optional().default(20),
   status: z.string().optional(),
-  cursor: z.string().optional(),
+  // Opaque page cursor "<created_at>|<task id>" (or a bare timestamp from older clients). A value
+  // that is not a timestamp is a 400 here; typed PostgreSQL would otherwise raise a 500.
+  cursor: z
+    .string()
+    .max(200)
+    .regex(BACKGROUND_CURSOR_PATTERN, "Invalid cursor")
+    .optional(),
 });
 
 export const PushSubscriptionSchema = z.object({

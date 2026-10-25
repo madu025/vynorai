@@ -18,9 +18,14 @@ const TRANSIENT = new Set([
   "NETWORK_ERROR",
 ]);
 
-export function isTransient(error: unknown): boolean {
+export function isTransient(
+  error: unknown,
+  options: { network?: boolean } = {},
+): boolean {
   const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" && TRANSIENT.has(code);
+  if (typeof code !== "string" || !TRANSIENT.has(code)) return false;
+  // A dropped connection may have happened after the server did (and billed) the work.
+  return code !== "NETWORK_ERROR" || options.network !== false;
 }
 
 export async function retryTransient<T>(
@@ -30,6 +35,8 @@ export async function retryTransient<T>(
     delays?: number[];
     wait?: (ms: number) => Promise<void>;
     shouldStop?: () => boolean;
+    /** Set false for a billed call: a lost connection is then not retried (default true). */
+    retryNetworkErrors?: boolean;
   } = {},
 ): Promise<T> {
   const tries = options.tries ?? 3;
@@ -41,7 +48,11 @@ export async function retryTransient<T>(
     try {
       return await run();
     } catch (error) {
-      if (attempt >= tries || options.shouldStop?.() || !isTransient(error))
+      if (
+        attempt >= tries ||
+        options.shouldStop?.() ||
+        !isTransient(error, { network: options.retryNetworkErrors })
+      )
         throw error;
       await wait(delays[Math.min(attempt - 1, delays.length - 1)]);
     }

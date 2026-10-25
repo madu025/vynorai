@@ -102,6 +102,9 @@ async function persistReservation(r: QuotaReservation): Promise<void> {
  * it (nothing may be refunded a second time). A hold that was never recorded (no id) is treated as
  * owned, as before.
  */
+const STALE_SWEEP_BATCH = 500;
+const STALE_SWEEP_MAX_BATCHES = 20;
+
 async function closeReservationRecord(r: QuotaReservation): Promise<boolean> {
   if (!r.id) return true;
   try {
@@ -129,30 +132,37 @@ export async function reconcileStaleReservations(
   now: Date = new Date(),
 ): Promise<number> {
   const cutoff = new Date(now.getTime() - STALE_RESERVATION_MS).toISOString();
-  const stale = await dbAll<{
-    id: string;
-    user_id: string;
-    tokens: number;
-    requests: number;
-  }>(
-    "SELECT id, user_id, tokens, requests FROM quota_reservations WHERE created_at < ? AND COALESCE(owner_type, 'request') != 'background_task'",
-    [cutoff],
-  );
   let released = 0;
-  for (const row of stale) {
-    const claimed = await dbRun("DELETE FROM quota_reservations WHERE id = ?", [
-      row.id,
-    ]);
-    if (claimed.changes === 0) continue;
-    await dbRun(
-      `UPDATE monthly_usage
+  // After a long outage there can be thousands of stale holds: sweep in bounded batches so one
+  // pass never loads them all (each row is still claimed by its own DELETE, so replicas never
+  // refund a hold twice). The batch cap keeps one sweep bounded; the next run continues.
+  for (let batch = 0; batch < STALE_SWEEP_MAX_BATCHES; batch += 1) {
+    const stale = await dbAll<{
+      id: string;
+      user_id: string;
+      tokens: number;
+      requests: number;
+    }>(
+      "SELECT id, user_id, tokens, requests FROM quota_reservations WHERE created_at < ? AND COALESCE(owner_type, 'request') != 'background_task' ORDER BY created_at LIMIT ?",
+      [cutoff, STALE_SWEEP_BATCH],
+    );
+    for (const row of stale) {
+      const claimed = await dbRun(
+        "DELETE FROM quota_reservations WHERE id = ?",
+        [row.id],
+      );
+      if (claimed.changes === 0) continue;
+      await dbRun(
+        `UPDATE monthly_usage
        SET used_tokens = MAX(0, used_tokens - ?),
            used_requests = MAX(0, used_requests - ?),
            updated_at = CURRENT_TIMESTAMP
        WHERE user_id = ? AND period_end >= ?`,
-      [Number(row.tokens), Number(row.requests), row.user_id, isoDate(now)],
-    );
-    released++;
+        [Number(row.tokens), Number(row.requests), row.user_id, isoDate(now)],
+      );
+      released++;
+    }
+    if (stale.length < STALE_SWEEP_BATCH) break;
   }
   // Tenant-scoped M365 holds are recovered against their own ledger, never the user's cycle.
   released += await reconcileStaleM365Reservations(now);

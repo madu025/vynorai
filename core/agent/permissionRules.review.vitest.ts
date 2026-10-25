@@ -94,6 +94,16 @@ describe("path rules handle URIs, .. segments and root files (code review)", () 
     ).toBe("deny");
   });
 
+  it("keeps a plain POSIX path with a 'c:' directory distinct from a drive path", () => {
+    // A path that is not a file: URI is never rewritten: "/c:/x" is a directory named "c:".
+    const posix = rules({ deny: ["Edit(/c:/x/**)"] });
+    expect(evaluatePermissionRules(posix, edit("/c:/x/a.txt"))?.decision).toBe(
+      "deny",
+    );
+    const drive = rules({ deny: ["Edit(c:/x/**)"] });
+    expect(evaluatePermissionRules(drive, edit("/c:/x/a.txt"))).toBeUndefined();
+  });
+
   it("collapses .. so a rule cannot be dodged", () => {
     const r = rules({ deny: ["Edit(secrets/**)"] });
     expect(

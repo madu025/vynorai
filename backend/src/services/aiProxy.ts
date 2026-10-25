@@ -111,6 +111,13 @@ export interface AuthenticatedUser {
     objectId: string;
     planSource: "tenant" | "user" | "free";
   };
+  /** Commercial mode is asserted by the M365 scope middleware, never inferred from email. */
+  m365Commercial?: {
+    mode: "individual" | "organization";
+    billingStatus: string;
+    quotaMode: "per_seat" | "pooled";
+    isOrganizationPrincipal: boolean;
+  };
 }
 
 // ── In-Memory High-Speed Auth Cache (Handles 1000+ Concurrent Requests / 0ms Latency) ──
@@ -146,7 +153,7 @@ export async function authenticateApiKey(
   const apiKeyHash = crypto.createHash("sha256").update(apiKey).digest("hex");
 
   const user = await dbGet<any>(
-    "SELECT id, email, name, api_key_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE api_key_hash = ?",
+    "SELECT id, email, name, api_key_hash, COALESCE(is_suspended, 0) as is_suspended, allowed_ips FROM users WHERE api_key_hash = ? AND COALESCE(account_kind, 'personal') = 'personal'",
     [apiKeyHash],
   );
   if (!user) return null;

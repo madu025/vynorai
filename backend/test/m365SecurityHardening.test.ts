@@ -25,6 +25,7 @@ const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
 let dbm: typeof import("../src/db.js");
 let registry: typeof import("../src/services/m365TenantRegistry.js");
 let entitlements: typeof import("../src/services/m365Entitlements.js");
+let organization: typeof import("../src/services/m365Organization.js");
 let policy: typeof import("../src/services/m365Policy.js");
 let analysis: typeof import("../src/services/m365Analysis.js");
 let agent: typeof import("../src/services/m365Agent.js");
@@ -118,6 +119,7 @@ before(async () => {
   await dbm.initDb();
   registry = await import("../src/services/m365TenantRegistry.js");
   entitlements = await import("../src/services/m365Entitlements.js");
+  organization = await import("../src/services/m365Organization.js");
   policy = await import("../src/services/m365Policy.js");
   analysis = await import("../src/services/m365Analysis.js");
   agent = await import("../src/services/m365Agent.js");
@@ -144,6 +146,10 @@ beforeEach(async () => {
     planId: null,
     seatLimit: 5,
     subscriptionValidUntil: null,
+    billingMode: "individual",
+    billingStatus: "not_configured",
+    quotaMode: "per_seat",
+    autoProvisionMembers: false,
   });
   await addUser("user-sec");
   await link(objectId, "user-sec", "2026-10-01 00:00:00");
@@ -231,6 +237,58 @@ test("a disabled link and a disabled tenant also fail closed", async () => {
   const off = await call("GET", "/excel/capabilities", entraToken());
   assert.equal(off.status, 403);
   assert.equal(off.json.error.code, "tenant_disabled");
+});
+
+test("organization mode provisions a non-login Entra principal and never falls back to a personal plan", async () => {
+  await dbm.dbRun("DELETE FROM m365_identity_links");
+  await dbm.dbRun("DELETE FROM users");
+  await registry.upsertM365Tenant({
+    tenantId,
+    status: "enabled",
+    allowedScopes: ["m365.excel.read", "m365.excel.write"],
+    consentedAt: "2026-10-15T00:00:00.000Z",
+    aiEnabled: true,
+    planId: "pro",
+    seatLimit: 2,
+    subscriptionValidUntil: "2999-01-01T00:00:00.000Z",
+    billingMode: "organization",
+    billingStatus: "active",
+    quotaMode: "pooled",
+    autoProvisionMembers: true,
+  });
+
+  const beforeProvision = await call(
+    "GET",
+    "/excel/capabilities",
+    entraToken("org-object-1"),
+  );
+  assert.equal(beforeProvision.status, 200);
+  assert.equal(beforeProvision.json.commercial.mode, "organization");
+  assert.equal(beforeProvision.json.commercial.quotaMode, "pooled");
+  assert.equal(beforeProvision.json.subscription.source, "tenant");
+
+  const created = await call("POST", "/session", entraToken("org-object-1"));
+  assert.equal(created.status, 200);
+  const principal = await dbm.dbGet<any>(
+    `SELECT u.account_kind, l.linked_via, l.user_id
+     FROM m365_identity_links l JOIN users u ON u.id = l.user_id
+     WHERE l.tenant_id = ? AND l.object_id = ?`,
+    [tenantId, "org-object-1"],
+  );
+  assert.equal(
+    principal.account_kind,
+    organization.M365_ORGANIZATION_PRINCIPAL_KIND,
+  );
+  assert.equal(principal.linked_via, "organization");
+  assert.match(principal.user_id, /^m365-org-/);
+
+  await dbm.dbRun(
+    "UPDATE m365_tenants SET billing_status = 'expired' WHERE tenant_id = ?",
+    [tenantId],
+  );
+  const expired = await call("POST", "/session", entraToken("org-object-2"));
+  assert.equal(expired.status, 403);
+  assert.equal(expired.json.error.code, "M365_ORG_BILLING_INACTIVE");
 });
 
 // ── 2. session lifetime ───────────────────────────────────────────────────────────────────────
@@ -410,6 +468,8 @@ test("linkIdentityWithSeatCheck: simultaneous links cannot exceed the seat limit
     status: "enabled",
     allowedScopes: ["m365.excel.read"],
     seatLimit: 2,
+    planId: "pro",
+    subscriptionValidUntil: "2999-01-01T00:00:00.000Z",
   });
   for (const id of ["u1", "u2", "u3", "u4"]) await addUser(id);
   const results = await Promise.all(
@@ -440,7 +500,9 @@ test("linkIdentityWithSeatCheck reports the previous owner, allows re-pointing a
     tenantId,
     status: "enabled",
     allowedScopes: ["m365.excel.read"],
+    planId: "pro",
     seatLimit: 1,
+    subscriptionValidUntil: "2999-01-01T00:00:00.000Z",
   });
   await addUser("owner-a");
   await addUser("owner-b");

@@ -14,6 +14,12 @@ import { authRateLimiter } from "../middleware/security.js";
 import { encryptCredential, maskApiKey } from "../services/credentialVault.js";
 import { logSecurityEvent } from "../services/securityAudit.js";
 import { z, validateQuery } from "../middleware/validate.js";
+import {
+  clearPendingProofs,
+  rotateUserApiKey,
+  unusablePasswordHash,
+} from "../services/accountSecurity.js";
+import { invalidateAuthCache } from "../services/aiProxy.js";
 
 export const GoogleOAuthStartQuerySchema = z.object({
   return: z.string().optional(),
@@ -340,7 +346,7 @@ googleAuthRouter.get(
  * signed in (and marked verified); otherwise a new account is created with an
  * unusable random password (password sign-in stays off until one is set).
  */
-async function findOrCreateGoogleUser(
+export async function findOrCreateGoogleUser(
   email: string,
   name?: string,
 ): Promise<{
@@ -359,16 +365,35 @@ async function findOrCreateGoogleUser(
     [email],
   );
   if (existing) {
+    let passwordHash = existing.password_hash;
     if (existing.email_verified !== 1) {
-      await dbRun("UPDATE users SET email_verified = 1 WHERE id = ?", [
-        existing.id,
-      ]);
+      // Pre-account takeover: this unverified account was registered by someone who has not proven
+      // the address (they hold its password and API key). Google has now proven it, so the account
+      // becomes the Google owner's: the registrant's password, key, sessions and pending codes all
+      // stop working before it is marked verified. If the key cannot be replaced, nothing changes.
+      const newKey = await rotateUserApiKey(dbRun, existing.id);
+      if (!newKey) throw new Error("Sign-in is temporarily unavailable.");
+      passwordHash = await unusablePasswordHash();
+      await dbRun(
+        "UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?",
+        [passwordHash, existing.id],
+      );
+      await clearPendingProofs(dbRun, existing.id);
+      invalidateAuthCache();
+      await logSecurityEvent({
+        eventType: "AUTH_UNVERIFIED_ACCOUNT_CLAIMED",
+        severity: "WARN",
+        actor: existing.id,
+        target: existing.id,
+        details:
+          "Unverified account claimed through Google: password, API key and pending codes were reset",
+      });
     }
     return {
       id: existing.id,
       is_suspended: existing.is_suspended,
       created: false,
-      passwordHash: existing.password_hash,
+      passwordHash,
     };
   }
 

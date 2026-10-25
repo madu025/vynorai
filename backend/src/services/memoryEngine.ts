@@ -152,8 +152,11 @@ export async function setMemory(
   value: string,
   ttlDays?: number,
 ): Promise<void> {
-  const expires = ttlDays
-    ? new Date(Date.now() + ttlDays * 86400_000).toISOString()
+  // A huge ttl makes an invalid Date (toISOString throws RangeError): clamp to ten years.
+  const days =
+    ttlDays && Number.isFinite(ttlDays) ? Math.min(ttlDays, 3650) : 0;
+  const expires = days
+    ? new Date(Date.now() + days * 86400_000).toISOString()
     : null;
   await dbRun(
     `INSERT INTO user_memory (id, user_id, key, value, expires_at)

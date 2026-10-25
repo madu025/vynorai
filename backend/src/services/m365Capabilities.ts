@@ -27,7 +27,8 @@ export type CapabilityStatus =
   | "consent_required";
 
 export type HostPlatform = "web" | "windows" | "mac" | "unknown";
-export type CompanionState =
+/** The companion layer as the capability resolver sees it (the handshake states live in companion.ts). */
+export type CompanionRoutingState =
   | "not_installed"
   | "unsigned"
   | "unsupported_host"
@@ -333,7 +334,7 @@ export interface CapabilityContext {
   platform: HostPlatform;
   /** Supported ExcelApi versions on this host. Undefined: not evaluated (the server does not know). */
   apiSets?: readonly string[];
-  companion: CompanionState;
+  companion: CompanionRoutingState;
   sandbox: SandboxState;
   /** The tenant allows AI analysis. */
   aiEnabled: boolean;
@@ -356,7 +357,7 @@ export interface CapabilityObserved {
   platform: HostPlatform;
   /** null when the API sets were not evaluated; false when missing. */
   excelApi: boolean | null;
-  companion?: CompanionState;
+  companion?: CompanionRoutingState;
   sandbox?: SandboxState;
 }
 
@@ -421,7 +422,10 @@ function requirementFor(spec: CapabilitySpec): CapabilityRequirement {
   };
 }
 
-const COMPANION_REASON: Record<Exclude<CompanionState, "ready">, string> = {
+const COMPANION_REASON: Record<
+  Exclude<CompanionRoutingState, "ready">,
+  string
+> = {
   not_installed:
     "This needs the optional signed VynorAI Windows companion, which is not installed.",
   unsigned:
@@ -604,20 +608,28 @@ const NATIVE_REQUEST_PATTERNS: ReadonlyArray<[NativeOnlyFeature, RegExp]> = [
     "power-pivot",
     /\bpower\s*-?\s*pivot\b|\bdax\s+(?:formula|measure|calculation)s?\b/i,
   ],
-  ["data-model", /\bdata\s*-?\s*model\b/i],
+  [
+    "data-model",
+    // A request ABOUT the Excel Data Model (add tables to it, build it, use it), not a column or
+    // sheet that merely contains the words ("use the data model column Name").
+    /\b(?:add|put|load|send|push|import|move|copy|connect|relate|link)\b[^.]{0,60}\b(?:to|into|in|from|with)\s+(?:the|an?|your)\s+(?:excel\s+)?data\s*-?\s*model\b(?!\s+(?:column|field|name|header|sheet|row|value|tab)s?\b)|\b(?:use|open|show|create|build|make|refresh|manage|edit|add|set\s*up)\s+(?:a|an|the|my|this)?\s*(?:excel\s+)?data\s*-?\s*model\b(?!\s+(?:column|field|name|header|sheet|row|value|tab)s?\b)|\bdata\s*-?\s*model\s+relationships?\b/i,
+  ],
   [
     "vba-com",
-    /\b(?:run|execute|launch|start|call)\b[^.]{0,40}\b(?:vba|macros?|com\s+(?:add-?in|automation|object))\b|\b(?:vsto|activex|com\s+automation)\b/i,
+    /\b(?:run|execute|launch|start|call)\b[^.]{0,40}\b(?:vba|macros?|com\s+(?:add-?in|automation|object))\b|\b(?:vsto|activex|com\s+(?:automation|add-?in))\b|\brecord(?:ing)?\s+(?:a|an|the|my)?\s*macro\b/i,
   ],
   [
     "solver",
-    /\b(?:use|run|open|with|using|the|excel'?s?)\s+solver\b|\bsolver\s+(?:add-?in|tool|model)\b|\bsolver\b[^.]{0,60}\b(?:maximi[sz]e|minimi[sz]e|constraints?|objective)\b/i,
+    // Solver as a tool the person wants used. "Solver Partners" (a vendor name) is not a request.
+    /\b(?:use|using|run|open|launch|start|apply|try|with|the|excel'?s?)\s+solver\b(?=\s*(?:$|[,.;:!?)]|to\b|for\b|on\b|and\b|add-?in\b|tool\b|model\b|please\b|now\b|then\b|so\b|with\b|using\b|over\b|against\b|in\b))|\bsolver\s+(?:add-?in|tool|model)\b|\bsolver\s+(?:karanna|karala|eken|walin)\b|\bsolver\b[^.]{0,60}\b(?:maximi[sz]e|minimi[sz]e|constraints?|objective)\b/i,
   ],
   ["scenario-manager", /\bscenario\s*manager\b/i],
   ["sparklines", /\bsparklines?\b/i],
   [
     "python-sandbox",
-    /\b(?:run|execute|use|using|with|via|in|write|create|generate|build)\b[^.]{0,40}\b(?:python|pandas|numpy|scipy|scikit-?learn|jupyter|matplotlib)\b|\b(?:python|pandas|numpy|jupyter)\s+(?:script|code|notebook|program|library|package|model)\b|\b(?:pandas|numpy|jupyter|matplotlib|scikit-?learn)\b|\bpython\s+(?:eken|walin|wala|ekak)\b|\bpy\s*\(|පයිතන්|பைதான்/i,
+    // An instruction to run or write Python (or one of its libraries). A word that only appears as
+    // data ("the Python course category", "Pandas Ltd customers", "Skill is Python") is not one.
+    /\b(?:run|execute|use|using|write|create|generate|build)\b[^.]{0,40}\b(?:python|pandas|numpy|scipy|scikit-?learn|jupyter|matplotlib)\b(?!\s+(?:ltd|inc|co|corp|llc|pvt|limited|course|courses|class|classes|training|developers?|skills?|category|categories|team|vendors?|partners?|customers?|students?|jobs?|roles?|users?)\b)|\b(?:do|solve|calculate|analy[sz]e|compute|forecast|process)\s+(?:this|it|that|these|them)\b[^.]{0,20}\b(?:in|with|using|via)\s+python\b|\b(?:python|pandas|numpy|jupyter)\s+(?:script|code|notebook|program|library|package)\b|\bpython\s+(?:eken|walin|wala|ekak)\b|\bpy\s*\(|පයිතන්|பைதான்/i,
   ],
 ];
 

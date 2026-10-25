@@ -238,7 +238,7 @@ test("deleting an account scrubs audit details and removes id-keyed rows", async
   const deleted = await call(
     "POST",
     "/delete-account",
-    { confirmEmail: EMAIL },
+    { confirmEmail: EMAIL, password: NEW_PASSWORD },
     login.body.token,
   );
   assert.equal(deleted.response.status, 200);

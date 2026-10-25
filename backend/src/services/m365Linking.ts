@@ -23,6 +23,7 @@
  */
 import crypto from "node:crypto";
 import { dbAll, dbGet, dbRun } from "../db.js";
+import { activeM365TenantPlan } from "./m365Entitlements.js";
 import { getM365Tenant } from "./m365TenantRegistry.js";
 import { incrementRateLimit, peekRateLimit } from "./redisStore.js";
 import { logSecurityEvent } from "./securityAudit.js";
@@ -366,24 +367,36 @@ export async function confirmLinkCode(input: {
 
   let inserted = 0;
   try {
-    const result = await dbRun(
-      `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
-       SELECT ?, ?, ?, 1, 'self'
-       WHERE (SELECT seat_limit FROM m365_tenants WHERE tenant_id = ? AND status = 'enabled') >= 1
-         AND (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1)
-           < (SELECT seat_limit FROM m365_tenants WHERE tenant_id = ? AND status = 'enabled')
-         AND NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)`,
-      [
-        row.tenant_id,
-        row.object_id,
-        input.userId,
-        row.tenant_id,
-        row.tenant_id,
-        row.tenant_id,
-        row.tenant_id,
-        row.object_id,
-      ],
-    );
+    const tenantPlan = activeM365TenantPlan(tenant);
+    const result = tenantPlan
+      ? await dbRun(
+          `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+           SELECT ?, ?, ?, 1, 'self'
+           WHERE (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1)
+             < ?
+             AND NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)`,
+          [
+            row.tenant_id,
+            row.object_id,
+            input.userId,
+            row.tenant_id,
+            tenantPlan.seatLimit,
+            row.tenant_id,
+            row.object_id,
+          ],
+        )
+      : await dbRun(
+          `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+           SELECT ?, ?, ?, 1, 'self'
+           WHERE NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)`,
+          [
+            row.tenant_id,
+            row.object_id,
+            input.userId,
+            row.tenant_id,
+            row.object_id,
+          ],
+        );
     inserted = result?.changes ?? 0;
   } catch (error) {
     // A simultaneous insert for the same identity loses on the primary key.

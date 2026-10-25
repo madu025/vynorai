@@ -274,7 +274,8 @@ function commandMatches(specifier: string, command: string): boolean {
 /** A tool may pass a file: URI; rules are written against plain paths. */
 function toPlainPath(filepath: string): string {
   let plain = filepath;
-  if (/^file:/i.test(plain)) {
+  const fromFileUrl = /^file:/i.test(plain);
+  if (fromFileUrl) {
     try {
       plain = fileURLToPath(plain);
     } catch {
@@ -282,9 +283,14 @@ function toPlainPath(filepath: string): string {
     }
   }
   // Collapse "a/../b" so a rule cannot be dodged with ".." segments.
-  // Off Windows, fileURLToPath keeps a slash before the drive ("/d:/x").
-  const slashed = plain.replace(/\\/g, "/").replace(/^\/(?=[a-z]:\/)/i, "");
-  return path.posix.normalize(slashed).replace(/^\.\//, "");
+  // Off Windows, fileURLToPath keeps a slash before the drive ("/d:/x"). Only a path that came
+  // from a file: URL gets that slash dropped: a plain POSIX path "/c:/x" is a real directory
+  // named "c:" and must keep matching rules written for it.
+  const slashed = plain.replace(/\\/g, "/");
+  const drivePath = fromFileUrl
+    ? slashed.replace(/^\/(?=[a-z]:\/)/i, "")
+    : slashed;
+  return path.posix.normalize(drivePath).replace(/^\.\//, "");
 }
 
 function pathCandidates(filepath: string, roots: string[]): string[] {

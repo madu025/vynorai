@@ -105,7 +105,12 @@ async function addUser(
 }
 
 async function setTenant(
-  options: { status?: "enabled" | "disabled"; seatLimit?: number } = {},
+  options: {
+    status?: "enabled" | "disabled";
+    seatLimit?: number;
+    planId?: "free" | "starter" | "pro" | "enterprise" | "ultra" | null;
+    subscriptionValidUntil?: string | null;
+  } = {},
 ) {
   await registry.upsertM365Tenant({
     tenantId,
@@ -114,9 +119,9 @@ async function setTenant(
     allowedScopes: ["m365.excel.read", "m365.excel.write"],
     consentedAt: "2026-10-15T00:00:00.000Z",
     aiEnabled: true,
-    planId: null,
+    planId: options.planId ?? null,
     seatLimit: options.seatLimit ?? 5,
-    subscriptionValidUntil: null,
+    subscriptionValidUntil: options.subscriptionValidUntil ?? null,
   });
 }
 
@@ -344,6 +349,14 @@ test("an Entra identity gets a code, the VynorAI account confirms it, and the pa
   assert.equal(again.json.error.code, "m365_already_linked");
 });
 
+test("status polling stays below the action limiter during a normal sign-in wait", async () => {
+  await startCode();
+  const responses = await Promise.all(
+    Array.from({ length: 65 }, () => call("GET", "/link/status", entraToken())),
+  );
+  assert.ok(responses.every((response) => response.status === 200));
+});
+
 test("only an Entra access token can ask for a code; sessions, API keys and no token cannot", async () => {
   await adminLink(objectId, "user-a");
   const sessionToken = (await call("POST", "/session", entraToken())).json
@@ -385,6 +398,20 @@ test("a disabled organisation gets no code", async () => {
     (await dbm.dbGet<any>("SELECT COUNT(*) AS n FROM m365_link_codes"))?.n ?? 0,
     0,
   );
+});
+
+test("self-service links do not treat the default seat as a cap without a tenant plan", async () => {
+  await setTenant({ seatLimit: 1 });
+  await addUser("free-link-a");
+  await addUser("free-link-b");
+
+  const first = await confirmFor("free-link-a", await startCode(objectId));
+  assert.equal(first.ok, true);
+  const second = await confirmFor(
+    "free-link-b",
+    await startCode(otherObjectId),
+  );
+  assert.equal(second.ok, true);
 });
 
 // ── code lifecycle ────────────────────────────────────────────────────────────────────────────
@@ -630,7 +657,11 @@ test("a link an administrator disabled stays disabled", async () => {
 
 test("the seat limit holds and a refused link gives the code back", async () => {
   await adminLink(otherObjectId, "user-b");
-  await setTenant({ seatLimit: 1 });
+  await setTenant({
+    seatLimit: 1,
+    planId: "pro",
+    subscriptionValidUntil: "2999-01-01T00:00:00.000Z",
+  });
   const code = await startCode();
   const result = await confirmFor("user-a", code);
   assert.deepEqual(
@@ -647,7 +678,11 @@ test("the seat limit holds and a refused link gives the code back", async () => 
     null,
   );
   // After the administrator adds a seat the same code works.
-  await setTenant({ seatLimit: 2 });
+  await setTenant({
+    seatLimit: 2,
+    planId: "pro",
+    subscriptionValidUntil: "2999-01-01T00:00:00.000Z",
+  });
   assert.equal((await confirmFor("user-a", code)).ok, true);
 });
 

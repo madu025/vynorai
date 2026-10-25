@@ -48,6 +48,7 @@ async function resolveM365EntitlementUnsafe(
   objectId: string,
 ): Promise<M365Entitlement> {
   const tenant = await getM365Tenant(tenantId);
+  const organizationMode = tenant?.billingMode === "organization";
   const link = await dbGet<LinkedUserRow>(
     "SELECT l.user_id, u.is_suspended FROM m365_identity_links l JOIN users u ON u.id = l.user_id WHERE l.tenant_id = ? AND l.object_id = ? AND l.enabled = 1",
     [tenantId, objectId],
@@ -59,10 +60,10 @@ async function resolveM365EntitlementUnsafe(
       : false,
   );
   const userSubscription =
-    link && !suspended
+    !organizationMode && link && !suspended
       ? await getActiveSubscription<{ plan_name: string }>(link.user_id)
       : undefined;
-  const tenantPlan = activeTenantPlan(tenant);
+  const tenantPlan = activeM365TenantPlan(tenant);
   const seatExceeded = Boolean(
     link &&
       tenantPlan &&
@@ -98,7 +99,10 @@ async function resolveM365EntitlementUnsafe(
     planDisplayName: plan.displayName,
     source: selectedPlan.source,
     active: Boolean(
-      tenant?.status === "enabled" && link && !suspended && !seatExceeded,
+      tenant?.status === "enabled" &&
+        (organizationMode ? Boolean(tenantPlan) : Boolean(link)) &&
+        !suspended &&
+        !seatExceeded,
     ),
     ...(suspended
       ? { blockedReason: "user_suspended" as const }
@@ -127,14 +131,15 @@ export async function assertM365SeatAvailable(
     [tenantId, objectId],
   );
   if (alreadyLinked) return;
-  // A missing, zero or garbage seat limit never means "unlimited": it blocks new seats.
-  if (!validSeatLimit(tenant.seatLimit))
-    throw new Error("m365_seat_limit_reached");
+  const tenantPlan = activeM365TenantPlan(tenant);
+  // An enabled tenant without an active tenant subscription uses the linked user's plan. The
+  // registry default seat_limit=1 is not a free-plan organisation seat cap.
+  if (!tenantPlan) return;
   const count = await dbGet<{ count: number | string }>(
     "SELECT COUNT(*) AS count FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1",
     [tenantId],
   );
-  if (Number(count?.count ?? 0) >= tenant.seatLimit)
+  if (Number(count?.count ?? 0) >= tenantPlan.seatLimit)
     throw new Error("m365_seat_limit_reached");
 }
 
@@ -199,26 +204,41 @@ export async function linkIdentityWithSeatCheck(input: {
     );
     return { ok: true, ...(previousUserId ? { previousUserId } : {}) };
   }
-  const result = await dbRun(
-    `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
-     SELECT ?, ?, ?, 1, 'admin'
-     WHERE (SELECT seat_limit FROM m365_tenants WHERE tenant_id = ? AND status = 'enabled') >= 1
-       AND (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1 AND object_id <> ?)
-         < (SELECT seat_limit FROM m365_tenants WHERE tenant_id = ? AND status = 'enabled')
-     ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 1, linked_via = 'admin'`,
-    [
-      input.tenantId,
-      input.objectId,
-      input.userId,
-      input.tenantId,
-      input.tenantId,
-      input.objectId,
-      input.tenantId,
-    ],
-  );
+  const tenant = await getM365Tenant(input.tenantId);
+  if (!tenant || tenant.status !== "enabled")
+    return { ok: false, code: "tenant_disabled" };
+  const tenantPlan = activeM365TenantPlan(tenant);
+  const result = tenantPlan
+    ? await dbRun(
+        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+         SELECT ?, ?, ?, 1, 'admin'
+         WHERE (SELECT COUNT(*) FROM m365_identity_links WHERE tenant_id = ? AND enabled = 1 AND object_id <> ?)
+           < ?
+         ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 1, linked_via = 'admin'`,
+        [
+          input.tenantId,
+          input.objectId,
+          input.userId,
+          input.tenantId,
+          input.objectId,
+          tenantPlan.seatLimit,
+        ],
+      )
+    : await dbRun(
+        `INSERT INTO m365_identity_links (tenant_id, object_id, user_id, enabled, linked_via)
+         SELECT ?, ?, ?, 1, 'admin'
+         WHERE NOT EXISTS (SELECT 1 FROM m365_identity_links WHERE tenant_id = ? AND object_id = ?)
+         ON CONFLICT(tenant_id, object_id) DO UPDATE SET user_id = excluded.user_id, enabled = 1, linked_via = 'admin'`,
+        [
+          input.tenantId,
+          input.objectId,
+          input.userId,
+          input.tenantId,
+          input.objectId,
+        ],
+      );
   if (result.changes > 0)
     return { ok: true, ...(previousUserId ? { previousUserId } : {}) };
-  const tenant = await getM365Tenant(input.tenantId);
   return {
     ok: false,
     code:
@@ -228,12 +248,18 @@ export async function linkIdentityWithSeatCheck(input: {
   };
 }
 
-function activeTenantPlan(
+export function activeM365TenantPlan(
   tenant: M365TenantRecord | undefined,
 ):
   | { planId: string; seatLimit: number; validUntil: string | null }
   | undefined {
   if (!tenant?.planId || tenant.status !== "enabled") return undefined;
+  if (
+    tenant.billingMode === "organization" &&
+    tenant.billingStatus !== "active" &&
+    tenant.billingStatus !== "trialing"
+  )
+    return undefined;
   if (tenant.subscriptionValidUntil) {
     // An unreadable date is treated as expired: the tenant falls back instead of keeping the plan.
     const expiresAt = new Date(tenant.subscriptionValidUntil).getTime();

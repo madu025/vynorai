@@ -23,6 +23,20 @@ export interface M365Capabilities {
     writableActionKinds: string[];
   };
   aiAnalysis: boolean;
+  subscription?: {
+    planId: string;
+    planDisplayName: string;
+    source: "tenant" | "user" | "free";
+    active: boolean;
+    validUntil: string | null;
+  };
+  commercial?: {
+    mode: "individual" | "organization";
+    billingStatus: string;
+    quotaMode: "per_seat" | "pooled";
+    directProvisioning: boolean;
+    organizationName: string | null;
+  };
   advanced?: AdvancedCapabilityReport;
 }
 

@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
   privacy_accepted_at TIMESTAMPTZ,
   privacy_version VARCHAR(16),
+  account_kind VARCHAR(32) DEFAULT 'personal' NOT NULL,
   CONSTRAINT users_email_verified_check CHECK (email_verified IN (0, 1)),
   CONSTRAINT users_is_suspended_check CHECK (is_suspended IN (0, 1)),
   CONSTRAINT users_email_format CHECK (email ~ '^[^@[:space:]]+@[^@[:space:]]+$'),
@@ -354,9 +355,17 @@ CREATE TABLE IF NOT EXISTS m365_tenants (
   plan_id VARCHAR(64),
   seat_limit INTEGER DEFAULT 1 NOT NULL,
   subscription_valid_until TIMESTAMPTZ,
+  billing_mode VARCHAR(16) DEFAULT 'individual' NOT NULL,
+  billing_status VARCHAR(24) DEFAULT 'not_configured' NOT NULL,
+  quota_mode VARCHAR(16) DEFAULT 'per_seat' NOT NULL,
+  auto_provision_members SMALLINT DEFAULT 1 NOT NULL,
   CONSTRAINT chk_m365_tenants_seat_limit CHECK ((seat_limit >= 1)),
   CONSTRAINT m365_tenants_status_check CHECK (status IN ('enabled', 'disabled')),
   CONSTRAINT m365_tenants_ai_enabled_flag CHECK (ai_enabled IN (0, 1)),
+  CONSTRAINT m365_tenants_auto_provision_flag CHECK (auto_provision_members IN (0, 1)),
+  CONSTRAINT m365_tenants_billing_mode_check CHECK (billing_mode IN ('individual', 'organization')),
+  CONSTRAINT m365_tenants_billing_status_check CHECK (billing_status IN ('not_configured', 'trialing', 'active', 'past_due', 'canceled', 'expired')),
+  CONSTRAINT m365_tenants_quota_mode_check CHECK (quota_mode IN ('per_seat', 'pooled')),
   PRIMARY KEY (tenant_id)
 );
 CREATE TABLE IF NOT EXISTS model_registry (
@@ -756,9 +765,50 @@ CREATE INDEX IF NOT EXISTS idx_m365_link_codes_expires ON m365_link_codes(expire
 ALTER TABLE m365_identity_links ADD COLUMN IF NOT EXISTS linked_via VARCHAR(16) DEFAULT 'admin' NOT NULL;
 `;
 
+const COMMERCIAL_MODES_SQL = `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_kind VARCHAR(32) DEFAULT 'personal' NOT NULL;
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS billing_mode VARCHAR(16) DEFAULT 'individual' NOT NULL;
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS billing_status VARCHAR(24) DEFAULT 'not_configured' NOT NULL;
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS quota_mode VARCHAR(16) DEFAULT 'per_seat' NOT NULL;
+ALTER TABLE m365_tenants ADD COLUMN IF NOT EXISTS auto_provision_members SMALLINT DEFAULT 1 NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_m365_org_principal ON users(account_kind);
+CREATE INDEX IF NOT EXISTS idx_m365_tenant_billing ON m365_tenants(billing_mode, billing_status);
+`;
+
+const ORGANIZATION_BILLING_SQL = `
+CREATE TABLE IF NOT EXISTS m365_tenant_billing_orders (
+  id vynor_id NOT NULL,
+  tenant_id VARCHAR(128) NOT NULL,
+  payer_user_id vynor_id,
+  plan_name VARCHAR(64) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  order_id VARCHAR(160) NOT NULL,
+  payment_id VARCHAR(128),
+  amount_minor BIGINT NOT NULL,
+  amount NUMERIC(14,2) NOT NULL,
+  currency VARCHAR(3) NOT NULL,
+  valid_until TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+  CONSTRAINT m365_org_billing_status_check CHECK (status IN ('pending', 'active', 'cancelled', 'failed', 'chargedback')),
+  CONSTRAINT m365_org_billing_amount_check CHECK (amount_minor > 0 AND amount > 0),
+  CONSTRAINT m365_org_billing_currency_check CHECK (currency IN ('LKR', 'USD', 'EUR', 'GBP')),
+  PRIMARY KEY (id),
+  UNIQUE (order_id),
+  CONSTRAINT m365_org_billing_payer_fk FOREIGN KEY (payer_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_m365_org_billing_tenant ON m365_tenant_billing_orders(tenant_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_m365_org_billing_payment ON m365_tenant_billing_orders(payment_id) WHERE payment_id IS NOT NULL;
+DROP TRIGGER IF EXISTS trg_m365_org_billing_updated_at ON m365_tenant_billing_orders;
+CREATE TRIGGER trg_m365_org_billing_updated_at BEFORE UPDATE ON m365_tenant_billing_orders
+  FOR EACH ROW EXECUTE FUNCTION vynor_touch_updated_at();
+`;
+
 export const PG_MIGRATIONS: PgMigration[] = [
   { version: PG_BASELINE_VERSION, sql: BASELINE_SQL },
   { version: "042_m365_link_codes", sql: LINK_CODES_SQL },
+  { version: "043_m365_commercial_modes", sql: COMMERCIAL_MODES_SQL },
+  { version: "044_m365_organization_billing", sql: ORGANIZATION_BILLING_SQL },
 ];
 
 /** Thrown when the connected database was built by the retired text-timestamp schema. */

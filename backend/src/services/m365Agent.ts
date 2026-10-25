@@ -1115,11 +1115,24 @@ export function nativeFeatureReply(
   messages: AgentMessage[],
 ): AgentReply | undefined {
   const last = messages[messages.length - 1] as any;
-  if (last?.role !== "user" || typeof last.content !== "string")
-    return undefined;
-  if (last.content.startsWith("[Report from the add-in")) return undefined;
-  const refusal = refuseNativeRequest(last.content, baseCapabilityContext());
-  return refusal ? { content: refusal.message, tool_calls: [] } : undefined;
+  // Only a turn that starts from a user-role message is screened; a tool result or an assistant
+  // message means the agent is mid-run on a request that was already screened.
+  if (last?.role !== "user") return undefined;
+  // The newest user message that is the person's own words. A report from the add-in is not
+  // exempted by its prefix alone: it makes the screen look at the person's message before it, so a
+  // message that merely starts with the prefix cannot switch the screen off.
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const candidate = messages[index] as any;
+    if (candidate?.role !== "user" || typeof candidate.content !== "string")
+      continue;
+    if (candidate.content.startsWith("[Report from the add-in")) continue;
+    const refusal = refuseNativeRequest(
+      candidate.content,
+      baseCapabilityContext(),
+    );
+    return refusal ? { content: refusal.message, tool_calls: [] } : undefined;
+  }
+  return undefined;
 }
 
 /** One model turn: the fixed system prompt and tools, then the conversation. */

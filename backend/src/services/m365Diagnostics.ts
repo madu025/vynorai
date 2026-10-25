@@ -11,6 +11,7 @@ import {
   resolveAllCapabilities,
   type AdvancedCapabilityReport,
 } from "./m365Capabilities.js";
+import { activeM365TenantPlan } from "./m365Entitlements.js";
 
 const M365_SCOPES = ["m365.excel.read", "m365.excel.write"] as const;
 
@@ -39,6 +40,8 @@ export const M365_EXCEL_ACTION_KINDS = [
 export interface M365IdentityLink {
   user_id: string;
   email: string;
+  account_kind?: string | null;
+  linked_via?: string | null;
   subscription_plan?: string;
   /** 1 when an administrator suspended the linked VynorAI account; such a link never grants access. */
   is_suspended?: number | null;
@@ -78,6 +81,13 @@ export interface M365Capabilities {
     validUntil: string | null;
     tenantPlanConfigured: boolean;
   };
+  commercial: {
+    mode: "individual" | "organization";
+    billingStatus: string;
+    quotaMode: "per_seat" | "pooled";
+    directProvisioning: boolean;
+    organizationName: string | null;
+  };
   /** The tenant-scoped M365 credit ledger. Separate from the user's VS Code allowance. */
   quota: M365QuotaSummary;
   /** Per-feature verdicts from the shared registry (m365Capabilities.ts). */
@@ -90,7 +100,7 @@ export function findM365IdentityLink(
   objectId: string,
 ): Promise<M365IdentityLink | undefined> {
   return dbGet<M365IdentityLink>(
-    "SELECT l.user_id, u.email, u.is_suspended, s.plan_name as subscription_plan FROM m365_identity_links l JOIN users u ON u.id = l.user_id LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' WHERE l.tenant_id = ? AND l.object_id = ? AND l.enabled = 1 ORDER BY s.valid_until DESC LIMIT 1",
+    "SELECT l.user_id, u.email, u.is_suspended, u.account_kind, l.linked_via, s.plan_name as subscription_plan FROM m365_identity_links l JOIN users u ON u.id = l.user_id LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active' WHERE l.tenant_id = ? AND l.object_id = ? AND l.enabled = 1 ORDER BY s.valid_until DESC LIMIT 1",
     [tenantId, objectId],
   );
 }
@@ -158,18 +168,23 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
   }
 
   const link = await findM365IdentityLink(identity.tenantId, identity.objectId);
+  const organizationReady = Boolean(
+    tenant?.billingMode === "organization" && activeM365TenantPlan(tenant),
+  );
   const suspended = Boolean(link && isM365LinkSuspended(link));
   stages.push({
     name: "identity",
-    ok: Boolean(link) && !suspended,
-    code: !link
-      ? "M365_IDENTITY_NOT_LINKED"
-      : suspended
-        ? "M365_USER_SUSPENDED"
-        : undefined,
+    ok: (Boolean(link) && !suspended) || organizationReady,
+    code: organizationReady
+      ? "M365_ORG_AUTO_PROVISION"
+      : !link
+        ? "M365_IDENTITY_NOT_LINKED"
+        : suspended
+          ? "M365_USER_SUSPENDED"
+          : undefined,
   });
 
-  if (link && !suspended) {
+  if ((link && !suspended) || organizationReady) {
     const entitlement = await resolveM365Entitlement(
       identity.tenantId,
       identity.objectId,
@@ -188,10 +203,19 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
       },
     });
     // Credits come from the organisation's M365 ledger, never the user's VS Code monthly_usage.
-    const quota = await summarizeM365Quota(identity, {
-      planId: entitlement.planId,
-      source: entitlement.source,
-    });
+    const quota = await summarizeM365Quota(
+      {
+        tenantId: identity.tenantId,
+        objectId:
+          tenant?.quotaMode === "pooled"
+            ? "__organization__"
+            : identity.objectId,
+      },
+      {
+        planId: entitlement.planId,
+        source: entitlement.source,
+      },
+    );
     // No active row means the first billable request will initialise a fresh cycle.
     const available = quota.freshCycle || quota.usedCredits < quota.maxCredits;
     stages.push({
@@ -214,7 +238,8 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
     });
   }
 
-  const shared = passed("identity") && passed("credits");
+  const shared =
+    passed("identity") && passed("subscription") && passed("credits");
   return {
     stages,
     ready: {
@@ -257,10 +282,27 @@ export async function getM365Capabilities(
     },
     aiAnalysis: diagnostics.ready.read && (tenant?.aiEnabled ?? false),
     subscription,
-    quota: await summarizeM365Quota(identity, {
-      planId: subscription.planId,
-      source: subscription.source,
-    }),
+    commercial: {
+      mode: tenant?.billingMode ?? "individual",
+      billingStatus: tenant?.billingStatus ?? "not_configured",
+      quotaMode: tenant?.quotaMode ?? "per_seat",
+      directProvisioning:
+        tenant?.billingMode === "organization" && tenant.autoProvisionMembers,
+      organizationName: tenant?.displayName ?? null,
+    },
+    quota: await summarizeM365Quota(
+      {
+        tenantId: identity.tenantId,
+        objectId:
+          tenant?.quotaMode === "pooled"
+            ? "__organization__"
+            : identity.objectId,
+      },
+      {
+        planId: subscription.planId,
+        source: subscription.source,
+      },
+    ),
     advanced: resolveAllCapabilities(
       baseCapabilityContext({
         canRead: diagnostics.ready.read,

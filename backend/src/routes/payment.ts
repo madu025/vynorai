@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { config, getPlan } from "../config.js";
 import {
@@ -7,6 +7,18 @@ import {
 } from "../services/billingDb.js";
 import { generatePayhereHash, verifyPayhereIpn } from "../services/payhere.js";
 import { requireAuth } from "./auth.js";
+import {
+  validateM365BearerToken,
+  validateM365Identity,
+} from "../services/m365Policy.js";
+import {
+  activateM365OrganizationOrder,
+  createM365OrganizationBillingOrder,
+  getM365OrganizationBillingOrder,
+  markM365OrganizationOrderChargeback,
+  markM365OrganizationOrderFailed,
+} from "../services/m365OrganizationBilling.js";
+import { getM365Tenant } from "../services/m365TenantRegistry.js";
 import {
   creditTopup,
   getActiveSubscription,
@@ -56,7 +68,38 @@ export const TestActivateSchema = z.object({
   plan: z.string().optional().default("pro"),
 });
 
+export const M365OrganizationCheckoutSchema = z.object({
+  tenantId: z.string().regex(/^[A-Za-z0-9-]{1,128}$/),
+  plan: z.string().optional().default("starter"),
+  billingEmail: z.string().email().optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+});
+
 export const paymentRouter = Router();
+
+/** Accept either the signed-in personal account flow or a validated Microsoft Entra identity. */
+async function requireOrganizationCheckoutAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const authorization = req.headers.authorization;
+  if (!authorization?.startsWith("Bearer "))
+    return res.status(401).json({ error: "Authentication required" });
+  const token = authorization.slice("Bearer ".length).trim();
+  try {
+    const identity = await validateM365BearerToken(token);
+    validateM365Identity(identity, "m365.excel.read");
+    (req as any).m365Identity = identity;
+    return next();
+  } catch {
+    // Personal Vynor JWT/API-key checkout remains supported. requireAuth performs the canonical
+    // personal-account checks and rejects technical organization principals.
+    return requireAuth(req, res, next);
+  }
+}
 
 /** Plans offered on the website, in display order. */
 const PUBLIC_PLAN_IDS = [
@@ -360,6 +403,130 @@ paymentRouter.post(
 );
 
 /**
+ * Create an organization-scoped PayHere checkout. The payer's Vynor account is only the
+ * verified payment contact; this endpoint never creates a personal subscription row.
+ */
+paymentRouter.post(
+  "/m365/organization/checkout",
+  requireOrganizationCheckoutAuth,
+  validateBody(M365OrganizationCheckoutSchema),
+  async (req: Request, res: Response) => {
+    try {
+      if (config.nodeEnv === "production" && config.payhere.env !== "live") {
+        return res.status(503).json({
+          error:
+            "Online payments are temporarily unavailable while the payment gateway is in test mode.",
+        });
+      }
+      const user = (req as any).user;
+      const m365Identity = (req as any).m365Identity as
+        | { tenantId: string; objectId: string }
+        | undefined;
+      const {
+        tenantId,
+        plan = "starter",
+        billingEmail,
+        phone,
+        address,
+        city,
+      } = req.body;
+      if (m365Identity && m365Identity.tenantId !== tenantId)
+        return res.status(403).json({ error: "m365_tenant_mismatch" });
+      if (m365Identity && !billingEmail)
+        return res
+          .status(400)
+          .json({ error: "billingEmail is required for Entra checkout" });
+      const planConfig = await getEffectivePlan(String(plan));
+      if (!planConfig || planConfig.id === "free" || planConfig.id !== plan) {
+        return res
+          .status(400)
+          .json({ error: "Invalid organization subscription plan selected" });
+      }
+      const orderId = `m365org_${uuidv4().replace(/-/g, "")}`;
+      const order = await createM365OrganizationBillingOrder({
+        tenantId,
+        payerUserId: user?.id ?? null,
+        m365ObjectId: m365Identity?.objectId,
+        planId: planConfig.id,
+        orderId,
+        amount: planConfig.priceLKR,
+        currency: "LKR",
+      });
+      const tenant = await getM365Tenant(tenantId);
+      const hash = generatePayhereHash(orderId, planConfig.priceLKR, "LKR");
+      return res.json({
+        success: true,
+        billingScope: "organization",
+        tenant: {
+          tenantId,
+          displayName: tenant?.displayName ?? null,
+          planId: planConfig.id,
+        },
+        checkoutUrl: config.payhere.checkoutUrl,
+        params: {
+          merchant_id: config.payhere.merchantId,
+          return_url: config.payhere.returnUrl,
+          cancel_url: config.payhere.cancelUrl,
+          notify_url: config.payhere.notifyUrl,
+          order_id: orderId,
+          items: `VynorAI Microsoft 365 organization · ${planConfig.displayName}`,
+          currency: "LKR",
+          amount: planConfig.priceLKR.toFixed(2),
+          first_name: user?.name || "VynorAI",
+          last_name: "Organization Admin",
+          email: user?.email || billingEmail,
+          phone:
+            typeof phone === "string" && phone.trim()
+              ? phone.trim()
+              : "0771234567",
+          address:
+            typeof address === "string" && address.trim()
+              ? address.trim()
+              : "Sri Lanka",
+          city:
+            typeof city === "string" && city.trim() ? city.trim() : "Colombo",
+          country: "Sri Lanka",
+          hash,
+          // Informational only; the IPN handler trusts only its signed order row.
+          custom_1: tenantId,
+          custom_2: planConfig.id,
+        },
+        order: {
+          orderId: order.orderId,
+          amount: order.amount,
+          currency: order.currency,
+          status: order.status,
+        },
+      });
+    } catch (err: any) {
+      const code = String(err?.message || "");
+      if (
+        [
+          "m365_tenant_disabled",
+          "m365_organization_billing_not_enabled",
+          "m365_org_billing_requires_linked_identity",
+          "m365_org_billing_requires_identity",
+          "m365_org_too_many_pending_orders",
+          "invalid_m365_organization_plan",
+        ].includes(code)
+      ) {
+        return res
+          .status(
+            code === "m365_org_billing_requires_linked_identity" ? 403 : 422,
+          )
+          .json({
+            error: code,
+          });
+      }
+      console.error("M365 organization checkout generation error:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to generate organization checkout parameters" });
+    }
+  },
+);
+
+/**
  * PayHere IPN Webhook (Instant Payment Notification)
  * PayHere calls this server-to-server endpoint when a payment succeeds or fails.
  * It may deliver the same notification more than once; every transition is
@@ -377,6 +544,46 @@ paymentRouter.post(
       if (!verifyPayhereIpn(body)) {
         console.warn("[PayHere IPN] Invalid MD5 signature received!");
         return res.status(400).send("Invalid signature");
+      }
+
+      // Organization orders use a separate tenant ledger. Keep this branch before the personal
+      // subscriptions lookup so one payment can never accidentally activate a personal account.
+      const organizationOrder = await getM365OrganizationBillingOrder(order_id);
+      if (organizationOrder) {
+        const amount = Number(body.payhere_amount);
+        if (
+          body.merchant_id !== config.payhere.merchantId ||
+          body.payhere_currency !== organizationOrder.currency ||
+          !Number.isFinite(amount) ||
+          Math.round(amount * 100) !== organizationOrder.amountMinor
+        ) {
+          console.warn(
+            `[PayHere IPN] Rejected organization order=${order_id}: amount or merchant mismatch`,
+          );
+          return res.status(400).send("Order mismatch");
+        }
+        switch (String(status_code)) {
+          case "2":
+            await activateM365OrganizationOrder(
+              organizationOrder,
+              String(payment_id || ""),
+            );
+            break;
+          case "-1":
+          case "-2":
+            await markM365OrganizationOrderFailed(
+              organizationOrder,
+              String(status_code) === "-1" ? "cancelled" : "failed",
+            );
+            break;
+          case "-3":
+            await markM365OrganizationOrderChargeback(organizationOrder);
+            break;
+          default:
+            break;
+        }
+        invalidateAuthCache();
+        return res.status(200).send("OK");
       }
 
       const order = await dbGet<OrderRow>(

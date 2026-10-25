@@ -363,6 +363,12 @@ const preview = document.querySelector<HTMLElement>("#preview");
 const instruction = document.querySelector<HTMLTextAreaElement>("#instruction");
 const signIn = document.querySelector<HTMLButtonElement>("#sign-in");
 const linkVynorai = document.querySelector<HTMLButtonElement>("#link-vynorai");
+const accountLinkButton = document.querySelector<HTMLButtonElement>(
+  "#account-link-button",
+);
+const accountLinkStatus = document.querySelector<HTMLElement>(
+  "#account-link-status",
+);
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const smartRun = document.querySelector<HTMLButtonElement>("#smart-run");
@@ -930,6 +936,7 @@ function signInDialogMessage(code: unknown): string {
 
 let lastStatus = "";
 const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
+let vynoraiAccountConnected = false;
 const NEW_CHAT_READY_STATUS =
   "New chat. Select your data and describe what you want.";
 /** The preview card's badge: "No changes yet" before Apply, "Applied" after it, so it never contradicts the status line. */
@@ -1040,6 +1047,10 @@ function setLinkActionVisible(visible: boolean) {
   if (linkVynorai) linkVynorai.hidden = !visible;
 }
 
+function setAccountLinkStatus(message: string) {
+  if (accountLinkStatus) accountLinkStatus.textContent = message;
+}
+
 function needsVynorAccountLink(error: unknown): boolean {
   return (
     error instanceof M365ApiError &&
@@ -1113,6 +1124,8 @@ async function connectVynoraiAccount() {
   if (!config || !linkVynorai || linking) return;
   linking = true;
   linkVynorai.disabled = true;
+  if (accountLinkButton) accountLinkButton.disabled = true;
+  setAccountLinkStatus("Opening the secure VynorAI connection page...");
   setStatus("Preparing the secure VynorAI connection...");
   try {
     let token = await acquireMicrosoftTokenForLink();
@@ -1140,6 +1153,9 @@ async function connectVynoraiAccount() {
     setStatus(
       "VynorAI connection page opened. Sign in there and confirm the Microsoft account.",
     );
+    setAccountLinkStatus(
+      "The secure page is open. Finish VynorAI sign-in, email verification and confirmation there.",
+    );
     renderConversation(
       "assistant",
       "A secure VynorAI connection page is open. Sign in with your VynorAI account, review the Microsoft account shown, and confirm.",
@@ -1157,6 +1173,7 @@ async function connectVynoraiAccount() {
       if (!state) continue; // one bad answer does not end the wait
       outcome = linkPollOutcome(state);
       if (outcome === "linked") {
+        vynoraiAccountConnected = true;
         setLinkActionVisible(false);
         await extendSession("sign-in");
         await refreshCapabilities("oauth");
@@ -1165,6 +1182,7 @@ async function connectVynoraiAccount() {
           "assistant",
           "Microsoft account connected. You can now use this VynorAI subscription in Excel.",
         );
+        setAccountLinkStatus("Connected. Your VynorAI workspace is ready.");
         return;
       }
       if (outcome === "expired") break;
@@ -1173,6 +1191,11 @@ async function connectVynoraiAccount() {
       outcome === "expired"
         ? "The connection code expired. Start Connect VynorAI account again."
         : "The connection is still waiting for confirmation. Finish the browser page, then try Connect VynorAI account again.",
+    );
+    setAccountLinkStatus(
+      outcome === "expired"
+        ? "The connection expired. Start the connection again to continue."
+        : "Finish the secure VynorAI page, then return here. The workspace stays locked until confirmation.",
     );
   } catch (error) {
     log.record("m365-link", "fail", describeError(error));
@@ -1190,6 +1213,7 @@ async function connectVynoraiAccount() {
   } finally {
     linking = false;
     linkVynorai.disabled = false;
+    if (accountLinkButton) accountLinkButton.disabled = false;
   }
 }
 
@@ -1716,7 +1740,19 @@ function updateAuthenticationUi(signedIn: boolean) {
   if (runMode) runMode.disabled = !signedIn;
   updateEmailUi(signedIn);
   renderCommercialStatus(signedIn ? capabilities : undefined);
-  document.body.dataset.auth = signedIn ? "in" : "out";
+  document.body.dataset.auth = !signedIn
+    ? "out"
+    : vynoraiAccountConnected
+      ? "in"
+      : "link-required";
+  if (accountLinkButton)
+    accountLinkButton.disabled =
+      !signedIn || vynoraiAccountConnected || linking;
+  if (!signedIn) {
+    setAccountLinkStatus(
+      "Sign in with Microsoft first. Your workbook stays private until both sign-ins are complete.",
+    );
+  }
 }
 
 function renderCommercialStatus(value: M365Capabilities | undefined) {
@@ -1763,14 +1799,20 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
         }),
       ),
     };
+    vynoraiAccountConnected = true;
     updateAuthenticationUi(true);
+    setStatus(SIGNED_IN_IDLE_STATUS);
   } catch (error) {
     capabilities = undefined;
+    vynoraiAccountConnected = false;
     log.record("api:capabilities", "fail", describeError(error));
     if (needsVynorAccountLink(error)) {
       setLinkActionVisible(true);
       setStatus(
         "Connect a VynorAI account to continue with this Microsoft account.",
+      );
+      setAccountLinkStatus(
+        "Microsoft sign-in is complete. Connect and confirm your VynorAI account to unlock the workspace.",
       );
     }
     updateAuthenticationUi(true);
@@ -1816,6 +1858,7 @@ async function extendSession(reason: "sign-in" | "renew") {
   } catch (error) {
     log.record("session:extend", "fail", describeError(error));
     if (needsVynorAccountLink(error)) {
+      vynoraiAccountConnected = false;
       setLinkActionVisible(true);
       setStatus(
         "Connect a VynorAI account to continue with this Microsoft account.",
@@ -1855,6 +1898,7 @@ function signOutOfMicrosoft() {
   cachedHeaderLayout = undefined;
   accessToken = "";
   microsoftAccessToken = "";
+  vynoraiAccountConnected = false;
   capabilities = undefined;
   currentPlan = undefined;
   previewFingerprint = "";
@@ -2120,6 +2164,7 @@ signIn?.addEventListener("click", async () => {
     );
     accessToken = tokens.accessToken;
     microsoftAccessToken = tokens.accessToken;
+    vynoraiAccountConnected = false;
     setLinkActionVisible(false);
     saveSession(tokens);
     void extendSession("sign-in");
@@ -2128,7 +2173,7 @@ signIn?.addEventListener("click", async () => {
     updateAuthenticationUi(true);
     recordTokenSummary("oauth:token-claims");
     void refreshCapabilities("oauth");
-    setStatus(SIGNED_IN_IDLE_STATUS);
+    setStatus("Checking your VynorAI account connection...");
   } catch (error) {
     log.record("oauth:sign-in", "fail", describeError(error));
     setStatus((error as Error).message);
@@ -2136,6 +2181,9 @@ signIn?.addEventListener("click", async () => {
 });
 
 linkVynorai?.addEventListener("click", () => {
+  void connectVynoraiAccount();
+});
+accountLinkButton?.addEventListener("click", () => {
   void connectVynoraiAccount();
 });
 
@@ -5826,7 +5874,7 @@ async function initialize() {
     updateAuthenticationUi(true);
     recordTokenSummary("session:restore");
     void refreshCapabilities("restore");
-    return setStatus(SIGNED_IN_IDLE_STATUS);
+    return setStatus("Checking your VynorAI account connection...");
   }
   log.record("session:restore", "info", "no unexpired session");
   updateAuthenticationUi(false);

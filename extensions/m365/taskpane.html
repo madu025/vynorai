@@ -15,9 +15,9 @@
         color: CanvasText;
       }
     </style>
-    <link rel="stylesheet" href="pane.css?v=20261025.02" onerror="this.onerror=null;this.href='pane.css?v=20261025.02&amp;try=1'" />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261025.02" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261025.02" />
+    <link rel="stylesheet" href="pane.css?v=20261025.03" onerror="this.onerror=null;this.href='pane.css?v=20261025.03&amp;try=1'" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261025.03" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261025.03" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -177,7 +177,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261025.02</p>
+          <p class="menu-version" id="build-id">Build 20261025.03</p>
         </div>
       </div>
       <div id="commercial-status" class="commercial-status" hidden aria-live="polite"></div>
@@ -191,6 +191,25 @@
         <button id="sign-in" class="primary" type="button" data-i18n="signin">
           Sign in with Microsoft
         </button>
+      </section>
+
+      <section id="account-link-card" class="account-link-card" aria-labelledby="account-link-title" hidden>
+        <div class="account-link-icon" aria-hidden="true">V</div>
+        <h1 id="account-link-title">Connect your VynorAI account</h1>
+        <p id="account-link-copy">
+          Microsoft sign-in is complete. Connect your VynorAI account to continue to Excel.
+        </p>
+        <ol class="account-link-steps">
+          <li>Sign in or register on the secure VynorAI page.</li>
+          <li>Verify your email and review the Microsoft account shown.</li>
+          <li>Confirm the connection to unlock your VynorAI workspace.</li>
+        </ol>
+        <button id="account-link-button" class="primary" type="button">
+          Connect VynorAI account
+        </button>
+        <p id="account-link-status" class="account-link-status" role="status" aria-live="polite">
+          Your workbook and other features stay hidden until both sign-ins are complete.
+        </p>
       </section>
 
       <div class="workspace">
@@ -1365,7 +1384,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261025.02";
+        var BUILD = "20261025.03";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");

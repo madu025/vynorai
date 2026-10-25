@@ -318,6 +318,7 @@ main {
   }
 }
 #signin-card,
+#account-link-card,
 .card {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -328,6 +329,52 @@ main {
   margin-top: 28px;
   padding: 26px 18px;
   text-align: center;
+}
+#account-link-card {
+  display: none;
+  margin: 28px auto 0;
+  max-width: 430px;
+  padding: 28px 22px 24px;
+  text-align: center;
+}
+#account-link-card .account-link-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  border-radius: 14px;
+  color: white;
+  background: linear-gradient(135deg, #09b7d5, #3157e8);
+  font-size: 24px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgb(49 87 232 / 22%);
+}
+#account-link-card h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+#account-link-card > p:not(.account-link-status) {
+  margin: 0 auto 18px;
+  max-width: 34rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.account-link-steps {
+  margin: 0 0 22px;
+  padding: 0 0 0 24px;
+  text-align: left;
+  color: var(--ink);
+  line-height: 1.55;
+}
+.account-link-steps li + li {
+  margin-top: 8px;
+}
+.account-link-status {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 #signin-card h1 {
   margin: 0 0 6px;
@@ -341,6 +388,9 @@ main {
 #signin-card {
   display: none;
 }
+#account-link-card {
+  display: none;
+}
 .workspace,
 .scroll-area,
 .composer {
@@ -352,6 +402,24 @@ body[data-auth="in"] .workspace {
   gap: 8px;
   flex: 1 1 auto;
   min-height: 0;
+}
+body[data-auth="link-required"] #account-link-card {
+  display: block;
+}
+body[data-auth="link-required"] #link-vynorai {
+  display: none;
+}
+body[data-auth="link-required"] #menu-toggle,
+body[data-auth="link-required"] #menu {
+  display: none;
+}
+body[data-auth="link-required"] main {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 /* The request starts at the top; chat, reports and insights flow below it in one scroll area. */
 body[data-auth="in"] main {

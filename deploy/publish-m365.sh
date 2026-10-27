@@ -35,7 +35,11 @@ fi
 PANE_ID=$(grep -o 'var BUILD = "[^"]*"' "$SRC/taskpane.html" | head -1 | sed 's/.*"\(.*\)"/\1/')
 [[ "$PANE_ID" =~ ^[0-9]{8}\.[0-9]+$ ]] || { echo "could not read the pane build id from taskpane.html" >&2; exit 1; }
 
-(cd "$SRC" && npm run build)
+if [ "${VYNOR_M365_SKIP_BUILD:-0}" = "1" ]; then
+  echo "Skipping M365 build; using the already-built dist artifacts"
+else
+  (cd "$SRC" && npm run build)
+fi
 for file in dist/taskpane.bundle.js dist/text.bundle.js pane.css runtime-config.production.js; do
   [ -f "$SRC/$file" ] || { echo "$file missing" >&2; exit 1; }
 done

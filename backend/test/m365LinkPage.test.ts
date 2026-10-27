@@ -18,6 +18,8 @@ test("M365 link page preserves the secure handoff across sign-in", () => {
   assert.match(page, /\/v1\/m365\/link\/preview/);
   assert.match(page, /\/v1\/m365\/link\/confirm/);
   assert.match(page, /confirm: true/);
+  assert.match(page, /id="closeBtn"/);
+  assert.match(page, /window\.close\(\)/);
   // The one-time code must not be sent in the page's initial URL query string.
   assert.doesNotMatch(page, /location\.search[^;]*code/);
 });

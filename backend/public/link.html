@@ -290,6 +290,10 @@
         <button id="againBtn" type="button" class="secondary" data-i="againBtn">
           Connect another account
         </button>
+        <button id="closeBtn" type="button" class="secondary" data-i="closeBtn">
+          Close window
+        </button>
+        <div class="msg" id="closeMsg" role="status" aria-live="polite"></div>
       </section>
     </main>
     <script>
@@ -321,6 +325,8 @@
             doneBody:
               "Go back to Excel. The VynorAI pane continues on its own in a few seconds.",
             againBtn: "Connect another account",
+            closeBtn: "Close window",
+            closeManual: "You can close this window and return to Excel.",
             disconnect: "Disconnect",
             byAdmin: "set by your administrator",
             noOrg: "Not named",
@@ -371,6 +377,8 @@
             doneBody:
               "Excel වෙත ආපසු යන්න. VynorAI කොටස තත්පර කිහිපයකින් ස්වයංක්‍රීයව ඉදිරියට යයි.",
             againBtn: "තවත් ගිණුමක් සම්බන්ධ කරන්න",
+            closeBtn: "කවුළුව වසන්න",
+            closeManual: "මෙම කවුළුව වසා Excel වෙත ආපසු යන්න.",
             disconnect: "විසන්ධි කරන්න",
             byAdmin: "ඔබේ පරිපාලකයා සකසා ඇත",
             noOrg: "නම නොමැත",
@@ -421,6 +429,8 @@
             doneBody:
               "Excel க்குத் திரும்பவும். VynorAI பலகம் சில விநாடிகளில் தானாகத் தொடரும்.",
             againBtn: "மற்றொரு கணக்கை இணை",
+            closeBtn: "சாளரத்தை மூடு",
+            closeManual: "இந்தச் சாளரத்தை மூடி Excel-க்கு திரும்பலாம்.",
             disconnect: "இணைப்பை நீக்கு",
             byAdmin: "உங்கள் நிர்வாகி அமைத்தது",
             noOrg: "பெயர் இல்லை",
@@ -709,6 +719,12 @@
           show("enter");
           loadMine();
           $("code").focus();
+        });
+        $("closeBtn").addEventListener("click", function () {
+          window.close();
+          window.setTimeout(function () {
+            $("closeMsg").textContent = t("closeManual");
+          }, 150);
         });
 
         start();

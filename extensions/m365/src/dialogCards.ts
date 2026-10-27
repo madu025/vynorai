@@ -58,9 +58,9 @@ export function agentConsentCard(
     {
       text: pick(
         language,
-        "Sent: request, column names, small samples",
-        "යවන්නේ: ඉල්ලීම, තීරු නම්, කුඩා නිදර්ශක",
-        "அனுப்புவது: கோரிக்கை, நெடுவரிசைப் பெயர்கள், சிறு மாதிரிகள்",
+        "Will send after approval: request, column names, small samples",
+        "අනුමැතියෙන් පසු යවනු ලැබේ: ඉල්ලීම, තීරු නම්, කුඩා නිදර්ශක",
+        "ஒப்புதலுக்குப் பிறகு அனுப்பப்படும்: கோரிக்கை, நெடுவரிசைப் பெயர்கள், சிறு மாதிரிகள்",
       ),
     },
   ];

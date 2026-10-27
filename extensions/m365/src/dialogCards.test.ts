@@ -27,6 +27,13 @@ test("the consent card follows the request and the real selection", () => {
   const masked = card.tags.find((tag) => tag.warn);
   assert.match(masked!.text, /Name, Email, Phone/);
   assert.match(masked!.text, /\+1/);
+  assert.ok(
+    card.tags.some((tag) =>
+      /Will send after approval: request, column names, small samples/.test(
+        tag.text,
+      ),
+    ),
+  );
 });
 
 test("the consent card says so when no column looks personal, and works without a selection", () => {

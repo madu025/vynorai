@@ -7394,10 +7394,18 @@ const shareMessage =
 const shareMessageBlock = document.querySelector<HTMLElement>(
   "#share-message-block",
 );
+const shareEmpty = document.querySelector<HTMLElement>("#share-empty");
 let shareState: { card: ShareCard; blob: Blob | null } | undefined;
 
 function setShareStatus(message: string) {
   if (shareStatus) shareStatus.textContent = message;
+}
+
+function setSharePanel(hasCard: boolean) {
+  if (shareEmpty) shareEmpty.hidden = hasCard;
+  const shareCard = document.querySelector<HTMLElement>("#share-card");
+  if (shareCard) shareCard.hidden = !hasCard;
+  workspaceNavigation.refresh();
 }
 
 /* Card styles (Summary / Chart / Insight): drawn on this device from the same card. */
@@ -7453,6 +7461,7 @@ async function showShareCard(
   });
   if (card.kind === "empty") {
     shareState = undefined;
+    setSharePanel(false);
     if (shareImage) shareImage.hidden = true;
     if (shareStylesRoot) shareStylesRoot.hidden = true;
     if (shareMessageBlock) shareMessageBlock.hidden = true;
@@ -7466,6 +7475,7 @@ async function showShareCard(
   }
   const canvas = renderShareStyles(card);
   shareState = { card, blob: await canvasToBlob(canvas) };
+  setSharePanel(true);
   if (shareImage) {
     shareImage.src = canvas.toDataURL("image/png");
     shareImage.alt = card.title;
@@ -7518,10 +7528,19 @@ document
   });
 sharePaste?.addEventListener("input", () => {
   const text = sharePaste.value;
-  if (text.trim())
-    showShareCard(parsePastedCells(text), "", "pasted").catch((error) =>
-      log.record("share:card", "fail", describeError(error)),
-    );
+  if (!text.trim()) {
+    shareState = undefined;
+    setSharePanel(false);
+    if (shareImage) shareImage.hidden = true;
+    if (shareStylesRoot) shareStylesRoot.hidden = true;
+    if (shareMessageBlock) shareMessageBlock.hidden = true;
+    if (shareMain) shareMain.disabled = true;
+    setShareStatus("");
+    return;
+  }
+  showShareCard(parsePastedCells(text), "", "pasted").catch((error) =>
+    log.record("share:card", "fail", describeError(error)),
+  );
 });
 document
   .querySelector('#workspace-nav [data-workspace-target="share"]')

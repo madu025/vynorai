@@ -10,12 +10,15 @@ export interface PaneCard {
   tags: { text: string; warn?: boolean }[];
 }
 
-function cardNode(card: PaneCard): HTMLElement {
+let dialogSequence = 0;
+
+function cardNode(card: PaneCard, titleId: string): HTMLElement {
   const wrap = document.createElement("div");
   wrap.style.cssText = "margin:0 0 14px";
-  const title = document.createElement("strong");
+  const title = document.createElement("h2");
+  title.id = titleId;
   title.textContent = card.title;
-  title.style.cssText = "display:block;font-size:15px;margin-bottom:10px";
+  title.style.cssText = "display:block;font-size:15px;margin:0 0 10px";
   const tiles = document.createElement("div");
   tiles.style.cssText =
     "display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px;margin-bottom:10px";
@@ -57,22 +60,36 @@ export function askInPane(
   card?: PaneCard,
 ): Promise<boolean> {
   return new Promise((resolve) => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const sequence = ++dialogSequence;
+    const titleId = `vynorai-dialog-title-${sequence}`;
+    const messageId = `vynorai-dialog-message-${sequence}`;
     const overlay = document.createElement("div");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-describedby", messageId);
+    if (card) overlay.setAttribute("aria-labelledby", titleId);
     overlay.style.cssText =
       "position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.45)";
     const box = document.createElement("div");
     box.style.cssText =
-      "max-width:320px;width:100%;padding:18px;border:1px solid var(--line,#dbe2ea);border-radius:18px;background:var(--surface-solid,#fff);color:var(--ink,#1b2a41);box-shadow:var(--shadow,0 12px 32px rgba(15,23,42,.25));font:13.5px/1.45 system-ui,sans-serif";
+      "max-width:320px;max-height:calc(100vh - 32px);overflow:auto;width:100%;padding:18px;border:1px solid var(--line,#dbe2ea);border-radius:18px;background:var(--surface-solid,#fff);color:var(--ink,#1b2a41);box-shadow:var(--shadow,0 12px 32px rgba(15,23,42,.25));font:13.5px/1.45 system-ui,sans-serif";
     const text = document.createElement("p");
+    text.id = messageId;
     text.style.cssText =
       "margin:0 0 14px;white-space:pre-wrap;max-height:50vh;overflow:auto";
     text.textContent = message;
     const row = document.createElement("div");
     row.style.cssText = "display:flex;gap:8px;justify-content:flex-end";
+    let finished = false;
     const finish = (value: boolean) => {
+      if (finished) return;
+      finished = true;
       overlay.remove();
+      previousFocus?.focus();
       resolve(value);
     };
     const cancel = document.createElement("button");
@@ -89,9 +106,27 @@ export function askInPane(
     ok.addEventListener("click", () => finish(true));
     overlay.addEventListener("keydown", (event) => {
       if (event.key === "Escape") finish(false);
+      if (event.key !== "Tab") return;
+      const focusable = [cancel, ok];
+      const current = focusable.indexOf(
+        document.activeElement as HTMLButtonElement,
+      );
+      const next = event.shiftKey
+        ? current <= 0
+          ? focusable.length - 1
+          : current - 1
+        : (current + 1) % focusable.length;
+      event.preventDefault();
+      focusable[next].focus();
     });
     row.append(cancel, ok);
-    box.append(card ? cardNode(card) : text, row);
+    if (card) {
+      const content = document.createElement("div");
+      content.append(text, cardNode(card, titleId));
+      box.append(content, row);
+    } else {
+      box.append(text, row);
+    }
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     cancel.focus();

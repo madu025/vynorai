@@ -10,6 +10,7 @@ function fakePane(shownPanels: string[], devOnlyPanels: string[] = []) {
     const classes = new Set<string>();
     const listeners: Record<string, Array<(event?: any) => void>> = {};
     return {
+      id: `tab-${target}`,
       dataset: { workspaceTarget: target },
       disabled: false,
       tabIndex: 0,
@@ -37,27 +38,50 @@ function fakePane(shownPanels: string[], devOnlyPanels: string[] = []) {
     };
   });
   const body: { dataset: Record<string, string> } = { dataset: {} };
+  const scrollArea = {
+    attributes: {} as Record<string, string>,
+    setAttribute: (name: string, value: string) => {
+      scrollArea.attributes[name] = value;
+    },
+    scrollTo: () => undefined,
+  };
   const document: any = {
     body,
     querySelectorAll: (selector: string) =>
       selector === "#workspace-nav [data-workspace-target]" ? buttons : [],
     querySelector: (selector: string) => {
+      if (selector === "#scroll-area") return scrollArea;
       const panel = /data-workspace-panel="(\w+)"/.exec(selector)?.[1];
       if (!panel) return null;
       // A panel marked data-dev only matches a selector that does not exclude developer panels.
-      if (devOnlyPanels.includes(panel) && selector.includes(":not([data-dev])")) return null;
-      return shownPanels.includes(panel) || devOnlyPanels.includes(panel) ? {} : null;
+      if (
+        devOnlyPanels.includes(panel) &&
+        selector.includes(":not([data-dev])")
+      )
+        return null;
+      return shownPanels.includes(panel) || devOnlyPanels.includes(panel)
+        ? {}
+        : null;
     },
   };
-  return { document, buttons, body, focused };
+  return { document, buttons, body, focused, scrollArea };
 }
 
 test("Explore is enabled from the start, with no result", () => {
   const { document, buttons } = fakePane([]);
   const unavailable: string[] = [];
-  const nav = createWorkspaceNavigation(document, (view) => unavailable.push(view));
-  const state = Object.fromEntries(buttons.map((b) => [b.dataset.workspaceTarget, b.disabled]));
-  assert.deepEqual(state, { work: false, results: true, share: true, explore: false });
+  const nav = createWorkspaceNavigation(document, (view) =>
+    unavailable.push(view),
+  );
+  const state = Object.fromEntries(
+    buttons.map((b) => [b.dataset.workspaceTarget, b.disabled]),
+  );
+  assert.deepEqual(state, {
+    work: false,
+    results: true,
+    share: true,
+    explore: false,
+  });
   assert.equal(nav.activate("explore"), true);
   assert.equal(nav.current(), "explore");
   assert.deepEqual(unavailable, []);
@@ -66,28 +90,52 @@ test("Explore is enabled from the start, with no result", () => {
 test("Results and Share stay unavailable until their real panel exists", () => {
   const { document } = fakePane([]);
   const unavailable: string[] = [];
-  const nav = createWorkspaceNavigation(document, (view) => unavailable.push(view));
+  const nav = createWorkspaceNavigation(document, (view) =>
+    unavailable.push(view),
+  );
   assert.equal(nav.activate("results"), false);
   assert.equal(nav.activate("share"), false);
   assert.deepEqual(unavailable, ["results", "share"]);
   assert.equal(nav.current(), "work");
 });
 
-test("tapping the Explore button opens it and marks it selected", () => {
-  const { document, buttons, body } = fakePane([]);
+test("real empty-state panels keep Results and Share reachable", () => {
+  const { document, buttons } = fakePane(["results", "share"]);
+  createWorkspaceNavigation(document, () => {});
+  const state = Object.fromEntries(
+    buttons.map((button) => [button.dataset.workspaceTarget, button.disabled]),
+  );
+  assert.deepEqual(state, {
+    work: false,
+    results: false,
+    share: false,
+    explore: false,
+  });
+});
+
+test("tapping the Explore button opens it and updates the tab panel relationship", () => {
+  const { document, buttons, body, scrollArea } = fakePane([]);
   createWorkspaceNavigation(document, () => {});
   const explore = buttons.find((b) => b.dataset.workspaceTarget === "explore")!;
   explore.click();
   assert.equal(body.dataset.workspaceView, "explore");
   assert.equal(explore.attributes["aria-selected"], "true");
   assert.equal(buttons[0].attributes["aria-selected"], "false");
+  assert.equal(scrollArea.attributes["aria-labelledby"], "tab-explore");
 });
 
 test("a developer-only panel does not make Results or Share available", () => {
   const { document, buttons } = fakePane([], ["results", "share"]);
   const nav = createWorkspaceNavigation(document, () => {});
-  const state = Object.fromEntries(buttons.map((b) => [b.dataset.workspaceTarget, b.disabled]));
-  assert.deepEqual(state, { work: false, results: true, share: true, explore: false });
+  const state = Object.fromEntries(
+    buttons.map((b) => [b.dataset.workspaceTarget, b.disabled]),
+  );
+  assert.deepEqual(state, {
+    work: false,
+    results: true,
+    share: true,
+    explore: false,
+  });
   assert.equal(nav.activate("results"), false);
 });
 
@@ -116,9 +164,11 @@ test("the arrow keys also reach Results and Share once they exist", () => {
   const seen: string[] = [];
   for (let i = 0; i < 4; i += 1) {
     const view = nav.current();
-    const button = (document.querySelectorAll("#workspace-nav [data-workspace-target]") as any[]).find(
-      (b) => b.dataset.workspaceTarget === view,
-    );
+    const button = (
+      document.querySelectorAll(
+        "#workspace-nav [data-workspace-target]",
+      ) as any[]
+    ).find((b) => b.dataset.workspaceTarget === view);
     button.press("ArrowRight");
     seen.push(body.dataset.workspaceView);
   }

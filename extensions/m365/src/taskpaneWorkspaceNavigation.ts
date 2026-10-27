@@ -63,6 +63,10 @@ export function createWorkspaceNavigation(
       button.setAttribute("aria-selected", String(selected));
       button.tabIndex = selected ? 0 : -1;
     }
+    const selectedTab = buttons.get(view);
+    document
+      .querySelector<HTMLElement>("#scroll-area")
+      ?.setAttribute("aria-labelledby", selectedTab?.id || "tab-work");
     document.querySelector<HTMLElement>("#scroll-area")?.scrollTo({ top: 0 });
     return true;
   };
@@ -72,12 +76,22 @@ export function createWorkspaceNavigation(
     // Only the selected tab is in the Tab order (roving tabindex), so the arrow keys must reach the
     // others: without them a keyboard user could never leave Work.
     button.addEventListener("keydown", (event: KeyboardEvent) => {
-      const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+      const keys = [
+        "ArrowRight",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowUp",
+        "Home",
+        "End",
+      ];
       if (!keys.includes(event.key)) return;
-      const enabled = [...buttons].filter(([, candidate]) => !candidate.disabled);
+      const enabled = [...buttons].filter(
+        ([, candidate]) => !candidate.disabled,
+      );
       const at = enabled.findIndex(([name]) => name === view);
       if (at < 0 || !enabled.length) return;
-      const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+      const step =
+        event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
       const next =
         event.key === "Home"
           ? 0

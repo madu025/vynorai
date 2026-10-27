@@ -238,7 +238,9 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
-  page.on("pageerror", (error) => consoleErrors.push(error.stack || error.message));
+  page.on("pageerror", (error) =>
+    consoleErrors.push(error.stack || error.message),
+  );
   await page.setViewport(viewport);
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem(
@@ -281,7 +283,9 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     const state = await page.evaluate(() => ({
       auth: document.body.dataset.auth,
       status: document.querySelector("#status-text")?.textContent,
-      smartDisabled: document.querySelector("#smart-run")?.hasAttribute("disabled"),
+      smartDisabled: document
+        .querySelector("#smart-run")
+        ?.hasAttribute("disabled"),
     }));
     throw new Error(
       `taskpane initialization failed: ${JSON.stringify(state)}; ${consoleErrors.join(" | ")}`,
@@ -291,7 +295,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   const idleStatus = await page.$eval("#status", (element) => ({
     mode: element.dataset.mode,
     statusTextVisible:
-      (element.querySelector("#status-text"))?.getClientRects().length > 0,
+      element.querySelector("#status-text")?.getClientRects().length > 0,
     menuVisible:
       document.querySelector("#menu-toggle")?.getClientRects().length > 0,
   }));
@@ -386,7 +390,10 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "the legacy chat row must not consume a signed-in pane row",
   );
   assert.equal(
-    await page.$eval("#header-new-chat", (element) => element.getClientRects().length),
+    await page.$eval(
+      "#header-new-chat",
+      (element) => element.getClientRects().length,
+    ),
     1,
     "New chat must remain available from the header",
   );
@@ -396,7 +403,10 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "empty workbooks should keep the history picker closed",
   );
   assert.equal(
-    await page.$eval(".brand-bar", (element) => element.getClientRects().length > 0),
+    await page.$eval(
+      ".brand-bar",
+      (element) => element.getClientRects().length > 0,
+    ),
     true,
     "the premium workspace brand header must remain visible",
   );
@@ -410,7 +420,10 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "the disabled history control must remain discoverable in the header",
   );
   assert.equal(
-    await page.$eval("#selection-chip", (element) => element.getClientRects().length),
+    await page.$eval(
+      "#selection-chip",
+      (element) => element.getClientRects().length,
+    ),
     0,
     "the retained selection context must not consume a work-screen row",
   );
@@ -472,16 +485,25 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   // A landing suggestion is a safe shortcut: it may prepare a request, but it must never run a
   // workbook operation or create chat output before the person presses Run.
   const beforeSuggestion = await page.evaluate(() => ({
-    messages: document.querySelector("#conversation-history")?.childElementCount,
-    previewHidden: document.querySelector("#result-card")?.hasAttribute("hidden"),
+    messages: document.querySelector("#conversation-history")
+      ?.childElementCount,
+    previewHidden: document
+      .querySelector("#result-card")
+      ?.hasAttribute("hidden"),
   }));
   await page.click(".idle-card");
   const afterSuggestion = await page.evaluate(() => ({
     request: document.querySelector("#instruction")?.value,
-    messages: document.querySelector("#conversation-history")?.childElementCount,
-    previewHidden: document.querySelector("#result-card")?.hasAttribute("hidden"),
+    messages: document.querySelector("#conversation-history")
+      ?.childElementCount,
+    previewHidden: document
+      .querySelector("#result-card")
+      ?.hasAttribute("hidden"),
   }));
-  assert.ok(afterSuggestion.request, "a landing suggestion must fill the request box");
+  assert.ok(
+    afterSuggestion.request,
+    "a landing suggestion must fill the request box",
+  );
   assert.equal(
     afterSuggestion.messages,
     beforeSuggestion.messages,
@@ -562,7 +584,10 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     "the capability report must render real feature rows",
   );
   assert.match(
-    await page.$eval("#capabilities-summary", (element) => element.textContent ?? ""),
+    await page.$eval(
+      "#capabilities-summary",
+      (element) => element.textContent ?? "",
+    ),
     /features checked/,
     "the capability report must summarize the host verdicts",
   );
@@ -626,7 +651,10 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
       ["2", "Changes"],
       ["0", "Warnings"],
     ]
-      .map(([value, name]) => `<div class="impact-item"><strong>${value}</strong><span>${name}</span></div>`)
+      .map(
+        ([value, name]) =>
+          `<div class="impact-item"><strong>${value}</strong><span>${name}</span></div>`,
+      )
       .join("");
     document.querySelector("#outcomes").innerHTML =
       '<div class="outcome"><strong>Sales dashboard</strong><div class="where">Will be created on a new sheet</div><p>Column chart of Net Amount by Category with totals.</p></div>';
@@ -635,19 +663,20 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     for (const label of tweaks.querySelectorAll("label"))
       label.removeAttribute("hidden");
     document.querySelector("#tweak-chart-type").innerHTML =
-      '<option>Column</option><option>Line</option>';
+      "<option>Column</option><option>Line</option>";
     document.querySelector("#tweak-aggregation").innerHTML =
-      '<option>Sum</option><option>Average</option>';
+      "<option>Sum</option><option>Average</option>";
     document.querySelector("#tweak-category").innerHTML =
-      '<option>Category</option>';
+      "<option>Category</option>";
     document.querySelector("#tweak-value").innerHTML =
-      '<option>Net Amount</option>';
+      "<option>Net Amount</option>";
     const apply = document.querySelector("#apply");
     apply.removeAttribute("disabled");
     result.scrollIntoView({ block: "start" });
   });
   await page.waitForFunction(
-    () => !document.querySelector('[data-workspace-target="results"]')?.disabled,
+    () =>
+      !document.querySelector('[data-workspace-target="results"]')?.disabled,
   );
   await page.click('[data-workspace-target="results"]');
   assert.equal(
@@ -686,7 +715,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     insights.removeAttribute("hidden");
     insights.setAttribute("open", "");
     document.querySelector("#insights-list").innerHTML =
-      '<p><strong>Net Amount:</strong> Total 7,461,955; average 25,308.</p><p><strong>Trend:</strong> The later half is stronger.</p>';
+      "<p><strong>Net Amount:</strong> Total 7,461,955; average 25,308.</p><p><strong>Trend:</strong> The later half is stronger.</p>";
     gallery.scrollIntoView({ block: "start" });
   });
   await assertReachable(page, "#result-gallery");
@@ -713,6 +742,8 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     document.querySelector("#email-body").value =
       "Please find the reviewed Excel report attached.";
     document.querySelector("#share-message-block").removeAttribute("hidden");
+    document.querySelector("#share-card").removeAttribute("hidden");
+    document.querySelector("#share-empty").setAttribute("hidden", "");
     document.querySelector("#share-message").value =
       "Sales dashboard\nTotal Net Amount: 7,461,955";
     email.scrollIntoView({ block: "start" });

@@ -174,6 +174,55 @@ test("advanced capability report downgrades unsupported host APIs explicitly", (
   assert.equal(report["power-pivot"].observed.platform, "web");
 });
 
+test("evaluated ExcelApi evidence wins over the server's unknown host verdict", () => {
+  const office = {
+    context: {
+      platform: "PC",
+      requirements: {
+        isSetSupported: (name: string, version: string) =>
+          name === "ExcelApi" &&
+          ["1.1", "1.4", "1.7", "1.8", "1.9"].includes(version),
+      },
+    },
+  };
+  const context = hostCapabilityContext({
+    office,
+    server: {
+      excel: { canInspect: true, canApply: true },
+      aiAnalysis: true,
+    },
+    graphScopes: ["https://graph.microsoft.com/Mail.Send"],
+  });
+  const unknownApi = (
+    excelApi: string,
+    status: "unsupported" | "available_with_fallback",
+  ) => ({
+    status,
+    execution: "office_js" as const,
+    reason: `ExcelApi ${excelApi} support was not evaluated`,
+    requirement: {
+      hosts: ["web", "windows", "mac"] as const,
+      excelApi,
+      needs: [],
+    },
+    observed: { platform: "unknown" as const, excelApi: null },
+  });
+  const report = buildAdvancedCapabilityReport(
+    {
+      chart: unknownApi("1.4", "unsupported"),
+      dashboard: unknownApi("1.8", "available_with_fallback"),
+      "export-xlsx": unknownApi("1.1", "unsupported"),
+    },
+    context,
+  );
+  assert.equal(context.apiSets?.includes("1.4"), true);
+  assert.equal(report.chart.status, "available");
+  assert.equal(report.dashboard.status, "available");
+  assert.equal(report["export-xlsx"].status, "available");
+  assert.equal(report.slicer.status, "available_with_fallback");
+  assert.match(report.slicer.reason!, /slicers/i);
+});
+
 test("without a server answer the host never reports more than it can run", () => {
   const context = hostCapabilityContext({ office: undefined });
   const report = buildAdvancedCapabilityReport(undefined, context);

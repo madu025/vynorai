@@ -276,9 +276,11 @@ export function hostCapabilityContext(input: {
 }
 
 /**
- * Merges the server's per-feature verdicts with the host's own: for every feature in the shared
- * registry the stricter answer wins, so a label is never kinder than what can really run here.
- * A feature the server did not report is decided by the host alone (never assumed available).
+ * Merges the server's account verdicts with the host's own. The host's evaluated ExcelApi evidence
+ * is authoritative for Office.js features: the server intentionally cannot observe the workbook
+ * host and its "not evaluated" verdict must not turn a supported desktop action into a refusal.
+ * For account/native/consent facts, the stricter answer still wins. A feature the server did not
+ * report is decided by the host alone (never assumed available).
  */
 export function buildAdvancedCapabilityReport(
   server: AdvancedCapabilityReport | undefined,
@@ -288,7 +290,13 @@ export function buildAdvancedCapabilityReport(
   for (const feature of CAPABILITY_FEATURES) {
     const local = resolveCapability(feature, context);
     const remote = server?.[feature];
-    report[feature] = remote ? stricterCapability(remote, local) : local;
+    const hostApiWasEvaluated =
+      local.requirement.excelApi !== undefined &&
+      local.observed.excelApi !== null;
+    report[feature] =
+      remote && !hostApiWasEvaluated
+        ? stricterCapability(remote, local)
+        : local;
   }
   return report;
 }

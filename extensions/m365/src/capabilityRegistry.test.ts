@@ -331,6 +331,7 @@ test("Office platforms and API sets map to the host kinds", () => {
   assert.equal(hostPlatformFromOffice("Mac"), "mac");
   assert.equal(hostPlatformFromOffice("iOS"), "unknown");
   assert.deepEqual(supportedApiSets({ "1.4": true, "1.8": false }), ["1.4"]);
+  assert.equal(supportedApiSets(undefined), undefined);
 });
 
 test("native requests are recognised, ordinary and macro-writing requests are not", () => {

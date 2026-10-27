@@ -624,8 +624,9 @@ export function hostPlatformFromOffice(value: unknown): HostPlatform {
 /** The ExcelApi versions marked supported in a `{ "1.4": true, ... }` record. */
 export function supportedApiSets(
   excelApi: Record<string, boolean> | undefined,
-): string[] {
-  return Object.entries(excelApi ?? {})
+): string[] | undefined {
+  if (!excelApi) return undefined;
+  return Object.entries(excelApi)
     .filter(([, supported]) => supported === true)
     .map(([version]) => version);
 }

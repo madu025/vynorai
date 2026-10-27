@@ -33,6 +33,8 @@ const EXACT: Record<string, string> = {
     "මෙම Excel add-in එකේ Sparklines තවම ලබාගත නොහැක. ඒ වෙනුවට අලුත් result sheet එකක line chart එකක් භාවිතා කරන්න.",
   "Scheduled refresh is not available in this add-in yet. Run the request again when you want a fresh, reviewed result.":
     "නියමිත වේලාවට refresh කිරීම තවම ලබාගත නොහැක. අලුත්, පරීක්ෂා කළ result එකක් අවශ්‍ය වූ විට ඉල්ලීම නැවත run කරන්න.",
+  "Scheduled refresh is due. Preparing a fresh preview for “1”.":
+    "නියමිත refresh වේලාව පැමිණ ඇත. “1” සඳහා අලුත් පෙරදසුනක් සූදානම් කරමින් පවතී.",
   "Email delivery is not enabled. VynorAI will not request Mail permissions or send workbook data by email.":
     "Email යැවීම සක්‍රීය කර නැත. VynorAI Mail permissions ඉල්ලා workbook data email මගින් නොයවයි.",
   "export-csv": "CSV අපනයනය",

@@ -17,6 +17,15 @@ test("parses a weekly refresh while preserving the report request", () => {
   assert.equal(new Date(value!.nextRunAt).getDay(), 1);
 });
 
+test("removes a schedule phrase even when the request does not say refresh", () => {
+  const schedule = parseScheduledRefresh(
+    "Create a sales report every Monday",
+    new Date("2026-10-27T08:00:00"),
+  );
+  assert.equal(schedule?.request, "Create a sales report");
+  assert.equal(schedule?.weekday, 1);
+});
+
 test("invalid stored schedule data is discarded", () => {
   assert.equal(parseStoredScheduledRefresh('{"frequency":"daily"}'), undefined);
   assert.equal(parseStoredScheduledRefresh("not json"), undefined);

@@ -52,6 +52,10 @@ export function parseScheduledRefresh(
       /\s*(?:and\s+)?(?:refresh|update)\s+(?:this\s+)?(?:result|report|sheet|workbook)?\s*(?:every|each)\s+(?:day|week|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b[^.]*$/i,
       "",
     )
+    .replace(
+      /\s*(?:every|each)\s+(?:day|week|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b[^.]*$/i,
+      "",
+    )
     .replace(/\s+/g, " ")
     .trim();
   const next = new Date(now);

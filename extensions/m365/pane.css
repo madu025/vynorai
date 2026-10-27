@@ -468,7 +468,8 @@ body[data-auth="link-required"] main {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 /* The request starts at the top; chat, reports and insights flow below it in one scroll area. */
 body[data-auth="in"] main {

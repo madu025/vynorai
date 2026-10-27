@@ -4839,10 +4839,6 @@ body[data-workspace-view="results"]:has(
 body[data-workspace-view="share"] #share-empty {
   display: block;
 }
-body[data-workspace-view="share"]:has(#selection-chip:not([hidden]))
-  #share-empty {
-  display: none;
-}
 body[data-history-loading] .history-skeleton {
   display: grid;
   gap: 8px;

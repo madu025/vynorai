@@ -427,6 +427,28 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     0,
     "the retained selection context must not consume a work-screen row",
   );
+  await page.evaluate(() => {
+    document.body.dataset.workspaceView = "share";
+    document.querySelector("#share-card")?.setAttribute("hidden", "");
+    document.querySelector("#share-empty")?.removeAttribute("hidden");
+    document.querySelector("#selection-chip")?.removeAttribute("hidden");
+  });
+  const shareEmptyLayout = await page.$eval("#share-empty", (element) => {
+    const box = element.getBoundingClientRect();
+    return { display: getComputedStyle(element).display, height: box.height };
+  });
+  assert.equal(
+    shareEmptyLayout.display,
+    "block",
+    "Share empty state must remain visible when selection context exists",
+  );
+  assert.ok(
+    shareEmptyLayout.height > 0,
+    "Share empty state must have visible content before a card exists",
+  );
+  await page.evaluate(() => {
+    document.body.dataset.workspaceView = "work";
+  });
   assert.equal(
     await page.$("#workbook-context"),
     null,

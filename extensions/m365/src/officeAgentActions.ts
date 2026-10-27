@@ -2233,21 +2233,31 @@ export async function readDetails(
         possibleCircular: report.possibleCircularReferenceCount,
         inconsistent: report.inconsistentFormulaCount,
         hardCoded: report.hardCodedCellCount,
-        cells: report.items
-          .filter(
-            (item) =>
-              item.errors.length ||
-              item.possibleCircularReference ||
-              item.inconsistentFormula,
-          )
-          .slice(0, 30)
-          .map((item) => ({
+        cells: [
+          ...report.items
+            .filter(
+              (item) =>
+                item.errors.length ||
+                item.possibleCircularReference ||
+                item.inconsistentFormula,
+            )
+            .map((item) => ({
+              cell: item.address,
+              formula: item.formula,
+              value: undefined,
+              errors: item.errors,
+              circular: item.possibleCircularReference || undefined,
+              inconsistent: item.inconsistentFormula || undefined,
+            })),
+          ...report.displayedErrorItems.map((item) => ({
             cell: item.address,
-            formula: item.formula,
+            formula: "",
+            value: item.value,
             errors: item.errors,
-            circular: item.possibleCircularReference || undefined,
-            inconsistent: item.inconsistentFormula || undefined,
+            circular: undefined,
+            inconsistent: undefined,
           })),
+        ].slice(0, 30),
       };
     }
     case "formula_audit": {

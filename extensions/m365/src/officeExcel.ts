@@ -2852,6 +2852,7 @@ export async function applyApprovedExcelPlan(
                   [
                     "Address",
                     "Formula",
+                    "Displayed value",
                     "References",
                     "Errors",
                     "Possible circular reference",
@@ -2864,6 +2865,7 @@ export async function applyApprovedExcelPlan(
                     .map((item) => [
                       item.address,
                       literal(item.formula),
+                      "",
                       item.references.join(", "),
                       item.errors.join(", "),
                       item.possibleCircularReference ? "Yes" : "No",
@@ -2872,6 +2874,19 @@ export async function applyApprovedExcelPlan(
                       item.repair
                         ? `${item.repair.candidate ? `Suggested repair: ${item.repair.candidate}. ` : ""}${item.repair.guidance}`
                         : "",
+                    ]),
+                  ...report.displayedErrorItems
+                    .slice(0, Math.max(0, 500 - report.items.length))
+                    .map((item) => [
+                      item.address,
+                      "",
+                      literal(item.value),
+                      "",
+                      item.errors.join(", "),
+                      "No",
+                      "No",
+                      item.explanation,
+                      "",
                     ]),
                 ];
                 if (report.items.length > 500)

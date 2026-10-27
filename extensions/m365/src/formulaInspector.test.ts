@@ -31,6 +31,31 @@ test("formula inspector reports references, calculation errors and a direct self
   assert.match(formatFormulaInspection(report), /B3: =B3\+1/);
 });
 
+test("formula inspector reports displayed Excel errors when formula text is unavailable", () => {
+  const report = inspectFormulas({
+    worksheetName: "CustomerFeedback",
+    address: "CustomerFeedback!G2",
+    formulas: [["#VALUE!"]],
+    values: [["#VALUE!"]],
+  });
+
+  assert.equal(report.formulaCellCount, 0);
+  assert.equal(report.errorCellCount, 1);
+  assert.deepEqual(report.displayedErrorItems, [
+    {
+      address: "G2",
+      value: "#VALUE!",
+      errors: ["#VALUE!"],
+      explanation:
+        "Excel returned an error value, but no formula text was available for this cell. It may be a hard-coded error value or a formula whose text Excel did not expose.",
+    },
+  ]);
+  assert.match(
+    formatFormulaInspection(report),
+    /G2: no formula text was returned; displayed value #VALUE!/,
+  );
+});
+
 test("formula audit reports hard-coded numbers and copied-formula inconsistencies", () => {
   const report = inspectFormulas({
     worksheetName: "Sales",

@@ -19,6 +19,13 @@ export interface FormulaInspectionItem {
   };
 }
 
+export interface DisplayedErrorItem {
+  address: string;
+  value: string;
+  errors: string[];
+  explanation: string;
+}
+
 export interface FormulaInspection {
   worksheetName: string;
   address: string;
@@ -28,6 +35,8 @@ export interface FormulaInspection {
   hardCodedCellCount: number;
   inconsistentFormulaCount: number;
   items: FormulaInspectionItem[];
+  /** Error values returned by Excel where no formula text was available. */
+  displayedErrorItems: DisplayedErrorItem[];
 }
 
 const ERROR_CODES = [
@@ -221,6 +230,7 @@ export function isFormulaExplanationRequest(instruction: string): boolean {
 export function inspectFormulas(input: FormulaSelection): FormulaInspection {
   const start = selectionStart(input.address);
   const items: FormulaInspectionItem[] = [];
+  const displayedErrorItems: DisplayedErrorItem[] = [];
   let errorCellCount = 0;
   let possibleCircularReferenceCount = 0;
   const hardCodedColumns: number[] = [];
@@ -232,6 +242,19 @@ export function inspectFormulas(input: FormulaSelection): FormulaInspection {
       const value = String(input.values[row]?.[column] ?? "");
       const cell = `${columnLetter(start.column + column)}${start.row + row + 1}`;
       if (!formula.startsWith("=")) {
+        const displayedErrors = ERROR_CODES.filter((code) =>
+          value.includes(code),
+        );
+        if (displayedErrors.length) {
+          errorCellCount += 1;
+          displayedErrorItems.push({
+            address: cell,
+            value,
+            errors: displayedErrors,
+            explanation:
+              "Excel returned an error value, but no formula text was available for this cell. It may be a hard-coded error value or a formula whose text Excel did not expose.",
+          });
+        }
         if (
           typeof input.values[row]?.[column] === "number" &&
           Number.isFinite(input.values[row][column] as number)
@@ -293,14 +316,15 @@ export function inspectFormulas(input: FormulaSelection): FormulaInspection {
     hardCodedCellCount,
     inconsistentFormulaCount,
     items,
+    displayedErrorItems,
   };
 }
 
 export function formatFormulaInspection(report: FormulaInspection): string {
-  if (report.formulaCellCount === 0)
+  if (report.formulaCellCount === 0 && report.displayedErrorItems.length === 0)
     return "No formulas were found in the selected cells.";
   const header = `${report.formulaCellCount} formula cell(s), ${report.errorCellCount} error cell(s), ${report.possibleCircularReferenceCount} possible direct circular reference(s), ${report.inconsistentFormulaCount} inconsistent formula(s), ${report.hardCodedCellCount} hard-coded numeric cell(s).`;
-  const details = report.items.slice(0, 20).map((item) => {
+  const formulaDetails = report.items.slice(0, 20).map((item) => {
     const warnings = [
       ...item.errors,
       ...(item.possibleCircularReference
@@ -313,7 +337,13 @@ export function formatFormulaInspection(report: FormulaInspection): string {
       : "";
     return `${item.address}: ${item.formula}. ${item.explanation}${warnings.length ? ` Warning: ${warnings.join(", ")}.` : ""}${repair}`;
   });
-  return [header, ...details].join(" ");
+  const displayedErrorDetails = report.displayedErrorItems
+    .slice(0, 20)
+    .map(
+      (item) =>
+        `${item.address}: no formula text was returned; displayed value ${item.value}. ${item.explanation} Warning: ${item.errors.join(", ")}.`,
+    );
+  return [header, ...formulaDetails, ...displayedErrorDetails].join(" ");
 }
 
 export interface WorkbookAudit {
@@ -328,12 +358,18 @@ export interface WorkbookAudit {
     hardCoded: number;
   };
   /** Sheets with at least one problem, worst first. */
-  sheets: { sheet: string; errors: number; possibleCircular: number; inconsistent: number }[];
+  sheets: {
+    sheet: string;
+    errors: number;
+    possibleCircular: number;
+    inconsistent: number;
+  }[];
   /** The worst cells across the workbook: errors, then circular references, then inconsistent copies. */
   issues: {
     sheet: string;
     cell: string;
     formula: string;
+    value?: string;
     errors: string[];
     circular?: true;
     inconsistent?: true;
@@ -348,7 +384,11 @@ export function auditWorkbook(
   skipped: string[] = [],
   limit = 40,
 ): WorkbookAudit {
-  const weight = (item: FormulaInspectionItem) =>
+  const weight = (item: {
+    errors: string[];
+    possibleCircularReference?: boolean;
+    inconsistentFormula?: boolean;
+  }) =>
     (item.errors.length ? 4 : 0) +
     (item.possibleCircularReference ? 2 : 0) +
     (item.inconsistentFormula ? 1 : 0);
@@ -374,26 +414,38 @@ export function auditWorkbook(
       .filter((s) => s.errors + s.possibleCircular + s.inconsistent > 0)
       .sort(
         (a, b) =>
-          b.errors * 4 + b.possibleCircular * 2 + b.inconsistent -
+          b.errors * 4 +
+          b.possibleCircular * 2 +
+          b.inconsistent -
           (a.errors * 4 + a.possibleCircular * 2 + a.inconsistent),
       ),
     issues: reports
-      .flatMap((report) =>
-        report.items
+      .flatMap((report) => [
+        ...report.items
           .filter((item) => weight(item) > 0)
           .map((item) => ({ sheet: report.worksheetName, item })),
-      )
+        ...report.displayedErrorItems.map((item) => ({
+          sheet: report.worksheetName,
+          item,
+        })),
+      ])
       .sort((a, b) => weight(b.item) - weight(a.item))
       .slice(0, limit)
       .map(({ sheet, item }) => ({
         sheet,
         cell: item.address,
-        formula: item.formula,
+        formula: "formula" in item ? item.formula : "",
+        ...("value" in item ? { value: item.value } : {}),
         errors: item.errors,
-        ...(item.possibleCircularReference ? { circular: true as const } : {}),
-        ...(item.inconsistentFormula ? { inconsistent: true as const } : {}),
+        ...("possibleCircularReference" in item &&
+        item.possibleCircularReference
+          ? { circular: true as const }
+          : {}),
+        ...("inconsistentFormula" in item && item.inconsistentFormula
+          ? { inconsistent: true as const }
+          : {}),
         explanation: item.explanation,
-        ...(item.repair
+        ...("repair" in item && item.repair
           ? {
               repair: item.repair.candidate
                 ? `${item.repair.guidance} Candidate: ${item.repair.candidate}`

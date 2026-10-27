@@ -13,10 +13,19 @@ import {
   type CleanOperation,
   type ComputeOperator,
 } from "./transform.js";
+import { parseScheduledRefresh } from "./scheduledRefresh.js";
 
 type Cell = string | number | boolean | null;
 
 export interface InstructionSpecs {
+  /** Local schedule metadata; execution happens when the task pane is open again. */
+  scheduleRefresh?: {
+    frequency: "daily" | "weekly";
+    weekday?: number;
+    request: string;
+    nextRunAt: number;
+    createdAt: number;
+  };
   /** A separate, explicitly approved workbook-email request handled by the task pane. */
   email?: { to: string };
   namedRange?: { source: number; name?: string };
@@ -329,7 +338,12 @@ export function interpretInstruction(
     specs: {},
     problems: [],
   };
-  const text = rewriteColumnWishes(instruction.replace(/[_]+/g, " "), headers);
+  const scheduled = parseScheduledRefresh(instruction);
+  const text = rewriteColumnWishes(
+    (scheduled?.request || instruction).replace(/[_]+/g, " "),
+    headers,
+  );
+  if (scheduled) result.specs.scheduleRefresh = scheduled;
   // Native-only features are never faked. Real fallbacks are handled explicitly below; otherwise
   // return the structured unsupported message instead of falling through to a near-miss plan.
   const native = refuseNativeRequest(text, baseCapabilityContext());
@@ -395,16 +409,6 @@ export function interpretInstruction(
   // current permission and Office.js safety boundary. Return an actionable
   // refusal instead of falling through to the generic "unsupported action"
   // hint, and never invent a plan that could appear to have succeeded.
-  if (
-    /\b(?:refresh|update)\b.*\b(?:every|each|on)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|day)/i.test(
-      text,
-    )
-  ) {
-    result.problems.push(
-      "Scheduled refresh is not available in this add-in yet. Run the request again when you want a fresh, reviewed result.",
-    );
-    return result;
-  }
   if (
     /\bemail\b.*\b(?:result|sheet|workbook|report)\b|\bsend\b.*\b(?:result|sheet|workbook|report)\b.*\b(?:email|finance team|team)\b/i.test(
       text,

@@ -35,20 +35,24 @@ test("Sparkline requests use the real chart fallback", () => {
   assert.equal(interpreted.specs.chart?.chartType, "line");
 });
 
-test("unsupported or gated automation requests explain the safe boundary", () => {
-  for (const prompt of [
-    "Refresh this result every Monday",
+test("scheduled refresh is recorded while email remains approval-gated", () => {
+  const schedule = interpretInstruction(
+    "Create a sales report and refresh this result every Monday",
+    HEADERS,
+    ROWS,
+  );
+  assert.ok(schedule.specs.scheduleRefresh);
+  assert.equal(schedule.specs.scheduleRefresh?.frequency, "weekly");
+  assert.equal(schedule.specs.scheduleRefresh?.weekday, 1);
+
+  const email = interpretInstruction(
     "Email the result sheet to the finance team",
-  ]) {
-    const interpreted = interpretInstruction(prompt, HEADERS, ROWS);
-    assert.deepEqual(interpreted.actions, [], prompt);
-    assert.equal(interpreted.problems.length, 1, prompt);
-    assert.match(
-      interpreted.problems[0],
-      /recipient|not available|not enabled/i,
-      prompt,
-    );
-  }
+    HEADERS,
+    ROWS,
+  );
+  assert.deepEqual(email.actions, []);
+  assert.equal(email.problems.length, 1);
+  assert.match(email.problems[0], /recipient|not available|not enabled/i);
 });
 
 type CataloguePrompt = {

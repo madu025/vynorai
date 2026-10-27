@@ -20,9 +20,12 @@
     .orb-3{width:320px;height:320px;background:radial-gradient(circle,rgba(0,229,255,0.08) 0%,transparent 70%);top:40%;left:55%;animation-duration:24s;}
     @keyframes drift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(40px,30px) scale(1.08)}}
     .grid-lines{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);background-size:50px 50px;pointer-events:none;}
-    .page-wrapper{position:relative;z-index:1;width:100%;min-height:100vh;display:grid;grid-template-columns:1fr 1fr;}
-    @media(max-width:860px){.page-wrapper{grid-template-columns:1fr}.left-panel{display:none}}
-    .left-panel{display:flex;flex-direction:column;justify-content:center;padding:60px 56px;background:linear-gradient(145deg,rgba(0,229,255,0.04) 0%,rgba(176,38,255,0.03) 100%);border-right:1px solid var(--border);}
+    .page-wrapper{position:relative;z-index:1;width:100%;min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+    /* Office Dialog API can report a wide CSS viewport while displaying a much narrower window.
+       Keep the form in the visible column instead of letting the hero's min-content width push it
+       outside the dialog. */
+    @media(max-width:1100px){.page-wrapper{grid-template-columns:1fr}.left-panel{display:none}.right-panel{min-width:0;padding:24px 18px;overflow:auto}}
+    .left-panel{display:flex;flex-direction:column;justify-content:center;min-width:0;padding:60px 56px;background:linear-gradient(145deg,rgba(0,229,255,0.04) 0%,rgba(176,38,255,0.03) 100%);border-right:1px solid var(--border);}
     .brand-mark{display:flex;align-items:center;gap:14px;margin-bottom:64px;text-decoration:none;}
     .brand-icon{width:44px;height:44px;border-radius:12px;background:var(--gradient);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#000;box-shadow:0 0 28px rgba(0,229,255,0.45);flex-shrink:0;}
     .brand-text{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-0.5px;}
@@ -37,7 +40,7 @@
     .chip-label{font-size:14px;font-weight:500;color:var(--text);}
     .chip-desc{font-size:12px;color:var(--text-muted);margin-top:1px;}
     .left-footer{margin-top:48px;font-size:12px;color:var(--text-muted);}
-    .right-panel{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px 32px;min-height:100vh;}
+    .right-panel{display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:0;padding:40px 32px;min-height:100vh;}
     .auth-card{width:100%;max-width:420px;background:var(--card-bg);border:1px solid var(--border);border-radius:24px;padding:40px;backdrop-filter:blur(24px);box-shadow:0 0 0 1px rgba(0,229,255,0.03),0 24px 64px rgba(0,0,0,0.6);transition:border-color 0.3s;}
     .auth-card:focus-within{border-color:rgba(0,229,255,0.18);}
     .auth-header{text-align:center;margin-bottom:28px;}

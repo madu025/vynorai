@@ -148,6 +148,7 @@ import {
   setAiFirst,
 } from "./taskpaneAiMode.js";
 import { describeUnknownColumns, findUnknownColumns } from "./unknownColumn.js";
+import type { ScheduledRefresh } from "./scheduledRefresh.js";
 import { cleanFirstInstruction, describeNearDuplicates } from "./valueCheck.js";
 import { describeIntegrityIssues } from "./integrity.js";
 import {
@@ -586,6 +587,27 @@ function resultsStorageKey(): string | undefined {
   const workbook = workbookStorageFingerprint();
   if (!claims?.tenantId || !claims.objectId || !workbook) return undefined;
   return `${RESULTS_KEY_PREFIX}.${claims.tenantId}.${claims.objectId}.${workbook}`;
+}
+
+function scheduledRefreshStorageKey(): string | undefined {
+  const claims = describeAccessToken(accessToken);
+  const workbook = workbookStorageFingerprint();
+  if (!claims?.tenantId || !claims.objectId || !workbook) return undefined;
+  return `vynorai.m365.excel.schedule.v1.${claims.tenantId}.${claims.objectId}.${workbook}`;
+}
+
+function persistScheduledRefresh(schedule: ScheduledRefresh): void {
+  const key = scheduledRefreshStorageKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(schedule));
+    log.record("schedule:save", "pass", {
+      frequency: schedule.frequency,
+      nextRunAt: schedule.nextRunAt,
+    });
+  } catch (error) {
+    log.record("schedule:save", "skip", describeError(error));
+  }
 }
 
 function persistResultGallery() {
@@ -3183,6 +3205,20 @@ apply?.addEventListener("click", async () => {
       ),
     );
     if (!failed.length) lastAppliedSpecs = previewSpecs;
+    const scheduled = (
+      previewSpecs as
+        | (ExcelColumnSpecs & {
+            scheduleRefresh?: ScheduledRefresh;
+          })
+        | undefined
+    )?.scheduleRefresh;
+    if (!failed.length && scheduled?.request) {
+      persistScheduledRefresh(scheduled);
+      renderConversation(
+        "assistant",
+        `Saved a local ${scheduled.frequency} refresh for this report. It will become a fresh preview when the Excel task pane is open; nothing runs while the pane is closed.`,
+      );
+    }
     // How a result was built (a fallback, a feature this Excel lacks), so nothing differs silently.
     const buildNotes = report.results.flatMap((result) => result.notes ?? []);
     if (buildNotes.length)

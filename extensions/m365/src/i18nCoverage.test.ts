@@ -254,7 +254,10 @@ test("agent role rows wrap the status under the name at 320px instead of squeezi
 });
 
 test("the agent badge is a polite live region and every button has a name", () => {
-  assert.match(html, /id="agent-badge" role="status" aria-live="polite"/);
+  assert.match(
+    html,
+    /id="agent-badge"[\s\S]*?role="status"[\s\S]*?aria-live="polite"/,
+  );
   assert.match(html, /id="status"\s+role="status"\s+aria-live="polite"/);
   const unnamed: string[] = [];
   for (const match of body.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)) {

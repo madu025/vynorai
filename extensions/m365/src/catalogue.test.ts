@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import path from "node:path";
 import { test } from "node:test";
 import { interpretInstruction } from "./intent.js";
 
@@ -82,11 +81,7 @@ const ROWS = [
 const BASELINE = { parsedPercent: 93.9, fullyServedPercent: 92.9 };
 
 function loadCatalogue(): CataloguePrompt[] {
-  const filename = path.resolve(
-    process.cwd(),
-    "test-data",
-    "copilot-prompts.txt",
-  );
+  const filename = new URL("../test-data/copilot-prompts.txt", import.meta.url);
   const lines = fs
     .readFileSync(filename, "utf8")
     .split(/\r?\n/)

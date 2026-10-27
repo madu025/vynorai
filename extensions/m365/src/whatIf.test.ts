@@ -150,4 +150,42 @@ test("bad what-if arguments come back as messages the model can act on", () => {
       }),
     /B1 needs a number/,
   );
+  assert.throws(
+    () =>
+      checkWhatIf({
+        mode: "optimisation",
+        outputs: ["B5"],
+        direction: "maximize",
+        variables: [
+          { cell: "B1", min: 0, max: 2, step: 1 },
+          { cell: "$B$1", min: 0, max: 2, step: 1 },
+        ],
+      }),
+    /distinct input cells/,
+  );
+  assert.throws(
+    () =>
+      checkWhatIf({
+        mode: "scenarios",
+        outputs: ["B5"],
+        scenarios: [
+          { name: "Base", inputs: { B1: 1 } },
+          { name: " base ", inputs: { B1: 2 } },
+        ],
+      }),
+    /scenario names must be unique/,
+  );
+});
+
+test("Excel calculation errors are not reported as a successful what-if result", () => {
+  const args = checkWhatIf({
+    mode: "data_table",
+    outputs: ["B5"],
+    input_cell: "B1",
+    values: [1],
+  });
+  assert.throws(
+    () => whatIfTable(args, [["#DIV/0!"]], ["Profit"]),
+    /Excel error value.*#DIV\/0!/,
+  );
 });

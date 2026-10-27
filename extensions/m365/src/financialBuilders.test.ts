@@ -135,7 +135,7 @@ test("ageing puts amounts in 30-day buckets, by customer when given", () => {
   assert.equal(value(byCustomer, 0, 1), "=DATE(2026,3,31)");
   assert.equal(
     value(byCustomer, 3, 0),
-    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,GROUPBY('AR'!B2:B500,HSTACK(a*(g>=0)*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)),SUM,0,1))",
+    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,GROUPBY('AR'!B2:B500,HSTACK(a*(g<0),a*(g>=0)*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)),SUM,0,1))",
   );
   const totals = financialCells({
     kind: "ageing",
@@ -146,6 +146,10 @@ test("ageing puts amounts in 30-day buckets, by customer when given", () => {
   assert.equal(value(totals, 0, 1), "=TODAY()");
   assert.equal(
     value(totals, 3, 0),
-    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,HSTACK(SUM(a*(g>=0)*(g<=30)),SUM(a*(g>30)*(g<=60)),SUM(a*(g>60)*(g<=90)),SUM(a*(g>90))))",
+    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,HSTACK(SUM(a*(g<0)),SUM(a*(g>=0)*(g<=30)),SUM(a*(g>30)*(g<=60)),SUM(a*(g>60)*(g<=90)),SUM(a*(g>90))))",
+  );
+  assert.deepEqual(
+    [0, 1, 2, 3, 4].map((column) => value(totals, 2, column)),
+    ["Not due", "0-30 days", "31-60 days", "61-90 days", "Over 90 days"],
   );
 });

@@ -44,6 +44,11 @@ export interface CombineCell {
 const quote = (sheet: string) => `'${sheet.replace(/'/g, "''")}'`;
 const text = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
+/** Match the guard's case/space/leading-zero policy inside the workbook formula too. */
+export function normalizedKeyFormula(reference: string): string {
+  return `LET(v,${reference},IF(TRIM(v)="","",IFERROR(TEXT(VALUE(v),"0"),LOWER(TRIM(v)))))`;
+}
+
 function index(table: CombineTable, header: string, what: string): number {
   const wanted = header.trim().toLowerCase();
   const found = table.headers.findIndex(
@@ -106,6 +111,8 @@ export function combineCells(spec: CombineSpec): CombineCell[] {
     right,
     index(right, spec.rightKey || spec.key, "right_key"),
   );
+  const normalizedLeftKey = normalizedKeyFormula(leftKey);
+  const normalizedRightKey = normalizedKeyFormula(rightKey);
   if (spec.mode === "join") {
     const keyIndex = index(right, spec.rightKey || spec.key, "right_key");
     const bring = spec.columns?.length
@@ -114,7 +121,8 @@ export function combineCells(spec: CombineSpec): CombineCell[] {
     if (!bring.length)
       throw new AgentToolError("join needs at least one column to bring.");
     const looked = bring.map(
-      (i) => `XLOOKUP(${leftKey},${rightKey},${dataColumn(right, i)},"Not found")`,
+      (i) =>
+        `XLOOKUP(${normalizedLeftKey},${normalizedRightKey},${dataColumn(right, i)},"Not found")`,
     );
     const names = bring.map((i) => text(String(right.headers[i])));
     return [
@@ -125,15 +133,19 @@ export function combineCells(spec: CombineSpec): CombineCell[] {
       },
     ];
   }
-  const inRight = `ISNUMBER(XMATCH(${leftKey},${rightKey}))`;
-  const inLeft = `ISNUMBER(XMATCH(${rightKey},${leftKey}))`;
+  const inRight = `ISNUMBER(XMATCH(${normalizedLeftKey},${normalizedRightKey}))`;
+  const inLeft = `ISNUMBER(XMATCH(${normalizedRightKey},${normalizedLeftKey}))`;
   const cells: CombineCell[] = [
     { row: 0, column: 0, formula: `=${text("In both")}` },
     { row: 1, column: 0, formula: `=SUM(--${inRight})` },
     { row: 2, column: 0, formula: `=FILTER(${leftKey},${inRight},"None")` },
     { row: 0, column: 1, formula: `=${text(`Only in ${left.sheet}`)}` },
     { row: 1, column: 1, formula: `=SUM(--NOT(${inRight}))` },
-    { row: 2, column: 1, formula: `=FILTER(${leftKey},NOT(${inRight}),"None")` },
+    {
+      row: 2,
+      column: 1,
+      formula: `=FILTER(${leftKey},NOT(${inRight}),"None")`,
+    },
     { row: 0, column: 2, formula: `=${text(`Only in ${right.sheet}`)}` },
     { row: 1, column: 2, formula: `=SUM(--NOT(${inLeft}))` },
     {
@@ -158,7 +170,7 @@ export function combineCells(spec: CombineSpec): CombineCell[] {
       {
         row: 2,
         column: 4,
-        formula: `=LET(k,${leftKey},a,${a},b,XLOOKUP(k,${rightKey},${b},0),m,${inRight},FILTER(HSTACK(k,a,b,a-b),m*(a<>b),"None"))`,
+        formula: `=LET(k,${leftKey},nk,${normalizedLeftKey},a,${a},b,XLOOKUP(nk,${normalizedRightKey},${b},0),m,${inRight},FILTER(HSTACK(k,a,b,a-b),m*(a<>b),"None"))`,
       },
     );
   }

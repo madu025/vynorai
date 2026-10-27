@@ -224,9 +224,15 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
         const [y, m, d] = spec.as_of.split("-").map(Number);
         asOf = `DATE(${y},${m},${d})`;
       }
-      // Future due dates are not overdue; keep them out of the 0-30 bucket.
-      const buckets = `a*(g>=0)*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)`;
-      const headers = ["0-30 days", "31-60 days", "61-90 days", "Over 90 days"];
+      // Future due dates are not overdue; expose them so the ageing total reconciles.
+      const buckets = `a*(g<0),a*(g>=0)*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)`;
+      const headers = [
+        "Not due",
+        "0-30 days",
+        "31-60 days",
+        "61-90 days",
+        "Over 90 days",
+      ];
       const cells: ModelCell[] = [
         { row: 0, column: 0, value: "As of" },
         { row: 0, column: 1, value: `=${asOf}` },

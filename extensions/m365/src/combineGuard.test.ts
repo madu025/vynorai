@@ -87,6 +87,39 @@ test("a join refuses duplicate right-side keys instead of silently taking the fi
   );
 });
 
+test("a reconcile refuses duplicate keys on either side", async () => {
+  const duplicateHost = {
+    readRange: async (sheet: string, address: string) => ({
+      address,
+      values:
+        sheet === "Orders"
+          ? [
+              ["Order", "Customer", "Amount"],
+              [1, "C-1", 10],
+              [2, "C-1", 20],
+            ]
+          : tables[`${sheet}!${address}`],
+    }),
+  } as unknown as AgentHost;
+  await assert.rejects(
+    guardCombine(
+      {
+        mode: "reconcile",
+        left_sheet: "Orders",
+        left_address: "A1:C4",
+        right_sheet: "Customers",
+        right_address: "A1:B3",
+        key: "Customer",
+        right_key: "Customer",
+        sheet: "Result",
+      },
+      duplicateHost,
+      clampReadAddress,
+    ),
+    /reconcile key.*duplicate value/i,
+  );
+});
+
 test("a key column that does not exist is named", async () => {
   await assert.rejects(
     guardCombine(join({ key: "Region" }), host, clampReadAddress),

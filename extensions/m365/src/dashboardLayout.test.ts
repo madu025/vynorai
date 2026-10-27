@@ -218,6 +218,11 @@ test("very large data uses spilled formulas for chart data and the fallback", ()
   );
   assert.match(text(helper.cells[0][1]), /^=BYROW\(Q3#,LAMBDA\(c,SUMIFS\(/);
   assert.match(text(layout.fallbackBreakdown[1].cells[0][1]), /^=BYROW\(A11#,/);
+  assert.match(
+    text(layout.fallbackBreakdown[1].cells[0][0]),
+    /SORTBY\(c,a,-1\)/,
+  );
+  assert.match(text(layout.fallbackBreakdown[1].cells[0][0]), /SUMIFS\(/);
   assert.match(layout.notes.join(" "), /up to 10 Region values/);
   assert.equal(layout.charts[0].dataRows, 10);
 });

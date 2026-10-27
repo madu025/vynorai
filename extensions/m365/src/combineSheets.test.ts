@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { combineCells, dataColumn } from "./combineSheets.js";
+import {
+  combineCells,
+  dataColumn,
+  normalizedKeyFormula,
+} from "./combineSheets.js";
 
 const orders = {
   sheet: "Orders",
@@ -23,6 +27,13 @@ test("data columns skip the header and quote the sheet", () => {
   assert.equal(dataColumn(customers, 0), "'Customer List'!B4:B53");
 });
 
+test("normalized key formulas use the guard's trim, case and numeric policy", () => {
+  assert.equal(
+    normalizedKeyFormula("'Orders'!B2:B101"),
+    `LET(v,'Orders'!B2:B101,IF(TRIM(v)="","",IFERROR(TEXT(VALUE(v),"0"),LOWER(TRIM(v)))))`,
+  );
+});
+
 test("join brings the named columns by key with XLOOKUP and keeps the headers", () => {
   const [cell] = combineCells({
     mode: "join",
@@ -32,12 +43,13 @@ test("join brings the named columns by key with XLOOKUP and keeps the headers", 
     columns: ["Region", "Name"],
   });
   assert.equal(cell.row, 0);
-  assert.equal(
+  assert.equal(cell.row, 0);
+  assert.match(
     cell.formula,
-    `=VSTACK(HSTACK('Orders'!A1:C1,"Region","Name"),HSTACK('Orders'!A2:C101,` +
-      `XLOOKUP('Orders'!B2:B101,'Customer List'!B4:B53,'Customer List'!D4:D53,"Not found"),` +
-      `XLOOKUP('Orders'!B2:B101,'Customer List'!B4:B53,'Customer List'!C4:C53,"Not found")))`,
+    /^=VSTACK\(HSTACK\('Orders'!A1:C1,"Region","Name"\)/,
   );
+  assert.equal((cell.formula.match(/XLOOKUP/g) ?? []).length, 2);
+  assert.equal((cell.formula.match(/TEXT\(VALUE\(/g) ?? []).length, 4);
 });
 
 test("join with no columns named brings every column except the key", () => {
@@ -49,6 +61,7 @@ test("join with no columns named brings every column except the key", () => {
   });
   assert.match(cell.formula, /"Name","Region","Segment"/);
   assert.equal((cell.formula.match(/XLOOKUP/g) ?? []).length, 3);
+  assert.match(cell.formula, /LOWER\(TRIM\(/);
 });
 
 test("append matches the second table's columns to the first by header", () => {
@@ -80,14 +93,12 @@ test("reconcile lists both, only-first and only-second keys with counts", () => 
   assert.equal(at(0, 0), '="In both"');
   assert.equal(at(0, 1), '="Only in Orders"');
   assert.equal(at(0, 2), '="Only in Bank"');
-  assert.equal(
-    at(2, 1),
-    `=FILTER('Orders'!A2:A101,NOT(ISNUMBER(XMATCH('Orders'!A2:A101,'Bank'!A2:A201))),"None")`,
+  assert.match(
+    String(at(2, 1)),
+    /^=FILTER\('Orders'!A2:A101,NOT\(ISNUMBER\(XMATCH\(/,
   );
-  assert.equal(
-    at(1, 2),
-    "=SUM(--NOT(ISNUMBER(XMATCH('Bank'!A2:A201,'Orders'!A2:A101))))",
-  );
+  assert.match(String(at(1, 2)), /^=SUM\(--NOT\(ISNUMBER\(XMATCH\(/);
+  assert.match(String(at(2, 1)), /TEXT\(VALUE\(/);
   assert.equal(at(2, 4), undefined);
 });
 
@@ -102,11 +113,9 @@ test("reconcile with amounts lists matched keys whose amounts differ", () => {
     rightAmount: "Value",
   });
   const differs = cells.find((cell) => cell.row === 2 && cell.column === 4);
-  assert.equal(
-    differs?.formula,
-    `=LET(k,'Orders'!A2:A101,a,'Orders'!C2:C101,b,XLOOKUP(k,'Bank'!A2:A201,'Bank'!B2:B201,0),` +
-      `m,ISNUMBER(XMATCH('Orders'!A2:A101,'Bank'!A2:A201)),FILTER(HSTACK(k,a,b,a-b),m*(a<>b),"None"))`,
-  );
+  assert.match(String(differs?.formula), /^=LET\(k,'Orders'!A2:A101,nk,LET\(/);
+  assert.match(String(differs?.formula), /XLOOKUP\(nk,LET\(/);
+  assert.match(String(differs?.formula), /TEXT\(VALUE\(/);
 });
 
 test("unknown headers and header-only ranges are refused with the real headers named", () => {

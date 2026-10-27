@@ -66,21 +66,39 @@ export async function guardCombine(
     args.right_key || args.key,
     `${args.right_sheet}!${args.right_address}`,
   );
-  if (left.clipped || right.clipped) return;
+  if (left.clipped || right.clipped)
+    throw new AgentToolError(
+      `The ${mode} key ranges are too large to verify completely for duplicate keys. Narrow the ranges before applying this ${mode}.`,
+    );
   const rightKeys = new Set(right.rows.map((row) => loose(row[ri])));
-  if (mode === "join") {
-    const duplicateKeys = new Set<string>();
+  const duplicateKeys = (rows: unknown[][], index: number) => {
+    const duplicates = new Set<string>();
     const seen = new Set<string>();
-    for (const row of right.rows) {
-      const key = loose(row[ri]);
+    for (const row of rows) {
+      const key = loose(row[index]);
       if (!key) continue;
-      if (seen.has(key)) duplicateKeys.add(key);
+      if (seen.has(key)) duplicates.add(key);
       seen.add(key);
     }
-    if (duplicateKeys.size)
+    return duplicates;
+  };
+  const rejectDuplicates = (
+    rows: unknown[][],
+    index: number,
+    table: typeof right,
+    side: string,
+  ) => {
+    const duplicates = duplicateKeys(rows, index);
+    if (duplicates.size)
       throw new AgentToolError(
-        `The join key "${right.header[ri]}" has ${duplicateKeys.size} duplicate value(s) in ${args.right_sheet}. XLOOKUP would silently use the first match; deduplicate or aggregate that table before joining.`,
+        `The ${mode} key "${table.header[index]}" has ${duplicates.size} duplicate value(s) in ${side}. ${mode === "join" ? "XLOOKUP would silently use the first match; deduplicate or aggregate that table before joining." : "Reconcile counts and amounts would be ambiguous; deduplicate or aggregate both tables first."}`,
       );
+  };
+  if (mode === "join")
+    rejectDuplicates(right.rows, ri, right, String(args.right_sheet));
+  else {
+    rejectDuplicates(left.rows, li, left, String(args.left_sheet));
+    rejectDuplicates(right.rows, ri, right, String(args.right_sheet));
   }
   const present = left.rows.filter((row) => loose(row[li]) !== "");
   if (!present.length) return;

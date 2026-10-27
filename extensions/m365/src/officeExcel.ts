@@ -2363,13 +2363,16 @@ export async function applyApprovedExcelPlan(
                   for (const field of dataFields) {
                     try {
                       field.showAs = { calculation };
-                    } catch {
-                      // Older hosts keep the plain totals.
+                    } catch (error) {
+                      throw new Error(
+                        `PivotTable ${action.spec.showAs} is not supported by this Excel host (${describePivotError(error)}); plain totals were not reported as a successful percentage result.`,
+                      );
                     }
                   }
                 }
                 if (action.spec.topN) {
-                  // Biggest first, then only the top N rows. Older hosts keep every row.
+                  // Biggest first, then only the top N rows. A host that cannot do this must fail
+                  // explicitly instead of silently returning every row.
                   try {
                     total.load("name");
                     await context.sync();
@@ -2391,11 +2394,20 @@ export async function applyApprovedExcelPlan(
                         total,
                       );
                       await context.sync();
-                    } catch {
-                      // The filter alone still limits the rows.
+                    } catch (error) {
+                      throw new Error(
+                        `PivotTable top-N sorting is not supported by this Excel host (${describePivotError(error)}); the full unsorted result was not reported as successful.`,
+                      );
                     }
-                  } catch {
-                    // The host has no PivotTable filters: every row stays.
+                  } catch (error) {
+                    if (
+                      error instanceof Error &&
+                      /top-N sorting is not supported/.test(error.message)
+                    )
+                      throw error;
+                    throw new Error(
+                      `PivotTable top-N filtering is not supported by this Excel host (${describePivotError(error)}); the full result was not reported as successful.`,
+                    );
                   }
                 }
                 if (action.spec.columnsColumn)

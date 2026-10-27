@@ -118,6 +118,14 @@ export function checkWhatIf(args: Record<string, unknown>): WhatIfArgs {
         );
       return { cell, min, max, step };
     });
+    const duplicateCells = variables.filter(
+      (variable, index) =>
+        variables.findIndex((other) => other.cell === variable.cell) !== index,
+    );
+    if (duplicateCells.length)
+      throw new AgentToolError(
+        `optimisation variables must use distinct input cells; ${duplicateCells[0].cell} was provided more than once.`,
+      );
     const runs = variables.reduce(
       (total, variable) =>
         total * (Math.floor((variable.max - variable.min) / variable.step) + 1),
@@ -204,6 +212,18 @@ export function checkWhatIf(args: Record<string, unknown>): WhatIfArgs {
       ),
     };
   });
+  const duplicateNames = scenarios.filter(
+    (scenario, index) =>
+      scenarios.findIndex(
+        (other) =>
+          other.name.trim().toLowerCase() ===
+          scenario.name.trim().toLowerCase(),
+      ) !== index,
+  );
+  if (duplicateNames.length)
+    throw new AgentToolError(
+      `scenario names must be unique; "${duplicateNames[0].name}" is repeated.`,
+    );
   return { mode, outputs, scenarios };
 }
 
@@ -251,6 +271,18 @@ export function whatIfTable(
   results: (number | string)[][],
   labels: string[],
 ): (string | number)[][] {
+  const formulaErrors = results
+    .flatMap((row) => row)
+    .map((value) => String(value ?? ""))
+    .filter((value) =>
+      /^#(?:DIV\/0!|VALUE!|SPILL!|CALC!|REF!|NAME\?|NUM!|N\/A|NULL!)$/i.test(
+        value,
+      ),
+    );
+  if (formulaErrors.length)
+    throw new AgentToolError(
+      `What-if calculation returned Excel error value(s): ${[...new Set(formulaErrors)].join(", ")}. Inputs were restored and no result was reported as successful.`,
+    );
   if (args.mode === "optimisation") {
     const variables = args.variables!;
     const constraints = args.constraints ?? [];

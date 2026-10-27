@@ -475,14 +475,17 @@ export function buildDashboardLayout(
       style: "table-header",
     },
   ];
-  if (input.sampled)
+  if (input.sampled) {
+    const primary = values[0];
+    const categories = `UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))`;
+    const ranking = `BYROW(c,LAMBDA(x,${categoryAggregateFormula(aggregation, primary.ref, input.categoryRef, "x")}))`;
     fallbackBreakdown.push({
       row: PIVOT_ROW + 1,
       col: 0,
       cells: [
         [
           {
-            f: `=TAKE(SORT(UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))),${shown})`,
+            f: `=LET(c,${categories},a,${ranking},TAKE(SORTBY(c,a,-1),${shown}))`,
           },
           ...values.map((value) => ({
             f: `=BYROW(A${PIVOT_ROW + 2}#,LAMBDA(c,${categoryAggregateFormula(aggregation, value.ref, input.categoryRef, "c")}))`,
@@ -491,7 +494,7 @@ export function buildDashboardLayout(
       ],
       style: "table-body",
     });
-  else if (input.categories.length)
+  } else if (input.categories.length)
     fallbackBreakdown.push({
       row: PIVOT_ROW + 1,
       col: 0,

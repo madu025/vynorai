@@ -294,13 +294,14 @@ export function buildDashboardLayout(
         input.categoryRef,
         "c",
       );
+      const categories = `UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))`;
       blocks.push({
         row: 2,
         col,
         cells: [
           [
             {
-              f: `=TAKE(SORT(UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))),${shown})`,
+              f: `=TAKE(SORTBY(${categories},BYROW(${categories},LAMBDA(c,${lambda})),-1),${shown})`,
             },
             { f: `=BYROW(${letter}3#,LAMBDA(c,${lambda}))` },
           ],

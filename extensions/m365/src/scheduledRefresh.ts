@@ -15,6 +15,22 @@ export interface ScheduledRefresh {
   createdAt: number;
 }
 
+/** Move a completed/due schedule to its next local 09:00 run. */
+export function nextScheduledRefresh(
+  schedule: ScheduledRefresh,
+  now = new Date(),
+): ScheduledRefresh {
+  const next = new Date(now);
+  if (schedule.frequency === "weekly") {
+    const weekday = schedule.weekday ?? next.getDay();
+    const distance = (weekday - next.getDay() + 7) % 7 || 7;
+    next.setDate(next.getDate() + distance);
+  } else {
+    next.setDate(next.getDate() + 1);
+  }
+  return { ...schedule, nextRunAt: nextAtNine(now, next) };
+}
+
 const WEEKDAYS: Record<string, number> = {
   sunday: 0,
   monday: 1,

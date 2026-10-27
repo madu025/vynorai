@@ -214,7 +214,7 @@ test("very large data uses spilled formulas for chart data and the fallback", ()
   )!;
   assert.match(
     text(helper.cells[0][0]),
-    /^=TAKE\(SORT\(UNIQUE\(FILTER\(.+\)\)\),10\)$/,
+    /^=TAKE\(SORTBY\(UNIQUE\(FILTER\(.+\)\),BYROW\(UNIQUE\(FILTER\(.+\)\),LAMBDA\(c,SUMIFS\(.+\)\),-1\),10\)$/,
   );
   assert.match(text(helper.cells[0][1]), /^=BYROW\(Q3#,LAMBDA\(c,SUMIFS\(/);
   assert.match(text(layout.fallbackBreakdown[1].cells[0][1]), /^=BYROW\(A11#,/);

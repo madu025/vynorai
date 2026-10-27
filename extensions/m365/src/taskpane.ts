@@ -148,7 +148,11 @@ import {
   setAiFirst,
 } from "./taskpaneAiMode.js";
 import { describeUnknownColumns, findUnknownColumns } from "./unknownColumn.js";
-import type { ScheduledRefresh } from "./scheduledRefresh.js";
+import {
+  nextScheduledRefresh,
+  parseStoredScheduledRefresh,
+  type ScheduledRefresh,
+} from "./scheduledRefresh.js";
 import { cleanFirstInstruction, describeNearDuplicates } from "./valueCheck.js";
 import { describeIntegrityIssues } from "./integrity.js";
 import {
@@ -608,6 +612,31 @@ function persistScheduledRefresh(schedule: ScheduledRefresh): void {
   } catch (error) {
     log.record("schedule:save", "skip", describeError(error));
   }
+}
+
+/** A saved schedule creates a fresh preview when the pane is opened after its due time. */
+function runDueScheduledRefresh(): void {
+  const key = scheduledRefreshStorageKey();
+  if (!key) return;
+  let stored: ScheduledRefresh | undefined;
+  try {
+    stored = parseStoredScheduledRefresh(localStorage.getItem(key));
+  } catch (error) {
+    log.record("schedule:load", "skip", describeError(error));
+    return;
+  }
+  if (!stored || stored.nextRunAt > Date.now()) return;
+  persistScheduledRefresh(nextScheduledRefresh(stored));
+  if (!instruction) return;
+  instruction.value = stored.request;
+  instruction.dispatchEvent(new Event("input", { bubbles: true }));
+  setStatus(
+    `Scheduled refresh is due. Preparing a fresh preview for “${stored.request}”.`,
+  );
+  window.setTimeout(() => {
+    if (accessToken) void inspect?.click();
+  }, 250);
+  log.record("schedule:due", "pass", { request: stored.request });
 }
 
 function persistResultGallery() {
@@ -6012,7 +6041,9 @@ async function initialize() {
     updateAuthenticationUi(true);
     recordTokenSummary("session:restore");
     void refreshCapabilities("restore");
-    return setStatus("Checking your VynorAI account connection...");
+    setStatus("Checking your VynorAI account connection...");
+    runDueScheduledRefresh();
+    return;
   }
   log.record("session:restore", "info", "no unexpired session");
   updateAuthenticationUi(false);

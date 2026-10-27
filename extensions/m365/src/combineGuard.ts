@@ -33,7 +33,11 @@ export async function guardCombine(
     const clamped = readAddress(address);
     const result = await host.readRange(sheet, clamped.address, false);
     const [header = [], ...rows] = result.values as unknown[][];
-    return { header: header.map((cell) => String(cell ?? "")), rows, clipped: clamped.clipped };
+    return {
+      header: header.map((cell) => String(cell ?? "")),
+      rows,
+      clipped: clamped.clipped,
+    };
   };
   let left;
   let right;
@@ -52,7 +56,11 @@ export async function guardCombine(
       );
     return at;
   };
-  const li = find(left.header, args.key, `${args.left_sheet}!${args.left_address}`);
+  const li = find(
+    left.header,
+    args.key,
+    `${args.left_sheet}!${args.left_address}`,
+  );
   const ri = find(
     right.header,
     args.right_key || args.key,
@@ -60,6 +68,20 @@ export async function guardCombine(
   );
   if (left.clipped || right.clipped) return;
   const rightKeys = new Set(right.rows.map((row) => loose(row[ri])));
+  if (mode === "join") {
+    const duplicateKeys = new Set<string>();
+    const seen = new Set<string>();
+    for (const row of right.rows) {
+      const key = loose(row[ri]);
+      if (!key) continue;
+      if (seen.has(key)) duplicateKeys.add(key);
+      seen.add(key);
+    }
+    if (duplicateKeys.size)
+      throw new AgentToolError(
+        `The join key "${right.header[ri]}" has ${duplicateKeys.size} duplicate value(s) in ${args.right_sheet}. XLOOKUP would silently use the first match; deduplicate or aggregate that table before joining.`,
+      );
+  }
   const present = left.rows.filter((row) => loose(row[li]) !== "");
   if (!present.length) return;
   const matched = present.filter((row) => rightKeys.has(loose(row[li]))).length;

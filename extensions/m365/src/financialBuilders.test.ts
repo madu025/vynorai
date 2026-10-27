@@ -9,9 +9,15 @@ const value = (
 ) => cells.find((cell) => cell.row === row && cell.column === column)?.value;
 
 test("sheet-qualified ranges are normalised and anything else is refused", () => {
-  assert.equal(qualifiedRange("'Sales Data'!$B$2:$B$50", "x"), "'Sales Data'!B2:B50");
+  assert.equal(
+    qualifiedRange("'Sales Data'!$B$2:$B$50", "x"),
+    "'Sales Data'!B2:B50",
+  );
   assert.equal(qualifiedRange("Data!C2:C9", "x"), "'Data'!C2:C9");
-  assert.throws(() => qualifiedRange("B2:B9", "cash_flows"), /cash_flows must be a sheet-qualified range/);
+  assert.throws(
+    () => qualifiedRange("B2:B9", "cash_flows"),
+    /cash_flows must be a sheet-qualified range/,
+  );
   assert.throws(() => qualifiedRange("[Book2.xlsx]Data!B2", "x"));
 });
 
@@ -31,8 +37,38 @@ test("a loan schedule keeps its inputs in cells and spills every period from the
     "=LET(r,$C$3/$C$5,n,$C$4*$C$5,p,SEQUENCE(n),HSTACK(p,p*0+$C$6,IPMT(r,p,n,-$C$2),PPMT(r,p,n,-$C$2),FV(r,p,$C$6,-$C$2)))",
   );
   assert.throws(
-    () => financialCells({ kind: "loan_schedule", cell: "A1", principal: 5, annual_rate: 12, years: 5 }),
+    () =>
+      financialCells({
+        kind: "loan_schedule",
+        cell: "A1",
+        principal: 5,
+        annual_rate: 12,
+        years: 5,
+      }),
     /fraction from 0 to 1/,
+  );
+  assert.throws(
+    () =>
+      financialCells({
+        kind: "loan_schedule",
+        cell: "A1",
+        principal: 5,
+        annual_rate: 0.1,
+        years: 2.5,
+      }),
+    /years must be a whole number/,
+  );
+  assert.throws(
+    () =>
+      financialCells({
+        kind: "loan_schedule",
+        cell: "A1",
+        principal: 5,
+        annual_rate: 0.1,
+        years: 2,
+        payments_per_year: 12.5,
+      }),
+    /payments_per_year must be a whole number/,
   );
 });
 
@@ -79,7 +115,10 @@ test("budget against actual groups by category and sorts the largest variance fi
     [0, 1, 2, 3, 4].map((column) => value(cells, 0, column)),
     ["Category", "Actual", "Budget", "Variance", "Variance %"],
   );
-  assert.match(String(value(cells, 1, 0)), /SUMIFS\('Data'!F2:F900,'Data'!C2:C900,c\)/);
+  assert.match(
+    String(value(cells, 1, 0)),
+    /SUMIFS\('Data'!F2:F900,'Data'!C2:C900,c\)/,
+  );
   assert.match(String(value(cells, 1, 0)), /SORTBY\(.*ABS\(v\),-1\)\)$/);
   assert.equal(value(cells, 2, 7), "=$H$1-$H$2");
 });
@@ -96,7 +135,7 @@ test("ageing puts amounts in 30-day buckets, by customer when given", () => {
   assert.equal(value(byCustomer, 0, 1), "=DATE(2026,3,31)");
   assert.equal(
     value(byCustomer, 3, 0),
-    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,GROUPBY('AR'!B2:B500,HSTACK(a*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)),SUM,0,1))",
+    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,GROUPBY('AR'!B2:B500,HSTACK(a*(g>=0)*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)),SUM,0,1))",
   );
   const totals = financialCells({
     kind: "ageing",
@@ -107,6 +146,6 @@ test("ageing puts amounts in 30-day buckets, by customer when given", () => {
   assert.equal(value(totals, 0, 1), "=TODAY()");
   assert.equal(
     value(totals, 3, 0),
-    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,HSTACK(SUM(a*(g<=30)),SUM(a*(g>30)*(g<=60)),SUM(a*(g>60)*(g<=90)),SUM(a*(g>90))))",
+    "=LET(g,$B$1-'AR'!D2:D500,a,'AR'!E2:E500,HSTACK(SUM(a*(g>=0)*(g<=30)),SUM(a*(g>30)*(g<=60)),SUM(a*(g>60)*(g<=90)),SUM(a*(g>90))))",
   );
 });

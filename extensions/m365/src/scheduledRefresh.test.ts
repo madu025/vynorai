@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { interpretInstruction } from "./intent.js";
 import {
+  nextScheduledRefresh,
   parseScheduledRefresh,
   parseStoredScheduledRefresh,
 } from "./scheduledRefresh.js";
@@ -29,6 +30,19 @@ test("removes a schedule phrase even when the request does not say refresh", () 
 test("invalid stored schedule data is discarded", () => {
   assert.equal(parseStoredScheduledRefresh('{"frequency":"daily"}'), undefined);
   assert.equal(parseStoredScheduledRefresh("not json"), undefined);
+});
+
+test("a due schedule advances to the next local morning without changing the request", () => {
+  const now = new Date("2026-10-27T10:00:00");
+  const schedule = parseScheduledRefresh("refresh the report every day", now)!;
+  const advanced = nextScheduledRefresh(
+    { ...schedule, nextRunAt: now.getTime() },
+    now,
+  );
+  assert.equal(advanced.request, schedule.request);
+  const next = new Date(advanced.nextRunAt);
+  assert.equal(next.getDate(), 28);
+  assert.equal(next.getHours(), 9);
 });
 
 test("scheduled requests still use the normal report planner", () => {

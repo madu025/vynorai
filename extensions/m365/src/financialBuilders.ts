@@ -32,9 +32,10 @@ export interface ModelCell {
 /** Normalises a sheet-qualified range ("'Sales Data'!B2:B500" or "Data!B2:B500"). */
 export function qualifiedRange(value: unknown, what: string): string {
   const text = String(value ?? "").trim();
-  const match = /^(?:'((?:[^']|'')+)'|([^'!]+))!(\$?[A-Z]{1,3}\$?\d{1,7}(?::\$?[A-Z]{1,3}\$?\d{1,7})?)$/i.exec(
-    text,
-  );
+  const match =
+    /^(?:'((?:[^']|'')+)'|([^'!]+))!(\$?[A-Z]{1,3}\$?\d{1,7}(?::\$?[A-Z]{1,3}\$?\d{1,7})?)$/i.exec(
+      text,
+    );
   if (!match)
     throw new AgentToolError(
       `${what} must be a sheet-qualified range like 'Sales'!B2:B500.`,
@@ -50,7 +51,15 @@ const rows = (range: string) => {
 const positive = (value: unknown, what: string, max: number) => {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0 || number > max)
-    throw new AgentToolError(`${what} must be a number above 0 and at most ${max}.`);
+    throw new AgentToolError(
+      `${what} must be a number above 0 and at most ${max}.`,
+    );
+  return number;
+};
+const positiveInteger = (value: unknown, what: string, max: number) => {
+  const number = positive(value, what, max);
+  if (!Number.isInteger(number))
+    throw new AgentToolError(`${what} must be a whole number.`);
   return number;
 };
 
@@ -88,9 +97,19 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
         throw new AgentToolError(
           "annual_rate is a fraction from 0 to 1, e.g. 0.12 for 12%.",
         );
-      const years = positive(spec.years, "years", 50);
-      const perYear = positive(spec.payments_per_year ?? 12, "payments_per_year", 365);
-      const [P, R, Y, N, PAY] = [at(0, 1), at(1, 1), at(2, 1), at(3, 1), at(4, 1)];
+      const years = positiveInteger(spec.years, "years", 50);
+      const perYear = positiveInteger(
+        spec.payments_per_year ?? 12,
+        "payments_per_year",
+        365,
+      );
+      const [P, R, Y, N, PAY] = [
+        at(0, 1),
+        at(1, 1),
+        at(2, 1),
+        at(3, 1),
+        at(4, 1),
+      ];
       return [
         { row: 0, column: 0, value: "Principal" },
         { row: 0, column: 1, value: principal },
@@ -118,7 +137,9 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
       const flows = qualifiedRange(spec.cash_flows, "cash_flows");
       const rate = Number(spec.rate);
       if (!Number.isFinite(rate) || rate <= -1 || rate > 10)
-        throw new AgentToolError("rate is the discount rate as a fraction, e.g. 0.1.");
+        throw new AgentToolError(
+          "rate is the discount rate as a fraction, e.g. 0.1.",
+        );
       const cells: ModelCell[] = [
         { row: 0, column: 0, value: "Discount rate" },
         { row: 0, column: 1, value: rate },
@@ -126,7 +147,9 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
       if (spec.dates) {
         const dates = qualifiedRange(spec.dates, "dates");
         if (rows(dates) !== rows(flows))
-          throw new AgentToolError("dates and cash_flows must have the same number of rows.");
+          throw new AgentToolError(
+            "dates and cash_flows must have the same number of rows.",
+          );
         cells.push(
           { row: 1, column: 0, value: "XNPV" },
           { row: 1, column: 1, value: `=XNPV(${at(0, 1)},${flows},${dates})` },
@@ -138,7 +161,9 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
         const sheet = flows.slice(0, flows.lastIndexOf("!"));
         const first = `${sheet}!${columnLetters(box.column)}${box.row}`;
         if (box.lastRow === box.row && box.lastColumn === box.column)
-          throw new AgentToolError("cash_flows needs the first (investment) flow and at least one more.");
+          throw new AgentToolError(
+            "cash_flows needs the first (investment) flow and at least one more.",
+          );
         const rest =
           box.lastColumn > box.column
             ? `${sheet}!${columnLetters(box.column + 1)}${box.row}:${columnLetters(box.lastColumn)}${box.lastRow}`
@@ -165,7 +190,9 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
       const actual = qualifiedRange(spec.actual, "actual");
       const budget = qualifiedRange(spec.budget, "budget");
       if (new Set([rows(categories), rows(actual), rows(budget)]).size !== 1)
-        throw new AgentToolError("categories, actual and budget must have the same number of rows.");
+        throw new AgentToolError(
+          "categories, actual and budget must have the same number of rows.",
+        );
       return [
         ...["Category", "Actual", "Budget", "Variance", "Variance %"].map(
           (text, column) => ({ row: 0, column, value: text }),
@@ -187,7 +214,9 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
       const due = qualifiedRange(spec.due_dates, "due_dates");
       const amounts = qualifiedRange(spec.amounts, "amounts");
       if (rows(due) !== rows(amounts))
-        throw new AgentToolError("due_dates and amounts must have the same number of rows.");
+        throw new AgentToolError(
+          "due_dates and amounts must have the same number of rows.",
+        );
       let asOf = "TODAY()";
       if (spec.as_of) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(spec.as_of))
@@ -195,7 +224,8 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
         const [y, m, d] = spec.as_of.split("-").map(Number);
         asOf = `DATE(${y},${m},${d})`;
       }
-      const buckets = `a*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)`;
+      // Future due dates are not overdue; keep them out of the 0-30 bucket.
+      const buckets = `a*(g>=0)*(g<=30),a*(g>30)*(g<=60),a*(g>60)*(g<=90),a*(g>90)`;
       const headers = ["0-30 days", "31-60 days", "61-90 days", "Over 90 days"];
       const cells: ModelCell[] = [
         { row: 0, column: 0, value: "As of" },
@@ -204,7 +234,9 @@ export function financialCells(spec: FinancialSpec): ModelCell[] {
       if (spec.customers) {
         const customers = qualifiedRange(spec.customers, "customers");
         if (rows(customers) !== rows(due))
-          throw new AgentToolError("customers must have the same number of rows as due_dates.");
+          throw new AgentToolError(
+            "customers must have the same number of rows as due_dates.",
+          );
         cells.push(
           ...["Customer", ...headers].map((text, column) => ({
             row: 2,

@@ -16,6 +16,7 @@ export async function readWorkspaceContext(
     await context.sync();
     let info: WorkspaceSelection = {
       address: String(range.address),
+      worksheetName: String(range.worksheet.name),
       rows: Number(range.rowCount),
       columns: Number(range.columnCount),
     };
@@ -32,6 +33,7 @@ export async function readWorkspaceContext(
           await context.sync();
           info = {
             address: String(range.address),
+            worksheetName: String(range.worksheet.name),
             rows: Number(range.rowCount),
             columns: Number(range.columnCount),
           };

@@ -275,8 +275,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   try {
     await page.waitForFunction(
       () =>
-        document.body.dataset.auth === "in" &&
-        !document.querySelector("#smart-run")?.hasAttribute("disabled"),
+        document.body.dataset.auth === "in",
       { timeout: 8000 },
     );
   } catch (error) {
@@ -364,6 +363,14 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   await page.waitForSelector('#context-suggestion-list[data-count="3"]', {
     timeout: 8000,
   });
+  const emptyRequestGate = await page.$eval("#smart-run", (button) => ({
+    disabled: button.hasAttribute("disabled"),
+    reason: button.dataset.gateReason,
+    message: document.querySelector("#run-gate")?.textContent,
+  }));
+  assert.equal(emptyRequestGate.disabled, true, "Run must be disabled without a request");
+  assert.equal(emptyRequestGate.reason, "request_required");
+  assert.match(emptyRequestGate.message ?? "", /Describe what you want/i);
   await page.$eval("#status", (element) => {
     element.dataset.mode = "signed-in-idle";
   });
@@ -521,6 +528,8 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     previewHidden: document
       .querySelector("#result-card")
       ?.hasAttribute("hidden"),
+    runDisabled: document.querySelector("#smart-run")?.hasAttribute("disabled"),
+    runReason: document.querySelector("#smart-run")?.dataset.gateReason,
   }));
   assert.ok(
     afterSuggestion.request,
@@ -536,10 +545,18 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     beforeSuggestion.previewHidden,
     "a landing suggestion must not create a preview before Run",
   );
+  assert.equal(afterSuggestion.runDisabled, false, "Run must enable for a valid request and selection");
+  assert.equal(afterSuggestion.runReason, "ready");
   await page.$eval("#instruction", (element) => {
     element.value = "";
     element.dispatchEvent(new Event("input"));
   });
+  const clearedRequestGate = await page.$eval("#smart-run", (button) => ({
+    disabled: button.hasAttribute("disabled"),
+    reason: button.dataset.gateReason,
+  }));
+  assert.equal(clearedRequestGate.disabled, true);
+  assert.equal(clearedRequestGate.reason, "request_required");
   await page.waitForSelector('#context-suggestion-list[data-count="3"]');
   if (viewport.width <= 360) {
     assert.equal(

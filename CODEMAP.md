@@ -19,6 +19,14 @@ the Proof Pack.
 ### 1.1 Microsoft 365 add-in first Excel slice
 
 The M365 sub-product remains under `extensions/m365/`. Its first safe Excel slice is implemented by
+Taskpane modularization boundaries: `taskpane.ts` remains the runtime orchestrator; pane primitives,
+capability/preview/preferences views, persistence keys and chat-history rendering live in
+`extensions/m365/src/taskpanePrimitives.ts`, `taskpaneCapabilityView.ts`, `taskpanePreviewView.ts`,
+`taskpanePreferences.ts`, `taskpaneStorage.ts`, `taskpanePersistence.ts` and
+`taskpaneChatHistoryView.ts`; the complete report-email/Graph delivery flow is in
+`taskpaneEmailController.ts`; result-card rendering, evidence, refresh, replace and undo are in
+`taskpaneResultGalleryController.ts`. New Excel behavior
+should be added behind an explicit seam and its focused test before changing orchestration.
 `extensions/m365/src/excel.ts` (fail-closed instruction-to-action selection, range profiling, bounded chunks, sampled planning for ranges over 100,000 cells (PivotTable, view, statistics, add-column, named range, quality, lookup, split, dashboard and, bounded to the first rows, clean, format and unpivot; Excel computes over every row), preview plans, and the confirmation gate),
 `extensions/m365/src/largeRange.ts` (spilled dynamic-array formulas for very large ranges: view, add-column, clean-up, quality table, split, unpivot, with row caps for Excel on the web), `extensions/m365/src/chatSessions.ts` (pure saved-chat store behind New chat and history), `extensions/m365/src/oauth.ts` (Entra Authorization Code + PKCE, including separately gated Graph scopes), `extensions/m365/src/email.ts` (validated multi-format Graph mail payloads, inline images, drafts and resumable large attachments), `extensions/m365/src/taskpane.ts` (bundled taskpane runtime), and
 `extensions/m365/auth-dialog.html` / `extensions/m365/auth-callback.html` (Office Dialog API authentication handoff), `extensions/m365/src/officeExcel.ts`

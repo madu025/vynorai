@@ -57,16 +57,10 @@ import {
   payrollCard,
   payrollQuestion,
   payrollResult,
-  samplePreviewNote,
   usingRowsSummary,
   willBeCreatedOn,
 } from "./paneText.js";
-import {
-  buildOutcomes,
-  kindTitle,
-  plannedSheetName,
-  type OutcomeChart,
-} from "./outcome.js";
+import { kindTitle, plannedSheetName } from "./outcome.js";
 import {
   answerQuestion,
   normalizeInstruction,
@@ -94,7 +88,6 @@ import {
   normalizeChartGrouping,
   readGrouping,
 } from "./previewGrouping.js";
-import { buildPreviewKpis } from "./previewKpis.js";
 import { canCancelPreview } from "./previewCancel.js";
 import {
   renderChatListView,
@@ -121,7 +114,11 @@ import {
   type AgentStage,
 } from "./taskpaneAgentView.js";
 import { checkedLine } from "./agentChecked.js";
-import { prepareShareComposer, updateShareView } from "./taskpaneShareView.js";
+import {
+  createEmailController,
+  type EmailControllerElements,
+} from "./taskpaneEmailController.js";
+import { createResultGalleryController } from "./taskpaneResultGalleryController.js";
 import { noticeInData, NOTICE_MAX_ROWS, type NoticedTile } from "./noticed.js";
 import {
   finalRoleStates,
@@ -179,12 +176,6 @@ import {
   removeResultsCard,
 } from "./dialogCards.js";
 import {
-  buildReportEmailRequest,
-  reportEmailConsentMessage,
-  reportSummaryText as buildReportSummaryText,
-} from "./reportEmailAi.js";
-import { validateAssistResult } from "./textAssist.js";
-import {
   activeMessages,
   deleteChat,
   emptyChatStore,
@@ -196,6 +187,12 @@ import {
   startNewChat,
   type ChatStore,
 } from "./chatSessions.js";
+import { renderChatHistoryPopover as renderChatHistoryPopoverView } from "./taskpaneChatHistoryView.js";
+import { createTaskpaneStorageKeys } from "./taskpaneStorage.js";
+import {
+  parseResultGallery,
+  serializeResultGallery,
+} from "./taskpanePersistence.js";
 import { applyFollowUpChart } from "./followUp.js";
 import {
   ACTION_REQUIREMENTS,
@@ -206,7 +203,6 @@ import {
   buildAdvancedCapabilityReport,
   hostCapabilityContext,
   formatEntry,
-  stableStorageFingerprint,
 } from "./diagnostics.js";
 import {
   adaptForSampledRange,
@@ -223,33 +219,15 @@ import {
   type M365OAuthConfig,
 } from "./oauth.js";
 import {
-  sendGraphMailAdaptive,
-  outlookWebDraftUrl,
-  isGraphConsentFailure,
-  MAX_DIRECT_ATTACHMENT_BYTES,
-  MAX_OUTLOOK_ATTACHMENT_BYTES,
-  EXCEL_WORKBOOK_MIME,
-  PDF_MIME,
-  CSV_MIME,
-  JPEG_MIME,
-  type GraphMailAttachment,
-  type GraphMailRequest,
-  type GraphDeliveryMode,
-} from "./email.js";
-import {
   applyApprovedExcelPlan,
-  excelValuesToCsv,
   inspectSelectedExcelFormulas,
   inspectSelectedExcelRange,
   inspectWorkbookOverview,
   rollbackItemsFromApplyReport,
   rollbackCreatedItems,
   revealExcelResult,
-  readExcelWorkbookBase64,
-  readExcelPdfBase64,
   readExcelReportValues,
   readSelectedExcelValues,
-  readExcelChartImages,
   readLookupSheetInfo,
   listWorksheetNames,
   listVynorSheets,
@@ -262,16 +240,8 @@ import {
   isFormulaInspectionRequest,
   isFormulaRepairRequest,
 } from "./formulaInspector.js";
-import {
-  CHANGE_LOG_SHEET,
-  changeLogRows,
-  type ChangeLogEntry,
-} from "./changeLog.js";
-import {
-  appendChangeLog,
-  writeHolidaySheet,
-  writePayrollSheet,
-} from "./officeSriLanka.js";
+import { CHANGE_LOG_SHEET, type ChangeLogEntry } from "./changeLog.js";
+import { writeHolidaySheet, writePayrollSheet } from "./officeSriLanka.js";
 import { holidaySheetRows } from "./sriLanka.js";
 import {
   buildPayrollPlan,
@@ -281,14 +251,8 @@ import {
   monthFromRequest,
   type PayrollEmployee,
 } from "./payroll.js";
-import {
-  describePreferences,
-  learnFromRequest,
-  parsePreferences,
-  preferenceFacts,
-  PREFERENCES_KEY,
-  type WorkbookPreferences,
-} from "./preferences.js";
+import { preferenceFacts, type WorkbookPreferences } from "./preferences.js";
+import { createWorkbookPreferencesController } from "./taskpanePreferences.js";
 import {
   buildPrivacyReceipt,
   describePrivacyReceipt,
@@ -332,6 +296,20 @@ import {
   type WorkspaceSchema,
   type WorkspaceSelection,
 } from "./smartWorkspace.js";
+import { evaluateRunGate, type CapabilityState } from "./taskpaneRunGate.js";
+import { buildResultEvidence } from "./resultEvidence.js";
+import { renderCapabilityReport as renderCapabilityReportView } from "./taskpaneCapabilityView.js";
+import {
+  drawOutcomeChart as drawOutcomeChartView,
+  renderOutcomes as renderOutcomesView,
+  renderPreviewKpis as renderPreviewKpisView,
+} from "./taskpanePreviewView.js";
+import {
+  base64Bytes,
+  editDistance,
+  signInDialogMessage,
+  supportsExcelApi,
+} from "./taskpanePrimitives.js";
 
 declare global {
   interface Window {
@@ -381,12 +359,10 @@ const accountLinkStatus = document.querySelector<HTMLElement>(
 );
 const capabilitiesCard =
   document.querySelector<HTMLElement>("#capabilities-card");
-const capabilityReportList = document.querySelector<HTMLElement>(
-  "#capability-report-list",
-);
 const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const smartRun = document.querySelector<HTMLButtonElement>("#smart-run");
+const runGateMessage = document.querySelector<HTMLElement>("#run-gate");
 const runMode = document.querySelector<HTMLSelectElement>("#run-mode");
 const dupFix = document.querySelector<HTMLElement>("#dup-fix");
 const dupFixButton = document.querySelector<HTMLButtonElement>("#dup-fix-btn");
@@ -465,6 +441,7 @@ let accessToken = "";
 /** Short-lived Microsoft proof retained in memory for the account-link handoff only. */
 let microsoftAccessToken = "";
 let capabilities: M365Capabilities | undefined;
+let capabilityState: CapabilityState = "idle";
 let currentPlan: any;
 let cachedHeaderLayout:
   | {
@@ -517,12 +494,13 @@ let lastSummary: SchemaSummary | undefined;
 let lastConversationRequest = "";
 const LEGACY_SESSION_KEY = "vynorai.m365.excel.session";
 const SESSION_KEY = "vynorai.m365.excel.session.v2";
-const CONVERSATION_KEY_PREFIX = "vynorai.m365.excel.conversation.v1";
-const RESULTS_KEY_PREFIX = "vynorai.m365.excel.results.v1";
 const MAX_CONVERSATION_MESSAGES = 12;
 /** A reply is at most five bullets; 300 once cut them mid-word. */
 const MAX_CONVERSATION_CHARS = 2000;
 const MAX_STORED_RESULTS = 40;
+const PREVIEW_TIMEOUT_MS = 30_000;
+const PREVIEW_TIMEOUT_MESSAGE =
+  "VynorAI did not respond within 30 seconds. Nothing changed. Check Diagnostics and try again.";
 
 type ConversationMessage = {
   kind: "user" | "assistant" | "error";
@@ -547,9 +525,11 @@ const newChatId = () => {
 };
 
 const previewController = createPreviewController((visible) => {
-  if (!cancelPreviewButton) return;
-  cancelPreviewButton.hidden = !visible;
-  cancelPreviewButton.disabled = !visible;
+  if (cancelPreviewButton) {
+    cancelPreviewButton.hidden = !visible;
+    cancelPreviewButton.disabled = !visible;
+  }
+  updateRunButtonState();
 });
 
 function getCachedHeaderLayout(
@@ -573,32 +553,15 @@ function getCachedHeaderLayout(
   return layout;
 }
 
-function conversationStorageKey(): string | undefined {
-  const claims = describeAccessToken(accessToken);
-  if (!claims?.tenantId || !claims.objectId) return undefined;
-  return `${CONVERSATION_KEY_PREFIX}.${claims.tenantId}.${claims.objectId}`;
-}
-
-/** Produces a non-reversible workbook key; the document URL is never stored. */
-function workbookStorageFingerprint(): string | undefined {
-  const url = String(office()?.context?.document?.url ?? "");
-  if (!url) return undefined;
-  return stableStorageFingerprint(url);
-}
-
-function resultsStorageKey(): string | undefined {
-  const claims = describeAccessToken(accessToken);
-  const workbook = workbookStorageFingerprint();
-  if (!claims?.tenantId || !claims.objectId || !workbook) return undefined;
-  return `${RESULTS_KEY_PREFIX}.${claims.tenantId}.${claims.objectId}.${workbook}`;
-}
-
-function scheduledRefreshStorageKey(): string | undefined {
-  const claims = describeAccessToken(accessToken);
-  const workbook = workbookStorageFingerprint();
-  if (!claims?.tenantId || !claims.objectId || !workbook) return undefined;
-  return `vynorai.m365.excel.schedule.v1.${claims.tenantId}.${claims.objectId}.${workbook}`;
-}
+const storageKeys = createTaskpaneStorageKeys({
+  getAccessToken: () => accessToken,
+  getWorkbookUrl: () =>
+    String(office()?.context?.document?.url ?? "") || undefined,
+});
+const conversationStorageKey = storageKeys.conversation;
+const workbookStorageFingerprint = storageKeys.workbook;
+const resultsStorageKey = storageKeys.results;
+const scheduledRefreshStorageKey = storageKeys.scheduledRefresh;
 
 function persistScheduledRefresh(schedule: ScheduledRefresh): void {
   const key = scheduledRefreshStorageKey();
@@ -645,19 +608,7 @@ function persistResultGallery() {
   try {
     localStorage.setItem(
       key,
-      JSON.stringify({
-        planId: galleryPlanId,
-        results: galleryResults.slice(-MAX_STORED_RESULTS).map((result) => ({
-          kind: result.kind,
-          name: result.name,
-          targetSheet: result.targetSheet,
-          status: result.status,
-          ...(result.createdSheet ? { createdSheet: true } : {}),
-          ...(result.createdNames?.length
-            ? { createdNames: result.createdNames.slice(0, 20) }
-            : {}),
-        })),
-      }),
+      serializeResultGallery(galleryPlanId, galleryResults, MAX_STORED_RESULTS),
     );
   } catch {
     // Convenience metadata must never affect workbook work.
@@ -668,60 +619,24 @@ async function restoreResultGallery() {
   const key = resultsStorageKey();
   if (!key) return;
   try {
-    const parsed = JSON.parse(localStorage.getItem(key) || "null") as {
-      planId?: unknown;
-      results?: unknown;
-    } | null;
-    if (
-      !parsed ||
-      typeof parsed.planId !== "string" ||
-      !Array.isArray(parsed.results)
-    )
-      return;
     const sheets = new Set(await listVynorSheets(officeRuntime()));
-    const restored = parsed.results
-      .filter((entry): entry is Record<string, unknown> => {
-        if (!entry || typeof entry !== "object") return false;
-        const item = entry as Record<string, unknown>;
-        return (
-          typeof item.kind === "string" &&
-          typeof item.name === "string" &&
-          typeof item.targetSheet === "string" &&
-          (item.status === "created" || item.status === "exists") &&
-          sheets.has(item.targetSheet)
-        );
-      })
-      .slice(-MAX_STORED_RESULTS)
-      .map((item) => ({
-        kind: item.kind as string,
-        name: item.name as string,
-        targetSheet: item.targetSheet as string,
-        status: item.status as ExcelActionResult["status"],
-        ...(item.createdSheet === true ? { createdSheet: true } : {}),
-        ...(Array.isArray(item.createdNames)
-          ? {
-              createdNames: item.createdNames
-                .filter((name): name is string => typeof name === "string")
-                .slice(0, 20),
-            }
-          : {}),
-      }));
-    if (!restored.length) return;
-    galleryPlanId = parsed.planId;
-    galleryResults = restored;
+    const restored = parseResultGallery(
+      localStorage.getItem(key),
+      sheets,
+      MAX_STORED_RESULTS,
+    );
+    if (!restored?.results.length) return;
+    galleryPlanId = restored.planId;
+    galleryResults = restored.results;
     renderResultGallery();
-    log.record("gallery:restore", "pass", { results: restored.length });
+    log.record("gallery:restore", "pass", { results: restored.results.length });
   } catch (error) {
     localStorage.removeItem(key);
     log.record("gallery:restore", "skip", describeError(error));
   }
 }
 
-function chatsStorageKey(): string | undefined {
-  const claims = describeAccessToken(accessToken);
-  if (!claims?.tenantId || !claims.objectId) return undefined;
-  return `vynorai.m365.excel.chats.v1.${claims.tenantId}.${claims.objectId}`;
-}
+const chatsStorageKey = storageKeys.chats;
 
 function writeChatStore() {
   const key = chatsStorageKey();
@@ -763,46 +678,7 @@ function renderChatList() {
 
 /** A bounded, responsive history panel: one row opens a chat, its adjacent × removes only it. */
 function renderChatHistoryPopover() {
-  const list = document.querySelector<HTMLElement>("#chat-history-list");
-  const trigger =
-    document.querySelector<HTMLButtonElement>("#open-chat-history");
-  if (!list) return;
-  const entries = historyList(chatStore);
-  if (trigger) {
-    trigger.disabled = entries.length === 0;
-    trigger.setAttribute("aria-disabled", String(entries.length === 0));
-  }
-  list.replaceChildren(
-    ...entries.map((entry) => {
-      const row = document.createElement("div");
-      row.className = "chat-history-entry";
-      row.setAttribute("role", "listitem");
-      const open = document.createElement("button");
-      open.type = "button";
-      open.className = "chat-history-open";
-      open.dataset.chatId = entry.id;
-      const untitled = translate(language, "untitled_chat", "Untitled chat");
-      open.title = entry.title || untitled;
-      const title = document.createElement("strong");
-      title.textContent = entry.title || untitled;
-      const date = document.createElement("small");
-      date.textContent = new Date(entry.updatedAt).toLocaleDateString();
-      open.append(title, date);
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "chat-history-remove";
-      remove.dataset.deleteChatId = entry.id;
-      const deleteWord = translate(language, "delete_chat", "Delete");
-      remove.setAttribute(
-        "aria-label",
-        `${deleteWord} ${entry.title || untitled}`,
-      );
-      remove.title = deleteWord;
-      remove.textContent = "×";
-      row.append(open, remove);
-      return row;
-    }),
-  );
+  renderChatHistoryPopoverView(document, language, chatStore);
 }
 
 /** A different chat starts clean: no preview, no follow-up memory from the one before. */
@@ -824,6 +700,7 @@ function resetWorkingState() {
   if (apply) apply.disabled = true;
   if (instruction) instruction.value = "";
   requestLanguage = undefined;
+  updateRunButtonState();
 }
 
 function showChat(messages: ConversationMessage[]) {
@@ -989,17 +866,6 @@ if (diagnostics && diagnostics.textContent !== DIAGNOSTICS_PLACEHOLDER) {
 }
 window.__VYNORAI_DIAG_NOTE__ = (message) => log.record("page", "info", message);
 
-/** Office dialog error codes, explained in words a person can act on. */
-function signInDialogMessage(code: unknown): string {
-  if (code === 12007)
-    return "A Microsoft sign-in window is already open. Finish it, or close it and press Sign in again.";
-  if (code === 12009)
-    return "The sign-in window was blocked. Allow pop-ups for this page, then press Sign in again.";
-  if (code === 12011)
-    return "The browser blocked the sign-in window. Allow pop-ups for Office, then press Sign in again.";
-  return `Unable to open the Microsoft sign-in dialog (${String(code ?? "unknown")}).`;
-}
-
 let lastStatus = "";
 const SIGNED_IN_IDLE_STATUS = "Signed in. Select data and inspect it.";
 let vynoraiAccountConnected = false;
@@ -1049,6 +915,32 @@ function setStatus(message: string) {
           translate(language, "new_chat_ready", NEW_CHAT_READY_STATUS))
         ? "signed-in-idle"
         : "message";
+  }
+}
+
+/** Keep the unified Run control honest and explain every disabled state in the pane. */
+function updateRunButtonState(): void {
+  if (!smartRun) return;
+  const gate = evaluateRunGate({
+    signedIn: Boolean(accessToken),
+    accountReady: vynoraiAccountConnected,
+    request: instruction?.value ?? "",
+    selection: shownSelection,
+    busy: agentBusy || previewController.hasActiveRun(),
+    capabilityState,
+    canInspect: capabilities?.excel.canInspect,
+    agentMode: runMode?.value === "agent",
+    aiAvailable: capabilities?.aiAnalysis !== false,
+  });
+  smartRun.disabled = !gate.enabled;
+  smartRun.dataset.gateReason = gate.reason;
+  smartRun.setAttribute("aria-disabled", String(!gate.enabled));
+  smartRun.setAttribute("aria-describedby", "run-gate");
+  smartRun.title = gate.message;
+  if (runGateMessage) {
+    runGateMessage.hidden = gate.enabled;
+    runGateMessage.textContent = gate.enabled ? "" : gate.message;
+    runGateMessage.dataset.reason = gate.reason;
   }
 }
 
@@ -1115,55 +1007,6 @@ function setLinkActionVisible(visible: boolean) {
 
 function setAccountLinkStatus(message: string) {
   if (accountLinkStatus) accountLinkStatus.textContent = message;
-}
-
-function renderCapabilityReport() {
-  if (!capabilityReportList) return;
-  capabilityReportList.replaceChildren();
-  const report = capabilities?.advanced;
-  if (!report) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "Sign in and refresh capabilities to review this host.";
-    capabilityReportList.append(empty);
-    return;
-  }
-  const entries = Object.entries(report).sort(([a], [b]) => a.localeCompare(b));
-  const counts = new Map<string, number>();
-  for (const [, value] of entries)
-    counts.set(value.status, (counts.get(value.status) ?? 0) + 1);
-  for (const [feature, value] of entries) {
-    const row = document.createElement("div");
-    row.className = "capability-row";
-    const body = document.createElement("div");
-    const title = document.createElement("strong");
-    title.textContent = feature.replaceAll("-", " ");
-    body.append(title);
-    const detail = document.createElement("small");
-    const requirements = [
-      value.requirement?.hosts?.length
-        ? `Hosts: ${value.requirement.hosts.join(", ")}`
-        : "",
-      value.requirement?.excelApi
-        ? `ExcelApi ${value.requirement.excelApi}`
-        : "",
-      value.fallbackFeature
-        ? `Fallback: ${value.fallbackFeature.replaceAll("-", " ")}`
-        : "",
-      value.reason ?? "",
-    ].filter(Boolean);
-    detail.textContent = requirements.join(" · ") || "No extra requirements.";
-    body.append(detail);
-    const status = document.createElement("span");
-    status.className = "capability-status";
-    status.dataset.status = value.status;
-    status.textContent = value.status.replaceAll("_", " ");
-    row.append(body, status);
-    capabilityReportList.append(row);
-  }
-  const summary = document.querySelector<HTMLElement>("#capabilities-summary");
-  if (summary)
-    summary.textContent = `${entries.length} features checked · ${counts.get("available") ?? 0} available · ${counts.get("available_with_fallback") ?? 0} with fallback · ${counts.get("consent_required") ?? 0} needing approval · ${counts.get("unsupported") ?? 0} unavailable.`;
 }
 
 function needsVynorAccountLink(error: unknown): boolean {
@@ -1339,511 +1182,46 @@ async function connectVynoraiAccount() {
   }
 }
 
-function supportsExcelApi(version: string): boolean {
-  try {
-    return Boolean(
-      office()?.context?.requirements?.isSetSupported?.("ExcelApi", version),
-    );
-  } catch {
-    return false;
-  }
-}
-
-let emailSending = false;
-
-type EmailFormat = "auto" | "xlsx" | "pdf" | "csv" | "xlsx-pdf" | "summary";
-
-function splitEmailAddresses(value: string): string[] {
-  return value
-    .split(/[;,\s]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function hasWorkbookReportForEmail(): boolean {
-  return Boolean(lastCreated?.sheets.length || galleryResults.length);
-}
-
-function updateEmailUi(signedIn = Boolean(accessToken)) {
-  updateShareView(
-    {
-      card: emailCard,
-      note: emailNote,
-      to: emailTo,
-      subject: emailSubject,
-      body: emailBody,
-      send: emailSend,
-    },
-    {
-      signedIn,
-      hasReport: hasWorkbookReportForEmail(),
-      configured: Boolean(config?.graphScopes?.length),
-      sending: emailSending,
-    },
-  );
-}
-
-function prepareEmailComposer(recipient = "", openShare = true) {
-  if (emailDeliveryStatus) {
-    emailDeliveryStatus.className = "delivery-status";
-    emailDeliveryStatus.textContent = localizeMessage(
-      language,
-      "Not sent yet · approval required",
-    );
-  }
-  if (emailReportName)
-    emailReportName.textContent =
-      lastRevealSheet || currentSourceSheet || "Workbook report";
-  if (emailAttachmentSize)
-    emailAttachmentSize.textContent = localizeMessage(
-      language,
-      "Size calculated after approval",
-    );
-  updateEmailUi();
-  workspaceNavigation.refresh();
-  if (openShare) workspaceNavigation.activate("share");
-  prepareShareComposer(
-    {
-      card: emailCard,
-      note: emailNote,
-      to: emailTo,
-      subject: emailSubject,
-      body: emailBody,
-      send: emailSend,
-    },
-    {
-      recipient,
-      reportSheet: lastRevealSheet || currentSourceSheet || "Workbook",
-    },
-  );
-}
-
-function createOAuthAttemptStorage() {
-  const values = new Map<string, string>();
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => void values.set(key, value),
-    removeItem: (key: string) => void values.delete(key),
-  };
-}
-
-async function acquireGraphMailToken(
-  scopesOverride?: string[],
-): Promise<string> {
-  if (!config) throw new Error("EMAIL_PERMISSION_NOT_CONFIGURED");
-  const scopes = scopesOverride ?? config?.graphScopes;
-  if (!scopes?.length) throw new Error("EMAIL_PERMISSION_NOT_CONFIGURED");
-  const graphConfig: M365OAuthConfig = {
-    ...config,
-    scopes: [...new Set(scopes)],
-  };
-  const attemptStorage = createOAuthAttemptStorage();
-  const authorizeUrl = await log.step("email:oauth-authorize-url", () =>
-    beginM365OAuth(graphConfig, attemptStorage),
-  );
-  const callbackUrl = await signInWithOfficeDialog(authorizeUrl);
-  const tokens = await log.step(
-    "email:oauth-token-exchange",
-    () => completeM365OAuth(callbackUrl, graphConfig, attemptStorage),
-    (value) => ({ expiresIn: value.expiresIn, tokenType: value.tokenType }),
-  );
-  return tokens.accessToken;
-}
-
-function emailErrorMessage(error: unknown): string {
-  const code = error instanceof Error ? error.message : String(error);
-  const messages: Record<string, string> = {
-    EMAIL_PERMISSION_NOT_CONFIGURED:
-      "Email is not configured for this deployment. Ask the Microsoft 365 administrator to add Mail.Send consent.",
-    EMAIL_PERMISSION_DENIED:
-      "Microsoft denied Mail.Send. Grant the permission or ask your administrator, then try again.",
-    EMAIL_LARGE_ATTACHMENT_PERMISSION_REQUIRED:
-      "Large or multiple attachments need delegated Mail.ReadWrite and Mail.Send consent. Add graphLargeScopes to the deployment configuration.",
-    EMAIL_ATTACHMENT_TOO_LARGE: `This report is larger than the Microsoft Outlook attachment limit of ${Math.round(MAX_OUTLOOK_ATTACHMENT_BYTES / 1_000_000)} MB. Use a SharePoint/OneDrive link or a smaller report.`,
-    XLSX_EXPORT_UNAVAILABLE:
-      "This Excel host cannot export the workbook as XLSX through Office.js.",
-    XLSX_EXPORT_FAILED: "Excel could not prepare the XLSX attachment.",
-    XLSX_SLICE_READ_FAILED: "Excel could not read one XLSX attachment slice.",
-    PDF_EXPORT_UNAVAILABLE:
-      "This Excel host cannot export a PDF through Office.js.",
-    PDF_EXPORT_FAILED: "Excel could not prepare the PDF report.",
-    PDF_SLICE_READ_FAILED: "Excel could not read one PDF report slice.",
-    EXCEL_API_UNAVAILABLE:
-      "This Excel host does not expose the required report API.",
-    REPORT_SHEET_EMPTY: "The applied report sheet is empty.",
-    EMAIL_RECIPIENT_INVALID: "Enter one valid recipient email address.",
-    EMAIL_RECIPIENT_LIMIT:
-      "Use no more than 20 recipients in each address field.",
-    EMAIL_CC_INVALID: "Enter valid CC email addresses.",
-    EMAIL_BCC_INVALID: "Enter valid BCC email addresses.",
-    EMAIL_SUBJECT_INVALID: "Enter a subject without line breaks.",
-    EMAIL_BODY_INVALID:
-      "The email body is too long or contains too many blank lines.",
-    EMAIL_ATTACHMENT_SIZE_MISMATCH:
-      "The generated attachment failed its size verification and was not sent.",
-    EMAIL_DRAFT_INVALID: "Microsoft did not return a valid Outlook draft.",
-    EMAIL_UPLOAD_SESSION_INVALID:
-      "Microsoft did not return a valid large-file upload session.",
-  };
-  return messages[code] || `Email was not sent (${code}).`;
-}
-
-emailTo?.addEventListener("input", () => updateEmailUi());
-emailSubject?.addEventListener("input", () => updateEmailUi());
-
-function escapeEmailHtml(value: unknown): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function textToBase64(value: string): { base64: string; bytes: number } {
-  const data = new TextEncoder().encode(value);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < data.length; offset += chunkSize)
-    binary += String.fromCharCode(
-      ...data.subarray(offset, Math.min(data.length, offset + chunkSize)),
-    );
-  return { base64: btoa(binary), bytes: data.byteLength };
-}
-
-function base64Bytes(value: string): number {
-  return Math.max(
-    0,
-    Math.floor((value.length * 3) / 4) -
-      (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0),
-  );
-}
-
-function reportSummaryText(values: any[][], truncated: boolean): string {
-  return buildReportSummaryText(
-    galleryResults,
-    lastRevealSheet || currentSourceSheet || "Workbook",
-    values,
-    truncated,
-  );
-}
-
-function reportSummaryHtml(values: any[][], truncated: boolean): string {
-  const rows = values
-    .slice(0, 80)
-    .map(
-      (row) =>
-        `<tr>${row
-          .slice(0, 30)
-          .map((cell) => `<td>${escapeEmailHtml(cell)}</td>`)
-          .join("")}</tr>`,
-    )
-    .join("");
-  const results = galleryResults
-    .slice(-20)
-    .map(
-      (result) =>
-        `<li>${escapeEmailHtml(`${result.kind}: ${result.name} on ${result.targetSheet} (${result.status})`)}</li>`,
-    )
-    .join("");
-  return `<h3>VynorAI Excel report</h3><p>Report sheet: ${escapeEmailHtml(lastRevealSheet || currentSourceSheet || "Workbook")}</p><ul>${results}</ul>${rows ? `<table border="1" cellpadding="4" cellspacing="0"><tbody>${rows}</tbody></table>` : ""}${truncated ? "<p><em>Report preview truncated to a bounded local sample.</em></p>" : ""}`;
-}
-
-async function buildEmailRequest(): Promise<{
-  request: GraphMailRequest;
-  format: string;
-}> {
-  const requested = (emailFormat?.value || "auto") as EmailFormat;
-  const bodyType = emailBodyType?.value === "Text" ? "Text" : "HTML";
-  const reportSheet = lastRevealSheet || currentSourceSheet;
-  let values: any[][] = [];
-  let truncated = false;
-  if (reportSheet && requested !== "xlsx") {
-    const report = await readExcelReportValues(reportSheet, 200, 30);
-    values = report.values;
-    truncated = report.truncated;
-  }
-  const attachments: GraphMailAttachment[] = [];
-  let actualFormat: string = requested;
-  const addFile = (
-    name: string,
-    contentType: string,
-    contentBytes: string,
-    bytes: number,
-    options: Pick<GraphMailAttachment, "isInline" | "contentId"> = {},
-  ) => attachments.push({ name, contentType, contentBytes, bytes, ...options });
-  const readWorkbook = async () => {
-    const file = await readExcelWorkbookBase64(MAX_OUTLOOK_ATTACHMENT_BYTES);
-    addFile(
-      "VynorAI-Excel-Report.xlsx",
-      EXCEL_WORKBOOK_MIME,
-      file.base64,
-      file.byteLength,
-    );
-  };
-  const readPdf = async () => {
-    const file = await readExcelPdfBase64(MAX_OUTLOOK_ATTACHMENT_BYTES);
-    addFile("VynorAI-Excel-Report.pdf", PDF_MIME, file.base64, file.byteLength);
-  };
-  if (requested === "xlsx" || requested === "xlsx-pdf") await readWorkbook();
-  if (requested === "pdf" || requested === "xlsx-pdf") await readPdf();
-  if (requested === "csv") {
-    const csv = textToBase64(excelValuesToCsv(values));
-    addFile("VynorAI-Report.csv", CSV_MIME, csv.base64, csv.bytes);
-  }
-  if (requested === "auto") {
-    try {
-      await readWorkbook();
-      actualFormat = "xlsx";
-    } catch (error) {
-      if (!/XLSX_EXPORT|XLSX_SLICE|COMPRESSED/i.test(String(error)))
-        throw error;
-      await readPdf();
-      actualFormat = "pdf-fallback";
-    }
-  }
-  if (requested === "summary" && !values.length && reportSheet) {
-    const report = await readExcelReportValues(reportSheet, 200, 30);
-    values = report.values;
-    truncated = report.truncated;
-  }
-  const includeChart = emailIncludeChart?.checked === true;
-  const charts =
-    includeChart && reportSheet
-      ? await readExcelChartImages(reportSheet, 3)
-      : [];
-  const baseMessage =
-    emailBody?.value.trim() ||
-    "Please find the approved VynorAI report attached.";
-  let body = baseMessage;
-  if (bodyType === "HTML") {
-    body = `<p>${escapeEmailHtml(baseMessage).replace(/\n/g, "<br>")}</p>${reportSummaryHtml(values, truncated)}`;
-    for (const chart of charts) {
-      const attachmentName = `${chart.name.replace(/[^A-Za-z0-9 _.-]/g, "_")}.jpg`;
-      addFile(
-        attachmentName,
-        JPEG_MIME,
-        chart.base64,
-        base64Bytes(chart.base64),
-        {
-          isInline: true,
-          contentId: chart.contentId,
-        },
-      );
-      body += `<h4>${escapeEmailHtml(chart.name)}</h4><img src="cid:${escapeEmailHtml(chart.contentId)}" alt="${escapeEmailHtml(chart.name)}" />`;
-    }
-  } else {
-    body = `${baseMessage}\n\n${reportSummaryText(values, truncated)}`;
-    for (const chart of charts)
-      addFile(
-        `${chart.name.replace(/[^A-Za-z0-9 _.-]/g, "_")}.jpg`,
-        JPEG_MIME,
-        chart.base64,
-        base64Bytes(chart.base64),
-      );
-  }
-  return {
-    format: actualFormat,
-    request: {
-      to: splitEmailAddresses(emailTo?.value || ""),
-      cc: splitEmailAddresses(emailCc?.value || ""),
-      bcc: splitEmailAddresses(emailBcc?.value || ""),
-      subject: emailSubject?.value.trim() || "VynorAI Excel report",
-      body,
-      bodyType,
-      attachments,
-    },
-  };
-}
-
-/**
- * When Microsoft will not give the Mail.Send permission (an administrator has not approved the app),
- * the report summary becomes a ready draft in Outlook on the web. No Graph permission is involved, and
- * nothing is sent: the person reviews the draft and presses Send themselves.
- */
-async function offerOutlookDraft(): Promise<void> {
-  if (!emailDraftFallback || !emailDraftLink || !emailTo || !emailSubject)
-    return;
-  const reportSheet = lastRevealSheet || currentSourceSheet;
-  let values: any[][] = [];
-  let truncated = false;
-  try {
-    if (reportSheet) {
-      const report = await readExcelReportValues(reportSheet, 30, 8);
-      values = report.values;
-      truncated = report.truncated;
-    }
-  } catch {
-    // The draft still opens with the message only.
-  }
-  const message =
-    emailBody?.value.trim() ||
-    "Please find the approved VynorAI report summary below.";
-  const draft = outlookWebDraftUrl({
-    to: splitEmailAddresses(emailTo.value),
-    cc: splitEmailAddresses(emailCc?.value || ""),
-    bcc: splitEmailAddresses(emailBcc?.value || ""),
-    subject: emailSubject.value.trim() || "VynorAI Excel report",
-    body: `${message}
-
-${reportSummaryText(values, truncated)}`,
-  });
-  emailDraftLink.href = draft.url;
-  if (emailDraftNote)
-    emailDraftNote.textContent = draft.bodyTruncated
-      ? "The summary was shortened for the link. Attach the workbook yourself if you need all of it."
-      : "Attachments cannot be added through a link; attach the workbook yourself if you need it.";
-  emailDraftFallback.hidden = false;
-  log.record("email:outlook-draft-link", "pass", { recipient: "redacted" });
-}
-
-// Optional, only when asked: the AI writes the message from the same summary the email would carry.
-// The summary is shown first, nothing leaves the pane without a yes, and the result only fills the
-// editable message box; it is never sent from here.
-emailAiWrite?.addEventListener("click", async () => {
-  if (!emailBody || !emailAiWrite) return;
-  const reportSheet = lastRevealSheet || currentSourceSheet;
-  if (!reportSheet) return setStatus("Create a report first.");
-  emailAiWrite.disabled = true;
-  try {
-    const report = await readExcelReportValues(reportSheet, 200, 30);
-    const summary = reportSummaryText(report.values, report.truncated);
-    if (
-      !(await askInPane(
-        reportEmailConsentMessage(summary),
-        "Send and write",
-        "Cancel",
-      ))
-    )
-      return setStatus("Nothing was sent to AI.");
-    setStatus("Writing the message...");
-    const response = await apiClient().assistText(
-      buildReportEmailRequest(summary, true),
-    );
-    const answer = validateAssistResult(response?.result);
-    emailBody.value = answer.text.slice(0, 4000);
-    updateEmailUi();
-    setStatus(
-      "The message was written by AI. Read and edit it before you send the report.",
-    );
-  } catch (error) {
-    setStatus(
-      `The message could not be written (${String((error as Error)?.message ?? error).slice(0, 120)}). Write it yourself or try again.`,
-    );
-  } finally {
-    emailAiWrite.disabled = false;
-  }
+const emailController = createEmailController({
+  elements: {
+    card: emailCard,
+    note: emailNote,
+    to: emailTo,
+    subject: emailSubject,
+    body: emailBody,
+    send: emailSend,
+    cc: emailCc,
+    bcc: emailBcc,
+    format: emailFormat,
+    bodyType: emailBodyType,
+    deliveryMode: emailDeliveryMode,
+    includeChart: emailIncludeChart,
+    aiWrite: emailAiWrite,
+    deliveryStatus: emailDeliveryStatus,
+    reportName: emailReportName,
+    attachmentSize: emailAttachmentSize,
+    draftFallback: emailDraftFallback,
+    draftLink: emailDraftLink,
+    draftNote: emailDraftNote,
+  },
+  config,
+  getAccessToken: () => accessToken,
+  getLanguage: () => language,
+  getTextLanguage: textLanguage,
+  getReportSheet: () => lastRevealSheet || currentSourceSheet || undefined,
+  getGalleryResults: () => galleryResults,
+  hasReport: () => Boolean(lastCreated?.sheets.length || galleryResults.length),
+  apiClient,
+  signInWithOfficeDialog,
+  setStatus,
+  refreshNavigation: () => workspaceNavigation.refresh(),
+  activateShare: () => workspaceNavigation.activate("share"),
+  log,
 });
-
-emailSend?.addEventListener("click", async () => {
-  if (!emailTo || !emailSubject || !emailBody || !emailSend) return;
-  const to = emailTo.value.trim();
-  const subject = emailSubject.value.trim();
-  const body = emailBody.value.trim();
-  if (!to || !subject) return setStatus("Enter a recipient and subject first.");
-  if (
-    !(await askInPane(
-      `Deliver the reviewed report to ${to}? The selected format may include workbook data, report details and charts.`,
-      "Send Excel report",
-      undefined,
-      emailSendCard(to, subject, textLanguage()),
-    ))
-  )
-    return;
-  emailSending = true;
-  updateEmailUi();
-  try {
-    setStatus("Preparing the approved report variants...");
-    const prepared = await log.step(
-      "email:prepare-report",
-      buildEmailRequest,
-      (value) => ({
-        format: value.format,
-        attachments: value.request.attachments?.map((attachment) => ({
-          name: attachment.name,
-          bytes: attachment.bytes,
-        })),
-      }),
-    );
-    if (emailReportName) {
-      const names = (prepared.request.attachments ?? []).map(
-        (attachment) => attachment.name,
-      );
-      emailReportName.textContent = names.join(", ") || "Summary in email";
-    }
-    if (emailAttachmentSize) {
-      const bytes = (prepared.request.attachments ?? []).reduce(
-        (total, attachment) => total + attachment.bytes,
-        0,
-      );
-      emailAttachmentSize.textContent = bytes
-        ? `${(bytes / 1024 / 1024).toFixed(2)} MB`
-        : "No attachment";
-    }
-    const requiresLargePermission =
-      (prepared.request.attachments ?? []).some(
-        (attachment) => attachment.bytes >= MAX_DIRECT_ATTACHMENT_BYTES,
-      ) ||
-      (prepared.request.attachments ?? []).reduce(
-        (total, attachment) => total + attachment.bytes,
-        0,
-      ) >= MAX_DIRECT_ATTACHMENT_BYTES;
-    const deliveryMode: GraphDeliveryMode =
-      emailDeliveryMode?.value === "draft" ? "draft" : "send";
-    setStatus(
-      requiresLargePermission || deliveryMode === "draft"
-        ? "Requesting Microsoft draft and large-attachment permission..."
-        : "Requesting Microsoft email permission...",
-    );
-    const graphToken = await acquireGraphMailToken(
-      requiresLargePermission || deliveryMode === "draft"
-        ? (config?.graphLargeScopes ?? config?.graphScopes)
-        : config?.graphScopes,
-    );
-    setStatus(
-      deliveryMode === "draft"
-        ? "Creating and verifying the Outlook draft..."
-        : "Sending and verifying the approved report...",
-    );
-    const delivery = await log.step("email:send-report", () =>
-      sendGraphMailAdaptive(graphToken, prepared.request, fetch, deliveryMode),
-    );
-    log.record("email:send", "pass", {
-      recipient: "redacted",
-      delivery,
-      format: prepared.format,
-      attachments: prepared.request.attachments?.length ?? 0,
-    });
-    setStatus(
-      deliveryMode === "draft"
-        ? `Outlook draft created for ${to} and verified by Microsoft Graph.`
-        : `Report sent to ${to} and verified by Microsoft Graph.`,
-    );
-    if (emailDeliveryStatus) {
-      emailDeliveryStatus.className = "delivery-status sent";
-      emailDeliveryStatus.textContent =
-        deliveryMode === "draft"
-          ? "Draft created · verified by Microsoft Graph"
-          : "Sent · verified by Microsoft Graph";
-    }
-  } catch (error) {
-    log.record("email:send", "fail", emailErrorMessage(error));
-    if (isGraphConsentFailure(error)) {
-      await offerOutlookDraft();
-      setStatus(
-        "Microsoft did not give this add-in permission to send mail (your organization's administrator may need to approve it). Nothing was sent. Use the link below to open the report as a draft in Outlook on the web.",
-      );
-    } else setStatus(emailErrorMessage(error));
-    if (emailDeliveryStatus) {
-      emailDeliveryStatus.className = "delivery-status failed";
-      emailDeliveryStatus.textContent = "Not sent · review the error and retry";
-    }
-  } finally {
-    emailSending = false;
-    updateEmailUi();
-  }
-});
-
+emailController.bind();
+const hasWorkbookReportForEmail = emailController.hasReport;
+const updateEmailUi = emailController.updateUi;
+const prepareEmailComposer = emailController.prepare;
 function updateAuthenticationUi(signedIn: boolean) {
   if (signIn) signIn.disabled = signedIn;
   if (linkVynorai) linkVynorai.disabled = !signedIn || linking;
@@ -1857,8 +1235,6 @@ function updateAuthenticationUi(signedIn: boolean) {
   const agentRun = document.querySelector<HTMLButtonElement>("#agent-run");
   if (agentRun)
     agentRun.disabled = !signedIn || capabilities?.aiAnalysis === false;
-  if (smartRun)
-    smartRun.disabled = !signedIn || capabilities?.excel.canInspect === false;
   if (runMode) runMode.disabled = !signedIn;
   updateEmailUi(signedIn);
   renderCommercialStatus(signedIn ? capabilities : undefined);
@@ -1877,6 +1253,7 @@ function updateAuthenticationUi(signedIn: boolean) {
       "Sign in with Microsoft first. Your workbook stays private until both sign-ins are complete.",
     );
   }
+  updateRunButtonState();
 }
 
 function renderCommercialStatus(value: M365Capabilities | undefined) {
@@ -1898,8 +1275,14 @@ function renderCommercialStatus(value: M365Capabilities | undefined) {
   commercialStatus.hidden = false;
 }
 
+function renderCapabilityReport() {
+  renderCapabilityReportView(document, capabilities?.advanced);
+}
+
 async function refreshCapabilities(reason: "oauth" | "restore") {
   if (!accessToken) return;
+  capabilityState = "loading";
+  updateRunButtonState();
   try {
     capabilities = await log.step(
       `api:capabilities:${reason}`,
@@ -1923,12 +1306,14 @@ async function refreshCapabilities(reason: "oauth" | "restore") {
         }),
       ),
     };
+    capabilityState = "ready";
     vynoraiAccountConnected = true;
     updateAuthenticationUi(true);
     renderCapabilityReport();
     setStatus(SIGNED_IN_IDLE_STATUS);
   } catch (error) {
     capabilities = undefined;
+    capabilityState = "unavailable";
     vynoraiAccountConnected = false;
     log.record("api:capabilities", "fail", describeError(error));
     if (needsVynorAccountLink(error)) {
@@ -2021,6 +1406,7 @@ function signOutOfMicrosoft() {
   microsoftAccessToken = "";
   vynoraiAccountConnected = false;
   capabilities = undefined;
+  capabilityState = "idle";
   currentPlan = undefined;
   previewFingerprint = "";
   clearAnalysisOutput();
@@ -2085,26 +1471,6 @@ const API_MESSAGES: Record<string, string> = {
   EXCEL_SELECTION_TOO_LARGE:
     "The selected range is too large. Select at most 100,000 cells and 100 columns.",
 };
-
-function editDistance(left: string, right: string): number {
-  const a = left.toLocaleLowerCase().trim();
-  const b = right.toLocaleLowerCase().trim();
-  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let row = 1; row <= a.length; row += 1) {
-    let diagonal = previous[0];
-    previous[0] = row;
-    for (let column = 1; column <= b.length; column += 1) {
-      const above = previous[column];
-      previous[column] = Math.min(
-        previous[column] + 1,
-        previous[column - 1] + 1,
-        diagonal + (a[row - 1] === b[column - 1] ? 0 : 1),
-      );
-      diagonal = above;
-    }
-  }
-  return previous[b.length];
-}
 
 function suggestMissingColumn(message: string): string {
   if (!lastRange?.headers.length || !/column|columns|key/i.test(message))
@@ -2474,6 +1840,7 @@ instruction?.addEventListener("input", () => {
   if (dupFix) dupFix.hidden = true;
   if (apply) apply.disabled = true;
   if (preview) preview.textContent = "No preview yet.";
+  updateRunButtonState();
 });
 
 dupFixButton?.addEventListener("click", () => {
@@ -2488,7 +1855,19 @@ inspect?.addEventListener("click", async () => {
     return setStatus("Sign in before inspecting Excel data.");
   const previewRun = previewController.start();
   const { abortController, isStale } = previewRun;
+  let timedOut = false;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    abortController.abort();
+    // Release the gate immediately. The stale continuation is still stopped by stopIfStale,
+    // while a new request can be started without waiting for a host that ignored AbortSignal.
+    previewController.finish(previewRun);
+    renderConversation("error", PREVIEW_TIMEOUT_MESSAGE);
+    setStatus(PREVIEW_TIMEOUT_MESSAGE);
+    updateRunButtonState();
+  }, PREVIEW_TIMEOUT_MS);
   const stopIfStale = () => {
+    if (timedOut) throw new Error(PREVIEW_TIMEOUT_MESSAGE);
     if (!isStale()) return false;
     log.record("preview:stale", "skip", "superseded by a newer instruction");
     return true;
@@ -2518,6 +1897,7 @@ inspect?.addEventListener("click", async () => {
   ) {
     if (await offerPayroll(typed)) {
       previewController.finish(previewRun);
+      window.clearTimeout(timeoutId);
       return;
     }
     payrollDeclined = instructionText;
@@ -2535,6 +1915,7 @@ inspect?.addEventListener("click", async () => {
   skipAiOnce = false;
   if (aiTurn) {
     previewController.finish(previewRun);
+    window.clearTimeout(timeoutId);
     scriptMode = true;
     autoAi = true;
     void startConsent();
@@ -3035,11 +2416,18 @@ inspect?.addEventListener("click", async () => {
     if (!reviewToggle?.checked && apply && !apply.disabled) apply.click();
   } catch (error) {
     previewController.finish(previewRun);
+    if (timedOut) {
+      renderConversation("error", PREVIEW_TIMEOUT_MESSAGE);
+      setStatus(PREVIEW_TIMEOUT_MESSAGE);
+      return;
+    }
     if (isStale()) return;
     restoreConfirmedPreview();
     handleApiError("inspect", error);
   } finally {
+    window.clearTimeout(timeoutId);
     previewController.finish(previewRun);
+    updateRunButtonState();
   }
 });
 
@@ -3192,7 +2580,14 @@ apply?.addEventListener("click", async () => {
       report.results,
     );
     galleryPlanId = approvedPlan.planId;
-    galleryResults = report.results;
+    const evidenceRequest =
+      lastConversationRequest || instruction?.value?.trim() || "";
+    galleryResults = report.results.map((result) => ({
+      ...result,
+      request: evidenceRequest,
+      sourceRange: currentRangeAddress,
+      previewPlanId: approvedPlan.planId,
+    }));
     persistResultGallery();
     renderResultGallery();
     prepareEmailComposer("", false);
@@ -4201,8 +3596,24 @@ function setupLayout() {
       void sheets;
       void label;
     }
-    renderPreviewKpis(actions, parsed);
-    renderOutcomes(actions);
+    renderPreviewKpisView(
+      document,
+      actions,
+      parsed,
+      lastRange,
+      lastSample,
+      textLanguage(),
+    );
+    renderOutcomesView(
+      document,
+      actions,
+      lastRange,
+      lastSample,
+      textLanguage(),
+      (container, requestedActions) => {
+        void refreshSheetNames(container, requestedActions);
+      },
+    );
     configurePreviewTweaks(actions);
     setPreviewBadge(false);
     resultCard.hidden = false;
@@ -4224,381 +3635,6 @@ const rollbackButton = document.querySelector<HTMLButtonElement>("#rollback");
 const stepsContainer = document.querySelector<HTMLElement>("#steps");
 const overviewButton = document.querySelector<HTMLButtonElement>("#overview");
 const languageButton = document.querySelector<HTMLButtonElement>("#language");
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-const PALETTE = ["#123a6b", "#d9822b", "#2e8b57", "#8e44ad"];
-
-function drawChart(chart: OutcomeChart): SVGElement {
-  const width = 300;
-  const height = 150;
-  const pad = 18;
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  const all = chart.series.flatMap((entry) => entry.values);
-  const min = Math.min(0, ...all);
-  const max = Math.max(1, ...all);
-  const range = Math.max(1, max - min);
-  const count = Math.max(1, chart.categories.length);
-  const step = (width - pad * 2) / count;
-  const add = (name: string, attrs: Record<string, string>) => {
-    const node = document.createElementNS(SVG_NS, name);
-    for (const [key, value] of Object.entries(attrs))
-      node.setAttribute(key, value);
-    svg.appendChild(node);
-    return node;
-  };
-  const y = (value: number) =>
-    height - pad - ((value - min) / range) * (height - pad * 2);
-  add("line", {
-    x1: String(pad),
-    y1: String(y(0)),
-    x2: String(width - pad),
-    y2: String(y(0)),
-    stroke: "#9aa5b5",
-  });
-
-  const type = String(chart.type || "column").toLowerCase();
-  const drawLineSeries = (
-    entry: OutcomeChart["series"][number],
-    index: number,
-  ) => {
-    const points = entry.values
-      .map((value, at) => `${pad + step * (at + 0.5)},${y(value)}`)
-      .join(" ");
-    add("polyline", {
-      points,
-      fill: "none",
-      stroke: PALETTE[index % PALETTE.length],
-      "stroke-width": "2",
-    });
-  };
-  const drawColumns = (stacked: boolean, firstOnly = false) => {
-    chart.categories.forEach((_, at) => {
-      let stack = 0;
-      chart.series.forEach((entry, index) => {
-        if (firstOnly && index > 0) return;
-        const value = Number(entry.values[at] ?? 0);
-        const start = stacked ? stack : 0;
-        const end = start + value;
-        stack = stacked ? end : stack;
-        add("rect", {
-          x: String(
-            stacked
-              ? pad + step * at + step * 0.1
-              : pad +
-                  step * at +
-                  step * 0.1 +
-                  ((step * 0.8) / chart.series.length) * index,
-          ),
-          y: String(y(Math.max(start, end))),
-          width: String(
-            stacked ? step * 0.8 : (step * 0.8) / chart.series.length,
-          ),
-          height: String(Math.max(1, Math.abs(y(end) - y(start)))),
-          fill: PALETTE[index % PALETTE.length],
-        });
-      });
-    });
-  };
-  const drawHorizontalBars = () => {
-    const series = chart.series[0];
-    if (!series) return;
-    const rowHeight = (height - pad * 2) / Math.max(1, series.values.length);
-    const horizontalMax = Math.max(
-      1,
-      ...series.values.map((value) => Math.abs(value)),
-    );
-    series.values.forEach((value, at) => {
-      const bar = (Math.abs(value) / horizontalMax) * (width - pad * 2);
-      add("rect", {
-        x: String(value < 0 ? pad + (width - pad * 2) - bar : pad),
-        y: String(pad + rowHeight * at + rowHeight * 0.12),
-        width: String(Math.max(1, bar)),
-        height: String(Math.max(1, rowHeight * 0.76)),
-        fill: PALETTE[0],
-      });
-    });
-  };
-  const drawStackedHorizontalBars = () => {
-    const rowHeight = (height - pad * 2) / Math.max(1, chart.categories.length);
-    chart.categories.forEach((_, at) => {
-      const total = Math.max(
-        1,
-        chart.series.reduce(
-          (sum, entry) => sum + Math.max(0, Number(entry.values[at] ?? 0)),
-          0,
-        ),
-      );
-      let offset = 0;
-      chart.series.forEach((entry, index) => {
-        const value = Math.max(0, Number(entry.values[at] ?? 0));
-        const segmentWidth = (value / total) * (width - pad * 2);
-        add("rect", {
-          x: String(pad + offset),
-          y: String(pad + rowHeight * at + rowHeight * 0.12),
-          width: String(Math.max(1, segmentWidth)),
-          height: String(Math.max(1, rowHeight * 0.76)),
-          fill: PALETTE[index % PALETTE.length],
-        });
-        offset += segmentWidth;
-      });
-    });
-  };
-  const drawHistogram = () => {
-    const values = chart.series[0]?.values ?? [];
-    if (!values.length) return;
-    const lower = Math.min(...values);
-    const upper = Math.max(...values);
-    const binCount = Math.max(
-      3,
-      Math.min(8, Math.ceil(Math.sqrt(values.length))),
-    );
-    const span = Math.max(1, upper - lower);
-    const counts = Array.from({ length: binCount }, () => 0);
-    values.forEach((value) => {
-      const bin = Math.min(
-        binCount - 1,
-        Math.floor(((value - lower) / span) * binCount),
-      );
-      counts[bin] += 1;
-    });
-    const peak = Math.max(1, ...counts);
-    counts.forEach((count, at) => {
-      const barWidth = ((width - pad * 2) / binCount) * 0.82;
-      const x = pad + ((width - pad * 2) / binCount) * at + barWidth * 0.1;
-      const top = height - pad - (count / peak) * (height - pad * 2);
-      add("rect", {
-        x: String(x),
-        y: String(top),
-        width: String(barWidth),
-        height: String(Math.max(1, height - pad - top)),
-        fill: PALETTE[0],
-      });
-    });
-  };
-  if (type === "line") chart.series.forEach(drawLineSeries);
-  else if (type === "area") {
-    chart.series.forEach((entry, index) => {
-      const points = entry.values
-        .map((value, at) => `${pad + step * (at + 0.5)},${y(value)}`)
-        .join(" ");
-      const first = `${pad + step * 0.5},${y(0)}`;
-      const last = `${pad + step * (entry.values.length - 0.5)},${y(0)}`;
-      add("polygon", {
-        points: `${first} ${points} ${last}`,
-        fill: PALETTE[index % PALETTE.length],
-        opacity: "0.2",
-      });
-      drawLineSeries(entry, index);
-    });
-  } else if (type === "bar") drawHorizontalBars();
-  else if (type === "combo") {
-    drawColumns(false, true);
-    chart.series.slice(1).forEach(drawLineSeries);
-  } else if (type === "stacked-column") drawColumns(true);
-  else if (type === "stacked-bar") drawStackedHorizontalBars();
-  else if (type === "histogram") drawHistogram();
-  else if (type === "waterfall") {
-    const series = chart.series[0];
-    let running = 0;
-    series?.values.forEach((value, at) => {
-      const next = running + Number(value || 0);
-      add("rect", {
-        x: String(pad + step * at + step * 0.1),
-        y: String(y(Math.max(running, next))),
-        width: String(step * 0.8),
-        height: String(Math.max(1, Math.abs(y(next) - y(running)))),
-        fill: next >= running ? "#2e8b57" : "#c94c4c",
-      });
-      running = next;
-    });
-  } else if (type === "pie") {
-    const series = chart.series[0];
-    const values = series?.values.map((value) => Math.max(0, value)) ?? [];
-    const total = values.reduce((sum, value) => sum + value, 0) || 1;
-    const cx = width / 2;
-    const cy = (height - 6) / 2;
-    const radius = Math.min(cx - pad, cy - pad / 2);
-    let angle = -Math.PI / 2;
-    values.forEach((value, index) => {
-      const nextAngle = angle + (value / total) * Math.PI * 2;
-      const largeArc = nextAngle - angle > Math.PI ? 1 : 0;
-      const startX = cx + radius * Math.cos(angle);
-      const startY = cy + radius * Math.sin(angle);
-      const endX = cx + radius * Math.cos(nextAngle);
-      const endY = cy + radius * Math.sin(nextAngle);
-      add("path", {
-        d: `M ${cx} ${cy} L ${startX} ${startY} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`,
-        fill: PALETTE[index % PALETTE.length],
-      });
-      angle = nextAngle;
-    });
-  } else drawColumns(false);
-  if (chart.showDataLabels && type !== "pie" && type !== "histogram") {
-    chart.series.forEach((entry, index) =>
-      entry.values.forEach((value, at) => {
-        const text = add("text", {
-          x: String(
-            type === "bar" || type === "stacked-bar"
-              ? pad +
-                  Math.max(
-                    2,
-                    (Math.abs(value) / Math.max(1, max)) * (width - pad * 2),
-                  )
-              : pad + step * (at + 0.5),
-          ),
-          y: String(
-            type === "bar" || type === "stacked-bar"
-              ? pad +
-                  ((height - pad * 2) / Math.max(1, chart.categories.length)) *
-                    at +
-                  10
-              : Math.max(10, y(value) - 4),
-          ),
-          "text-anchor":
-            type === "bar" || type === "stacked-bar" ? "start" : "middle",
-          "font-size": "7",
-          fill: "#374151",
-        });
-        text.textContent = Number(value).toLocaleString("en-US");
-        void index;
-      }),
-    );
-  }
-  chart.categories.forEach((name, at) => {
-    const label = add("text", {
-      x: String(pad + step * (at + 0.5)),
-      y: String(height - 4),
-      "text-anchor": "middle",
-      "font-size": "8",
-      fill: "#4b5563",
-    });
-    label.textContent = name.slice(0, 6);
-  });
-  return svg;
-}
-
-/** Key figures (total, top group, rows; or checked, clean, to review) from the plan and the real data. */
-function renderPreviewKpis(actions: any[], parsed: any) {
-  const container = document.querySelector<HTMLElement>("#preview-kpis");
-  if (!container) return;
-  container.textContent = "";
-  const tiles = lastRange
-    ? buildPreviewKpis({
-        actions,
-        headers: lastRange.headers,
-        rows: lastRange.rows,
-        sample: parsed?.profile?.sample ?? lastSample,
-        normalized: Boolean(parsed?.normalization),
-        tr: (text) => localizeMessage(textLanguage(), text),
-      })
-    : [];
-  for (const tile of tiles) {
-    const box = document.createElement("div");
-    box.className = tile.warn ? "kpi warn" : "kpi";
-    if (tile.title) box.title = tile.title;
-    const label = document.createElement("small");
-    label.textContent = tile.label;
-    const value = document.createElement("strong");
-    value.textContent = tile.value;
-    box.append(label, value);
-    if (tile.sub) {
-      const sub = document.createElement("span");
-      sub.textContent = tile.sub;
-      box.append(sub);
-    }
-    container.append(box);
-  }
-  container.hidden = tiles.length === 0;
-}
-
-/** The first thing a person sees: what will exist afterwards, drawn from their own data. */
-function renderOutcomes(actions: any[]) {
-  const container = document.querySelector<HTMLElement>("#outcomes");
-  if (!container) return;
-  container.textContent = "";
-  if (!lastRange) return;
-  for (const outcome of buildOutcomes(
-    actions,
-    lastRange.headers,
-    lastRange.rows,
-    textLanguage(),
-  )) {
-    const box = document.createElement("div");
-    box.className = "outcome";
-    const title = document.createElement("strong");
-    title.textContent = outcome.title;
-    const where = document.createElement("div");
-    where.className = "where";
-    where.textContent = willBeCreatedOn(outcome.where, textLanguage());
-    box.appendChild(title);
-    box.appendChild(where);
-    if (outcome.chart) {
-      box.appendChild(drawChart(outcome.chart));
-      const legend = document.createElement("div");
-      legend.className = "legend";
-      legend.textContent = outcome.chart.series
-        .map(
-          (entry, index) => `${["■", "▲", "●", "◆"][index % 4]} ${entry.name}`,
-        )
-        .join("   ");
-      box.appendChild(legend);
-    } else if (outcome.table) {
-      const table = document.createElement("table");
-      const head = table.insertRow();
-      outcome.table.headers.forEach((name, index) => {
-        const th = document.createElement("th");
-        th.textContent = outcome.table!.dropdownColumns.includes(index)
-          ? `${name} ▾`
-          : name;
-        head.appendChild(th);
-      });
-      // A total over a sample is not the real total: leave it out and say so below.
-      const shownRows = lastSample
-        ? outcome.table.rows.filter(
-            (row) => row[0] !== "Grand total" && row[0] !== "මුළු එකතුව",
-          )
-        : outcome.table.rows;
-      for (const row of shownRows) {
-        const tr = table.insertRow();
-        row.forEach((value, index) => {
-          const td = tr.insertCell();
-          td.textContent = value;
-          const bar = outcome.table!.barColumns.find(
-            (entry) => entry.index === index,
-          );
-          if (bar) {
-            const share = Math.min(1, Math.max(0, Number(value) / bar.max));
-            td.style.background = `linear-gradient(to right, #9ec5f0 ${Math.round(share * 100)}%, transparent ${Math.round(share * 100)}%)`;
-          }
-        });
-      }
-      box.appendChild(table);
-      if (lastSample) {
-        const note = document.createElement("div");
-        note.className = "legend";
-        note.textContent = samplePreviewNote(
-          lastSample.sampledRows,
-          lastSample.totalRows,
-          textLanguage(),
-        );
-        box.appendChild(note);
-      }
-    }
-    if (outcome.details.length) {
-      const list = document.createElement("ul");
-      list.className = "details";
-      for (const line of outcome.details) {
-        const li = document.createElement("li");
-        li.textContent = line;
-        list.appendChild(li);
-      }
-      box.appendChild(list);
-    }
-    container.appendChild(box);
-  }
-  void refreshSheetNames(container, actions);
-}
 
 /**
  * Keep the visible, unconfirmed preview aligned with a tweak while the same
@@ -4869,227 +3905,52 @@ async function refreshSheetNames(container: HTMLElement, actions: any[]) {
   });
 }
 
-async function replaceOlderResultSheets(keepSheet: string) {
-  if (!config || !accessToken) return;
-  if (
-    !(await askInPane(
-      localizeMessage(
-        language,
-        "Remove older VynorAI result sheets and keep this result? Your original data is not touched.",
-      ),
-      localizeMessage(language, "Replace"),
-    ))
-  )
-    return log.record("gallery:replace", "skip", "user cancelled");
-  try {
-    const older = (await listVynorSheets(officeRuntime())).filter(
-      (sheet) => sheet !== keepSheet,
-    );
-    if (!older.length)
-      return setStatus("No older VynorAI result sheets found.");
-    const removed = await rollbackCreatedItems(
-      officeRuntime(),
-      { sheets: older, tables: [] },
-      true,
-    );
-    await apiClient()
-      .reportRollback({
-        planId: galleryPlanId,
-        removedSheets: Math.min(10, removed.removedSheets.length),
-        convertedTables: 0,
-        removedNames: 0,
-      })
-      .catch((error) =>
-        log.record("api:gallery-replace", "fail", describeError(error)),
-      );
-    galleryResults = galleryResults.filter(
-      (result) => result.targetSheet === keepSheet,
-    );
-    persistResultGallery();
-    renderResultGallery();
-    renderChanged([
-      ...galleryResults.map(
-        (result) => `${result.kind} - ${result.targetSheet}`,
-      ),
-      `Removed ${removed.removedSheets.length} older VynorAI result sheet(s).`,
-    ]);
-    setStatus(`Removed ${removed.removedSheets.length} older result sheet(s).`);
-    log.record("gallery:replace", "pass", {
-      removedSheets: removed.removedSheets.length,
-    });
-  } catch (error) {
-    handleApiError("gallery:replace", error);
-  }
-}
-
-function renderResultGallery() {
-  const gallery = document.querySelector<HTMLElement>("#result-gallery");
-  const list = document.querySelector<HTMLElement>("#result-gallery-list");
-  const operationHistory =
-    document.querySelector<HTMLElement>("#operation-history");
-  const verifiedBanner = document.querySelector<HTMLElement>(
-    "#verified-result-banner",
-  );
-  if (!gallery || !list) return;
-  list.replaceChildren();
-  const visible = galleryResults.filter(
-    (result) => result.status === "created" || result.status === "exists",
-  );
-  gallery.hidden = visible.length === 0;
-  if (operationHistory) operationHistory.hidden = visible.length === 0;
-  if (verifiedBanner) verifiedBanner.hidden = visible.length === 0;
-  // The safety note is for the first preview; once a result exists the person has seen it.
-  const safetySummary = document.querySelector<HTMLElement>(".safety-summary");
-  if (safetySummary) safetySummary.hidden = visible.length > 0;
-  for (const result of visible) {
-    const item = document.createElement("article");
-    item.className = "result-item";
-    const head = document.createElement("div");
-    head.className = "result-item-head";
-    const title = document.createElement("strong");
-    title.textContent = kindTitle(result.kind, textLanguage());
-    const target = document.createElement("span");
-    target.className = "verified-badge";
-    target.textContent = `Verified · ${result.targetSheet}`;
-    head.append(title, target);
-    const summary = document.createElement("p");
-    summary.className = "result-item-summary";
-    summary.textContent = `Saved on ${result.targetSheet}. Verified by reading the result back from Excel.`;
-    const actions = document.createElement("div");
-    actions.className = "result-item-actions";
-    const show = document.createElement("button");
-    show.type = "button";
-    show.className = "result-primary-action";
-    show.textContent = translate(language, "show_result", "Show result");
-    show.addEventListener("click", () => {
-      void revealExcelResult(officeRuntime(), result.targetSheet);
-    });
-    actions.appendChild(show);
-    const evidence = document.createElement("details");
-    evidence.className = "result-evidence";
-    const evidenceSummary = document.createElement("summary");
-    evidenceSummary.textContent = "Show evidence";
-    const evidenceList = document.createElement("ul");
-    const evidenceLines = [
-      `Result read back from sheet ${result.targetSheet}`,
-      currentRangeAddress
-        ? `Source: ${currentRangeAddress}`
-        : "Source recorded in the applied plan",
-      `${kindTitle(result.kind, language)} completed with status ${result.status}`,
-      ...(result.notes ?? []),
-      ...(result.warnings ?? []).map((warning) => `Warning: ${warning}`),
-    ];
-    for (const line of evidenceLines) {
-      const row = document.createElement("li");
-      row.textContent = line;
-      evidenceList.appendChild(row);
-    }
-    evidence.append(evidenceSummary, evidenceList);
-    const more = document.createElement("details");
-    more.className = "result-more-actions";
-    const moreSummary = document.createElement("summary");
-    moreSummary.textContent = "More actions";
-    const moreActions = document.createElement("div");
-    moreActions.className = "result-more-actions-list";
-    const share = document.createElement("button");
-    share.type = "button";
-    share.textContent = translate(language, "email_report", "Email report");
-    share.addEventListener("click", () => {
-      // Email the result that was selected in this card, rather than a stale active sheet.
-      lastRevealSheet = result.targetSheet;
-      prepareEmailComposer();
-    });
-    moreActions.appendChild(share);
-    const refresh = document.createElement("button");
-    refresh.type = "button";
-    refresh.textContent = translate(language, "refresh_result", "Refresh");
-    refresh.disabled = !instruction?.value.trim();
-    refresh.title = refresh.disabled
-      ? "Enter the original request again to refresh this result."
-      : "Create a fresh preview from the current request.";
-    refresh.addEventListener("click", () => {
-      if (!instruction?.value.trim()) {
-        setStatus("Enter the request again before refreshing this result.");
-        return;
-      }
-      currentPlan = undefined;
-      previewFingerprint = "";
-      pendingSpecs = undefined;
-      excludedKinds = new Set<string>();
-      setStatus("Refreshing the preview. Nothing changes until you confirm.");
-      instruction.focus();
-      void inspect?.click();
-    });
-    moreActions.appendChild(refresh);
-    if (result.status === "created") {
-      const undo = document.createElement("button");
-      undo.type = "button";
-      undo.textContent = translate(language, "undo", "Undo");
-      undo.addEventListener("click", async () => {
-        const sameSheet = galleryResults.filter(
-          (candidate) =>
-            candidate.targetSheet === result.targetSheet &&
-            candidate.status === "created",
-        );
-        if (
-          !(await askInPane(
-            localizeMessage(
-              language,
-              "Remove this VynorAI result? Your original data is not touched.",
-            ),
-            localizeMessage(language, "Remove"),
-          ))
-        )
-          return;
-        try {
-          const removed = await rollbackCreatedItems(
-            officeRuntime(),
-            rollbackItemsFromApplyReport(galleryPlanId, sameSheet),
-            true,
-          );
-          await apiClient()
-            .reportRollback({
-              planId: galleryPlanId,
-              removedSheets: Math.min(10, removed.removedSheets.length),
-              convertedTables: Math.min(1, removed.convertedTables.length),
-              removedNames: Math.min(10, removed.removedNames.length),
-            })
-            .catch((error) =>
-              log.record("api:gallery-undo", "fail", describeError(error)),
-            );
-          galleryResults = galleryResults.filter(
-            (candidate) => candidate.targetSheet !== result.targetSheet,
-          );
-          persistResultGallery();
-          lastCreated = rollbackItemsFromApplyReport(
-            galleryPlanId,
-            galleryResults.filter(
-              (candidate) => candidate.status === "created",
-            ),
-          );
-          renderResultGallery();
-          markChangeNote("undone");
-          setStatus(`Removed ${removed.removedSheets.length} result sheet(s).`);
-        } catch (error) {
-          handleApiError("gallery:undo", error);
-        }
-      });
-      moreActions.appendChild(undo);
-    }
-    const replace = document.createElement("button");
-    replace.type = "button";
-    replace.textContent = translate(language, "cleanup", "Replace older");
-    replace.addEventListener("click", () => {
-      void replaceOlderResultSheets(result.targetSheet);
-    });
-    moreActions.appendChild(replace);
-    more.append(moreSummary, moreActions);
-    actions.appendChild(more);
-    item.append(head, summary, actions, evidence);
-    list.appendChild(item);
-  }
-}
-
+const resultGalleryController = createResultGalleryController({
+  document,
+  rollbackButton,
+  instruction,
+  getLanguage: () => language,
+  getTextLanguage: textLanguage,
+  getPlanId: () => galleryPlanId,
+  getResults: () => galleryResults,
+  setResults: (results) => {
+    galleryResults = results;
+  },
+  getLastCreated: () => lastCreated,
+  setLastCreated: (items) => {
+    lastCreated = items;
+  },
+  getLastRevealSheet: () => lastRevealSheet,
+  setLastRevealSheet: (sheet) => {
+    lastRevealSheet = sheet;
+  },
+  getCurrentRequest: () => lastConversationRequest,
+  getCurrentRange: () => currentRangeAddress,
+  resetPreview: () => {
+    currentPlan = undefined;
+    previewFingerprint = "";
+    pendingSpecs = undefined;
+    excludedKinds = new Set<string>();
+  },
+  inspect: () => {
+    if (inspect) void inspect.click();
+  },
+  prepareEmail: () => prepareEmailComposer(),
+  persist: persistResultGallery,
+  updateEmailUi: () => updateEmailUi(),
+  renderChanged,
+  markChangeNote: (action) => markChangeNote(action),
+  setStatus,
+  handleApiError,
+  officeRuntime,
+  apiClient,
+  listVynorSheets,
+  askInPane,
+  log,
+});
+const renderResultGallery = resultGalleryController.render;
+const replaceOlderResultSheets =
+  resultGalleryController.replaceOlderResultSheets;
 document
   .querySelector<HTMLButtonElement>("#open-change-log")
   ?.addEventListener("click", async () => {
@@ -5145,64 +4006,7 @@ document.querySelector("#show-result")?.addEventListener("click", () => {
   if (lastRevealSheet) void revealExcelResult(officeRuntime(), lastRevealSheet);
 });
 
-rollbackButton?.addEventListener("click", async () => {
-  if (!lastCreated || !config || !accessToken) return;
-  const items = lastCreated;
-  if (
-    !(await askInPane(
-      localizeMessage(
-        language,
-        "Remove the result sheets and Table this add-in created? Your original data is not touched.",
-      ),
-      localizeMessage(language, "Remove"),
-      undefined,
-      removeResultsCard(items, language),
-    ))
-  )
-    return log.record("rollback:confirm", "skip", "user cancelled");
-  try {
-    const report = await log.step("excel:rollback", () =>
-      rollbackCreatedItems(officeRuntime(), items, true),
-    );
-    await apiClient()
-      .reportRollback({
-        planId: items.planId,
-        removedSheets: Math.min(10, report.removedSheets.length),
-        convertedTables: Math.min(1, report.convertedTables.length),
-        removedNames: Math.min(10, report.removedNames.length),
-      })
-      .catch((error) =>
-        log.record("api:rollback", "fail", describeError(error)),
-      );
-    lastCreated = undefined;
-    galleryPlanId = "";
-    galleryResults = [];
-    persistResultGallery();
-    renderResultGallery();
-    if (rollbackButton) rollbackButton.hidden = true;
-    updateEmailUi();
-    markChangeNote("undone");
-    await logChanges({
-      at: new Date(),
-      action: "undone",
-      request: lastConversationRequest,
-      changes: report.removedSheets.map((sheet) => ({
-        change: "removed result sheet",
-        sheet,
-        status: "undone",
-      })),
-      reference: items.planId,
-    });
-    // The "changed" list names sheets that no longer exist; clear it with the rest of the result.
-    renderChanged([]);
-    setStatus(
-      `Removed ${report.removedSheets.length} sheet(s), ${report.removedNames.length} named range(s), and converted ${report.convertedTables.length} table(s) back to a range.`,
-    );
-  } catch (error) {
-    handleApiError("rollback", error);
-  }
-});
-
+resultGalleryController.bindRollback();
 document.querySelector("#more-pills")?.addEventListener("click", (event) => {
   document
     .querySelectorAll<HTMLElement>(".pill.extra")
@@ -5795,6 +4599,7 @@ async function askAiForIdeas() {
   const button = document.querySelector<HTMLButtonElement>("#explore-ai-go");
   if (button) button.disabled = true;
   agentBusy = true;
+  updateRunButtonState();
   setStatus("Asking the AI for ideas...");
   // The ideas belong to the columns they were asked for; the person may move on while the AI answers.
   const askedFor = selectionKey();
@@ -5833,6 +4638,7 @@ async function askAiForIdeas() {
     setStatus("The ideas could not be made. See Diagnostics.");
   } finally {
     agentBusy = false;
+    updateRunButtonState();
     if (button) button.disabled = false;
   }
 }
@@ -5923,6 +4729,7 @@ async function refreshSelectionChip() {
     const text = describeSelectionLocal(info);
     shownSelection = info;
     latestSelectionAddress = info.address;
+    updateRunButtonState();
     selectionText.textContent = text;
     show(selectionChip, text !== "");
     renderWorkspaceContext(info, schema);
@@ -5936,6 +4743,9 @@ async function refreshSelectionChip() {
     show(selectionChangeWarning, changedAfterPreview);
     if (changedAfterPreview && apply) apply.disabled = true;
   } catch {
+    shownSelection = undefined;
+    latestSelectionAddress = "";
+    updateRunButtonState();
     show(selectionChip, false);
     renderWorkspaceContext(undefined);
   }
@@ -6431,6 +5241,7 @@ function finishAgentRoles(reviewed: Awaited<ReturnType<typeof runTeam>>) {
 
 async function agentLoop(request: string) {
   agentBusy = true;
+  updateRunButtonState();
   agentStopped = false;
   show(agentCard, true);
   show(agentStop, true);
@@ -6656,6 +5467,7 @@ async function agentLoop(request: string) {
     }
   } finally {
     agentBusy = false;
+    updateRunButtonState();
     show(agentStop, false);
   }
 }
@@ -6794,6 +5606,7 @@ runMode?.addEventListener("change", () => {
   } catch {
     // The selected mode still applies to this session.
   }
+  updateRunButtonState();
 });
 smartRun?.addEventListener("click", () => {
   const request = instruction?.value.trim() ?? "";
@@ -6890,6 +5703,7 @@ agentApprove?.addEventListener("click", async () => {
   if (!run || agentBusy) return;
   agentPending = undefined;
   agentBusy = true;
+  updateRunButtonState();
   show(agentApprove, false);
   show(agentDiscard, false);
   if (agentBadge) setAgentBadge("Applying");
@@ -6927,6 +5741,7 @@ agentApprove?.addEventListener("click", async () => {
     );
   } catch (error) {
     agentBusy = false;
+    updateRunButtonState();
     show(agentStop, false);
     setAgentRoleView(document, "verification", "skipped", "did not finish");
     agentIssues = [describeError(error)];
@@ -6937,6 +5752,7 @@ agentApprove?.addEventListener("click", async () => {
     return;
   }
   agentBusy = false;
+  updateRunButtonState();
   show(agentStop, false);
   if (agentProgress) setLocalizedText(agentProgress, "");
   agentIssues = report.results
@@ -7062,6 +5878,7 @@ const mergeUndo = mergeUndoData;
 agentUndo?.addEventListener("click", async () => {
   if (!agentLastUndo || agentBusy) return;
   agentBusy = true;
+  updateRunButtonState();
   setStatus("Undoing the agent's changes...");
   try {
     await undoAgentChanges(officeRuntime(), agentLastUndo, async (rollback) => {
@@ -7102,6 +5919,7 @@ agentUndo?.addEventListener("click", async () => {
         `${status.textContent ?? ""} ${describeError(error).slice(0, 240)}`.trim();
   } finally {
     agentBusy = false;
+    updateRunButtonState();
   }
 });
 
@@ -7119,125 +5937,29 @@ document.querySelectorAll(".new-chat-action").forEach((button) => {
 // choices are stored, never cell values. See preferences.ts, changeLog.ts, sriLanka.ts.
 
 let workbookPrefs: WorkbookPreferences = {};
-const prefsLine = document.querySelector<HTMLElement>("#prefs-line");
-const prefsStyle = document.querySelector<HTMLSelectElement>(
-  "#prefs-number-style",
-);
-const prefsFiscal = document.querySelector<HTMLSelectElement>("#prefs-fiscal");
-const prefsCurrency =
-  document.querySelector<HTMLSelectElement>("#prefs-currency");
-const prefsAudience =
-  document.querySelector<HTMLSelectElement>("#prefs-audience");
-const prefsResultPrefix = document.querySelector<HTMLInputElement>(
-  "#prefs-result-prefix",
-);
-const prefsChangeLog =
-  document.querySelector<HTMLInputElement>("#prefs-changelog");
-
-function prefsFallbackKey(): string | undefined {
-  const workbook = workbookStorageFingerprint();
-  return workbook ? `${PREFERENCES_KEY}.${workbook}` : undefined;
-}
-
-function loadPreferences(): WorkbookPreferences {
-  try {
-    const raw = office()?.context?.document?.settings?.get?.(PREFERENCES_KEY);
-    if (raw != null) return parsePreferences(raw);
-  } catch {
-    // Settings are not available in this host; the browser copy is used.
-  }
-  try {
-    const key = prefsFallbackKey();
-    return key ? parsePreferences(localStorage.getItem(key)) : {};
-  } catch {
-    return {};
-  }
-}
-
-function savePreferences(next: WorkbookPreferences) {
-  workbookPrefs = parsePreferences(next);
-  const text = JSON.stringify(workbookPrefs);
-  try {
-    const settings = office()?.context?.document?.settings;
-    if (settings?.set) {
-      settings.set(PREFERENCES_KEY, text);
-      settings.saveAsync?.();
-    }
-  } catch {
-    // Kept in the browser copy below.
-  }
-  try {
-    const key = prefsFallbackKey();
-    if (key) localStorage.setItem(key, text);
-  } catch {
-    // Private window: remembered for this session only.
-  }
-  renderPreferences();
-}
-
-function learnPreferences(request: string) {
-  const learnt = learnFromRequest(workbookPrefs, request);
-  if (!Object.keys(learnt).length) return;
-  savePreferences({ ...workbookPrefs, ...learnt });
-  log.record("prefs:learnt", "info", Object.keys(learnt).join(","));
-}
-
-function renderPreferences() {
-  if (prefsLine) prefsLine.textContent = describePreferences(workbookPrefs);
-  if (prefsStyle) prefsStyle.value = workbookPrefs.numberStyle ?? "";
-  if (prefsFiscal)
-    prefsFiscal.value = String(workbookPrefs.fiscalYearStart ?? "");
-  if (prefsCurrency) prefsCurrency.value = workbookPrefs.currency ?? "";
-  if (prefsAudience) prefsAudience.value = workbookPrefs.audience ?? "";
-  if (prefsResultPrefix)
-    prefsResultPrefix.value = workbookPrefs.resultSheetPrefix ?? "";
-  if (prefsChangeLog)
-    prefsChangeLog.checked = workbookPrefs.changeLog !== false;
-}
-
-function updatePreference(change: Partial<WorkbookPreferences>) {
-  const next: Record<string, unknown> = { ...workbookPrefs, ...change };
-  for (const [key, value] of Object.entries(change))
-    if (value === undefined || value === "") delete next[key];
-  savePreferences(next as WorkbookPreferences);
-}
-
-prefsStyle?.addEventListener("change", () =>
-  updatePreference({ numberStyle: (prefsStyle.value || undefined) as any }),
-);
-prefsFiscal?.addEventListener("change", () =>
-  updatePreference({
-    fiscalYearStart: prefsFiscal.value ? Number(prefsFiscal.value) : undefined,
-  }),
-);
-prefsCurrency?.addEventListener("change", () =>
-  updatePreference({ currency: prefsCurrency.value || undefined }),
-);
-prefsAudience?.addEventListener("change", () =>
-  updatePreference({ audience: (prefsAudience.value || undefined) as any }),
-);
-prefsResultPrefix?.addEventListener("change", () =>
-  updatePreference({
-    resultSheetPrefix: prefsResultPrefix.value.trim() || undefined,
-  }),
-);
-prefsChangeLog?.addEventListener("change", () =>
-  updatePreference({ changeLog: prefsChangeLog.checked }),
-);
-document.querySelector("#prefs-forget")?.addEventListener("click", () => {
-  savePreferences({});
-  setStatus("Forgot the saved choices for this workbook.");
+const preferencesController = createWorkbookPreferencesController({
+  document,
+  office,
+  officeRuntime,
+  workbookStorageFingerprint,
+  getPreferences: () => workbookPrefs,
+  setPreferences: (next) => {
+    workbookPrefs = next;
+  },
+  setStatus,
+  record: (step, result, detail) => log.record(step, result, detail),
 });
-
-/** One line per change in the "VynorAI Log" sheet; never fails an apply or an undo. */
-async function logChanges(entry: ChangeLogEntry) {
-  if (workbookPrefs.changeLog === false) return;
-  const ok = await appendChangeLog(officeRuntime(), changeLogRows(entry));
-  log.record("changelog:append", ok ? "pass" : "fail", {
-    action: entry.action,
-    rows: entry.changes.length,
-  });
-}
+const loadPreferences = () => preferencesController.load();
+const savePreferences = (next: WorkbookPreferences) =>
+  preferencesController.save(next);
+const learnPreferences = (request: string) =>
+  preferencesController.learn(request);
+const renderPreferences = () => preferencesController.render();
+const updatePreference = (change: Partial<WorkbookPreferences>) =>
+  preferencesController.update(change);
+const logChanges = (entry: ChangeLogEntry) =>
+  preferencesController.logChanges(entry);
+preferencesController.bind();
 
 document
   .querySelector("#prefs-holidays")

@@ -162,6 +162,12 @@ export interface ExcelActionResult {
   kind: string;
   name: string;
   targetSheet: string;
+  /** Exact output range when Excel returned one; omitted when the action has no single range. */
+  targetRange?: string;
+  /** Request/evidence captured at apply time so an older result card never borrows newer context. */
+  request?: string;
+  sourceRange?: string;
+  previewPlanId?: string;
   status: ExcelActionStatus;
   /** True only when this apply call created the target worksheet itself. */
   createdSheet?: boolean;

@@ -3440,6 +3440,20 @@ body:has(#agent-checked[data-state="working"]) #agent-progress {
   margin-top: 2px;
   gap: var(--sp-2);
 }
+.run-gate {
+  margin: 6px 2px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.run-gate[data-reason="backend_unavailable"],
+.run-gate[data-reason="account_not_ready"] {
+  color: var(--danger);
+}
+.run-gate[data-reason="waiting_for_host"],
+.run-gate[data-reason="request_running"] {
+  color: var(--brand);
+}
 .mode-control {
   flex: 1 1 auto;
   align-items: center;

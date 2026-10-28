@@ -5,6 +5,8 @@ export type SmartPath = "local" | "agent";
 
 export interface WorkspaceSelection {
   address: string;
+  /** Worksheet owning the selected range, loaded from the live Excel host. */
+  worksheetName?: string;
   rows: number;
   columns: number;
   /** A local-only fact used to avoid suggesting work against an empty active cell. */

@@ -477,9 +477,9 @@ not consider the PostgreSQL cutover complete while `billing.mode` is `sqlite`.
    their ports to the internet.
 3. Take a recoverable snapshot of the existing `/app/data` volume.
 4. Configure `BILLING_DB_MODE=postgres`, `DATABASE_URL`, `REDIS_URL`,
-   `IDE_AUTH_REQUIRE_REDIS=true`, `DATA_ENCRYPTION_KEY`, `JWT_SECRET`, and
-   `ADMIN_SECRET` as Coolify secrets. Never place their values in Git or build
-   arguments.
+   `IDE_AUTH_REQUIRE_REDIS=true`, `DATA_ENCRYPTION_KEY`, `JWT_SECRET`, and the
+   Cloudflare Access team domain/audience as Coolify secrets. Never place their
+   values in Git or build arguments.
 5. Deploy one backend replica. Startup performs the idempotent SQLite-to-
    PostgreSQL backfill and refuses to become ready if table parity fails.
 6. Require Coolify to probe `GET /ready`, not only `GET /health`. Readiness must

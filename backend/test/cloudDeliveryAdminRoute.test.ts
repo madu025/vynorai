@@ -6,7 +6,6 @@ import { after, before, test } from "node:test";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-cloud-admin-"));
 const originalCwd = process.cwd();
-const adminSecret = "vynor-cloud-admin-test-secret-2026";
 let dbm: typeof import("../src/db.js");
 let server: import("node:http").Server;
 let baseUrl = "";
@@ -14,7 +13,6 @@ let baseUrl = "";
 before(async () => {
   process.chdir(tempDir);
   process.env.NODE_ENV = "test";
-  process.env.ADMIN_SECRET = adminSecret;
   process.env.DB_DRIVER = "sqlite";
   delete process.env.DATABASE_URL;
   dbm = await import("../src/db.js");
@@ -38,7 +36,7 @@ after(async () => {
 
 const headers = {
   "content-type": "application/json",
-  "x-admin-secret": adminSecret,
+  "cf-access-authenticated-user-email": "admin@vynor.lk",
 };
 const receipt = "a".repeat(64);
 

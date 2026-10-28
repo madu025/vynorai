@@ -99,7 +99,7 @@ docker exec vynor-postgres psql -U vynor -d vynor -Atc \
   "select count(*) from users; select version from schema_migrations;"
 ```
 
-1. Admin portal: sign in (Cloudflare Access or `ADMIN_SECRET`). Provider keys list shows the carried
+1. Admin portal: sign in through Cloudflare Access. Provider keys list shows the carried
    keys (masked); Models and Plans show the carried configuration.
 2. The kept account: a request with its API key succeeds (`node --env-file=.env.e2e ...` with the
    E2E key works unchanged, the key hash was copied).
@@ -146,11 +146,11 @@ Rows written to the typed database after the cutover (new registrations, payment
 
 ## Failure table
 
-| Symptom                                                       | Cause                         | Action                                                 |
-| ------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------ |
-| `preflight`: `vynor_typed already exists`                     | An earlier attempt            | Confirm it is yours, drop it, rerun                    |
-| `prepare`: "kept account was not found"                       | Email differs                 | Set `KEPT_EMAIL`, rerun                                |
-| `copy`: "already holds data" or "other than the kept account" | `vynor_typed` was used        | Drop and rerun `prepare`                               |
-| Worker logs `PG_LEGACY_SCHEMA`                                | Backend started before `swap` | Stop it, run `swap --yes`, start again                 |
-| `swap`: `vynor_old_<date>` exists                             | Second attempt the same day   | Set `DB_OLD=vynor_old_<date>b`                         |
-| Admin portal says unauthorised                                | Cloudflare Access variables   | `ADMIN_SECRET` still works; see ARCHITECTURE_DECISIONS |
+| Symptom                                                       | Cause                         | Action                                                                           |
+| ------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
+| `preflight`: `vynor_typed already exists`                     | An earlier attempt            | Confirm it is yours, drop it, rerun                                              |
+| `prepare`: "kept account was not found"                       | Email differs                 | Set `KEPT_EMAIL`, rerun                                                          |
+| `copy`: "already holds data" or "other than the kept account" | `vynor_typed` was used        | Drop and rerun `prepare`                                                         |
+| Worker logs `PG_LEGACY_SCHEMA`                                | Backend started before `swap` | Stop it, run `swap --yes`, start again                                           |
+| `swap`: `vynor_old_<date>` exists                             | Second attempt the same day   | Set `DB_OLD=vynor_old_<date>b`                                                   |
+| Admin portal says unauthorised                                | Cloudflare Access variables   | Verify `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and the signed Access assertion |

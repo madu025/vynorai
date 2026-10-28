@@ -232,10 +232,12 @@ test("webhook and secret comparisons are constant-time", () => {
   const checks: Array<[string, RegExp]> = [
     ["services/payhere.ts", /safeEqual\(/],
     ["routes/googleAuth.ts", /safeEqual\(claims\.nonce/],
-    ["routes/admin.ts", /safeEqual\(secret, expected\)/],
   ];
   for (const [file, pattern] of checks)
     assert.match(fs.readFileSync(path.join(SRC, file), "utf8"), pattern, file);
+  const admin = fs.readFileSync(path.join(SRC, "routes/admin.ts"), "utf8");
+  assert.doesNotMatch(admin, /safeEqual\(secret, expected\)/);
+  assert.doesNotMatch(admin, /x-admin-secret/);
   const payhere = fs.readFileSync(
     path.join(SRC, "services/payhere.ts"),
     "utf8",

@@ -7,9 +7,10 @@ import { after, before, test } from "node:test";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-admin-auth-"));
 const originalCwd = process.cwd();
-const masterSecret = "vynorai_super_admin_secret_key_2026_secure";
-const devSecret = "vynorai_admin_2026_change_me"; // 28 chars
-
+const adminHtml = fs.readFileSync(
+  new URL("../public/admin.html", import.meta.url),
+  "utf8",
+);
 let baseUrl = "";
 let server: import("node:http").Server;
 let dbm: typeof import("../src/db.js");
@@ -17,7 +18,6 @@ let dbm: typeof import("../src/db.js");
 before(async () => {
   process.chdir(tmpDir);
   process.env.NODE_ENV = "test";
-  process.env.ADMIN_SECRET = masterSecret;
   dbm = await import("../src/db.js");
   await dbm.initDb();
 
@@ -72,54 +72,10 @@ test("Cloudflare Zero Trust Access: allows access to protected /admin/health", a
   assert.equal(data.version, "2.0.0");
 });
 
-test("Master Secret Key: authenticates successfully via x-admin-secret", async () => {
+test("Admin secret headers are never accepted; Cloudflare Access is the only admin gate", async () => {
   const res = await fetch(`${baseUrl}/admin/session`, {
     headers: {
-      "x-admin-secret": masterSecret,
-    },
-  });
-
-  assert.equal(res.status, 200);
-  const data = (await res.json()) as any;
-  assert.equal(data.authenticated, true);
-  assert.equal(data.authMethod, "secret_key");
-});
-
-test("Master Secret Key: unlocks protected routes like /admin/health", async () => {
-  const res = await fetch(`${baseUrl}/admin/health`, {
-    headers: {
-      "x-admin-secret": masterSecret,
-    },
-  });
-
-  assert.equal(res.status, 200);
-  const data = (await res.json()) as any;
-  assert.equal(data.status, "ok");
-});
-
-test("Dev Secret Key (28 chars): accepted in test/dev environment", async () => {
-  // Temporarily switch ADMIN_SECRET to devSecret to verify non-prod length flexibility
-  process.env.ADMIN_SECRET = devSecret;
-
-  const res = await fetch(`${baseUrl}/admin/session`, {
-    headers: {
-      "x-admin-secret": devSecret,
-    },
-  });
-
-  assert.equal(res.status, 200);
-  const data = (await res.json()) as any;
-  assert.equal(data.authenticated, true);
-  assert.equal(data.authMethod, "secret_key");
-
-  // Restore masterSecret
-  process.env.ADMIN_SECRET = masterSecret;
-});
-
-test("Invalid Secret Key: rejected with 401 Unauthorized", async () => {
-  const res = await fetch(`${baseUrl}/admin/session`, {
-    headers: {
-      "x-admin-secret": "wrong_secret_key_12345678901234567890",
+      "x-admin-secret": "vynorai_super_admin_secret_key_2026_secure",
     },
   });
 
@@ -138,4 +94,18 @@ test("No credentials: /admin/session returns 401", async () => {
 test("No credentials: protected /admin/health returns 401", async () => {
   const res = await fetch(`${baseUrl}/admin/health`);
   assert.equal(res.status, 401);
+});
+
+test("Admin UI has no origin secret or browser-secret session gate", () => {
+  assert.match(adminHtml, /id="adminAccessGate"/);
+  assert.doesNotMatch(
+    adminHtml,
+    /adminSecretInput|handleAdminLogin|adminLoginGate/,
+  );
+  assert.doesNotMatch(adminHtml, /x-admin-secret/);
+  assert.doesNotMatch(
+    adminHtml,
+    /sessionStorage\.setItem\(['"]vynor_admin_secret/,
+  );
+  assert.match(adminHtml, /cdn-cgi\/access\/logout/);
 });

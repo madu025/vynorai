@@ -8,7 +8,6 @@ if [ ! -f backend/.env ]; then
   cp deploy/env.production.example backend/.env
   chmod 600 backend/.env
   sed -i "s|^JWT_SECRET=__GENERATE__|JWT_SECRET=$(openssl rand -hex 48)|" backend/.env
-  sed -i "s|^ADMIN_SECRET=__GENERATE__|ADMIN_SECRET=$(openssl rand -hex 24)|" backend/.env
   sed -i "s|^DATA_ENCRYPTION_KEY=__GENERATE__|DATA_ENCRYPTION_KEY=$(openssl rand -hex 32)|" backend/.env
   echo "Created backend/.env with generated secrets."
 fi

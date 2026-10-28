@@ -16,9 +16,8 @@ const originalCwd = process.cwd();
 const tmpDir = fs.mkdtempSync(
   path.join(os.tmpdir(), "vynor-code-review-data-"),
 );
-const adminSecret = "s".repeat(40);
 const adminHeaders = {
-  "x-admin-secret": adminSecret,
+  "cf-access-authenticated-user-email": "admin@vynor.lk",
   "content-type": "application/json",
 };
 const repoRoot = path.resolve(originalCwd, "..");
@@ -33,7 +32,6 @@ process.env.BG_MODEL_TOKEN_SECRET = "m".repeat(48);
 before(async () => {
   process.chdir(tmpDir);
   process.env.NODE_ENV = "test";
-  process.env.ADMIN_SECRET = adminSecret;
   dbm = await import("../src/db.js");
   await dbm.initDb();
   await (await import("../src/services/planManager.js")).initPlanManager();

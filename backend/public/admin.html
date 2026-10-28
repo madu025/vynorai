@@ -94,75 +94,14 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
 </head>
 <body>
 <!-- ── ADMIN AUTHENTICATION GATE (Restricted Access) ──────────────────── -->
-<div id="adminLoginGate" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:10;background:radial-gradient(circle at 50% 20%, rgba(124,92,252,0.12) 0%, transparent 60%), var(--bg);">
-  <div style="max-width:440px;width:100%;background:var(--card);border:1px solid rgba(124,92,252,0.3);border-radius:22px;padding:2.8rem 2.2rem;box-shadow:0 24px 70px rgba(0,0,0,0.85),0 0 50px rgba(124,92,252,0.12);backdrop-filter:blur(24px);">
-    <div style="text-align:center;margin-bottom:2.2rem;">
-      <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent3));display:inline-flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:1.2rem;box-shadow:0 0 32px rgba(124,92,252,0.45);">
-        🛡️
-      </div>
-      <h2 style="font-size:1.6rem;font-weight:800;color:#fff;letter-spacing:-0.5px;">VynorAI Control Center</h2>
-      <p style="color:var(--muted);font-size:0.85rem;margin-top:6px;">Restricted Super Admin Portal</p>
-    </div>
-
-    <div id="loginError" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:var(--danger);padding:11px 14px;border-radius:10px;font-size:0.82rem;margin-bottom:1.2rem;align-items:center;gap:8px;">
-      <span>⚠️</span> <span id="loginErrorText">Access Denied: Invalid Admin Secret Key.</span>
-    </div>
-
-    <form onsubmit="handleAdminLogin(event)">
-      <div style="margin-bottom:1.4rem;">
-        <label style="display:block;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.5rem;font-weight:600;">
-          Admin Access Secret Key
-        </label>
-        <div style="position:relative;">
-          <input 
-            type="password" 
-            id="adminSecretInput" 
-            placeholder="Enter your admin secret key..." 
-            autocomplete="current-password"
-            required
-            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:13px 44px 13px 14px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:0.92rem;outline:none;transition:border-color 0.2s;"
-            onfocus="this.style.borderColor='var(--accent)'"
-            onblur="this.style.borderColor='var(--border)'"
-          />
-          <button 
-            type="button" 
-            onclick="toggleAdminSecretVisibility()" 
-            style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px;"
-            id="eyeBtn"
-            title="Toggle visibility"
-          >
-            👁️
-          </button>
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
-          <label style="display:flex;align-items:center;gap:7px;font-size:0.78rem;color:var(--muted);cursor:pointer;margin:0;">
-            <input type="checkbox" id="rememberSecretCheckbox" style="width:auto;margin:0;cursor:pointer;" checked disabled>
-            Stay signed in for this browser tab
-          </label>
-        </div>
-      </div>
-
-      <button 
-        type="submit" 
-        id="loginSubmitBtn"
-        class="btn btn-primary" 
-        style="width:100%;padding:13px;font-size:0.95rem;font-weight:700;border-radius:10px;box-shadow:0 4px 24px rgba(124,92,252,0.35);cursor:pointer;"
-      >
-        Authenticate & Unlock Portal →
-      </button>
-    </form>
-
-    <div style="margin-top:1.8rem;padding-top:1.4rem;border-top:1px solid var(--border);text-align:center;">
-      <p style="font-size:0.75rem;color:var(--muted);line-height:1.5;">
-        🔒 Zero-Trust Perimeter. All authentication attempts and IP addresses are recorded in security audit logs.
-      </p>
-      <a href="https://vynor.lk" style="display:inline-block;margin-top:12px;font-size:0.8rem;color:var(--muted);text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--accent2)'" onmouseout="this.style.color='var(--muted)'">
-        ← Back to Vynor.lk Main Website
-      </a>
-    </div>
+<div id="adminAccessGate" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:10;background:radial-gradient(circle at 50% 20%, rgba(124,92,252,0.12) 0%, transparent 60%), var(--bg);">
+  <div style="max-width:440px;width:100%;background:var(--card);border:1px solid rgba(124,92,252,0.3);border-radius:22px;padding:2.8rem 2.2rem;box-shadow:0 24px 70px rgba(0,0,0,0.85),0 0 50px rgba(124,92,252,0.12);backdrop-filter:blur(24px);text-align:center;">
+    <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent3));display:inline-flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:1.2rem;box-shadow:0 0 32px rgba(124,92,252,0.45);">Cloudflare</div>
+    <h2 style="font-size:1.6rem;font-weight:800;color:#fff;letter-spacing:-0.5px;">VynorAI Control Center</h2>
+    <p id="accessStatus" style="color:var(--muted);font-size:0.85rem;margin-top:10px;line-height:1.5;">Checking Cloudflare Access authorization...</p>
+    <a href="https://vynor.lk" style="display:inline-block;margin-top:1.5rem;font-size:0.8rem;color:var(--muted);text-decoration:none;">Back to Vynor.lk Main Website</a>
   </div>
 </div>
-
 <!-- ── AUTHENTICATED ADMIN HEADER ───────────────────────────────────── -->
 <div class="header" id="adminHeader" style="display:none;">
   <div class="logo">⚡ VynorAI Operations Center</div>
@@ -860,68 +799,9 @@ textarea{resize:vertical;min-height:80px;font-family:'JetBrains Mono',monospace;
 
 <script>
 const API = '';
-let currentAdminSecret = sessionStorage.getItem('vynor_admin_secret') || '';
-let S = () => currentAdminSecret;
-
-function toggleAdminSecretVisibility() {
-  const inp = document.getElementById('adminSecretInput');
-  const btn = document.getElementById('eyeBtn');
-  if (inp.type === 'password') {
-    inp.type = 'text';
-    btn.innerText = '🙈';
-  } else {
-    inp.type = 'password';
-    btn.innerText = '👁️';
-  }
-}
-
-async function handleAdminLogin(e) {
-  if (e) e.preventDefault();
-  const inp = document.getElementById('adminSecretInput');
-  const errBox = document.getElementById('loginError');
-  const errText = document.getElementById('loginErrorText');
-  const btn = document.getElementById('loginSubmitBtn');
-  const secret = inp.value.trim();
-
-  if (!secret) return;
-
-  btn.disabled = true;
-  btn.innerText = 'Verifying Secret...';
-  errBox.style.display = 'none';
-
-  try {
-    const res = await fetch(API + '/admin/health', {
-      headers: { 'x-admin-secret': secret }
-    });
-
-    if (!res.ok) {
-      errText.innerText = 'Access Denied: Invalid Admin Secret Key.';
-      errBox.style.display = 'flex';
-      btn.disabled = false;
-      btn.innerText = 'Authenticate & Unlock Portal →';
-      return;
-    }
-
-    // Success! Save secret
-    currentAdminSecret = secret;
-    // The admin secret is a long-lived credential: it lives in sessionStorage only (cleared when
-    // the tab closes). It is never written to localStorage, where any script on this origin could
-    // read it long after the session ended.
-    sessionStorage.setItem('vynor_admin_secret', secret);
-
-    unlockDashboard('secret_key', null);
-    showToast('Admin session authenticated');
-  } catch (err) {
-    errText.innerText = 'Connection error: ' + err.message;
-    errBox.style.display = 'flex';
-  } finally {
-    btn.disabled = false;
-    btn.innerText = 'Authenticate & Unlock Portal →';
-  }
-}
 
 function unlockDashboard(authMethod, email) {
-  document.getElementById('adminLoginGate').style.display = 'none';
+  document.getElementById('adminAccessGate').style.display = 'none';
   document.getElementById('adminHeader').style.display = 'flex';
   document.getElementById('adminLayout').style.display = 'grid';
 
@@ -940,22 +820,12 @@ function unlockDashboard(authMethod, email) {
 }
 
 function adminLogout() {
-  localStorage.removeItem('vynor_admin_secret');
-  sessionStorage.removeItem('vynor_admin_secret');
-  currentAdminSecret = '';
-  document.getElementById('adminLayout').style.display = 'none';
-  document.getElementById('adminHeader').style.display = 'none';
-  document.getElementById('adminLoginGate').style.display = 'flex';
-  document.getElementById('adminSecretInput').value = '';
-  showToast('Logged out of Admin Portal');
+  window.location.assign('/cdn-cgi/access/logout');
 }
 
 async function api(method, path, body) {
   try {
     const headers = { 'Content-Type': 'application/json' };
-    const sec = S();
-    if (sec) headers['x-admin-secret'] = sec;
-
     const r = await fetch(API + path, {
       method,
       headers,
@@ -1226,8 +1096,7 @@ function b64url(bytes) {
   return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 async function acquireGraphMailToken() {
-  const sec = S();
-  const cfgRes = await fetch(API + '/admin/email/graph-config', { headers: sec ? { 'x-admin-secret': sec } : {} });
+  const cfgRes = await fetch(API + '/admin/email/graph-config');
   const cfg = await cfgRes.json().catch(() => null);
   if (!cfg?.configured) throw new Error('M365_ENTRA_TENANT_ID and M365_ENTRA_CLIENT_ID are not set on the backend.');
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
@@ -1281,8 +1150,6 @@ async function sendTestEmail() {
   try {
     // Not api(): a Graph 401 (M365_GRAPH_AUTH_REQUIRED) must not log the admin out.
     const headers = { 'Content-Type': 'application/json' };
-    const sec = S();
-    if (sec) headers['x-admin-secret'] = sec;
     headers['x-m365-graph-token'] = await acquireGraphMailToken();
     const r = await fetch(API + '/admin/email/test', { method: 'POST', headers, body: JSON.stringify({ to }) });
     status = r.status;
@@ -2063,6 +1930,8 @@ async function clearCache(type) {
 
 // Session check on load
 window.onload = async () => {
+  localStorage.removeItem('vynor_admin_secret');
+  sessionStorage.removeItem('vynor_admin_secret');
   // 1. First: Test Cloudflare Zero Trust Access session (sends CF cookies/headers automatically)
   try {
     const cfRes = await fetch(API + '/admin/session');
@@ -2075,28 +1944,9 @@ window.onload = async () => {
     }
   } catch (_) {}
 
-  // 2. Second: the secret saved for this tab (sessionStorage). A copy that an older version of this
-  // page left in localStorage is removed, not used.
-  localStorage.removeItem('vynor_admin_secret');
-  const saved = sessionStorage.getItem('vynor_admin_secret');
-  if (saved) {
-    currentAdminSecret = saved;
-    try {
-      const res = await fetch(API + '/admin/session', {
-        headers: { 'x-admin-secret': saved }
-      });
-      if (res.ok) {
-        unlockDashboard('secret_key', null);
-        return;
-      }
-    } catch (_) {}
-    localStorage.removeItem('vynor_admin_secret');
-    sessionStorage.removeItem('vynor_admin_secret');
-    currentAdminSecret = '';
-  }
-
-  // Not logged in: show Login Gate
-  document.getElementById('adminLoginGate').style.display = 'flex';
+  // Cloudflare Access is the only login. The origin never offers a secret-key bypass.
+  document.getElementById('accessStatus').textContent = 'Cloudflare Access authorization was not verified. Return through the protected admin URL and try again.';
+  document.getElementById('adminAccessGate').style.display = 'flex';
   document.getElementById('adminHeader').style.display = 'none';
   document.getElementById('adminLayout').style.display = 'none';
 };

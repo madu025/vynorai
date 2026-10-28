@@ -36,6 +36,7 @@ import { getRedis, redisStatus } from "./services/redisStore.js";
 import { billingDbStatus } from "./services/billingDb.js";
 import { assertPayhereConfig } from "./services/payhere.js";
 import { loadProviderCredentials } from "./services/providerCredentials.js";
+import { readCfAccessConfig } from "./services/cfAccess.js";
 import { scheduleBackgroundReconciliation } from "./services/backgroundTasks.js";
 import {
   trackRequestStart,
@@ -388,9 +389,9 @@ async function start() {
         "JWT_SECRET must be configured with at least 32 characters in production",
       );
     }
-    if (!process.env.ADMIN_SECRET || process.env.ADMIN_SECRET.length < 32) {
+    if (!readCfAccessConfig()) {
       throw new Error(
-        "ADMIN_SECRET must be configured with at least 32 characters in production",
+        "CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be configured in production",
       );
     }
     if (!process.env.DATA_ENCRYPTION_KEY) {
@@ -474,7 +475,7 @@ async function start() {
 ║  Admin UI   → http://localhost:${config.adminPort}                    ║
 ║  Admin API  → http://localhost:${config.adminPort}/admin/health       ║
 ╠══════════════════════════════════════════════════════════╣
-║  Secured by: ADMIN_SECRET header (X-Admin-Secret)        ║
+║  Secured by: Cloudflare Access (verified JWT)             ║
 ║  CORS origin: ${String(adminOrigin || "same-origin").padEnd(42)} ║
 ╚══════════════════════════════════════════════════════════╝
     `);

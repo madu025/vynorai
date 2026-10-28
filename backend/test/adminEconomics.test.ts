@@ -8,7 +8,6 @@ import { after, before, test } from "node:test";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-economics-"));
 const originalCwd = process.cwd();
-const adminSecret = "economics-test-admin-secret-32-characters";
 let baseUrl = "";
 let server: import("node:http").Server;
 let dbm: typeof import("../src/db.js");
@@ -16,7 +15,6 @@ let dbm: typeof import("../src/db.js");
 before(async () => {
   process.chdir(tmpDir);
   process.env.NODE_ENV = "test";
-  process.env.ADMIN_SECRET = adminSecret;
   dbm = await import("../src/db.js");
   await dbm.initDb();
 
@@ -126,7 +124,7 @@ after(async () => {
 
 test("economics reports cash and DeepSeek cost by total and user", async () => {
   const response = await fetch(`${baseUrl}/admin/economics?days=30`, {
-    headers: { "x-admin-secret": adminSecret },
+    headers: { "cf-access-authenticated-user-email": "admin@vynor.lk" },
   });
   assert.equal(response.status, 200);
   const data = (await response.json()) as any;

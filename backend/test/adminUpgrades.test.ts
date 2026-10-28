@@ -24,7 +24,6 @@ test("Admin Upgrades Test Suite", async (t) => {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   process.env.NODE_ENV = "test";
-  process.env.ADMIN_SECRET = "test_super_secret_admin_key_32bytes!!";
 
   t.after(() => {
     server.close();
@@ -52,7 +51,7 @@ test("Admin Upgrades Test Suite", async (t) => {
     async () => {
       const res = await fetch(`${baseUrl}/admin/swarm/briefings`, {
         headers: {
-          "x-admin-secret": "test_super_secret_admin_key_32bytes!!",
+          "cf-access-authenticated-user-email": "admin@vynor.lk",
         },
       });
       assert.equal(res.status, 200);
@@ -68,7 +67,7 @@ test("Admin Upgrades Test Suite", async (t) => {
       const res = await fetch(`${baseUrl}/admin/swarm/run`, {
         method: "POST",
         headers: {
-          "x-admin-secret": "test_super_secret_admin_key_32bytes!!",
+          "cf-access-authenticated-user-email": "admin@vynor.lk",
         },
       });
       assert.equal(res.status, 409);
@@ -84,7 +83,7 @@ test("Admin Upgrades Test Suite", async (t) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-admin-secret": "test_super_secret_admin_key_32bytes!!",
+        "cf-access-authenticated-user-email": "admin@vynor.lk",
       },
       body: JSON.stringify({ to: "invalid-email" }),
     });
@@ -93,7 +92,7 @@ test("Admin Upgrades Test Suite", async (t) => {
 
   const ADMIN = {
     "Content-Type": "application/json",
-    "x-admin-secret": "test_super_secret_admin_key_32bytes!!",
+    "cf-access-authenticated-user-email": "admin@vynor.lk",
   };
   const jwt = (claims: Record<string, unknown>) =>
     `${Buffer.from('{"alg":"RS256"}').toString("base64url")}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signaturesignaturesig`;
@@ -296,7 +295,7 @@ test("Admin Upgrades Test Suite", async (t) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-secret": "test_super_secret_admin_key_32bytes!!",
+          "cf-access-authenticated-user-email": "admin@vynor.lk",
         },
         body: JSON.stringify({ to: "admin@vynor.lk" }),
       });

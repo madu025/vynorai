@@ -1,4 +1,4 @@
-import { idParam, nameParam, newId, safeEqual } from "../services/secureId.js";
+import { idParam, nameParam, newId } from "../services/secureId.js";
 import {
   FeedbackRow,
   RoutingRow,
@@ -273,7 +273,7 @@ export const adminRouter = Router();
 
 type AdminAccess = {
   ok: boolean;
-  authMethod: "cloudflare_zero_trust" | "secret_key" | "unauthorized";
+  authMethod: "cloudflare_zero_trust" | "unauthorized";
   email?: string;
 };
 
@@ -283,7 +283,9 @@ type AdminAccess = {
  *    on its own. It counts only when the signed `cf-access-jwt-assertion` verifies (RS256, team JWKS,
  *    audience, issuer, expiry, email claim equal to the header). Without CF_ACCESS_TEAM_DOMAIN and
  *    CF_ACCESS_AUD this path is disabled (fail closed); the only exception is NODE_ENV=test.
- * 2. `x-admin-secret` against process.env.ADMIN_SECRET (constant-time).
+ * There is deliberately no secret-key fallback: the Cloudflare Access application is the
+ * only authentication boundary for admin.vynor.lk. A verified assertion is required even in
+ * production, and an unverified header never grants access.
  */
 export async function resolveAdminAccess(req: Request): Promise<AdminAccess> {
   const cfEmail = (req.headers["cf-access-authenticated-user-email"] || "")
@@ -304,9 +306,8 @@ export async function resolveAdminAccess(req: Request): Promise<AdminAccess> {
     } else if (process.env.NODE_ENV === "test") {
       return { ok: true, authMethod: "cloudflare_zero_trust", email: cfEmail };
     }
-    // An unverifiable Access header never grants access, but the secret path below still can.
   }
-  return verifyAdminAccess(req);
+  return { ok: false, authMethod: "unauthorized" };
 }
 
 /** Verified admin identity for audit rows: the Access email or a fixed label, never a literal "ADMIN". */
@@ -319,7 +320,7 @@ export function adminActor(req: Request): string {
     ? String(email)
         .replace(/[\u0000-\u001f\u007f]/g, "")
         .slice(0, 120)
-    : "admin-secret";
+    : "cloudflare-admin";
 }
 
 /**
@@ -345,25 +346,6 @@ export function stableAdminMessage(err: unknown, fallback: string): string {
   return /^[A-Z][A-Z0-9_]{2,63}$/.test(raw) ? raw : fallback;
 }
 
-/** Secret-key check only (synchronous). Cloudflare Access is handled by resolveAdminAccess. */
-export function verifyAdminAccess(req: Request): AdminAccess {
-  // Fallback: x-admin-secret header check
-  const secret =
-    typeof req.headers["x-admin-secret"] === "string"
-      ? req.headers["x-admin-secret"]
-      : "";
-  const expected = process.env.ADMIN_SECRET || "";
-  const minLength = process.env.NODE_ENV === "production" ? 32 : 16;
-  if (expected && expected.length >= minLength && safeEqual(secret, expected)) {
-    return {
-      ok: true,
-      authMethod: "secret_key",
-    };
-  }
-
-  return { ok: false, authMethod: "unauthorized" };
-}
-
 async function requireAdmin(req: Request, res: Response, next: Function) {
   const check = await resolveAdminAccess(req).catch(
     (): AdminAccess => ({ ok: false, authMethod: "unauthorized" }),
@@ -374,14 +356,6 @@ async function requireAdmin(req: Request, res: Response, next: Function) {
       authMethod: check.authMethod,
     };
     return next();
-  }
-
-  const expected = process.env.ADMIN_SECRET || "";
-  const minLength = process.env.NODE_ENV === "production" ? 32 : 16;
-  if (!expected || expected.length < minLength) {
-    return res
-      .status(503)
-      .json({ error: "Admin authentication is not configured" });
   }
 
   return res.status(401).json({ error: "Unauthorized" });

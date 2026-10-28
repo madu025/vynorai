@@ -6,7 +6,6 @@ import { after, before, test } from "node:test";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-m365-admin-"));
 const originalCwd = process.cwd();
-const adminSecret = "vynor-m365-admin-test-secret-2026";
 const tenantId = "55555555-5555-4555-8555-555555555555";
 let dbm: typeof import("../src/db.js");
 let server: import("node:http").Server;
@@ -15,7 +14,6 @@ let baseUrl = "";
 before(async () => {
   process.chdir(tempDir);
   process.env.NODE_ENV = "test";
-  process.env.ADMIN_SECRET = adminSecret;
   process.env.DB_DRIVER = "sqlite";
   delete process.env.DATABASE_URL;
   dbm = await import("../src/db.js");
@@ -39,7 +37,7 @@ after(async () => {
 
 const headers = {
   "content-type": "application/json",
-  "x-admin-secret": adminSecret,
+  "cf-access-authenticated-user-email": "admin@vynor.lk",
 };
 
 test("the tenant policy can enable text scopes and switch AI off, behind the admin guard", async () => {

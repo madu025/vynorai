@@ -10,7 +10,6 @@ import express from "express";
 
 const MERCHANT_ID = "1200000";
 const MERCHANT_SECRET = "test-merchant-secret-key-12345";
-const ADMIN_SECRET = "economics-audit-admin-secret-32-chars";
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-billing-audit-"));
 const originalCwd = process.cwd();
 
@@ -104,7 +103,6 @@ test("Subscription Billing Flow Audit & Verification Suite", async (suite) => {
   process.env.NODE_ENV = "test";
   process.env.PAYHERE_MERCHANT_ID = MERCHANT_ID;
   process.env.PAYHERE_MERCHANT_SECRET = MERCHANT_SECRET;
-  process.env.ADMIN_SECRET = ADMIN_SECRET;
 
   dbm = await import("../src/db.js");
   await dbm.initDb();
@@ -497,7 +495,7 @@ test("Subscription Billing Flow Audit & Verification Suite", async (suite) => {
 
       // Query /admin/economics to verify margins
       const econRes = await fetch(`${baseUrl}/admin/economics?days=30`, {
-        headers: { "x-admin-secret": ADMIN_SECRET },
+        headers: { "cf-access-authenticated-user-email": "admin@vynor.lk" },
       });
       assert.equal(econRes.status, 200);
       const econData = (await econRes.json()) as any;

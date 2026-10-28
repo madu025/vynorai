@@ -13,7 +13,6 @@ import jwt from "jsonwebtoken";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-sec-2a-"));
 const originalCwd = process.cwd();
-const adminSecret = "vynor-security-2a-admin-secret-32chars!!";
 const TEAM = "vynor-test.cloudflareaccess.com";
 const AUD = "aud-tag-1234567890";
 const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
@@ -45,7 +44,6 @@ function accessJwt(
 before(async () => {
   process.chdir(tempDir);
   process.env.NODE_ENV = "test";
-  process.env.ADMIN_SECRET = adminSecret;
   process.env.DB_DRIVER = "sqlite";
   delete process.env.DATABASE_URL;
   dbm = await import("../src/db.js");
@@ -197,11 +195,11 @@ test("without CF_ACCESS settings the header is ignored outside the test runner (
       process.env.NODE_ENV = previous;
     }
   }
-  // The admin secret keeps working, so nobody is locked out.
+  // No alternate credential bypasses Cloudflare Access.
   const bySecret = await fetch(`${baseUrl}/admin/session`, {
-    headers: { "x-admin-secret": adminSecret },
+    headers: { "x-admin-secret": "legacy-secret-must-not-work" },
   });
-  assert.equal(bySecret.status, 200);
+  assert.equal(bySecret.status, 401);
 });
 
 test("the Cloudflare team domain must be a plain host name", async () => {
@@ -230,7 +228,7 @@ test("the Cloudflare team domain must be a plain host name", async () => {
 
 const adminHeaders = {
   "content-type": "application/json",
-  "x-admin-secret": adminSecret,
+  "cf-access-authenticated-user-email": "staff@vynor.lk",
 };
 
 async function insertUser(id: string, email = `${id}@example.com`) {
@@ -251,7 +249,7 @@ test("admin actions are attributed to a verified admin and never log the user's 
     "SELECT actor, target, details FROM security_audit_logs WHERE event_type IN ('ADMIN_USER_SUSPENDED','ADMIN_USER_REACTIVATED')",
   );
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].actor, "admin-secret");
+  assert.equal(rows[0].actor, "staff@vynor.lk");
   assert.equal(rows[0].target, "user:u-audit-1");
   assert.ok(!JSON.stringify(rows).includes("private.person@example.com"));
 });

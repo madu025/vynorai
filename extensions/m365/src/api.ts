@@ -13,8 +13,19 @@ export interface M365AccessDiagnostics {
   ready: { read: boolean; write: boolean };
 }
 
+/** A capability response can be valid while a policy/entitlement gate blocks Excel reads. */
+export type M365CapabilityBlockedReason =
+  | "insufficient_scope"
+  | "tenant_disabled"
+  | "tenant_scope_disabled"
+  | "identity_not_linked"
+  | "subscription_inactive"
+  | "credits_exhausted";
+
 export interface M365Capabilities {
   contractVersion: 1;
+  /** Present when the account is known but the Excel read gate is closed. */
+  blockedReason?: M365CapabilityBlockedReason;
   excel: {
     canInspect: boolean;
     canPreview: boolean;

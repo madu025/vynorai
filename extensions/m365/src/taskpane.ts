@@ -929,6 +929,7 @@ function updateRunButtonState(): void {
     busy: agentBusy || previewController.hasActiveRun(),
     capabilityState,
     canInspect: capabilities?.excel.canInspect,
+    blockedReason: capabilities?.blockedReason,
     agentMode: runMode?.value === "agent",
     aiAvailable: capabilities?.aiAnalysis !== false,
   });

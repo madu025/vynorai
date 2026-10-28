@@ -62,6 +62,13 @@ export interface M365DiagnosticStage {
 
 export interface M365Capabilities {
   contractVersion: 1;
+  blockedReason?:
+    | "insufficient_scope"
+    | "tenant_disabled"
+    | "tenant_scope_disabled"
+    | "identity_not_linked"
+    | "subscription_inactive"
+    | "credits_exhausted";
   excel: {
     canInspect: boolean;
     canPreview: boolean;
@@ -92,6 +99,30 @@ export interface M365Capabilities {
   quota: M365QuotaSummary;
   /** Per-feature verdicts from the shared registry (m365Capabilities.ts). */
   advanced: AdvancedCapabilityReport;
+}
+
+function capabilityBlockedReason(
+  diagnostics: Awaited<ReturnType<typeof diagnoseM365Identity>>,
+): M365Capabilities["blockedReason"] {
+  const failed = diagnostics.stages.find((stage) => !stage.ok);
+  switch (failed?.code) {
+    case "insufficient_scope":
+      return "insufficient_scope";
+    case "tenant_not_registered":
+    case "tenant_disabled":
+      return "tenant_disabled";
+    case "tenant_scope_disabled":
+      return "tenant_scope_disabled";
+    case "M365_IDENTITY_NOT_LINKED":
+    case "M365_USER_SUSPENDED":
+      return "identity_not_linked";
+    case "M365_SUBSCRIPTION_INACTIVE":
+      return "subscription_inactive";
+    case "CREDITS_EXHAUSTED":
+      return "credits_exhausted";
+    default:
+      return undefined;
+  }
 }
 
 /** Enabled link from a validated Entra identity to a VynorAI account; email is never the key. */
@@ -271,8 +302,10 @@ export async function getM365Capabilities(
   const writableActionKinds = diagnostics.ready.write
     ? M365_EXCEL_ACTION_KINDS
     : [];
+  const blockedReason = capabilityBlockedReason(diagnostics);
   return {
     contractVersion: 1,
+    ...(blockedReason ? { blockedReason } : {}),
     excel: {
       canInspect: diagnostics.ready.read,
       canPreview: diagnostics.ready.read,

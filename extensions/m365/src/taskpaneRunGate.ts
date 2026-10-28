@@ -8,6 +8,7 @@ export type RunGateReason =
   | "request_running"
   | "waiting_for_host"
   | "backend_unavailable"
+  | "credits_exhausted"
   | "agent_unavailable";
 
 export type CapabilityState = "idle" | "loading" | "ready" | "unavailable";
@@ -21,6 +22,7 @@ export interface RunGateInput {
   busy: boolean;
   capabilityState: CapabilityState;
   canInspect?: boolean;
+  blockedReason?: "credits_exhausted" | string;
   agentMode: boolean;
   aiAvailable: boolean;
 }
@@ -65,6 +67,13 @@ export function evaluateRunGate(input: RunGateInput): RunGateState {
       enabled: false,
       reason: "waiting_for_host",
       message: "Waiting for Excel and account capabilities.",
+    };
+  if (input.blockedReason === "credits_exhausted")
+    return {
+      enabled: false,
+      reason: "credits_exhausted",
+      message:
+        "Your VynorAI Excel trial credits are exhausted. Add credits or upgrade the plan, then refresh capabilities.",
     };
   if (input.capabilityState === "idle" && input.canInspect === undefined)
     return {

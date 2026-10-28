@@ -53,6 +53,14 @@ test("Run exposes a reason for every blocked precondition", () => {
     evaluateRunGate({ ...base, capabilityState: "unavailable" }).reason,
     "backend_unavailable",
   );
+  assert.equal(
+    evaluateRunGate({
+      ...base,
+      canInspect: false,
+      blockedReason: "credits_exhausted",
+    }).reason,
+    "credits_exhausted",
+  );
 });
 
 test("Run waits for the VynorAI account handshake instead of enabling early", () => {

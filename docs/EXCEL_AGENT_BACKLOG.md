@@ -137,6 +137,8 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 104.  **E** Regular expression functions (REGEXTEST, REGEXEXTRACT) where the Excel version has them; needs a capability check.
 105.  **E** Remove a prefix or suffix from codes.
 
+Where no formula can do it (the city in a free-form address, a category from a description, a short summary in Sinhala), the agent uses an AI column: `analyze_text_batch` with feature `instruction` answers each item (masked, at most 100 items per call) and the answers are staged with `write_values` for review.
+
 ## Date and time formulas
 
 106. **E** YEAR, MONTH, DAY, WEEKDAY, WEEKNUM.

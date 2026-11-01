@@ -160,6 +160,8 @@ export interface AgentHost {
     feature: AiTextFeature;
     texts: string[];
     categories?: string[];
+    /** Only with feature "instruction": what to put in the new column for each item. */
+    instruction?: string;
   }): Promise<unknown>;
   /**
    * Runs the agent's JavaScript over every cell of a range on the device, in a sandbox with no
@@ -1161,7 +1163,17 @@ async function runTool(
       const feature = String(args.feature ?? "") as AiTextFeature;
       if (!(AI_TEXT_FEATURES as readonly string[]).includes(feature))
         throw new AgentToolError(
-          "feature must be sentiment, keywords or classification.",
+          `feature must be one of ${AI_TEXT_FEATURES.join(", ")}.`,
+        );
+      const instruction =
+        feature === "instruction"
+          ? mask
+              .mask(restore(String(args.instruction ?? "")).trim())
+              .slice(0, 300)
+          : undefined;
+      if (feature === "instruction" && (instruction?.length ?? 0) < 3)
+        throw new AgentToolError(
+          "feature instruction needs `instruction`: one sentence that says what to put in the new column for each item.",
         );
       if (
         !Array.isArray(args.texts) ||
@@ -1182,6 +1194,7 @@ async function runTool(
         feature,
         texts,
         ...(categories?.length ? { categories } : {}),
+        ...(instruction ? { instruction } : {}),
       });
     }
     case "vynor_step": {

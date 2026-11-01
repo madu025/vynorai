@@ -157,7 +157,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 122. **E** Rows older than N days, counted or listed.
 123. **E** Overdue flag (date before today and status not done).
 124. **E** (as a GROUPBY month table; PivotTable date grouping is not in Office.js) Day-level date pivot on 500k rows (pivot groups by day; month grouping needs a formula table).
-125. **N** Holiday list for Sri Lanka in NETWORKDAYS (needs a holiday table).
+125. **P** (fixed-date holidays only; the person adds Poya days and festivals from the gazette) Holiday list for Sri Lanka in NETWORKDAYS: the "LK Holidays" sheet and the `LK_Holidays` name (`officeSriLanka.ts`).
 
 ## Logic and error formulas
 

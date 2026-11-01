@@ -5831,10 +5831,26 @@ agentApprove?.addEventListener("click", async () => {
         report.results,
       ),
     );
+  // The add-in's own count of errors and "not found" results in what was written (formulaResultHealth).
+  const resultChecks = report.results
+    .map((result) =>
+      result.status === "applied"
+        ? (result.detail as { resultHealth?: unknown } | undefined)
+            ?.resultHealth
+        : undefined,
+    )
+    .filter((line): line is string => typeof line === "string");
+  const resultWarning = resultChecks.length > 0;
+  if (resultWarning) {
+    agentIssues = [...agentIssues, ...resultChecks];
+    refreshAgentChecked();
+  }
   lastApplyStatus =
     failed || agentStopped
       ? "Partly applied. Undo puts everything back."
-      : "Applied. Undo puts everything back.";
+      : resultWarning
+        ? "Applied, but many results are errors or not found. Check them, or Undo puts everything back."
+        : "Applied. Undo puts everything back.";
   noticedKey = "";
   setStatus(lastApplyStatus);
   // The agent checks what was written once or twice and may stage fixes (they need approval again).

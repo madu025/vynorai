@@ -247,6 +247,8 @@ const EXACT: Record<string, string> = {
   "Verifying the applied result...": "යෙදූ ප්‍රතිඵලය තහවුරු කරමින්...",
   "Applied. Undo puts everything back.":
     "යොදන ලදී. ආපසු හැරවීමෙන් සියල්ල නැවත පෙර පරිදි වේ.",
+  "Applied, but many results are errors or not found. Check them, or Undo puts everything back.":
+    "යොදන ලදී, නමුත් ප්‍රතිඵල බොහොමයක් දෝෂ හෝ හමු නොවූ ඒවා වේ. ඒවා පරීක්ෂා කරන්න, නැතහොත් ආපසු හැරවීමෙන් සියල්ල නැවත පෙර පරිදි වේ.",
   "Partly applied. Undo puts everything back.":
     "කොටසක් පමණක් යොදන ලදී. ආපසු හැරවීමෙන් සියල්ල නැවත පෙර පරිදි වේ.",
   "The agent stopped at its step limit. Try a smaller request.":

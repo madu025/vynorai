@@ -1323,5 +1323,5 @@ export function plainText(text: string): string {
 export function appliedReport(
   results: { change: string; status: "applied" | "failed"; detail?: unknown }[],
 ): string {
-  return `[Report from the add-in, not from the person] The person approved the changes. Results: ${JSON.stringify(results)}. If something failed or shows an error value, stage a fix; otherwise reply with one short summary of what was done.`;
+  return `[Report from the add-in, not from the person] The person approved the changes. Results: ${JSON.stringify(results)}. If something failed, shows an error value, or has a resultHealth line (the add-in counted errors or "not found" results in the written column), find the cause, stage a fix and say what was wrong; otherwise reply with one short summary of what was done.`;
 }

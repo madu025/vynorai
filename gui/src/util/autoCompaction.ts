@@ -60,6 +60,6 @@ export function useAutoCompaction(): void {
     const attemptKey = `${sessionId}:${history.length}`;
     if (lastAttempt.current === attemptKey) return;
     lastAttempt.current = attemptKey;
-    void compactConversation(history.length - 1);
+    void compactConversation(history.length - 1, "auto");
   }, [history, isStreaming, contextPercentage, isCompacting, sessionId]);
 }

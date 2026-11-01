@@ -5,6 +5,7 @@ import {
   setCompactionLoading,
   deleteCompaction,
 } from "../redux/slices/sessionSlice";
+import { runPreCompactHook } from "../redux/util/hooks";
 import { reloadOpenSession, saveCurrentSession } from "../redux/thunks/session";
 
 export const useCompactConversation = () => {
@@ -12,7 +13,7 @@ export const useCompactConversation = () => {
   const ideMessenger = useContext(IdeMessengerContext);
   const currentSessionId = useAppSelector((state) => state.session.id);
 
-  return async (index: number) => {
+  return async (index: number, trigger: "manual" | "auto" = "manual") => {
     if (!currentSessionId) {
       return;
     }
@@ -20,6 +21,8 @@ export const useCompactConversation = () => {
     try {
       // Set loading state
       dispatch(setCompactionLoading({ index, loading: true }));
+
+      await runPreCompactHook(ideMessenger, currentSessionId, trigger);
 
       await ideMessenger.request("conversation/compact", {
         index,

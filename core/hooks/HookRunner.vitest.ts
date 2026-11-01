@@ -231,3 +231,99 @@ describe("project hooks", () => {
     expect(asked).toHaveLength(1);
   });
 });
+
+describe("SessionStart, PreCompact and SubagentStop", () => {
+  const ECHO_PAYLOAD = node(
+    "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{process.stdout.write(s)})",
+  );
+
+  test("config parsing accepts the new events in flat and nested form", () => {
+    const config = parseHooksConfig(
+      {
+        hooks: {
+          SessionStart: [{ command: "a" }],
+          PreCompact: [{ hooks: [{ type: "command", command: "b" }] }],
+          SubagentStop: [{ command: "c", timeout: 5 }],
+        },
+      },
+      "user",
+    );
+    expect(config.SessionStart.map((c) => c.command)).toEqual(["a"]);
+    expect(config.PreCompact.map((c) => c.command)).toEqual(["b"]);
+    expect(config.SubagentStop[0].timeoutSeconds).toBe(5);
+    expect(config.Stop).toEqual([]);
+  });
+
+  test("an unconfigured event runs nothing", async () => {
+    writeHooks(globalDir, { Stop: [{ command: ECHO_PAYLOAD }] });
+    for (const event of [
+      "SessionStart",
+      "PreCompact",
+      "SubagentStop",
+    ] as const) {
+      const result = await runner().run({ event, sessionId: "s1" });
+      expect(result).toEqual({ blocked: false, warnings: [], ran: 0 });
+    }
+  });
+
+  test("the payload carries sessionId, trigger and subagent fields", async () => {
+    writeHooks(globalDir, {
+      PreCompact: [{ command: ECHO_PAYLOAD }],
+      SubagentStop: [{ command: ECHO_PAYLOAD }],
+      SessionStart: [{ command: ECHO_PAYLOAD }],
+    });
+    const compact = await runner().run({
+      event: "PreCompact",
+      sessionId: "s1",
+      trigger: "auto",
+    });
+    expect(JSON.parse(compact.context!)).toMatchObject({
+      event: "PreCompact",
+      sessionId: "s1",
+      trigger: "auto",
+    });
+    const sub = await runner().run({
+      event: "SubagentStop",
+      sessionId: "s1",
+      subagentId: "t9",
+      subagentType: "explore",
+    });
+    expect(JSON.parse(sub.context!)).toMatchObject({
+      subagentId: "t9",
+      subagentType: "explore",
+    });
+    const start = await runner().run({
+      event: "SessionStart",
+      sessionId: "s1",
+    });
+    expect(JSON.parse(start.context!)).toMatchObject({ sessionId: "s1" });
+  });
+
+  test("exit 2 never blocks these events, it only warns", async () => {
+    writeHooks(globalDir, {
+      SessionStart: [{ command: BLOCK }],
+      PreCompact: [{ command: BLOCK }],
+      SubagentStop: [{ command: BLOCK }],
+    });
+    for (const event of [
+      "SessionStart",
+      "PreCompact",
+      "SubagentStop",
+    ] as const) {
+      const result = await runner().run({ event, sessionId: "s1" });
+      expect(result.blocked).toBe(false);
+      expect(result.ran).toBe(1);
+      expect(result.warnings[0]).toContain("rm -rf is not allowed");
+    }
+  });
+
+  test("a matcher is ignored for these events", async () => {
+    writeHooks(globalDir, {
+      SessionStart: [
+        { matcher: "run_terminal_command", command: ALLOW_WITH_CONTEXT },
+      ],
+    });
+    const result = await runner().run({ event: "SessionStart" });
+    expect(result.context).toBe("use pnpm, not npm");
+  });
+});

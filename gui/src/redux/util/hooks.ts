@@ -41,3 +41,55 @@ export function toolOutputText(output: ContextItem[] | undefined): string {
     .join("\n\n")
     .slice(0, TOOL_OUTPUT_LIMIT);
 }
+
+/**
+ * PreCompact hook. Compaction is never blocked or delayed by a hook failure:
+ * exit 2 is only a warning (the runner reports it in `warnings`).
+ */
+export async function runPreCompactHook(
+  ideMessenger: IIdeMessenger,
+  sessionId: string,
+  trigger: "manual" | "auto",
+  instructions?: string,
+): Promise<void> {
+  await runHooks(ideMessenger, {
+    event: "PreCompact",
+    sessionId,
+    trigger,
+    ...(instructions ? { instructions } : {}),
+  });
+}
+
+/**
+ * SessionStart hook: fired once, on the first turn of a conversation. The
+ * returned stdout is context for that first prompt. Never blocks.
+ */
+export async function runSessionStartHook(
+  ideMessenger: IIdeMessenger,
+  sessionId: string,
+): Promise<string | undefined> {
+  const result = await runHooks(ideMessenger, {
+    event: "SessionStart",
+    sessionId,
+  });
+  return result.context;
+}
+
+/** SubagentStop hook: fired when a subagent tool call has finished. Never blocks. */
+export async function runSubagentStopHook(
+  ideMessenger: IIdeMessenger,
+  sessionId: string,
+  subagentId: string,
+  subagentType: string,
+  toolOutput: string,
+  toolError?: string,
+): Promise<void> {
+  await runHooks(ideMessenger, {
+    event: "SubagentStop",
+    sessionId,
+    subagentId,
+    subagentType,
+    toolOutput,
+    toolError,
+  });
+}

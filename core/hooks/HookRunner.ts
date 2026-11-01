@@ -5,7 +5,13 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { getContinueGlobalPath } from "../util/paths";
-import { HOOK_EVENTS, HookEvent, HookPayload, HookRunResult } from "./types";
+import {
+  HOOK_EVENTS,
+  HookEvent,
+  HookPayload,
+  HookRunResult,
+  NON_BLOCKING_HOOK_EVENTS,
+} from "./types";
 
 export interface HookCommand {
   command: string;
@@ -23,7 +29,15 @@ export const HOOKS_FILE = "hooks.json";
 export const PROJECT_HOOKS_PATH = path.join(".vynorai", HOOKS_FILE);
 
 function emptyConfig(): HooksConfig {
-  return { UserPromptSubmit: [], PreToolUse: [], PostToolUse: [], Stop: [] };
+  return {
+    UserPromptSubmit: [],
+    PreToolUse: [],
+    PostToolUse: [],
+    Stop: [],
+    SessionStart: [],
+    PreCompact: [],
+    SubagentStop: [],
+  };
 }
 
 function toCommand(
@@ -283,9 +297,12 @@ export class HookRunner {
   async run(payload: HookPayload): Promise<HookRunResult> {
     const result: HookRunResult = { blocked: false, warnings: [], ran: 0 };
     const { config, cwd } = await this.load();
-    const commands = config[payload.event].filter((c) =>
-      matchesTool(c.matcher, payload.toolName),
+    // The non-blocking lifecycle events have no tool name: a matcher is ignored.
+    const canBlock = !NON_BLOCKING_HOOK_EVENTS.includes(payload.event);
+    const commands = config[payload.event].filter(
+      (c) => !canBlock || matchesTool(c.matcher, payload.toolName),
     );
+    if (commands.length === 0) return result;
     const contexts: string[] = [];
 
     for (const hook of commands) {
@@ -300,7 +317,7 @@ export class HookRunner {
         if (outcome.stdout.trim()) contexts.push(outcome.stdout.trim());
         continue;
       }
-      if (outcome.code === 2) {
+      if (outcome.code === 2 && canBlock) {
         result.blocked = true;
         result.reason =
           outcome.stderr.trim() ||

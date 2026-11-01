@@ -11,6 +11,7 @@ import {
   setShowDialog,
 } from "../slices/uiSlice";
 import { ThunkApiType } from "../store";
+import { runPreCompactHook } from "../util/hooks";
 import { rewindToUserMessage } from "./rewind";
 import { reloadOpenSession, saveCurrentSession } from "./session";
 import { updateSelectedModelByRole } from "./updateSelectedModelByRole";
@@ -212,6 +213,12 @@ export const runPanelCommand = createAsyncThunk<
           // Core compacts the saved copy, so make sure it is current.
           await dispatch(
             saveCurrentSession({ openNewSession: false, generateTitle: false }),
+          );
+          await runPreCompactHook(
+            extra.ideMessenger,
+            session.id,
+            "manual",
+            command.arg || undefined,
           );
           await extra.ideMessenger.request("conversation/compact", {
             index,

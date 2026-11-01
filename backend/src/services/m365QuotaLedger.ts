@@ -6,11 +6,7 @@ import {
 } from "./billingDb.js";
 import { getPlan } from "../config.js";
 import { isoDate } from "./billingPolicy.js";
-import {
-  partialHold,
-  STALE_RESERVATION_MS,
-  type QuotaReservation,
-} from "./monthlyQuota.js";
+import { STALE_RESERVATION_MS, type QuotaReservation } from "./monthlyQuota.js";
 
 /**
  * Tenant-scoped quota ledger for Microsoft 365 requests.
@@ -27,8 +23,6 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = 30;
-/** Below this many credits left, a request is refused rather than reserved (same rule as personal). */
-const MIN_RESERVATION_CREDITS = 1_000;
 
 export type M365PlanSource = "tenant" | "user" | "free";
 
@@ -277,15 +271,11 @@ export async function reserveM365Quota(
     await persistHold(reservation);
     return reservation;
   }
-  // Same rule as the personal ledger: with credits left, hold what remains instead of refusing.
-  const usage = await getOrInitM365Usage(scope, plan);
-  const remaining = Math.floor(usage.max_tokens - usage.used_tokens);
-  if (remaining < MIN_RESERVATION_CREDITS) return null;
-  const hold = partialHold(remaining);
-  if (!(await consumeAtomic(scope, plan, hold, 1))) return null;
-  const reservation = build(hold);
-  await persistHold(reservation);
-  return reservation;
+  // Never make a partial hold for a provider request. The actual provider usage can be larger
+  // than the estimate; settling a partial hold would then overshoot max_tokens and let one agent
+  // turn consume the next cycle's allowance. Refuse the request and let the pane show quota
+  // exhausted instead.
+  return null;
 }
 
 function holdScope(reservation: QuotaReservation): {

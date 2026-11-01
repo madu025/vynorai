@@ -224,7 +224,7 @@ Where no formula can do it (the city in a free-form address, a category from a d
 177. **E** (get_details formula_check, up to 20,000 cells) Find inconsistent formulas in a column (needs reading many cells; bounded to 500 per read).
 178. **E** Replace formulas with their values (paste values).
 179. **E** Document what each formula column does (written to a new sheet).
-180. **P** (the agent calculates the parts; Evaluate Formula is not in Office.js) Evaluate a formula step by step.
+180. **P** (the agent calculates the parts; Evaluate Formula is not in Office.js) Evaluate a formula step by step. `extensions/m365/src/formulaSteps.ts` (`explainFormulaSteps`) now splits a formula into nested calls, innermost first, with meaning, referenced cells and optional given cell values; it does not calculate results (no evaluator exists) and is not wired to the agent yet, because a new tool or a new `formula_check` option would change the fixed tool list in `m365Agent.ts` and the prompt-cache prefix. Stays **P**.
 
 ## Computed columns
 

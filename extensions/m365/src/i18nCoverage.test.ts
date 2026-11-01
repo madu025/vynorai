@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { applyLanguage, localizeMessage, translate } from "./i18n.js";
 import { checkedLine, CHECKED_OK } from "./agentChecked.js";
+import { HEALTH_LABELS } from "./dataHealth.js";
 import { idleSuggestions } from "./idleSuggestions.js";
 import { workbookOverviewLines } from "./paneText.js";
 import { evaluateRunGate } from "./taskpaneRunGate.js";
@@ -410,6 +411,39 @@ test("run-time lines the pane builds from fixed English text have Sinhala and Ta
       if (/[A-Za-z]{3}/.test(text) && localizeMessage(lang, text) === text)
         missing.push(`${lang}: ${text}`);
   assert.deepEqual(missing, []);
+});
+
+test("the Check my data card sits in the Work panel and every one of its strings is in Sinhala and Tamil", () => {
+  assert.match(html, /id="health"[\s\S]{0,200}data-workspace-panel="work"/);
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
+  const keys = new Set<string>();
+  for (const match of source.matchAll(/healthText\(\s*"(health_\w+)"/g))
+    keys.add(match[1]);
+  for (const kind of Object.keys(HEALTH_LABELS)) keys.add(`health_${kind}`);
+  for (const level of ["high", "medium", "low"])
+    keys.add(`health_sev_${level}`);
+  assert.ok(keys.size >= 20);
+  const missing: string[] = [];
+  for (const lang of ["si", "ta"] as const)
+    for (const key of keys) {
+      const text = translate(lang, key, "");
+      if (!text) missing.push(`${lang}: ${key}`);
+      // The same placeholders as the English text, or a number or column name would be lost.
+      const english =
+        HEALTH_LABELS[
+          key.replace(/^health_/, "") as keyof typeof HEALTH_LABELS
+        ];
+      if (english)
+        for (const slot of english.match(/\{\w+\}/g) ?? [])
+          if (!text.includes(slot))
+            missing.push(`${lang}: ${key} lacks ${slot}`);
+    }
+  assert.deepEqual(missing, []);
+  // A finding's button only fills the request box; nothing runs by itself.
+  assert.match(source, /instruction\.value = finding\.request;/);
 });
 
 test("the workbook overview answer is written in the pane's language", () => {

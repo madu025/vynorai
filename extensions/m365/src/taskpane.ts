@@ -120,6 +120,12 @@ import {
   type EmailControllerElements,
 } from "./taskpaneEmailController.js";
 import { createResultGalleryController } from "./taskpaneResultGalleryController.js";
+import {
+  HEALTH_LABELS,
+  scanDataHealth,
+  type HealthFinding,
+  type HealthReport,
+} from "./dataHealth.js";
 import { noticeInData, NOTICE_MAX_ROWS, type NoticedTile } from "./noticed.js";
 import {
   finalRoleStates,
@@ -127,7 +133,10 @@ import {
   relationshipLine,
 } from "./roleEvidence.js";
 import { idleSuggestions } from "./idleSuggestions.js";
-import { readWorkspaceContext as readWorkspaceContextView } from "./taskpaneWorkspaceContext.js";
+import {
+  readDataHealthValues,
+  readWorkspaceContext as readWorkspaceContextView,
+} from "./taskpaneWorkspaceContext.js";
 import { createWorkspaceNavigation } from "./taskpaneWorkspaceNavigation.js";
 import { exploreFor, type ExploreItem } from "./exploreView.js";
 import {
@@ -4540,6 +4549,124 @@ function renderNoticed(tiles: NoticedTile[]) {
   );
   show(noticedCard, tiles.length > 0);
 }
+
+/**
+ * "Check my data" (dataHealth.ts): a read-only scan of the selection or the used range, on this
+ * device, no model call. A finding's button only fills the request box; nothing runs by itself.
+ */
+const healthRun = document.querySelector<HTMLButtonElement>("#health-run");
+const healthStatus = document.querySelector<HTMLElement>("#health-status");
+const healthList = document.querySelector<HTMLElement>("#health-list");
+let healthReport: HealthReport | undefined;
+let healthMessage = "";
+
+const healthText = (
+  key: string,
+  english: string,
+  values: Record<string, string> = {},
+) =>
+  Object.entries(values).reduce(
+    (text, [name, value]) => text.split(`{${name}}`).join(value),
+    translate(language, key, english),
+  );
+
+function renderHealth() {
+  if (!healthStatus || !healthList) return;
+  const report = healthReport;
+  if (!report) {
+    healthStatus.textContent = healthMessage;
+    healthList.replaceChildren();
+    return;
+  }
+  const notes: string[] = [];
+  if (report.rowsChecked === 0 && report.findings.length === 0)
+    notes.push(healthText("health_empty", "There are no data rows to check."));
+  else if (report.findings.length === 0)
+    notes.push(
+      healthText("health_clean", "No problems found in {rows} rows.", {
+        rows: report.rowsChecked.toLocaleString("en-US"),
+      }),
+    );
+  if (report.partialRows)
+    notes.push(
+      healthText(
+        "health_partial_rows",
+        "Only the first {rows} of {total} rows were checked.",
+        {
+          rows: report.rowsChecked.toLocaleString("en-US"),
+          total: report.rowsTotal.toLocaleString("en-US"),
+        },
+      ),
+    );
+  if (report.partialColumns)
+    notes.push(
+      healthText(
+        "health_partial_columns",
+        "Only the first {cols} of {total} columns were checked.",
+        {
+          cols: String(report.columnsChecked),
+          total: report.columnsTotal.toLocaleString("en-US"),
+        },
+      ),
+    );
+  if (report.omitted > 0)
+    notes.push(
+      healthText("health_omitted", "{n} more findings are not shown.", {
+        n: String(report.omitted),
+      }),
+    );
+  healthStatus.textContent = notes.join(" ");
+  healthList.replaceChildren(
+    ...report.findings.map((finding: HealthFinding) => {
+      const item = document.createElement("li");
+      item.dataset.severity = finding.severity;
+      const title = document.createElement("b");
+      title.textContent = healthText(
+        `health_${finding.kind}`,
+        HEALTH_LABELS[finding.kind],
+        { n: finding.count.toLocaleString("en-US"), col: finding.column ?? "" },
+      );
+      const detail = document.createElement("small");
+      detail.textContent = `${healthText(`health_sev_${finding.severity}`, finding.severity)} · ${healthText("health_cells", "First cells: {cells}", { cells: finding.cells.join(", ") })}`;
+      const use = document.createElement("button");
+      use.type = "button";
+      use.className = "ghost";
+      use.textContent = healthText("health_use", "Use as request");
+      use.addEventListener("click", () => {
+        if (!instruction) return;
+        instruction.value = finding.request;
+        instruction.dispatchEvent(new Event("input", { bubbles: true }));
+        instruction.focus();
+      });
+      item.append(title, detail, use);
+      return item;
+    }),
+  );
+}
+
+healthRun?.addEventListener("click", async () => {
+  healthRun.disabled = true;
+  healthReport = undefined;
+  healthMessage = healthText("health_checking", "Checking...");
+  renderHealth();
+  try {
+    const read = await readDataHealthValues(officeRuntime());
+    healthReport = read ? scanDataHealth(read) : undefined;
+    healthMessage = read
+      ? ""
+      : healthText(
+          "health_nothing",
+          "Select cells or open a sheet that has data.",
+        );
+  } catch (error) {
+    log.record("health:scan", "skip", describeError(error));
+    healthMessage = healthText("health_failed", "The cells could not be read.");
+  } finally {
+    healthRun.disabled = false;
+    renderHealth();
+  }
+});
+languageHooks.push(renderHealth);
 
 /** On a short pane the "Noticed" card folds to one line; the toggle is keyboard reachable. */
 const noticedToggle =

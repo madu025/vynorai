@@ -451,6 +451,33 @@
           <div id="noticed-tiles" class="noticed-tiles"></div>
         </section>
         <section
+          id="health"
+          class="card"
+          data-workspace-panel="work"
+          aria-labelledby="health-heading"
+        >
+          <h2 id="health-heading" data-i18n="health_title">Check my data</h2>
+          <p class="muted" data-i18n="health_note">
+            Looks for duplicates, blanks, numbers stored as text and more. Read
+            only, on this device. Nothing is sent or changed.
+          </p>
+          <button
+            id="health-run"
+            class="ghost"
+            type="button"
+            data-i18n="health_run"
+          >
+            Check my data
+          </button>
+          <p
+            id="health-status"
+            class="muted"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <ul id="health-list" class="health-list"></ul>
+        </section>
+        <section
           id="starter-suggestions"
           class="suggestions quick-start"
           aria-label="Suggestions"

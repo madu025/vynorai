@@ -126,3 +126,42 @@ test("a key column that does not exist is named", async () => {
     /no column "Region"/,
   );
 });
+
+test("the join guard keeps decimal keys apart and treats 004 and 4 as one key, like the formula", async () => {
+  const keyed = (right: unknown[][]) =>
+    ({
+      readRange: async (sheet: string, address: string) => ({
+        address,
+        values:
+          sheet === "Customers"
+            ? [["Customer", "Region"], ...right]
+            : [
+                ["Order", "Customer", "Amount"],
+                [1, "4.1", 10],
+                [2, "4.2", 20],
+                [3, 4, 5],
+              ],
+      }),
+    }) as unknown as AgentHost;
+  await guardCombine(
+    join(),
+    keyed([
+      ["4.1", "East"],
+      ["4.2", "West"],
+      ["004", "North"],
+    ]),
+    clampReadAddress,
+  );
+  await assert.rejects(
+    guardCombine(
+      join(),
+      keyed([
+        ["4.1", "East"],
+        ["004", "West"],
+        ["4", "North"],
+      ]),
+      clampReadAddress,
+    ),
+    /1 duplicate value/,
+  );
+});

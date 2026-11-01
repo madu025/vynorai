@@ -4,15 +4,12 @@
  * column that matches almost nothing fills the whole column with "Not found".
  */
 import { AgentToolError, type AgentHost } from "./agent.js";
+import { combineKey } from "./combineSheets.js";
 
 const MIN_SHARE = 0.5;
 
-const loose = (value: unknown): string =>
-  String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/^0+(?=\d)/, "");
+/** Same key policy as the workbook formula the join writes (`normalizedKeyFormula`). */
+const loose = combineKey;
 
 export async function guardCombine(
   args: Record<string, unknown>,

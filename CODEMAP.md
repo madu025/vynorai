@@ -260,7 +260,7 @@ The backend is built with Node.js, Express, and TypeScript (`backend/package.jso
 
 - [backend/src/index.ts](backend/src/index.ts): Main application entry point. Configures Express, CORS, Cloudflare reverse proxy settings (`trust proxy`), static assets (`login.html`, `admin.html`), clean URL routes, security headers, and mounts sub-routers (`/api/auth`, `/v1`, `/api/admin`, `/api/payment`, `/api/memory`).
 - [backend/src/config.ts](backend/src/config.ts): Centralized configuration loader. Manages environment variables, port bindings, JWT secret keys, model aliases (`MODEL_ALIASES`), default models, PayHere merchant keys, quota tiers, and the tier router mode (`ROUTER_MODE=classifier|slm|rules`, optional `LOCAL_SLM_*`). Background LLM jobs read `LOCAL_LLM_URL`, `LOCAL_LLM_MODEL`, `LOCAL_LLM_ROLES`.
-- [backend/src/db.ts](backend/src/db.ts): Database layer. With `DATABASE_URL` it runs on PostgreSQL (`services/pgDriver.ts`, migrations in `services/postgresSchema.ts` under an advisory lock); without it, SQLite (dev and tests). On SIGTERM the server drains: `/ready` returns 503 and in-flight streams get up to 60s.
+- [backend/src/db.ts](backend/src/db.ts): Database layer. `dbTimestampMs` reads a database time as epoch ms (SQLite's zone-less `CURRENT_TIMESTAMP` as UTC). With `DATABASE_URL` it runs on PostgreSQL (`services/pgDriver.ts`, migrations in `services/postgresSchema.ts` under an advisory lock); without it, SQLite (dev and tests). On SIGTERM the server drains: `/ready` returns 503 and in-flight streams get up to 60s.
 
 ### 2.2 Middleware
 

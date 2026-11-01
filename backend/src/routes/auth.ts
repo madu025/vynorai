@@ -18,6 +18,7 @@ import {
 } from "../services/billingDb.js";
 import { authRateLimiter } from "../middleware/security.js";
 import { describeError } from "../services/httpHygiene.js";
+import { dbTimestampMs } from "../db.js";
 import {
   rotateUserApiKey,
   windowCount,
@@ -935,7 +936,7 @@ authRouter.post(
       );
       if (
         previous?.created_at &&
-        Date.now() - new Date(previous.created_at).getTime() <
+        Date.now() - dbTimestampMs(previous.created_at) <
           VERIFICATION_RESEND_COOLDOWN_MS
       ) {
         return res.status(429).json({
@@ -962,7 +963,7 @@ authRouter.post(
         user.id,
       ]);
       await dbRun(
-        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, otp_code, token, attempts, expires_at) VALUES (?, ?, ?, ?, ?, '', '', ?, ?)",
+        "INSERT INTO email_verifications (id, user_id, email, otp_hash, token_hash, otp_code, token, attempts, expires_at, created_at) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)",
         [
           uuidv4(),
           user.id,
@@ -971,6 +972,8 @@ authRouter.post(
           sha256(verifyToken),
           Math.max(0, Number(previous?.attempts ?? 0)),
           expiresAt,
+          // Explicit UTC ISO time: the cooldown above compares it with Date.now().
+          new Date().toISOString(),
         ],
       );
 

@@ -3,7 +3,7 @@ import fs from "fs";
 import crypto from "crypto";
 import os from "os";
 import path from "path";
-import { initDb } from "../db.js";
+import { dbTimestampMs, initDb } from "../db.js";
 import {
   billingAll as dbAll,
   billingGet as dbGet,
@@ -412,7 +412,7 @@ async function reconcile() {
     if (
       task.status === "running" &&
       task.heartbeat_at &&
-      Date.now() - new Date(task.heartbeat_at).getTime() < 75_000
+      Date.now() - dbTimestampMs(task.heartbeat_at) < 75_000
     ) {
       await restoreBackgroundLease(taskId, leaseMs);
       continue;

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import type { Readable } from "stream";
 import { v4 as uuidv4 } from "uuid";
 import { getPlan } from "../config.js";
+import { dbTimestampMs } from "../db.js";
 import {
   billingAll as dbAll,
   billingGet as dbGet,
@@ -227,7 +228,7 @@ async function createBackgroundTaskUnlocked(args: {
       task: publicTask(existing),
       uploadUrl: `/v1/background/tasks/${existing.id}/upload`,
       uploadExpiresAt: new Date(
-        new Date(existing.created_at).getTime() + 30 * 60_000,
+        dbTimestampMs(existing.created_at) + 30 * 60_000,
       ).toISOString(),
       reused: true,
     };

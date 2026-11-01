@@ -22,6 +22,7 @@ import {
   describeBusinessMeaning,
   type BusinessMeaning,
 } from "./businessContext.js";
+import { HEALTH_MAX_ROWS, formulaResultHealth } from "./formulaResultHealth.js";
 import type { M365ApiClient } from "./api.js";
 import {
   RUN_CODE_MAX_CELLS,
@@ -781,12 +782,21 @@ export async function applyAgentChanges(
           await context.sync();
           const shown = spill.isNullObject ? target : spill;
           const rows = Math.max(1, Number(shown.rowCount) || 1);
-          const top = shown
-            .getCell(0, 0)
-            .getResizedRange(Math.min(4, rows - 1), 0);
+          // A formula's whole first column (bounded) is read, so a join that fills it with
+          // "Not found" or #SPILL! is caught here and not only when the top rows show it.
+          const checkedRows =
+            change.kind === "write_formula"
+              ? Math.min(rows, HEALTH_MAX_ROWS)
+              : Math.min(5, rows);
+          const top = shown.getCell(0, 0).getResizedRange(checkedRows - 1, 0);
           top.load("values");
           await context.sync();
-          const firstValues = (top.values as any[][]).map((row) => row[0]);
+          const columnValues = (top.values as any[][]).map((row) => row[0]);
+          const firstValues = columnValues.slice(0, 5);
+          const health =
+            change.kind === "write_formula"
+              ? formulaResultHealth(columnValues)
+              : undefined;
           const readBack =
             change.kind === "write_values"
               ? await verifyReadBack(context, target, change.values)
@@ -805,7 +815,9 @@ export async function applyAgentChanges(
                   typeof value === "string" && /^#[A-Z/0!?]+/.test(value),
               ),
               ...(readBack.verified ? [] : ["#READ_BACK_VERIFICATION_FAILED"]),
+              ...(health?.warning && !health.errors ? ["#MOSTLY_NOT_FOUND"] : []),
             ],
+            ...(health?.warning ? { resultHealth: health.warning } : {}),
             verification: readBack.verified ? "verified" : "failed",
             ...(readBack.error ? { verificationError: readBack.error } : {}),
             ...(readBack.mismatches.length

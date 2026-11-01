@@ -257,6 +257,8 @@ const EXACT: Record<string, string> = {
     "பயன்படுத்திய முடிவை உறுதிப்படுத்துகிறது...",
   "Applied. Undo puts everything back.":
     "பயன்படுத்தப்பட்டது. மீளமைத்தால் அனைத்தும் முன்பு போல் ஆகும்.",
+  "Applied, but many results are errors or not found. Check them, or Undo puts everything back.":
+    "பயன்படுத்தப்பட்டது, ஆனால் பல முடிவுகள் பிழைகள் அல்லது கண்டுபிடிக்கப்படாதவை. அவற்றைச் சரிபார்க்கவும், அல்லது மீளமைத்தால் அனைத்தும் முன்பு போல் ஆகும்.",
   "Partly applied. Undo puts everything back.":
     "ஓரளவு பயன்படுத்தப்பட்டது. மீளமைத்தால் அனைத்தும் முன்பு போல் ஆகும்.",
   "The agent stopped at its step limit. Try a smaller request.":

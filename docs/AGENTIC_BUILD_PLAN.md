@@ -215,7 +215,7 @@ Open after the review:
   times with no edit in between) is still off for that prompt; the stall rule is what bounds repeats there.
 - Each round awaits the next inside its own call, so a turn of several hundred rounds holds every round's
   compiled messages until it ends. Not measured.
-- Edits that undo each other with small differences are not seen as a loop.
+- ~~Edits that undo each other with small differences are not seen as a loop.~~ Done: `agentProgress.ts` keeps the (old, new) pairs of find-and-replace and multi-edit calls per file (whitespace squashed, last 8 edits); the second reversal on a file (A to B, B to A, A to B) counts like an exact repeat, so the stall rule applies. One undo, or a revert after a failing check, does not count. Tests in `agentProgress.test.ts`, `edits that undo each other`: `does not fire on one undo`, `does not fire on an undo and a redo with a fix in between`, `sees A to B, B to A, A to B again as a loop even when the call differs`, `pauses an agent that keeps flip-flopping`, `ignores whitespace differences`, `still counts the flips as a loop when other edits come between`, `does not mix up different files`, `does not count normal progress as a loop`, `reads the reversal inside a multi edit`. Edits by `edit_existing_file` (no old text) are not tracked.
 
 ## Follow-up audit of 2026-10-13
 

@@ -203,6 +203,125 @@ describe("progressCounters", () => {
   });
 });
 
+describe("edits that undo each other", () => {
+  const swap = (
+    filepath: string,
+    from: string,
+    to: string,
+    extra: object = {},
+  ) =>
+    round("single_find_and_replace", {
+      filepath,
+      old_string: from,
+      new_string: to,
+      ...extra,
+    });
+
+  it("does not fire on one undo (A to B, then B to A)", () => {
+    const history = [
+      user("fix it"),
+      swap("a.ts", "A", "B"),
+      swap("a.ts", "B", "A"),
+    ];
+    expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
+  });
+
+  it("does not fire on an undo and a redo with a fix in between", () => {
+    const history = [
+      user("fix it"),
+      swap("a.ts", "A", "B"),
+      failing(FAIL),
+      swap("a.ts", "B", "A"),
+      swap("a.ts", "A", "C"),
+    ];
+    expect(progressCounters(history).unchanged).toBe(0);
+  });
+
+  it("sees A to B, B to A, A to B again as a loop even when the call differs", () => {
+    // Same change, but not the same arguments (an extra flag), so the exact
+    // repeat check does not see it.
+    const history = [
+      user("fix it"),
+      swap("a.ts", "A", "B"),
+      swap("a.ts", "B", "A"),
+      swap("a.ts", "A", "B", { replace_all: false }),
+    ];
+    expect(progressCounters(history)).toEqual({ idle: 1, unchanged: 1 });
+  });
+
+  it("pauses an agent that keeps flip-flopping", () => {
+    const flips = Array.from({ length: STALL_LIMIT + 2 }, (_, i) =>
+      i % 2 === 0
+        ? swap("a.ts", "A", "B", { n: i })
+        : swap("a.ts", "B", "A", { n: i }),
+    );
+    expect(progressPause([user("fix it"), ...flips])).toBe("stalled");
+  });
+
+  it("ignores whitespace differences in the reversed text", () => {
+    const history = [
+      user("fix it"),
+      swap("a.ts", "const x = 1;", "const x = 2;"),
+      swap("a.ts", "const x = 2;", "const x = 1;"),
+      swap("a.ts", "const  x = 1;\n", "const x =  2;"),
+    ];
+    expect(progressCounters(history).idle).toBe(1);
+  });
+
+  it("still counts the flips as a loop when other edits come between", () => {
+    const history = [
+      user("fix it"),
+      swap("a.ts", "A", "B"),
+      swap("b.ts", "X", "Y"),
+      swap("a.ts", "B", "A"),
+      swap("c.ts", "P", "Q"),
+      swap("a.ts", "A", "B", { n: 1 }),
+    ];
+    expect(progressCounters(history)).toEqual({ idle: 1, unchanged: 1 });
+  });
+
+  it("does not mix up different files", () => {
+    const history = [
+      user("fix it"),
+      swap("a.ts", "A", "B"),
+      swap("b.ts", "B", "A"),
+      swap("c.ts", "A", "B", { n: 1 }),
+      swap("d.ts", "B", "A", { n: 1 }),
+    ];
+    expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
+  });
+
+  it("does not count normal progress as a loop", () => {
+    const history = [
+      user("fix it"),
+      swap("a.ts", "A", "B"),
+      swap("a.ts", "B", "C"),
+      swap("a.ts", "C", "D"),
+      swap("a.ts", "D", "E"),
+    ];
+    expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
+  });
+
+  it("reads the reversal inside a multi edit", () => {
+    const multi = (pairs: [string, string][], n = 0) =>
+      round("multi_edit", {
+        filepath: "a.ts",
+        n,
+        edits: pairs.map(([old_string, new_string]) => ({
+          old_string,
+          new_string,
+        })),
+      });
+    const history = [
+      user("fix it"),
+      multi([["A", "B"]]),
+      multi([["B", "A"]]),
+      multi([["A", "B"]], 1),
+    ];
+    expect(progressCounters(history).idle).toBe(1);
+  });
+});
+
 describe("failureFingerprint", () => {
   const print = (content: string) =>
     failureFingerprint([{ name: "t", description: "", content }]);

@@ -159,8 +159,11 @@ main {
   margin: auto;
   padding: 10px clamp(10px, 2.5vw, 20px) 15px;
   overflow-wrap: anywhere;
-  background:
-    radial-gradient(circle at 100% 0%, rgb(0 122 255 / 10%), transparent 34%),
+  background: radial-gradient(
+      circle at 100% 0%,
+      rgb(0 122 255 / 10%),
+      transparent 34%
+    ),
     linear-gradient(160deg, rgb(255 255 255 / 45%), transparent 42%);
 }
 .workspace > *,
@@ -1191,6 +1194,7 @@ textarea {
 }
 .explain-steps small {
   color: var(--muted);
+}
 
 .health-list {
   display: grid;
@@ -1976,8 +1980,11 @@ main {
   --card-radius: clamp(16px, 4vw, 22px);
   max-width: 760px;
   padding: 8px var(--pane-gutter) 12px;
-  background:
-    radial-gradient(circle at 92% 5%, rgb(40 145 255 / 16%), transparent 28%),
+  background: radial-gradient(
+      circle at 92% 5%,
+      rgb(40 145 255 / 16%),
+      transparent 28%
+    ),
     radial-gradient(circle at 8% 30%, rgb(41 205 178 / 8%), transparent 30%),
     linear-gradient(180deg, #f9fbff 0%, #f4f6fa 48%, #f8f9fb 100%);
 }
@@ -2175,8 +2182,11 @@ body[data-auth="in"] .workspace {
   padding: clamp(12px, 3.4vw, 17px);
   border: 1px solid rgb(45 128 255 / 30%);
   border-radius: var(--card-radius);
-  background:
-    radial-gradient(circle at 100% 0%, rgb(0 122 255 / 10%), transparent 40%),
+  background: radial-gradient(
+      circle at 100% 0%,
+      rgb(0 122 255 / 10%),
+      transparent 40%
+    ),
     linear-gradient(145deg, rgb(245 251 255 / 98%), rgb(255 255 255 / 94%));
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 80%),
@@ -2391,8 +2401,11 @@ body[data-auth="in"] .workspace {
 }
 @media (prefers-color-scheme: dark) {
   main {
-    background:
-      radial-gradient(circle at 92% 5%, rgb(10 132 255 / 18%), transparent 30%),
+    background: radial-gradient(
+        circle at 92% 5%,
+        rgb(10 132 255 / 18%),
+        transparent 30%
+      ),
       linear-gradient(180deg, #17191d, #111317);
   }
   #status {
@@ -3023,10 +3036,10 @@ body[data-auth="in"] .apply-dock button:not(.primary) {
 body[data-auth="in"]
   .apply-dock:has(#agent-stop:not([hidden])):not(
     :has(
-      #agent-approve:not([hidden]),
-      #agent-discard:not([hidden]),
-      #agent-undo:not([hidden])
-    )
+        #agent-approve:not([hidden]),
+        #agent-discard:not([hidden]),
+        #agent-undo:not([hidden])
+      )
   ) {
   margin-top: var(--sp-2);
   padding: 0;
@@ -3037,10 +3050,10 @@ body[data-auth="in"]
 body[data-auth="in"]
   .apply-dock:has(#agent-stop:not([hidden])):not(
     :has(
-      #agent-approve:not([hidden]),
-      #agent-discard:not([hidden]),
-      #agent-undo:not([hidden])
-    )
+        #agent-approve:not([hidden]),
+        #agent-discard:not([hidden]),
+        #agent-undo:not([hidden])
+      )
   )
   #agent-stop {
   min-height: 36px;
@@ -4821,8 +4834,8 @@ body #explore-empty {
 
 /* 1. Sinhala and Tamil run longer and taller than English: nothing is cut, lines have room */
 :lang(si) body {
-  font-family:
-    system-ui, "Nirmala UI", "Noto Sans Sinhala", "Iskoola Pota", sans-serif;
+  font-family: system-ui, "Nirmala UI", "Noto Sans Sinhala", "Iskoola Pota",
+    sans-serif;
 }
 :lang(ta) body {
   font-family: system-ui, "Nirmala UI", "Noto Sans Tamil", Latha, sans-serif;
@@ -5105,8 +5118,11 @@ body[data-auth="in"] main {
   max-width: 760px;
   margin-inline: auto;
   padding: 14px clamp(14px, 4vw, 28px) 16px;
-  background:
-    radial-gradient(circle at 100% -4%, rgb(0 122 255 / 13%), transparent 31%),
+  background: radial-gradient(
+      circle at 100% -4%,
+      rgb(0 122 255 / 13%),
+      transparent 31%
+    ),
     linear-gradient(180deg, #fbfdff 0%, #f5f8fc 52%, #f8fafc 100%);
 }
 body[data-auth="in"] .brand-bar {
@@ -5744,8 +5760,7 @@ body[data-auth="in"] .workspace-nav button.active {
 }
 @media (prefers-color-scheme: dark) {
   body[data-auth="in"] main {
-    background:
-      radial-gradient(
+    background: radial-gradient(
         circle at 100% -4%,
         rgb(37 99 235 / 22%),
         transparent 31%

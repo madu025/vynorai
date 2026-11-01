@@ -47,6 +47,7 @@
             aria-label="New chat"
             data-i18n-aria-label="new_chat"
             title="New chat"
+            data-i18n-title="new_chat"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14M5 12h14" />
@@ -59,6 +60,7 @@
             aria-label="Chat history"
             data-i18n-aria-label="chat_history"
             title="Chat history"
+            data-i18n-title="chat_history"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -82,6 +84,7 @@
                 aria-label="Close chat history"
                 data-i18n-aria-label="close_chat_history"
                 title="Close"
+                data-i18n-title="close_chat_history"
               >
                 &#215;
               </button>
@@ -373,7 +376,13 @@
               Cancel
             </button>
           </div>
-          <p id="run-gate" class="run-gate" role="status" aria-live="polite" hidden></p>
+          <p
+            id="run-gate"
+            class="run-gate"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
           <details class="more-tools">
             <summary data-i18n="more_tools">More tools</summary>
             <div class="action-row">
@@ -1002,7 +1011,8 @@
             </p>
             <div class="email-form">
               <label for="email-to"
-                >Recipient email<input
+                ><span data-i18n="lbl_email_to">Recipient email</span
+                ><input
                   id="email-to"
                   type="email"
                   autocomplete="email"
@@ -1010,22 +1020,33 @@
               /></label>
               <div class="email-options">
                 <label for="email-cc"
-                  >CC<input id="email-cc" type="text" placeholder="optional"
+                  >CC<input
+                    id="email-cc"
+                    type="text"
+                    placeholder="optional"
+                    data-i18n-placeholder="ph_optional"
                 /></label>
                 <label for="email-bcc"
-                  >BCC<input id="email-bcc" type="text" placeholder="optional"
+                  >BCC<input
+                    id="email-bcc"
+                    type="text"
+                    placeholder="optional"
+                    data-i18n-placeholder="ph_optional"
                 /></label>
               </div>
               <label for="email-subject"
-                >Subject<input
+                ><span data-i18n="lbl_subject">Subject</span
+                ><input
                   id="email-subject"
                   type="text"
                   maxlength="200"
                   placeholder="VynorAI Excel report"
+                  data-i18n-placeholder="ph_email_subject"
               /></label>
               <div class="email-options">
                 <label for="email-format"
-                  >Delivery format<select id="email-format">
+                  ><span data-i18n="lbl_delivery_format">Delivery format</span
+                  ><select id="email-format">
                     <option value="auto" data-i18n="fmt_auto">
                       Automatic fallback
                     </option>
@@ -1047,7 +1068,8 @@
                   </select></label
                 >
                 <label for="email-body-type"
-                  >Body format<select id="email-body-type">
+                  ><span data-i18n="lbl_body_format">Body format</span
+                  ><select id="email-body-type">
                     <option value="HTML" data-i18n="body_html">
                       HTML with details
                     </option>
@@ -1057,7 +1079,8 @@
                   </select></label
                 >
                 <label for="email-delivery-mode"
-                  >Delivery<select id="email-delivery-mode">
+                  ><span data-i18n="lbl_delivery">Delivery</span
+                  ><select id="email-delivery-mode">
                     <option value="send" data-i18n="send_now">Send now</option>
                     <option value="draft" data-i18n="save_draft">
                       Save Outlook draft
@@ -1072,10 +1095,12 @@
                 >
               </div>
               <label for="email-body"
-                >Message<textarea
+                ><span data-i18n="lbl_message">Message</span
+                ><textarea
                   id="email-body"
                   maxlength="4000"
                   placeholder="Please find the Excel report attached."
+                  data-i18n-placeholder="ph_email_body"
                 ></textarea>
               </label>
               <button
@@ -1356,7 +1381,9 @@
               Only these choices are stored, never cell values.
             </p>
             <label for="prefs-currency"
-              >Currency when the data names none<select id="prefs-currency">
+              ><span data-i18n="lbl_currency_none"
+                >Currency when the data names none</span
+              ><select id="prefs-currency">
                 <option value="" data-i18n="not_set">Not set</option>
                 <option value="LKR">LKR (Rs)</option>
                 <option value="USD">USD</option>
@@ -1370,7 +1397,8 @@
               </select></label
             >
             <label for="prefs-number-style"
-              >Large amounts<select id="prefs-number-style">
+              ><span data-i18n="lbl_large_amounts">Large amounts</span
+              ><select id="prefs-number-style">
                 <option value="" data-i18n="as_in_data">As in the data</option>
                 <option value="lakh" data-i18n="style_lakhs">
                   Lakhs (12,34,567)
@@ -1384,7 +1412,8 @@
               </select></label
             >
             <label for="prefs-fiscal"
-              >Financial year starts<select id="prefs-fiscal">
+              ><span data-i18n="lbl_fiscal_start">Financial year starts</span
+              ><select id="prefs-fiscal">
                 <option value="" data-i18n="not_set">Not set</option>
                 <option value="4" data-i18n="fy_april">
                   April (Sri Lanka)
@@ -1394,7 +1423,8 @@
               </select></label
             >
             <label for="prefs-audience"
-              >Reports are usually for<select id="prefs-audience">
+              ><span data-i18n="lbl_audience">Reports are usually for</span
+              ><select id="prefs-audience">
                 <option value="" data-i18n="audience_auto">
                   Decide from the request
                 </option>
@@ -1407,7 +1437,8 @@
               </select></label
             >
             <label for="prefs-result-prefix"
-              >Result sheet prefix<input
+              ><span data-i18n="lbl_result_prefix">Result sheet prefix</span
+              ><input
                 id="prefs-result-prefix"
                 type="text"
                 maxlength="12"

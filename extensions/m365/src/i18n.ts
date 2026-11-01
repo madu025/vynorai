@@ -130,6 +130,21 @@ export function applyLanguage(root: ParentNode, language: Language): void {
       ),
     );
   }
+  // A tooltip that repeats a button's name: it uses the same string as the aria-label key.
+  for (const element of root.querySelectorAll<HTMLElement>(
+    "[data-i18n-title]",
+  )) {
+    if (element.dataset.i18nTitleDefault === undefined)
+      element.dataset.i18nTitleDefault = element.getAttribute("title") ?? "";
+    element.setAttribute(
+      "title",
+      translate(
+        language,
+        element.dataset.i18nTitle ?? "",
+        element.dataset.i18nTitleDefault,
+      ),
+    );
+  }
   for (const element of root.querySelectorAll<HTMLElement>(
     "[data-i18n-aria-label]",
   )) {

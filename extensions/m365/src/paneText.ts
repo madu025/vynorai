@@ -280,3 +280,52 @@ export function payrollResult(
     `"${sheet}" தாள் சேர்க்கப்பட்டது. செலுத்தும் முன் வலப்புற விகிதங்களை உங்கள் கணக்காளரிடம் சரிபார்க்கவும்; செயல்தவிர்க்கத் தாளை நீக்கவும்.`,
   );
 }
+
+/** The two lines of the "Workbook overview" answer: the sheets, then the Excel tables. Names and sizes stay as they are. */
+export function workbookOverviewLines(
+  overview: {
+    sheets: Array<{ name: string; rows: number; columns: number }>;
+    tables: Array<{
+      name: string;
+      sheet: string;
+      rows: number;
+      columns: number;
+    }>;
+  },
+  language: Language,
+): string[] {
+  const sheets = overview.sheets
+    .map((sheet) => `${sheet.name} (${sheet.rows}×${sheet.columns})`)
+    .join(", ");
+  const tables = overview.tables
+    .map((table) =>
+      pick(
+        language,
+        `${table.name} on ${table.sheet} (${table.rows}×${table.columns})`,
+        `${table.sheet} හි ${table.name} (${table.rows}×${table.columns})`,
+        `${table.sheet} தாளில் ${table.name} (${table.rows}×${table.columns})`,
+      ),
+    )
+    .join(", ");
+  return [
+    pick(
+      language,
+      `${overview.sheets.length} sheet(s): ${sheets}.`,
+      `පත්‍රිකා ${overview.sheets.length}ක්: ${sheets}.`,
+      `${overview.sheets.length} தாள்கள்: ${sheets}.`,
+    ),
+    overview.tables.length
+      ? pick(
+          language,
+          `${overview.tables.length} table(s): ${tables}.`,
+          `වගු ${overview.tables.length}ක්: ${tables}.`,
+          `${overview.tables.length} அட்டவணைகள்: ${tables}.`,
+        )
+      : pick(
+          language,
+          "No Excel tables.",
+          "Excel වගු නැත.",
+          "Excel அட்டவணைகள் இல்லை.",
+        ),
+  ];
+}

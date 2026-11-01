@@ -6,6 +6,40 @@
 import { localizeAction } from "./messagesActions.js";
 
 const EXACT: Record<string, string> = {
+  // Added from the pane drive test: run-time text that was still English.
+  "Checked · your original data is not changed":
+    "පරීක්ෂා කළා · ඔබේ මුල් දත්ත වෙනස් වී නැත",
+  "Check needed:": "පරීක්ෂාවක් අවශ්‍යයි:",
+  "stopped before it finished": "අවසන් වීමට පෙර නතර විය",
+  Failed: "අසාර්ථකයි",
+  Details: "විස්තර",
+  "Answered here, nothing is changed":
+    "මෙහිම පිළිතුරු දෙයි, කිසිවක් වෙනස් නොවේ",
+  "Shows the blanks first, you pick the value":
+    "මුලින් හිස් කොටු පෙන්වයි, අගය ඔබ තෝරන්න",
+  "Inspect formulas": "සූත්‍ර පරීක්ෂා කරන්න",
+  "Check formulas and errors in this table":
+    "මෙම වගුවේ සූත්‍ර සහ දෝෂ පරීක්ෂා කරන්න",
+  "Check data quality": "දත්ත ගුණාත්මකභාවය පරීක්ෂා කරන්න",
+  "Blanks, duplicates and odd values": "හිස් කොටු, අනුපිටපත් සහ අමුතු අගයන්",
+  "Total, average, smallest and largest": "එකතුව, සාමාන්‍යය, අඩුම සහ වැඩිම",
+  "(Excel could not write the cells.)": "(Excel හට කොටු ලිවිය නොහැකි විය.)",
+  "Sign in to use VynorAI with Excel.":
+    "Excel සමඟ VynorAI භාවිත කිරීමට පිවිසෙන්න.",
+  "Select a rectangular Excel range first.":
+    "මුලින් Excel හි සෘජුකෝණාස්‍ර පරාසයක් තෝරන්න.",
+  "A request is already running. Wait or cancel it first.":
+    "ඉල්ලීමක් දැනටමත් ක්‍රියාත්මක වේ. මුලින් රැඳී සිටින්න, නැතහොත් එය අවලංගු කරන්න.",
+  "Waiting for Excel and account capabilities.":
+    "Excel සහ ගිණුමේ හැකියා සඳහා රැඳී සිටිමින්.",
+  "Your VynorAI Excel trial credits are exhausted. Add credits or upgrade the plan, then refresh capabilities.":
+    "ඔබේ VynorAI Excel අත්හදා බැලීමේ credits අවසන්. credits එක් කරන්න හෝ සැලැස්ම උසස් කරන්න, ඉන්පසු හැකියා නැවත බලන්න.",
+  "Excel preview is unavailable. Reconnect VynorAI or check Diagnostics.":
+    "Excel පෙරදසුන දැනට නොමැත. VynorAI නැවත සම්බන්ධ කරන්න, නැතහොත් Diagnostics බලන්න.",
+  "Agent workflow is unavailable for this account. Use Local preview.":
+    "මෙම ගිණුමට නියෝජිත ක්‍රියාවලිය නොමැත. දේශීය පෙරදසුන භාවිත කරන්න.",
+  "The agent sends your request, the column names and small samples of the cells it reads (at most 50 rows at a time) to the VynorAI AI service. Personal data such as e-mail addresses and phone numbers is replaced before anything leaves this workbook. Nothing changes until you approve.":
+    "නියෝජිතයා ඔබේ ඉල්ලීම, තීරු නම් සහ එය කියවන කොටු වලින් කුඩා සාම්පල (එක් වරකට පේළි 50 දක්වා) VynorAI AI සේවාවට යවයි. ඊමේල් ලිපින සහ දුරකථන අංක වැනි පෞද්ගලික දත්ත මෙම වැඩපොතෙන් පිටත යාමට පෙර ප්‍රතිස්ථාපනය කෙරේ. ඔබ අනුමත කරන තුරු කිසිවක් වෙනස් නොවේ.",
   "Sign in to refresh capabilities.": "හැකියා නැවත බලන්න පළමුව පිවිසෙන්න.",
   "Refreshing Excel capability report...":
     "Excel හැකියා වාර්තාව නැවත බලමින්...",
@@ -459,6 +493,31 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  // Suggestion cards and plan lines the pane builds from the person's own column names.
+  [/^Total (.+) by (.+)$/, (m, g) => `${g} අනුව ${m} එකතුව`],
+  [/^Find duplicate (.+)$/, (c) => `අනුපිටපත් ${c} සොයන්න`],
+  [
+    /^Checks the (.+) column for repeats$/,
+    (c) => `${c} තීරුවේ නැවත නැවත එන අගයන් පරීක්ෂා කරයි`,
+  ],
+  [/^Fill blank cells in (.+)$/, (c) => `${c} හි හිස් කොටු පුරවන්න`],
+  [/^(.+) over time$/, (m) => `කාලයත් සමඟ ${m}`],
+  [
+    /^By (.+), as a chart preview$/,
+    (d) => `${d} අනුව, ප්‍රස්තාර පෙරදසුනක් ලෙස`,
+  ],
+  [/^Summarize (.+)$/, (m) => `${m} සාරාංශ කරන්න`],
+  [/^Bring (.+) from (.+)$/, (c, s) => `${s} වෙතින් ${c} ගෙන එන්න`],
+  [
+    /^Matched by (.+), on a new sheet$/,
+    (k) => `${k} අනුව ගළපයි, නව පත්‍රිකාවක`,
+  ],
+  [/^Create sheet (.+)$/, (s) => `${s} පත්‍රිකාව සාදන්න`],
+  [/^Write values in (.+)$/, (s) => `${s} හි අගයන් ලියන්න`],
+  [
+    /^Write (\d+) x (\d+) values from (.+)$/,
+    (r, c, s) => `${s} වෙතින් අගයන් ${r} x ${c} ලියන්න`,
+  ],
   [/^dates in (.+) are stored as text$/, (c) => `${c} හි දින පෙළ ලෙස ඇත`],
   [/^unusual (.+) values?$/, (c) => `අසාමාන්‍ය ${c} අගය`],
   [/^blank cells? in (.+)$/, (c) => `${c} හි හිස් සෛල`],

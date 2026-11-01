@@ -3,7 +3,11 @@ import "./packTa.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { applyLanguage, translate } from "./i18n.js";
+import { applyLanguage, localizeMessage, translate } from "./i18n.js";
+import { checkedLine, CHECKED_OK } from "./agentChecked.js";
+import { idleSuggestions } from "./idleSuggestions.js";
+import { workbookOverviewLines } from "./paneText.js";
+import { evaluateRunGate } from "./taskpaneRunGate.js";
 
 const html =
   readFileSync(new URL("../taskpane.html", import.meta.url), "utf8") +
@@ -310,4 +314,121 @@ test("every aria-label in the page has a Sinhala and a Tamil string (a screen re
       if (!translate(lang, key, "")) missing.push(`${lang}: ${key}`);
   }
   assert.deepEqual(missing, []);
+});
+
+test("a label's own words and a placeholder are translatable in Sinhala and Tamil", () => {
+  const missing: string[] = [];
+  // <label for="x">Words<input ...>: the words need their own span, or a language switch cannot reach them.
+  for (const match of body.matchAll(
+    /<label\b[^>]*>\s*([^<>]*[A-Za-z]{3}[^<>]*?)\s*<(?:input|select|textarea)\b/g,
+  ))
+    if (!/^B?CC$/.test(match[1].trim()))
+      missing.push(`label text without data-i18n: ${match[1].trim()}`);
+  const WORDLESS = new Set(["Ctrl+V", "recipient@example.com", "Finance"]);
+  for (const match of body.matchAll(
+    /<(\w+)\b([^>]*\bplaceholder="([^"]+)"[^>]*)>/g,
+  )) {
+    const [, , attrs, text] = match;
+    if (WORDLESS.has(text)) continue;
+    const key = /data-i18n-placeholder="(\w+)"/.exec(attrs)?.[1];
+    if (!key) missing.push(`placeholder without key: ${text}`);
+    else
+      for (const lang of ["si", "ta"] as const)
+        if (!translate(lang, key, "")) missing.push(`${lang}: ${key}`);
+  }
+  // A tooltip (title) is read aloud and shown on hover: it needs a key too.
+  for (const match of body.matchAll(
+    /<(\w+)\b([^>]*\btitle="([^"]+)"[^>]*)>/g,
+  )) {
+    const [, , attrs, text] = match;
+    if (text === "Nothing changed yet.") continue; // set by code with the dock's state
+    const key = /data-i18n-title="(\w+)"/.exec(attrs)?.[1];
+    if (!key) missing.push(`title without key: ${text}`);
+    else
+      for (const lang of ["si", "ta"] as const)
+        if (!translate(lang, key, "")) missing.push(`${lang}: ${key}`);
+  }
+  for (const match of body.matchAll(/<span data-i18n="(lbl_\w+)"/g))
+    for (const lang of ["si", "ta"] as const)
+      if (!translate(lang, match[1], "")) missing.push(`${lang}: ${match[1]}`);
+  assert.deepEqual(missing, []);
+});
+
+test("run-time lines the pane builds from fixed English text have Sinhala and Tamil wording", () => {
+  const schema = {
+    hasMeasure: true,
+    hasDate: true,
+    hasCategory: true,
+    hasText: true,
+    sampleRows: 40,
+    columns: [
+      { name: "Net Amount", role: "measure" },
+      { name: "Region", role: "category" },
+      { name: "Order No", role: "identifier" },
+      { name: "Order Date", role: "date" },
+    ],
+    blankColumns: ["Customer"],
+    otherSheets: [{ name: "Customers", headers: ["Order No", "Segment"] }],
+  };
+  const english: string[] = [];
+  for (const card of idleSuggestions(schema))
+    english.push(card.title, card.hint);
+  english.push(
+    CHECKED_OK,
+    ...Object.values(
+      checkedLine({ badge: "Stopped", progress: "", issues: [] }),
+    )
+      .filter((v) => typeof v === "string" && v.length > 0 && v !== "warn")
+      .map((v) => v.replace(/^Check needed: /, "")),
+  );
+  const base = {
+    signedIn: true,
+    accountReady: true,
+    request: "",
+    selection: undefined,
+    busy: false,
+    capabilityState: "ready",
+    canInspect: true,
+    agentMode: true,
+    aiAvailable: true,
+  } as const;
+  for (const input of [
+    { ...base, signedIn: false },
+    base,
+    { ...base, request: "x" },
+    { ...base, request: "x", busy: true },
+    { ...base, request: "x", capabilityState: "idle", canInspect: undefined },
+    { ...base, request: "x", capabilityState: "unavailable" },
+    { ...base, request: "x", aiAvailable: false },
+  ] as const) {
+    const gate = evaluateRunGate({ ...input } as never);
+    if (!gate.enabled) english.push(gate.message);
+  }
+  const missing: string[] = [];
+  for (const lang of ["si", "ta"] as const)
+    for (const text of new Set(english))
+      if (/[A-Za-z]{3}/.test(text) && localizeMessage(lang, text) === text)
+        missing.push(`${lang}: ${text}`);
+  assert.deepEqual(missing, []);
+});
+
+test("the workbook overview answer is written in the pane's language", () => {
+  const overview = {
+    sheets: [{ name: "Orders", rows: 3001, columns: 12 }],
+    tables: [{ name: "Sales", sheet: "Orders", rows: 3000, columns: 12 }],
+  };
+  const en = workbookOverviewLines(overview, "en").join(" ");
+  assert.equal(
+    en,
+    "1 sheet(s): Orders (3001×12). 1 table(s): Sales on Orders (3000×12).",
+  );
+  for (const lang of ["si", "ta"] as const) {
+    const lines = workbookOverviewLines(overview, lang).join(" ");
+    assert.match(lines, /Orders \(3001×12\)/);
+    assert.doesNotMatch(lines, /sheet\(s\)|table\(s\)| on /);
+    assert.doesNotMatch(
+      workbookOverviewLines({ sheets: [], tables: [] }, lang).join(" "),
+      /No Excel tables/,
+    );
+  }
 });

@@ -61,6 +61,7 @@ const EXACT: Record<string, string> = {
     "මෙය වැඩපොතෙන් පිටත ක්‍රියාත්මක වන්නේ ඔබ අනුමත කිරීමෙන් පසුවය. කිසිවක් ධාවනය කර නැත.",
   "Checking the result…": "ප්‍රතිඵලය පරීක්ෂා කරමින්…",
   "Checking safety…": "ආරක්ෂාව පරීක්ෂා කරමින්…",
+  "Ready to run.": "ක්‍රියාත්මක කිරීමට සූදානම්.",
   "Preview ready. Nothing changed yet.":
     "පෙරදසුන සූදානම්. තවම කිසිවක් වෙනස් වී නැත.",
   "Sparklines are not available in this Excel add-in yet. Use a line chart on a new result sheet instead.":

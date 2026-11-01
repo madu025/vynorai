@@ -117,7 +117,31 @@ test("a language switch writes the agent card's run-time text again in the new l
   setAgentViewLocalizer((text) => text);
 });
 
-import { PLAN_STEPS_SHOWN, plainStep, stepRange } from "./taskpaneAgentView.js";
+test("a tooltip set with setLocalizedTitle follows a language switch", () => {
+  let language = "si";
+  setAgentViewLocalizer((text) =>
+    language === "si" && text === "Add a new sheet"
+      ? "නව පත්‍රයක් එක් කරන්න"
+      : text,
+  );
+  const item: any = { title: "", dataset: {} };
+  setLocalizedTitle(item, "Add a new sheet");
+  assert.equal(item.title, "නව පත්‍රයක් එක් කරන්න");
+  language = "en";
+  relocalizeView({
+    querySelectorAll: (selector: string) =>
+      selector === "[data-en-title]" ? [item] : [],
+  } as any);
+  assert.equal(item.title, "Add a new sheet");
+  setAgentViewLocalizer((text) => text);
+});
+
+import {
+  PLAN_STEPS_SHOWN,
+  plainStep,
+  setLocalizedTitle,
+  stepRange,
+} from "./taskpaneAgentView.js";
 
 test("the live progress line never shows formulas, ranges or tool names", () => {
   assert.equal(

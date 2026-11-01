@@ -277,6 +277,51 @@ test("the agent badge is a polite live region and every button has a name", () =
   assert.deepEqual(unnamed, []);
 });
 
+test("status lines follow the pane language, not the language of the typed request", () => {
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
+  const start = source.indexOf("function setStatus(message: string) {");
+  assert.ok(start > 0);
+  const fn = source.slice(start, source.indexOf("\n}\n", start));
+  assert.match(fn, /localizeMessage\(language, message\)/);
+  assert.doesNotMatch(fn, /textLanguage\(\)/);
+});
+
+test("the run tooltip and the action dock tooltip are translated", () => {
+  for (const lang of ["si", "ta"] as const) {
+    assert.notEqual(localizeMessage(lang, "Ready to run."), "Ready to run.");
+    assert.notEqual(
+      localizeMessage(lang, "Preview ready. Nothing changed yet."),
+      "Preview ready. Nothing changed yet.",
+    );
+  }
+  const page = readFileSync(
+    new URL("../taskpane.html", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    page,
+    /class="apply-dock"[^>]*title="Nothing changed yet\."\s+data-i18n-title="agent_note"/,
+  );
+});
+
+test("the Share composer (source buttons and paste box) is never hidden, so a first card can be made", () => {
+  const page = readFileSync(
+    new URL("../taskpane.html", import.meta.url),
+    "utf8",
+  );
+  const section = page.match(/<section\s+id="share-card"[^>]*>/);
+  assert.ok(section, "share-card section exists");
+  assert.doesNotMatch(section[0], /\bhidden\b/);
+  const source = readFileSync(
+    new URL("./taskpane.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /shareCard\.hidden/);
+});
+
 test("result glyphs have a text alternative and the tiles show a keyboard focus outline", () => {
   const source = readFileSync(
     new URL("./taskpane.ts", import.meta.url),

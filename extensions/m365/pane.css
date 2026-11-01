@@ -4918,9 +4918,6 @@ body[data-workspace-view="results"]:has(
   #results-empty {
   display: none;
 }
-body[data-workspace-view="share"] #share-empty {
-  display: block;
-}
 body[data-history-loading] .history-skeleton {
   display: grid;
   gap: 8px;

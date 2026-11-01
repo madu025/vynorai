@@ -101,6 +101,7 @@ import {
   showAgentPlanView,
   showChangeList,
   shortResult,
+  setLocalizedTitle,
   collapseAppliedList,
   showAgentSourcesView,
   relationshipEvidence,
@@ -903,7 +904,8 @@ function setPreviewBadge(applied: boolean) {
 
 function setStatus(message: string) {
   lastStatus = message;
-  if (status) status.textContent = localizeMessage(textLanguage(), message);
+  // Status lines are pane chrome: they follow the pane language, not the language of the request.
+  if (status) status.textContent = localizeMessage(language, message);
   const normalized = message.toLocaleLowerCase();
   const tone =
     /failed|error|could not|unavailable|missing|expired|rejected|invalid|no credits|blocked/.test(
@@ -5959,7 +5961,7 @@ agentApprove?.addEventListener("click", async () => {
       );
       const what = document.createElement("span");
       setLocalizedText(what, shortResult(result.change));
-      li.title = result.change;
+      setLocalizedTitle(li, result.change);
       li.dataset.status = result.status;
       const colon = document.createElement("span");
       colon.className = "sr-only";
@@ -6301,17 +6303,14 @@ const shareMessage =
 const shareMessageBlock = document.querySelector<HTMLElement>(
   "#share-message-block",
 );
-const shareEmpty = document.querySelector<HTMLElement>("#share-empty");
 let shareState: { card: ShareCard; blob: Blob | null } | undefined;
 
 function setShareStatus(message: string) {
   if (shareStatus) shareStatus.textContent = message;
 }
 
-function setSharePanel(hasCard: boolean) {
-  if (shareEmpty) shareEmpty.hidden = hasCard;
-  const shareCard = document.querySelector<HTMLElement>("#share-card");
-  if (shareCard) shareCard.hidden = !hasCard;
+/** The source buttons and the paste box stay visible: they are how a first card gets made. */
+function setSharePanel(_hasCard: boolean) {
   workspaceNavigation.refresh();
 }
 

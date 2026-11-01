@@ -1145,6 +1145,33 @@ export function agentToolTokenEstimate(): number {
   return toolTokenEstimate;
 }
 
+/** The answer budget of one agent turn: Sinhala and Tamil need about twice the tokens. */
+export function agentMaxTokens(language: string): number {
+  return language === "en" ? 2500 : 5000;
+}
+
+/**
+ * Credits one agent turn reserves on the M365 ledger before the model is called: the prompt
+ * (`chars` of messages and tool-call arguments, about 4 characters a token), the tool list and the
+ * answer budget. The ledger refuses the turn unless all of it fits (`reserveM365Quota`).
+ */
+export function agentTurnCredits(chars: number, language: string): number {
+  return (
+    Math.ceil(chars / 4) + agentToolTokenEstimate() + agentMaxTokens(language)
+  );
+}
+
+/**
+ * The smallest turn the ledger can accept: the fixed prompt and the English language line with
+ * no conversation. Diagnostics report credits exhausted below it, because every run would be refused.
+ */
+export function minimumAgentTurnCredits(): number {
+  return agentTurnCredits(
+    AGENT_SYSTEM_PROMPT.length + LANGUAGE_LINE.en.length,
+    "en",
+  );
+}
+
 /**
  * The honest answer for a new person request that can only be a native desktop or Python feature.
  * Add-in reports and tool results are not the person's words and are never screened.
@@ -1277,13 +1304,12 @@ export async function agentTurn(
       ),
     0,
   );
-  const maxTokens = parsed.data.language === "en" ? 2500 : 5000;
   const raw = await runAgentModel(
     user,
     messages,
     AGENT_TOOLS,
-    Math.ceil(chars / 4) + agentToolTokenEstimate() + maxTokens,
-    maxTokens,
+    agentTurnCredits(chars, parsed.data.language),
+    agentMaxTokens(parsed.data.language),
   );
   return restoreAgentReply(cleanAgentReply(raw), piiMasked.map);
 }

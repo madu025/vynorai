@@ -584,6 +584,35 @@
             ></div>
           </section>
           <section
+            id="explain-formula-card"
+            class="card"
+            data-workspace-panel="work"
+            aria-labelledby="explain-formula-heading"
+          >
+            <div class="card-head">
+              <h2
+                id="explain-formula-heading"
+                data-i18n="explain_formula_title"
+              >
+                Explain a formula
+              </h2>
+            </div>
+            <p class="muted" data-i18n="explain_formula_note">
+              Select one cell with a formula. It is explained on this device,
+              step by step. Nothing is sent or changed.
+            </p>
+            <button
+              id="explain-formula"
+              type="button"
+              aria-label="Explain the formula in the selected cell"
+              data-i18n-aria-label="explain_formula_aria"
+              data-i18n="explain_formula_button"
+            >
+              Explain this formula
+            </button>
+            <div id="explain-formula-result" aria-live="polite"></div>
+          </section>
+          <section
             class="conversation"
             data-workspace-panel="work"
             aria-label="VynorAI conversation"

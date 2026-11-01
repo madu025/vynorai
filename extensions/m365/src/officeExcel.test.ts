@@ -11,6 +11,7 @@ import {
   inspectSelectedExcelRange,
   localExcelAddress,
   readExcelWorkbookBase64,
+  readSelectedFormulaForExplain,
   rollbackItemsFromApplyReport,
   sampleBlocks,
   sampleRowBudget,
@@ -1729,4 +1730,94 @@ test("a sampled very large range turns a chart summary into the PivotTable's own
   assert.equal(adapted.specs.chart?.pivotResult, true);
   assert.equal(adapted.specs.chart?.aggregation, undefined);
   assert.equal(adapted.specs.chart?.topN, undefined);
+});
+
+function explainRuntime(selection: {
+  rows: number;
+  columns: number;
+  formulas: unknown[][];
+}) {
+  const writes: string[] = [];
+  const cell = (value: unknown) => ({
+    values: [[value]],
+    load() {},
+    set formulas(_: unknown) {
+      writes.push("formulas");
+    },
+  });
+  const sheet = {
+    name: "Sheet1",
+    load() {},
+    getRange: (address: string) => cell(address === "A1" ? 7 : "x"),
+  };
+  const selected: any = {
+    address: "Sheet1!C2",
+    rowCount: selection.rows,
+    columnCount: selection.columns,
+    formulas: selection.formulas,
+    worksheet: sheet,
+    load() {},
+  };
+  const runtime = {
+    run: async (callback: any) =>
+      callback({
+        sync: async () => {},
+        workbook: {
+          getSelectedRange: () => selected,
+          worksheets: {
+            getItem: (name: string) => {
+              if (name === "Gone") throw new Error("ItemNotFound");
+              return { getRange: () => cell(`${name}-value`) };
+            },
+          },
+        },
+      }),
+  };
+  return { runtime, writes };
+}
+
+test("explain read: a single formula cell returns the formula and bounded referenced values, read-only", async () => {
+  const { runtime, writes } = explainRuntime({
+    rows: 1,
+    columns: 1,
+    formulas: [["=A1+Data!B2+Gone!C3"]],
+  });
+  const result = await readSelectedFormulaForExplain(runtime as any, () => [
+    "A1",
+    "Data!B2",
+    "Gone!C3",
+  ]);
+  assert.equal(result.formula, "=A1+Data!B2+Gone!C3");
+  assert.deepEqual(result.values, { A1: 7, "Data!B2": "Data-value" });
+  assert.deepEqual(writes, []);
+});
+
+test("explain read: a many-cell selection or a plain value reads no references", async () => {
+  let asked = 0;
+  const refs = () => {
+    asked++;
+    return ["A1"];
+  };
+  const many = explainRuntime({ rows: 2, columns: 2, formulas: [] });
+  const a = await readSelectedFormulaForExplain(many.runtime as any, refs);
+  assert.equal(a.cellCount, 4);
+  assert.equal(a.formula, null);
+  const plain = explainRuntime({ rows: 1, columns: 1, formulas: [["text"]] });
+  const b = await readSelectedFormulaForExplain(plain.runtime as any, refs);
+  assert.equal(b.formula, null);
+  assert.equal(asked, 0);
+});
+
+test("explain read: no more than the allowed number of referenced cells is read", async () => {
+  const { runtime } = explainRuntime({
+    rows: 1,
+    columns: 1,
+    formulas: [["=A1"]],
+  });
+  const result = await readSelectedFormulaForExplain(
+    runtime as any,
+    () => Array.from({ length: 50 }, (_, i) => `A${i + 1}`),
+    3,
+  );
+  assert.equal(Object.keys(result.values).length, 3);
 });

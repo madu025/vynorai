@@ -223,6 +223,7 @@ import {
   applyApprovedExcelPlan,
   inspectSelectedExcelFormulas,
   inspectSelectedExcelRange,
+  readSelectedFormulaForExplain,
   inspectWorkbookOverview,
   rollbackItemsFromApplyReport,
   rollbackCreatedItems,
@@ -300,6 +301,12 @@ import {
 import { evaluateRunGate, type CapabilityState } from "./taskpaneRunGate.js";
 import { buildResultEvidence } from "./resultEvidence.js";
 import { renderCapabilityReport as renderCapabilityReportView } from "./taskpaneCapabilityView.js";
+import {
+  EXPLAIN_MAX_REFERENCE_CELLS,
+  buildFormulaExplainView,
+  singleCellReferences,
+} from "./formulaExplainView.js";
+import { renderFormulaExplain } from "./taskpaneFormulaExplainView.js";
 import {
   drawOutcomeChart as drawOutcomeChartView,
   renderOutcomes as renderOutcomesView,
@@ -5656,6 +5663,45 @@ function showAgentToggle() {
       : localizeMessage(language, "Agent (preview): OFF (click to turn on)");
 }
 languageHooks.push(showAgentToggle);
+
+/** "Explain this formula": reads the selected cell, explains it on this device, writes nothing. */
+const explainFormulaButton =
+  document.querySelector<HTMLButtonElement>("#explain-formula");
+const explainFormulaResult = document.querySelector<HTMLElement>(
+  "#explain-formula-result",
+);
+languageHooks.push(() => explainFormulaResult?.replaceChildren());
+explainFormulaButton?.addEventListener("click", async () => {
+  if (!explainFormulaResult) return;
+  explainFormulaButton.disabled = true;
+  try {
+    const read = await log.step(
+      "excel:explain-formula",
+      () =>
+        readSelectedFormulaForExplain(
+          officeRuntime(),
+          singleCellReferences,
+          EXPLAIN_MAX_REFERENCE_CELLS,
+        ),
+      (value) => ({ cells: value.cellCount, hasFormula: !!value.formula }),
+    );
+    renderFormulaExplain(
+      document,
+      explainFormulaResult,
+      buildFormulaExplainView(read),
+      language,
+    );
+  } catch {
+    renderFormulaExplain(
+      document,
+      explainFormulaResult,
+      { kind: "read_failed" },
+      language,
+    );
+  } finally {
+    explainFormulaButton.disabled = false;
+  }
+});
 document.querySelector("#agent-toggle")?.addEventListener("click", () => {
   try {
     localStorage.setItem(AGENT_ON_KEY, agentOn() ? "0" : "1");

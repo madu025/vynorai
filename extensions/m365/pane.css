@@ -1172,6 +1172,26 @@ textarea {
   font-style: normal;
   font-weight: 600;
 }
+.explain-steps {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding-left: 22px;
+}
+.explain-steps li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.explain-steps code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.explain-steps small {
+  color: var(--muted);
+}
 /* While the agent team works or shows its plan, the starter cards step aside so the roles and the preview are in view. */
 body:has(#agent-card:not([hidden])) #noticed,
 body:has(#agent-card:not([hidden])) #context-suggestions,

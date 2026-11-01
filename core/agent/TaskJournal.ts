@@ -25,7 +25,7 @@ function endsWithNewline(filePath: string): boolean {
   try {
     const { size } = fs.fstatSync(descriptor);
     if (size === 0) return true;
-    const last = Buffer.alloc(1);
+    const last = new Uint8Array(1);
     fs.readSync(descriptor, last, 0, 1, size - 1);
     return last[0] === 0x0a;
   } finally {

@@ -24,7 +24,7 @@ import {
   commandOf,
   verificationFromToolResult,
 } from "../util/verificationEvidence";
-import { runHooks, toolOutputText } from "../util/hooks";
+import { runHooks, runSubagentStopHook, toolOutputText } from "../util/hooks";
 import {
   guardErrorForModel,
   isRecoverableGuardError,
@@ -362,6 +362,19 @@ async function callToolByIdImpl(
         hidden: false,
       });
     }
+  }
+
+  // SubagentStop: a subagent tool call has finished (report or failure).
+  if (toolName === "run_subagent" && !guardRefusal && !preHook.blocked) {
+    const agent = (toolInput as { agent?: unknown }).agent;
+    await runSubagentStopHook(
+      extra.ideMessenger,
+      state.session.id,
+      toolCallId,
+      typeof agent === "string" && agent.trim() ? agent.trim() : "explore",
+      toolOutputText(output),
+      error?.message,
+    );
   }
 
   if (error) {

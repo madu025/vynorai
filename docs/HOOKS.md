@@ -1,6 +1,6 @@
 # Hooks
 
-Hooks run your own shell commands at fixed points of an agent turn: before and after every tool call, when a prompt is submitted, and when the agent finishes. Use them to block dangerous commands, run a linter after edits, or inject project context into every prompt.
+Hooks run your own shell commands at fixed points of an agent turn: before and after every tool call, when a prompt is submitted, when a conversation starts, before the conversation is compacted, when a subagent finishes, and when the agent finishes. Use them to block dangerous commands, run a linter after edits, or inject project context into every prompt.
 
 The format and exit-code semantics match Claude Code hooks, so existing hook scripts work unchanged.
 
@@ -45,12 +45,17 @@ The Claude Code nested form (`{ "matcher": "...", "hooks": [{ "type": "command",
 
 ## Events
 
-| Event              | When                                                   | Exit 2 effect                                                                  | Exit 0 stdout                     |
-| ------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------ | --------------------------------- |
-| `UserPromptSubmit` | A prompt is sent, before the model sees it             | The turn is stopped and the reason is shown                                    | Attached to the prompt as context |
-| `PreToolUse`       | Before a tool runs (file edits, terminal, search, MCP) | The tool does not run; the reason is returned to the model as the tool's error | Ignored                           |
-| `PostToolUse`      | After a tool runs                                      | The reason is returned to the model next to the tool output                    | Ignored                           |
-| `Stop`             | The agent finished the turn                            | The reason is shown to you; the turn does not resume                           | Ignored                           |
+| Event              | When                                                                                                            | Exit 2 effect                                                                  | Exit 0 stdout                            |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------- |
+| `UserPromptSubmit` | A prompt is sent, before the model sees it                                                                      | The turn is stopped and the reason is shown                                    | Attached to the prompt as context        |
+| `PreToolUse`       | Before a tool runs (file edits, terminal, search, MCP)                                                          | The tool does not run; the reason is returned to the model as the tool's error | Ignored                                  |
+| `PostToolUse`      | After a tool runs                                                                                               | The reason is returned to the model next to the tool output                    | Ignored                                  |
+| `Stop`             | The agent finished the turn                                                                                     | The reason is shown to you; the turn does not resume                           | Ignored                                  |
+| `SessionStart`     | The first prompt of a new conversation, before `UserPromptSubmit`                                               | Never blocks; reported as a warning                                            | Attached to that first prompt as context |
+| `PreCompact`       | Right before the conversation is summarized (`/compact`, the Compact button, or auto-compaction at 70% context) | Never blocks; reported as a warning                                            | Ignored                                  |
+| `SubagentStop`     | A `run_subagent` tool call finished (report or failure)                                                         | Never blocks; reported as a warning                                            | Ignored                                  |
+
+`SessionStart`, `PreCompact` and `SubagentStop` cannot block: the session starts, the compaction runs and the subagent result is used no matter what. Exit 2 from them is shown as a warning with the stderr text. `matcher` is ignored for these three events.
 
 Any other non-zero exit, a timeout, or a command that fails to start is a warning shown as a notification. It never blocks.
 
@@ -68,6 +73,18 @@ Each command receives a JSON object on stdin. The environment also contains `VYN
 ```
 
 `UserPromptSubmit` sends `prompt`. `PostToolUse` also sends `toolOutput` (truncated to 8,000 characters) and `toolError` when the tool failed.
+
+`SessionStart` sends only `sessionId`. `PreCompact` sends `trigger` (`"manual"` or `"auto"`) and, for `/compact <focus>`, `instructions`. `SubagentStop` sends `subagentId` (the tool-call id), `subagentType` (`"explore"` or the custom agent name), `toolOutput` (the report, truncated) and `toolError` when the subagent failed.
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "command": "cat .vynorai/context.md" }],
+    "PreCompact": [{ "command": "node .vynorai/hooks/save-notes.js" }],
+    "SubagentStop": [{ "command": "node .vynorai/hooks/log-subagent.js" }]
+  }
+}
+```
 
 ## Example: block recursive deletes
 

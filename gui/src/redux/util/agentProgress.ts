@@ -244,6 +244,74 @@ function completedTodos(call: Call): number | undefined {
 }
 
 /**
+ * Edits that undo each other. The exact-repeat check above does not see an
+ * agent that changes a region from A to B, back to A, and again, when the
+ * calls differ a little (an extra flag, other spacing). Each find-and-replace
+ * is kept as an (old, new) pair per file; an edit whose pair is the swap of
+ * one of the last FLIP_WINDOW edits on that file is a reversal.
+ *
+ * One reversal is normal (an undo, or a revert after a failing check), so it
+ * counts as progress. From the second reversal on (A to B, B to A, A to B)
+ * the pattern is a loop and the edit counts as a repeat, like an exact one.
+ */
+export const FLIP_WINDOW = 8;
+export const FLIP_LIMIT = 2;
+
+type EditPair = { from: string; to: string };
+
+const squash = (text: unknown): string =>
+  typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
+
+/** The (old, new) pairs of a find-and-replace or multi-edit call, if any. */
+function editPairs(
+  call: Call,
+): { file: string; pairs: EditPair[] } | undefined {
+  const name = call.toolCall.function.name;
+  if (
+    name !== BuiltInToolNames.SingleFindAndReplace &&
+    name !== BuiltInToolNames.MultiEdit
+  )
+    return undefined;
+  const args = argsOf(call) as {
+    filepath?: unknown;
+    old_string?: unknown;
+    new_string?: unknown;
+    edits?: unknown;
+  };
+  if (typeof args.filepath !== "string") return undefined;
+  const raw =
+    name === BuiltInToolNames.MultiEdit
+      ? Array.isArray(args.edits)
+        ? (args.edits as { old_string?: unknown; new_string?: unknown }[])
+        : []
+      : [args];
+  const pairs = raw
+    .map((e) => ({ from: squash(e?.old_string), to: squash(e?.new_string) }))
+    .filter((p) => p.from !== "" && p.from !== p.to);
+  return pairs.length > 0 ? { file: args.filepath, pairs } : undefined;
+}
+
+class FlipTracker {
+  private recent = new Map<string, EditPair[]>();
+  private flips = new Map<string, number>();
+
+  /** Records the edit; true when it is the second or later reversal on its file. */
+  isLoop(call: Call): boolean {
+    const edit = editPairs(call);
+    if (!edit) return false;
+    const before = this.recent.get(edit.file) ?? [];
+    const reversal = edit.pairs.every((p) =>
+      before.some((b) => b.from === p.to && b.to === p.from),
+    );
+    this.recent.set(edit.file, [...before, ...edit.pairs].slice(-FLIP_WINDOW));
+    if (!reversal) return false;
+    const flips = (this.flips.get(edit.file) ?? 0) + 1;
+    this.flips.set(edit.file, flips);
+    return flips >= FLIP_LIMIT;
+  }
+}
+
+/**
  * Tool-calling answers in a row, up to now, in the current prompt:
  * - `idle`: that learned nothing new. An answer learns something when one of
  *   its calls succeeded and was a new edit or a call not already made since
@@ -258,6 +326,7 @@ export function progressCounters(history: ChatHistoryItem[]): {
   const edits = new Set<string>();
   const seen = new Set<string>();
   const failingChecks = new Set<string>();
+  const flips = new FlipTracker();
   let closedTodos = 0;
   let idle = 0;
   let unchanged = 0;
@@ -279,6 +348,8 @@ export function progressCounters(history: ChatHistoryItem[]): {
         // Writing the same change again is a loop, not a new state.
         if (edits.has(signature)) continue;
         edits.add(signature);
+        // Changing it back and forth is a loop too, however the call is worded.
+        if (flips.isLoop(call)) continue;
         learned = changed = true;
         seen.clear();
         continue;

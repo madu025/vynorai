@@ -6,6 +6,7 @@ import {
   type DistributedSlot,
 } from "./redisStore.js";
 import { billingGet as dbGet } from "./billingDb.js";
+import { dbTimestampParam } from "../db.js";
 
 const DEFAULT_GLOBAL_LIMIT = 64;
 const DEFAULT_PROVIDER_LIMIT = 48;
@@ -161,9 +162,9 @@ export async function getAdmissionSnapshot() {
   const localAnthropic = localCounts.get("ai-provider:anthropic") || 0;
 
   const now = Date.now();
-  const oneMinAgo = new Date(now - 60 * 1000).toISOString();
-  const fiveMinAgo = new Date(now - 5 * 60 * 1000).toISOString();
-  const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+  const oneMinAgo = dbTimestampParam(now - 60 * 1000);
+  const fiveMinAgo = dbTimestampParam(now - 5 * 60 * 1000);
+  const oneHourAgo = dbTimestampParam(now - 60 * 60 * 1000);
 
   let rpm = 0;
   let requests5m = 0;

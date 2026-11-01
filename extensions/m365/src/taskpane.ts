@@ -59,6 +59,7 @@ import {
   payrollResult,
   usingRowsSummary,
   willBeCreatedOn,
+  workbookOverviewLines,
 } from "./paneText.js";
 import { kindTitle, plannedSheetName } from "./outcome.js";
 import {
@@ -937,10 +938,12 @@ function updateRunButtonState(): void {
   smartRun.dataset.gateReason = gate.reason;
   smartRun.setAttribute("aria-disabled", String(!gate.enabled));
   smartRun.setAttribute("aria-describedby", "run-gate");
-  smartRun.title = gate.message;
+  smartRun.title = localizeMessage(language, gate.message);
   if (runGateMessage) {
     runGateMessage.hidden = gate.enabled;
-    runGateMessage.textContent = gate.enabled ? "" : gate.message;
+    runGateMessage.textContent = gate.enabled
+      ? ""
+      : localizeMessage(language, gate.message);
     runGateMessage.dataset.reason = gate.reason;
   }
 }
@@ -4115,19 +4118,7 @@ overviewButton?.addEventListener("click", async () => {
     const overview = await log.step("excel:overview", () =>
       inspectWorkbookOverview(officeRuntime()),
     );
-    const lines = [
-      `${overview.sheets.length} sheet(s): ${overview.sheets
-        .map((sheet) => `${sheet.name} (${sheet.rows}×${sheet.columns})`)
-        .join(", ")}.`,
-      overview.tables.length
-        ? `${overview.tables.length} table(s): ${overview.tables
-            .map(
-              (table) =>
-                `${table.name} on ${table.sheet} (${table.rows}×${table.columns})`,
-            )
-            .join(", ")}.`
-        : "No Excel tables.",
-    ];
+    const lines = workbookOverviewLines(overview, language);
     showAnswer(lines.join(" "));
     setStatus("Workbook overview ready. Only names and sizes were read.");
   } catch (error) {
@@ -4141,6 +4132,7 @@ function refreshLanguage() {
   applyLanguage(document, language);
   document.documentElement.lang = language;
   for (const hook of languageHooks) hook();
+  updateRunButtonState();
   renderConversationHistory();
   renderResultGallery();
   const previewNode = document.querySelector<HTMLElement>("#preview");
@@ -4373,7 +4365,10 @@ function renderWorkspaceContext(
 }
 
 /** Data-driven suggestion cards for the empty chat: a click fills the input and never runs. */
+let lastIdleCards: ReturnType<typeof idleSuggestions> = [];
+languageHooks.push(() => renderIdleCards(lastIdleCards));
 function renderIdleCards(list: ReturnType<typeof idleSuggestions>) {
+  lastIdleCards = list;
   const host = document.querySelector<HTMLElement>("#idle-cards");
   if (!host) return;
   host.replaceChildren(
@@ -4387,9 +4382,9 @@ function renderIdleCards(list: ReturnType<typeof idleSuggestions>) {
       icon.textContent = item.icon;
       const text = document.createElement("span");
       const title = document.createElement("b");
-      title.textContent = item.title;
+      title.textContent = localizeMessage(language, item.title);
       const hint = document.createElement("small");
-      hint.textContent = item.hint;
+      hint.textContent = localizeMessage(language, item.hint);
       text.append(title, hint);
       button.append(icon, text);
       button.addEventListener("click", () => {
@@ -4957,7 +4952,7 @@ function refreshAgentChecked() {
   agentChecked.dataset.state = line.state;
   const detail = line.detail;
   agentCheckedText.textContent =
-    `${localizeMessage(language, line.prefix)}${detail ? ` ${detail}` : ""}`.trim();
+    `${localizeMessage(language, line.prefix)}${detail ? ` ${localizeMessage(language, detail)}` : ""}`.trim();
   if (agentChecksDetails) {
     if (line.state === "warn") agentChecksDetails.open = true;
     else if (line.state === "ok") agentChecksDetails.open = false;

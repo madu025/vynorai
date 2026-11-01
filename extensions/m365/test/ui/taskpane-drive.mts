@@ -11,6 +11,8 @@
  * Run (after `npm run build`):  npx tsx test/ui/taskpane-drive.mts
  * Needs playwright-core and a chromium; see the paths below. Exit code 1 when a check fails.
  * Options (env): M365_DRIVE_LANGS=en,si,ta  M365_DRIVE_WIDTHS=320,480  M365_DRIVE_SHOTS=<dir>
+ *   M365_DRIVE_ONLY=agent,share (home, ideas, agent, doublerun, previewcancel, share, switch)
+ *   M365_UI_CHROME_PATH=<chrome binary>
  */
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -234,10 +236,10 @@ interface Pane {
 
 async function openPane(
   browser: any,
-  options: { lang: Lang; width: number; consent?: boolean; runMode?: "agent" | "smart" | "local"; selection?: { sheet: string; address: string } },
+  options: { lang: Lang; width: number; height?: number; consent?: boolean; runMode?: "agent" | "smart" | "local"; selection?: { sheet: string; address: string } },
 ): Promise<Pane> {
   const context = await browser.newContext({
-    viewport: { width: options.width, height: 820 },
+    viewport: { width: options.width, height: options.height ?? 820 },
     permissions: ["clipboard-read", "clipboard-write"],
   });
   await context.addInitScript("window.__name = (f) => f;"); // tsx wraps named functions with __name
@@ -277,12 +279,34 @@ async function openPane(
   await page.route((url: URL) => !url.href.startsWith(BASE) && url.href !== OFFICE_URL, (route: any) => route.abort());
   await page.goto(`${BASE}/taskpane.html`);
   await page.waitForFunction(
-    () => document.body.dataset.auth === "in" && !(document.querySelector("#smart-run") as HTMLButtonElement | null)?.disabled,
+    () => {
+      // Run stays disabled with reason "request_required" until the person types; that is a ready pane.
+      const run = document.querySelector("#smart-run") as HTMLButtonElement | null;
+      return document.body.dataset.auth === "in" && Boolean(run) && (!run!.disabled || run!.dataset.gateReason === "request_required");
+    },
     undefined,
     { timeout: 10_000 },
   );
   await page.waitForFunction(() => (document.querySelector("#selection-text")?.textContent ?? "").trim() !== "", undefined, { timeout: 10_000 });
   return { page, errors, lang: options.lang, width: options.width };
+}
+
+// A real pane is short (Excel on the web: about 600 px). While a plan or preview is open the scroll area
+// must keep a usable share of the viewport, or the person cannot see the plan and its buttons.
+const PANE_HEIGHT = 640;
+const MIN_SCROLL_SHARE = 0.45;
+async function checkScrollAreaHeight(pane: Pane, what: string) {
+  const m = await pane.page.evaluate(() => {
+    const sa = document.querySelector("#scroll-area") as HTMLElement;
+    // The Approve/Discard bar is pinned at the bottom of the scroll area and covers part of it.
+    const dock = [...sa.querySelectorAll<HTMLElement>(".apply-dock")].find((d) => d.getClientRects().length > 0);
+    const dockHeight = dock ? dock.getBoundingClientRect().height + 6 : 0;
+    const height = Math.round(sa.getBoundingClientRect().height - dockHeight);
+    return { height, viewport: window.innerHeight, scrollWidth: document.documentElement.scrollWidth };
+  });
+  note(`room to read ${what}: ${m.height}px of ${m.viewport}px (${Math.round((100 * m.height) / m.viewport)}%)`);
+  check(m.height >= MIN_SCROLL_SHARE * m.viewport, `only ${m.height}px of ${m.viewport}px left to read ${what} (need ${Math.round(MIN_SCROLL_SHARE * m.viewport)}px)`);
+  check(m.scrollWidth <= pane.width, `horizontal scroll ${m.scrollWidth}px with ${what}`);
 }
 
 async function tab(pane: Pane, name: "work" | "results" | "share" | "explore") {
@@ -654,7 +678,7 @@ async function flowIdeas(browser: any, lang: Lang, width: number) {
 
 async function flowAgent(browser: any, lang: Lang, width: number) {
   scope = `agent ${lang}/${width}`;
-  const pane = await openPane(browser, { lang, width });
+  const pane = await openPane(browser, { lang, width, height: PANE_HEIGHT });
   const { page } = pane;
   calls.length = 0;
   await tab(pane, "work");
@@ -673,6 +697,7 @@ async function flowAgent(browser: any, lang: Lang, width: number) {
   const roles = await page.evaluate(() => [...document.querySelectorAll("#agent-activity-list [data-agent-role]")].map((row) => `${(row as HTMLElement).dataset.agentRole}=${(row as HTMLElement).dataset.state}:${row.querySelector(".agent-role-status")?.textContent}`));
   note(`roles at preview: ${roles.join(" | ")}`);
   await audit(pane, "agent-preview");
+  await checkScrollAreaHeight(pane, "agent plan and preview");
   await shot(pane, "agent-preview");
   const sheetsBefore: string[] = await page.evaluate(() => (window as any).__xl.sheetNames());
   check(!sheetsBefore.includes(STAGE_SHEET), "nothing may be written before Approve");
@@ -946,6 +971,18 @@ async function flowStatus(pane: Pane) {
   await pane.page.keyboard.press("Escape");
 }
 
+// A flow that throws (a selector never shows up) is recorded as a failure; the other flows still run.
+async function guard(name: string, run: () => Promise<void>) {
+  try {
+    await run();
+  } catch (error) {
+    failures.push(`[${scope}] ${name} threw: ${String((error as Error).message).split("\n")[0]}`);
+  }
+}
+
+const ONLY = process.env.M365_DRIVE_ONLY?.split(",");
+const wanted = (name: string) => !ONLY || ONLY.includes(name);
+
 // --- main ----------------------------------------------------------------------------------------------
 
 const browser = await chromium.launch({ executablePath: process.env.M365_UI_CHROME_PATH || "/opt/pw-browsers/chromium", args: ["--no-sandbox"] }).catch(async () =>
@@ -954,26 +991,28 @@ const browser = await chromium.launch({ executablePath: process.env.M365_UI_CHRO
 try {
   for (const width of WIDTHS) {
     for (const lang of LANGS) {
-      const pane = await openPane(browser, { lang, width, consent: true });
-      scope = `home ${lang}/${width}`;
-      await audit(pane, "home");
-      await shot(pane, "home");
-      await runtimeErrors(pane, "start");
-      await flowStatus(pane);
-      await flowTabs(pane);
-      await flowNoticed(pane);
-      await flowExplore(pane);
-      await runtimeErrors(pane, "explore+tabs");
-      const misses: string[] = await pane.page.evaluate(() => [...(window as any).__xl.misses]);
-      for (const miss of misses) note(`stub did not model ${miss}`);
-      await pane.page.context().close();
-      await flowIdeas(browser, lang, width);
-      await flowAgent(browser, lang, width);
-      await flowDoubleRun(browser, lang, width);
-      await flowPreviewCancel(browser, lang, width);
-      await flowShare(browser, lang, width);
+      if (wanted("home")) {
+        const pane = await openPane(browser, { lang, width, consent: true });
+        scope = `home ${lang}/${width}`;
+        await audit(pane, "home");
+        await shot(pane, "home");
+        await runtimeErrors(pane, "start");
+        await flowStatus(pane);
+        await flowTabs(pane);
+        await flowNoticed(pane);
+        await flowExplore(pane);
+        await runtimeErrors(pane, "explore+tabs");
+        const misses: string[] = await pane.page.evaluate(() => [...(window as any).__xl.misses]);
+        for (const miss of misses) note(`stub did not model ${miss}`);
+        await pane.page.context().close();
+      }
+      if (wanted("ideas")) await guard("flowIdeas", () => flowIdeas(browser, lang, width));
+      if (wanted("agent")) await guard("flowAgent", () => flowAgent(browser, lang, width));
+      if (wanted("doublerun")) await guard("flowDoubleRun", () => flowDoubleRun(browser, lang, width));
+      if (wanted("previewcancel")) await guard("flowPreviewCancel", () => flowPreviewCancel(browser, lang, width));
+      if (wanted("share")) await guard("flowShare", () => flowShare(browser, lang, width));
     }
-    await flowLanguageSwitch(browser, width);
+    if (wanted("switch")) await guard("flowLanguageSwitch", () => flowLanguageSwitch(browser, width));
   }
 } finally {
   await browser.close();

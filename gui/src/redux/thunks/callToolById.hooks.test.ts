@@ -3,7 +3,10 @@ import { createMockStore } from "../../util/test/mockStore";
 import { callToolById } from "./callToolById";
 import { getRootStateWithClaude } from "../../util/test/rootStateWithClaude";
 
-function storeWithPendingTool() {
+function storeWithPendingTool(
+  toolName = "read_file",
+  args: Record<string, unknown> = { filepath: "a.ts" },
+) {
   const root = getRootStateWithClaude();
   const store = createMockStore({
     ...root,
@@ -23,13 +26,13 @@ function storeWithPendingTool() {
             {
               toolCallId: "t1",
               status: "generated",
-              parsedArgs: { filepath: "a.ts" },
+              parsedArgs: args,
               toolCall: {
                 id: "t1",
                 type: "function",
                 function: {
-                  name: "read_file",
-                  arguments: '{"filepath":"a.ts"}',
+                  name: toolName,
+                  arguments: JSON.stringify(args),
                 },
               },
             },
@@ -132,5 +135,42 @@ describe("callToolById lifecycle hooks", () => {
     await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
 
     expect(calls.find(([type]) => type === "tools/call")?.[2]).toBe(120_000);
+  });
+});
+
+describe("SubagentStop hook", () => {
+  it("fires after a run_subagent tool call with its id and type, and does not block", async () => {
+    const { store, hookCalls } = storeWithPendingTool("run_subagent", {
+      prompt: "find x",
+      agent: "reviewer",
+    });
+    store.mockIdeMessenger.responseHandlers["hooks/run"] = async (
+      payload: any,
+    ) => {
+      hookCalls.push(payload);
+      return payload.event === "SubagentStop"
+        ? { blocked: true, reason: "ignored", warnings: [], ran: 1 }
+        : { blocked: false, warnings: [], ran: 0 };
+    };
+    await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
+    const stop = hookCalls.find((p) => p.event === "SubagentStop");
+    expect(stop).toMatchObject({
+      sessionId: "s1",
+      subagentId: "t1",
+      subagentType: "reviewer",
+    });
+    expect(toolOutput(store)).toContain("export const a = 1;");
+  });
+
+  it("does not fire for ordinary tools", async () => {
+    const { store, hookCalls } = storeWithPendingTool();
+    store.mockIdeMessenger.responseHandlers["hooks/run"] = async (
+      payload: any,
+    ) => {
+      hookCalls.push(payload);
+      return { blocked: false, warnings: [], ran: 0 };
+    };
+    await (store.dispatch as any)(callToolById({ toolCallId: "t1" }));
+    expect(hookCalls.some((p) => p.event === "SubagentStop")).toBe(false);
   });
 });

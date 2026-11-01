@@ -3,7 +3,7 @@ import { createAsyncThunk, unwrapResult } from "@reduxjs/toolkit";
 import { LLMFullCompletionOptions, ModelDescription } from "core";
 import { renderChatMessage } from "core/util/messageContent";
 import { v4 as uuidv4 } from "uuid";
-import { runHooks } from "../util/hooks";
+import { runHooks, runSessionStartHook } from "../util/hooks";
 import { countTokens } from "../../util/tokenCount";
 import { getRuleId } from "core/llm/rules/getSystemMessageWithRules";
 import { ToCoreProtocol } from "core/protocol";
@@ -435,6 +435,15 @@ export const streamNormalInput = createAsyncThunk<
     let promptHistory = state.session.history;
     let scopeAssessment: TaskScopeAssessment | undefined;
     if (depth === 0 && !resumeTaskId && latestUserPrompt) {
+      // SessionStart hooks: once per conversation, on its first user turn
+      // (no assistant message yet). Never blocks; stdout joins the hook
+      // context of this first prompt.
+      const isFirstTurn = !state.session.history.some(
+        (item) => item.message.role === "assistant",
+      );
+      const sessionContext = isFirstTurn
+        ? await runSessionStartHook(extra.ideMessenger, state.session.id)
+        : undefined;
       const promptHook = await runHooks(extra.ideMessenger, {
         event: "UserPromptSubmit",
         sessionId: state.session.id,
@@ -445,7 +454,10 @@ export const streamNormalInput = createAsyncThunk<
           `Blocked by a UserPromptSubmit hook: ${promptHook.reason}`,
         );
       }
-      if (promptHook.context) {
+      const hookContext = [sessionContext, promptHook.context]
+        .filter(Boolean)
+        .join("\n\n");
+      if (hookContext) {
         const index = state.session.history.findIndex(
           (item) => item.message.id === latestUserPrompt.message.id,
         );
@@ -459,7 +471,7 @@ export const streamNormalInput = createAsyncThunk<
                   id: { providerTitle: "hook", itemId: uuidv4() },
                   name: "Hook context",
                   description: "UserPromptSubmit hook",
-                  content: promptHook.context,
+                  content: hookContext,
                 },
               ],
             },

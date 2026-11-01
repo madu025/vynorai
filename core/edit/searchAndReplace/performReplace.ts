@@ -1,6 +1,7 @@
 import { EditOperation } from "../../tools/definitions/multiEdit";
 import { ContinueError, ContinueErrorReason } from "../../util/errors";
 import { SearchMatchResult, findSearchMatches } from "./findSearchMatch";
+import { findNearestMatch, truncateForEcho } from "./nearestMatch";
 
 /**
  * Get the leading whitespace of the first non-empty line in a string.
@@ -92,9 +93,13 @@ export function executeFindAndReplace(
   const matches = findSearchMatches(fileContent, oldString);
 
   if (matches.length === 0) {
+    const nearest = findNearestMatch(fileContent, oldString);
+    const hint = nearest
+      ? ` The closest block in the file is at lines ${nearest.startLine}-${nearest.endLine} (nothing was changed). Copy old_string exactly from these lines (the "N: " line numbers are not part of the file):\n${nearest.snippet}\n`
+      : " ";
     throw new ContinueError(
       ContinueErrorReason.FindAndReplaceOldStringNotFound,
-      `Edit at index ${editIndex}: string not found in the latest file contents. No edits from this multi_edit call were applied. Re-read the file, then retry only this edit with a smaller exact old_string and enough surrounding context to make it unique. old_string: "${oldString}"`,
+      `Edit at index ${editIndex}: string not found in the latest file contents. No edits from this multi_edit call were applied. Re-read the file, then retry only this edit with a smaller exact old_string and enough surrounding context to make it unique.${hint}old_string: "${truncateForEcho(oldString)}"`,
     );
   }
 

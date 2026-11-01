@@ -18,7 +18,7 @@ import {
 } from "../services/billingDb.js";
 import { authRateLimiter } from "../middleware/security.js";
 import { describeError } from "../services/httpHygiene.js";
-import { dbTimestampMs } from "../db.js";
+import { dbTimestampMs, dbTimestampParam } from "../db.js";
 import {
   rotateUserApiKey,
   windowCount,
@@ -1327,7 +1327,7 @@ authRouter.get("/export", requireAuth, async (req: Request, res: Response) => {
       .status(403)
       .json({ error: "Sign in on vynor.lk to download your data." });
   const user = (req as any).user;
-  const since = new Date(Date.now() - 365 * 86400_000).toISOString();
+  const since = dbTimestampParam(Date.now() - 365 * 86400_000);
   const [
     account,
     subscriptions,

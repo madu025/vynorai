@@ -247,8 +247,8 @@ function drawNextSteps(
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "next-step";
-    chip.textContent = step.label;
-    chip.title = step.full ?? step.text;
+    chip.textContent = localizeMessage(language, step.label);
+    chip.title = localizeMessage(language, step.full ?? step.text);
     chip.addEventListener("click", () => {
       if (!instruction) return;
       instruction.value = step.text;

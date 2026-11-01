@@ -311,12 +311,12 @@ export function showChangeList(
       const li = document.createElement("li");
       const line = document.createElement("span");
       write(line, shortChange(change, full));
-      li.title = full;
+      li.title = localize(full);
       li.append(line);
       const details = document.createElement("details");
       details.className = "change-full";
       const summary = document.createElement("summary");
-      summary.textContent = "Details";
+      summary.textContent = localize("Details");
       const text = document.createElement("p");
       write(text, full);
       details.append(summary, text);

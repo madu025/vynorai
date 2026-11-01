@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Readable } from "stream";
 import { v4 as uuidv4 } from "uuid";
 import { getPlan } from "../config.js";
-import { dbTimestampMs } from "../db.js";
+import { dbTimestampMs, dbTimestampParam } from "../db.js";
 import {
   billingAll as dbAll,
   billingGet as dbGet,
@@ -126,7 +126,7 @@ export async function getBackgroundEntitlement(userId: string) {
   periodStart.setUTCHours(0, 0, 0, 0);
   const usage = await dbGet<{ count: number }>(
     "SELECT COUNT(*) AS count FROM background_tasks WHERE user_id = ? AND created_at >= ?",
-    [userId, periodStart.toISOString()],
+    [userId, dbTimestampParam(periodStart)],
   );
   const running = await dbGet<{ count: number }>(
     `SELECT COUNT(*) AS count FROM background_tasks WHERE user_id = ? AND status IN (${ACTIVE_STATUSES.map(() => "?").join(",")})`,
@@ -164,7 +164,7 @@ export async function createBackgroundTask(
 export async function reconcileExpiredBackgroundUploads(
   now = Date.now(),
 ): Promise<number> {
-  const cutoff = new Date(now - 30 * 60_000).toISOString();
+  const cutoff = dbTimestampParam(now - 30 * 60_000);
   const rows = await dbAll<TaskRow>(
     "SELECT * FROM background_tasks WHERE status = 'awaiting_upload' AND created_at < ? LIMIT 100",
     [cutoff],

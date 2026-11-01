@@ -7,6 +7,42 @@
 import { localizeAction } from "./messagesActions.js";
 
 const EXACT: Record<string, string> = {
+  // Added from the pane drive test: run-time text that was still English.
+  "Checked · your original data is not changed":
+    "சரிபார்க்கப்பட்டது · உங்கள் அசல் தரவு மாறவில்லை",
+  "Check needed:": "சரிபார்ப்பு தேவை:",
+  "stopped before it finished": "முடிவதற்கு முன் நிறுத்தப்பட்டது",
+  Failed: "தோல்வி",
+  Details: "விவரங்கள்",
+  "Answered here, nothing is changed":
+    "இங்கேயே பதில் கிடைக்கும், எதுவும் மாறாது",
+  "Shows the blanks first, you pick the value":
+    "முதலில் வெற்றுக் கலங்களைக் காட்டும், மதிப்பை நீங்கள் தேர்வு செய்யுங்கள்",
+  "Inspect formulas": "சூத்திரங்களைச் சரிபார்க்கவும்",
+  "Check formulas and errors in this table":
+    "இந்த அட்டவணையில் சூத்திரங்களையும் பிழைகளையும் சரிபார்க்கவும்",
+  "Check data quality": "தரவின் தரத்தைச் சரிபார்க்கவும்",
+  "Blanks, duplicates and odd values":
+    "வெற்றுக் கலங்கள், நகல்கள் மற்றும் வித்தியாசமான மதிப்புகள்",
+  "Total, average, smallest and largest":
+    "மொத்தம், சராசரி, குறைந்தது மற்றும் அதிகமானது",
+  "(Excel could not write the cells.)": "(Excel கலங்களில் எழுத முடியவில்லை.)",
+  "Sign in to use VynorAI with Excel.":
+    "Excel உடன் VynorAI-ஐப் பயன்படுத்த உள்நுழையவும்.",
+  "Select a rectangular Excel range first.":
+    "முதலில் Excel-இல் செவ்வக வரம்பைத் தேர்ந்தெடுக்கவும்.",
+  "A request is already running. Wait or cancel it first.":
+    "ஒரு கோரிக்கை ஏற்கனவே இயங்குகிறது. முதலில் காத்திருக்கவும் அல்லது அதை ரத்து செய்யவும்.",
+  "Waiting for Excel and account capabilities.":
+    "Excel மற்றும் கணக்கின் திறன்களுக்காகக் காத்திருக்கிறது.",
+  "Your VynorAI Excel trial credits are exhausted. Add credits or upgrade the plan, then refresh capabilities.":
+    "உங்கள் VynorAI Excel சோதனை credits தீர்ந்துவிட்டன. credits சேர்க்கவும் அல்லது திட்டத்தை மேம்படுத்தவும், பிறகு திறன்களைப் புதுப்பிக்கவும்.",
+  "Excel preview is unavailable. Reconnect VynorAI or check Diagnostics.":
+    "Excel முன்னோட்டம் தற்போது கிடைக்கவில்லை. VynorAI-ஐ மீண்டும் இணைக்கவும் அல்லது Diagnostics-ஐப் பார்க்கவும்.",
+  "Agent workflow is unavailable for this account. Use Local preview.":
+    "இந்தக் கணக்குக்கு முகவர் பணிப்பாய்வு இல்லை. உள்ளூர் முன்னோட்டத்தைப் பயன்படுத்தவும்.",
+  "The agent sends your request, the column names and small samples of the cells it reads (at most 50 rows at a time) to the VynorAI AI service. Personal data such as e-mail addresses and phone numbers is replaced before anything leaves this workbook. Nothing changes until you approve.":
+    "முகவர் உங்கள் கோரிக்கை, நெடுவரிசை பெயர்கள் மற்றும் அது படிக்கும் கலங்களின் சிறிய மாதிரிகளை (ஒரு நேரத்தில் அதிகபட்சம் 50 வரிசைகள்) VynorAI AI சேவைக்கு அனுப்பும். மின்னஞ்சல் முகவரிகள், தொலைபேசி எண்கள் போன்ற தனிப்பட்ட தரவு இந்த workbook-ஐ விட்டு வெளியேறும் முன் மாற்றப்படும். நீங்கள் ஒப்புதல் அளிக்கும் வரை எதுவும் மாறாது.",
   "Sign in to refresh capabilities.":
     "திறன்களைப் புதுப்பிக்க முதலில் உள்நுழையவும்.",
   "Refreshing Excel capability report...":
@@ -470,6 +506,37 @@ function tail(rest: string): string {
 type Template = [RegExp, (...groups: string[]) => string];
 
 const TEMPLATES: Template[] = [
+  // Suggestion cards and plan lines the pane builds from the person's own column names.
+  [/^Total (.+) by (.+)$/, (m, g) => `${g} வாரியாக ${m} மொத்தம்`],
+  [/^Find duplicate (.+)$/, (c) => `நகல் ${c}-ஐக் கண்டறியவும்`],
+  [
+    /^Checks the (.+) column for repeats$/,
+    (c) => `${c} நெடுவரிசையில் மீண்டும் வருவதைச் சரிபார்க்கும்`,
+  ],
+  [
+    /^Fill blank cells in (.+)$/,
+    (c) => `${c} நெடுவரிசையில் வெற்றுக் கலங்களை நிரப்பவும்`,
+  ],
+  [/^(.+) over time$/, (m) => `காலப்போக்கில் ${m}`],
+  [
+    /^By (.+), as a chart preview$/,
+    (d) => `${d} அடிப்படையில், வரைபட முன்னோட்டமாக`,
+  ],
+  [/^Summarize (.+)$/, (m) => `${m}-ஐச் சுருக்கவும்`],
+  [
+    /^Bring (.+) from (.+)$/,
+    (c, s) => `${s} தாளிலிருந்து ${c}-ஐக் கொண்டு வரவும்`,
+  ],
+  [
+    /^Matched by (.+), on a new sheet$/,
+    (k) => `${k} மூலம் பொருத்தப்படும், புதிய தாளில்`,
+  ],
+  [/^Create sheet (.+)$/, (s) => `${s} தாளை உருவாக்கவும்`],
+  [/^Write values in (.+)$/, (s) => `${s} தாளில் மதிப்புகளை எழுதவும்`],
+  [
+    /^Write (\d+) x (\d+) values from (.+)$/,
+    (r, c, s) => `${s} இலிருந்து ${r} x ${c} மதிப்புகளை எழுதவும்`,
+  ],
   [
     /^dates in (.+) are stored as text$/,
     (c) => `${c} இல் தேதிகள் உரையாகச் சேமிக்கப்பட்டுள்ளன`,

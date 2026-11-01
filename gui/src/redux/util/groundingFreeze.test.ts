@@ -63,6 +63,26 @@ describe("grounding block is stable across rounds (cache-safe)", () => {
     expect(later).toBe(first);
   });
 
+  it("freezes the git text once per conversation, even when the git output changes", () => {
+    const withGit = (changed: string[], recent: string[]) =>
+      snapshot({
+        roots: [
+          {
+            id: "r1",
+            name: "app",
+            branch: "main",
+            git: { changed, changedTotal: changed.length, recent },
+          },
+        ],
+      });
+    const first = block("s2", withGit(["M a.ts"], ["a1b2c3d one"]));
+    const second = block("s2", withGit(["M b.ts", "?? c.ts"], ["e5f6a7b two"]));
+    expect(second).toBe(first);
+    expect(first).toContain("M a.ts");
+    // a new conversation takes a fresh reading
+    expect(block("s3", withGit(["M b.ts"], []))).toContain("M b.ts");
+  });
+
   it("still follows things that matter: trust, open folders and index ready", () => {
     const first = block("s1", snapshot());
     const untrusted = block("s1", snapshot({ trusted: false }));

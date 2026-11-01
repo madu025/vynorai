@@ -2,7 +2,9 @@ import { fileURLToPath } from "node:url";
 import type { IDE } from "..";
 import type { GitState } from "./types";
 
-const MAX_CHANGED = 15;
+const MAX_CHANGED = 20;
+const SUBJECT_MAX = 80;
+const HASH_LEN = 7;
 const MAX_RECENT = 5;
 const TIMEOUT_MS = 2_000;
 const CACHE_MS = 20_000;
@@ -36,6 +38,18 @@ function unquote(path: string): string {
   return path;
 }
 
+/** `hash subject`: 7-character hash, subject cut at 80 characters. */
+function formatCommit(line: string): string {
+  const space = line.indexOf(" ");
+  const hash = (space < 0 ? line : line.slice(0, space)).slice(0, HASH_LEN);
+  const subject = space < 0 ? "" : line.slice(space + 1).trim();
+  const cut =
+    subject.length > SUBJECT_MAX
+      ? `${subject.slice(0, SUBJECT_MAX)}…`
+      : subject;
+  return cut ? `${hash} ${cut}` : hash;
+}
+
 export function parseGitState(status: string, log: string): GitState {
   const entries = status
     .split("\n")
@@ -57,14 +71,10 @@ export function parseGitState(status: string, log: string): GitState {
       ),
     recent: log
       .split("\n")
-      .map((line) =>
-        line
-          .replace(/[\u0000-\u001f]/g, " ")
-          .trim()
-          .slice(0, 120),
-      )
+      .map((line) => line.replace(/[\u0000-\u001f]/g, " ").trim())
       .filter(Boolean)
-      .slice(0, MAX_RECENT),
+      .slice(0, MAX_RECENT)
+      .map(formatCommit),
   };
 }
 

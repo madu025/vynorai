@@ -85,8 +85,61 @@ describe("parseGitState", () => {
     ].join("\n");
     const state = parseGitState(status, "");
     expect(state.changed[0]).toBe("R new.ts");
-    expect(state.changed).toHaveLength(15);
+    expect(state.changed).toHaveLength(20);
     expect(state.changedTotal).toBe(21);
+  });
+});
+
+describe("G6b caps and formatting", () => {
+  it("caps the list at 20 and still counts every file", () => {
+    const status = Array.from({ length: 27 }, (_, i) => ` M f${i}.ts`).join(
+      "\n",
+    );
+    const state = parseGitState(status, "");
+    expect(state.changed).toHaveLength(20);
+    expect(state.changedTotal).toBe(27);
+  });
+
+  it("formats commits as a 7-char hash and a subject cut at 80 chars", () => {
+    const long = "x".repeat(100);
+    const state = parseGitState("", `abcdef0123 ${long}\n1234567 short one`);
+    expect(state.recent[0]).toBe(`abcdef0 ${"x".repeat(80)}…`);
+    expect(state.recent[1]).toBe("1234567 short one");
+    const exact = parseGitState("", `abcdef0 ${"y".repeat(80)}`);
+    expect(exact.recent[0]).toBe(`abcdef0 ${"y".repeat(80)}`);
+  });
+
+  it("reads a detached HEAD and a repository without commits", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vynor-detached-"));
+    try {
+      const g = (...a: string[]) =>
+        execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+      g("init", "-q");
+      g("config", "user.email", "t@example.com");
+      g("config", "user.name", "Test");
+      const empty = await readGitState(ide, pathToFileURL(dir).href);
+      expect(empty?.recent).toEqual([]);
+      fs.writeFileSync(path.join(dir, "a.txt"), "1\n");
+      g("add", ".");
+      g("commit", "-q", "-m", "one");
+      g("checkout", "-q", "--detach");
+      resetGitStateCacheForTests();
+      const state = await readGitState(ide, pathToFileURL(dir).href);
+      expect(state?.recent[0]).toMatch(/^[0-9a-f]{7} one$/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("is undefined when git fails", async () => {
+    const failing = {
+      subprocess: async () => {
+        throw new Error("git: not found");
+      },
+    } as any;
+    expect(
+      await readGitState(failing, pathToFileURL(repo).href),
+    ).toBeUndefined();
   });
 });
 

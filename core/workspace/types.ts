@@ -11,11 +11,11 @@ export type WorkspaceIndexState =
 
 /** Working-tree state of a git root: relative paths only, capped. */
 export interface GitState {
-  /** `XY path` lines from `git status --porcelain`, at most 15, secrets omitted. */
+  /** `XY path` lines from `git status --porcelain`, at most 20, secrets omitted. */
   changed: string[];
   /** All changed files, including the ones not listed. */
   changedTotal: number;
-  /** `hash subject` of the latest commits. */
+  /** `hash subject` of the latest commits: 7-char hash, subject cut at 80 chars. */
   recent: string[];
 }
 

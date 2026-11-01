@@ -6,6 +6,11 @@ import { defineConfig } from "vitest/config";
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    // Shared core files use Node's crypto (Node 18 has no globalThis.crypto); the webview gets
+    // a browser version instead of Vite's empty stub, which made the build fail.
+    alias: { crypto: resolve(__dirname, "src/util/browserCrypto.ts") },
+  },
   build: {
     sourcemap: true,
 

@@ -815,7 +815,9 @@ export async function applyAgentChanges(
                   typeof value === "string" && /^#[A-Z/0!?]+/.test(value),
               ),
               ...(readBack.verified ? [] : ["#READ_BACK_VERIFICATION_FAILED"]),
-              ...(health?.warning && !health.errors ? ["#MOSTLY_NOT_FOUND"] : []),
+              ...(health?.warning && !health.errors
+                ? ["#MOSTLY_NOT_FOUND"]
+                : []),
             ],
             ...(health?.warning ? { resultHealth: health.warning } : {}),
             verification: readBack.verified ? "verified" : "failed",

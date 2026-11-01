@@ -5835,7 +5835,8 @@ agentApprove?.addEventListener("click", async () => {
   const resultChecks = report.results
     .map((result) =>
       result.status === "applied"
-        ? (result.detail as { resultHealth?: unknown } | undefined)?.resultHealth
+        ? (result.detail as { resultHealth?: unknown } | undefined)
+            ?.resultHealth
         : undefined,
     )
     .filter((line): line is string => typeof line === "string");

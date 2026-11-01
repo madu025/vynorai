@@ -25,7 +25,8 @@ test("a few unmatched rows in a good join are not a warning", () => {
 
 test("30% or more not found is a warning; numbers and blanks are fine", () => {
   assert.match(
-    formulaResultHealth(["Not found", "not found", "No match", "N/A", 12, ""]).warning ?? "",
+    formulaResultHealth(["Not found", "not found", "No match", "N/A", 12, ""])
+      .warning ?? "",
     /4 of 6/,
   );
   assert.equal(formulaResultHealth([1, 2, 3, "", "East"]).warning, undefined);
@@ -38,11 +39,17 @@ test("two cells that both missed are reported; one of two is not", () => {
 });
 
 test("a text that only starts like a word is not a miss", () => {
-  assert.equal(formulaResultHealth(Array(10).fill("Missing invoice paid")).warning, undefined);
+  assert.equal(
+    formulaResultHealth(Array(10).fill("Missing invoice paid")).warning,
+    undefined,
+  );
 });
 
 test("the not-found limit is 30%, the same as the check before review", () => {
-  const rows = (misses: number) => [...Array(10 - misses).fill("East"), ...Array(misses).fill("Not found")];
+  const rows = (misses: number) => [
+    ...Array(10 - misses).fill("East"),
+    ...Array(misses).fill("Not found"),
+  ];
   assert.ok(formulaResultHealth(rows(3)).warning);
   assert.equal(formulaResultHealth(rows(2)).warning, undefined);
 });

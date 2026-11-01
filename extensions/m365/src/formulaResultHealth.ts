@@ -13,8 +13,10 @@ const MIN_ROWS_FOR_SHARE = 5;
 /** Share of "not found" results above which the join is reported as probably wrong (as in resultCheck.ts). */
 const MISS_SHARE_LIMIT = 0.3;
 
-const ERROR = /^#(?:SPILL!|N\/A|REF!|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!|CALC!|FIELD!|BUSY!|BLOCKED!|CONNECT!|UNKNOWN!|GETTING_DATA)/;
-const MISS = /^(?:not\s*found|no\s*match|missing|n\/a|none found|not\s*in\s*list)$/i;
+const ERROR =
+  /^#(?:SPILL!|N\/A|REF!|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!|CALC!|FIELD!|BUSY!|BLOCKED!|CONNECT!|UNKNOWN!|GETTING_DATA)/;
+const MISS =
+  /^(?:not\s*found|no\s*match|missing|n\/a|none found|not\s*in\s*list)$/i;
 
 export interface FormulaResultHealth {
   checked: number;
@@ -26,7 +28,9 @@ export interface FormulaResultHealth {
   warning?: string;
 }
 
-export function formulaResultHealth(values: readonly unknown[]): FormulaResultHealth {
+export function formulaResultHealth(
+  values: readonly unknown[],
+): FormulaResultHealth {
   const cells = values.slice(0, HEALTH_MAX_ROWS);
   let errors = 0;
   let misses = 0;

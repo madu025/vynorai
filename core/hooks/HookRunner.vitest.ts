@@ -232,7 +232,7 @@ describe("project hooks", () => {
   });
 });
 
-describe("SessionStart, PreCompact and SubagentStop", () => {
+describe("SessionStart, PreCompact, SubagentStop and Notification", () => {
   const ECHO_PAYLOAD = node(
     "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{process.stdout.write(s)})",
   );
@@ -244,6 +244,7 @@ describe("SessionStart, PreCompact and SubagentStop", () => {
           SessionStart: [{ command: "a" }],
           PreCompact: [{ hooks: [{ type: "command", command: "b" }] }],
           SubagentStop: [{ command: "c", timeout: 5 }],
+          Notification: [{ command: "d" }],
         },
       },
       "user",
@@ -251,6 +252,7 @@ describe("SessionStart, PreCompact and SubagentStop", () => {
     expect(config.SessionStart.map((c) => c.command)).toEqual(["a"]);
     expect(config.PreCompact.map((c) => c.command)).toEqual(["b"]);
     expect(config.SubagentStop[0].timeoutSeconds).toBe(5);
+    expect(config.Notification.map((c) => c.command)).toEqual(["d"]);
     expect(config.Stop).toEqual([]);
   });
 
@@ -260,6 +262,7 @@ describe("SessionStart, PreCompact and SubagentStop", () => {
       "SessionStart",
       "PreCompact",
       "SubagentStop",
+      "Notification",
     ] as const) {
       const result = await runner().run({ event, sessionId: "s1" });
       expect(result).toEqual({ blocked: false, warnings: [], ran: 0 });
@@ -270,6 +273,7 @@ describe("SessionStart, PreCompact and SubagentStop", () => {
     writeHooks(globalDir, {
       PreCompact: [{ command: ECHO_PAYLOAD }],
       SubagentStop: [{ command: ECHO_PAYLOAD }],
+      Notification: [{ command: ECHO_PAYLOAD }],
       SessionStart: [{ command: ECHO_PAYLOAD }],
     });
     const compact = await runner().run({
@@ -292,6 +296,17 @@ describe("SessionStart, PreCompact and SubagentStop", () => {
       subagentId: "t9",
       subagentType: "explore",
     });
+    const note = await runner().run({
+      event: "Notification",
+      sessionId: "s1",
+      message: "Approve edit?",
+      kind: "approval_required",
+    });
+    expect(JSON.parse(note.context!)).toMatchObject({
+      event: "Notification",
+      message: "Approve edit?",
+      kind: "approval_required",
+    });
     const start = await runner().run({
       event: "SessionStart",
       sessionId: "s1",
@@ -304,11 +319,13 @@ describe("SessionStart, PreCompact and SubagentStop", () => {
       SessionStart: [{ command: BLOCK }],
       PreCompact: [{ command: BLOCK }],
       SubagentStop: [{ command: BLOCK }],
+      Notification: [{ command: BLOCK }],
     });
     for (const event of [
       "SessionStart",
       "PreCompact",
       "SubagentStop",
+      "Notification",
     ] as const) {
       const result = await runner().run({ event, sessionId: "s1" });
       expect(result.blocked).toBe(false);

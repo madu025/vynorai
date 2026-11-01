@@ -17,11 +17,11 @@
     </style>
     <link
       rel="stylesheet"
-      href="pane.css?v=20261101.03"
-      onerror="this.onerror=null;this.href='pane.css?v=20261101.03&amp;try=1'"
+      href="pane.css?v=20261101.04"
+      onerror="this.onerror=null;this.href='pane.css?v=20261101.04&amp;try=1'"
     />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261101.03" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261101.03" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261101.04" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261101.04" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -208,7 +208,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261101.03</p>
+          <p class="menu-version" id="build-id">Build 20261101.04</p>
         </div>
       </div>
       <div
@@ -451,6 +451,33 @@
           <div id="noticed-tiles" class="noticed-tiles"></div>
         </section>
         <section
+          id="health"
+          class="card"
+          data-workspace-panel="work"
+          aria-labelledby="health-heading"
+        >
+          <h2 id="health-heading" data-i18n="health_title">Check my data</h2>
+          <p class="muted" data-i18n="health_note">
+            Looks for duplicates, blanks, numbers stored as text and more. Read
+            only, on this device. Nothing is sent or changed.
+          </p>
+          <button
+            id="health-run"
+            class="ghost"
+            type="button"
+            data-i18n="health_run"
+          >
+            Check my data
+          </button>
+          <p
+            id="health-status"
+            class="muted"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <ul id="health-list" class="health-list"></ul>
+        </section>
+        <section
           id="starter-suggestions"
           class="suggestions quick-start"
           aria-label="Suggestions"
@@ -582,6 +609,35 @@
               id="context-suggestion-list"
               class="smart-suggestion-list"
             ></div>
+          </section>
+          <section
+            id="explain-formula-card"
+            class="card"
+            data-workspace-panel="work"
+            aria-labelledby="explain-formula-heading"
+          >
+            <div class="card-head">
+              <h2
+                id="explain-formula-heading"
+                data-i18n="explain_formula_title"
+              >
+                Explain a formula
+              </h2>
+            </div>
+            <p class="muted" data-i18n="explain_formula_note">
+              Select one cell with a formula. It is explained on this device,
+              step by step. Nothing is sent or changed.
+            </p>
+            <button
+              id="explain-formula"
+              type="button"
+              aria-label="Explain the formula in the selected cell"
+              data-i18n-aria-label="explain_formula_aria"
+              data-i18n="explain_formula_button"
+            >
+              Explain this formula
+            </button>
+            <div id="explain-formula-result" aria-live="polite"></div>
           </section>
           <section
             class="conversation"
@@ -870,20 +926,9 @@
             </button>
           </section>
           <section
-            id="share-empty"
-            class="card empty-card"
-            data-workspace-panel="share"
-          >
-            <h2 data-i18n="share_empty">Select your data</h2>
-            <p class="muted" data-i18n="share_empty_note">
-              Select the data in the sheet before you share.
-            </p>
-          </section>
-          <section
             id="share-card"
             class="card"
             data-workspace-panel="share"
-            hidden
             aria-labelledby="share-card-heading"
           >
             <div class="card-head">
@@ -1309,6 +1354,7 @@
               aria-label="Result actions"
               data-i18n-aria-label="dock_actions"
               title="Nothing changed yet."
+              data-i18n-title="agent_note"
             >
               <button
                 id="agent-approve"
@@ -1773,7 +1819,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261101.03";
+        var BUILD = "20261101.04";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");

@@ -4,6 +4,34 @@ import { localizeMessageTa } from "./messagesTa.js";
 registerLanguagePack("ta", {
   localize: localizeMessageTa,
   strings: {
+    health_title: "என் தரவைச் சரிபார்",
+    health_note:
+      "நகல்கள், வெற்றுக் கலங்கள், உரையாகச் சேமித்த எண்கள் போன்றவற்றைத் தேடும். படிக்க மட்டும், இந்தச் சாதனத்திலேயே. எதுவும் அனுப்பப்படாது, மாற்றப்படாது.",
+    health_run: "என் தரவைச் சரிபார்",
+    health_use: "கோரிக்கையாகப் பயன்படுத்து",
+    health_cells: "முதல் கலங்கள்: {cells}",
+    health_checking: "சரிபார்க்கிறது...",
+    health_nothing:
+      "கலங்களைத் தேர்ந்தெடுக்கவும் அல்லது தரவுள்ள தாளைத் திறக்கவும்.",
+    health_failed: "கலங்களைப் படிக்க முடியவில்லை.",
+    health_empty: "சரிபார்க்க தரவு வரிசைகள் இல்லை.",
+    health_clean: "{rows} வரிசைகளில் சிக்கல் எதுவும் இல்லை.",
+    health_partial_rows:
+      "{total} வரிசைகளில் முதல் {rows} வரிசைகள் மட்டுமே சரிபார்க்கப்பட்டன.",
+    health_partial_columns:
+      "{total} நெடுவரிசைகளில் முதல் {cols} மட்டுமே சரிபார்க்கப்பட்டன.",
+    health_omitted: "மேலும் {n} கண்டுபிடிப்புகள் காட்டப்படவில்லை.",
+    health_sev_high: "உயர்ந்த",
+    health_sev_medium: "நடுத்தர",
+    health_sev_low: "குறைந்த",
+    health_duplicate_rows: "நகல் வரிசைகள் (அனைத்து நெடுவரிசைகள்): {n}",
+    health_duplicate_key: "{col} இல் மீண்டும் வரும் மதிப்புகள்: {n}",
+    health_blank_cells: "{col} இல் வெற்றுக் கலங்கள்: {n}",
+    health_number_text: "{col} இல் உரையாகச் சேமித்த எண்கள்: {n}",
+    health_mixed_types: "{col} இல் கலப்பு வகைகள்: {n}",
+    health_extra_spaces: "தொடக்கத்தில் அல்லது முடிவில் கூடுதல் இடைவெளிகள்: {n}",
+    health_date_formats: "{col} இல் வெவ்வேறு தேதி வடிவங்கள்: {n}",
+    health_outliers: "{col} இல் வழக்கத்துக்கு மாறான எண்கள்: {n}",
     noticed_title: "உங்கள் தரவில் கவனித்தவை",
     noticed_note:
       "இந்தச் சாதனத்திலேயே சரிபார்க்கப்பட்டது. எதுவும் அனுப்பப்படவில்லை.",
@@ -294,5 +322,21 @@ registerLanguagePack("ta", {
     ph_email_subject: "VynorAI Excel அறிக்கை",
     ph_email_body: "Excel அறிக்கை இணைக்கப்பட்டுள்ளது.",
     next_steps: "அடுத்த படிகள்",
+    explain_formula_title: "ஒரு சூத்திரத்தை விளக்கு",
+    explain_formula_note:
+      "ஒரு சூத்திரம் உள்ள கலத்தைத் தேர்ந்தெடுக்கவும். இது இந்தச் சாதனத்திலேயே படிப்படியாக விளக்கப்படும். எதுவும் அனுப்பப்படாது, மாற்றப்படாது.",
+    explain_formula_button: "இந்தச் சூத்திரத்தை விளக்கு",
+    explain_formula_aria: "தேர்ந்தெடுத்த கலத்தில் உள்ள சூத்திரத்தை விளக்கு",
+    explain_many_cells: "சூத்திரம் உள்ள ஒரே ஒரு கலத்தைத் தேர்ந்தெடுக்கவும்.",
+    explain_no_formula: "இந்தக் கலத்தில் சூத்திரம் இல்லை.",
+    explain_too_long: "இந்தச் சூத்திரம் இங்கே விளக்க முடியாத அளவு நீளமானது.",
+    explain_error: "இந்தச் சூத்திரத்தை விளக்க முடியவில்லை.",
+    explain_read_failed: "தேர்ந்தெடுத்த கலத்தைப் படிக்க முடியவில்லை.",
+    explain_cell: "கலம்",
+    explain_step: "படி",
+    explain_whole: "முழுச் சூத்திரம்",
+    explain_inputs: "படித்த மதிப்புகள்",
+    explain_empty: "வெறுமை",
+    explain_more: "மேலும் {n} படிகள் காட்டப்படவில்லை",
   },
 });

@@ -36,6 +36,12 @@ export function setLocalizedText(element: HTMLElement, english: string): void {
   element.textContent = localize(english);
 }
 
+/** A tooltip written in the current language that `relocalizeView` writes again after a language switch. */
+export function setLocalizedTitle(element: HTMLElement, english: string): void {
+  element.dataset.enTitle = english;
+  element.title = localize(english);
+}
+
 /** A line made of several English parts, each localized on its own and joined with a space. */
 export function setLocalizedParts(
   element: HTMLElement,
@@ -50,6 +56,10 @@ export function setLocalizedParts(
 export function relocalizeView(root: ParentNode): void {
   for (const element of root.querySelectorAll<HTMLElement>("[data-en]"))
     element.textContent = localize(element.dataset.en ?? "");
+  for (const element of root.querySelectorAll<HTMLElement>("[data-en-title]")) {
+    if (element.dataset?.enTitle !== undefined)
+      element.title = localize(element.dataset.enTitle);
+  }
   for (const element of root.querySelectorAll<HTMLElement>("[data-en-parts]")) {
     let parts: unknown;
     try {
@@ -311,7 +321,7 @@ export function showChangeList(
       const li = document.createElement("li");
       const line = document.createElement("span");
       write(line, shortChange(change, full));
-      li.title = localize(full);
+      setLocalizedTitle(li, full);
       li.append(line);
       const details = document.createElement("details");
       details.className = "change-full";

@@ -1,4 +1,9 @@
 import { buildSchemaSummary } from "./analysis.js";
+import {
+  healthReadPlan,
+  type HealthCell,
+  type HealthInput,
+} from "./dataHealth.js";
 import type { WorkspaceSchema, WorkspaceSelection } from "./smartWorkspace.js";
 
 /**
@@ -190,4 +195,64 @@ async function readOtherSheetHeaders(
   } catch {
     return [];
   }
+}
+
+/**
+ * Read-only bounded read for the "Check my data" scan (dataHealth.ts): the selected cells, or the
+ * used range of the active sheet when one cell (or none) is selected. Reads at most the top
+ * HEALTH_SCAN_MAX_ROWS rows and HEALTH_SCAN_MAX_COLUMNS columns, in chunks, and reports the full
+ * size so the pane can say when only the top rows were checked. Never writes or selects.
+ */
+export async function readDataHealthValues(
+  excel: any,
+): Promise<(HealthInput & { sheetName: string }) | undefined> {
+  return excel.run(async (context: any) => {
+    let range = context.workbook.getSelectedRange();
+    range.load(["rowCount", "columnCount"]);
+    range.worksheet.load("name");
+    await context.sync();
+    const sheet = range.worksheet;
+    if (Number(range.rowCount) * Number(range.columnCount) <= 1) {
+      const used = sheet.getUsedRangeOrNullObject(true);
+      used.load(["isNullObject"]);
+      await context.sync();
+      if (used.isNullObject) return undefined;
+      range = used;
+      range.load(["rowCount", "columnCount"]);
+    }
+    range.load(["rowIndex", "columnIndex"]);
+    await context.sync();
+    const totalRows = Number(range.rowCount);
+    const totalColumns = Number(range.columnCount);
+    const plan = healthReadPlan(totalRows, totalColumns);
+    if (plan.rows === 0) return undefined;
+    const values: HealthCell[][] = [];
+    for (let at = 0; at < plan.rows; at += plan.chunkRows) {
+      const count = Math.min(plan.chunkRows, plan.rows - at);
+      const chunk = range
+        .getCell(at, 0)
+        .getResizedRange(count - 1, plan.columns - 1);
+      chunk.load("values");
+      await context.sync();
+      for (const row of chunk.values as unknown[][])
+        values.push(
+          row.map((cell) =>
+            typeof cell === "string" ||
+            typeof cell === "number" ||
+            typeof cell === "boolean" ||
+            cell === null
+              ? cell
+              : String(cell ?? ""),
+          ),
+        );
+    }
+    return {
+      values,
+      row: Number(range.rowIndex) + 1,
+      column: Number(range.columnIndex),
+      totalRows,
+      totalColumns,
+      sheetName: String(sheet.name),
+    };
+  });
 }

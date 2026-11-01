@@ -291,12 +291,54 @@ function editPairs(
   return pairs.length > 0 ? { file: args.filepath, pairs } : undefined;
 }
 
+/** Small string hash (FNV-1a) of the whitespace-squashed text. */
+function contentHash(text: string): string {
+  let h = 0x811c9dc5;
+  const s = squash(text);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${s.length}:${(h >>> 0).toString(16)}`;
+}
+
+/**
+ * `edit_existing_file` has no old text, so its writes are followed by a hash
+ * of the content written. Returning to a hash seen in the last FLIP_WINDOW
+ * writes of that file is a reversal; the same content as the write just
+ * before is an exact repeat and not one.
+ */
+function writtenContent(
+  call: Call,
+): { file: string; hash: string } | undefined {
+  if (call.toolCall.function.name !== BuiltInToolNames.EditExistingFile)
+    return undefined;
+  const args = argsOf(call) as { filepath?: unknown; changes?: unknown };
+  if (typeof args.filepath !== "string" || typeof args.changes !== "string")
+    return undefined;
+  return { file: args.filepath, hash: contentHash(args.changes) };
+}
+
 class FlipTracker {
   private recent = new Map<string, EditPair[]>();
+  private hashes = new Map<string, string[]>();
   private flips = new Map<string, number>();
 
   /** Records the edit; true when it is the second or later reversal on its file. */
   isLoop(call: Call): boolean {
+    const written = writtenContent(call);
+    if (written) {
+      const before = this.hashes.get(written.file) ?? [];
+      const reversal =
+        before.length > 0 &&
+        before[before.length - 1] !== written.hash &&
+        before.includes(written.hash);
+      this.hashes.set(
+        written.file,
+        [...before, written.hash].slice(-FLIP_WINDOW),
+      );
+      return reversal ? this.countFlip(written.file) : false;
+    }
     const edit = editPairs(call);
     if (!edit) return false;
     const before = this.recent.get(edit.file) ?? [];
@@ -304,9 +346,12 @@ class FlipTracker {
       before.some((b) => b.from === p.to && b.to === p.from),
     );
     this.recent.set(edit.file, [...before, ...edit.pairs].slice(-FLIP_WINDOW));
-    if (!reversal) return false;
-    const flips = (this.flips.get(edit.file) ?? 0) + 1;
-    this.flips.set(edit.file, flips);
+    return reversal ? this.countFlip(edit.file) : false;
+  }
+
+  private countFlip(file: string): boolean {
+    const flips = (this.flips.get(file) ?? 0) + 1;
+    this.flips.set(file, flips);
     return flips >= FLIP_LIMIT;
   }
 }

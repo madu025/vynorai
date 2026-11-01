@@ -291,6 +291,68 @@ describe("edits that undo each other", () => {
     expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
   });
 
+  describe("edit_existing_file content hashes", () => {
+    const rewrite = (filepath: string, changes: string, extra: object = {}) =>
+      round("edit_existing_file", { filepath, changes, ...extra });
+
+    it("sees A, B, A, B written to one file as a loop", () => {
+      const history = [
+        user("fix it"),
+        rewrite("a.ts", "const x = 1;"),
+        rewrite("a.ts", "const x = 2;"),
+        rewrite("a.ts", "const x = 1;", { n: 1 }),
+        rewrite("a.ts", "const x = 2;", { n: 1 }),
+      ];
+      expect(progressCounters(history)).toEqual({ idle: 1, unchanged: 1 });
+    });
+
+    it("treats one revert as normal progress", () => {
+      const history = [
+        user("fix it"),
+        rewrite("a.ts", "const x = 1;"),
+        rewrite("a.ts", "const x = 2;"),
+        rewrite("a.ts", "const x = 1;", { n: 1 }),
+      ];
+      expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
+    });
+
+    it("does not mix up different files", () => {
+      const history = [
+        user("fix it"),
+        rewrite("a.ts", "const x = 1;"),
+        rewrite("b.ts", "const x = 2;"),
+        rewrite("c.ts", "const x = 1;", { n: 1 }),
+        rewrite("d.ts", "const x = 2;", { n: 1 }),
+      ];
+      expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
+    });
+
+    it("does not count the same content written twice in a row as a reversal", () => {
+      const history = [
+        user("fix it"),
+        rewrite("a.ts", "const x = 1;"),
+        rewrite("a.ts", "const x = 1;", { n: 1 }),
+        rewrite("a.ts", "const x = 1;", { n: 2 }),
+        rewrite("a.ts", "const x = 1;", { n: 3 }),
+      ];
+      expect(progressCounters(history).unchanged).toBe(0);
+    });
+
+    it("forgets content older than the last 8 writes", () => {
+      const fillers = Array.from({ length: 8 }, (_, i) =>
+        rewrite("a.ts", `const x = ${i + 10};`),
+      );
+      const history = [
+        user("fix it"),
+        rewrite("a.ts", "const x = 1;"),
+        ...fillers,
+        rewrite("a.ts", "const x = 1;", { n: 1 }),
+        rewrite("a.ts", "const x = 10;", { n: 1 }),
+      ];
+      expect(progressCounters(history)).toEqual({ idle: 0, unchanged: 0 });
+    });
+  });
+
   it("does not count normal progress as a loop", () => {
     const history = [
       user("fix it"),

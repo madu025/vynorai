@@ -1,6 +1,6 @@
 # Hooks
 
-Hooks run your own shell commands at fixed points of an agent turn: before and after every tool call, when a prompt is submitted, when a conversation starts, before the conversation is compacted, when a subagent finishes, and when the agent finishes. Use them to block dangerous commands, run a linter after edits, or inject project context into every prompt.
+Hooks run your own shell commands at fixed points of an agent turn: before and after every tool call, when a prompt is submitted, when a conversation starts, before the conversation is compacted, when a subagent finishes, when the chat needs you, and when the agent finishes. Use them to block dangerous commands, run a linter after edits, or inject project context into every prompt.
 
 The format and exit-code semantics match Claude Code hooks, so existing hook scripts work unchanged.
 
@@ -55,7 +55,9 @@ The Claude Code nested form (`{ "matcher": "...", "hooks": [{ "type": "command",
 | `PreCompact`       | Right before the conversation is summarized (`/compact`, the Compact button, or auto-compaction at 70% context) | Never blocks; reported as a warning                                            | Ignored                                  |
 | `SubagentStop`     | A `run_subagent` tool call finished (report or failure)                                                         | Never blocks; reported as a warning                                            | Ignored                                  |
 
-`SessionStart`, `PreCompact` and `SubagentStop` cannot block: the session starts, the compaction runs and the subagent result is used no matter what. Exit 2 from them is shown as a warning with the stderr text. `matcher` is ignored for these three events.
+| `Notification` | The chat needs you: a tool waits for your approval, or the agent paused (stalled, no change, same failure, action or credit limit) | Never blocks; reported as a warning | Ignored |
+
+`SessionStart`, `PreCompact`, `SubagentStop` and `Notification` cannot block: the session starts, the compaction runs, the subagent result is used and the approval prompt is shown no matter what. Exit 2 from them is shown as a warning with the stderr text. `matcher` is ignored for these four events.
 
 Any other non-zero exit, a timeout, or a command that fails to start is a warning shown as a notification. It never blocks.
 
@@ -74,14 +76,15 @@ Each command receives a JSON object on stdin. The environment also contains `VYN
 
 `UserPromptSubmit` sends `prompt`. `PostToolUse` also sends `toolOutput` (truncated to 8,000 characters) and `toolError` when the tool failed.
 
-`SessionStart` sends only `sessionId`. `PreCompact` sends `trigger` (`"manual"` or `"auto"`) and, for `/compact <focus>`, `instructions`. `SubagentStop` sends `subagentId` (the tool-call id), `subagentType` (`"explore"` or the custom agent name), `toolOutput` (the report, truncated) and `toolError` when the subagent failed.
+`SessionStart` sends only `sessionId`. `PreCompact` sends `trigger` (`"manual"` or `"auto"`) and, for `/compact <focus>`, `instructions`. `SubagentStop` sends `subagentId` (the tool-call id), `subagentType` (`"explore"` or the custom agent name), `toolOutput` (the report, truncated) and `toolError` when the subagent failed. `Notification` sends `message` (the text) and `kind` (`"approval_required"` or `"agent_paused"`).
 
 ```json
 {
   "hooks": {
     "SessionStart": [{ "command": "cat .vynorai/context.md" }],
     "PreCompact": [{ "command": "node .vynorai/hooks/save-notes.js" }],
-    "SubagentStop": [{ "command": "node .vynorai/hooks/log-subagent.js" }]
+    "SubagentStop": [{ "command": "node .vynorai/hooks/log-subagent.js" }],
+    "Notification": [{ "command": "node .vynorai/hooks/notify.js" }]
   }
 }
 ```

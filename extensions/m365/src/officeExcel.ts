@@ -1109,6 +1109,57 @@ export async function inspectSelectedExcelFormulas(
   });
 }
 
+/**
+ * Reads the selected cell's formula and the values of the cells it names directly, for the pane's
+ * "Explain this formula" action. Read-only and bounded: a selection of more than one cell loads only its
+ * size, and at most `maxReferences` single cells are read (a reference that cannot be read, such as a missing sheet, is skipped).
+ * `referencesOf` maps the formula to its single-cell references (`B2` or `Sheet name!B2`).
+ */
+export async function readSelectedFormulaForExplain(
+  runtime: ExcelRuntimeLike,
+  referencesOf: (formula: string) => string[],
+  maxReferences = 20,
+): Promise<{
+  address: string;
+  cellCount: number;
+  formula: string | null;
+  values: Record<string, unknown>;
+}> {
+  return runtime.run(async (context) => {
+    const selected = context.workbook.getSelectedRange();
+    selected.load(["address", "rowCount", "columnCount"]);
+    selected.worksheet.load("name");
+    await context.sync();
+    const cellCount = Number(selected.rowCount) * Number(selected.columnCount);
+    const address = String(selected.address);
+    const empty = { address, cellCount, formula: null, values: {} };
+    if (cellCount !== 1) return empty;
+    selected.load("formulas");
+    await context.sync();
+    const formula = selected.formulas?.[0]?.[0];
+    if (typeof formula !== "string" || !formula.startsWith("=")) return empty;
+    const references = referencesOf(formula).slice(0, maxReferences);
+    const values: Record<string, unknown> = {};
+    for (const key of references) {
+      const bang = key.lastIndexOf("!");
+      const sheetName = bang < 0 ? "" : key.slice(0, bang);
+      const cell = bang < 0 ? key : key.slice(bang + 1);
+      try {
+        const sheet = sheetName
+          ? context.workbook.worksheets.getItem(sheetName)
+          : selected.worksheet;
+        const range = sheet.getRange(cell);
+        range.load("values");
+        await context.sync();
+        values[key] = range.values?.[0]?.[0];
+      } catch {
+        // A reference to a sheet that does not exist: show the steps without that value.
+      }
+    }
+    return { address, cellCount, formula, values };
+  });
+}
+
 /** Re-reads the planned source cells and returns the same local fingerprint the preview used. */
 async function sourceFingerprint(
   context: ExcelContextLike,

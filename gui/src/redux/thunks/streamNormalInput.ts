@@ -3,7 +3,11 @@ import { createAsyncThunk, unwrapResult } from "@reduxjs/toolkit";
 import { LLMFullCompletionOptions, ModelDescription } from "core";
 import { renderChatMessage } from "core/util/messageContent";
 import { v4 as uuidv4 } from "uuid";
-import { runHooks, runSessionStartHook } from "../util/hooks";
+import {
+  runHooks,
+  runNotificationHook,
+  runSessionStartHook,
+} from "../util/hooks";
 import { countTokens } from "../../util/tokenCount";
 import { getRuleId } from "core/llm/rules/getSystemMessageWithRules";
 import { ToCoreProtocol } from "core/protocol";
@@ -1469,6 +1473,15 @@ export const streamNormalInput = createAsyncThunk<
         );
       }
       if (toolBudgetExhausted) {
+        const pauseReason = creditCapHit
+          ? "credits"
+          : (progressStop ?? "stalled");
+        void runNotificationHook(
+          extra.ideMessenger,
+          getState().session.id,
+          "agent_paused",
+          `Agent paused (${pauseReason}): waiting for you to continue`,
+        );
         dispatch(setToolBudgetPausedAfter(depth));
         dispatch(
           setToolBudgetPauseReason(
@@ -1509,6 +1522,14 @@ export const streamNormalInput = createAsyncThunk<
       dispatch(setInactive());
     } else if (needsApprovalPolicies.length > 0) {
       await transitionTask("awaiting_approval", "Tool approval required");
+      void runNotificationHook(
+        extra.ideMessenger,
+        getState().session.id,
+        "approval_required",
+        `Approval required for: ${needsApprovalPolicies
+          .map(({ toolCallState }) => toolCallState.toolCall.function.name)
+          .join(", ")}`,
+      );
       const builtInReadonlyAutoApproved = autoApprovedPolicies.filter(
         ({ toolCallState }) =>
           toolCallState.tool?.group === BUILT_IN_GROUP_NAME &&

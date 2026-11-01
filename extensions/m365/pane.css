@@ -1172,6 +1172,75 @@ textarea {
   font-style: normal;
   font-weight: 600;
 }
+.explain-steps {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding-left: 22px;
+}
+.explain-steps li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.explain-steps code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.explain-steps small {
+  color: var(--muted);
+}
+
+.health-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.health-list li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+.health-list li[data-severity="high"] {
+  border-left-color: var(--danger);
+}
+.health-list li[data-severity="medium"] {
+  border-left-color: var(--warning);
+}
+.health-list li[data-severity="low"] {
+  border-left-color: var(--brand);
+}
+.health-list b {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.health-list small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.health-list .ghost {
+  justify-self: start;
+  min-height: 28px;
+  font-size: 11px;
+}
+.health-list .ghost:focus-visible,
+#health-run:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+#health-status:empty {
+  display: none;
+}
 /* While the agent team works or shows its plan, the starter cards step aside so the roles and the preview are in view. */
 body:has(#agent-card:not([hidden])) #noticed,
 body:has(#agent-card:not([hidden])) #context-suggestions,
@@ -4849,9 +4918,6 @@ body[data-workspace-view="results"]:has(
   )
   #results-empty {
   display: none;
-}
-body[data-workspace-view="share"] #share-empty {
-  display: block;
 }
 body[data-history-loading] .history-skeleton {
   display: grid;

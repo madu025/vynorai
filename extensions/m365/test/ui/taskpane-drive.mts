@@ -85,6 +85,10 @@ const STUB_TEXTS = [
   "Make a column chart of Net Amount by Category",
   "Which Customer has the highest Net Amount",
   "UPSTREAM_FAILED",
+  // Follow-up suggestions come from the stubbed AI.
+  "total Quantity by Region",
+  "find duplicate Order No",
+  "fill blank cells in Customer",
 ];
 const DATA_WORDS = new Set(
   [...HEADERS, ...REGIONS, ...PRODUCTS, ...CATEGORIES, "Customer", "Orders", "Notes", "Blank", "SalesTable", "Chart", "Region", "Summary"]
@@ -288,6 +292,9 @@ async function openPane(
     { timeout: 10_000 },
   );
   await page.waitForFunction(() => (document.querySelector("#selection-text")?.textContent ?? "").trim() !== "", undefined, { timeout: 10_000 });
+  // The Sinhala and Tamil text is a lazy chunk: on the first load it arrives after the pane is ready.
+  if (options.lang !== "en")
+    await page.waitForFunction(() => document.querySelector("#header-new-chat")?.getAttribute("aria-label") !== "New chat", undefined, { timeout: 10_000 });
   return { page, errors, lang: options.lang, width: options.width };
 }
 
@@ -318,6 +325,16 @@ const visible = (pane: Pane, selector: string): Promise<boolean> =>
     const el = document.querySelector<HTMLElement>(sel);
     return Boolean(el && !el.hidden && el.getClientRects().length > 0);
   }, selector);
+/**
+ * Run is free when it is enabled, or when the only thing stopping it is the empty request box (the pane
+ * clears the box after a run, and the run gate then says "Describe what you want first.").
+ * A busy or waiting gate means the pane is stuck.
+ */
+const runFree = (pane: Pane): Promise<boolean> =>
+  pane.page.evaluate(() => {
+    const run = document.querySelector<HTMLButtonElement>("#smart-run");
+    return Boolean(run && (!run.disabled || run.dataset.gateReason === "request_required"));
+  });
 const value = (pane: Pane, selector: string): Promise<string> =>
   pane.page.evaluate((sel: string) => (document.querySelector(sel) as HTMLInputElement | null)?.value ?? "", selector);
 const text = (pane: Pane, selector: string): Promise<string> =>
@@ -383,6 +400,8 @@ async function audit(pane: Pane, label: string) {
           el.children.length === 0 &&
           (el.textContent ?? "").trim() &&
           el.scrollWidth > el.clientWidth + 1 &&
+          // A 1 px clipped box is the visually-hidden pattern (screen-reader-only text), not clipped text.
+          rect.width > 1 &&
           style.overflowX !== "visible" &&
           style.textOverflow !== "ellipsis" &&
           el.tagName !== "TEXTAREA" &&
@@ -486,8 +505,11 @@ async function flowTabs(pane: Pane) {
     const before = await view(pane);
     await tab(pane, name).catch(() => undefined);
     const disabled = await pane.page.evaluate((n: string) => (document.querySelector(`[data-workspace-target="${n}"]`) as HTMLButtonElement).disabled, name);
-    if (name === "results") check(disabled && (await view(pane)) === before, "Results must stay disabled with no result");
-    else check((await view(pane)) === name, `tab ${name} did not open (is ${await view(pane)})`);
+    // Results opens even with no result: it shows the "Nothing applied yet" empty state (#results-empty).
+    if (name === "results") {
+      check(!disabled && (await view(pane)) === "results", `Results must open with its empty state when there is no result (is ${await view(pane)})`);
+      check(await visible(pane, "#results-empty"), "Results with no result must show the empty-state card");
+    } else check((await view(pane)) === name, `tab ${name} did not open (is ${await view(pane)})`);
     const selected = await pane.page.evaluate(() => [...document.querySelectorAll("[data-workspace-target]")].map((b) => `${b.getAttribute("data-workspace-target")}:${b.getAttribute("aria-selected")}`).join(","));
     check(selected.split(",").filter((s) => s.endsWith(":true")).length === 1, `exactly one selected tab expected: ${selected}`);
     await audit(pane, `tab-${name}`);
@@ -630,16 +652,16 @@ async function flowIdeas(browser: any, lang: Lang, width: number) {
   await tab(pane, "explore");
   await page.click("#explore-ai-go");
   await settle(pane, 200);
-  // Run while the ideas are on their way: it must say so, and keep the request in the box.
+  // Run while the ideas are on their way: the run gate disables Run (reason request_running) rather than
+  // letting a click through to a refusal message, and the request stays in the box.
   await tab(pane, "work");
   await page.fill("#instruction", "Which Region has the highest Net Amount?");
-  await page.click("#smart-run");
-  const busyStatus = await text(pane, "#status-text");
-  check(
-    /still working|තවමත් පෙර|இன்னும் முந்தைய/.test(busyStatus), // the language switch earlier in this flow moved the pane on
-    `Run during the ideas request must say the AI is busy (status: ${JSON.stringify(busyStatus)})`,
-  );
-  check((await value(pane, "#instruction")) !== "", "the request must stay in the box when Run is refused");
+  const gate = await page.evaluate(() => {
+    const run = document.querySelector<HTMLButtonElement>("#smart-run")!;
+    return { disabled: run.disabled, reason: run.dataset.gateReason };
+  });
+  check(gate.disabled && gate.reason === "request_running", `Run during the ideas request must be disabled as busy (got ${JSON.stringify(gate)})`);
+  check((await value(pane, "#instruction")) !== "", "the request must stay in the box while Run is disabled");
   await page.fill("#instruction", "");
   await tab(pane, "explore");
   await select(pane, "Orders", "H1:I41");
@@ -743,7 +765,7 @@ async function flowAgent(browser: any, lang: Lang, width: number) {
   check(!(await page.evaluate(() => (window as any).__xl.sheetNames())).includes(STAGE_SHEET), "Discard must write nothing");
   const discardRoles = await page.evaluate(() => [...document.querySelectorAll("#agent-activity-list [data-agent-role]")].map((row) => `${(row as HTMLElement).dataset.agentRole}=${(row as HTMLElement).dataset.state}`));
   check(discardRoles.every((r) => !r.endsWith("=pending") && !r.endsWith("=active")), `role cards left unfinished after Discard: ${discardRoles.join(" ")}`);
-  check(!(await page.evaluate(() => (document.querySelector("#smart-run") as HTMLButtonElement).disabled)), "Run must stay enabled after Discard");
+  check(await runFree(pane), "Run must stay enabled after Discard");
   await audit(pane, "agent-discarded");
 
   // A question: nothing to approve, every role gets a final state.
@@ -791,7 +813,7 @@ async function flowAgent(browser: any, lang: Lang, width: number) {
   api.delayMs = 0;
   const stoppedRoles = await page.evaluate(() => [...document.querySelectorAll("#agent-activity-list [data-agent-role]")].map((row) => `${(row as HTMLElement).dataset.agentRole}=${(row as HTMLElement).dataset.state}:${row.querySelector(".agent-role-status")?.textContent}`));
   check(stoppedRoles.every((r) => !/=pending/.test(r)), `role cards say "pending" after Stop while thinking: ${stoppedRoles.join(" | ")}`);
-  check(!(await page.evaluate(() => (document.querySelector("#smart-run") as HTMLButtonElement).disabled)), "Run must be enabled after Stop");
+  check(await runFree(pane), "Run must be enabled after Stop");
   await audit(pane, "agent-stopped-thinking");
 
   // Excel refuses the write: the person sees the failure, can still Undo, and no control stays disabled.
@@ -806,7 +828,7 @@ async function flowAgent(browser: any, lang: Lang, width: number) {
   await settle(pane, 500);
   const failedItems = await page.evaluate(() => [...document.querySelectorAll("#agent-changes li")].map((li) => li.textContent ?? ""));
   check(failedItems.some((t) => t.includes("✗")), `a failed write must be listed with a cross: ${JSON.stringify(failedItems)}`);
-  check(!(await page.evaluate(() => (document.querySelector("#smart-run") as HTMLButtonElement).disabled)), "Run must be enabled after a failed apply");
+  check(await runFree(pane), "Run must be enabled after a failed apply");
   check(!(await page.evaluate(() => (document.querySelector("#instruction") as HTMLTextAreaElement).disabled)), "the request box must be enabled after a failed apply");
   const failRoles = await page.evaluate(() => [...document.querySelectorAll("#agent-activity-list [data-agent-role]")].map((row) => `${(row as HTMLElement).dataset.agentRole}=${(row as HTMLElement).dataset.state}`));
   check(failRoles.every((r) => !/=(pending|active)/.test(r)), `role cards left unfinished after a failed apply: ${failRoles.join(" ")}`);
@@ -825,7 +847,7 @@ async function flowAgent(browser: any, lang: Lang, width: number) {
   await settle(pane, 500);
   const errRoles = await page.evaluate(() => [...document.querySelectorAll("#agent-activity-list [data-agent-role]")].map((row) => `${(row as HTMLElement).dataset.agentRole}=${(row as HTMLElement).dataset.state}`));
   check(errRoles.every((r) => !/=(pending|active)/.test(r)), `role cards left unfinished after a backend error: ${errRoles.join(" ")}`);
-  check(!(await page.evaluate(() => (document.querySelector("#smart-run") as HTMLButtonElement).disabled)), "Run must be enabled after a backend error");
+  check(await runFree(pane), "Run must be enabled after a backend error");
   note(`status after backend error: ${await text(pane, "#status-text")}`);
   await audit(pane, "agent-error");
   api.agent = "ok";
@@ -898,7 +920,10 @@ async function flowShare(browser: any, lang: Lang, width: number) {
     const button = page.locator(`#share-styles .share-style[data-style="${style}"]`);
     if (await button.isVisible().catch(() => false)) {
       await button.click();
-      await settle(pane, 400);
+      await page
+        .waitForFunction((name: string) => document.querySelector(`#share-styles .share-style[data-style="${name}"]`)?.getAttribute("aria-pressed") === "true", style, { timeout: 4000 })
+        .catch(() => undefined);
+      await settle(pane, 200);
       const pressed = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#share-styles .share-style")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.style));
       check(pressed.length === 1 && pressed[0] === style, `style ${style} must be the only pressed one, got ${JSON.stringify(pressed)}`);
     }
@@ -918,8 +943,10 @@ async function flowShare(browser: any, lang: Lang, width: number) {
   check(await page.evaluate(() => (document.querySelector("#share-main") as HTMLButtonElement).disabled), "Share must be disabled when no card exists");
   // Selected cells.
   await page.click("#share-use-selection");
-  await settle(pane, 800);
-  check(await visible(pane, "#share-card-img"), "Selected cells must make a card");
+  // The card is drawn in three styles, which takes longer than a fixed pause on a slow machine.
+  await page.waitForSelector("#share-card-img:not([hidden])", { timeout: 6000 }).catch(() => undefined);
+  await settle(pane, 300);
+  check(await visible(pane, "#share-card-img"), `Selected cells must make a card: ${await text(pane, "#share-card-status")}`);
   await page.click("#share-use-result");
   await settle(pane, 500);
   note(`share "Latest result" with no result: ${await text(pane, "#share-card-status")}`);

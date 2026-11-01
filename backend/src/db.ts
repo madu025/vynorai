@@ -58,6 +58,17 @@ export function dbTimestampMs(value: string | Date): number {
     : Date.parse(text);
 }
 
+/**
+ * SQL parameter for comparing a column that defaults to (or is written with) `CURRENT_TIMESTAMP`.
+ * SQLite stores that as "YYYY-MM-DD HH:MM:SS"; an ISO parameter ("...T...Z") would compare wrongly
+ * on the same calendar day because ' ' sorts before 'T'. PostgreSQL parses this text as UTC
+ * (sessions run with timezone=UTC) into its timestamptz column. Whole seconds, like SQLite stores.
+ * Columns the code writes itself as ISO strings keep ISO parameters.
+ */
+export function dbTimestampParam(value: number | Date = Date.now()): string {
+  return new Date(value).toISOString().slice(0, 19).replace("T", " ");
+}
+
 // ─── Query Helpers ────────────────────────────────────────────────────────────
 export function dbGet<T = any>(
   sql: string,

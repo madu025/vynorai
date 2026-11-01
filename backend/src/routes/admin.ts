@@ -1,5 +1,5 @@
 import { idParam, nameParam, newId } from "../services/secureId.js";
-import { dbTimestampMs } from "../db.js";
+import { dbTimestampMs, dbTimestampParam } from "../db.js";
 import {
   FeedbackRow,
   RoutingRow,
@@ -491,7 +491,7 @@ adminRouter.get(
   "/stats",
   requireAdmin,
   async (_req: Request, res: Response) => {
-    const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const yesterday = dbTimestampParam(Date.now() - 24 * 3600 * 1000);
 
     const [totalUsers, activeUsers, topModels, recentErrors, economics] =
       await Promise.all([

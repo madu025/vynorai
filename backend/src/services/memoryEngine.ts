@@ -137,9 +137,10 @@ export async function getUserMemory(
     expires_at: string | null;
   }>(
     `SELECT key, value, expires_at FROM user_memory
-     WHERE user_id = ? AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+     WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)
      ORDER BY created_at DESC LIMIT 50`,
-    [userId],
+    // expires_at is written as an ISO string by setMemory, so compare with an ISO string.
+    [userId, new Date().toISOString()],
   );
   return Object.fromEntries(
     rows.map((r) => [r.key, unprotect(r.value)]).filter(([, value]) => value),

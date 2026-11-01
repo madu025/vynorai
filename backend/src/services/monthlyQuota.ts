@@ -5,6 +5,7 @@ import {
   billingGet as dbGet,
   billingRun as dbRun,
 } from "./billingDb.js";
+import { dbTimestampParam } from "../db.js";
 import {
   DEFAULT_CHAT_MODEL,
   getPlan,
@@ -186,12 +187,11 @@ export const FAILED_ORDER_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export async function reapStalePendingOrders(
   now: Date = new Date(),
 ): Promise<number> {
-  const pendingCutoff = new Date(
-    now.getTime() - PENDING_ORDER_TTL_MS,
-  ).toISOString();
-  const failedCutoff = new Date(
+  // subscriptions.created_at defaults to CURRENT_TIMESTAMP: compare with the same text format.
+  const pendingCutoff = dbTimestampParam(now.getTime() - PENDING_ORDER_TTL_MS);
+  const failedCutoff = dbTimestampParam(
     now.getTime() - FAILED_ORDER_RETENTION_MS,
-  ).toISOString();
+  );
   const aged = await dbRun(
     "UPDATE subscriptions SET status = 'failed' WHERE status = 'pending' AND created_at < ?",
     [pendingCutoff],

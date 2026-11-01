@@ -12,6 +12,7 @@ import {
   type AdvancedCapabilityReport,
 } from "./m365Capabilities.js";
 import { activeM365TenantPlan } from "./m365Entitlements.js";
+import { minimumAgentTurnCredits } from "./m365Agent.js";
 
 const M365_SCOPES = ["m365.excel.read", "m365.excel.write"] as const;
 
@@ -101,10 +102,18 @@ export interface M365Capabilities {
   advanced: AdvancedCapabilityReport;
 }
 
+/**
+ * Why read (inspect, preview, run) is refused, or nothing when read works. Write-only gates
+ * (`*:m365.excel.write`) never block read, so a read-only tenant is not reported as blocked by its
+ * missing write scope; the first failed read gate, in stage order, is the reason.
+ */
 function capabilityBlockedReason(
   diagnostics: Awaited<ReturnType<typeof diagnoseM365Identity>>,
 ): M365Capabilities["blockedReason"] {
-  const failed = diagnostics.stages.find((stage) => !stage.ok);
+  if (diagnostics.ready.read) return undefined;
+  const failed = diagnostics.stages.find(
+    (stage) => !stage.ok && !stage.name.endsWith(":m365.excel.write"),
+  );
   switch (failed?.code) {
     case "insufficient_scope":
       return "insufficient_scope";
@@ -176,7 +185,11 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
   stages.push({
     name: "tenant",
     ok: tenant?.status === "enabled",
-    code: tenant ? undefined : "tenant_not_registered",
+    code: !tenant
+      ? "tenant_not_registered"
+      : tenant.status === "enabled"
+        ? undefined
+        : "tenant_disabled",
     detail: tenant
       ? {
           status: tenant.status,
@@ -247,8 +260,13 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
         source: entitlement.source,
       },
     );
-    // No active row means the first billable request will initialise a fresh cycle.
-    const available = quota.freshCycle || quota.usedCredits < quota.maxCredits;
+    // The ledger refuses a turn unless all of its reservation and one more request fit
+    // (`reserveM365Quota`), so less than the smallest agent turn left is exhausted, not available.
+    // With no active row the first billable request opens a fresh cycle; the summary then
+    // carries the plan's full limits and zero usage.
+    const available =
+      quota.maxCredits - quota.usedCredits >= minimumAgentTurnCredits() &&
+      quota.usedRequests + 1 <= quota.maxRequests;
     stages.push({
       name: "credits",
       ok: available,

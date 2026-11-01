@@ -44,9 +44,29 @@ export interface CombineCell {
 const quote = (sheet: string) => `'${sheet.replace(/'/g, "''")}'`;
 const text = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
-/** Match the guard's case/space/leading-zero policy inside the workbook formula too. */
+/**
+ * The one key policy of `combine_tables`, shared by the guard (`combineGuard.ts`) and the workbook
+ * formula below: keys compare trimmed, with runs of spaces collapsed and case ignored, and a key
+ * that is a whole number compares as that number ("004", "4", "4.0" and 4 are one key). Any other
+ * key, decimals included, compares as text, so "4.1" and "4.2" stay two keys.
+ */
+export function combineKey(value: unknown): string {
+  if (typeof value === "boolean") return value ? "1" : "0";
+  const t = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/.test(t)) return t;
+  const n = Number(t);
+  return Number.isInteger(n) ? String(n) : t;
+}
+
+/**
+ * `combineKey` as an Excel formula over a key column. Excel's `--` also reads text such as dates
+ * or "1,000" as numbers, which only matters if two such spellings of one whole number sit in one column.
+ */
 export function normalizedKeyFormula(reference: string): string {
-  return `LET(v,${reference},IF(TRIM(v)="","",IFERROR(TEXT(VALUE(v),"0"),LOWER(TRIM(v)))))`;
+  return `LET(v,${reference},t,LOWER(TRIM(v)),IF(t="","",IFERROR(IF(INT(--v)=--v,TEXT(--v,"0"),t),t)))`;
 }
 
 function index(table: CombineTable, header: string, what: string): number {

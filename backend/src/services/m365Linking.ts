@@ -24,7 +24,7 @@
  * - Audit rows carry ids and a short hash of the object id only: no email, code or label.
  */
 import crypto from "node:crypto";
-import { dbAll, dbGet, dbRun } from "../db.js";
+import { dbAll, dbGet, dbRun, dbTimestampMs } from "../db.js";
 import { activeM365TenantPlan } from "./m365Entitlements.js";
 import { getM365Tenant } from "./m365TenantRegistry.js";
 import { incrementRateLimit, peekRateLimit } from "./redisStore.js";
@@ -478,7 +478,9 @@ export async function listOwnLinks(userId: string): Promise<OwnLink[]> {
     tenantName: row.display_name,
     enabled: Number(row.enabled) === 1,
     linkedVia: row.linked_via || "admin",
-    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+    createdAt: row.created_at
+      ? new Date(dbTimestampMs(row.created_at)).toISOString()
+      : null,
   }));
 }
 

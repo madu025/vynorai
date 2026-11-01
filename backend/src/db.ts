@@ -45,6 +45,19 @@ export function databaseStatus(): {
     : { driver: "sqlite", ready: true };
 }
 
+/**
+ * Epoch milliseconds of a timestamp read from either database. SQLite's `CURRENT_TIMESTAMP` is UTC
+ * text with no zone ("2026-11-01 10:00:00"), which `new Date` would read as local time, hours off
+ * outside UTC; such text is read as UTC here. PostgreSQL values already carry a zone.
+ */
+export function dbTimestampMs(value: string | Date): number {
+  if (value instanceof Date) return value.getTime();
+  const text = String(value).trim();
+  return /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text)
+    ? Date.parse(`${text.replace(" ", "T")}Z`)
+    : Date.parse(text);
+}
+
 // ─── Query Helpers ────────────────────────────────────────────────────────────
 export function dbGet<T = any>(
   sql: string,

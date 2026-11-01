@@ -18,6 +18,7 @@
     "src/taskpane.ts",
     "src/smartWorkspace.ts",
     "src/text.ts",
-    "src/textAssist.ts"
+    "src/textAssist.ts",
+    "src/sheetBlocks.ts"
   ]
 }

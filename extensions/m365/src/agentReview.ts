@@ -23,6 +23,7 @@ import { checkLabelGrouping } from "./labelCheck.js";
 import { evaluateJoins } from "./resultCheck.js";
 import { reviewRisk } from "./reviewRisk.js";
 import { checkSimpleFormulas, overwritesExisting } from "./simpleChecks.js";
+import { checkMissingColumns } from "./unknownColumn.js";
 import { findUnhandledJobs } from "./workflowCheck.js";
 
 /** The reviewer only reads and calculates; it never needs many turns. */
@@ -244,14 +245,26 @@ export async function reviewAndRevise(options: {
   const { run } = options;
   if (!run.changes.length) return { run, revised: false };
   const reviewers: ReviewerVerdict[] = [];
+  // A column the workbook does not have ("add the customer phone number" with no phone anywhere)
+  // goes back first and alone: the other checks would only polish a change that must not exist.
+  const missing = await checkMissingColumns(
+    options.request,
+    run.changes,
+    options.host,
+  );
   // A mistake that is plain from the formula text goes straight back to the builder: no reviewer needed.
-  const simple = await checkSimpleFormulas(run.changes, options.host);
-  const linted = [
-    ...lintChanges(run.changes),
-    ...(await evaluateJoins(run.changes, options.host)),
-    ...(await checkLabelGrouping(options.request, run.changes, options.host)),
-    ...simple.issues,
-  ].slice(0, REVIEW_MAX_ISSUES);
+  const linted = missing.issues.length
+    ? missing.issues.slice(0, REVIEW_MAX_ISSUES)
+    : [
+        ...lintChanges(run.changes),
+        ...(await evaluateJoins(run.changes, options.host)),
+        ...(await checkLabelGrouping(
+          options.request,
+          run.changes,
+          options.host,
+        )),
+        ...(await checkSimpleFormulas(run.changes, options.host)).issues,
+      ].slice(0, REVIEW_MAX_ISSUES);
   if (linted.length)
     reviewers.push({ focus: "accuracy", ok: false, issues: linted });
   for (const focus of linted.length
@@ -288,6 +301,18 @@ export async function reviewAndRevise(options: {
       mask: options.mask,
       onTool: options.onTool,
     });
+    // For a missing column, staging nothing is the answer: the first plan is dropped.
+    if (!revision.changes.length && missing.issues.length)
+      return {
+        run: {
+          ...revision,
+          reply: revision.reply || missing.reply || run.reply,
+          turns: run.turns + revision.turns,
+        },
+        review,
+        reviewers,
+        revised: true,
+      };
     // A revision that stages nothing keeps the first plan, with the review shown to the person.
     if (!revision.changes.length) {
       repairChanges(run.changes);

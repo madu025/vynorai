@@ -1,4 +1,5 @@
 import { idParam, nameParam, newId } from "../services/secureId.js";
+import { dbTimestampMs } from "../db.js";
 import {
   FeedbackRow,
   RoutingRow,
@@ -2199,7 +2200,7 @@ adminRouter.get(
         enabled: Number(row.enabled) === 1,
         linkedVia: row.linked_via || "admin",
         createdAt: row.created_at
-          ? new Date(row.created_at).toISOString()
+          ? new Date(dbTimestampMs(row.created_at)).toISOString()
           : null,
       })),
     });

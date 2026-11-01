@@ -15,6 +15,24 @@ function setPrivatePermissions(filePath: string): void {
   }
 }
 
+function endsWithNewline(filePath: string): boolean {
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(filePath, "r");
+  } catch {
+    return true; // A missing file needs no separator.
+  }
+  try {
+    const { size } = fs.fstatSync(descriptor);
+    if (size === 0) return true;
+    const last = new Uint8Array(1);
+    fs.readSync(descriptor, last, 0, 1, size - 1);
+    return last[0] === 0x0a;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 export class TaskJournal {
   constructor(private readonly directory: string) {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -47,6 +65,11 @@ export class TaskJournal {
       const target = path.join(this.directory, `${taskId}${suffix}`);
       if (fs.existsSync(target)) fs.unlinkSync(target);
     }
+    // Quarantined corrupt snapshots hold task content too.
+    for (const name of fs.readdirSync(this.directory)) {
+      if (name.startsWith(`${taskId}.json.`) && name.endsWith(".corrupt"))
+        fs.unlinkSync(path.join(this.directory, name));
+    }
   }
 
   list(): AgentTask[] {
@@ -63,7 +86,10 @@ export class TaskJournal {
       .map((taskId) => {
         try {
           return this.load(taskId);
-        } catch {
+        } catch (error) {
+          if (error instanceof SyntaxError) this.quarantineSnapshot(taskId);
+          else
+            console.warn(`TaskJournal: cannot read task ${taskId}: ${error}`);
           return undefined;
         }
       })
@@ -74,7 +100,10 @@ export class TaskJournal {
     this.assertTaskId(event.taskId);
     const target = path.join(this.directory, `${event.taskId}.events.jsonl`);
     const safeEvent = redactEventData(event) as AgentTaskEvent;
-    fs.appendFileSync(target, `${JSON.stringify(safeEvent)}\n`, {
+    // After a crash the last line may be torn (no trailing newline). Start the
+    // new entry on its own line so it is not glued to the broken one.
+    const separator = endsWithNewline(target) ? "" : "\n";
+    fs.appendFileSync(target, `${separator}${JSON.stringify(safeEvent)}\n`, {
       encoding: "utf8",
       mode: 0o600,
     });
@@ -87,26 +116,57 @@ export class TaskJournal {
       withFileTypes: true,
     })) {
       if (!entry.isFile() || !entry.name.endsWith(".events.jsonl")) continue;
+      let content: string;
       try {
-        const lines = fs
-          .readFileSync(path.join(this.directory, entry.name), "utf8")
-          .trim()
-          .split(/\r?\n/)
-          .filter(Boolean);
-        for (const line of lines) {
+        content = fs.readFileSync(
+          path.join(this.directory, entry.name),
+          "utf8",
+        );
+      } catch (error) {
+        console.warn(`TaskJournal: cannot read ${entry.name}: ${error}`);
+        continue;
+      }
+      // Parse line by line: a torn or malformed line (for example after a
+      // crash) is skipped on its own, so later valid events still count and
+      // new sequence numbers stay above every decodable one.
+      let malformed = 0;
+      for (const line of content.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        try {
           const event = JSON.parse(line) as Partial<AgentTaskEvent>;
           if (
             typeof event.sequence === "number" &&
             Number.isSafeInteger(event.sequence)
           )
             maximum = Math.max(maximum, event.sequence);
+        } catch {
+          malformed++;
         }
-      } catch {
-        // A malformed historical event must not prevent task recovery. New
-        // events continue after the highest sequence that could be decoded.
       }
+      if (malformed > 0)
+        console.warn(
+          `TaskJournal: skipped ${malformed} malformed event line(s) in ${entry.name}`,
+        );
     }
     return maximum;
+  }
+
+  /** Move an undecodable task snapshot aside so it is kept for inspection
+   * and reported once, instead of being silently skipped on every list. */
+  private quarantineSnapshot(taskId: string): void {
+    const source = path.join(this.directory, `${taskId}.json`);
+    let target = `${source}.corrupt`;
+    if (fs.existsSync(target)) target = `${source}.${Date.now()}.corrupt`;
+    try {
+      fs.renameSync(source, target);
+      console.warn(
+        `TaskJournal: corrupt task snapshot ${taskId}.json moved to ${path.basename(target)}`,
+      );
+    } catch (error) {
+      console.warn(
+        `TaskJournal: corrupt task snapshot ${taskId}.json could not be moved aside: ${error}`,
+      );
+    }
   }
 
   private assertTaskId(taskId: string): void {

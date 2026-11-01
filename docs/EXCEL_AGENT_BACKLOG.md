@@ -31,7 +31,8 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 11. **E** List hidden sheets, rows and columns.
 12. **E** Find merged cells in the data.
 13. **E** Find the last filled row of a column.
-14. **N** Detect several tables on one sheet and their ranges.
+14. **E** Detect several tables on one sheet and their ranges. `get_workbook` lists the blocks (address,
+    headers, title) of a sheet that holds more than one, found in the top 200 rows and 40 columns of its used range.
 15. **E** Read cell comments and notes.
 
 ## Questions and answers

@@ -19,6 +19,11 @@ import {
 import type { ExcelRuntimeLike } from "./officeExcel.js";
 import { compareWrittenRows } from "./integrity.js";
 import {
+  BLOCK_SCAN_COLUMNS,
+  BLOCK_SCAN_ROWS,
+  findSheetBlocks,
+} from "./sheetBlocks.js";
+import {
   describeBusinessMeaning,
   type BusinessMeaning,
 } from "./businessContext.js";
@@ -314,9 +319,41 @@ export function createOfficeAgentHost(
           return { sheet, range };
         });
         await context.sync();
+        // One bounded read of the top-left part of each used range finds separate blocks (a
+        // summary on top, a table further down, a side table). Sheets with one block stay as they were.
+        const scans = used.map(({ range }: any) => {
+          if (range.isNullObject) return undefined;
+          const rows = Math.min(Number(range.rowCount), BLOCK_SCAN_ROWS);
+          const columns = Math.min(
+            Number(range.columnCount),
+            BLOCK_SCAN_COLUMNS,
+          );
+          if (rows < 2 || columns < 2) return undefined;
+          const scan = range
+            .getCell(0, 0)
+            .getResizedRange(rows - 1, columns - 1);
+          scan.load("values");
+          return scan;
+        });
+        if (scans.some(Boolean)) await context.sync();
+        const blocksOf = used.map(({ range }: any, index: number) => {
+          const scan = scans[index];
+          if (!scan) return undefined;
+          const blocks = findSheetBlocks({
+            values: scan.values as unknown[][],
+            usedAddress: String(range.address),
+            usedRows: Number(range.rowCount),
+            usedColumns: Number(range.columnCount),
+          });
+          return blocks.length > 1 ? blocks : undefined;
+        });
         const activeUsed = used.find(
           (item: any) => item.sheet.name === active.name,
         )?.range;
+        const activeBlocks =
+          blocksOf[
+            used.findIndex((item: any) => item.sheet.name === active.name)
+          ];
         let data: unknown;
         if (activeUsed && !activeUsed.isNullObject) {
           const top = activeUsed.getRow(0).getResizedRange(3, 0);
@@ -357,6 +394,11 @@ export function createOfficeAgentHost(
               ),
             })),
             firstRows: readable(firstRows, formats),
+            ...(activeBlocks
+              ? {
+                  note: `This sheet holds ${activeBlocks.length} separate blocks (see its blocks): the columns above are the used range's first row. Read the block you need by its address.`,
+                }
+              : {}),
             meaning: await readMeaning(
               context,
               activeUsed,
@@ -368,13 +410,14 @@ export function createOfficeAgentHost(
         return {
           activeSheet: String(active.name),
           selection: selectionAddress.split("!").pop() || undefined,
-          sheets: used.map(({ sheet, range }: any) => ({
+          sheets: used.map(({ sheet, range }: any, index: number) => ({
             name: String(sheet.name),
             usedRange: range.isNullObject
               ? null
               : String(range.address).split("!").pop(),
             rows: range.isNullObject ? 0 : Number(range.rowCount),
             columns: range.isNullObject ? 0 : Number(range.columnCount),
+            ...(blocksOf[index] ? { blocks: blocksOf[index] } : {}),
           })),
           tables: tables.items.map((table: any) => String(table.name)),
           ...(data ? { data } : {}),

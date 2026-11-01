@@ -78,7 +78,7 @@ const list = (description: string) => ({
 export const AGENT_TOOLS = [
   fn(
     "get_workbook",
-    "Sheets (name, used range, rows, columns), tables, the active sheet and selection, and for the data region of the active sheet: headers with column letters, types and a summary. Call it first.",
+    "Sheets (name, used range, rows, columns, and when a sheet holds several separate blocks, each block's address and headers), tables, the active sheet and selection, and for the data region of the active sheet: headers with column letters, types and a summary. Call it first.",
     {},
     [],
   ),

@@ -131,6 +131,7 @@ export interface M365ApiClient {
       language?: "en" | "si" | "ta";
       texts: string[];
       categories?: string[];
+      instruction?: string;
       consent: true;
     },
     signal?: AbortSignal,

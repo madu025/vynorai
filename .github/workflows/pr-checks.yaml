@@ -378,6 +378,17 @@ jobs:
   # GitHub does not have a way of requiring that all checks pass (you must manually select each job)
   # This action at least lets us manage the list of required tests via source control
 
+  # A change to what publish-m365.sh ships must bump the pane build id, or the publish is refused.
+  m365-build-id-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Pane build id bumped when shipped files change
+        run: node scripts/check-m365-build-id.mjs "origin/${{ github.base_ref }}"
+
   # so that creators of new jobs can add them to this list
   require-all-checks-to-pass:
     if: always()
@@ -393,9 +404,12 @@ jobs:
       - vscode-get-test-file-matrix
       - vscode-package-extension-linux
       - vscode-e2e-tests
+      - m365-build-id-check
 
     steps:
       - name: Decide whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}
+          # Runs on pull requests only; a push to main skips it.
+          allowed-skips: m365-build-id-check

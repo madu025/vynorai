@@ -67,6 +67,8 @@ export const CAPABILITY_FEATURES = [
   "sentiment",
   "keywords",
   "classification",
+  // A free-form instruction applied to every item (an AI column: extract, categorise, rewrite).
+  "instruction",
   // Microsoft Graph, after explicit approval of the recipient and the content.
   "email-share",
   // Native desktop features: never faked, never Office.js.
@@ -88,6 +90,7 @@ export const AI_TEXT_FEATURES = [
   "sentiment",
   "keywords",
   "classification",
+  "instruction",
 ] as const satisfies readonly CapabilityFeature[];
 export type AiTextFeature = (typeof AI_TEXT_FEATURES)[number];
 
@@ -304,6 +307,11 @@ export const CAPABILITY_REGISTRY: Readonly<
     needs: ["read", "ai"],
   },
   classification: {
+    execution: "masked_ai",
+    base: "available",
+    needs: ["read", "ai"],
+  },
+  instruction: {
     execution: "masked_ai",
     base: "available",
     needs: ["read", "ai"],

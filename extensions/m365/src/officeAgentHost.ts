@@ -17,6 +17,7 @@ import {
   type StagedChange,
 } from "./agent.js";
 import type { ExcelRuntimeLike } from "./officeExcel.js";
+import type { AiTextFeature } from "./capabilityRegistry.js";
 import { compareWrittenRows } from "./integrity.js";
 import {
   BLOCK_SCAN_COLUMNS,
@@ -484,9 +485,10 @@ export function createOfficeAgentHost(
     ...(api
       ? {
           analyzeTextBatch: (input: {
-            feature: "sentiment" | "keywords" | "classification";
+            feature: AiTextFeature;
             texts: string[];
             categories?: string[];
+            instruction?: string;
           }) =>
             api.analyzeTextBatch({
               ...input,

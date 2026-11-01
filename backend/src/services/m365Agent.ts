@@ -123,9 +123,12 @@ export const AGENT_TOOLS = [
   ),
   fn(
     "analyze_text_batch",
-    "Read-only, consent-gated masked text analysis. Send only a bounded batch from the selected text column; results are labels and keywords that must be staged with write_values after review.",
+    'Read-only, consent-gated masked text analysis. Send only a bounded batch from the selected text column; results are labels and keywords that must be staged with write_values after review. feature `instruction` is an AI column: give `instruction` (one sentence, e.g. "the city in this address", "the expense category: Food, Transport or Other", "a 10-word summary in Sinhala") and each result\'s label is that item\'s answer ("n/a" when there is none); stage the answers with write_values into a new column next to the source, with a header. Use a formula instead when one can compute it exactly.',
     {
       feature: en(...AI_TEXT_FEATURES),
+      instruction: str(
+        "Only with feature instruction: what to put in the new column for each item",
+      ),
       texts: {
         type: "array",
         items: { type: "string", maxLength: 1000 },

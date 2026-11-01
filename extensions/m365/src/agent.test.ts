@@ -256,6 +256,50 @@ test("text analysis is read-only and bounded before a result column can be stage
   assert.match(run.messages.at(-1)?.content ?? "", /positive/);
 });
 
+test("an AI column sends a masked instruction and the answers reach the model masked", async () => {
+  const received: unknown[] = [];
+  const run = await runAgent({
+    request: "add a column with the contact email",
+    host: host({
+      analyzeTextBatch: async (input) => {
+        received.push(input);
+        return {
+          results: [{ index: 0, label: "sales@example.com", keywords: [] }],
+        };
+      },
+    }),
+    mask: new PersonalMask(),
+    model: async (messages) =>
+      messages.some((m) => m.role === "tool")
+        ? { content: "done", tool_calls: [] }
+        : {
+            content: "",
+            tool_calls: [
+              call("missing", "analyze_text_batch", {
+                feature: "instruction",
+                texts: ["x"],
+              }),
+              call("ai", "analyze_text_batch", {
+                feature: "instruction",
+                instruction: "the contact email; cc boss@example.com",
+                texts: ["write to sales@example.com"],
+              }),
+            ],
+          },
+  });
+  // Without an instruction the tool refuses before any request.
+  assert.equal(received.length, 1);
+  const sent = received[0] as { instruction: string; texts: string[] };
+  assert.doesNotMatch(JSON.stringify(sent), /@example\.com/);
+  assert.match(sent.instruction, /^the contact email; cc /);
+  const tools = run.messages
+    .filter((m) => m.role === "tool")
+    .map((m: any) => String(m.content));
+  assert.match(tools[0], /needs `instruction`/);
+  assert.doesNotMatch(tools[1], /sales@example\.com/);
+  assert.equal(run.changes.length, 0);
+});
+
 test("column analysis reads at most 5,000 rows on the device and returns a summary, not rows", async () => {
   const asked: string[] = [];
   let turn = 0;

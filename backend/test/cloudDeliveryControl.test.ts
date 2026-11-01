@@ -23,7 +23,18 @@ after(async () => {
   if (dbm?.db)
     await new Promise<void>((resolve) => dbm.db!.close(() => resolve()));
   process.chdir(originalCwd);
-  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3 });
+  // Best-effort: on Windows a handle can keep the temp folder busy for a moment
+  // after the database closes. The folder is in the OS temp dir either way.
+  try {
+    fs.rmSync(tmpDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 200,
+    });
+  } catch (error) {
+    console.warn(`temp cleanup skipped: ${(error as Error).message}`);
+  }
 });
 
 const sha = "a".repeat(64);

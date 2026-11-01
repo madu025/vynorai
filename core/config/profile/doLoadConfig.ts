@@ -38,6 +38,7 @@ import { getWorkspaceContinueRuleDotFiles } from "../getWorkspaceContinueRuleDot
 import { loadContinueConfigFromJson } from "../load";
 import { CodebaseRulesCache } from "../markdown/loadCodebaseRules";
 import { loadMarkdownRules } from "../markdown/loadMarkdownRules";
+import { gateWorkspaceRules } from "../markdown/workspaceTrustRules";
 import { migrateJsonSharedConfig } from "../migrateSharedConfig";
 import { rectifySelectedModelsFromGlobalContext } from "../selectedModels";
 import { loadContinueConfigFromYaml } from "../yaml/loadYaml";
@@ -63,7 +64,11 @@ async function loadRules(ide: IDE) {
   rules.unshift(...codebaseRulesCache.rules);
   errors.push(...codebaseRulesCache.errors);
 
-  return { rules, errors };
+  // An untrusted workspace does not get to steer the agent with its own files.
+  const gated = await gateWorkspaceRules(ide, rules);
+  errors.push(...gated.errors);
+
+  return { rules: gated.rules, errors };
 }
 
 export default async function doLoadConfig(options: {

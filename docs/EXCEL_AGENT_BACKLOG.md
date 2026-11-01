@@ -590,7 +590,7 @@ Unless a line says "live", an E item is checked by unit tests or the real-model 
 494. **E** Ask a short clarifying question when a request is ambiguous, with options.
 495. **E** Suggest follow-up actions after an answer.
 496. **E** Use the person's selection as the range when they say "this".
-497. **N** Remember preferred formats and sheets per workbook.
+497. **P** (currency, number style, financial-year start, audience, change log and a result-sheet prefix are kept in the workbook settings; preferred source sheets are not) Remember preferred formats and sheets per workbook (`extensions/m365/src/preferences.ts`).
 498. **E** (tokens of the request are shown under the agent card; credits are on the dashboard) Cost per request shown in credits (counted by the gateway; not shown in the pane).
 499. **N** Work on Excel desktop for Windows and Mac (built for Excel for the web; desktop not checked).
 500. **N** Compare its answers with Copilot on a held-out set of real requests.

@@ -578,6 +578,8 @@ export class VsCodeExtension {
       void this.core.invoke("workspace/invalidate", {
         reason: "workspace-trust-granted",
       });
+      // Project instruction files load only in a trusted workspace.
+      void this.configHandler.reloadConfig("Workspace trust granted");
     });
 
     // TODO merge this and re-enable https://github.com/continuedev/continue/pull/8364

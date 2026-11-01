@@ -1,5 +1,9 @@
 import type { ContextItem } from "core";
-import type { HookPayload, HookRunResult } from "core/hooks/types";
+import type {
+  HookPayload,
+  HookRunResult,
+  NotificationKind,
+} from "core/hooks/types";
 import type { IIdeMessenger } from "../../context/IdeMessenger";
 
 const NO_HOOKS: HookRunResult = { blocked: false, warnings: [], ran: 0 };
@@ -91,5 +95,23 @@ export async function runSubagentStopHook(
     subagentType,
     toolOutput,
     toolError,
+  });
+}
+
+/**
+ * Notification hook: fired where the GUI needs the person (a tool waits for
+ * approval, the agent paused). It never blocks and never throws.
+ */
+export async function runNotificationHook(
+  ideMessenger: IIdeMessenger,
+  sessionId: string,
+  kind: NotificationKind,
+  message: string,
+): Promise<void> {
+  await runHooks(ideMessenger, {
+    event: "Notification",
+    sessionId,
+    kind,
+    message,
   });
 }

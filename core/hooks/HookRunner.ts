@@ -37,6 +37,7 @@ function emptyConfig(): HooksConfig {
     SessionStart: [],
     PreCompact: [],
     SubagentStop: [],
+    Notification: [],
   };
 }
 

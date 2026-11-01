@@ -3,7 +3,7 @@
  * turn. Semantics follow the Claude Code convention so existing hook scripts
  * work unchanged: exit 0 = allow (stdout may add context), exit 2 = block
  * (stderr is the reason), any other exit = non-blocking warning.
- * SessionStart, PreCompact and SubagentStop cannot block: exit 2 is a warning.
+ * SessionStart, PreCompact, SubagentStop and Notification cannot block: exit 2 is a warning.
  */
 export type HookEvent =
   | "UserPromptSubmit"
@@ -12,7 +12,8 @@ export type HookEvent =
   | "Stop"
   | "SessionStart"
   | "PreCompact"
-  | "SubagentStop";
+  | "SubagentStop"
+  | "Notification";
 
 export const HOOK_EVENTS: HookEvent[] = [
   "UserPromptSubmit",
@@ -22,6 +23,7 @@ export const HOOK_EVENTS: HookEvent[] = [
   "SessionStart",
   "PreCompact",
   "SubagentStop",
+  "Notification",
 ];
 
 /**
@@ -33,7 +35,11 @@ export const NON_BLOCKING_HOOK_EVENTS: readonly HookEvent[] = [
   "SessionStart",
   "PreCompact",
   "SubagentStop",
+  "Notification",
 ];
+
+/** Why a Notification hook fired. */
+export type NotificationKind = "approval_required" | "agent_paused";
 
 /** JSON sent to the hook on stdin. */
 export interface HookPayload {
@@ -54,6 +60,9 @@ export interface HookPayload {
   /** SubagentStop: the subagent's tool-call id and kind ("explore" or a custom agent name). */
   subagentId?: string;
   subagentType?: string;
+  /** Notification: the text shown to the person and why it was shown. */
+  message?: string;
+  kind?: NotificationKind;
 }
 
 export interface HookRunResult {

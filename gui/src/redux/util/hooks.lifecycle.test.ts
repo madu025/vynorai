@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { runPreCompactHook, runSessionStartHook } from "./hooks";
+import {
+  runNotificationHook,
+  runPreCompactHook,
+  runSessionStartHook,
+} from "./hooks";
 
 function messenger(calls: any[], content: any) {
   return {
@@ -22,6 +26,27 @@ describe("lifecycle hook helpers", () => {
     });
     expect(await runSessionStartHook(m, "s7")).toBe("hi");
     expect(calls[0]).toEqual({ event: "SessionStart", sessionId: "s7" });
+  });
+
+  it("Notification sends the message and kind and never throws", async () => {
+    const calls: any[] = [];
+    const m = messenger(calls, { blocked: true, warnings: [], ran: 1 });
+    await runNotificationHook(m, "s1", "approval_required", "Approve edit?");
+    expect(calls[0]).toEqual({
+      event: "Notification",
+      sessionId: "s1",
+      kind: "approval_required",
+      message: "Approve edit?",
+    });
+    const broken = {
+      request: async () => {
+        throw new Error("down");
+      },
+      ide: { showToast: async () => undefined },
+    } as any;
+    await expect(
+      runNotificationHook(broken, "s1", "agent_paused", "x"),
+    ).resolves.toBeUndefined();
   });
 
   it("PreCompact sends the trigger and optional instructions", async () => {

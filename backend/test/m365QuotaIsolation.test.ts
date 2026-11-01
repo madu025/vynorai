@@ -686,3 +686,19 @@ test("18. top-ups stay inside the allowance, and a swept hold cannot be grown", 
   assert.equal(await quota.topUpReservation(hold!, 500), false);
   assert.equal((await seatUsage(tenantId, "obj-18")).used_tokens, 0);
 });
+
+test("19. a request larger than remaining M365 quota is refused without overspend", async () => {
+  const { tenantId, user } = await freshSeat("obj-19", "free");
+  const opened = await analysis.reserveM365ForUser(user, 1_000);
+  await quota.releaseQuotaReservation(opened!);
+  const before = await seatUsage(tenantId, "obj-19");
+  await dbm.dbRun(
+    "UPDATE m365_tenant_usage SET used_tokens = max_tokens - 1000 WHERE tenant_id = ? AND object_id = ?",
+    [tenantId, "obj-19"],
+  );
+  const hold = await analysis.reserveM365ForUser(user, 2_000);
+  assert.equal(hold, null);
+  const after = await seatUsage(tenantId, "obj-19");
+  assert.equal(after.used_tokens, Number(before.max_tokens) - 1_000);
+  assert.ok(after.used_tokens <= after.max_tokens);
+});

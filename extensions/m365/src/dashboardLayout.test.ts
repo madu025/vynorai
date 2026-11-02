@@ -343,6 +343,19 @@ test("a measure the request names but the data lacks is reported, not dropped", 
     missingMeasures("Sales and Cost by Region", ["Region", "Sales", "Cost"]),
     [],
   );
+  // A margin percentage is not the profit amount (live run 2026-11-02).
+  assert.deepEqual(
+    missingMeasures("Sales and Profit by Region", [
+      "Region",
+      "Sales",
+      "Profit Margin",
+    ]),
+    ["Profit"],
+  );
+  assert.deepEqual(
+    missingMeasures("Profit margin by Region", ["Region", "Profit Margin"]),
+    [],
+  );
   const layout = buildDashboardLayout(base({ missing: ["Profit"] }));
   assert.ok(layout.notes.some((note) => note.includes('"Profit"')));
 });

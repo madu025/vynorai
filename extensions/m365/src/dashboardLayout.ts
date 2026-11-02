@@ -75,7 +75,14 @@ export function missingMeasures(
   return MEASURE_WORDS.filter(
     (word) =>
       new RegExp(`\\b${word}s?\\b`).test(asked) &&
-      !names.some((name) => name.includes(word)),
+      // "profit margin" asks for the margin, not the profit amount.
+      !new RegExp(`\\b${word}s?\\s+(margin|%|ratio|rate)`).test(asked) &&
+      // "Profit Margin" or "Tax %" is a ratio, not the amount the person asked for.
+      !names.some(
+        (name) =>
+          name.includes(word) &&
+          (word === "margin" || !/margin|%|ratio|rate|percent/.test(name)),
+      ),
   ).map((word) => word[0].toUpperCase() + word.slice(1));
 }
 

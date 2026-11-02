@@ -5832,6 +5832,37 @@ body[data-auth="in"] .workspace-nav button.active {
   position: sticky;
   bottom: 0;
 }
+/* With a preview open only the scroll area scrolls, and it ends above the tab bar. When the workspace
+   scrolled too, the scroll area grew past the pane and its pinned Approve/Discard bar sat under the
+   tab bar or below the pane (live run 2026-11-02). The request box is already small here, so the
+   plan keeps most of the pane. */
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  ) {
+  overflow: hidden;
+}
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  )
+  > .scroll-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  )
+  > .workspace-nav {
+  position: static;
+}
+/* "Check my data" sits above the request box, outside the scroll area: it steps aside while a plan
+   is open, as the starter cards do, so the plan is not left 118 px. */
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  )
+  > #health {
+  display: none;
+}
 
 /* A preview table of several columns scrolls sideways in a narrow pane; a cell never breaks a word or
    a number in two ("Regio n", "1440 0"). */

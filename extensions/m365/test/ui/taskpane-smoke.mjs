@@ -809,6 +809,61 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     path: path.join(artifactDirectory, `taskpane-${label}-share.png`),
     fullPage: true,
   });
+  // A long agent plan: Approve stays on screen above the tab bar wherever the plan is scrolled.
+  // Live run 2026-11-02: two scrollers pinned the bar under the tab bar or below the pane.
+  await page.click('[data-workspace-target="work"]');
+  const approveStates = await page.evaluate(async () => {
+    document.querySelector("#email-card")?.setAttribute("hidden", "");
+    document.querySelector("#share-card")?.setAttribute("hidden", "");
+    const card = document.querySelector("#agent-card");
+    card.hidden = false;
+    // A plan waiting for approval: Approve and Discard show, Stop and Undo do not.
+    const prior = ["agent-stop", "agent-undo"].map((id) => [
+      id,
+      document.getElementById(id).hidden,
+    ]);
+    for (const [id] of prior) document.getElementById(id).hidden = true;
+    for (const id of ["agent-approve", "agent-discard"])
+      document.getElementById(id).hidden = false;
+    const filler = document.createElement("div");
+    filler.style.height = "900px";
+    filler.textContent = "plan steps";
+    card.insertBefore(filler, card.querySelector(".apply-dock"));
+    card.scrollIntoView({ block: "start" });
+    const area = document.querySelector(".scroll-area");
+    const approve = document.getElementById("agent-approve");
+    const nav = document.querySelector(".workspace-nav");
+    const states = [];
+    // the start of the plan, part way down, and its end
+    for (const step of ["start", "middle", "end"]) {
+      if (step === "middle") area.scrollTop += 300;
+      if (step === "end") card.scrollIntoView({ block: "end" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const box = approve.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      states.push({
+        step,
+        onScreen: box.top >= 0 && box.bottom <= window.innerHeight,
+        aboveNav: box.bottom <= nav.getBoundingClientRect().top + 1,
+        unobscured: hit === approve || approve.contains(hit),
+      });
+    }
+    filler.remove();
+    for (const id of ["agent-approve", "agent-discard"])
+      document.getElementById(id).hidden = true;
+    for (const [id, hidden] of prior)
+      document.getElementById(id).hidden = hidden;
+    card.hidden = true;
+    return states;
+  });
+  for (const state of approveStates)
+    assert.ok(
+      state.onScreen && state.aboveNav && state.unobscured,
+      `${label}: Approve must stay visible above the tab bar: ${JSON.stringify(state)}`,
+    );
   assert.deepEqual(
     consoleErrors,
     [],

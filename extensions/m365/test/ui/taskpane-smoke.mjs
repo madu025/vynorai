@@ -434,24 +434,25 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     0,
     "the retained selection context must not consume a work-screen row",
   );
+  // The separate "Select your data" share state was removed (0b8dc547): the Share tab always shows
+  // the share card itself.
   await page.evaluate(() => {
     document.body.dataset.workspaceView = "share";
-    document.querySelector("#share-card")?.setAttribute("hidden", "");
-    document.querySelector("#share-empty")?.removeAttribute("hidden");
+    document.querySelector("#share-card")?.removeAttribute("hidden");
     document.querySelector("#selection-chip")?.removeAttribute("hidden");
   });
-  const shareEmptyLayout = await page.$eval("#share-empty", (element) => {
+  const shareLayout = await page.$eval("#share-card", (element) => {
     const box = element.getBoundingClientRect();
     return { display: getComputedStyle(element).display, height: box.height };
   });
-  assert.equal(
-    shareEmptyLayout.display,
-    "block",
-    "Share empty state must remain visible when selection context exists",
+  assert.notEqual(
+    shareLayout.display,
+    "none",
+    "the Share tab must show the share card",
   );
   assert.ok(
-    shareEmptyLayout.height > 0,
-    "Share empty state must have visible content before a card exists",
+    shareLayout.height > 0,
+    "the share card must have visible content in the Share tab",
   );
   await page.evaluate(() => {
     document.body.dataset.workspaceView = "work";
@@ -782,7 +783,6 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
       "Please find the reviewed Excel report attached.";
     document.querySelector("#share-message-block").removeAttribute("hidden");
     document.querySelector("#share-card").removeAttribute("hidden");
-    document.querySelector("#share-empty").setAttribute("hidden", "");
     document.querySelector("#share-message").value =
       "Sales dashboard\nTotal Net Amount: 7,461,955";
     email.scrollIntoView({ block: "start" });

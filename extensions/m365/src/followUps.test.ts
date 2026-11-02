@@ -71,3 +71,29 @@ test("the answer's own question is the first chip with the full sentence kept", 
   assert.equal(steps[0].label, "Want a summary sheet or chart?");
   assert.match(steps[0].full ?? "", /Total is 3,000/);
 });
+
+test("an offer question becomes a clean chip and the request it fills is the person's own words", () => {
+  // Live run 2026-11-02: the chip read "Should I write these two to a sorted sheet,?" and filled the
+  // request box with the assistant's own question.
+  const [step] = nextSteps({
+    questions: [
+      "Should I write these two to a sorted sheet, or sort the main data by sales instead?",
+    ],
+  });
+  assert.equal(step.label, "Should I write these two to a sorted sheet?");
+  assert.equal(step.text, "Write these two to a sorted sheet");
+  const [want] = nextSteps({
+    questions: ["Do you want me to add a chart of Sales by Region?"],
+  });
+  assert.equal(want.text, "Add a chart of Sales by Region");
+  const [open] = nextSteps({ questions: ["Which region grew fastest?"] });
+  assert.equal(open.text, "Which region grew fastest?");
+  for (const question of [
+    "Want this as a pivot, a chart, a summary table, or a dashboard with filters on Region?",
+    "Should I add totals; or format the numbers as currency, with two decimals?",
+  ])
+    assert.doesNotMatch(
+      nextSteps({ questions: [question] })[0].label,
+      /[,;:]\?$/,
+    );
+});

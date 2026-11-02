@@ -23,6 +23,11 @@ export function drawOutcomeChart(
   const width = 300;
   const height = 150;
   const pad = 18;
+  const type = String(chart.type || "column").toLowerCase();
+  const horizontal = type === "bar" || type === "stacked-bar";
+  // Horizontal bars carry their category names on the left of each row.
+  const left = horizontal ? 52 : pad;
+  const span = width - left - pad;
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   const all = chart.series.flatMap((entry) => entry.values);
@@ -48,7 +53,6 @@ export function drawOutcomeChart(
     stroke: "#9aa5b5",
   });
 
-  const type = String(chart.type || "column").toLowerCase();
   const drawLineSeries = (
     entry: OutcomeChart["series"][number],
     index: number,
@@ -100,9 +104,9 @@ export function drawOutcomeChart(
       ...series.values.map((value) => Math.abs(value)),
     );
     series.values.forEach((value, at) => {
-      const bar = (Math.abs(value) / horizontalMax) * (width - pad * 2);
+      const bar = (Math.abs(value) / horizontalMax) * span;
       add("rect", {
-        x: String(value < 0 ? pad + (width - pad * 2) - bar : pad),
+        x: String(value < 0 ? left + span - bar : left),
         y: String(pad + rowHeight * at + rowHeight * 0.12),
         width: String(Math.max(1, bar)),
         height: String(Math.max(1, rowHeight * 0.76)),
@@ -123,9 +127,9 @@ export function drawOutcomeChart(
       let offset = 0;
       chart.series.forEach((entry, index) => {
         const value = Math.max(0, Number(entry.values[at] ?? 0));
-        const segmentWidth = (value / total) * (width - pad * 2);
+        const segmentWidth = (value / total) * span;
         add("rect", {
-          x: String(pad + offset),
+          x: String(left + offset),
           y: String(pad + rowHeight * at + rowHeight * 0.12),
           width: String(Math.max(1, segmentWidth)),
           height: String(Math.max(1, rowHeight * 0.76)),
@@ -230,12 +234,8 @@ export function drawOutcomeChart(
       entry.values.forEach((value, at) => {
         const text = add("text", {
           x: String(
-            type === "bar" || type === "stacked-bar"
-              ? pad +
-                  Math.max(
-                    2,
-                    (Math.abs(value) / Math.max(1, max)) * (width - pad * 2),
-                  )
+            horizontal
+              ? left + Math.max(2, (Math.abs(value) / Math.max(1, max)) * span)
               : pad + step * (at + 0.5),
           ),
           y: String(
@@ -255,15 +255,27 @@ export function drawOutcomeChart(
       }),
     );
   }
+  const rowHeight = (height - pad * 2) / count;
   chart.categories.forEach((name, at) => {
-    const label = add("text", {
-      x: String(pad + step * (at + 0.5)),
-      y: String(height - 4),
-      "text-anchor": "middle",
-      "font-size": "8",
-      fill: "#4b5563",
-    });
-    label.textContent = name.slice(0, 6);
+    const label = add(
+      "text",
+      horizontal
+        ? {
+            x: String(left - 4),
+            y: String(pad + rowHeight * (at + 0.5) + 3),
+            "text-anchor": "end",
+            "font-size": "8",
+            fill: "#4b5563",
+          }
+        : {
+            x: String(pad + step * (at + 0.5)),
+            y: String(height - 4),
+            "text-anchor": "middle",
+            "font-size": "8",
+            fill: "#4b5563",
+          },
+    );
+    label.textContent = name.slice(0, horizontal ? 9 : 6);
   });
   return svg;
 }

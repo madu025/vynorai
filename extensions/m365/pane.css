@@ -3516,6 +3516,7 @@ body:has(#agent-checked[data-state="working"]) #agent-progress {
   line-height: 1.35;
 }
 .run-gate[data-reason="backend_unavailable"],
+.run-gate[data-reason="credits_exhausted"],
 .run-gate[data-reason="account_not_ready"] {
   color: var(--danger);
 }
@@ -4801,7 +4802,8 @@ body #explore-empty {
 }
 
 /* the pinned bar must not hide the field that has the focus or the end of a result */
-.workspace > .scroll-area:has(.apply-dock button:not([hidden])) {
+.workspace
+  > .scroll-area:has(.card:not([hidden]) .apply-dock button:not([hidden])) {
   scroll-padding-bottom: 76px;
 }
 
@@ -5792,29 +5794,55 @@ body[data-auth="in"] .workspace-nav button.active {
  * box and tab bar already take about half of a 600 px pane, and the pinned bar covers the bottom of the
  * scroll area, so only about 200 px were left to read the plan. Keep at least 45% of the pane for the
  * plan itself: the request box gets smaller, the "describe what you want" hint goes away (a preview is
- * already open), and what still does not fit scrolls inside the workspace with the tab bar pinned.
+ * already open; a blocking reason such as no credits stays visible), and what still does not fit scrolls inside the workspace with the tab bar pinned.
  */
-.workspace:has(.scroll-area .apply-dock button:not([hidden])) {
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  ) {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.workspace:has(.scroll-area .apply-dock button:not([hidden])) > .scroll-area {
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  )
+  > .scroll-area {
   min-height: calc(45vh + 84px);
   min-height: calc(45dvh + 84px);
 }
-.workspace:has(.scroll-area .apply-dock button:not([hidden]))
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  )
   > .composer
   textarea {
   min-height: 44px;
   height: 44px;
 }
-.workspace:has(.scroll-area .apply-dock button:not([hidden]))
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  )
   > .composer
-  .run-gate {
+  .run-gate[data-reason="request_required"] {
   display: none;
 }
-.workspace:has(.scroll-area .apply-dock button:not([hidden])) > .workspace-nav {
+.workspace:has(
+    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
+  )
+  > .workspace-nav {
   position: sticky;
   bottom: 0;
+}
+
+/* A preview table of several columns scrolls sideways in a narrow pane; a cell never breaks a word or
+   a number in two ("Regio n", "1440 0"). */
+body[data-auth="in"] .outcome table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+body[data-auth="in"] .outcome th,
+body[data-auth="in"] .outcome td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }

@@ -44,10 +44,34 @@ export function shortQuestion(text: string): string {
     .trim();
   q = q.replace(/[?.!]+$/, "");
   const words = q.split(" ");
-  if (words.length > 9) q = words.slice(0, 9).join(" ");
-  while (TRAILING.test(q)) q = q.replace(TRAILING, "");
+  if (words.length > 9) {
+    // Cut at the first choice ("..., or ...") when it fits, never mid-clause with a stray comma.
+    const choice = /^(.{8,}?),?\s+or\s+/i.exec(q);
+    q =
+      choice && choice[1].split(" ").length <= 9
+        ? choice[1]
+        : words.slice(0, 9).join(" ");
+  }
+  q = q.replace(/[\s,;:]+$/, "");
+  while (TRAILING.test(q)) q = q.replace(TRAILING, "").replace(/[\s,;:]+$/, "");
   q = q.charAt(0).toUpperCase() + q.slice(1);
   return q ? q + "?" : "";
+}
+
+/**
+ * The request a chip fills in. An offer the assistant made ("Should I X?", "Do you want me to X?")
+ * becomes the person's own instruction "X", taken from the full question so a long X is not cut;
+ * any other question is asked as its short chip.
+ */
+const OFFER =
+  /\b(?:should\s+i|shall\s+i|can\s+i|may\s+i|do\s+you\s+want\s+me\s+to|would\s+you\s+like\s+me\s+to|want\s+me\s+to)\s+([^?]+)/i;
+export function chipRequest(question: string, short: string): string {
+  if (!/^(?:should|shall|can|may|do|would|want)\b/i.test(short)) return short;
+  const offer = OFFER.exec(question);
+  if (!offer) return short;
+  // "Should I X, or Y instead?": the chip takes the first choice, X.
+  const action = offer[1].split(/,?\s+or\s+/i)[0].trim();
+  return action ? action.charAt(0).toUpperCase() + action.slice(1) : short;
 }
 
 const key = (text: string): string =>
@@ -75,7 +99,7 @@ export function nextSteps(input: {
   };
   for (const question of input.questions ?? []) {
     const short = shortQuestion(question);
-    add(short, short, cleanChipText(question));
+    add(short, chipRequest(question, short), cleanChipText(question));
   }
   for (const idea of idleSuggestions(input.schema))
     if (!/inspect formulas/i.test(idea.title)) add(idea.title, idea.text);

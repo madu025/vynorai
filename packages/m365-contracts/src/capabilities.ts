@@ -386,6 +386,8 @@ export interface CapabilityContext {
   graphScopes?: readonly string[];
   canRead: boolean;
   canWrite: boolean;
+  /** Why the account cannot use Excel right now (credits, subscription), shown instead of "no read access". */
+  accountBlock?: string;
 }
 
 export interface CapabilityRequirement {
@@ -531,9 +533,9 @@ export function resolveCapability(
       );
   }
   if (spec.needs.includes("read") && !context.canRead)
-    return refuse("Excel read access is unavailable.");
+    return refuse(context.accountBlock ?? "Excel read access is unavailable.");
   if (spec.needs.includes("write") && !context.canWrite)
-    return refuse("Excel write access is unavailable.");
+    return refuse(context.accountBlock ?? "Excel write access is unavailable.");
   if (spec.needs.includes("ai") && !context.aiEnabled)
     return refuse("AI analysis is disabled or unavailable.");
   if (

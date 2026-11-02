@@ -263,3 +263,27 @@ test("a real verified companion probe can upgrade only a Windows desktop capabil
     "unsupported_host",
   );
 });
+
+test("an account block names its real reason instead of 'Excel read access is unavailable'", async () => {
+  // Live run 2026-11-02: credits were used up, and every feature said only that read access was
+  // unavailable.
+  const { resolveCapability } = await import("./capabilityRegistry.js");
+  const blocked = hostCapabilityContext({
+    server: {
+      excel: { canInspect: false, canApply: false },
+      aiAnalysis: true,
+      blockedReason: "credits_exhausted",
+    },
+  });
+  const chart = resolveCapability("chart", blocked);
+  assert.equal(chart.status, "unsupported");
+  assert.match(chart.reason ?? "", /credits/i);
+  assert.doesNotMatch(chart.reason ?? "", /access is unavailable/i);
+  const plain = hostCapabilityContext({
+    server: { excel: { canInspect: false, canApply: false }, aiAnalysis: true },
+  });
+  assert.match(
+    resolveCapability("chart", plain).reason ?? "",
+    /access is unavailable/i,
+  );
+});

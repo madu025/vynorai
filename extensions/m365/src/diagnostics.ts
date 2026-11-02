@@ -249,6 +249,7 @@ export function hostCapabilityContext(input: {
   server?: {
     excel: { canInspect: boolean; canApply: boolean };
     aiAnalysis: boolean;
+    blockedReason?: string;
   };
   /** Delegated Graph scopes configured for this add-in (full URIs or short names). */
   graphScopes?: readonly string[];
@@ -256,6 +257,7 @@ export function hostCapabilityContext(input: {
   /** Result of a real signed-companion probe, when the caller has one. */
   companionStatus?: CompanionStatus;
 }): CapabilityContext {
+  const accountBlock = ACCOUNT_BLOCK_REASON[input.server?.blockedReason ?? ""];
   const host = describeOfficeHost(input.office);
   const platformRaw = input.office?.context?.platform ?? host.platform;
   return baseCapabilityContext({
@@ -272,8 +274,21 @@ export function hostCapabilityContext(input: {
     aiEnabled: input.server?.aiAnalysis ?? false,
     aiConsent: input.aiConsent ?? false,
     graphScopes: input.graphScopes ?? [],
+    ...(accountBlock ? { accountBlock } : {}),
   });
 }
+
+/** The server's account block, in words a person can act on. */
+const ACCOUNT_BLOCK_REASON: Record<string, string> = {
+  credits_exhausted:
+    "Your VynorAI Excel credits are used up for this period. Add credits or upgrade the plan.",
+  subscription_inactive: "Your VynorAI Excel subscription is not active.",
+  identity_not_linked: "Link this Microsoft account to VynorAI first.",
+  tenant_disabled: "VynorAI is turned off for your organization.",
+  tenant_scope_disabled:
+    "Your organization has not allowed VynorAI to use Excel.",
+  insufficient_scope: "Sign in again so VynorAI can get Excel access.",
+};
 
 /**
  * Merges the server's account verdicts with the host's own. The host's evaluated ExcelApi evidence

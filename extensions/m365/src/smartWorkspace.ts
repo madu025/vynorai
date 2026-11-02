@@ -57,6 +57,19 @@ const COMPLEX_REQUEST =
 const MULTI_STEP =
   /\b(?:and then|then|after that|before that|first.+then|clean.+(?:chart|pivot|dashboard)|(?:chart|pivot|dashboard).+(?:email|send|share))\b/i;
 
+// Each local action writes its own result, so "make a column, then act on that column" cannot chain.
+const CHAINED_NEW_COLUMN =
+  /\b(?:add|create|make|insert|new)\b[^.?]{0,60}\bcolumn\b[^.?]{0,80}\band\s+(?:then\s+)?(?:highlight|colou?r|shade|mark|flag|sort|filter|rank|chart)\b/i;
+// A business ratio with no formula given: the local reader only takes explicit expressions.
+const INFERRED_RATIO =
+  /\b(?:add|create|make|insert|new|calculate|compute)\b[^.?]{0,60}\b(?:profit\s+)?(?:margin|markup)\b/i;
+// "Which products are above average? Sort them": a filtered list, not one aggregate number.
+const FILTERED_LIST =
+  /^\s*(?:which|what|who|list|show|find)\b[^.?]{0,80}\b(?:above|below|over|under|more\s+than|less\s+than|higher\s+than|lower\s+than)\s+(?:the\s+)?average\b|\?\s*(?:and\s+)?(?:please\s+)?(?:sort|rank|order)\s+them\b|\baverage\b[^.?]{0,40}\band\s+(?:sort|rank|order)\s+them\b/i;
+// Free-text extraction (city from an address, domain from an email) needs reading the text itself.
+const TEXT_EXTRACTION =
+  /\b(?:take|extract|get|pull|grab|split\s+out)\b[^.?]{0,40}\b(?:city|town|country|state|province|district|domain|first\s+name|last\s+name|surname|post\s*code|zip(?:\s*code)?|house\s+number|street)\b[^.?]{0,40}\bfrom\b/i;
+
 /** Smart stays local for ordinary work and uses the agent for workbook-wide reasoning. */
 export function chooseSmartPath(
   request: string,
@@ -68,6 +81,10 @@ export function chooseSmartPath(
   const text = String(request ?? "").trim();
   return COMPLEX_REQUEST.test(text) ||
     MULTI_STEP.test(text) ||
+    CHAINED_NEW_COLUMN.test(text) ||
+    INFERRED_RATIO.test(text) ||
+    FILTERED_LIST.test(text) ||
+    TEXT_EXTRACTION.test(text) ||
     text.length > 240
     ? "agent"
     : "local";

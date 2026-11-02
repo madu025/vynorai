@@ -626,3 +626,26 @@ test("the quality report checks the business key, not only whole rows", () => {
   // The column table stays where the writer bolds it.
   assert.equal(report.values[report.headerRow][0], "Column");
 });
+
+test("a highlight rule with no column it can match is a problem, never a freeze-only plan", () => {
+  // Live run 2026-11-02: "highlight rows under 10%" named no existing column and the plan froze the
+  // header only, presented as the answer.
+  const sales = ["Region", "Product", "Units", "Sales", "Cost", "Address"];
+  const data = [
+    ["North", "Laptop", 12, 14400, 11800, "12 Galle Road, Colombo"],
+  ];
+  const near = interpretInstruction(
+    "Add a column with profit margin and highlight rows under 10%",
+    sales,
+    data,
+  );
+  assert.deepEqual(near.actions, []);
+  assert.match(near.problems.join(" "), /column to highlight/i);
+  const named = interpretInstruction(
+    "highlight rows where Sales < 5000",
+    sales,
+    data,
+  );
+  assert.ok(named.actions.includes("format"));
+  assert.equal(named.specs.format?.conditional?.[0]?.column, 3);
+});

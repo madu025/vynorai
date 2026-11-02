@@ -2877,6 +2877,23 @@ function interpretFormatAndQuality(
       if (validation[at].rule === "list" && ruled.has(validation[at].column))
         validation.splice(at, 1);
   }
+  // "highlight rows under 10%" with no column we can match: say so, never return a freeze-only plan
+  // as if it were the highlight.
+  const otherFormatWish =
+    /\bpresentable\b|\bprofessional(?:ly)?\b|\bpolish\b|\bbeautif(?:y|ul)\b|\bfreeze\b|\btotals?\s+row\b|\bgridlines?\b|\bformat\s+(?:the\s+)?(?:data|numbers|sheet)\b/i.test(
+      text,
+    );
+  if (
+    /\bhighlight\b/i.test(text) &&
+    !conditional.length &&
+    !validation.length &&
+    !otherFormatWish
+  ) {
+    result.problems.push(
+      "Name the column to highlight, for example: highlight rows where Margin < 10%.",
+    );
+    return;
+  }
   const format: NonNullable<InstructionSpecs["format"]> = {
     freezeHeader: true,
     ...(() => {

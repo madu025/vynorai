@@ -506,11 +506,16 @@ export function buildDashboardLayout(
     }
   });
 
+  // Month totals of the first measure (last two feed the first card's change line).
+  let trendValues: string | undefined;
   // Monthly trend of the first measure, as a line under the other charts.
   if (input.trend && input.trend.months.length >= 2 && values.length) {
     const col = HELPER_COLUMN + values.length * 3;
     const letter = usageColumnLetter(col);
     const { ref, months } = input.trend;
+    trendValues = input.live
+      ? `${usageColumnLetter(col + 1)}3#`
+      : `${usageColumnLetter(col + 1)}$3:${usageColumnLetter(col + 1)}${months.length + 2}`;
     const value = values[0];
     const monthCell = (row: number) => `${letter}${row + 3}`;
     const between = (row: number) =>
@@ -615,15 +620,25 @@ export function buildDashboardLayout(
       : `${input.totalCategories ?? input.categories.length}${text.categoryValues(input.categoryName)}`,
     format: "#,##0",
   };
+  // The first card says how the latest month compares with the one before: "▲ 12.5% vs previous
+  // month"; with no usable trend (or a zero before) it keeps the average line.
+  const valueSub = (index: number, value: { ref: string }): DashboardCell => {
+    const average =
+      aggregation === "sum"
+        ? `"${text.averagePrefix}"&TEXT(IFERROR(AVERAGE(${value.ref}),0),"#,##0.00")`
+        : '""';
+    if (index !== 0 || !trendValues || aggregation !== "sum")
+      return aggregation === "sum" ? { f: `=${average}` } : "";
+    const last = `INDEX(${trendValues},ROWS(${trendValues}))`;
+    const before = `INDEX(${trendValues},ROWS(${trendValues})-1)`;
+    return {
+      f: `=IFERROR(IF(${before}=0,${average},IF(${last}>=${before},"▲ ","▼ ")&TEXT(ABS(${last}/${before}-1),"0.0%")&" ${text.vsPreviousMonth}"),${average})`,
+    };
+  };
   const valueCards: Card[] = values.map((value, index) => ({
     label: text.valueCard(label, value.name).toUpperCase(),
     value: { f: headlineFormula(aggregation, value.ref) },
-    sub:
-      aggregation === "sum"
-        ? {
-            f: `="${text.averagePrefix}"&TEXT(IFERROR(AVERAGE(${value.ref}),0),"#,##0.00")`,
-          }
-        : "",
+    sub: valueSub(index, value),
     format: compactFormat(valueFormats[index]),
   }));
   const targetCards: Card[] = [];

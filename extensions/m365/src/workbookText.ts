@@ -43,6 +43,7 @@ export interface WorkbookText {
   largeData: (shown: number, category: string) => string;
   /** "Sales by month": the trend chart title. */
   byMonth: (label: string, value: string) => string;
+  vsPreviousMonth: string;
   /** A measure the request names that is not a column. */
   missingMeasure: (name: string) => string;
   chartOrder: string;
@@ -99,6 +100,7 @@ const EN: WorkbookText = {
   largeData: (shown, category) =>
     `The data is large, so the charts list up to ${shown} ${category} values from a live formula; the totals cover every row.`,
   byMonth: (label, value) => `${label} of ${value} by month`,
+  vsPreviousMonth: "vs previous month",
   missingMeasure: (name) =>
     `"${name}" is not a column in this data, so it is not on the dashboard. Add a ${name} column first (for example Sales minus Cost), then make the dashboard again.`,
   pivotRefresh:
@@ -157,6 +159,7 @@ const SI: WorkbookText = {
   largeData: (shown, category) =>
     `දත්ත විශාල නිසා ප්‍රස්තාර සජීවී සූත්‍රයකින් ${category} අගයන් ${shown}ක් දක්වා පෙන්වයි; එකතු සෑම පේළියක්ම ආවරණය කරයි.`,
   byMonth: (label, value) => `මාසය අනුව ${value} (${label})`,
+  vsPreviousMonth: "පෙර මාසයට සාපේක්ෂව",
   missingMeasure: (name) =>
     `"${name}" මේ data වල column එකක් නොවේ, ඒ නිසා dashboard එකේ නැත. මුලින් ${name} column එකක් එකතු කර (උදා: Sales අඩු Cost), dashboard එක නැවත හදන්න.`,
   pivotRefresh:
@@ -217,6 +220,7 @@ const TA: WorkbookText = {
   largeData: (shown, category) =>
     `தரவு பெரியது, எனவே வரைபடங்கள் ஒரு நேரடி சூத்திரத்திலிருந்து ${shown} ${category} மதிப்புகள் வரை காட்டுகின்றன; மொத்தங்கள் ஒவ்வொரு வரிசையையும் உள்ளடக்குகின்றன.`,
   byMonth: (label, value) => `மாதவாரியாக ${value} (${label})`,
+  vsPreviousMonth: "முந்தைய மாதத்துடன் ஒப்பிடும்போது",
   missingMeasure: (name) =>
     `"${name}" இந்தத் தரவில் ஒரு நெடுவரிசை இல்லை, எனவே dashboard-இல் இல்லை. முதலில் ${name} நெடுவரிசையைச் சேர்த்து (எ.கா. Sales கழித்தல் Cost) dashboard-ஐ மீண்டும் உருவாக்கவும்.`,
   pivotRefresh:

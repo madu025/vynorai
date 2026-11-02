@@ -2269,14 +2269,12 @@ export async function applyApprovedExcelPlan(
                   });
                   if (plannedChart.kind === "bar")
                     await decorate(() => {
-                      for (
-                        let point = 1;
-                        point < plannedChart.dataRows;
-                        point += 1
-                      )
-                        series.points
-                          .getItemAt(point)
-                          .format.fill.setSolidColor("#CBD5E1");
+                      // The series is grey and only the first (largest) bar carries the accent, so a
+                      // category added later is grey too, not the series colour (live run 2026-11-02).
+                      series.format.fill.setSolidColor("#CBD5E1");
+                      series.points
+                        .getItemAt(0)
+                        .format.fill.setSolidColor(plannedChart.color);
                     });
                   if (plannedChart.kind === "line")
                     await decorate(() => {

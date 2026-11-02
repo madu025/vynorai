@@ -399,3 +399,28 @@ test("six categories are a ranked bar, not a doughnut", () => {
     "bar",
   );
 });
+
+test("the first card shows the change against the previous month when there is a trend", () => {
+  const layout = buildDashboardLayout(
+    base({
+      trend: {
+        name: "Order Date",
+        ref: "'Data'!$D$2:$D$7",
+        months: [45658, 45689, 45717],
+      },
+    }),
+  );
+  const sub = layout.blocks
+    .filter((block) => block.style === "kpi-sub")
+    .flatMap((block) => block.cells.flat())
+    .map(text);
+  assert.match(sub[1] ?? sub[0], /▲ .*▼ .*vs previous month/);
+  const without = buildDashboardLayout(base({}));
+  assert.ok(
+    !without.blocks
+      .filter((block) => block.style === "kpi-sub")
+      .flatMap((block) => block.cells.flat())
+      .map(text)
+      .some((cell) => cell.includes("▲")),
+  );
+});

@@ -76,6 +76,11 @@ const TEXT_EXTRACTION =
 const EDIT_EXISTING =
   /\b(?:change|modify|edit|update|rename|recolou?r|switch|convert|turn|make)\b[^.?]{0,60}\b(?:the|this|that|existing|current|my)\b[^.?]{0,40}\b(?:chart|graph|doughnut|donut|pie|title|heading|card|kpi|legend|axis|label|colou?rs?|font|dashboard|slicer|pivot\s*table|pivot)\b|\b(?:chart|graph|doughnut|donut|pie)\b[^.?]{0,40}\b(?:to|into)\s+an?\s+(?:bar|column|line|pie|doughnut|donut|area)\b/i;
 
+// Work on a new or named sheet, or an Excel function the person names: the local reader acts on the
+// selection only, and charted the dashboard sheet's A1:A2 instead of Orders (live run 2026-11-02).
+const OTHER_SHEET =
+  /\b(?:new|another|separate)\s+(?:work)?sheet\b|\bsheet\s+(?:called|named)\b|\b(?:GROUPBY|PIVOTBY|XLOOKUP|LAMBDA|LET)\s*\(|\bGROUPBY\b|\bPIVOTBY\b/i;
+
 /** Smart stays local for ordinary work and uses the agent for workbook-wide reasoning. */
 export function chooseSmartPath(
   request: string,
@@ -92,6 +97,7 @@ export function chooseSmartPath(
     FILTERED_LIST.test(text) ||
     TEXT_EXTRACTION.test(text) ||
     EDIT_EXISTING.test(text) ||
+    OTHER_SHEET.test(text) ||
     text.length > 240
     ? "agent"
     : "local";

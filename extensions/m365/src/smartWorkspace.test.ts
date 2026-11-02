@@ -63,3 +63,20 @@ test("a change to something already built goes to the agent, a new build stays l
   ])
     assert.equal(chooseSmartPath(request, "smart", true), "local", request);
 });
+
+test("work on a new sheet or a named Excel function goes to the agent", () => {
+  for (const request of [
+    "Create a new sheet Region Summary with a GROUPBY of Orders Sales by Region, and a bar chart of it.",
+    "Put a summary on another sheet",
+    "Add a sheet called Totals with sales by month",
+  ])
+    assert.equal(chooseSmartPath(request, "smart", true), "agent", request);
+  assert.equal(
+    chooseSmartPath(
+      "Create a management dashboard of Sales by Region",
+      "smart",
+      true,
+    ),
+    "local",
+  );
+});

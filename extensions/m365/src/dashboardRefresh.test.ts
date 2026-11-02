@@ -58,3 +58,48 @@ test("refresh touches dashboard PivotTables and reports their sheets", async () 
   assert.deepEqual(refreshed, ["Sales_Vynor_Dashboard"]);
   assert.deepEqual([...sheets], ["dash"]);
 });
+
+test("a chart's first column is its category axis when it holds labels or dates", async () => {
+  const { firstColumnIsCategory } = await import("./officeAgentHost.js");
+  assert.equal(
+    firstColumnIsCategory(
+      [
+        ["Region", "Sales"],
+        ["Colombo", 5],
+        ["Galle", 3],
+      ],
+      undefined,
+    ),
+    true,
+  );
+  assert.equal(
+    firstColumnIsCategory(
+      [
+        ["Month", "Sales"],
+        [46023, 5],
+        [46054, 3],
+      ],
+      [
+        ["General", "General"],
+        ["mmm yyyy", "#,##0"],
+        ["mmm yyyy", "#,##0"],
+      ],
+    ),
+    true,
+  );
+  assert.equal(
+    firstColumnIsCategory(
+      [
+        ["Qty", "Sales"],
+        [4, 5],
+        [2, 3],
+      ],
+      [
+        ["General", "General"],
+        ["0", "0"],
+        ["0", "0"],
+      ],
+    ),
+    false,
+  );
+});

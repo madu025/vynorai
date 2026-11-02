@@ -981,6 +981,22 @@ export type AgentReply = {
   }[];
 };
 
+/**
+ * An earlier turn that failed (no credits, a provider error) leaves an assistant message with no
+ * text and no tool calls in the pane's history; DeepSeek refuses the whole request with HTTP 400
+ * "content or tool_calls must be set" (live run 2026-11-02). Such a message carries nothing: drop it.
+ */
+export function withoutEmptyAssistant<
+  T extends { role: string; content?: unknown; tool_calls?: unknown[] },
+>(messages: T[]): T[] {
+  return messages.filter(
+    (message) =>
+      message.role !== "assistant" ||
+      (typeof message.content === "string" && message.content.trim() !== "") ||
+      (message.tool_calls?.length ?? 0) > 0,
+  );
+}
+
 /** Checks the conversation the add-in sends: shape, order, tool results answering real calls, size. */
 export function checkAgentConversation(messages: AgentMessage[]): void {
   if (messages[0]?.role !== "user")
@@ -1298,7 +1314,7 @@ export async function agentTurn(
   const messages = [
     { role: "system", content: AGENT_SYSTEM_PROMPT },
     { role: "system", content: LANGUAGE_LINE[parsed.data.language] },
-    ...piiMasked.messages,
+    ...withoutEmptyAssistant(piiMasked.messages),
   ];
   // Tool call arguments ride in the assistant messages and are paid for like any input.
   const chars = messages.reduce(

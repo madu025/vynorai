@@ -286,3 +286,20 @@ test("the credit reservation estimate includes the serialized tool definitions",
   });
   assert.ok(seen > toolTokens);
 });
+
+test("an empty assistant turn from a failed run is dropped before the provider call", async () => {
+  const { withoutEmptyAssistant } = await import(
+    "../src/services/m365Agent.js"
+  );
+  const kept = withoutEmptyAssistant([
+    { role: "user", content: "a" },
+    { role: "assistant", content: "" },
+    { role: "assistant", content: null, tool_calls: [] },
+    { role: "user", content: "b" },
+    { role: "assistant", content: "ok" },
+  ] as any[]);
+  assert.deepEqual(
+    kept.map((message: any) => message.content),
+    ["a", "b", "ok"],
+  );
+});

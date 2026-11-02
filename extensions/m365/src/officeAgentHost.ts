@@ -500,6 +500,64 @@ export function createOfficeAgentHost(
   };
 }
 
+/**
+ * Is the first column of a chart source a category axis? It is when, under the header, every
+ * filled cell is text, or a number shown as a date ("mmm yyyy", "d/m/yy").
+ */
+export function firstColumnIsCategory(
+  values: readonly (readonly unknown[])[],
+  formats: readonly (readonly unknown[])[] | undefined,
+): boolean {
+  if (values.length < 2 || (values[0]?.length ?? 0) < 2) return false;
+  const cells = values
+    .slice(1)
+    .map((row, at) => ({
+      value: row[0],
+      format: String(formats?.[at + 1]?.[0] ?? ""),
+    }))
+    .filter(
+      ({ value }) => value !== "" && value !== null && value !== undefined,
+    );
+  if (!cells.length) return false;
+  return cells.every(
+    ({ value, format }) =>
+      typeof value === "string" ||
+      (typeof value === "number" &&
+        /[dmy]/i.test(format.replace(/"[^"]*"/g, ""))),
+  );
+}
+
+/** Rebuilds the series as "first column = categories, each other column = one series". */
+async function useFirstColumnAsCategories(
+  context: any,
+  chart: any,
+  source: any,
+): Promise<void> {
+  source.load("values,numberFormat,rowCount,columnCount");
+  await context.sync();
+  if (!firstColumnIsCategory(source.values, source.numberFormat)) return;
+  const rows = Number(source.rowCount);
+  const columns = Number(source.columnCount);
+  const body = (column: number) =>
+    source.getCell(1, column).getResizedRange(rows - 2, 0);
+  chart.series.load("count");
+  await context.sync();
+  for (let at = Number(chart.series.count) - 1; at >= columns - 1; at -= 1)
+    chart.series.getItemAt(at).delete();
+  chart.series.load("count");
+  await context.sync();
+  for (let column = 1; column < columns; column += 1) {
+    const series =
+      column - 1 < Number(chart.series.count)
+        ? chart.series.getItemAt(column - 1)
+        : chart.series.add(String(source.values[0][column] ?? ""));
+    series.setValues(body(column));
+    series.setXAxisValues(body(0));
+    series.name = String(source.values[0][column] ?? "");
+  }
+  await context.sync();
+}
+
 function columnLetter(index: number): string {
   let value = index;
   let letters = "";
@@ -893,6 +951,13 @@ export async function applyAgentChanges(
             source,
             "Auto",
           );
+          // "Auto" plotted a Month column of dates as a series and labelled regions 1..6 (live run
+          // 2026-11-02). When the first column is labels or dates, it is the category axis.
+          try {
+            await useFirstColumnAsCategories(context, chart, source);
+          } catch {
+            /* Excel's own choice stays */
+          }
           const title = change.title || plan.title;
           if (title) chart.title.text = title;
           if (plan.axisFormat) {

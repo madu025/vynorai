@@ -48,7 +48,50 @@ export interface DashboardBlock {
  * How a chart reads: a ranked bar for many categories, a doughnut for the share of a few, and
  * columns for the further measures. Designer dashboards mix these instead of repeating one type.
  */
-export type DashboardChartKind = "bar" | "doughnut" | "column";
+export type DashboardChartKind = "bar" | "doughnut" | "column" | "line";
+
+/** Months shown in the trend: the latest two years. */
+export const TREND_MAX_MONTHS = 24;
+const DATE_HEADER = /\b(date|month|period|day)\b|දිනය|මාසය|தேதி/i;
+/** Excel serials from 1955 to 2119: numbers outside are not dates. */
+const isDateSerial = (cell: unknown) =>
+  typeof cell === "number" && cell >= 20000 && cell <= 80000;
+
+/** Excel serial of the first day of the month that holds `serial`. */
+export function monthStartSerial(serial: number): number {
+  const day = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86400000);
+  const start = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1);
+  return Math.round((start - Date.UTC(1899, 11, 30)) / 86400000);
+}
+
+/**
+ * The date column for a monthly trend and its months (oldest first, at most the latest
+ * TREND_MAX_MONTHS). A column counts when its header names a date, or its number format is a date
+ * format, and at least 80% of its filled cells are date serials. Undefined when there is none or
+ * the data spans fewer than two months.
+ */
+export function findTrendColumn(
+  headers: readonly string[],
+  rows: readonly (readonly unknown[])[],
+  numberFormats?: readonly unknown[],
+): { index: number; months: number[] } | undefined {
+  for (const [index, header] of headers.entries()) {
+    const format = String(numberFormats?.[index] ?? "");
+    const dateFormat = /[dy]/i.test(format) && !/[#0]/.test(format);
+    if (!DATE_HEADER.test(header) && !dateFormat) continue;
+    const cells = rows
+      .map((row) => row[index])
+      .filter((cell) => cell !== "" && cell !== null && cell !== undefined);
+    const serials = cells.filter(isDateSerial) as number[];
+    if (!serials.length || serials.length < cells.length * 0.8) continue;
+    const months = [...new Set(serials.map(monthStartSerial))].sort(
+      (a, b) => a - b,
+    );
+    if (months.length < 2) continue;
+    return { index, months: months.slice(-TREND_MAX_MONTHS) };
+  }
+  return undefined;
+}
 
 /** Card and series colours, in order; dark enough for white text and for a white page. */
 export const DASHBOARD_PALETTE = [
@@ -139,6 +182,8 @@ export interface DashboardLayoutInput {
   sourceLabel: string;
   /** Language of the words written on the sheet; English when not given. */
   language?: WorkbookLanguage;
+  /** Monthly trend of the first value: the date column and its month starts (Excel serials). */
+  trend?: { name: string; ref: string; months: number[] };
 }
 
 /** Categories shown in a management view: the headline few. Others keep the longer list. */
@@ -390,6 +435,59 @@ export function buildDashboardLayout(
       });
     }
   });
+
+  // Monthly trend of the first measure, as a line under the other charts.
+  if (input.trend && input.trend.months.length >= 2 && values.length) {
+    const col = HELPER_COLUMN + values.length * 3;
+    const letter = usageColumnLetter(col);
+    const { ref, months } = input.trend;
+    const value = values[0];
+    const monthCell = (row: number) => `${letter}${row + 3}`;
+    const between = (row: number) =>
+      `${ref},">="&${monthCell(row)},${ref},"<"&EDATE(${monthCell(row)},1)`;
+    const monthly = (row: number) =>
+      aggregation === "count"
+        ? `COUNTIFS(${between(row)})`
+        : aggregation === "average"
+          ? `IFERROR(AVERAGEIFS(${value.ref},${between(row)}),0)`
+          : aggregation === "min"
+            ? `MINIFS(${value.ref},${between(row)})`
+            : aggregation === "max"
+              ? `MAXIFS(${value.ref},${between(row)})`
+              : `SUMIFS(${value.ref},${between(row)})`;
+    blocks.push({
+      row: 1,
+      col,
+      cells: [[input.trend.name, text.aggregateOf(label, value.name)]],
+      style: "table-header",
+    });
+    blocks.push({
+      row: 2,
+      col,
+      cells: months.map((month) => [month]),
+      style: "table-body",
+      numberFormat: "mmm yyyy",
+    });
+    blocks.push({
+      row: 2,
+      col: col + 1,
+      cells: months.map((_, row) => [{ f: `=${monthly(row)}` }]),
+      style: "table-body",
+      numberFormat: valueFormats[0],
+    });
+    const top = CHART_ROW + charts.length * (CHART_HEIGHT + 1);
+    charts.push({
+      title: `${text.aggregateOf(label, value.name)} / ${input.trend.name}`,
+      headerRow: 1,
+      col,
+      dataRows: months.length,
+      from: `${usageColumnLetter(CHART_COLUMN)}${top + 1}`,
+      to: `${usageColumnLetter(CHART_COLUMN + CHART_SPAN - 1)}${top + CHART_HEIGHT}`,
+      numberFormat: valueFormats[0],
+      kind: "line",
+      color: DASHBOARD_PALETTE[charts.length % DASHBOARD_PALETTE.length],
+    });
+  }
 
   // KPI cards: label, value and a small line under it, one card per column.
   interface Card {

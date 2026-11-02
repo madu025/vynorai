@@ -4,6 +4,8 @@ import { inferCurrency, parseBusinessTarget } from "./businessContext.js";
 import {
   buildDashboardLayout,
   dashboardTopN,
+  findTrendColumn,
+  monthStartSerial,
   rankCategories,
   type DashboardLayoutInput,
 } from "./dashboardLayout.js";
@@ -273,4 +275,56 @@ test("each KPI card has its own accent and the page colour covers the breakdown"
   assert.ok(accents.length >= 3);
   assert.equal(new Set(accents).size, accents.length);
   assert.ok(layout.pageRows >= 9 + 3 + 3);
+});
+
+test("a date column gives a monthly trend line of the first measure", () => {
+  // 45658 = 2025-01-01, 45689 = 2025-02-01, 45720 = 2025-03-04.
+  const found = findTrendColumn(
+    ["Order Date", "Region", "Sales"],
+    [
+      [45658, "North", 10],
+      [45689, "South", 20],
+      [45720, "East", 30],
+      [45700, "West", 5],
+    ],
+  );
+  assert.equal(found?.index, 0);
+  assert.deepEqual(found?.months, [45658, 45689, 45717]);
+  const layout = buildDashboardLayout(
+    base({
+      trend: {
+        name: "Order Date",
+        ref: "'Data'!$D$2:$D$7",
+        months: found!.months,
+      },
+    }),
+  );
+  const line = layout.charts.find((chart) => chart.kind === "line");
+  assert.ok(line);
+  assert.equal(line.dataRows, 3);
+  const formulas = layout.blocks
+    .flatMap((block) => block.cells.flat())
+    .map(text)
+    .filter((cell) => cell.includes("EDATE"));
+  assert.equal(formulas.length, 3);
+  assert.match(
+    formulas[0],
+    /^=SUMIFS\('Data'!\$B\$2:\$B\$7,'Data'!\$D\$2:\$D\$7,">="&/,
+  );
+});
+
+test("no trend from IDs, money, text dates or a single month", () => {
+  assert.equal(
+    findTrendColumn(
+      ["Customer ID", "Sales"],
+      [
+        [45658, 45700],
+        [45689, 45800],
+      ],
+    ),
+    undefined,
+  );
+  assert.equal(findTrendColumn(["Date"], [["Jan"], ["Feb"]]), undefined);
+  assert.equal(findTrendColumn(["Date"], [[45658], [45660]]), undefined);
+  assert.equal(monthStartSerial(45720), 45717);
 });

@@ -95,6 +95,7 @@ import {
 } from "./businessContext.js";
 import {
   buildDashboardLayout,
+  findTrendColumn,
   DASHBOARD_CARD,
   DASHBOARD_PAGE,
   dashboardTopN,
@@ -1861,7 +1862,29 @@ export async function applyApprovedExcelPlan(
                     values[0].index,
                     aggregation,
                   );
+              // A date column gives a monthly trend line (read rows only; large data skips it).
+              const trend = dashboardSampled
+                ? undefined
+                : findTrendColumn(
+                    headerNames.map((name, index) =>
+                      index === category.index ||
+                      values.some((value) => value.index === index)
+                        ? ""
+                        : name,
+                    ),
+                    rows as unknown[][],
+                    numberFormats,
+                  );
               const layout = buildDashboardLayout({
+                ...(trend
+                  ? {
+                      trend: {
+                        name: headerNames[trend.index],
+                        ref: sourceColumn(trend.index),
+                        months: trend.months,
+                      },
+                    }
+                  : {}),
                 categoryName: category.column,
                 categoryRef: sourceColumn(category.index),
                 values: values.map((value) => ({
@@ -1965,6 +1988,7 @@ export async function applyApprovedExcelPlan(
                     bar: "BarClustered",
                     doughnut: "Doughnut",
                     column: "ColumnClustered",
+                    line: "LineMarkers",
                   }[plannedChart.kind],
                   chartRange,
                   "Columns",
@@ -1991,8 +2015,14 @@ export async function applyApprovedExcelPlan(
                   } else {
                     series.hasDataLabels = true;
                     chart.legend.visible = false;
-                    series.format.fill.setSolidColor(plannedChart.color);
-                    series.gapWidth = 60;
+                    if (plannedChart.kind === "line") {
+                      series.format.line.color = plannedChart.color;
+                      series.format.line.weight = 2.5;
+                      series.dataLabels.position = "Top";
+                    } else {
+                      series.format.fill.setSolidColor(plannedChart.color);
+                      series.gapWidth = 60;
+                    }
                     chart.axes.valueAxis.majorGridlines.visible = false;
                     chart.axes.valueAxis.visible = false;
                     if (plannedChart.numberFormat)

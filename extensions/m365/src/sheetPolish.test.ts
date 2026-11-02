@@ -38,6 +38,11 @@ test("a PIVOTBY matrix with a blank corner still gets its header row", () => {
 
 test("polish styles header and total rows and fits the columns", async () => {
   const styled: string[] = [];
+  // Column A was fitted to a long note; column B is a normal width.
+  const widths = [
+    { format: { columnWidth: 900, load() {} } },
+    { format: { columnWidth: 60, load() {} } },
+  ];
   const values = [
     ["Region", "Sales"],
     ["North", 10],
@@ -75,6 +80,7 @@ test("polish styles header and total rows and fits the columns", async () => {
     columnCount: 2,
     load() {},
     getCell: (row: number) => cellRange(row),
+    getColumn: (column: number) => widths[column],
     format: { autofitColumns: () => styled.push("autofit") },
   };
   const runtime: any = {
@@ -96,4 +102,8 @@ test("polish styles header and total rows and fits the columns", async () => {
     "line 2 Continuous",
     "autofit",
   ]);
+  assert.deepEqual(
+    widths.map((w) => w.format.columnWidth),
+    [160, 60],
+  );
 });

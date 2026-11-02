@@ -49,6 +49,8 @@ export function planSheetPolish(
 const HEADER_FILL = "#1F4E78";
 const HEADER_FONT = "#FFFFFF";
 const TOTAL_LINE = "#1F4E78";
+/** About 30 characters: wide enough for a label, narrow enough to keep the table on screen. */
+export const MAX_COLUMN_POINTS = 160;
 
 /** Styles each named sheet; a sheet that cannot be read or styled is left as it is. */
 export async function polishCreatedSheets(
@@ -89,6 +91,18 @@ export async function polishCreatedSheets(
           top.color = TOTAL_LINE;
         }
         used.format.autofitColumns();
+        await context.sync();
+        // A long note fits its column to the whole sentence and pushes the table off screen (live
+        // run 2026-11-02): cap each column, and the note spills over the empty cells beside it.
+        const columns = Array.from({ length: width }, (_, at) => {
+          const format = used.getColumn(at).format;
+          format.load("columnWidth");
+          return format;
+        });
+        await context.sync();
+        for (const format of columns)
+          if (Number(format.columnWidth) > MAX_COLUMN_POINTS)
+            format.columnWidth = MAX_COLUMN_POINTS;
         await context.sync();
       } catch {
         // Polish is optional: the result is already written and verified.

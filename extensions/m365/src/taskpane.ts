@@ -99,6 +99,7 @@ import {
   agentToolLabel as agentToolLabelView,
   setAgentStageView,
   showAgentPlanView,
+  agentChatReply,
   showChangeList,
   shortResult,
   setLocalizedTitle,
@@ -4646,8 +4647,31 @@ function renderHealth() {
   );
 }
 
+/**
+ * "Check my data" and "Explain this formula" are small buttons under the request box. Their
+ * result card stays hidden until a button is used, opens in the scroll area like any answer, and
+ * closes with its ×, so the tools never hold the room the results need (live run 2026-11-02).
+ */
+function showToolResult(id: string) {
+  const card = document.getElementById(id);
+  if (!card) return;
+  card.hidden = false;
+  window.requestAnimationFrame(() =>
+    card.scrollIntoView?.({ block: "nearest", behavior: "smooth" }),
+  );
+}
+document
+  .querySelectorAll<HTMLButtonElement>("[data-close-tool]")
+  .forEach((button) =>
+    button.addEventListener("click", () => {
+      const card = document.getElementById(button.dataset.closeTool ?? "");
+      if (card) card.hidden = true;
+    }),
+  );
+
 healthRun?.addEventListener("click", async () => {
   healthRun.disabled = true;
+  showToolResult("health");
   healthReport = undefined;
   healthMessage = healthText("health_checking", "Checking...");
   renderHealth();
@@ -5538,12 +5562,13 @@ async function agentLoop(request: string) {
     showChangePreviews(run, host).catch((error) =>
       log.record("agent:preview", "fail", describeError(error)),
     );
-    if (run.reply) {
+    const chatReply = agentChatReply(run);
+    if (chatReply) {
       rememberAnswerResults(
-        run.reply.slice(0, MAX_CONVERSATION_CHARS),
+        chatReply.slice(0, MAX_CONVERSATION_CHARS),
         answerResults(run.messages, (text) => agentMask.unmask(text)),
       );
-      renderConversation("assistant", run.reply, false);
+      renderConversation("assistant", chatReply, false);
     }
     showAgentSources(
       answerSources(run.messages, (text) => agentMask.unmask(text)),
@@ -5803,6 +5828,7 @@ languageHooks.push(() => explainFormulaResult?.replaceChildren());
 explainFormulaButton?.addEventListener("click", async () => {
   if (!explainFormulaResult) return;
   explainFormulaButton.disabled = true;
+  showToolResult("explain-formula-card");
   try {
     const read = await log.step(
       "excel:explain-formula",

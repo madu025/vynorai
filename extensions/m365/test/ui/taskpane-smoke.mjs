@@ -864,6 +864,49 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
       state.onScreen && state.aboveNav && state.unobscured,
       `${label}: Approve must stay visible above the tab bar: ${JSON.stringify(state)}`,
     );
+  // Check my data and Explain this formula are small buttons; their results stay hidden until used,
+  // and once a conversation exists the answers get at least half of the pane (live run 2026-11-02:
+  // a fixed Check my data card left the answers about a quarter).
+  const toolLayout = await page.evaluate(async () => {
+    const chips = [...document.querySelectorAll(".composer .tool-chip")].map(
+      (chip) => chip.id,
+    );
+    const hiddenAtStart = ["health", "explain-formula-card"].every(
+      (id) => document.getElementById(id)?.hidden === true,
+    );
+    const history = document.querySelector("#conversation-history");
+    const answer = document.createElement("div");
+    answer.className = "message assistant";
+    answer.textContent = "An answer. ".repeat(80);
+    history.appendChild(answer);
+    document.activeElement?.blur?.();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const area = document.querySelector(".scroll-area").getBoundingClientRect();
+    const share = area.height / window.innerHeight;
+    answer.remove();
+    return { chips, hiddenAtStart, share: Math.round(share * 100) / 100 };
+  });
+  assert.deepEqual(
+    toolLayout.chips,
+    ["health-run", "explain-formula"],
+    `${label}: the tools must be two buttons in the request box`,
+  );
+  assert.ok(toolLayout.hiddenAtStart, `${label}: tool results must start hidden`);
+  assert.ok(
+    toolLayout.share >= 0.5,
+    `${label}: answers must get at least half of the pane, got ${toolLayout.share}`,
+  );
+  await page.click("#health-run");
+  await page.waitForFunction(
+    () => document.getElementById("health")?.hidden === false,
+    { timeout: 3000 },
+  );
+  await page.click('[data-close-tool="health"]');
+  assert.equal(
+    await page.$eval("#health", (card) => card.hidden),
+    true,
+    `${label}: the × must close the Check my data result`,
+  );
   assert.deepEqual(
     consoleErrors,
     [],

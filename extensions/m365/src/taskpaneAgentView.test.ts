@@ -137,7 +137,6 @@ test("a tooltip set with setLocalizedTitle follows a language switch", () => {
 });
 
 import {
-  PLAN_STEPS_SHOWN,
   plainStep,
   setLocalizedTitle,
   stepRange,
@@ -176,7 +175,6 @@ test("plan steps lose ranges for display and keep them for click-to-select", () 
     address: "N2:N3001",
   });
   assert.equal(stepRange("Sort the data"), undefined);
-  assert.equal(PLAN_STEPS_SHOWN, 3);
 });
 
 test("shortChange gives plain lines and keeps formulas out of them", async () => {
@@ -256,4 +254,63 @@ test("plainStep turns copied tool names into words", async () => {
     plainStep("write_formula in 'Sales Summary' column C: share of total"),
     "Write formula in 'Sales Summary' column C: share of total",
   );
+});
+
+test("the agent plan is folded under its heading with the step count", async () => {
+  // Live run 2026-11-02: four plan steps filled the card above the changes to approve.
+  const { showAgentPlanView } = await import("./taskpaneAgentView.js");
+  const items: any[] = [];
+  const plan: any = { hidden: true, open: true };
+  const count: any = { textContent: "" };
+  const steps: any = {
+    replaceChildren: (...children: any[]) =>
+      items.splice(0, items.length, ...children),
+  };
+  const document: any = {
+    querySelector: (selector: string) =>
+      ({
+        "#agent-plan": plan,
+        "#agent-plan-steps": steps,
+        "#agent-plan-count": count,
+      })[selector],
+    createElement: () => ({
+      hidden: false,
+      textContent: "",
+      title: "",
+      addEventListener() {},
+    }),
+  };
+  showAgentPlanView(document, [
+    "Note the column",
+    "Add a header",
+    "Highlight rows",
+    "Leave the rest",
+  ]);
+  assert.equal(plan.hidden, false);
+  assert.equal(plan.open, false, "the plan starts folded");
+  assert.equal(count.textContent, "(4)");
+  assert.equal(items.length, 4);
+  assert.ok(
+    items.every((item) => !item.hidden),
+    "every step shows once the plan is opened",
+  );
+  showAgentPlanView(document, []);
+  assert.equal(plan.hidden, true);
+});
+
+test("a plan waiting for approval adds no reply to the chat; answers still do", async () => {
+  const { agentChatReply } = await import("./taskpaneAgentView.js");
+  assert.equal(
+    agentChatReply({
+      reply:
+        "Staged highlighting on rows A2:I11 wherever the margin is under 10%.",
+      changes: [{ kind: "conditional_format" }],
+    }),
+    "",
+  );
+  assert.equal(
+    agentChatReply({ reply: "Laptop 43,200 and Phone 40,000.", changes: [] }),
+    "Laptop 43,200 and Phone 40,000.",
+  );
+  assert.equal(agentChatReply({ changes: [] }), "");
 });

@@ -17,11 +17,11 @@
     </style>
     <link
       rel="stylesheet"
-      href="pane.css?v=20261102.02"
-      onerror="this.onerror=null;this.href='pane.css?v=20261102.02&amp;try=1'"
+      href="pane.css?v=20261102.03"
+      onerror="this.onerror=null;this.href='pane.css?v=20261102.03&amp;try=1'"
     />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261102.02" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261102.02" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261102.03" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261102.03" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -208,7 +208,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261102.02</p>
+          <p class="menu-version" id="build-id">Build 20261102.03</p>
         </div>
       </div>
       <div
@@ -383,6 +383,30 @@
             aria-live="polite"
             hidden
           ></p>
+          <div class="tool-chips">
+            <button
+              id="health-run"
+              class="tool-chip"
+              type="button"
+              data-i18n="health_run"
+              title="Looks for duplicates, blanks, numbers stored as text and more. Read only, on this device. Nothing is sent or changed."
+              data-i18n-title="health_note"
+            >
+              Check my data
+            </button>
+            <button
+              id="explain-formula"
+              aria-label="Explain the formula in the selected cell"
+              class="tool-chip"
+              type="button"
+              data-i18n-aria-label="explain_formula_aria"
+              data-i18n="explain_formula_button"
+              title="Select one cell with a formula. It is explained on this device, step by step. Nothing is sent or changed."
+              data-i18n-title="explain_formula_note"
+            >
+              Explain this formula
+            </button>
+          </div>
           <details class="more-tools">
             <summary data-i18n="more_tools">More tools</summary>
             <div class="action-row">
@@ -449,33 +473,6 @@
             Checked on this device. Nothing was sent.
           </p>
           <div id="noticed-tiles" class="noticed-tiles"></div>
-        </section>
-        <section
-          id="health"
-          class="card"
-          data-workspace-panel="work"
-          aria-labelledby="health-heading"
-        >
-          <h2 id="health-heading" data-i18n="health_title">Check my data</h2>
-          <p class="muted" data-i18n="health_note">
-            Looks for duplicates, blanks, numbers stored as text and more. Read
-            only, on this device. Nothing is sent or changed.
-          </p>
-          <button
-            id="health-run"
-            class="ghost"
-            type="button"
-            data-i18n="health_run"
-          >
-            Check my data
-          </button>
-          <p
-            id="health-status"
-            class="muted"
-            role="status"
-            aria-live="polite"
-          ></p>
-          <ul id="health-list" class="health-list"></ul>
         </section>
         <section
           id="starter-suggestions"
@@ -612,9 +609,10 @@
           </section>
           <section
             id="explain-formula-card"
-            class="card"
+            class="card tool-result"
             data-workspace-panel="work"
             aria-labelledby="explain-formula-heading"
+            hidden
           >
             <div class="card-head">
               <h2
@@ -623,21 +621,46 @@
               >
                 Explain a formula
               </h2>
+              <button
+                class="tool-result-close"
+                type="button"
+                data-close-tool="explain-formula-card"
+                aria-label="Close"
+                data-i18n-aria-label="close_result"
+              >
+                ×
+              </button>
             </div>
-            <p class="muted" data-i18n="explain_formula_note">
-              Select one cell with a formula. It is explained on this device,
-              step by step. Nothing is sent or changed.
-            </p>
-            <button
-              id="explain-formula"
-              type="button"
-              aria-label="Explain the formula in the selected cell"
-              data-i18n-aria-label="explain_formula_aria"
-              data-i18n="explain_formula_button"
-            >
-              Explain this formula
-            </button>
             <div id="explain-formula-result" aria-live="polite"></div>
+          </section>
+          <section
+            id="health"
+            class="card tool-result"
+            data-workspace-panel="work"
+            aria-labelledby="health-heading"
+            hidden
+          >
+            <div class="card-head">
+              <h2 id="health-heading" data-i18n="health_title">
+                Check my data
+              </h2>
+              <button
+                class="tool-result-close"
+                type="button"
+                data-close-tool="health"
+                aria-label="Close"
+                data-i18n-aria-label="close_result"
+              >
+                ×
+              </button>
+            </div>
+            <p
+              id="health-status"
+              class="muted"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <ul id="health-list" class="health-list"></ul>
           </section>
           <section
             class="conversation"
@@ -1339,10 +1362,13 @@
                 </section>
               </details>
             </div>
-            <div id="agent-plan" hidden>
-              <strong data-i18n="agent_plan">Plan</strong>
+            <details id="agent-plan" hidden>
+              <summary>
+                <strong data-i18n="agent_plan">Plan</strong>
+                <span id="agent-plan-count"></span>
+              </summary>
               <ol id="agent-plan-steps" class="details"></ol>
-            </div>
+            </details>
             <div id="agent-reply"></div>
             <ol id="agent-changes" class="details" hidden></ol>
             <p id="agent-note" class="muted" hidden data-i18n="agent_note">
@@ -1819,7 +1845,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261102.02";
+        var BUILD = "20261102.03";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");

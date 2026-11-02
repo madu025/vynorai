@@ -2926,7 +2926,7 @@ body[data-auth="in"] .more-tools .action-row .ghost {
 }
 
 /* ---- agent card: plan and change list are the same kind of row ---- */
-body[data-auth="in"] #agent-plan > strong,
+body[data-auth="in"] #agent-plan > summary strong,
 body[data-auth="in"] #agent-sources > strong {
   display: block;
   margin: var(--sp-2) 0 var(--sp-1);
@@ -5855,14 +5855,6 @@ body[data-auth="in"] .workspace-nav button.active {
   > .workspace-nav {
   position: static;
 }
-/* "Check my data" sits above the request box, outside the scroll area: it steps aside while a plan
-   is open, as the starter cards do, so the plan is not left 118 px. */
-.workspace:has(
-    .scroll-area .card:not([hidden]) .apply-dock button:not([hidden])
-  )
-  > #health {
-  display: none;
-}
 
 /* A preview table of several columns scrolls sideways in a narrow pane; a cell never breaks a word or
    a number in two ("Regio n", "1440 0"). */
@@ -5876,4 +5868,96 @@ body[data-auth="in"] .outcome td {
   white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
+}
+
+/* The agent plan is folded under one "Plan (4)" row until it is opened. */
+body[data-auth="in"] #agent-plan > summary {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+}
+body[data-auth="in"] #agent-plan > summary strong {
+  display: inline;
+  margin: 0;
+}
+
+/* Check my data and Explain this formula: two small buttons under the request box, not cards. */
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.tool-chip {
+  min-height: 26px;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-xs, 11px);
+  cursor: pointer;
+}
+.tool-chip:hover:not(:disabled),
+.tool-chip:focus-visible {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+/* Their results open in the scroll area, like an answer, and close with the × */
+.tool-result .card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tool-result-close {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tool-result-close:hover,
+.tool-result-close:focus-visible {
+  background: var(--surface-2, rgb(100 116 139 / 12%));
+}
+
+/* Once a conversation has started, the answers get the room: the request box is one short line
+   until it is used again (live run 2026-11-02: it took a third of a 640 px pane). The empty-box
+   hint is never shown; the placeholder already says it. */
+.run-gate[data-reason="request_required"] {
+  display: none;
+}
+body[data-auth="in"]:has(#conversation-history > *) .workspace > .composer {
+  padding: 10px 12px;
+}
+body[data-auth="in"]:has(#conversation-history > *)
+  .workspace
+  > .composer
+  textarea {
+  min-height: 40px;
+  height: 40px;
+}
+body[data-auth="in"]:has(#conversation-history > *)
+  .workspace
+  > .composer:focus-within
+  textarea {
+  min-height: 68px;
+  height: 68px;
+}
+body[data-auth="in"]:has(#conversation-history > *)
+  .workspace
+  > .composer
+  .composer-bar {
+  margin-top: 4px;
+  padding-top: 6px;
 }

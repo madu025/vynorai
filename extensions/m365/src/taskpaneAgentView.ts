@@ -166,9 +166,6 @@ export function agentToolLabel(
   }
 }
 
-/** First plan steps shown before "Show all N steps". */
-export const PLAN_STEPS_SHOWN = 3;
-
 /** "'Sheet'!A1:B2" or "Sheet!A1" in a step; the first one found. */
 export function stepRange(
   step: string,
@@ -357,6 +354,18 @@ export function showChangeList(
   }
 }
 
+/**
+ * The agent's words for the chat. A plan waiting for approval says nothing there: its changes,
+ * Approve and Discard already say what will happen, and a "Staged highlighting on rows ..." line
+ * only took room from them (live run 2026-11-02). Answers and applied work still speak.
+ */
+export function agentChatReply(run: {
+  reply?: string;
+  changes: readonly unknown[];
+}): string {
+  return run.changes.length ? "" : (run.reply ?? "");
+}
+
 export function showAgentPlanView(
   document: Document,
   steps: readonly string[],
@@ -366,7 +375,7 @@ export function showAgentPlanView(
   const planSteps = document.querySelector<HTMLElement>("#agent-plan-steps");
   if (!plan || !planSteps) return;
   planSteps.replaceChildren(
-    ...steps.map((step, index) => {
+    ...steps.map((step) => {
       const item = document.createElement("li");
       item.textContent = plainStep(step) || step;
       item.title = step;
@@ -385,33 +394,14 @@ export function showAgentPlanView(
           }
         });
       }
-      if (index >= PLAN_STEPS_SHOWN) item.hidden = true;
       return item;
     }),
   );
-  planSteps.parentElement
-    ?.querySelector<HTMLElement>("#agent-plan-more")
-    ?.remove();
-  if (steps.length > PLAN_STEPS_SHOWN) {
-    const more = document.createElement("button");
-    more.type = "button";
-    more.id = "agent-plan-more";
-    more.className = "link";
-    more.setAttribute("aria-expanded", "false");
-    more.setAttribute("aria-controls", "agent-plan-steps");
-    more.textContent = `Show all ${steps.length} steps`;
-    more.addEventListener("click", () => {
-      const open = more.getAttribute("aria-expanded") !== "true";
-      more.setAttribute("aria-expanded", String(open));
-      more.textContent = open
-        ? "Show fewer steps"
-        : `Show all ${steps.length} steps`;
-      planSteps.querySelectorAll<HTMLElement>("li").forEach((li, i) => {
-        if (i >= PLAN_STEPS_SHOWN) li.hidden = !open;
-      });
-    });
-    planSteps.after(more);
-  }
+  // The plan is reference material: folded under its heading until the person opens it, so the
+  // changes to approve and the result keep the room (live run 2026-11-02).
+  const count = document.querySelector<HTMLElement>("#agent-plan-count");
+  if (count) count.textContent = steps.length ? `(${steps.length})` : "";
+  (plan as HTMLDetailsElement).open = false;
   plan.hidden = steps.length === 0;
 }
 

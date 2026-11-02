@@ -578,6 +578,21 @@ const storageKeys = createTaskpaneStorageKeys({
   getAccessToken: () => accessToken,
   getWorkbookUrl: () =>
     String(office()?.context?.document?.url ?? "") || undefined,
+  getWindowId: () => {
+    // sessionStorage lives as long as this pane window: a reload keeps the chat, a new blank
+    // workbook (its own pane window) starts a new one.
+    try {
+      const key = "vynorai.m365.window";
+      let id = sessionStorage.getItem(key);
+      if (!id) {
+        id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+        sessionStorage.setItem(key, id);
+      }
+      return id;
+    } catch {
+      return undefined;
+    }
+  },
 });
 const conversationStorageKey = storageKeys.conversation;
 const workbookStorageFingerprint = storageKeys.workbook;

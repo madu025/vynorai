@@ -42,4 +42,20 @@ const noWorkbook = createTaskpaneStorageKeys({
 assert.equal(noWorkbook.results(), undefined);
 assert.equal(noWorkbook.scheduledRefresh(), undefined);
 
+// A workbook that was never saved has no URL: each pane window stands for its own workbook, so a new
+// blank workbook starts a new chat instead of showing the earlier one.
+const unsavedA = createTaskpaneStorageKeys({
+  getAccessToken: () => accessToken,
+  getWorkbookUrl: () => undefined,
+  getWindowId: () => "window-a",
+});
+const unsavedB = createTaskpaneStorageKeys({
+  getAccessToken: () => accessToken,
+  getWorkbookUrl: () => undefined,
+  getWindowId: () => "window-b",
+});
+assert.ok(unsavedA.workbook());
+assert.notEqual(unsavedA.workbook(), unsavedB.workbook());
+assert.equal(unsavedA.workbook(), unsavedA.workbook());
+
 console.log("taskpaneStorage tests passed");

@@ -6,6 +6,12 @@ import {
 export type TaskpaneStorageKeyDeps = {
   getAccessToken: () => string | undefined;
   getWorkbookUrl: () => string | undefined;
+  /**
+   * An id that is the same for the life of one task-pane window. A workbook that was never saved
+   * has no URL, and every new blank workbook (Book2, Book3...) then looked like the one before it:
+   * its pane showed the earlier workbook's chat (live run 2026-11-02).
+   */
+  getWindowId?: () => string | undefined;
 };
 
 const CONVERSATION_KEY_PREFIX = "vynorai.m365.excel.conversation.v1";
@@ -29,7 +35,11 @@ export function createTaskpaneStorageKeys(deps: TaskpaneStorageKeyDeps) {
   };
   const workbook = () => {
     const url = String(deps.getWorkbookUrl() ?? "");
-    return url ? stableStorageFingerprint(url) : undefined;
+    if (url) return stableStorageFingerprint(url);
+    const windowId = deps.getWindowId?.();
+    return windowId
+      ? stableStorageFingerprint(`window:${windowId}`)
+      : undefined;
   };
 
   function conversation(): string | undefined {

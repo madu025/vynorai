@@ -1005,6 +1005,35 @@ export async function inspectSelectedExcelRange(
     selected.load(["address", "rowCount", "columnCount"]);
     selected.worksheet.load("name");
     await context.sync();
+    // Ctrl+A inside an Excel Table selects its rows without the header row, and the first data
+    // row was read as the headers ("Dashboard: 46027, 12, 45600", live run 2026-11-02). A
+    // selection that is exactly a table's data rows means the whole table.
+    try {
+      if (typeof selected.getTables === "function") {
+        const tables = selected.getTables(false);
+        tables.load("items/name");
+        await context.sync();
+        const bodies = (tables.items ?? []).map((table: any) => {
+          const body = table.getDataBodyRange();
+          body.load("address");
+          return { table, body };
+        });
+        await context.sync();
+        const match = bodies.find(
+          ({ body }: { body: any }) =>
+            String(body.address).toUpperCase() ===
+            String(selected.address).toUpperCase(),
+        );
+        if (match) {
+          selected = match.table.getRange();
+          selected.load(["address", "rowCount", "columnCount"]);
+          selected.worksheet.load("name");
+          await context.sync();
+        }
+      }
+    } catch {
+      // Older hosts: the selection stays as it is.
+    }
     // Nobody should have to drag-select first. A single clicked cell means "this table"; an empty
     // cell, a whole column or the whole sheet means "the data on this sheet".
     const cellCount = Number(selected.rowCount) * Number(selected.columnCount);
@@ -2015,6 +2044,13 @@ export async function applyApprovedExcelPlan(
                     range.numberFormat = block.cells.map((row) =>
                       row.map(() => block.numberFormat),
                     );
+                  // A spilled formula fills cells below it that have no format of their own: months
+                  // showed as 46,023 and the chart took them for numbers (live run 2026-11-02).
+                  if (block.numberFormat && block.spillRows)
+                    range.getResizedRange(block.spillRows - 1, 0).numberFormat =
+                      Array.from({ length: block.spillRows }, () =>
+                        block.cells[0].map(() => block.numberFormat),
+                      );
                   // A KPI card is merged across its grid columns, so the card is one wide box.
                   let styled = range;
                   if (block.span && block.span > 1) {
@@ -2129,6 +2165,27 @@ export async function applyApprovedExcelPlan(
                 madeCharts.push({ chart, plan: plannedChart });
               }
               await context.sync();
+              // One series per chart, the first column its categories: Excel's own guess plotted a
+              // spilled month column as a second series (live run 2026-11-02).
+              for (const { chart, plan: plannedChart } of madeCharts)
+                await decorate(() => {
+                  const column = (offset: number) =>
+                    sheet.getRangeByIndexes(
+                      plannedChart.headerRow + 1,
+                      plannedChart.col + offset,
+                      plannedChart.dataRows,
+                      1,
+                    );
+                  chart.series.getItemAt(0).setXAxisValues(column(0));
+                  chart.series.getItemAt(0).setValues(column(1));
+                  // One series: the title says what it is; a lone "Month" key only confuses.
+                  if (plannedChart.kind !== "doughnut")
+                    chart.legend.visible = false;
+                });
+              for (const { chart } of madeCharts)
+                await decorate(() => {
+                  chart.series.getItemAt(1).delete();
+                });
               for (const { chart, plan: plannedChart } of madeCharts) {
                 // Card look: white face, faint border, one font, a bold title.
                 await decorate(() => {
@@ -2261,6 +2318,20 @@ export async function applyApprovedExcelPlan(
                   return field;
                 });
                 await context.sync();
+                // An empty table row showed as a "(blank)" group (live run 2026-11-02). A label
+                // filter that excludes it still lets new categories in, unlike a picked list.
+                await decorate(() => {
+                  pivot.rowHierarchies
+                    .getItem(category.column)
+                    .fields.getItem(category.column)
+                    .applyFilter({
+                      labelFilter: {
+                        condition: "Equals",
+                        comparator: "(blank)",
+                        exclusive: true,
+                      },
+                    });
+                });
                 // Currency on the PivotTable values is a separate step: a host without it keeps the PivotTable.
                 // Always: the PivotTable's own "General" showed 104750 beside cards with commas.
                 {

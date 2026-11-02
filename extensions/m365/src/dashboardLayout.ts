@@ -40,6 +40,8 @@ export interface DashboardBlock {
   style: DashboardStyle;
   /** One number format for every cell of the block. */
   numberFormat?: string;
+  /** The block is one spilling row: the number format also covers this many rows (spill room). */
+  spillRows?: number;
   /** Card accent colour (KPI blocks): a line on top of the card and the value's colour. */
   accent?: string;
   /** Columns the block's one column is merged across (a KPI card on the grid). */
@@ -461,6 +463,7 @@ export function buildDashboardLayout(
         ],
         style: "table-body",
         numberFormat: valueFormats[index],
+        spillRows: shown,
       });
       helperRefs.push({ names: `${letter}3#`, values: `${valueLetter}3#` });
     } else if (input.categories.length) {
@@ -552,6 +555,7 @@ export function buildDashboardLayout(
         ],
         style: "table-body",
         numberFormat: "mmm yyyy",
+        spillRows: 24,
       });
       blocks.push({
         row: 2,
@@ -559,6 +563,7 @@ export function buildDashboardLayout(
         cells: [[{ f: `=BYROW(${letter}3#,LAMBDA(m,${monthly("m")}))` }]],
         style: "table-body",
         numberFormat: valueFormats[0],
+        spillRows: 24,
       });
     } else {
       blocks.push({
@@ -603,7 +608,7 @@ export function buildDashboardLayout(
     // Rows with a category: a table row whose cells were cleared is not a record.
     value: { f: `=SUMPRODUCT(--(LEN(${input.categoryRef})>0))` },
     // Excel 2016 and 2019 have no UNIQUE: the count is written as text when every row was read.
-    sub: input.sampled
+    sub: spill
       ? {
           f: `=IFERROR(COUNTA(UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))),"")&"${text.categoryValues(input.categoryName.replace(/"/g, "'"))}"`,
         }

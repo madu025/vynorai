@@ -2433,7 +2433,7 @@ inspect?.addEventListener("click", async () => {
     setStatus(
       "Preview ready. Nothing has changed yet. Review it before applying.",
     );
-    renderConversation("assistant", "Preview ready. Your data is untouched.");
+    // The status line above already says the preview is ready; a chat bubble repeated it.
     previewReadyAt = Date.now();
     document.querySelector<HTMLElement>("#preview-heading")?.focus();
     // "Review as you go" off: apply straight away, like Copilot's edit mode.

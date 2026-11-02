@@ -6027,3 +6027,30 @@ body[data-auth="in"] :is(#tab-work, #tab-results, #tab-share, #tab-explore) {
   min-height: 32px;
   padding-block: 4px;
 }
+
+/* After Apply the preview card only needs to say "Applied" and offer Show result / Undo: the counts,
+   figures, steps, safety box and options were repeated above the Results Hub (owner feedback
+   2026-11-02: the pane filled with the same facts twice). The Hub row already says "Verified". */
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  :is(
+    #preview-summary,
+    #preview-impact,
+    #preview-kpis,
+    #preview-warnings,
+    #outcomes,
+    #preview-tweaks,
+    #plan-trace,
+    #steps,
+    .safety-summary,
+    .apply-options
+  ) {
+  display: none;
+}
+body[data-auth="in"]:has(
+    #result-card:not([hidden]) [data-i18n="preview_applied"]
+  )
+  #verified-result-banner,
+body[data-auth="in"] #operation-history > p {
+  display: none;
+}

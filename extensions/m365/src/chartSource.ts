@@ -126,6 +126,26 @@ export interface ChartSourcePlan {
   axisFormat?: string;
   /** Plain-words note when the plan differs from the whole range. */
   note?: string;
+  /** 0-based series positions on a far smaller scale (a margin % next to sales): drawn as a line
+   * on a secondary axis, or they would be flat at zero. */
+  secondary?: number[];
+  /** Number format for the secondary axis. */
+  secondaryFormat?: string;
+}
+
+/** Series whose largest value is at least 20 times smaller than the largest series. */
+export function smallScaleSeries(
+  series: readonly (readonly number[])[],
+): number[] {
+  const tops = series.map((values) =>
+    values.length ? Math.max(...values.map(Math.abs)) : 0,
+  );
+  const top = Math.max(0, ...tops);
+  if (series.length < 2 || top <= 0) return [];
+  const small = tops.flatMap((value, at) =>
+    value > 0 && value * 20 <= top ? [at] : [],
+  );
+  return small.length < series.length ? small : [];
 }
 
 const TOO_WIDE = (columns: number) =>
@@ -178,13 +198,20 @@ export function planChartSource(
   checkChartSize(target.rows, target.columns);
   const header = sample[0] ?? [];
   const name = (c: number) => String(header[c] ?? "");
-  const numbers = valueColumns.flatMap((c) =>
+  const columnNumbers = (c: number) =>
     sample
       .slice(1)
       .map((row) => row[c])
-      .filter((cell): cell is number => typeof cell === "number"),
-  );
+      .filter((cell): cell is number => typeof cell === "number");
+  const series = valueColumns.map(columnNumbers);
+  const secondary = smallScaleSeries(series);
+  const numbers = series.filter((_, at) => !secondary.includes(at)).flat();
+  const secondaryFormat = secondary.length
+    ? axisNumberFormat(secondary.flatMap((at) => series[at]))
+    : undefined;
   return {
+    ...(secondary.length ? { secondary } : {}),
+    ...(secondaryFormat ? { secondaryFormat } : {}),
     box: target,
     title: autoChartTitle(
       valueColumns.map(name),
@@ -226,13 +253,32 @@ export async function resolveChartSource(
   sheet: ChartSourceSheet,
   sync: () => Promise<void>,
   address?: string,
+  title?: string,
 ): Promise<ChartSourcePlan> {
   const used = sheet.getUsedRange(true);
   used.load(GEOMETRY);
   const asked = address ? sheet.getRange(address) : used;
   if (address) asked.load(GEOMETRY);
   await sync();
-  const box = boxOf(asked);
+  let box = boxOf(asked);
+  // The title names a column just right of the given range ("Sales, Cost and Margin %" over A1:C5
+  // when Margin % is in D): the agent meant to chart it too.
+  const usedEnd = Number(used.columnIndex) + Number(used.columnCount);
+  if (address && title && box.column + box.columns < usedEnd) {
+    const next = sheet.getRangeByIndexes(
+      box.row,
+      box.column + box.columns,
+      1,
+      1,
+    );
+    next.load("values");
+    await sync();
+    const header = String(next.values?.[0]?.[0] ?? "")
+      .trim()
+      .toLowerCase();
+    if (header && title.toLowerCase().includes(header))
+      box = { ...box, columns: box.columns + 1 };
+  }
   const usedBox = boxOf(used);
   const whole =
     !address ||

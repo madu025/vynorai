@@ -877,6 +877,7 @@ export async function applyAgentChanges(
             sheet,
             () => context.sync(),
             change.address,
+            change.title,
           );
           const source = sheet.getRangeByIndexes(
             plan.box.row,
@@ -900,6 +901,22 @@ export async function applyAgentChanges(
               await context.sync();
             } catch {
               /* optional polish */
+            }
+          }
+          if (plan.secondary?.length) {
+            // A margin % next to sales: a line on its own axis, so it is not flat at zero.
+            try {
+              for (const at of plan.secondary) {
+                const series = chart.series.getItemAt(at);
+                series.chartType = "Line";
+                series.axisGroup = "Secondary";
+              }
+              if (plan.secondaryFormat)
+                chart.axes.getItem("Value", "Secondary").numberFormat =
+                  plan.secondaryFormat;
+              await context.sync();
+            } catch {
+              /* older hosts: the chart is still made */
             }
           }
           if (change.position) {

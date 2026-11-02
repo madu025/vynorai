@@ -179,3 +179,39 @@ test("headers such as 'Number of Orders' and 'No. of Units' are measures; 'Order
   assert.equal(picked?.label, 0);
   assert.deepEqual(picked?.values, [2, 3, 4]);
 });
+
+const regional = [
+  ["Region", "Total Sales", "Total Cost", "Margin %"],
+  ["North", 8100, 6825, 0.157],
+  ["South", 8100, 7005, 0.135],
+  ["West", 4900, 4260, 0.131],
+  ["East", 3000, 2695, 0.102],
+];
+
+test("a margin % next to sales goes on a secondary axis, not flat at zero", async () => {
+  const { sheet, sync } = fakeSheet(regional);
+  const plan = await resolveChartSource(sheet, sync, "A1:D5");
+  assert.equal(planAddress(plan), "A1:D5");
+  assert.deepEqual(plan.secondary, [2]);
+  assert.equal(plan.secondaryFormat, "0.0%");
+  assert.equal(plan.axisFormat, "#,##0");
+});
+
+test("a column the chart title names, just right of the range, is charted too", async () => {
+  const { sheet, sync } = fakeSheet(regional);
+  const plan = await resolveChartSource(
+    sheet,
+    sync,
+    "A1:C5",
+    "Sales, Cost and Margin % by Region",
+  );
+  assert.equal(planAddress(plan), "A1:D5");
+  const plain = await resolveChartSource(
+    sheet,
+    sync,
+    "A1:C5",
+    "Sales by Region",
+  );
+  assert.equal(planAddress(plain), "A1:C5");
+  assert.equal(plain.secondary, undefined);
+});

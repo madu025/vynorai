@@ -1544,11 +1544,20 @@ body:has(#agent-card:not([hidden])) #starter-suggestions {
   margin-top: 7px;
 }
 .relationship-facts span {
-  padding: 4px 7px;
+  padding: 4px 9px;
   border-radius: 999px;
   background: var(--surface-muted);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.relationship-facts span.warn {
+  background: var(--warning-bg);
   color: var(--warning);
-  font-size: 10px;
+}
+.relationship-facts span.ok {
+  background: var(--success-bg);
+  color: var(--success);
 }
 #change-note {
   margin: 10px 0 0;
@@ -5963,4 +5972,28 @@ body[data-auth="in"]:has(#conversation-history > *)
   .composer-bar {
   margin-top: 4px;
   padding-top: 6px;
+}
+
+/* The answer reads like a slide: a headline, then bullets, numbers in bold (live run 2026-11-02). */
+.ac-answer.ac-headline {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.ac-points {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.ac-answer b,
+.ac-points b {
+  color: var(--brand);
+  font-weight: 700;
 }

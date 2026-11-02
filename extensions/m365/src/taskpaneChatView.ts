@@ -273,6 +273,29 @@ function hiddenText(document: Document, text: string): HTMLElement {
   return span;
 }
 
+/** Numbers ("1,390", "14.3%", "Rs 2,500") and a leading "Label:" in bold, as text nodes only. */
+const EMPHASIS =
+  /(^[^:\d]{2,40}:)|((?:Rs\.?\s?|[$€£₹])?[-+]?\d[\d,]*(?:\.\d+)?%?)/g;
+export function appendEmphasized(
+  document: Document,
+  node: HTMLElement,
+  text: string,
+): void {
+  let at = 0;
+  for (const match of text.matchAll(EMPHASIS)) {
+    const start = match.index ?? 0;
+    if (start > at) node.append(document.createTextNode(text.slice(at, start)));
+    const bold = document.createElement("b");
+    bold.textContent = match[0];
+    node.append(bold);
+    at = start + match[0].length;
+  }
+  if (at < text.length) node.append(document.createTextNode(text.slice(at)));
+}
+
+/** Points shown at once; the rest wait behind "Show more". */
+const VISIBLE_POINTS = 4;
+
 /** Draws the card: title, tiles, bars or a table, warning pills and follow-up chips. */
 export function renderAnswerCard(
   document: Document,
@@ -341,11 +364,28 @@ export function renderAnswerCard(
     wrap.append(table);
     root.append(wrap);
   }
-  if (card.answer) {
-    const line = el("p", "ac-answer", stripRanges(card.answer));
-    line.title = card.answer;
+  // The answer reads like a slide: the first point as a headline, the next ones as bullets, the
+  // numbers in bold (live run 2026-11-02: one clipped line and "Show more (3)" hid the answer).
+  const points = [card.answer, ...card.more].filter((text): text is string =>
+    Boolean(text && text.trim()),
+  );
+  const hidden = points.slice(VISIBLE_POINTS);
+  if (points.length) {
+    const headline = el("p", "ac-answer ac-headline");
+    appendEmphasized(document, headline, stripRanges(points[0]));
+    headline.title = points[0];
     root.removeAttribute("aria-hidden");
-    root.append(line);
+    root.append(headline);
+  }
+  if (points.length > 1) {
+    const list = el("ul", "ac-points");
+    for (const text of points.slice(1, VISIBLE_POINTS)) {
+      const item = el("li");
+      appendEmphasized(document, item, stripRanges(text));
+      item.title = text;
+      list.append(item);
+    }
+    root.append(list);
   }
   if (card.pills.length) {
     const pills = el("div", "ac-pills");
@@ -356,14 +396,14 @@ export function renderAnswerCard(
     }
     root.append(pills);
   }
-  if (card.more.length) {
+  if (hidden.length) {
     const rest = el("div", "ac-more");
     rest.hidden = true;
-    for (const text of card.more) rest.append(el("p", undefined, text));
+    for (const text of hidden) rest.append(el("p", undefined, text));
     const toggle = el(
       "button",
       "reply-more",
-      `${translate(language, "show_more", "Show more")} (${card.more.length})`,
+      `${translate(language, "show_more", "Show more")} (${hidden.length})`,
     ) as HTMLButtonElement;
     toggle.type = "button";
     toggle.setAttribute("aria-expanded", "false");
@@ -373,7 +413,7 @@ export function renderAnswerCard(
       toggle.setAttribute("aria-expanded", String(open));
       toggle.textContent = open
         ? translate(language, "show_less", "Show less")
-        : `${translate(language, "show_more", "Show more")} (${card.more.length})`;
+        : `${translate(language, "show_more", "Show more")} (${hidden.length})`;
     });
     root.removeAttribute("aria-hidden");
     root.append(toggle, rest);

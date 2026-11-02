@@ -500,12 +500,27 @@ export function showWorkbookMapView(
   graph.append(node(link.from), line, node(link.to));
   const facts = document.createElement("div");
   facts.className = "relationship-facts";
-  for (const text of [
-    `${link.fromRowsWithoutPartner.toLocaleString("en-US")} unmatched rows`,
-    `${(link.from.duplicateKeys + link.to.duplicateKeys).toLocaleString("en-US")} duplicate keys`,
-    link.needsCleaning ? "Clean keys first" : "Keys are consistent",
-  ]) {
+  // A key that repeats on the "many" side is how a many-to-one link works, not a problem: only
+  // repeats on both sides (many-to-many) are worth a warning (live run 2026-11-02).
+  const repeats =
+    link.cardinality === "many-to-many"
+      ? link.from.duplicateKeys + link.to.duplicateKeys
+      : 0;
+  const unmatched = link.fromRowsWithoutPartner;
+  for (const [text, tone] of [
+    [
+      `${unmatched.toLocaleString("en-US")} unmatched rows`,
+      unmatched ? "warn" : "ok",
+    ],
+    ...(repeats
+      ? [[`${repeats.toLocaleString("en-US")} duplicate keys`, "warn"]]
+      : []),
+    link.needsCleaning
+      ? ["Clean keys first", "warn"]
+      : ["Keys are consistent", "ok"],
+  ] as const) {
     const badge = document.createElement("span");
+    badge.className = tone;
     badge.textContent = localize(text);
     facts.appendChild(badge);
   }

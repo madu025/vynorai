@@ -2078,6 +2078,14 @@ export async function applyApprovedExcelPlan(
                         top.color = block.accent;
                       }
                     }
+                    // A soft lower edge stands in for a card shadow (Office.js has no shadows).
+                    if (block.style === "kpi-sub") {
+                      const bottom =
+                        styled.format.borders.getItem("EdgeBottom");
+                      bottom.style = "Continuous";
+                      bottom.weight = "Medium";
+                      bottom.color = "#CBD5E1";
+                    }
                     // White edges between the cards read as gaps on the page colour.
                     if (block.style.startsWith("kpi-"))
                       for (const edge of ["EdgeLeft", "EdgeRight"]) {
@@ -2125,6 +2133,31 @@ export async function applyApprovedExcelPlan(
               };
               await decorate(() => {
                 sheet.showHeadings = false;
+              });
+              // Change lines turn green for ▲ and red for ▼: a conditional format reads the cell, so
+              // it follows the data when a row is added later.
+              await decorate(() => {
+                for (const block of layout.blocks) {
+                  if (block.style !== "kpi-sub") continue;
+                  const cell = sheet.getRangeByIndexes(
+                    block.row,
+                    block.col,
+                    1,
+                    1,
+                  );
+                  for (const [mark, color] of [
+                    ["▲", "#059669"],
+                    ["▼", "#DC2626"],
+                  ] as const) {
+                    const rule = cell.conditionalFormats.add("ContainsText");
+                    rule.textComparison.format.font.color = color;
+                    rule.textComparison.format.font.bold = true;
+                    rule.textComparison.rule = {
+                      operator: "Contains",
+                      text: mark,
+                    };
+                  }
+                }
               });
               await decorate(() => {
                 sheet.getRangeByIndexes(

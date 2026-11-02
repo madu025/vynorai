@@ -424,3 +424,16 @@ test("the first card shows the change against the previous month when there is a
       .some((cell) => cell.includes("▲")),
   );
 });
+
+test("the % of target card draws a bullet bar of ten blocks", () => {
+  const layout = buildDashboardLayout(
+    base({ target: { value: 100, label: "target" } }),
+  );
+  const subs = layout.blocks
+    .filter((block) => block.style === "kpi-sub")
+    .flatMap((block) => block.cells.flat())
+    .map(text);
+  const bar = subs.find((cell) => cell.includes('REPT("█"'));
+  assert.ok(bar, "a bullet bar formula");
+  assert.match(bar, /REPT\("░",10-ROUND/);
+});

@@ -14,6 +14,7 @@ import {
   type AgentPhase,
   type AgentRun,
 } from "./agent.js";
+import { canAutoApprove } from "./agentAutoApprove.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
 import { describeReview, runTeam } from "./agentReview.js";
 import { retryTransient } from "./retryTransient.js";
@@ -6105,6 +6106,22 @@ agentApprove?.addEventListener("click", async () => {
     agentVerifying = false;
     // The verify round ends on its own wording; the person must still see that the apply is undoable.
     if (!agentPending && !agentStopped) setStatus(lastApplyStatus);
+    // One approval per task: a chart or format on the sheet this run just made is applied at once.
+    // agentLoop sets agentPending while it runs, which the compiler cannot see from here.
+    const followUp = agentPending as typeof run | undefined;
+    if (
+      followUp &&
+      !agentStopped &&
+      canAutoApprove(
+        followUp.changes.map((item) => item.change),
+        agentLastUndo?.createdSheets ?? [],
+      )
+    ) {
+      log.record("agent:auto-approve", "pass", {
+        changes: followUp.changes.length,
+      });
+      agentApprove.click();
+    }
   } else if (agentStopped) {
     // Stop skipped the read-back: the verifier never ran, so it must not keep waiting for the apply.
     setAgentRoleView(document, "verification", "skipped", "did not finish");

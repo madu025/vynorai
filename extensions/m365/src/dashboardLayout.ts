@@ -650,7 +650,11 @@ export function buildDashboardLayout(
     targetCards.push({
       label: text.percentOf(input.target.label).toUpperCase(),
       value: { f: `=IFERROR(${total}/${input.target.value},0)` },
-      sub: `${value.name} ${input.target.label} ${targetText}`,
+      // A bullet bar in text (Office.js cannot draw one in a cell): ten blocks, filled to the share
+      // of the target reached, then the target in words.
+      sub: {
+        f: `=REPT("█",ROUND(MIN(1,IFERROR(${total}/${input.target.value},0))*10,0))&REPT("░",10-ROUND(MIN(1,IFERROR(${total}/${input.target.value},0))*10,0))&" ${`${value.name} ${input.target.label} ${targetText}`.replace(/"/g, "'")}"`,
+      },
       format: "0.0%",
     });
     targetCards.push({

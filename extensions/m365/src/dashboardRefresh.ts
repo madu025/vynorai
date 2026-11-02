@@ -50,65 +50,84 @@ export function spillAnchor(
 }
 
 /**
- * Charts over spilled data keep the row count they were made with; when a category or month is
- * added or removed, point each series at the spill's new size. Returns the sheets that hold them.
+ * Charts over spilled data (the dashboard's own, and an agent chart over a GROUPBY summary) keep
+ * the row count they were made with; when a category or month is added or removed, each series is
+ * pointed at the spill's new size. Returns the sheets of the dashboard's own charts only: a sheet
+ * that also holds the person's data must still trigger a refresh when they edit it.
  */
 export async function resizeDashboardCharts(
   context: any,
 ): Promise<Set<string>> {
   const sheets = new Set<string>();
   const list = context.workbook.worksheets;
-  list.load("items/id");
+  list.load("items/id,items/name");
   await context.sync();
-  const found: Array<{ sheet: any; chart: any }> = [];
+  const found: Array<{ sheet: any; charts: any }> = [];
   for (const sheet of list.items) {
     const charts = sheet.charts;
     charts.load("items/name");
-    found.push({ sheet, chart: charts });
+    found.push({ sheet, charts });
   }
   await context.sync();
-  const targets = found.flatMap(({ sheet, chart }) =>
-    (chart.items ?? [])
-      .filter((item: any) => isDashboardChart(String(item.name)))
-      .map((item: any) => ({ sheet, chart: item })),
+  const targets = found.flatMap(({ sheet, charts }) =>
+    (charts.items ?? []).map((chart: any) => {
+      if (isDashboardChart(String(chart.name))) sheets.add(String(sheet.id));
+      const series = chart.series;
+      series.load("count");
+      return { sheet, chart, series };
+    }),
   );
   if (!targets.length) return sheets;
-  const sources = targets.map(({ sheet, chart }) => {
-    sheets.add(String(sheet.id));
-    const series = chart.series.getItemAt(0);
-    return {
-      sheet,
-      chart,
-      series,
-      address: series.getDimensionDataSourceString("Values"),
-    };
-  });
   await context.sync();
+  const sources = targets.flatMap(({ sheet, series }) =>
+    Array.from({ length: Math.min(Number(series.count) || 0, 6) }, (_, at) => {
+      const item = series.getItemAt(at);
+      return {
+        sheet,
+        series: item,
+        address: item.getDimensionDataSourceString("Values"),
+      };
+    }),
+  );
+  await context.sync();
+  const byName = new Map<string, any>(
+    list.items.map((sheet: any) => [String(sheet.name).toLowerCase(), sheet]),
+  );
   const spills = sources.flatMap((source) => {
     const anchor = spillAnchor(String(source.address?.value ?? ""));
     if (!anchor) return [];
-    const spill = source.sheet
-      .getRange(`${anchor.column}${anchor.row}`)
-      .getSpillingToRangeOrNullObject();
-    spill.load("isNullObject,rowCount,address");
-    return [{ ...source, anchor, spill }];
+    const named = anchor.sheet.replace(/^'|'$/g, "").replace(/''/g, "'");
+    const sheet = named ? byName.get(named.toLowerCase()) : source.sheet;
+    if (!sheet) return [];
+    // The category cell may start the spill (=GROUPBY(...) in A2) or sit inside it, under a
+    // header the same formula wrote (=GROUPBY(...) in A1).
+    const parent = sheet
+      .getRange(anchor.column + anchor.row)
+      .getSpillParentOrNullObject();
+    parent.load("isNullObject");
+    return [{ ...source, sheet, anchor, parent }];
   });
   await context.sync();
-  for (const { sheet, series, anchor, spill, address } of spills) {
-    if (spill.isNullObject) continue;
-    const rows = Number(spill.rowCount);
+  const live = spills.flatMap((item) => {
+    if (item.parent.isNullObject) return [];
+    const spill = item.parent.getSpillingToRange();
+    spill.load("rowIndex,rowCount");
+    return [{ ...item, spill }];
+  });
+  await context.sync();
+  for (const { sheet, series, anchor, spill, address } of live) {
+    const last = Number(spill.rowIndex) + Number(spill.rowCount);
     const shown = /:\$?[A-Z]+\$?(\d+)$/i.exec(String(address.value));
     const lastShown = shown ? Number(shown[1]) : anchor.row;
-    if (rows < 1 || lastShown === anchor.row + rows - 1) continue;
-    const last = anchor.row + rows - 1;
+    if (last < anchor.row || lastShown === last) continue;
     const valueColumn = String(address.value)
       .replace(/^.*!/, "")
       .match(/\$?([A-Z]{1,3})\$?\d+/i)![1];
     series.setXAxisValues(
-      sheet.getRange(`${anchor.column}${anchor.row}:${anchor.column}${last}`),
+      sheet.getRange(anchor.column + anchor.row + ":" + anchor.column + last),
     );
     series.setValues(
-      sheet.getRange(`${valueColumn}${anchor.row}:${valueColumn}${last}`),
+      sheet.getRange(valueColumn + anchor.row + ":" + valueColumn + last),
     );
   }
   await context.sync();

@@ -914,6 +914,31 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     () => document.getElementById("health")?.hidden === false,
     { timeout: 3000 },
   );
+  // Same for Run: with text typed, the press moves focus off the text box; Run must stay put
+  // (live run 2026-11-02: the box shrank on press and the click landed on the text box).
+  await page.click("#instruction");
+  await page.type("#instruction", "total Sales by Region");
+  const runBox = await page.$eval("#smart-run", (button) => {
+    const box = button.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  });
+  await page.mouse.move(runBox.x, runBox.y);
+  await page.mouse.down();
+  const runAfter = await page.$eval("#smart-run", (button) => {
+    const box = button.getBoundingClientRect();
+    return box.top + box.height / 2;
+  });
+  await page.mouse.move(0, 0);
+  await page.mouse.up();
+  assert.equal(
+    Math.round(runAfter),
+    Math.round(runBox.y),
+    `${label}: pressing Run with text typed must not move it`,
+  );
+  await page.$eval("#instruction", (box) => {
+    box.value = "";
+    box.blur();
+  });
   await page.$eval("#smoke-answer", (answer) => answer.remove());
   await page.click('[data-close-tool="health"]');
   assert.equal(

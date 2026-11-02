@@ -5932,8 +5932,8 @@ body[data-auth="in"] #agent-plan > summary strong {
 }
 
 /* Once a conversation has started, the answers get the room (live run 2026-11-02: the request
-   box took a third of a 640 px pane). The box is one short line and grows only while the text box
-   itself has focus, so a click on Check my data or Explain this formula never moves the button
+   box took a third of a 640 px pane). The box is one short line and grows while the box has focus
+   or holds text, so a click on Check my data or Explain this formula never moves the button
    under the pointer. The empty-box hint is never shown; the placeholder already says it. */
 .run-gate[data-reason="request_required"] {
   display: none;
@@ -5948,10 +5948,16 @@ body[data-auth="in"]:has(#conversation-history > *)
   min-height: 40px;
   height: 40px;
 }
+/* Stays tall while the text box has focus or holds text: a press on Run moves focus off the text box
+   first, and a shrink then would pull Run out from under the pointer. */
 body[data-auth="in"]:has(#conversation-history > *)
   .workspace
   > .composer
-  textarea:focus {
+  textarea:focus,
+body[data-auth="in"]:has(#conversation-history > *)
+  .workspace
+  > .composer
+  textarea:not(:placeholder-shown) {
   min-height: 68px;
   height: 68px;
 }

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { planSheetPolish, polishCreatedSheets } from "./sheetPolish.js";
+import {
+  arrangeCharts,
+  planSheetPolish,
+  polishCreatedSheets,
+} from "./sheetPolish.js";
 
 test("a summary gets its header and total rows found", () => {
   const plan = planSheetPolish([
@@ -117,4 +121,33 @@ test("a one-cell title above a table becomes the title band", () => {
   ]);
   assert.equal(plan.titleRow, 0);
   assert.deepEqual(plan.headerRows, [1]);
+});
+
+test("overlapping charts go into a two-per-row grid under the cells; apart charts stay", () => {
+  const placed = arrangeCharts(
+    [
+      { left: 300, top: 200, width: 400, height: 250 },
+      { left: 300, top: 300, width: 400, height: 250 },
+      { left: 300, top: 400, width: 400, height: 250 },
+    ],
+    180,
+  );
+  assert.deepEqual(
+    placed?.map((box) => [box.left, box.top]),
+    [
+      [0, 192],
+      [432, 192],
+      [0, 464],
+    ],
+  );
+  assert.equal(
+    arrangeCharts(
+      [
+        { left: 0, top: 0, width: 100, height: 100 },
+        { left: 200, top: 0, width: 100, height: 100 },
+      ],
+      50,
+    ),
+    undefined,
+  );
 });

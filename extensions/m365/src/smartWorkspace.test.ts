@@ -47,3 +47,19 @@ test("explicit modes and a missing agent always win", () => {
     "agent",
   );
 });
+
+test("a change to something already built goes to the agent, a new build stays local", () => {
+  for (const request of [
+    "On this dashboard sheet, change the title to Regional Sales Overview",
+    "Change the Total of Sales by Region doughnut chart into a bar chart",
+    "make the existing chart colours blue",
+    "rename the dashboard title",
+  ])
+    assert.equal(chooseSmartPath(request, "smart", true), "agent", request);
+  for (const request of [
+    "Create a management dashboard of Sales by Region",
+    "make a bar chart of sales by region",
+    "create a pivot table of sales by region",
+  ])
+    assert.equal(chooseSmartPath(request, "smart", true), "local", request);
+});

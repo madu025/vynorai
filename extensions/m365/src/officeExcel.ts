@@ -1811,7 +1811,38 @@ export async function applyApprovedExcelPlan(
                 localExcelAddress(plan.sourceAddress),
               );
               const quotedSheet = `'${String(plan.worksheetName).replace(/'/g, "''")}'!`;
+              // Data in an Excel Table: the dashboard reads the table's columns, so rows added or
+              // removed later are counted. A fixed range missed them (live run 2026-11-02).
+              let sourceTable: string | undefined;
+              try {
+                const tables = sourceRange().getTables(false);
+                tables.load("items/name");
+                await context.sync();
+                const ranges = tables.items.map((table: any) => {
+                  const range = table.getRange();
+                  range.load("address");
+                  return { name: String(table.name), range };
+                });
+                await context.sync();
+                const wanted = localExcelAddress(
+                  plan.sourceAddress,
+                ).toUpperCase();
+                sourceTable = ranges.find(
+                  ({ range }: { range: any }) =>
+                    localExcelAddress(String(range.address)).toUpperCase() ===
+                    wanted,
+                )?.name;
+              } catch {
+                sourceTable = undefined; // older Excel: the fixed range stays
+              }
               const sourceColumn = (index: number) => {
+                if (sourceTable) {
+                  // Structured references escape [ ] # and ' with a leading '.
+                  const header = String(
+                    (dashboardHeaders as unknown[])[index] ?? "",
+                  ).replace(/(['#[\]])/g, "'$1");
+                  return `${sourceTable}[${header}]`;
+                }
                 const letter = columnLetter(parsed.startColumn + index);
                 return `${quotedSheet}$${letter}$${parsed.startRow + 1}:$${letter}$${parsed.endRow}`;
               };
@@ -2174,9 +2205,12 @@ export async function applyApprovedExcelPlan(
               // The breakdown: a PivotTable with a slicer, or a formula table where the host refuses one.
               let pivot: any;
               try {
+                // Built on the Excel Table when there is one, so a refresh picks up new rows.
                 pivot = sheet.pivotTables.add(
                   action.name,
-                  sourceRange(),
+                  sourceTable
+                    ? context.workbook.tables.getItem(sourceTable)
+                    : sourceRange(),
                   sheet.getRange(layout.pivotAnchor),
                 );
                 await context.sync();
@@ -2269,6 +2303,11 @@ export async function applyApprovedExcelPlan(
               if (pivot) {
                 await decorate(() => {
                   pivot.layout.layoutType = "Tabular";
+                });
+                // A PivotTable does not follow its data like the formulas do: it refreshes when the
+                // workbook opens, and the task pane refreshes it after an edit (dashboardRefresh.ts).
+                await decorate(() => {
+                  pivot.refreshOnOpen = true;
                 });
                 await decorate(() => {
                   const whole = pivot.layout.getRange();

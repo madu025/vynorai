@@ -56,6 +56,43 @@ export function planSheetPolish(
   return { headerRows, totalRows };
 }
 
+export interface ChartBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+const overlaps = (a: ChartBox, b: ChartBox) =>
+  a.left < b.left + b.width &&
+  b.left < a.left + a.width &&
+  a.top < b.top + b.height &&
+  b.top < a.top + a.height;
+
+/** Chart card size and gap in points on an agent-built dashboard. */
+export const CHART_CARD = { width: 420, height: 260, gap: 12 };
+
+/**
+ * Charts the agent placed on top of each other (live run 2026-11-02) go into a grid, two per row,
+ * under the sheet's cells. Charts that do not overlap keep their places (undefined).
+ */
+export function arrangeCharts(
+  boxes: readonly ChartBox[],
+  belowTop: number,
+): ChartBox[] | undefined {
+  const clash = boxes.some((box, index) =>
+    boxes.some((other, at) => at > index && overlaps(box, other)),
+  );
+  if (!clash) return undefined;
+  const { width, height, gap } = CHART_CARD;
+  return boxes.map((_, index) => ({
+    left: (index % 2) * (width + gap),
+    top: belowTop + gap + Math.floor(index / 2) * (height + gap),
+    width,
+    height,
+  }));
+}
+
 const HEADER_FILL = "#1F4E78";
 const HEADER_FONT = "#FFFFFF";
 const TOTAL_LINE = "#1F4E78";
@@ -124,9 +161,82 @@ export async function polishCreatedSheets(
           if (Number(format.columnWidth) > MAX_COLUMN_POINTS)
             format.columnWidth = MAX_COLUMN_POINTS;
         await context.sync();
+        await polishCharts(context, sheet, used, name);
       } catch {
         // Polish is optional: the result is already written and verified.
       }
     }
   });
+}
+
+/**
+ * Charts on a sheet the agent built: card look (white face, faint border, rounded corners, one
+ * font, bold title, no gridlines) and, when they overlap, a two-per-row grid under the cells. A
+ * sheet named like a dashboard also hides the cell grid. Every touch is optional.
+ */
+async function polishCharts(
+  context: any,
+  sheet: any,
+  used: any,
+  name: string,
+): Promise<void> {
+  const quietly = async (touch: () => void) => {
+    try {
+      touch();
+      await context.sync();
+    } catch {
+      // Decoration only.
+    }
+  };
+  if (/dashboard/i.test(name))
+    await quietly(() => {
+      sheet.showGridlines = false;
+    });
+  let charts: any[] = [];
+  try {
+    const list = sheet.charts;
+    list.load("items/name,items/left,items/top,items/width,items/height");
+    await context.sync();
+    charts = list.items ?? [];
+  } catch {
+    return;
+  }
+  if (!charts.length) return;
+  for (const chart of charts) {
+    await quietly(() => {
+      chart.format.fill.setSolidColor("#FFFFFF");
+      chart.format.border.color = "#E5E7EB";
+      chart.format.font.name = "Segoe UI";
+      chart.title.format.font.bold = true;
+      chart.title.format.font.size = 13;
+    });
+    await quietly(() => {
+      chart.format.roundedCorners = true;
+    });
+    await quietly(() => {
+      chart.axes.valueAxis.majorGridlines.visible = false;
+    });
+  }
+  let bottom = 0;
+  try {
+    const last = used.getLastRow();
+    last.load("top,height");
+    await context.sync();
+    bottom = Number(last.top) + Number(last.height);
+  } catch {
+    bottom = 0;
+  }
+  const placed = arrangeCharts(
+    charts.map((chart) => ({
+      left: Number(chart.left),
+      top: Number(chart.top),
+      width: Number(chart.width),
+      height: Number(chart.height),
+    })),
+    bottom,
+  );
+  if (placed)
+    await quietly(() => {
+      charts.forEach((chart, index) => Object.assign(chart, placed[index]));
+    });
 }

@@ -70,6 +70,12 @@ const FILTERED_LIST =
 const TEXT_EXTRACTION =
   /\b(?:take|extract|get|pull|grab|split\s+out)\b[^.?]{0,40}\b(?:city|town|country|state|province|district|domain|first\s+name|last\s+name|surname|post\s*code|zip(?:\s*code)?|house\s+number|street)\b[^.?]{0,40}\bfrom\b/i;
 
+// A change to something already built ("change the doughnut chart to a bar chart", "rename the
+// dashboard title"): the local reader only builds new results, so it made a new dashboard or chart
+// sheet instead (live run 2026-11-02). The agent has chart_action and cell edits for this.
+const EDIT_EXISTING =
+  /\b(?:change|modify|edit|update|rename|recolou?r|switch|convert|turn|make)\b[^.?]{0,60}\b(?:the|this|that|existing|current|my)\b[^.?]{0,40}\b(?:chart|graph|doughnut|donut|pie|title|heading|card|kpi|legend|axis|label|colou?rs?|font|dashboard|slicer|pivot\s*table|pivot)\b|\b(?:chart|graph|doughnut|donut|pie)\b[^.?]{0,40}\b(?:to|into)\s+an?\s+(?:bar|column|line|pie|doughnut|donut|area)\b/i;
+
 /** Smart stays local for ordinary work and uses the agent for workbook-wide reasoning. */
 export function chooseSmartPath(
   request: string,
@@ -85,6 +91,7 @@ export function chooseSmartPath(
     INFERRED_RATIO.test(text) ||
     FILTERED_LIST.test(text) ||
     TEXT_EXTRACTION.test(text) ||
+    EDIT_EXISTING.test(text) ||
     text.length > 240
     ? "agent"
     : "local";

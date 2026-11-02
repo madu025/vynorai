@@ -82,6 +82,7 @@ import {
 } from "./capabilityRegistry.js";
 import { describeUnhandledJobs, findUnhandledJobs } from "./workflowCheck.js";
 import { chooseInstructionRoute } from "./taskpaneRouting.js";
+import { watchDashboardPivots } from "./dashboardRefresh.js";
 import { createPreviewController } from "./taskpanePreviewControl.js";
 import {
   canGroup,
@@ -5001,6 +5002,15 @@ async function initialize() {
   workbookPrefs = loadPreferences();
   renderPreferences();
   watchSelection();
+  try {
+    const excel = officeRuntime();
+    if (excel)
+      watchDashboardPivots(excel, (error) =>
+        log.record("dashboard:refresh", "info", describeError(error)),
+      );
+  } catch (error) {
+    log.record("dashboard:refresh", "info", describeError(error));
+  }
   if (restoreSession()) {
     restoreConversationHistory();
     void restoreResultGallery();

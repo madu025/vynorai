@@ -275,7 +275,7 @@ function hiddenText(document: Document, text: string): HTMLElement {
 
 /** Numbers ("1,390", "14.3%", "Rs 2,500") and a leading "Label:" in bold, as text nodes only. */
 const EMPHASIS =
-  /(^[^:\d]{2,40}:)|((?:Rs\.?\s?|[$€£₹])?[-+]?\d[\d,]*(?:\.\d+)?%?)/g;
+  /(^[^:\d]{2,40}:)|((?<![A-Za-z$:!\d.,])(?:Rs\.?\s?|[$€£₹])?[-+]?\d[\d,]*(?:\.\d+)?%?(?![A-Za-z:]))/g;
 export function appendEmphasized(
   document: Document,
   node: HTMLElement,

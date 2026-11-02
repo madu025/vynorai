@@ -45,3 +45,10 @@ test("text without numbers stays plain", () => {
   appendEmphasized(doc, line, "Keys match on both sheets");
   assert.equal(line.parts.join(""), "Keys match on both sheets");
 });
+
+test("cell addresses are not bolded as numbers", () => {
+  const doc: any = fakeDocument();
+  const line = doc.root();
+  appendEmphasized(doc, line, "The chart over A1:D5 shows 4 regions");
+  assert.equal(line.parts.join(""), "The chart over A1:D5 shows **4** regions");
+});

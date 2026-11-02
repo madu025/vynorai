@@ -521,10 +521,12 @@ test("a GROUPBY that drops its first data row goes straight back to the builder,
   );
 });
 
-test("the accuracy reviewer is told to run the formulas and compare totals", () => {
+test("the reviewer compares totals in one calculate and keeps its tool calls few", () => {
+  // A live run spent six reviewer turns recalculating every staged formula (2026-11-02).
   const text = reviewRequest("Summary by region", { reply: "", changes: [] });
-  assert.match(text, /run every staged formula through calculate/);
-  assert.match(text, /compare it with the sum of the summary/);
+  assert.match(text, /ONE calculate that compares the sum of a value column/);
+  assert.match(text, /two at most for a summary, never run_code/);
+  assert.match(text, /only when its text looks wrong/);
 });
 
 test("a revision that repeats the known GROUPBY header mistake is repaired, not shown to the person", async () => {

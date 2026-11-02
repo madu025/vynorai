@@ -42,6 +42,8 @@ export interface DashboardBlock {
   numberFormat?: string;
   /** Card accent colour (KPI blocks): a line on top of the card and the value's colour. */
   accent?: string;
+  /** Columns the block's one column is merged across (a KPI card on the grid). */
+  span?: number;
 }
 
 /**
@@ -234,18 +236,21 @@ export interface DashboardLayoutInput {
 export const MANAGEMENT_TOP = 10;
 export const DEFAULT_TOP = 50;
 
+/**
+ * A 12-column grid like a web dashboard: KPI cards share the full width, charts sit two per row
+ * under them, and the breakdown with its slicer comes last (redesign 2026-11-02).
+ */
+const GRID_COLUMNS = 12;
+const GRID_WIDTH = 72;
 const CARD_COLUMNS = 6;
-const CARD_WIDTH = 120;
-const GAP_COLUMN = CARD_COLUMNS; // G: a thin gap before the charts
-const CHART_COLUMN = CARD_COLUMNS + 1; // H
-const CHART_SPAN = 7; // H:N
+const CHART_SPAN = GRID_COLUMNS / 2;
+/** First chart row, under the KPI cards and the note row. */
+const CHART_TOP = 7;
 // The chart data sits far right (AO), off the page: hiding it blanked the charts unless Excel
 // plotted hidden cells, which did not take in Excel desktop (live run 2026-11-02).
 const HELPER_COLUMN = 40; // AO
 const KPI_ROW = 3;
 const NOTE_ROW = 6;
-const SECTION_ROW = 8;
-const PIVOT_ROW = 9;
 const CHART_ROW = 3;
 const CHART_HEIGHT = 16;
 
@@ -470,8 +475,8 @@ export function buildDashboardLayout(
         headerRow: 1,
         col,
         dataRows: topCount,
-        from: `${usageColumnLetter(CHART_COLUMN)}${top + 1}`,
-        to: `${usageColumnLetter(CHART_COLUMN + CHART_SPAN - 1)}${top + CHART_HEIGHT}`,
+        from: `${usageColumnLetter(0)}${top + 1}`,
+        to: `${usageColumnLetter(CHART_SPAN - 1)}${top + CHART_HEIGHT}`,
         numberFormat: valueFormats[index],
         kind: dashboardChartKind(
           index,
@@ -529,8 +534,8 @@ export function buildDashboardLayout(
       headerRow: 1,
       col,
       dataRows: months.length,
-      from: `${usageColumnLetter(CHART_COLUMN)}${top + 1}`,
-      to: `${usageColumnLetter(CHART_COLUMN + CHART_SPAN - 1)}${top + CHART_HEIGHT}`,
+      from: `${usageColumnLetter(0)}${top + 1}`,
+      to: `${usageColumnLetter(CHART_SPAN - 1)}${top + CHART_HEIGHT}`,
       numberFormat: valueFormats[0],
       kind: "line",
       color: DASHBOARD_PALETTE[charts.length % DASHBOARD_PALETTE.length],
@@ -607,30 +612,50 @@ export function buildDashboardLayout(
   if (chosen.length > CARD_COLUMNS && targetCards[1])
     chosen = chosen.filter((card) => card !== targetCards[1]);
   chosen = chosen.slice(0, CARD_COLUMNS);
+  // Cards share the full grid width: three cards span four columns each, four span three.
+  const span = Math.max(
+    1,
+    Math.floor(GRID_COLUMNS / Math.max(1, chosen.length)),
+  );
   chosen.forEach((card, index) => {
     const accent = DASHBOARD_PALETTE[index % DASHBOARD_PALETTE.length];
+    const col = index * span;
     blocks.push({
       row: KPI_ROW,
-      col: index,
+      col,
       cells: [[card.label]],
       style: "kpi-label",
       accent,
+      span,
     });
     blocks.push({
       row: KPI_ROW + 1,
-      col: index,
+      col,
       cells: [[card.value]],
       style: "kpi-value",
       accent,
+      span,
       ...(card.format !== "@" ? { numberFormat: card.format } : {}),
     });
     blocks.push({
       row: KPI_ROW + 2,
-      col: index,
+      col,
       cells: [[card.sub]],
       style: "kpi-sub",
+      span,
     });
   });
+
+  // Charts two per row under the cards; a lone last chart keeps half the width.
+  charts.forEach((chart, index) => {
+    const top = CHART_TOP + Math.floor(index / 2) * (CHART_HEIGHT + 1);
+    const left = (index % 2) * CHART_SPAN;
+    chart.from = `${usageColumnLetter(left)}${top + 1}`;
+    chart.to = `${usageColumnLetter(left + CHART_SPAN - 1)}${top + CHART_HEIGHT}`;
+  });
+  const SECTION_ROW =
+    CHART_TOP + Math.ceil(charts.length / 2) * (CHART_HEIGHT + 1) + 1;
+  const PIVOT_ROW = SECTION_ROW + 1;
 
   if (input.currency?.mixedBy)
     notes.push(text.mixedRows(input.currency.mixed!, input.currency.mixedBy));
@@ -706,11 +731,10 @@ export function buildDashboardLayout(
     });
 
   const columnWidths = [
-    ...Array.from({ length: CARD_COLUMNS }, (_, col) => ({
+    ...Array.from({ length: GRID_COLUMNS }, (_, col) => ({
       col,
-      width: CARD_WIDTH,
+      width: GRID_WIDTH,
     })),
-    { col: GAP_COLUMN, width: 14 },
     ...values.flatMap((_, index) => [
       { col: HELPER_COLUMN + index * 3, width: 110 },
       { col: HELPER_COLUMN + index * 3 + 1, width: 95 },
@@ -730,10 +754,10 @@ export function buildDashboardLayout(
     blocks,
     charts,
     pivotAnchor: `A${PIVOT_ROW + 1}`,
-    slicerAnchor: `${usageColumnLetter(values.length + 2)}${PIVOT_ROW + 1}`,
+    slicerAnchor: `${usageColumnLetter(Math.max(CHART_SPAN, values.length + 2))}${PIVOT_ROW + 1}`,
     fallbackBreakdown,
     columnWidths,
-    titleWidth: CHART_COLUMN + CHART_SPAN,
+    titleWidth: GRID_COLUMNS,
     rowHeights: [
       { row: 0, height: 36 },
       { row: 1, height: 20 },
@@ -742,10 +766,7 @@ export function buildDashboardLayout(
       { row: KPI_ROW + 2, height: 20 },
     ],
     helperColumn: HELPER_COLUMN,
-    pageRows: Math.max(
-      CHART_ROW + Math.max(1, charts.length) * (CHART_HEIGHT + 1),
-      PIVOT_ROW + shown + 3,
-    ),
+    pageRows: Math.max(PIVOT_ROW + shown + 3, PIVOT_ROW + 14),
     valueFormats,
     notes,
   };

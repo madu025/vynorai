@@ -158,7 +158,7 @@ function dashboardChecks(
   const sheet = ctx.result;
   if (!sheet) return [...checks, ...extra(ctx)];
   const cards = filledCells(sheet).filter(
-    ([row, col, text]) => row === 3 && col < 6 && text,
+    ([row, col, text]) => row === 3 && col < 12 && text,
   );
   checks.push(
     check("layout", "title on the first row", cellText(sheet, 0, 0).length > 0),
@@ -190,7 +190,9 @@ function dashboardChecks(
       check(
         "layout",
         "breakdown PivotTable under the cards",
-        sheet.pivots.length === 1 && sheet.pivots[0].anchor === "A10",
+        sheet.pivots.length === 1 &&
+          /^A\d+$/.test(sheet.pivots[0].anchor) &&
+          Number(sheet.pivots[0].anchor.slice(1)) > 7,
         JSON.stringify(sheet.pivots),
       ),
       check(
@@ -207,7 +209,10 @@ function dashboardChecks(
       check(
         "fallback",
         "live formula breakdown in the PivotTable's place",
-        /^=/.test(cellText(sheet, 10, 1)),
+        // Under the charts on the grid: a live formula in the value column of the breakdown.
+        filledCells(sheet).some(
+          ([row, col, text]) => row > 7 && col === 1 && /^=/.test(text),
+        ),
         cellText(sheet, 10, 1),
       ),
       check(
@@ -233,7 +238,7 @@ const currencyCheck = (ctx: GradeContext): Check[] => {
   };
   const want = expected[ctx.dataset.id];
   const formats = filledCells(sheet)
-    .filter(([row, col]) => row === 4 && col < 6)
+    .filter(([row, col]) => row === 4 && col < 12)
     .map(([, , , cell]) => cell.numberFormat ?? "");
   if (want === "mixed") {
     const note = cellText(sheet, 6, 0);
@@ -313,7 +318,7 @@ function languageChecks(
   const labels =
     cards && sheet
       ? filledCells(sheet)
-          .filter(([row, col, text]) => row === 3 && col < 6 && text)
+          .filter(([row, col, text]) => row === 3 && col < 12 && text)
           .map(([, , text]) => text)
       : [];
   const words = [
@@ -434,13 +439,13 @@ const SCENARIOS: Scenario[] = [
         const sheet = c.result;
         const labels = sheet
           ? filledCells(sheet)
-              .filter(([row, col]) => row === 3 && col < 6)
+              .filter(([row, col]) => row === 3 && col < 12)
               .map(([, , text]) => text)
           : [];
         const percent = sheet
           ? filledCells(sheet).find(
               ([row, col, , cell]) =>
-                row === 4 && col < 6 && cell.numberFormat === "0.0%",
+                row === 4 && col < 12 && cell.numberFormat === "0.0%",
             )
           : undefined;
         return [

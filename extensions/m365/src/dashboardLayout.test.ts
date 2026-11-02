@@ -72,29 +72,31 @@ test("the layout has a title bar, KPI cards in one row and a breakdown under the
     .filter((block) => block.style === "kpi-label")
     .map((block) => [block.row, block.col, block.cells[0][0]]);
   assert.deepEqual(labels, [
+    // Four cards share the 12-column grid, three columns each.
     [3, 0, "RECORDS"],
-    [3, 1, "TOTAL SALES"],
-    [3, 2, "TOTAL QTY"],
-    [3, 3, "TOP REGION"],
+    [3, 3, "TOTAL SALES"],
+    [3, 6, "TOTAL QTY"],
+    [3, 9, "TOP REGION"],
   ]);
   assert.equal(
-    text(cellAt(layout, 4, 1)!.cells[0][0]),
+    text(cellAt(layout, 4, 3)!.cells[0][0]),
     "=SUM('Data'!$B$2:$B$7)",
   );
   assert.equal(cellAt(layout, 5, 0)!.cells[0][0], "3 Region values");
   // The top card reads the first chart's data.
   assert.equal(
-    text(cellAt(layout, 4, 3)!.cells[0][0]),
+    text(cellAt(layout, 4, 9)!.cells[0][0]),
     '=IFERROR(INDEX($AO$3:$AO$5,MATCH(MAX($AP$3:$AP$5),$AP$3:$AP$5,0)),"")',
   );
-  assert.equal(layout.pivotAnchor, "A10");
-  assert.equal(layout.slicerAnchor, "E10");
+  // Charts two per row, then the breakdown and its slicer under them.
+  assert.equal(layout.pivotAnchor, "A27");
+  assert.equal(layout.slicerAnchor, "G27");
   assert.equal(layout.charts.length, 2);
   assert.deepEqual(
     layout.charts.map((chart) => [chart.from, chart.to]),
     [
-      ["H4", "N19"],
-      ["H21", "N36"],
+      ["A8", "F23"],
+      ["G8", "L23"],
     ],
   );
 });
@@ -107,7 +109,7 @@ test("money columns take the currency format and other columns do not", () => {
   });
   const layout = buildDashboardLayout(base({ currency }));
   assert.deepEqual(layout.valueFormats, ['"Rs "#,##0.00', "#,##0.00"]);
-  assert.equal(cellAt(layout, 4, 1)!.numberFormat, '"Rs "#,##0.00');
+  assert.equal(cellAt(layout, 4, 3)!.numberFormat, '"Rs "#,##0.00');
   assert.match(String(cellAt(layout, 1, 0)!.cells[0][0]), /Amounts in LKR\./);
 });
 
@@ -186,7 +188,7 @@ test("with three values and a target the record count gives way so six cards fit
 test("the fallback breakdown is a live formula table in the PivotTable's place", () => {
   const layout = buildDashboardLayout(base());
   const [header, body] = layout.fallbackBreakdown;
-  assert.deepEqual([header.row, header.col], [9, 0]);
+  assert.deepEqual([header.row, header.col], [26, 0]);
   assert.deepEqual(header.cells[0], [
     "Region",
     "Total of Sales",
@@ -195,11 +197,11 @@ test("the fallback breakdown is a live formula table in the PivotTable's place",
   assert.equal(body.cells[0][0], "North");
   assert.equal(
     text(body.cells[0][1]),
-    "=SUMIFS('Data'!$B$2:$B$7,'Data'!$A$2:$A$7,$A11)",
+    "=SUMIFS('Data'!$B$2:$B$7,'Data'!$A$2:$A$7,$A28)",
   );
   assert.equal(
     text(body.cells[2][2]),
-    "=SUMIFS('Data'!$C$2:$C$7,'Data'!$A$2:$A$7,$A13)",
+    "=SUMIFS('Data'!$C$2:$C$7,'Data'!$A$2:$A$7,$A30)",
   );
 });
 
@@ -220,7 +222,7 @@ test("very large data uses spilled formulas for chart data and the fallback", ()
     /^=TAKE\(SORTBY\(UNIQUE\(FILTER\(.+\)\),BYROW\(UNIQUE\(FILTER\(.+\)\),LAMBDA\(c,SUMIFS\(.+\)\),-1\),10\)$/,
   );
   assert.match(text(helper.cells[0][1]), /^=BYROW\(AO3#,LAMBDA\(c,SUMIFS\(/);
-  assert.match(text(layout.fallbackBreakdown[1].cells[0][1]), /^=BYROW\(A11#,/);
+  assert.match(text(layout.fallbackBreakdown[1].cells[0][1]), /^=BYROW\(A28#,/);
   assert.match(
     text(layout.fallbackBreakdown[1].cells[0][0]),
     /SORTBY\(c,a,-1\)/,

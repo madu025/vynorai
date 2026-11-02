@@ -1955,13 +1955,28 @@ export async function applyApprovedExcelPlan(
                     range.numberFormat = block.cells.map((row) =>
                       row.map(() => block.numberFormat),
                     );
-                  DASHBOARD_STYLE[block.style](range);
+                  // A KPI card is merged across its grid columns, so the card is one wide box.
+                  let styled = range;
+                  if (block.span && block.span > 1) {
+                    styled = sheet.getRangeByIndexes(
+                      block.row,
+                      block.col,
+                      block.cells.length,
+                      block.span,
+                    );
+                    try {
+                      styled.merge(true);
+                    } catch {
+                      styled = range; // a host without merge keeps one-column cards
+                    }
+                  }
+                  DASHBOARD_STYLE[block.style](styled);
                   // Card accents are decoration: a host without borders keeps plain cards.
                   try {
                     if (block.accent) {
-                      range.format.font.color = block.accent;
+                      styled.format.font.color = block.accent;
                       if (block.style === "kpi-label") {
-                        const top = range.format.borders.getItem("EdgeTop");
+                        const top = styled.format.borders.getItem("EdgeTop");
                         top.style = "Continuous";
                         top.weight = "Thick";
                         top.color = block.accent;
@@ -1970,7 +1985,7 @@ export async function applyApprovedExcelPlan(
                     // White edges between the cards read as gaps on the page colour.
                     if (block.style.startsWith("kpi-"))
                       for (const edge of ["EdgeLeft", "EdgeRight"]) {
-                        const line = range.format.borders.getItem(edge);
+                        const line = styled.format.borders.getItem(edge);
                         line.style = "Continuous";
                         line.weight = "Thick";
                         line.color = DASHBOARD_PAGE;

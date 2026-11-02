@@ -239,7 +239,9 @@ const CARD_WIDTH = 120;
 const GAP_COLUMN = CARD_COLUMNS; // G: a thin gap before the charts
 const CHART_COLUMN = CARD_COLUMNS + 1; // H
 const CHART_SPAN = 7; // H:N
-const HELPER_COLUMN = CHART_COLUMN + CHART_SPAN + 2; // Q
+// The chart data sits far right (AO), off the page: hiding it blanked the charts unless Excel
+// plotted hidden cells, which did not take in Excel desktop (live run 2026-11-02).
+const HELPER_COLUMN = 40; // AO
 const KPI_ROW = 3;
 const NOTE_ROW = 6;
 const SECTION_ROW = 8;

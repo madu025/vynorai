@@ -85,7 +85,7 @@ test("the layout has a title bar, KPI cards in one row and a breakdown under the
   // The top card reads the first chart's data.
   assert.equal(
     text(cellAt(layout, 4, 3)!.cells[0][0]),
-    '=IFERROR(INDEX($Q$3:$Q$5,MATCH(MAX($R$3:$R$5),$R$3:$R$5,0)),"")',
+    '=IFERROR(INDEX($AO$3:$AO$5,MATCH(MAX($AP$3:$AP$5),$AP$3:$AP$5,0)),"")',
   );
   assert.equal(layout.pivotAnchor, "A10");
   assert.equal(layout.slicerAnchor, "E10");
@@ -213,13 +213,13 @@ test("very large data uses spilled formulas for chart data and the fallback", ()
     }),
   );
   const helper = layout.blocks.find(
-    (block) => block.row === 2 && block.col === 16,
+    (block) => block.row === 2 && block.col === 40,
   )!;
   assert.match(
     text(helper.cells[0][0]),
     /^=TAKE\(SORTBY\(UNIQUE\(FILTER\(.+\)\),BYROW\(UNIQUE\(FILTER\(.+\)\),LAMBDA\(c,SUMIFS\(.+\)\),-1\),10\)$/,
   );
-  assert.match(text(helper.cells[0][1]), /^=BYROW\(Q3#,LAMBDA\(c,SUMIFS\(/);
+  assert.match(text(helper.cells[0][1]), /^=BYROW\(AO3#,LAMBDA\(c,SUMIFS\(/);
   assert.match(text(layout.fallbackBreakdown[1].cells[0][1]), /^=BYROW\(A11#,/);
   assert.match(
     text(layout.fallbackBreakdown[1].cells[0][0]),

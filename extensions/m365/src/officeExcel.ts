@@ -2199,6 +2199,7 @@ export async function applyApprovedExcelPlan(
                 pivot &&
                 context.workbook.slicers?.add &&
                 (!options.supportsExcelApi || options.supportsExcelApi("1.10"));
+              let madeSlicer: any;
               if (slicerSupported) {
                 try {
                   const slicer = context.workbook.slicers.add(
@@ -2216,52 +2217,36 @@ export async function applyApprovedExcelPlan(
                   slicer.width = 150;
                   slicer.height = 220;
                   await context.sync();
+                  madeSlicer = slicer;
                 } catch {
                   notes.push(words.slicerFailed(category.column));
                 }
               } else if (pivot) {
                 notes.push(words.slicerNeedsVersion(category.column));
               }
-              // A tabular PivotTable shows the field name instead of "Row Labels"; a blue style
-              // matches the cards.
+              // A tabular PivotTable shows the field name instead of "Row Labels". Its header and
+              // total rows are styled as cells: setStyle and a slicer looked up by name did not take
+              // in Excel desktop (live run 2026-11-02).
               if (pivot) {
                 await decorate(() => {
                   pivot.layout.layoutType = "Tabular";
                 });
                 await decorate(() => {
-                  pivot.layout.setStyle("PivotStyleMedium2");
-                });
-                await decorate(() => {
-                  context.workbook.slicers.getItem(
-                    `${action.name}_slicer`.slice(0, 255),
-                  ).style = "SlicerStyleLight1";
+                  const whole = pivot.layout.getRange();
+                  const header = whole.getRow(0).format;
+                  header.fill.color = "#1F3864";
+                  header.font.color = "#FFFFFF";
+                  header.font.bold = true;
+                  const total = whole.getLastRow().format;
+                  total.fill.color = "#E8EEF7";
+                  total.font.bold = true;
+                  total.font.color = "#1F3864";
                 });
               }
-              // The chart data is a working table, not part of the page: hide it, but only once every
-              // chart plots hidden cells, or the charts would go blank.
-              if (madeCharts.length) {
-                let plotsHidden = false;
+              if (madeSlicer)
                 await decorate(() => {
-                  for (const { chart } of madeCharts)
-                    chart.plotVisibleOnly = false;
+                  madeSlicer.style = "SlicerStyleLight1";
                 });
-                try {
-                  for (const { chart } of madeCharts)
-                    chart.load("plotVisibleOnly");
-                  await context.sync();
-                  plotsHidden = madeCharts.every(
-                    ({ chart }) => chart.plotVisibleOnly === false,
-                  );
-                } catch {
-                  plotsHidden = false;
-                }
-                if (plotsHidden)
-                  await decorate(() => {
-                    sheet
-                      .getRangeByIndexes(0, layout.helperColumn, 1, 12)
-                      .getEntireColumn().columnHidden = true;
-                  });
-              }
               // A PivotTable fits its columns to itself on every refresh and squeezed the KPI cards
               // to "#######" (live run 2026-11-02): stop that and put the card widths back.
               if (pivot)

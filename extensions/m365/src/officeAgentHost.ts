@@ -717,6 +717,8 @@ export async function applyAgentChanges(
   const results: AgentApplyResult[] = [];
   const renamed = new Map<string, string>();
   const createdNames = new Set<string>();
+  // Sheets this run wrote to; an agent sheet from an earlier step is polished again too.
+  const touchedNames = new Set<string>();
   const backedUp = new Set<string>();
   const sheetOf = (name: string) => renamed.get(name) ?? name;
   let failed = false;
@@ -814,6 +816,7 @@ export async function applyAgentChanges(
           return { sheet: name };
         }
         const sheetName = sheetOf(change.sheet);
+        touchedNames.add(sheetName);
         const sheet = sheets.getItem(sheetName);
         sheet.load("id");
         await context.sync();
@@ -1264,8 +1267,29 @@ export async function applyAgentChanges(
     }
   }
   // Result sheets this run made get a header and total style (undo deletes them whole).
-  if (!failed && createdNames.size && typeof runtime.run === "function")
-    await polishCreatedSheets(runtime, [...createdNames]).catch(() => {});
+  // A later step that writes a formula on a sheet an earlier step made left its column at "####"
+  // (live run 2026-11-02): sheets the agent made (marked vynorai=agent) are polished again.
+  const earlier = [...touchedNames].filter((name) => !createdNames.has(name));
+  const agentMade: string[] = [];
+  if (!failed && earlier.length && typeof runtime.run === "function")
+    await Promise.resolve(
+      runtime.run(async (context: any) => {
+        const marks = earlier.map((name) => {
+          const mark = context.workbook.worksheets
+            .getItem(name)
+            .customProperties.getItemOrNullObject("vynorai");
+          mark.load("isNullObject,value");
+          return { name, mark };
+        });
+        await context.sync();
+        for (const { name, mark } of marks)
+          if (!mark.isNullObject && String(mark.value) === "agent")
+            agentMade.push(name);
+      }),
+    ).catch(() => {});
+  const polish = [...createdNames, ...agentMade];
+  if (!failed && polish.length && typeof runtime.run === "function")
+    await polishCreatedSheets(runtime, polish).catch(() => {});
   return { results, undo };
 }
 

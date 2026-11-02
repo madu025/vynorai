@@ -5997,3 +5997,33 @@ body[data-auth="in"]:has(#conversation-history > *)
   color: var(--brand);
   font-weight: 700;
 }
+
+/* Compact controls: in the narrow pane the 40-46px buttons and the padded approval bar took too
+   much room (owner feedback 2026-11-02). 32-34px stays an easy click target. */
+body[data-auth="in"]
+  .apply-dock
+  :is(
+    #apply,
+    #cancel-result,
+    #agent-approve,
+    #agent-discard,
+    #agent-undo,
+    #agent-stop
+  ) {
+  min-height: 34px;
+  padding-block: 0;
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 12.5px;
+}
+body[data-auth="in"] .apply-dock {
+  padding: 8px;
+  gap: 6px;
+}
+body[data-auth="in"] :is(#smart-run, #run-mode) {
+  min-height: 32px;
+}
+body[data-auth="in"] :is(#tab-work, #tab-results, #tab-share, #tab-explore) {
+  min-height: 32px;
+  padding-block: 4px;
+}

@@ -23,7 +23,7 @@ test("the preview-open layout needs a visible card, and a blocking run reason is
   for (const rule of previewRules)
     assert.match(rule, /\.card:not\(\[hidden\]\) \.apply-dock/, rule.trim());
   const gate =
-    /\.apply-dock button:not\(\[hidden\]\)\)\s*>\s*\.composer\s*\.run-gate([^{]*)\{/.exec(
+    /\.apply-dock button:not\(\[hidden\]\)\s*\)\s*>\s*\.composer\s*\.run-gate([^{]*)\{/.exec(
       css,
     );
   assert.ok(gate, "run-gate rule for an open preview is missing");

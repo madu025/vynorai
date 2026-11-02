@@ -898,6 +898,8 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
   );
   // A real pointer click while the request box is compact: a box that grew on focus moved the
   // button away between press and release, so the first click did nothing (live run 2026-11-02).
+  // The empty box has focus after a run (live run 2026-11-02: Approve missed its first click).
+  await page.focus("#instruction");
   const chipBefore = await page.$eval("#health-run", (chip) =>
     Math.round(chip.getBoundingClientRect().top),
   );

@@ -5948,12 +5948,8 @@ body[data-auth="in"]:has(#conversation-history > *)
   min-height: 40px;
   height: 40px;
 }
-/* Stays tall while the text box has focus or holds text: a press on Run moves focus off the text box
-   first, and a shrink then would pull Run out from under the pointer. */
-body[data-auth="in"]:has(#conversation-history > *)
-  .workspace
-  > .composer
-  textarea:focus,
+/* Grows only while the box holds text, never on focus alone: a press on Run, Approve or a tool
+   button moves focus off the box, and a shrink then pulls the button out from under the pointer. */
 body[data-auth="in"]:has(#conversation-history > *)
   .workspace
   > .composer

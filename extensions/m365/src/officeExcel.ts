@@ -1977,13 +1977,15 @@ export async function applyApprovedExcelPlan(
                   chart.title.format.font.size = 12;
                   chart.title.format.font.color = "#1F3864";
                   const series = chart.series.getItemAt(0);
-                  series.hasDataLabels = true;
                   if (plannedChart.kind === "doughnut") {
+                    // Share only: the value with its decimals crowded each slice (live run 2026-11-02).
                     chart.legend.visible = true;
                     chart.legend.position = "Right";
-                    series.dataLabels.showValue = false;
-                    series.dataLabels.showPercentage = true;
+                    chart.dataLabels.showValue = false;
+                    chart.dataLabels.showCategoryName = false;
+                    chart.dataLabels.showPercentage = true;
                   } else {
+                    series.hasDataLabels = true;
                     chart.legend.visible = false;
                     series.format.fill.setSolidColor(plannedChart.color);
                     series.gapWidth = 60;
@@ -2081,6 +2083,18 @@ export async function applyApprovedExcelPlan(
               } else if (pivot) {
                 notes.push(words.slicerNeedsVersion(category.column));
               }
+              // A PivotTable fits its columns to itself on every refresh and squeezed the KPI cards
+              // to "#######" (live run 2026-11-02): stop that and put the card widths back.
+              if (pivot)
+                try {
+                  pivot.layout.autoFormat = false;
+                  for (const { col, width } of layout.columnWidths)
+                    sheet.getRangeByIndexes(0, col, 1, 1).format.columnWidth =
+                      width;
+                  await context.sync();
+                } catch {
+                  // Older Excel keeps the PivotTable's widths.
+                }
               if (notes.length > layout.notes.length) {
                 const noteRange = sheet.getRangeByIndexes(6, 0, 1, 1);
                 noteRange.values = [[literal(notes.join(" "))]];

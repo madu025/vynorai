@@ -188,6 +188,10 @@ export interface DashboardLayout {
   titleWidth: number;
   /** Rows (from row 1) the light page colour covers, under the title bar. */
   pageRows: number;
+  /** Row heights in points: a tall title bar and roomy KPI cards, like a web dashboard. */
+  rowHeights: Array<{ row: number; height: number }>;
+  /** First column of the chart data; the writer hides it when charts can plot hidden cells. */
+  helperColumn: number;
   /** Number format per value column, also used for the PivotTable values. */
   valueFormats: string[];
   /** Plain-language notes shown on the sheet and in the result message. */
@@ -728,6 +732,14 @@ export function buildDashboardLayout(
     fallbackBreakdown,
     columnWidths,
     titleWidth: CHART_COLUMN + CHART_SPAN,
+    rowHeights: [
+      { row: 0, height: 36 },
+      { row: 1, height: 20 },
+      { row: KPI_ROW, height: 22 },
+      { row: KPI_ROW + 1, height: 38 },
+      { row: KPI_ROW + 2, height: 20 },
+    ],
+    helperColumn: HELPER_COLUMN,
     pageRows: Math.max(
       CHART_ROW + Math.max(1, charts.length) * (CHART_HEIGHT + 1),
       PIVOT_ROW + shown + 3,

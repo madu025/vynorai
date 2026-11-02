@@ -95,6 +95,7 @@ import {
 } from "./businessContext.js";
 import {
   buildDashboardLayout,
+  DASHBOARD_PALETTE,
   findTrendColumn,
   missingMeasures,
   DASHBOARD_CARD,
@@ -106,45 +107,60 @@ import {
   type DashboardStyle,
 } from "./dashboardLayout.js";
 
+/** Secondary text on the dashboard: labels, subtitles and notes. */
+const DASHBOARD_MUTED = "#6B7280";
+/** One font for the whole page, like a web dashboard. */
+const DASHBOARD_FONT = "Segoe UI";
+
 const DASHBOARD_STYLE: Record<DashboardStyle, (range: any) => void> = {
   title: (range) => {
     range.format.font.bold = true;
-    range.format.font.size = 16;
+    range.format.font.size = 20;
     range.format.font.color = "#FFFFFF";
+    range.format.verticalAlignment = "Center";
   },
   subtitle: (range) => {
-    range.format.font.italic = true;
-    range.format.font.color = "#595959";
+    range.format.font.size = 9;
+    range.format.font.color = DASHBOARD_MUTED;
   },
   "kpi-label": (range) => {
     range.format.font.bold = true;
     range.format.font.size = 9;
-    range.format.font.color = "#595959";
+    range.format.font.color = DASHBOARD_MUTED;
     range.format.fill.color = DASHBOARD_CARD;
+    range.format.verticalAlignment = "Bottom";
+    range.format.indentLevel = 1;
   },
   "kpi-value": (range) => {
     range.format.font.bold = true;
-    range.format.font.size = 16;
+    range.format.font.size = 22;
     range.format.font.color = "#1F3864";
     range.format.fill.color = DASHBOARD_CARD;
+    range.format.horizontalAlignment = "Left";
+    range.format.verticalAlignment = "Center";
+    range.format.indentLevel = 1;
   },
   "kpi-sub": (range) => {
-    range.format.font.size = 9;
-    range.format.font.color = "#595959";
+    range.format.font.size = 8;
+    range.format.font.color = DASHBOARD_MUTED;
     range.format.fill.color = DASHBOARD_CARD;
+    range.format.verticalAlignment = "Top";
+    range.format.indentLevel = 1;
   },
   note: (range) => {
     range.format.font.italic = true;
-    range.format.font.color = "#595959";
+    range.format.font.size = 9;
+    range.format.font.color = DASHBOARD_MUTED;
   },
   section: (range) => {
     range.format.font.bold = true;
+    range.format.font.size = 12;
     range.format.font.color = "#1F3864";
   },
   "table-header": (range) => {
     range.format.font.bold = true;
     range.format.font.color = "#FFFFFF";
-    range.format.fill.color = "#2F5597";
+    range.format.fill.color = "#1F3864";
   },
   "table-body": () => undefined,
   helper: (range) => {
@@ -1986,7 +2002,32 @@ export async function applyApprovedExcelPlan(
               ).format.fill.color = DASHBOARD_PAGE;
               writeBlocks(layout.blocks);
               await context.sync();
+              // Decoration runs in its own batch: a host that refuses one property must not fail the
+              // dashboard, and Office.js reports a refused property only at the next sync.
+              const decorate = async (style: () => void) => {
+                try {
+                  style();
+                  await context.sync();
+                } catch {
+                  // The dashboard stays, without this touch.
+                }
+              };
+              await decorate(() => {
+                sheet.getRangeByIndexes(
+                  0,
+                  0,
+                  layout.pageRows + 1,
+                  layout.helperColumn + 12,
+                ).format.font.name = DASHBOARD_FONT;
+                for (const { row, height } of layout.rowHeights)
+                  sheet.getRangeByIndexes(row, 0, 1, 1).format.rowHeight =
+                    height;
+              });
 
+              const madeCharts: Array<{
+                chart: any;
+                plan: (typeof layout.charts)[number];
+              }> = [];
               for (const [index, plannedChart] of layout.charts.entries()) {
                 const chartRange = sheet.getRangeByIndexes(
                   plannedChart.headerRow,
@@ -2006,27 +2047,67 @@ export async function applyApprovedExcelPlan(
                 );
                 chart.name = `${action.name}_chart_${index + 1}`;
                 chart.title.text = plannedChart.title;
-                try {
+                chart.setPosition(plannedChart.from, plannedChart.to);
+                madeCharts.push({ chart, plan: plannedChart });
+              }
+              await context.sync();
+              for (const { chart, plan: plannedChart } of madeCharts) {
+                // Card look: white face, faint border, one font, a bold title.
+                await decorate(() => {
                   chart.format.fill.setSolidColor(DASHBOARD_CARD);
-                  chart.format.border.color = "#D9DEE7";
-                  chart.title.format.font.size = 12;
-                  chart.title.format.font.color = "#1F3864";
-                  const series = chart.series.getItemAt(0);
-                  if (plannedChart.kind === "doughnut") {
-                    // Share only: the value with its decimals crowded each slice (live run 2026-11-02).
+                  chart.format.border.color = "#E5E7EB";
+                  chart.format.font.name = DASHBOARD_FONT;
+                  chart.format.font.color = "#374151";
+                  chart.title.format.font.size = 13;
+                  chart.title.format.font.bold = true;
+                  chart.title.format.font.color = "#111827";
+                });
+                await decorate(() => {
+                  chart.format.roundedCorners = true;
+                });
+                await decorate(() => {
+                  chart.title.horizontalAlignment = "Left";
+                });
+                let series: any;
+                try {
+                  series = chart.series.getItemAt(0);
+                } catch {
+                  continue; // a host without series styling keeps the plain chart
+                }
+                if (plannedChart.kind === "doughnut") {
+                  // Share only: the value with its decimals crowded each slice, and Excel ignored
+                  // showValue=false in the batch that made the labels (live run 2026-11-02): the
+                  // labels come first, then the value is switched off.
+                  await decorate(() => {
                     chart.legend.visible = true;
-                    chart.legend.position = "Right";
-                    // Excel ignored showValue=false in the batch that made the labels (live run
-                    // 2026-11-02): make the labels first, then switch the value off.
+                    chart.legend.position = "Bottom";
                     series.hasDataLabels = true;
-                    await context.sync();
+                  });
+                  await decorate(() => {
                     series.dataLabels.showPercentage = true;
                     series.dataLabels.showValue = false;
                     series.dataLabels.showCategoryName = false;
-                    // White on the coloured slices; dark text was hard to read (live run 2026-11-02).
                     series.dataLabels.format.font.color = "#FFFFFF";
                     series.dataLabels.format.font.bold = true;
-                  } else {
+                  });
+                  await decorate(() => {
+                    series.doughnutHoleSize = 60;
+                  });
+                  // Slices in the dashboard palette, so cards and charts share one colour set.
+                  await decorate(() => {
+                    for (
+                      let point = 0;
+                      point < plannedChart.dataRows;
+                      point += 1
+                    )
+                      series.points
+                        .getItemAt(point)
+                        .format.fill.setSolidColor(
+                          DASHBOARD_PALETTE[point % DASHBOARD_PALETTE.length],
+                        );
+                  });
+                } else {
+                  await decorate(() => {
                     series.hasDataLabels = true;
                     chart.legend.visible = false;
                     if (plannedChart.kind === "line") {
@@ -2035,23 +2116,31 @@ export async function applyApprovedExcelPlan(
                       series.dataLabels.position = "Top";
                     } else {
                       series.format.fill.setSolidColor(plannedChart.color);
-                      series.gapWidth = 60;
+                      series.gapWidth = 50;
                     }
                     chart.axes.valueAxis.majorGridlines.visible = false;
                     chart.axes.valueAxis.visible = false;
                     if (plannedChart.numberFormat)
                       series.dataLabels.numberFormat =
                         plannedChart.numberFormat;
+                    series.dataLabels.format.font.color = "#374151";
                     // A bar chart draws its first row at the bottom: flip it so the largest is on top.
                     if (plannedChart.kind === "bar")
                       chart.axes.categoryAxis.reversePlotOrder = true;
-                  }
-                } catch {
-                  // Chart styling is decoration; the chart is already there.
+                  });
+                  await decorate(() => {
+                    chart.axes.categoryAxis.format.font.color = DASHBOARD_MUTED;
+                    chart.axes.categoryAxis.format.line.lineStyle = "None";
+                  });
+                  if (plannedChart.kind === "line")
+                    await decorate(() => {
+                      series.markerStyle = "Circle";
+                      series.markerSize = 7;
+                      series.markerBackgroundColor = plannedChart.color;
+                      series.markerForegroundColor = plannedChart.color;
+                    });
                 }
-                chart.setPosition(plannedChart.from, plannedChart.to);
               }
-              await context.sync();
 
               // The breakdown: a PivotTable with a slicer, or a formula table where the host refuses one.
               let pivot: any;
@@ -2132,6 +2221,46 @@ export async function applyApprovedExcelPlan(
                 }
               } else if (pivot) {
                 notes.push(words.slicerNeedsVersion(category.column));
+              }
+              // A tabular PivotTable shows the field name instead of "Row Labels"; a blue style
+              // matches the cards.
+              if (pivot) {
+                await decorate(() => {
+                  pivot.layout.layoutType = "Tabular";
+                });
+                await decorate(() => {
+                  pivot.layout.setStyle("PivotStyleMedium2");
+                });
+                await decorate(() => {
+                  context.workbook.slicers.getItem(
+                    `${action.name}_slicer`.slice(0, 255),
+                  ).style = "SlicerStyleLight1";
+                });
+              }
+              // The chart data is a working table, not part of the page: hide it, but only once every
+              // chart plots hidden cells, or the charts would go blank.
+              if (madeCharts.length) {
+                let plotsHidden = false;
+                await decorate(() => {
+                  for (const { chart } of madeCharts)
+                    chart.plotVisibleOnly = false;
+                });
+                try {
+                  for (const { chart } of madeCharts)
+                    chart.load("plotVisibleOnly");
+                  await context.sync();
+                  plotsHidden = madeCharts.every(
+                    ({ chart }) => chart.plotVisibleOnly === false,
+                  );
+                } catch {
+                  plotsHidden = false;
+                }
+                if (plotsHidden)
+                  await decorate(() => {
+                    sheet
+                      .getRangeByIndexes(0, layout.helperColumn, 1, 12)
+                      .getEntireColumn().columnHidden = true;
+                  });
               }
               // A PivotTable fits its columns to itself on every refresh and squeezed the KPI cards
               // to "#######" (live run 2026-11-02): stop that and put the card widths back.

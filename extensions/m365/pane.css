@@ -6054,3 +6054,9 @@ body[data-auth="in"]:has(
 body[data-auth="in"] #operation-history > p {
   display: none;
 }
+/* An applied result has nothing left to confirm or cancel: only Show result and Undo remain. */
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  :is(#apply, #cancel-result) {
+  display: none;
+}

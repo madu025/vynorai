@@ -4,7 +4,7 @@ import {
   parseExpression,
   wantsPercentFormat,
 } from "./expression.js";
-import { isSafeColumnName } from "./transform.js";
+import { columnLetter, isSafeColumnName } from "./transform.js";
 type ExcelCell = string | number | boolean | null;
 type ExcelRow = ExcelCell[];
 type ExcelRangeInput = {
@@ -2291,6 +2291,22 @@ function assertUniqueHeaders(headers: string[]): void {
   }
 }
 
+/** Zero-based index of the first column in an address such as "'My Sheet'!C4:F9" (A when unknown). */
+function firstColumnIndex(address: string): number {
+  const cell = /^\$?([A-Z]{1,3})\$?\d+/.exec(
+    String(address ?? "")
+      .split("!")
+      .pop() ?? "",
+  );
+  if (!cell) return 0;
+  return (
+    [...cell[1]].reduce(
+      (sum, letter) => sum * 26 + letter.charCodeAt(0) - 64,
+      0,
+    ) - 1
+  );
+}
+
 export function getExcelHeaderLayout(
   input: ExcelRangeInput,
 ): ExcelHeaderLayout {
@@ -2303,6 +2319,20 @@ export function getExcelHeaderLayout(
   if (!firstRow.some((header) => !header)) {
     assertUniqueHeaders(firstRow);
     return { headerRowCount: 1, headers: firstRow };
+  }
+  // A blank header over a column of data (a formula typed next to the table) is an unnamed column,
+  // as in Excel's own tables: when the second row holds numbers it is data, not a second header
+  // row. Name the blank "Column H" by its letter (live run 2026-11-02).
+  if (
+    firstRow[0] &&
+    (input.values[1] ?? []).some((cell) => typeof cell === "number")
+  ) {
+    const start = firstColumnIndex(input.address);
+    const headers = firstRow.map(
+      (header, index) => header || `Column ${columnLetter(start + index)}`,
+    );
+    assertUniqueHeaders(headers);
+    return { headerRowCount: 1, headers };
   }
   if (input.values.length < 3)
     throw new InvalidExcelRangeError(

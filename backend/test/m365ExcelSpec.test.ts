@@ -1893,3 +1893,50 @@ test("sampled Spearman reports remain an Excel-computed operation", () => {
     ),
   );
 });
+
+test("server and add-in both read a blank header over data as an unnamed column", () => {
+  // Live run 2026-11-02: H1 empty, H2 a formula result; the table was refused as a two-row header.
+  const unnamed = {
+    ...input,
+    address: "Sheet1!A1:I3",
+    values: [
+      [
+        "Region",
+        "Product",
+        "Units",
+        "Sales",
+        "Cost",
+        "Address",
+        "City",
+        "",
+        "Profit Margin",
+      ],
+      [
+        "North",
+        "Laptop",
+        12,
+        14400,
+        11800,
+        "12 Galle Road, Colombo",
+        "Colombo",
+        "Medium",
+        0.18,
+      ],
+      [
+        "South",
+        "Phone",
+        30,
+        15000,
+        14100,
+        "45 Main Street, Galle",
+        "Galle",
+        "",
+        0.06,
+      ],
+    ],
+  };
+  const server = createServerExcelPreviewPlan(unnamed, ["table"], 500);
+  const local = createExcelPreviewPlan(unnamed as any, ["table"], 500);
+  assert.equal(excelPlansMatch(local, server), true);
+  assert.equal(local.normalization, undefined);
+});

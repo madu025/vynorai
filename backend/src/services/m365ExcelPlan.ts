@@ -2228,6 +2228,40 @@ function getServerExcelHeaderLayout(input: any): ExcelHeaderLayout {
     assertUniqueHeaders(firstRow);
     return { headerRowCount: 1, headers: firstRow };
   }
+  // Same rule as the add-in (excel.ts): a blank header over a column of data is an unnamed column,
+  // named "Column H" by its letter, when the second row holds numbers.
+  if (
+    firstRow[0] &&
+    ((input.values as any[][])[1] || []).some(
+      (cell: unknown) => typeof cell === "number",
+    )
+  ) {
+    const cell = /^\$?([A-Z]{1,3})\$?\d+/.exec(
+      String(input.address ?? "")
+        .split("!")
+        .pop() ?? "",
+    );
+    const start = cell
+      ? [...cell[1]].reduce(
+          (sum, letter) => sum * 26 + letter.charCodeAt(0) - 64,
+          0,
+        ) - 1
+      : 0;
+    const letter = (index: number) => {
+      let value = index;
+      let letters = "";
+      do {
+        letters = String.fromCharCode(65 + (value % 26)) + letters;
+        value = Math.floor(value / 26) - 1;
+      } while (value >= 0);
+      return letters;
+    };
+    const headers = firstRow.map(
+      (header, index) => header || `Column ${letter(start + index)}`,
+    );
+    assertUniqueHeaders(headers);
+    return { headerRowCount: 1, headers };
+  }
   if ((input.values as any[][]).length < 3)
     throw new InvalidExcelRangeError(
       "EXCEL_DATA_ROWS_REQUIRED",

@@ -201,3 +201,62 @@ test("normalizes merged headers and rejects ambiguous or header-only selections"
     /no data rows/,
   );
 });
+
+test("a blank header over a data column is an unnamed column, never a two-row header", async () => {
+  // Live run 2026-11-02: H1 was empty (a formula sat in H2), so the sales table's first data row
+  // (North, Laptop, 12, ...) was read as a second header row and every summary was refused with
+  // "This result needs a range with one header row". Copilot answered the same sheet.
+  const { getExcelHeaderLayout } = await import("./excel.js");
+  const layout = getExcelHeaderLayout({
+    address: "Sheet1!A1:I3",
+    values: [
+      [
+        "Region",
+        "Product",
+        "Units",
+        "Sales",
+        "Cost",
+        "Address",
+        "City",
+        "",
+        "Profit Margin",
+      ],
+      [
+        "North",
+        "Laptop",
+        12,
+        14400,
+        11800,
+        "12 Galle Road, Colombo",
+        "Colombo",
+        "Medium",
+        0.18,
+      ],
+      [
+        "South",
+        "Phone",
+        30,
+        15000,
+        14100,
+        "45 Main Street, Galle",
+        "Galle",
+        "",
+        0.06,
+      ],
+    ],
+  } as any);
+  assert.equal(layout.headerRowCount, 1);
+  assert.equal(layout.normalization, undefined);
+  assert.equal(layout.headers[7], "Column H");
+  assert.equal(layout.headers[0], "Region");
+  // A real two-row header (text under a merged band) still reads as two rows.
+  const merged = getExcelHeaderLayout({
+    address: "Sheet1!A1:C3",
+    values: [
+      ["Sales", "", "Region"],
+      ["Q1", "Q2", ""],
+      [10, 20, "North"],
+    ],
+  } as any);
+  assert.equal(merged.headerRowCount, 2);
+});

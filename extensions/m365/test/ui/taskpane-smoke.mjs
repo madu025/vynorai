@@ -883,7 +883,7 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     const area = document.querySelector(".scroll-area").getBoundingClientRect();
     const share = area.height / window.innerHeight;
-    answer.remove();
+    answer.id = "smoke-answer";
     return { chips, hiddenAtStart, share: Math.round(share * 100) / 100 };
   });
   assert.deepEqual(
@@ -896,11 +896,25 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     toolLayout.share >= 0.5,
     `${label}: answers must get at least half of the pane, got ${toolLayout.share}`,
   );
+  // A real pointer click while the request box is compact: a box that grew on focus moved the
+  // button away between press and release, so the first click did nothing (live run 2026-11-02).
+  const chipBefore = await page.$eval("#health-run", (chip) =>
+    Math.round(chip.getBoundingClientRect().top),
+  );
   await page.click("#health-run");
+  const chipAfter = await page.$eval("#health-run", (chip) =>
+    Math.round(chip.getBoundingClientRect().top),
+  );
+  assert.equal(
+    chipAfter,
+    chipBefore,
+    `${label}: pressing Check my data must not move it`,
+  );
   await page.waitForFunction(
     () => document.getElementById("health")?.hidden === false,
     { timeout: 3000 },
   );
+  await page.$eval("#smoke-answer", (answer) => answer.remove());
   await page.click('[data-close-tool="health"]');
   assert.equal(
     await page.$eval("#health", (card) => card.hidden),

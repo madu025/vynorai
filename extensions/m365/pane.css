@@ -5931,9 +5931,10 @@ body[data-auth="in"] #agent-plan > summary strong {
   background: var(--surface-2, rgb(100 116 139 / 12%));
 }
 
-/* Once a conversation has started, the answers get the room: the request box is one short line
-   until it is used again (live run 2026-11-02: it took a third of a 640 px pane). The empty-box
-   hint is never shown; the placeholder already says it. */
+/* Once a conversation has started, the answers get the room (live run 2026-11-02: the request
+   box took a third of a 640 px pane). The box is one short line and grows only while the text box
+   itself has focus, so a click on Check my data or Explain this formula never moves the button
+   under the pointer. The empty-box hint is never shown; the placeholder already says it. */
 .run-gate[data-reason="request_required"] {
   display: none;
 }
@@ -5949,8 +5950,8 @@ body[data-auth="in"]:has(#conversation-history > *)
 }
 body[data-auth="in"]:has(#conversation-history > *)
   .workspace
-  > .composer:focus-within
-  textarea {
+  > .composer
+  textarea:focus {
   min-height: 68px;
   height: 68px;
 }

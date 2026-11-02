@@ -19,8 +19,13 @@ const call = (id: string, name: string, args: unknown): ToolCall => ({
   function: { name, arguments: JSON.stringify(args) },
 });
 const host: AgentHost = {
-  getWorkbook: async () => ({ sheets: [{ name: "Data", rows: 11, columns: 3 }] }),
-  readRange: async (_sheet, address) => ({ address, values: [["Amount"], [5]] }),
+  getWorkbook: async () => ({
+    sheets: [{ name: "Data", rows: 11, columns: 3 }],
+  }),
+  readRange: async (_sheet, address) => ({
+    address,
+    values: [["Amount"], [5]],
+  }),
   calculate: async () => [[50]],
   checkStep: async () => ({ ok: false, error: "no action found." }),
 };
@@ -40,9 +45,16 @@ const roleOf = (messages: AgentMessage[]): Role => {
 
 /** A team model: every call is counted by role, and each role can be told to behave or fail. */
 function team(
-  behave: Partial<Record<Role, (messages: AgentMessage[]) => Promise<any> | any>> = {},
+  behave: Partial<
+    Record<Role, (messages: AgentMessage[]) => Promise<any> | any>
+  > = {},
 ) {
-  const runs: Record<Role, number> = { planner: 0, builder: 0, reviewer: 0, reviser: 0 };
+  const runs: Record<Role, number> = {
+    planner: 0,
+    builder: 0,
+    reviewer: 0,
+    reviser: 0,
+  };
   const calls: Role[] = [];
   const model = async (messages: AgentMessage[]) => {
     const role = roleOf(messages);
@@ -50,13 +62,18 @@ function team(
     if (fresh(messages)) runs[role] += 1;
     const custom = behave[role];
     if (custom) return custom(messages);
-    if (role === "planner") return { content: "PLAN:\n1. Add the total", tool_calls: [] };
+    if (role === "planner")
+      return { content: "PLAN:\n1. Add the total", tool_calls: [] };
     if (role === "reviewer") return { content: "VERDICT: OK", tool_calls: [] };
     if (fresh(messages))
       return {
         content: "",
         tool_calls: [
-          call("w", "write_formula", { sheet: "Data", cell: "C12", formula: "=SUM(Data!C2:C11)" }),
+          call("w", "write_formula", {
+            sheet: "Data",
+            cell: "C12",
+            formula: "=SUM(Data!C2:C11)",
+          }),
         ],
       };
     return { content: "- Added a total in C12.", tool_calls: [] };
@@ -75,7 +92,11 @@ test("a reviewer that tries to write changes nothing: only the builder's changes
         ? {
             content: "",
             tool_calls: [
-              call("x", "write_values", { sheet: "Data", cell: "A1", values: [["HACKED"]] }),
+              call("x", "write_values", {
+                sheet: "Data",
+                cell: "A1",
+                values: [["HACKED"]],
+              }),
               call("y", "excel_action", {}),
             ],
           }
@@ -113,18 +134,21 @@ test("when the planner fails, the builder still works", async () => {
   assert.equal(result.plan, undefined);
 });
 
-test("the worst case is bounded: one planner run, one builder, two reviewers, one correction, two re-reviews at most", async () => {
+test("the worst case is bounded: one planner run, one builder, one reviewer, one correction", async () => {
   // Reviewers always say FIX and the builder always restages: the team must still stop.
   const t = team({
     reviewer: async (messages) =>
       fresh(messages)
-        ? { content: "", tool_calls: [call("c", "calculate", { formula: "=1" })] }
+        ? {
+            content: "",
+            tool_calls: [call("c", "calculate", { formula: "=1" })],
+          }
         : { content: "VERDICT: FIX\n- C12 is wrong", tool_calls: [] },
   });
   const result = await go(t.model);
   assert.equal(t.runs.planner, 1);
   assert.equal(t.runs.builder, 1);
-  assert.equal(t.runs.reviewer, 2, "two reviewers, once each");
+  assert.equal(t.runs.reviewer, 1, "one reviewer, once");
   assert.ok(t.runs.reviser <= 1, "one correction round");
   assert.ok(result.run.reply.length > 0);
   assert.ok(t.calls.length <= 30, `${t.calls.length} model calls`);
@@ -174,7 +198,12 @@ const columnHost = (values: unknown[]): AgentHost => ({
 });
 const totalBuilder = (formula: string) => async (messages: AgentMessage[]) =>
   fresh(messages)
-    ? { content: "", tool_calls: [call("w", "write_formula", { sheet: "Data", cell: "C6", formula })] }
+    ? {
+        content: "",
+        tool_calls: [
+          call("w", "write_formula", { sheet: "Data", cell: "C6", formula }),
+        ],
+      }
     : { content: "- Added a total in C6.", tool_calls: [] };
 
 test("a plain total that the rules verify skips the reviewer models", async () => {
@@ -197,7 +226,16 @@ test("a plain total that is one row short goes back to the builder without the r
     reviser: async (messages) => {
       if (!fresh(messages)) return { content: "- Corrected.", tool_calls: [] };
       restaged = true;
-      return { content: "", tool_calls: [call("w2", "write_formula", { sheet: "Data", cell: "C6", formula: "=SUM(C2:C5)" })] };
+      return {
+        content: "",
+        tool_calls: [
+          call("w2", "write_formula", {
+            sheet: "Data",
+            cell: "C6",
+            formula: "=SUM(C2:C5)",
+          }),
+        ],
+      };
     },
   });
   const result = await runTeam({
@@ -206,7 +244,11 @@ test("a plain total that is one row short goes back to the builder without the r
     model: t.model,
     mask: new PersonalMask(),
   });
-  assert.equal(t.runs.reviewer, 0, "the rules caught it, no reviewer model was needed");
+  assert.equal(
+    t.runs.reviewer,
+    0,
+    "the rules caught it, no reviewer model was needed",
+  );
   assert.equal(restaged, true);
   assert.equal((result.run.changes[0].change as any).formula, "=SUM(C2:C5)");
 });

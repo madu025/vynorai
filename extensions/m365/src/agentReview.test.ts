@@ -150,16 +150,16 @@ test("a plan the reviewer accepts is shown unchanged", async () => {
   });
   assert.equal(result.run, run);
   assert.equal(result.revised, false);
-  // Two reviewers (accuracy, then coverage), each reading once and then answering.
+  // One reviewer checks accuracy and coverage together: it reads once, then answers.
   assert.deepEqual(
     seen.filter((s) => s !== "plan"),
-    ["review", "review", "review", "review"],
+    ["review", "review"],
   );
   assert.deepEqual(
     result.reviewers?.map((r) => r.focus),
-    ["accuracy", "coverage"],
+    ["combined"],
   );
-  assert.match(describeReview(result), /3 agents.*no problems found/);
+  assert.match(describeReview(result), /2 agents.*no problems found/);
 });
 
 test("a problem the reviewer finds is fixed by the first agent before the preview", async () => {
@@ -305,9 +305,11 @@ test("one reviewer's problem is enough to correct the plan", async () => {
     host,
     model,
     mask,
+    focuses: ["accuracy", "coverage"],
   });
   assert.equal(review, 1);
   assert.equal(result.revised, true);
+  // (two separate reviewers are still supported when asked for)
   assert.deepEqual(result.review?.issues, ["The total misses row 11"]);
   assert.deepEqual(
     result.reviewers?.map((r) => [r.focus, r.ok]),
@@ -374,7 +376,7 @@ test("the planner's steps are read strictly and passed as a note", () => {
   assert.match(planFacts(["a", "b"]), /planner agent.*\(1\) a \(2\) b/);
 });
 
-test("the team: planner, builder with the plan, two reviewers", async () => {
+test("the team: planner, builder with the plan, one reviewer", async () => {
   const roles: string[] = [];
   let builderNote = "";
   const base = scripted("VERDICT: OK").model;
@@ -402,7 +404,7 @@ test("the team: planner, builder with the plan, two reviewers", async () => {
     model,
     mask: new PersonalMask(),
   });
-  assert.deepEqual(roles, ["planner", "builder", "accuracy", "coverage"]);
+  assert.deepEqual(roles, ["planner", "builder", "accuracy"]);
   assert.match(
     builderNote,
     /^Add a total under Amount\n\n.*Plan from the planner agent/s,
@@ -411,7 +413,7 @@ test("the team: planner, builder with the plan, two reviewers", async () => {
   assert.equal(result.run.changes.length, 1);
   assert.match(
     describeReview(result),
-    /Planner \(1 step\), builder and 2 reviewer\(s\) checked the plan: no problems found/,
+    /Planner \(1 step\), builder and 1 reviewer\(s\) checked the plan: no problems found/,
   );
 });
 

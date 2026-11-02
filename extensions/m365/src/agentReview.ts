@@ -1,7 +1,7 @@
 /**
  * Agent team for one request: a planner splits a change request into steps, the builder (the main
- * agent) stages the changes, then two reviewers check them before the person sees the preview, one
- * for accuracy (ranges, formulas, totals) and one for coverage and safety (every part of the
+ * agent) stages the changes, then one reviewer checks them before the person sees the preview
+ * for accuracy (ranges, formulas, totals) and for coverage and safety (every part of the
  * request, nothing overwritten). Each helper starts a fresh conversation, so it does not share the
  * builder's assumptions, and may only read the workbook and calculate. When a reviewer finds
  * problems, the builder gets one chance to stage a corrected plan. Nothing is written here: every
@@ -36,15 +36,19 @@ export const REVIEW_MAX_MERGED = 8;
 export const PLAN_MAX_TURNS = 4;
 export const PLAN_MAX_STEPS = 8;
 
-export type ReviewFocus = "accuracy" | "coverage";
-export const REVIEW_FOCUSES: readonly ReviewFocus[] = ["accuracy", "coverage"];
+export type ReviewFocus = "accuracy" | "coverage" | "combined";
+/** One reviewer checks both accuracy and coverage: each reviewer is a fresh conversation that
+ * resends the whole prompt prefix, and two of them cost about as much as the builder again. */
+export const REVIEW_FOCUSES: readonly ReviewFocus[] = ["combined"];
 
 const FOCUS_CHECKS: Record<ReviewFocus, string> = {
   accuracy:
     "Your focus is accuracy: read the ranges and calculate where it helps. Look for wrong or shifted ranges, formulas that give errors or wrong totals, wrong column references, and number formats that do not fit the data. Do not trust the other agent's numbers: run every staged formula through calculate and report any error value (#VALUE!, #N/A, #REF!) as a problem. For a summary table, calculate the sum of its value column over the source rows and compare it with the sum of the summary's own totals; if they differ, report both numbers as a problem. For a cross-sheet lookup, join or reconciliation, call map_relationships on the source ranges and report a wrong key, many-to-many key, unmatched rows that were ignored, repeated lookup-side keys, or a key that needs cleaning. Dates stored as text make EOMONTH and TEXT fail: DATE(YEAR(x),MONTH(x),1) works on both.",
   coverage:
     "Your focus is coverage and safety: check that every part of the request is covered, nothing would overwrite existing data or headers, new cells sit next to the data they belong to, and labels and sheet names are clear.",
+  combined: "",
 };
+FOCUS_CHECKS.combined = `${FOCUS_CHECKS.accuracy} Also check coverage and safety: every part of the request is covered, nothing would overwrite existing data or headers, new cells sit next to the data they belong to, and labels and sheet names are clear.`;
 
 export interface ReviewResult {
   ok: boolean;

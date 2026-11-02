@@ -5500,8 +5500,23 @@ async function agentLoop(request: string) {
       },
       onPlan: showAgentPlan,
       onReviewer: (focus) => {
-        currentReviewer = focus === "accuracy" ? "accuracy" : "safety";
-        if (focus === "accuracy") {
+        currentReviewer = focus === "coverage" ? "safety" : "accuracy";
+        if (focus === "combined") {
+          // One reviewer checks both: show both roles at work.
+          setAgentRoleView(
+            document,
+            "accuracy",
+            "active",
+            "checking calculations",
+          );
+          setAgentRoleView(
+            document,
+            "safety",
+            "active",
+            "checking write safety",
+          );
+          setStatus("Checking the result…");
+        } else if (focus === "accuracy") {
           setAgentRoleView(
             document,
             "accuracy",

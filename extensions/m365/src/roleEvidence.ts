@@ -5,7 +5,8 @@
  */
 import type { RelationLink } from "./relationships.js";
 
-const tableName = (label: string): string => label.split("!")[0].replace(/^'|'$/g, "");
+const tableName = (label: string): string =>
+  label.split("!")[0].replace(/^'|'$/g, "");
 
 export function relationshipLine(link: RelationLink): string {
   const duplicates = link.from.duplicateKeys + link.to.duplicateKeys;
@@ -29,7 +30,12 @@ export function readBackLine(results: { status: string }[]): string {
   return `${results.length} change(s) read back${failed ? `, ${failed} failed` : ""}`;
 }
 
-export type FinalRole = "planner" | "relationships" | "builder" | "accuracy" | "safety";
+export type FinalRole =
+  | "planner"
+  | "relationships"
+  | "builder"
+  | "accuracy"
+  | "safety";
 export interface FinalRoleState {
   role: FinalRole;
   state: "done" | "skipped";
@@ -55,30 +61,54 @@ export function finalRoleStates(input: {
 }): FinalRoleState[] {
   const states: FinalRoleState[] = [
     input.planSteps > 0
-      ? { role: "planner", state: "done", evidence: `${input.planSteps} plan step(s)` }
+      ? {
+          role: "planner",
+          state: "done",
+          evidence: `${input.planSteps} plan step(s)`,
+        }
       : { role: "planner", state: "skipped", evidence: "no plan needed" },
   ];
   if (input.link)
-    states.push({ role: "relationships", state: "done", evidence: relationshipLine(input.link) });
+    states.push({
+      role: "relationships",
+      state: "done",
+      evidence: relationshipLine(input.link),
+    });
   else
     states.push({
       role: "relationships",
       state: "skipped",
-      evidence: input.mapperRan ? "no join found between the ranges" : "not needed for this request",
+      evidence: input.mapperRan
+        ? "no join found between the ranges"
+        : "not needed for this request",
     });
   states.push(
     input.changes > 0
-      ? { role: "builder", state: "done", evidence: `${input.changes} staged change(s)` }
-      : { role: "builder", state: "done", evidence: "answer ready, nothing to change" },
+      ? {
+          role: "builder",
+          state: "done",
+          evidence: `${input.changes} staged change(s)`,
+        }
+      : {
+          role: "builder",
+          state: "done",
+          evidence: "answer ready, nothing to change",
+        },
   );
   for (const role of ["accuracy", "safety"] as const) {
     // The coverage-and-safety reviewer is run with the focus "coverage" (agentReview.ts) and shown as "safety".
     const verdict = input.reviewers.find(
       (reviewer) =>
-        reviewer.focus === role || (role === "safety" && reviewer.focus === "coverage"),
+        reviewer.focus === role ||
+        reviewer.focus === "combined" ||
+        (role === "safety" && reviewer.focus === "coverage"),
     );
     if (verdict)
-      states.push({ role, state: "done", evidence: reviewerLine(verdict, input.calculations[role]) });
+      states.push({
+        role,
+        state: "done",
+        evidence: reviewerLine(verdict, input.calculations[role]),
+      });
     else
       states.push({
         role,
@@ -88,8 +118,8 @@ export function finalRoleStates(input: {
           : input.reviewSkipped
             ? "simple change, checked by rules only"
             : input.reviewers.length
-            ? "not run, the builder corrected first"
-            : "did not finish",
+              ? "not run, the builder corrected first"
+              : "did not finish",
       });
   }
   return states;

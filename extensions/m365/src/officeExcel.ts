@@ -95,6 +95,8 @@ import {
 } from "./businessContext.js";
 import {
   buildDashboardLayout,
+  DASHBOARD_CARD,
+  DASHBOARD_PAGE,
   dashboardTopN,
   rankCategories,
   type DashboardAggregation,
@@ -116,18 +118,18 @@ const DASHBOARD_STYLE: Record<DashboardStyle, (range: any) => void> = {
     range.format.font.bold = true;
     range.format.font.size = 9;
     range.format.font.color = "#595959";
-    range.format.fill.color = "#DEEAF6";
+    range.format.fill.color = DASHBOARD_CARD;
   },
   "kpi-value": (range) => {
     range.format.font.bold = true;
     range.format.font.size = 16;
     range.format.font.color = "#1F3864";
-    range.format.fill.color = "#DEEAF6";
+    range.format.fill.color = DASHBOARD_CARD;
   },
   "kpi-sub": (range) => {
     range.format.font.size = 9;
     range.format.font.color = "#595959";
-    range.format.fill.color = "#DEEAF6";
+    range.format.fill.color = DASHBOARD_CARD;
   },
   note: (range) => {
     range.format.font.italic = true;
@@ -1904,6 +1906,28 @@ export async function applyApprovedExcelPlan(
                       row.map(() => block.numberFormat),
                     );
                   DASHBOARD_STYLE[block.style](range);
+                  // Card accents are decoration: a host without borders keeps plain cards.
+                  try {
+                    if (block.accent) {
+                      range.format.font.color = block.accent;
+                      if (block.style === "kpi-label") {
+                        const top = range.format.borders.getItem("EdgeTop");
+                        top.style = "Continuous";
+                        top.weight = "Thick";
+                        top.color = block.accent;
+                      }
+                    }
+                    // White edges between the cards read as gaps on the page colour.
+                    if (block.style.startsWith("kpi-"))
+                      for (const edge of ["EdgeLeft", "EdgeRight"]) {
+                        const line = range.format.borders.getItem(edge);
+                        line.style = "Continuous";
+                        line.weight = "Thick";
+                        line.color = DASHBOARD_PAGE;
+                      }
+                  } catch {
+                    // Plain cards.
+                  }
                 }
               };
               try {
@@ -1920,6 +1944,12 @@ export async function applyApprovedExcelPlan(
                 1,
                 layout.titleWidth,
               ).format.fill.color = "#1F3864";
+              sheet.getRangeByIndexes(
+                1,
+                0,
+                layout.pageRows,
+                layout.titleWidth,
+              ).format.fill.color = DASHBOARD_PAGE;
               writeBlocks(layout.blocks);
               await context.sync();
 
@@ -1931,17 +1961,41 @@ export async function applyApprovedExcelPlan(
                   2,
                 );
                 const chart = sheet.charts.add(
-                  "ColumnClustered",
+                  {
+                    bar: "BarClustered",
+                    doughnut: "Doughnut",
+                    column: "ColumnClustered",
+                  }[plannedChart.kind],
                   chartRange,
                   "Columns",
                 );
                 chart.name = `${action.name}_chart_${index + 1}`;
                 chart.title.text = plannedChart.title;
                 try {
-                  chart.legend.visible = false;
-                  if (plannedChart.numberFormat)
-                    chart.axes.valueAxis.numberFormat =
-                      plannedChart.numberFormat;
+                  chart.format.fill.setSolidColor(DASHBOARD_CARD);
+                  chart.format.border.color = "#D9DEE7";
+                  chart.title.format.font.size = 12;
+                  chart.title.format.font.color = "#1F3864";
+                  const series = chart.series.getItemAt(0);
+                  series.hasDataLabels = true;
+                  if (plannedChart.kind === "doughnut") {
+                    chart.legend.visible = true;
+                    chart.legend.position = "Right";
+                    series.dataLabels.showValue = false;
+                    series.dataLabels.showPercentage = true;
+                  } else {
+                    chart.legend.visible = false;
+                    series.format.fill.setSolidColor(plannedChart.color);
+                    series.gapWidth = 60;
+                    chart.axes.valueAxis.majorGridlines.visible = false;
+                    chart.axes.valueAxis.visible = false;
+                    if (plannedChart.numberFormat)
+                      series.dataLabels.numberFormat =
+                        plannedChart.numberFormat;
+                    // A bar chart draws its first row at the bottom: flip it so the largest is on top.
+                    if (plannedChart.kind === "bar")
+                      chart.axes.categoryAxis.reversePlotOrder = true;
+                  }
                 } catch {
                   // Chart styling is decoration; the chart is already there.
                 }

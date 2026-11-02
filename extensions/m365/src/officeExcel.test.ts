@@ -99,7 +99,12 @@ function fakeWorkbook(
           typeof cell === "string" && cell.startsWith("=") ? cell : "",
         ),
       ),
-      format: { font: {}, fill: {}, autofitColumns() {} },
+      format: {
+        font: {},
+        fill: {},
+        borders: { getItem: () => ({}) },
+        autofitColumns() {},
+      },
       conditionalFormats: {
         add(type: string) {
           calls.push(`conditional.add ${type}`);
@@ -1061,10 +1066,12 @@ test("a dashboard creates one result sheet with live KPIs, charts and a PivotTab
   assert.ok(
     excel.calls.includes("mark Dashboard Sales-Cost Region vynorai=result"),
   );
-  assert.equal(
-    excel.calls.filter((call) => call.startsWith("chart.add ColumnClustered"))
-      .length,
-    2,
+  // A few regions: their share as a doughnut, the second measure as columns.
+  assert.deepEqual(
+    excel.calls
+      .filter((call) => call.startsWith("chart.add "))
+      .map((call) => call.split(" ")[1]),
+    ["Doughnut", "ColumnClustered"],
   );
   assert.ok(
     excel.calls.some((call) =>
@@ -1566,8 +1573,7 @@ test("a dashboard falls back to a formula breakdown when the host refuses a Pivo
   assert.ok(north >= 0);
   assert.match(formulas[north + 1], /^=SUMIFS\(/);
   assert.equal(
-    excel.calls.filter((call) => call.startsWith("chart.add ColumnClustered"))
-      .length,
+    excel.calls.filter((call) => call.startsWith("chart.add ")).length,
     1,
   );
 });

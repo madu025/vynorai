@@ -237,3 +237,40 @@ test("only the largest categories are charted in a management view, with a note"
   );
   assert.match(layout.notes.join(" "), /the 2 largest of 30 Region values/);
 });
+
+test("charts mix types: a doughnut for the share of a few, columns for further measures", () => {
+  const layout = buildDashboardLayout(base());
+  assert.deepEqual(
+    layout.charts.map((chart) => chart.kind),
+    ["doughnut", "column"],
+  );
+  assert.notEqual(layout.charts[0].color, layout.charts[1].color);
+});
+
+test("many categories, an average or sampled data get a ranked bar, never a doughnut", () => {
+  const many = Array.from({ length: 9 }, (_, i) => `R${i}`);
+  assert.equal(
+    buildDashboardLayout(base({ categories: many, totalCategories: 9 }))
+      .charts[0].kind,
+    "bar",
+  );
+  assert.equal(
+    buildDashboardLayout(base({ aggregation: "average" })).charts[0].kind,
+    "bar",
+  );
+  assert.equal(
+    buildDashboardLayout(base({ sampled: true, categories: [] })).charts[0]
+      .kind,
+    "bar",
+  );
+});
+
+test("each KPI card has its own accent and the page colour covers the breakdown", () => {
+  const layout = buildDashboardLayout(base());
+  const accents = layout.blocks
+    .filter((block) => block.style === "kpi-label")
+    .map((block) => block.accent);
+  assert.ok(accents.length >= 3);
+  assert.equal(new Set(accents).size, accents.length);
+  assert.ok(layout.pageRows >= 9 + 3 + 3);
+});

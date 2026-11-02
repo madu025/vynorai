@@ -40,6 +40,42 @@ export interface DashboardBlock {
   style: DashboardStyle;
   /** One number format for every cell of the block. */
   numberFormat?: string;
+  /** Card accent colour (KPI blocks): a line on top of the card and the value's colour. */
+  accent?: string;
+}
+
+/**
+ * How a chart reads: a ranked bar for many categories, a doughnut for the share of a few, and
+ * columns for the further measures. Designer dashboards mix these instead of repeating one type.
+ */
+export type DashboardChartKind = "bar" | "doughnut" | "column";
+
+/** Card and series colours, in order; dark enough for white text and for a white page. */
+export const DASHBOARD_PALETTE = [
+  "#2F5597",
+  "#00A3A3",
+  "#F28E2B",
+  "#7B61C9",
+  "#E15759",
+  "#59A14F",
+];
+/** Page behind the cards and charts, and the card face. */
+export const DASHBOARD_PAGE = "#F3F6FA";
+export const DASHBOARD_CARD = "#FFFFFF";
+/** A doughnut stays readable up to this many slices. */
+export const DOUGHNUT_MAX = 6;
+
+export function dashboardChartKind(
+  index: number,
+  categories: number,
+  sampled: boolean,
+  aggregation: DashboardAggregation,
+): DashboardChartKind {
+  if (index > 0) return "column";
+  const additive = aggregation === "sum" || aggregation === "count";
+  if (!sampled && additive && categories >= 2 && categories <= DOUGHNUT_MAX)
+    return "doughnut";
+  return "bar";
 }
 
 export interface DashboardChartPlan {
@@ -53,6 +89,9 @@ export interface DashboardChartPlan {
   from: string;
   to: string;
   numberFormat?: string;
+  kind: DashboardChartKind;
+  /** Series colour. */
+  color: string;
 }
 
 export interface DashboardLayout {
@@ -68,6 +107,8 @@ export interface DashboardLayout {
   columnWidths: Array<{ col: number; width: number }>;
   /** Width of the title bar in columns. */
   titleWidth: number;
+  /** Rows (from row 1) the light page colour covers, under the title bar. */
+  pageRows: number;
   /** Number format per value column, also used for the PivotTable values. */
   valueFormats: string[];
   /** Plain-language notes shown on the sheet and in the result message. */
@@ -339,6 +380,13 @@ export function buildDashboardLayout(
         from: `${usageColumnLetter(CHART_COLUMN)}${top + 1}`,
         to: `${usageColumnLetter(CHART_COLUMN + CHART_SPAN - 1)}${top + CHART_HEIGHT}`,
         numberFormat: valueFormats[index],
+        kind: dashboardChartKind(
+          index,
+          input.categories.length,
+          input.sampled,
+          aggregation,
+        ),
+        color: DASHBOARD_PALETTE[index % DASHBOARD_PALETTE.length],
       });
     }
   });
@@ -414,17 +462,20 @@ export function buildDashboardLayout(
     chosen = chosen.filter((card) => card !== targetCards[1]);
   chosen = chosen.slice(0, CARD_COLUMNS);
   chosen.forEach((card, index) => {
+    const accent = DASHBOARD_PALETTE[index % DASHBOARD_PALETTE.length];
     blocks.push({
       row: KPI_ROW,
       col: index,
       cells: [[card.label]],
       style: "kpi-label",
+      accent,
     });
     blocks.push({
       row: KPI_ROW + 1,
       col: index,
       cells: [[card.value]],
       style: "kpi-value",
+      accent,
       ...(card.format !== "@" ? { numberFormat: card.format } : {}),
     });
     blocks.push({
@@ -536,6 +587,10 @@ export function buildDashboardLayout(
     fallbackBreakdown,
     columnWidths,
     titleWidth: CHART_COLUMN + CHART_SPAN,
+    pageRows: Math.max(
+      CHART_ROW + Math.max(1, charts.length) * (CHART_HEIGHT + 1),
+      PIVOT_ROW + shown + 3,
+    ),
     valueFormats,
     notes,
   };

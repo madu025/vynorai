@@ -170,6 +170,19 @@ const DASHBOARD_STYLE: Record<DashboardStyle, (range: any) => void> = {
 };
 
 /** A short reason from an Office.js error, for the note on the sheet. */
+/** Dynamic arrays (UNIQUE, spills) exist in hosts with ExcelApi 1.12; tests without Office say yes. */
+function spillSupported(): boolean {
+  try {
+    const office = (globalThis as any).Office;
+    if (!office?.context?.requirements) return true;
+    return Boolean(
+      office.context.requirements.isSetSupported("ExcelApi", "1.12"),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function describePivotError(error: unknown): string {
   const code = (error as { code?: unknown })?.code;
   const message = String(
@@ -1835,6 +1848,20 @@ export async function applyApprovedExcelPlan(
               } catch {
                 sourceTable = undefined; // older Excel: the fixed range stays
               }
+              // A plain range: when the rows under it are empty, the formulas reach 1,000 rows
+              // further, so rows typed under the data are counted too. Blank rows add nothing.
+              let lastRow = parsed.endRow;
+              if (!sourceTable)
+                try {
+                  const below = sourceRange()
+                    .getRowsBelow(1000)
+                    .getUsedRangeOrNullObject(true);
+                  below.load("isNullObject");
+                  await context.sync();
+                  if (below.isNullObject) lastRow = parsed.endRow + 1000;
+                } catch {
+                  lastRow = parsed.endRow;
+                }
               const sourceColumn = (index: number) => {
                 if (sourceTable) {
                   // Structured references escape [ ] # and ' with a leading '.
@@ -1844,7 +1871,7 @@ export async function applyApprovedExcelPlan(
                   return `${sourceTable}[${header}]`;
                 }
                 const letter = columnLetter(parsed.startColumn + index);
-                return `${quotedSheet}$${letter}$${parsed.startRow + 1}:$${letter}$${parsed.endRow}`;
+                return `${quotedSheet}$${letter}$${parsed.startRow + 1}:$${letter}$${lastRow}`;
               };
               const category = dashboard.category as {
                 column: string;
@@ -1953,6 +1980,8 @@ export async function applyApprovedExcelPlan(
                 categories: ranked.slice(0, dashboardTopN(audience)),
                 totalCategories: ranked.length,
                 sampled: dashboardSampled,
+                // Spilled chart data needs dynamic arrays (ExcelApi 1.12 hosts have them).
+                live: Boolean(sourceTable) && spillSupported(),
                 ...(currency ? { currency } : {}),
                 // Only a column whose own name, format or cells say money gets the currency format.
                 money: values.map(

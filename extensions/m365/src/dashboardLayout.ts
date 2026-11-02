@@ -222,6 +222,11 @@ export interface DashboardLayoutInput {
    */
   categories: string[];
   sampled: boolean;
+  /**
+   * The source is an Excel Table in Excel with dynamic arrays: the chart data, the month list and
+   * the formula breakdown spill, so categories and months added later appear without a rebuild.
+   */
+  live?: boolean;
   /** Distinct categories in the data; used for the note when only the largest are shown. */
   totalCategories?: number;
   currency?: CurrencyGuess;
@@ -384,9 +389,8 @@ export function buildDashboardLayout(
           ? "#,##0"
           : "#,##0.00",
   );
-  const shown = input.sampled
-    ? dashboardTopN(input.audience)
-    : input.categories.length;
+  const spill = input.sampled || Boolean(input.live);
+  const shown = spill ? dashboardTopN(input.audience) : input.categories.length;
 
   const title = text.valuesBy(
     values.map((value) => value.name),
@@ -436,7 +440,7 @@ export function buildDashboardLayout(
       cells: [[input.categoryName, text.aggregateOf(label, value.name)]],
       style: "table-header",
     });
-    if (input.sampled) {
+    if (spill) {
       const lambda = categoryAggregateFormula(
         aggregation,
         value.ref,
@@ -478,7 +482,7 @@ export function buildDashboardLayout(
         values: `$${valueLetter}$3:$${valueLetter}$${last}`,
       });
     }
-    if (input.sampled || input.categories.length) {
+    if (spill || input.categories.length) {
       const top = CHART_ROW + index * (CHART_HEIGHT + 1);
       charts.push({
         title: text.aggregateOfBy(label, value.name, input.categoryName),
@@ -524,20 +528,54 @@ export function buildDashboardLayout(
       cells: [[input.trend.name, text.aggregateOf(label, value.name)]],
       style: "table-header",
     });
-    blocks.push({
-      row: 2,
-      col,
-      cells: months.map((month) => [month]),
-      style: "table-body",
-      numberFormat: "mmm yyyy",
-    });
-    blocks.push({
-      row: 2,
-      col: col + 1,
-      cells: months.map((_, row) => [{ f: `=${monthly(row)}` }]),
-      style: "table-body",
-      numberFormat: valueFormats[0],
-    });
+    if (input.live) {
+      // Every month from the first date to the last (latest 24), so a new month appears by itself.
+      const monthly = (m: string) =>
+        aggregation === "count"
+          ? `COUNTIFS(${ref},">="&${m},${ref},"<"&EDATE(${m},1))`
+          : aggregation === "average"
+            ? `IFERROR(AVERAGEIFS(${value.ref},${ref},">="&${m},${ref},"<"&EDATE(${m},1)),0)`
+            : aggregation === "min"
+              ? `MINIFS(${value.ref},${ref},">="&${m},${ref},"<"&EDATE(${m},1))`
+              : aggregation === "max"
+                ? `MAXIFS(${value.ref},${ref},">="&${m},${ref},"<"&EDATE(${m},1))`
+                : `SUMIFS(${value.ref},${ref},">="&${m},${ref},"<"&EDATE(${m},1))`;
+      blocks.push({
+        row: 2,
+        col,
+        cells: [
+          [
+            {
+              f: `=LET(d,FILTER(${ref},ISNUMBER(${ref})),s,EOMONTH(MIN(d),-1)+1,n,DATEDIF(s,MAX(d),"m")+1,TAKE(EDATE(s,SEQUENCE(n,1,0)),-24))`,
+            },
+          ],
+        ],
+        style: "table-body",
+        numberFormat: "mmm yyyy",
+      });
+      blocks.push({
+        row: 2,
+        col: col + 1,
+        cells: [[{ f: `=BYROW(${letter}3#,LAMBDA(m,${monthly("m")}))` }]],
+        style: "table-body",
+        numberFormat: valueFormats[0],
+      });
+    } else {
+      blocks.push({
+        row: 2,
+        col,
+        cells: months.map((month) => [month]),
+        style: "table-body",
+        numberFormat: "mmm yyyy",
+      });
+      blocks.push({
+        row: 2,
+        col: col + 1,
+        cells: months.map((_, row) => [{ f: `=${monthly(row)}` }]),
+        style: "table-body",
+        numberFormat: valueFormats[0],
+      });
+    }
     const top = CHART_ROW + charts.length * (CHART_HEIGHT + 1);
     charts.push({
       title: text.byMonth(label, value.name),
@@ -562,7 +600,8 @@ export function buildDashboardLayout(
   const cards: Card[] = [];
   const records: Card = {
     label: text.records,
-    value: { f: `=ROWS(${input.categoryRef})` },
+    // Rows with a category: a table row whose cells were cleared is not a record.
+    value: { f: `=SUMPRODUCT(--(LEN(${input.categoryRef})>0))` },
     // Excel 2016 and 2019 have no UNIQUE: the count is written as text when every row was read.
     sub: input.sampled
       ? {
@@ -685,7 +724,9 @@ export function buildDashboardLayout(
     );
   if (input.sampled) notes.push(text.largeData(shown, input.categoryName));
   for (const name of input.missing ?? []) notes.push(text.missingMeasure(name));
-  if (!input.sampled && input.categories.length) notes.push(text.chartOrder);
+  // Spilled chart data follows new categories, so the order note applies only to fixed lists.
+  if (!spill && input.categories.length) notes.push(text.chartOrder);
+  notes.push(text.pivotRefresh);
 
   blocks.push({
     row: SECTION_ROW,
@@ -708,7 +749,7 @@ export function buildDashboardLayout(
       style: "table-header",
     },
   ];
-  if (input.sampled) {
+  if (spill) {
     const primary = values[0];
     const categories = `UNIQUE(FILTER(${input.categoryRef},${input.categoryRef}<>""))`;
     const ranking = `BYROW(c,LAMBDA(x,${categoryAggregateFormula(aggregation, primary.ref, input.categoryRef, "x")}))`;

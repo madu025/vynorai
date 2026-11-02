@@ -46,6 +46,7 @@ export interface WorkbookText {
   /** A measure the request names that is not a column. */
   missingMeasure: (name: string) => string;
   chartOrder: string;
+  pivotRefresh: string;
   pivotFallback: (reason: string) => string;
   slicerFailed: (category: string) => string;
   slicerNeedsVersion: (category: string) => string;
@@ -100,6 +101,8 @@ const EN: WorkbookText = {
   byMonth: (label, value) => `${label} of ${value} by month`,
   missingMeasure: (name) =>
     `"${name}" is not a column in this data, so it is not on the dashboard. Add a ${name} column first (for example Sales minus Cost), then make the dashboard again.`,
+  pivotRefresh:
+    "The PivotTable updates while VynorAI is open and when the workbook opens; otherwise use Data > Refresh All.",
   chartOrder:
     "The chart order is from when the dashboard was made; the figures stay live.",
   pivotFallback: (reason) =>
@@ -156,6 +159,8 @@ const SI: WorkbookText = {
   byMonth: (label, value) => `මාසය අනුව ${value} (${label})`,
   missingMeasure: (name) =>
     `"${name}" මේ data වල column එකක් නොවේ, ඒ නිසා dashboard එකේ නැත. මුලින් ${name} column එකක් එකතු කර (උදා: Sales අඩු Cost), dashboard එක නැවත හදන්න.`,
+  pivotRefresh:
+    "VynorAI විවෘතව ඇති විට සහ workbook එක විවෘත කරන විට PivotTable එක යාවත්කාලීන වේ; නැතිනම් Data > Refresh All භාවිත කරන්න.",
   chartOrder:
     "ප්‍රස්තාරයේ අනුපිළිවෙල dashboard එක සාදන විට තිබූ ලෙසයි; සංඛ්‍යා සජීවීව යාවත්කාලීන වේ.",
   pivotFallback: (reason) =>
@@ -214,6 +219,8 @@ const TA: WorkbookText = {
   byMonth: (label, value) => `மாதவாரியாக ${value} (${label})`,
   missingMeasure: (name) =>
     `"${name}" இந்தத் தரவில் ஒரு நெடுவரிசை இல்லை, எனவே dashboard-இல் இல்லை. முதலில் ${name} நெடுவரிசையைச் சேர்த்து (எ.கா. Sales கழித்தல் Cost) dashboard-ஐ மீண்டும் உருவாக்கவும்.`,
+  pivotRefresh:
+    "VynorAI திறந்திருக்கும்போதும் workbook திறக்கப்படும்போதும் PivotTable புதுப்பிக்கப்படும்; இல்லையெனில் Data > Refresh All பயன்படுத்தவும்.",
   chartOrder:
     "வரைபட வரிசை dashboard உருவாக்கப்பட்ட நேரத்தில் இருந்தபடியே உள்ளது; எண்கள் நேரடியாகப் புதுப்பிக்கப்படுகின்றன.",
   pivotFallback: (reason) =>

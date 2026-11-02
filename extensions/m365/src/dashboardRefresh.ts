@@ -6,9 +6,113 @@
  */
 import type { ExcelRuntimeLike } from "./officeExcel.js";
 
-/** Dashboard PivotTables are named after the dashboard action ("Orders_Vynor_dashboard"). */
+/** Dashboard PivotTables are named after the dashboard action ("Orders_Vynor_Dashboard"). */
 export function isDashboardPivot(name: string): boolean {
-  return /dashboard/i.test(name);
+  return /_Vynor_Dashboard$/i.test(name);
+}
+
+/** Dashboard charts are named "<action>_chart_<n>". */
+export function isDashboardChart(name: string): boolean {
+  return /_Vynor_Dashboard_chart_\d+$/i.test(name);
+}
+
+/**
+ * The cell a chart's spilled data starts in, from its values address ("'Dash'!$AP$3:$AP$7"): the
+ * category cell to the left of the first value. Undefined for an address that is not one column.
+ */
+export function spillAnchor(
+  valuesAddress: string,
+): { sheet: string; column: string; row: number } | undefined {
+  const match =
+    /^(?:(.*)!)?\$?([A-Z]{1,3})\$?(\d+)(?::\$?([A-Z]{1,3})\$?\d+)?$/i.exec(
+      String(valuesAddress ?? "").trim(),
+    );
+  if (!match || (match[4] && match[4].toUpperCase() !== match[2].toUpperCase()))
+    return undefined;
+  const toNumber = (letters: string) =>
+    [...letters.toUpperCase()].reduce(
+      (n, ch) => n * 26 + ch.charCodeAt(0) - 64,
+      0,
+    );
+  const toLetters = (n: number) => {
+    let out = "";
+    for (; n > 0; n = Math.floor((n - 1) / 26))
+      out = String.fromCharCode(65 + ((n - 1) % 26)) + out;
+    return out;
+  };
+  const at = toNumber(match[2]);
+  if (at < 2) return undefined;
+  return {
+    sheet: match[1] ?? "",
+    column: toLetters(at - 1),
+    row: Number(match[3]),
+  };
+}
+
+/**
+ * Charts over spilled data keep the row count they were made with; when a category or month is
+ * added or removed, point each series at the spill's new size. Returns the sheets that hold them.
+ */
+export async function resizeDashboardCharts(
+  context: any,
+): Promise<Set<string>> {
+  const sheets = new Set<string>();
+  const list = context.workbook.worksheets;
+  list.load("items/id");
+  await context.sync();
+  const found: Array<{ sheet: any; chart: any }> = [];
+  for (const sheet of list.items) {
+    const charts = sheet.charts;
+    charts.load("items/name");
+    found.push({ sheet, chart: charts });
+  }
+  await context.sync();
+  const targets = found.flatMap(({ sheet, chart }) =>
+    (chart.items ?? [])
+      .filter((item: any) => isDashboardChart(String(item.name)))
+      .map((item: any) => ({ sheet, chart: item })),
+  );
+  if (!targets.length) return sheets;
+  const sources = targets.map(({ sheet, chart }) => {
+    sheets.add(String(sheet.id));
+    const series = chart.series.getItemAt(0);
+    return {
+      sheet,
+      chart,
+      series,
+      address: series.getDimensionDataSourceString("Values"),
+    };
+  });
+  await context.sync();
+  const spills = sources.flatMap((source) => {
+    const anchor = spillAnchor(String(source.address?.value ?? ""));
+    if (!anchor) return [];
+    const spill = source.sheet
+      .getRange(`${anchor.column}${anchor.row}`)
+      .getSpillingToRangeOrNullObject();
+    spill.load("isNullObject,rowCount,address");
+    return [{ ...source, anchor, spill }];
+  });
+  await context.sync();
+  for (const { sheet, series, anchor, spill, address } of spills) {
+    if (spill.isNullObject) continue;
+    const rows = Number(spill.rowCount);
+    const shown = /:\$?[A-Z]+\$?(\d+)$/i.exec(String(address.value));
+    const lastShown = shown ? Number(shown[1]) : anchor.row;
+    if (rows < 1 || lastShown === anchor.row + rows - 1) continue;
+    const last = anchor.row + rows - 1;
+    const valueColumn = String(address.value)
+      .replace(/^.*!/, "")
+      .match(/\$?([A-Z]{1,3})\$?\d+/i)![1];
+    series.setXAxisValues(
+      sheet.getRange(`${anchor.column}${anchor.row}:${anchor.column}${last}`),
+    );
+    series.setValues(
+      sheet.getRange(`${valueColumn}${anchor.row}:${valueColumn}${last}`),
+    );
+  }
+  await context.sync();
+  return sheets;
 }
 
 /**
@@ -67,6 +171,11 @@ export async function refreshDashboardPivots(
     }
     dashboards.forEach((pivot: any) => pivot.refresh());
     await context.sync();
+    try {
+      (await resizeDashboardCharts(context)).forEach((id) => sheets.add(id));
+    } catch {
+      // Older hosts cannot read a series' source; the charts keep their size.
+    }
     if (kept.length)
       try {
         kept.forEach(({ format, width }) => {

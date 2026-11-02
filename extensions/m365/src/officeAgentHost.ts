@@ -30,6 +30,7 @@ import {
 } from "./businessContext.js";
 import { HEALTH_MAX_ROWS, formulaResultHealth } from "./formulaResultHealth.js";
 import type { M365ApiClient } from "./api.js";
+import { polishCreatedSheets } from "./sheetPolish.js";
 import {
   RUN_CODE_MAX_CELLS,
   runSandboxedCode,
@@ -1197,6 +1198,9 @@ export async function applyAgentChanges(
       });
     }
   }
+  // Result sheets this run made get a header and total style (undo deletes them whole).
+  if (!failed && createdNames.size && typeof runtime.run === "function")
+    await polishCreatedSheets(runtime, [...createdNames]).catch(() => {});
   return { results, undo };
 }
 

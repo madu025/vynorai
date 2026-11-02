@@ -133,7 +133,7 @@ const DASHBOARD_STYLE: Record<DashboardStyle, (range: any) => void> = {
   },
   "kpi-value": (range) => {
     range.format.font.bold = true;
-    range.format.font.size = 22;
+    range.format.font.size = 26;
     range.format.font.color = "#1F3864";
     range.format.fill.color = DASHBOARD_CARD;
     range.format.horizontalAlignment = "Left";
@@ -2028,6 +2028,9 @@ export async function applyApprovedExcelPlan(
                 }
               };
               await decorate(() => {
+                sheet.showHeadings = false;
+              });
+              await decorate(() => {
                 sheet.getRangeByIndexes(
                   0,
                   0,
@@ -2147,6 +2150,17 @@ export async function applyApprovedExcelPlan(
                     chart.axes.categoryAxis.format.font.color = DASHBOARD_MUTED;
                     chart.axes.categoryAxis.format.line.lineStyle = "None";
                   });
+                  if (plannedChart.kind === "bar")
+                    await decorate(() => {
+                      for (
+                        let point = 1;
+                        point < plannedChart.dataRows;
+                        point += 1
+                      )
+                        series.points
+                          .getItemAt(point)
+                          .format.fill.setSolidColor("#CBD5E1");
+                    });
                   if (plannedChart.kind === "line")
                     await decorate(() => {
                       series.markerStyle = "Circle";
@@ -2194,6 +2208,16 @@ export async function applyApprovedExcelPlan(
                     await context.sync();
                   } catch {
                     // Older Excel keeps the PivotTable's own number format.
+                  }
+                  // "Sum of Sales" was cut off in its grid column: show the measure's own name. A
+                  // value field may not repeat a source field name, so a trailing space keeps it apart.
+                  try {
+                    fields.forEach((field: any, index: number) => {
+                      field.name = `${values[index].column} `;
+                    });
+                    await context.sync();
+                  } catch {
+                    // The PivotTable keeps "Sum of ..." names.
                   }
                 }
               } catch (error) {

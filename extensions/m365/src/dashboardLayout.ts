@@ -141,10 +141,20 @@ export const DASHBOARD_PALETTE = [
   "#59A14F",
 ];
 /** Page behind the cards and charts, and the card face. */
-export const DASHBOARD_PAGE = "#F3F6FA";
+export const DASHBOARD_PAGE = "#F3F4F6";
 export const DASHBOARD_CARD = "#FFFFFF";
-/** A doughnut stays readable up to this many slices. */
-export const DOUGHNUT_MAX = 6;
+/** A doughnut stays readable up to five slices; more read better as a ranked bar. */
+export const DOUGHNUT_MAX = 5;
+
+/**
+ * A KPI value in K or M when it is large, so the card shows 1.3M rather than 1,254,300. Plain
+ * number formats only: a currency format keeps its own symbol and digits.
+ */
+export function compactFormat(format: string): string {
+  if (format === "#,##0" || format === "#,##0.00")
+    return '[>=1000000]#,##0.0,,"M";[>=100000]#,##0.0,"K";' + format;
+  return format;
+}
 
 export function dashboardChartKind(
   index: number,
@@ -570,7 +580,7 @@ export function buildDashboardLayout(
             f: `="${text.averagePrefix}"&TEXT(IFERROR(AVERAGE(${value.ref}),0),"#,##0.00")`,
           }
         : "",
-    format: valueFormats[index],
+    format: compactFormat(valueFormats[index]),
   }));
   const targetCards: Card[] = [];
   if (input.target) {
@@ -733,7 +743,7 @@ export function buildDashboardLayout(
   const columnWidths = [
     ...Array.from({ length: GRID_COLUMNS }, (_, col) => ({
       col,
-      width: GRID_WIDTH,
+      width: col === 0 ? GRID_WIDTH + 24 : GRID_WIDTH,
     })),
     ...values.flatMap((_, index) => [
       { col: HELPER_COLUMN + index * 3, width: 110 },

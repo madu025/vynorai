@@ -7,6 +7,7 @@ import {
   findTrendColumn,
   monthStartSerial,
   missingMeasures,
+  compactFormat,
   rankCategories,
   type DashboardLayoutInput,
 } from "./dashboardLayout.js";
@@ -372,4 +373,29 @@ test("whole-number measures get commas without decimals; the trend title says by
   );
   assert.deepEqual(layout.valueFormats, ["#,##0", "#,##0"]);
   assert.ok(layout.charts.some((chart) => /by month/.test(chart.title)));
+});
+
+test("large KPI values read as K or M; currency formats keep their symbol", () => {
+  assert.equal(
+    compactFormat("#,##0"),
+    '[>=1000000]#,##0.0,,"M";[>=100000]#,##0.0,"K";#,##0',
+  );
+  assert.equal(compactFormat('"Rs "#,##0.00'), '"Rs "#,##0.00');
+  const layout = buildDashboardLayout(
+    base({ wholeNumbers: [true, true], money: [false, false] }),
+  );
+  const sales = layout.blocks.find(
+    (block) =>
+      block.style === "kpi-value" && text(block.cells[0][0]).includes("$B$"),
+  );
+  assert.match(String(sales?.numberFormat), /"M"/);
+});
+
+test("six categories are a ranked bar, not a doughnut", () => {
+  const six = ["A", "B", "C", "D", "E", "F"];
+  assert.equal(
+    buildDashboardLayout(base({ categories: six, totalCategories: 6 }))
+      .charts[0].kind,
+    "bar",
+  );
 });

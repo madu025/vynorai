@@ -50,6 +50,35 @@ export interface DashboardBlock {
  */
 export type DashboardChartKind = "bar" | "doughnut" | "column" | "line";
 
+/** Business measures a request may name; a named one that is no column gets a note. */
+const MEASURE_WORDS = [
+  "profit",
+  "revenue",
+  "margin",
+  "cost",
+  "expense",
+  "income",
+  "discount",
+  "tax",
+];
+
+/**
+ * Measures the request names that no header holds ("Sales and Profit" over Sales and Cost gives
+ * ["Profit"]). The dashboard then says so instead of quietly leaving them out (live run 2026-11-02).
+ */
+export function missingMeasures(
+  request: string,
+  headers: readonly string[],
+): string[] {
+  const asked = request.toLowerCase();
+  const names = headers.map((header) => header.toLowerCase());
+  return MEASURE_WORDS.filter(
+    (word) =>
+      new RegExp(`\\b${word}s?\\b`).test(asked) &&
+      !names.some((name) => name.includes(word)),
+  ).map((word) => word[0].toUpperCase() + word.slice(1));
+}
+
 /** Months shown in the trend: the latest two years. */
 export const TREND_MAX_MONTHS = 24;
 const DATE_HEADER = /\b(date|month|period|day)\b|දිනය|මාසය|தேதி/i;
@@ -184,6 +213,10 @@ export interface DashboardLayoutInput {
   language?: WorkbookLanguage;
   /** Monthly trend of the first value: the date column and its month starts (Excel serials). */
   trend?: { name: string; ref: string; months: number[] };
+  /** Per value column: every number is whole, so no decimals are shown. */
+  wholeNumbers?: boolean[];
+  /** Measures the request named that are not columns (see missingMeasures). */
+  missing?: string[];
 }
 
 /** Categories shown in a management view: the headline few. Others keep the longer list. */
@@ -319,7 +352,9 @@ export function buildDashboardLayout(
       ? "#,##0"
       : currencyOk && input.money[index]
         ? input.currency!.numberFormat
-        : "#,##0.00",
+        : aggregation !== "average" && input.wholeNumbers?.[index]
+          ? "#,##0"
+          : "#,##0.00",
   );
   const shown = input.sampled
     ? dashboardTopN(input.audience)
@@ -477,7 +512,7 @@ export function buildDashboardLayout(
     });
     const top = CHART_ROW + charts.length * (CHART_HEIGHT + 1);
     charts.push({
-      title: `${text.aggregateOf(label, value.name)} / ${input.trend.name}`,
+      title: text.byMonth(label, value.name),
       headerRow: 1,
       col,
       dataRows: months.length,
@@ -601,6 +636,7 @@ export function buildDashboardLayout(
       ),
     );
   if (input.sampled) notes.push(text.largeData(shown, input.categoryName));
+  for (const name of input.missing ?? []) notes.push(text.missingMeasure(name));
   if (!input.sampled && input.categories.length) notes.push(text.chartOrder);
 
   blocks.push({

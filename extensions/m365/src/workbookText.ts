@@ -41,6 +41,10 @@ export interface WorkbookText {
   mixedColumns: (currencies: string[]) => string;
   largestShown: (shown: number, total: number, category: string) => string;
   largeData: (shown: number, category: string) => string;
+  /** "Sales by month": the trend chart title. */
+  byMonth: (label: string, value: string) => string;
+  /** A measure the request names that is not a column. */
+  missingMeasure: (name: string) => string;
   chartOrder: string;
   pivotFallback: (reason: string) => string;
   slicerFailed: (category: string) => string;
@@ -93,6 +97,9 @@ const EN: WorkbookText = {
     `The charts show the ${shown} largest of ${total} ${category} values; the totals and the PivotTable cover all of them.`,
   largeData: (shown, category) =>
     `The data is large, so the charts list up to ${shown} ${category} values from a live formula; the totals cover every row.`,
+  byMonth: (label, value) => `${label} of ${value} by month`,
+  missingMeasure: (name) =>
+    `"${name}" is not a column in this data, so it is not on the dashboard. Add a ${name} column first (for example Sales minus Cost), then make the dashboard again.`,
   chartOrder:
     "The chart order is from when the dashboard was made; the figures stay live.",
   pivotFallback: (reason) =>
@@ -146,6 +153,9 @@ const SI: WorkbookText = {
     `ප්‍රස්තාර පෙන්වන්නේ ${category} අගයන් ${total}න් විශාලතම ${shown} පමණි; එකතු සහ PivotTable එක සියල්ලම ආවරණය කරයි.`,
   largeData: (shown, category) =>
     `දත්ත විශාල නිසා ප්‍රස්තාර සජීවී සූත්‍රයකින් ${category} අගයන් ${shown}ක් දක්වා පෙන්වයි; එකතු සෑම පේළියක්ම ආවරණය කරයි.`,
+  byMonth: (label, value) => `මාසය අනුව ${value} (${label})`,
+  missingMeasure: (name) =>
+    `"${name}" මේ data වල column එකක් නොවේ, ඒ නිසා dashboard එකේ නැත. මුලින් ${name} column එකක් එකතු කර (උදා: Sales අඩු Cost), dashboard එක නැවත හදන්න.`,
   chartOrder:
     "ප්‍රස්තාරයේ අනුපිළිවෙල dashboard එක සාදන විට තිබූ ලෙසයි; සංඛ්‍යා සජීවීව යාවත්කාලීන වේ.",
   pivotFallback: (reason) =>
@@ -201,6 +211,9 @@ const TA: WorkbookText = {
     `வரைபடங்கள் ${total} ${category} மதிப்புகளில் மிகப்பெரிய ${shown} ஐ மட்டும் காட்டுகின்றன; மொத்தங்களும் PivotTable உம் அனைத்தையும் உள்ளடக்குகின்றன.`,
   largeData: (shown, category) =>
     `தரவு பெரியது, எனவே வரைபடங்கள் ஒரு நேரடி சூத்திரத்திலிருந்து ${shown} ${category} மதிப்புகள் வரை காட்டுகின்றன; மொத்தங்கள் ஒவ்வொரு வரிசையையும் உள்ளடக்குகின்றன.`,
+  byMonth: (label, value) => `மாதவாரியாக ${value} (${label})`,
+  missingMeasure: (name) =>
+    `"${name}" இந்தத் தரவில் ஒரு நெடுவரிசை இல்லை, எனவே dashboard-இல் இல்லை. முதலில் ${name} நெடுவரிசையைச் சேர்த்து (எ.கா. Sales கழித்தல் Cost) dashboard-ஐ மீண்டும் உருவாக்கவும்.`,
   chartOrder:
     "வரைபட வரிசை dashboard உருவாக்கப்பட்ட நேரத்தில் இருந்தபடியே உள்ளது; எண்கள் நேரடியாகப் புதுப்பிக்கப்படுகின்றன.",
   pivotFallback: (reason) =>

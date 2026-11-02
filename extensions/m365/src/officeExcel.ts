@@ -96,6 +96,7 @@ import {
 import {
   buildDashboardLayout,
   findTrendColumn,
+  missingMeasures,
   DASHBOARD_CARD,
   DASHBOARD_PAGE,
   dashboardTopN,
@@ -1887,6 +1888,16 @@ export async function applyApprovedExcelPlan(
                   : {}),
                 categoryName: category.column,
                 categoryRef: sourceColumn(category.index),
+                wholeNumbers: values.map((value) => {
+                  const cells = (samples[value.index] ?? []).filter(
+                    (cell: unknown) => typeof cell === "number",
+                  );
+                  return (
+                    cells.length > 0 &&
+                    cells.every((cell: number) => Number.isInteger(cell))
+                  );
+                }),
+                missing: missingMeasures(options.request ?? "", headerNames),
                 values: values.map((value) => ({
                   name: value.column,
                   ref: sourceColumn(value.index),
@@ -2012,6 +2023,9 @@ export async function applyApprovedExcelPlan(
                     series.dataLabels.showPercentage = true;
                     series.dataLabels.showValue = false;
                     series.dataLabels.showCategoryName = false;
+                    // White on the coloured slices; dark text was hard to read (live run 2026-11-02).
+                    series.dataLabels.format.font.color = "#FFFFFF";
+                    series.dataLabels.format.font.bold = true;
                   } else {
                     series.hasDataLabels = true;
                     chart.legend.visible = false;
@@ -2067,7 +2081,8 @@ export async function applyApprovedExcelPlan(
                 });
                 await context.sync();
                 // Currency on the PivotTable values is a separate step: a host without it keeps the PivotTable.
-                if (layout.valueFormats.some((format) => format !== "#,##0.00"))
+                // Always: the PivotTable's own "General" showed 104750 beside cards with commas.
+                {
                   try {
                     fields.forEach((field: any, index: number) => {
                       field.numberFormat = layout.valueFormats[index];
@@ -2076,6 +2091,7 @@ export async function applyApprovedExcelPlan(
                   } catch {
                     // Older Excel keeps the PivotTable's own number format.
                   }
+                }
               } catch (error) {
                 // A half-made PivotTable is removed so the formula table can take its place.
                 if (pivot)

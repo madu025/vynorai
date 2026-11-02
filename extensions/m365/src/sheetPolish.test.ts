@@ -107,3 +107,14 @@ test("polish styles header and total rows and fits the columns", async () => {
     [160, 60],
   );
 });
+
+test("a one-cell title above a table becomes the title band", () => {
+  const plan = planSheetPolish([
+    ["Profit by Region", "", ""],
+    ["Region", "Sales", "Profit"],
+    ["North", 100, 20],
+    ["Total", 100, 20],
+  ]);
+  assert.equal(plan.titleRow, 0);
+  assert.deepEqual(plan.headerRows, [1]);
+});

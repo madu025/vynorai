@@ -6,6 +6,7 @@ import {
   dashboardTopN,
   findTrendColumn,
   monthStartSerial,
+  missingMeasures,
   rankCategories,
   type DashboardLayoutInput,
 } from "./dashboardLayout.js";
@@ -327,4 +328,33 @@ test("no trend from IDs, money, text dates or a single month", () => {
   assert.equal(findTrendColumn(["Date"], [["Jan"], ["Feb"]]), undefined);
   assert.equal(findTrendColumn(["Date"], [[45658], [45660]]), undefined);
   assert.equal(monthStartSerial(45720), 45717);
+});
+
+test("a measure the request names but the data lacks is reported, not dropped", () => {
+  assert.deepEqual(
+    missingMeasures("dashboard of Sales and Profit by Region", [
+      "Region",
+      "Sales",
+      "Cost",
+    ]),
+    ["Profit"],
+  );
+  assert.deepEqual(
+    missingMeasures("Sales and Cost by Region", ["Region", "Sales", "Cost"]),
+    [],
+  );
+  const layout = buildDashboardLayout(base({ missing: ["Profit"] }));
+  assert.ok(layout.notes.some((note) => note.includes('"Profit"')));
+});
+
+test("whole-number measures get commas without decimals; the trend title says by month", () => {
+  const layout = buildDashboardLayout(
+    base({
+      wholeNumbers: [true, true],
+      money: [false, false],
+      trend: { name: "Date", ref: "'Data'!$D$2:$D$7", months: [45658, 45689] },
+    }),
+  );
+  assert.deepEqual(layout.valueFormats, ["#,##0", "#,##0"]);
+  assert.ok(layout.charts.some((chart) => /by month/.test(chart.title)));
 });

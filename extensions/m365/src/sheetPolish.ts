@@ -10,6 +10,8 @@ export interface SheetPolishPlan {
   /** 0-based rows inside the used range. */
   headerRows: number[];
   totalRows: number[];
+  /** A one-cell title in the first row above a table: drawn as a dark band. */
+  titleRow?: number;
 }
 
 const TOTAL_LABEL = /^\s*(grand\s+)?totals?\b/i;
@@ -43,12 +45,21 @@ export function planSheetPolish(
     )
       headerRows.push(index);
   });
+  const first = values[0]?.filter(filled) ?? [];
+  if (
+    first.length === 1 &&
+    typeof first[0] === "string" &&
+    headerRows.length &&
+    !headerRows.includes(0)
+  )
+    return { headerRows, totalRows, titleRow: 0 };
   return { headerRows, totalRows };
 }
 
 const HEADER_FILL = "#1F4E78";
 const HEADER_FONT = "#FFFFFF";
 const TOTAL_LINE = "#1F4E78";
+const TITLE_FILL = "#1F3864";
 /** About 30 characters: wide enough for a label, narrow enough to keep the table on screen. */
 export const MAX_COLUMN_POINTS = 160;
 
@@ -77,6 +88,15 @@ export async function polishCreatedSheets(
           while (first < last && !filled(cells[first])) first += 1;
           return used.getCell(row, first).getResizedRange(0, last - first);
         };
+        if (plan.titleRow !== undefined) {
+          const band = used
+            .getCell(plan.titleRow, 0)
+            .getResizedRange(0, width - 1);
+          band.format.fill.color = TITLE_FILL;
+          band.format.font.color = HEADER_FONT;
+          band.format.font.bold = true;
+          band.format.font.size = 14;
+        }
         for (const row of plan.headerRows) {
           const format = span(row).format;
           format.fill.color = HEADER_FILL;

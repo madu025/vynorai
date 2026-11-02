@@ -1981,9 +1981,13 @@ export async function applyApprovedExcelPlan(
                     // Share only: the value with its decimals crowded each slice (live run 2026-11-02).
                     chart.legend.visible = true;
                     chart.legend.position = "Right";
-                    chart.dataLabels.showValue = false;
-                    chart.dataLabels.showCategoryName = false;
-                    chart.dataLabels.showPercentage = true;
+                    // Excel ignored showValue=false in the batch that made the labels (live run
+                    // 2026-11-02): make the labels first, then switch the value off.
+                    series.hasDataLabels = true;
+                    await context.sync();
+                    series.dataLabels.showPercentage = true;
+                    series.dataLabels.showValue = false;
+                    series.dataLabels.showCategoryName = false;
                   } else {
                     series.hasDataLabels = true;
                     chart.legend.visible = false;

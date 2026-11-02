@@ -141,6 +141,19 @@ async function findSheetDataRange(
   const worksheet = selected.worksheet;
   if (typeof worksheet?.getUsedRangeOrNullObject === "function")
     candidates.push(() => worksheet.getUsedRangeOrNullObject(true));
+  // An empty active sheet: fall back to the first sheet with data, as the Run path does.
+  const sheets = context.workbook?.worksheets;
+  if (sheets && typeof sheets.load === "function") {
+    try {
+      sheets.load("items/name");
+      await context.sync();
+      for (const sheet of sheets.items ?? [])
+        if (typeof sheet?.getUsedRangeOrNullObject === "function")
+          candidates.push(() => sheet.getUsedRangeOrNullObject(true));
+    } catch {
+      // no other sheets to look at
+    }
+  }
 
   for (const make of candidates) {
     try {

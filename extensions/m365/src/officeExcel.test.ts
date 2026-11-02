@@ -1821,3 +1821,101 @@ test("explain read: no more than the allowed number of referenced cells is read"
   );
   assert.equal(Object.keys(result.values).length, 3);
 });
+
+function tableRange(address: string, rows: unknown[][], sheet: any): any {
+  const range: any = {
+    address,
+    rowCount: rows.length,
+    columnCount: rows[0]?.length ?? 0,
+    isNullObject: false,
+    worksheet: sheet,
+    load() {},
+    getCell: (row: number) => ({
+      getSurroundingRegion: () => range,
+      getResizedRange: (lastRow: number, lastColumn: number) => ({
+        load() {},
+        values: rows
+          .slice(row, row + lastRow + 1)
+          .map((line) => line.slice(0, lastColumn + 1)),
+      }),
+    }),
+  };
+  return range;
+}
+
+test("inspect needs no drag-select: a header row alone means its table", async () => {
+  const sheet: any = { name: "Sales", load() {} };
+  const table = tableRange(
+    "Sales!A1:B3",
+    [
+      ["Region", "Sales"],
+      ["North", 10],
+      ["South", 20],
+    ],
+    sheet,
+  );
+  const selected: any = {
+    address: "Sales!A1:B1",
+    rowCount: 1,
+    columnCount: 2,
+    worksheet: sheet,
+    load() {},
+    getSurroundingRegion: () => table,
+  };
+  const runtime: any = {
+    run: (callback: (context: any) => Promise<unknown>) =>
+      callback({
+        workbook: { getSelectedRange: () => selected },
+        sync: async () => {},
+      }),
+  };
+  const input: any = await inspectSelectedExcelRange(runtime, "book-1");
+  assert.equal(input.address, "Sales!A1:B3");
+  assert.equal(input.values.length, 3);
+});
+
+test("inspect on an empty sheet uses the first sheet that has data", async () => {
+  const nothing: any = { load() {}, isNullObject: true };
+  const dataSheet: any = { name: "Data", load() {} };
+  const table = tableRange(
+    "Data!A1:B3",
+    [
+      ["Region", "Sales"],
+      ["North", 10],
+      ["South", 20],
+    ],
+    dataSheet,
+  );
+  dataSheet.getUsedRangeOrNullObject = () => table;
+  const blankSheet: any = {
+    name: "Sheet2",
+    load() {},
+    getUsedRangeOrNullObject: () => nothing,
+  };
+  const blankCell: any = {
+    address: "Sheet2!A1",
+    rowCount: 1,
+    columnCount: 1,
+    worksheet: blankSheet,
+    load() {},
+    getSurroundingRegion: () => ({
+      ...nothing,
+      isNullObject: false,
+      rowCount: 1,
+      columnCount: 1,
+    }),
+    getUsedRangeOrNullObject: () => nothing,
+  };
+  const runtime: any = {
+    run: (callback: (context: any) => Promise<unknown>) =>
+      callback({
+        workbook: {
+          getSelectedRange: () => blankCell,
+          worksheets: { load() {}, items: [blankSheet, dataSheet] },
+        },
+        sync: async () => {},
+      }),
+  };
+  const input: any = await inspectSelectedExcelRange(runtime, "book-1");
+  assert.equal(input.address, "Data!A1:B3");
+});

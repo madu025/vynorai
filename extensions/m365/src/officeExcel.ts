@@ -977,12 +977,14 @@ export async function inspectSelectedExcelRange(
     const cellCount = Number(selected.rowCount) * Number(selected.columnCount);
     const needsDetection =
       cellCount === 1 ||
+      // One row (often just the header row) is never a table on its own.
+      Number(selected.rowCount) < 2 ||
       cellCount > MAX_EXCEL_SELECTION_CELLS ||
       Number(selected.columnCount) > MAX_EXCEL_SELECTION_COLUMNS;
     if (needsDetection) {
       const candidates: Array<() => any> = [];
       if (
-        cellCount === 1 &&
+        (cellCount === 1 || Number(selected.rowCount) < 2) &&
         typeof selected.getSurroundingRegion === "function"
       )
         candidates.push(() => selected.getSurroundingRegion());
@@ -999,6 +1001,19 @@ export async function inspectSelectedExcelRange(
           );
           return used;
         });
+      // The active sheet is empty (a new sheet, a blank workbook tab): use the first sheet that has data.
+      const sheets = (context.workbook as any).worksheets;
+      if (sheets && typeof sheets.load === "function") {
+        try {
+          sheets.load("items/name");
+          await context.sync();
+          for (const sheet of sheets.items ?? [])
+            if (typeof sheet?.getUsedRangeOrNullObject === "function")
+              candidates.push(() => sheet.getUsedRangeOrNullObject(true));
+        } catch {
+          // no other sheets to look at
+        }
+      }
       for (const make of candidates) {
         try {
           let found = make();

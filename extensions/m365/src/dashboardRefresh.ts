@@ -41,8 +41,41 @@ export async function refreshDashboardPivots(
     });
     await context.sync();
     owners.forEach((sheet: any) => sheets.add(String(sheet.id)));
+    // A refresh fits the PivotTable's columns to its own text and squeezed the grid to "###" (live
+    // run 2026-11-02): keep each column's width and put it back afterwards.
+    const kept: Array<{ format: any; width: number }> = [];
+    try {
+      const columns = dashboards.flatMap((pivot: any) => {
+        const range = pivot.layout.getRange();
+        range.load("columnCount");
+        return [{ range }];
+      });
+      await context.sync();
+      const formats = columns.flatMap(({ range }: { range: any }) =>
+        Array.from({ length: Number(range.columnCount) || 0 }, (_, at) => {
+          const format = range.getColumn(at).format;
+          format.load("columnWidth");
+          return format;
+        }),
+      );
+      await context.sync();
+      formats.forEach((format: any) =>
+        kept.push({ format, width: Number(format.columnWidth) }),
+      );
+    } catch {
+      // Widths are a nicety; the refresh still runs.
+    }
     dashboards.forEach((pivot: any) => pivot.refresh());
     await context.sync();
+    if (kept.length)
+      try {
+        kept.forEach(({ format, width }) => {
+          format.columnWidth = width;
+        });
+        await context.sync();
+      } catch {
+        // The PivotTable keeps Excel's widths.
+      }
   });
   return sheets;
 }

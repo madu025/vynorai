@@ -470,6 +470,8 @@ export function detectBusinessKey(
     if (PERSONAL_KEY_HEADER.test(header) && !strong) return;
     const allNumbers = present.every((cell) => typeof cell === "number");
     if (allNumbers && !strong && !generic) return; // plain integer measure such as Qty
+    // A bare "Sales", "Payment" or "Bill" over numbers is an amount, not the record number.
+    if (allNumbers && isMoneyHeader(header)) return;
     const { distinctShare } = duplicatesOf(rows, [index]);
     if (distinctShare < 0.5) return;
     if (entity && !strong && distinctShare < 0.95) return;

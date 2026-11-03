@@ -114,3 +114,71 @@ test("data-quality insights flag blanks, duplicates and numbers stored as text",
   assert.match(text, /Duplicate rows/);
   assert.match(text, /Numbers stored as text in Qty/);
 });
+
+test("the top and lowest cards use the dashboard's measure, not a leading ID-like number column", () => {
+  const { insights, suggestions } = buildLocalInsights({
+    ...base,
+    address: "A1:D9",
+    values: [
+      ["Order No", "Region", "Qty", "Sales"],
+      [1001, "Colombo", 10, 100000],
+      [1002, "Kandy", 20, 80000],
+      [1003, "Colombo", 12, 155000],
+      [1004, "Galle", 8, 40000],
+      [1005, "Kandy", 6, 90000],
+      [1006, "Jaffna", 5, 37500],
+      [1007, "Galle", 9, 62250],
+      [1008, "Jaffna", 4, 20000],
+    ],
+  } as any);
+  const text = insights.map((i) => `${i.title} ${i.detail}`).join("\n");
+  assert.match(text, /Colombo has the highest Sales \(255,000\)/);
+  assert.match(text, /Jaffna has the lowest Sales \(57,500\)/);
+  assert.doesNotMatch(text, /Order No has/);
+  assert.ok(
+    suggestions.every((s) => !/Order No/.test(s.label)),
+    "no suggestion is built on the order number",
+  );
+});
+
+test("an empty row is reported once, and a quantity has no negative usual range", () => {
+  const { insights } = buildLocalInsights({
+    ...base,
+    address: "A1:C12",
+    values: [
+      ["Region", "Product", "Qty"],
+      ["N", "a", 10],
+      ["S", "b", 11],
+      ["N", "c", 12],
+      ["S", "d", 10],
+      ["N", "e", 11],
+      ["S", "f", 12],
+      ["N", "g", 10],
+      ["S", "h", 400],
+      [null, null, null],
+    ],
+  } as any);
+  const text = insights.map((i) => `${i.title} ${i.detail}`).join("\n");
+  assert.match(text, /Empty rows 1 empty row inside the selection/);
+  assert.doesNotMatch(text, /Missing values/);
+  assert.match(text, /1 value falls outside the usual range 7 to 15/);
+  assert.doesNotMatch(text, /range -/);
+});
+
+test("a bare Sales column of whole-number amounts is a measure, never the record key", () => {
+  const { insights } = buildLocalInsights({
+    ...base,
+    address: "A1:C7",
+    values: [
+      ["Month", "Region", "Sales"],
+      ["Jan", "North", 1200],
+      ["Feb", "South", 1500],
+      ["Mar", "North", 1800],
+      ["Apr", "East", 1350],
+      ["May", "South", 2100],
+      ["Jun", "East", 2200],
+    ],
+  } as any);
+  const text = insights.map((i) => `${i.title} ${i.detail}`).join("\n");
+  assert.match(text, /South has the highest Sales \(3,600\)/);
+});

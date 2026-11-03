@@ -1,4 +1,5 @@
 import { buildSchemaSummary, type SchemaSummary } from "./analysis.js";
+import { suggestDashboardColumns } from "./businessContext.js";
 import { getExcelHeaderLayout } from "./excel.js";
 
 type Cell = string | number | boolean | null;
@@ -61,7 +62,10 @@ export function buildLocalInsights(input: RangeInput): LocalInsights {
   const measures = summary.columns
     .filter((entry) => entry.roleHint === "measure")
     .map((entry) => entry.index);
-  const categoryIndex = roles.indexOf("category");
+  // The same business category and measure the dashboard picks, so the insight cards and the
+  // dashboard never name different winners (a leading ID-like number column is not the measure).
+  const suggested = suggestDashboardColumns(headers, rows);
+  const categoryIndex = suggested.category ?? roles.indexOf("category");
   const dateIndex = roles.indexOf("date");
   const insights: Insight[] = [];
   const suggestions: ColumnSuggestion[] = [];
@@ -89,8 +93,9 @@ export function buildLocalInsights(input: RangeInput): LocalInsights {
     });
   }
 
-  if (categoryIndex >= 0 && measures.length > 0) {
-    const valueIndex = measures[0];
+  const mainMeasure = suggested.values[0] ?? measures[0];
+  if (categoryIndex >= 0 && mainMeasure !== undefined) {
+    const valueIndex = mainMeasure;
     const totals = new Map<string, number>();
     for (const row of rows) {
       const key = String(row[categoryIndex] ?? "").trim();
@@ -146,8 +151,8 @@ export function buildLocalInsights(input: RangeInput): LocalInsights {
     });
   }
 
-  if (dateIndex >= 0 && measures.length > 0) {
-    const valueIndex = measures[0];
+  if (dateIndex >= 0 && mainMeasure !== undefined) {
+    const valueIndex = mainMeasure;
     const series = rows
       .map((row) => row[valueIndex])
       .filter((cell): cell is number => typeof cell === "number");
@@ -185,27 +190,45 @@ export function buildLocalInsights(input: RangeInput): LocalInsights {
     const q3 = quantile(numbers, 0.75);
     const spread = q3 - q1;
     if (spread === 0) continue;
-    const low = q1 - 1.5 * spread;
+    // A column that never goes below zero (a quantity, an amount) has no negative "usual" range.
+    const low =
+      numbers[0] >= 0 ? Math.max(0, q1 - 1.5 * spread) : q1 - 1.5 * spread;
     const high = q3 + 1.5 * spread;
     const outliers = numbers.filter((value) => value < low || value > high);
     if (outliers.length)
       insights.push({
         kind: "outlier",
         title: `Unusual values in ${headers[index]}`,
-        detail: `${outliers.length} value${outliers.length === 1 ? "" : "s"} fall outside the usual range ${format(low)} to ${format(high)}.`,
+        detail: `${outliers.length} value${outliers.length === 1 ? "" : "s"} ${outliers.length === 1 ? "falls" : "fall"} outside the usual range ${format(low)} to ${format(high)}.`,
         columns: [index],
       });
   }
 
-  const blanksByColumn = summary.columns.filter((entry) => entry.blank > 0);
+  // A wholly empty row is one problem, not one missing value in every column.
+  const emptyRows = rows.filter((row) =>
+    headers.every((_, index) => {
+      const cell = row[index];
+      return cell === null || cell === undefined || String(cell).trim() === "";
+    }),
+  ).length;
+  if (emptyRows)
+    insights.push({
+      kind: "quality",
+      title: "Empty rows",
+      detail: `${emptyRows} empty row${emptyRows === 1 ? "" : "s"} inside the selection.`,
+      columns: [],
+    });
+  const blanksByColumn = summary.columns
+    .map((entry) => ({ entry, blank: entry.blank - emptyRows }))
+    .filter(({ blank }) => blank > 0);
   if (blanksByColumn.length)
     insights.push({
       kind: "quality",
       title: "Missing values",
       detail: blanksByColumn
-        .map((entry) => `${headers[entry.index]}: ${entry.blank}`)
+        .map(({ entry, blank }) => `${headers[entry.index]}: ${blank}`)
         .join(", "),
-      columns: blanksByColumn.map((entry) => entry.index),
+      columns: blanksByColumn.map(({ entry }) => entry.index),
     });
   const seen = new Set<string>();
   let duplicateRows = 0;

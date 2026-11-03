@@ -423,6 +423,24 @@ const CASES: Case[] = [
       ),
   },
   {
+    // The add-in draws what calculate returns as a table and tiles only when the columns have names.
+    id: "a-named-card",
+    text: "which 5 RTOMs have the highest total issued quantity, and what is the average issued quantity per row?",
+    check: (run, seen) =>
+      all(
+        usedCalc(seen),
+        noChanges(run),
+        need(
+          formulas(run, seen).some((f) => /\{\s*"[^"]+"\s*,\s*"[^"]+"/.test(f)),
+          "no calculate returned a header row of names",
+        ),
+        need(
+          seen.filter((s) => s.name === "calculate").length <= 3,
+          "one calculate per number",
+        ),
+      ),
+  },
+  {
     id: "a-code-median",
     text: "for each RTOM, what is the median issued quantity, and how many rows are more than twice that median?",
     check: (run, seen) =>
@@ -954,7 +972,8 @@ const CASES: Case[] = [
         need(
           seen.some(
             (s) => s.name === "analyze_columns" && s.args.kind === "anomalies",
-          ) || seen.some((s) => s.name === "calculate" || s.name === "run_code"),
+          ) ||
+            seen.some((s) => s.name === "calculate" || s.name === "run_code"),
           seen
             .map((s) => s.name)
             .join(" ; ")

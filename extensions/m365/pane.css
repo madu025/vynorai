@@ -6199,3 +6199,14 @@ body[data-auth="in"] .message.user {
 body[data-auth="in"] #conversation-history {
   gap: 6px;
 }
+/* The three icon buttons share one row (the Remove older results button sits in its own row). */
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  .apply-dock,
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  .action-row {
+  display: inline-flex;
+  margin: 0 6px 0 0;
+  vertical-align: top;
+}

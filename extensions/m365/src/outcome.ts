@@ -1792,7 +1792,8 @@ export function friendlySheetName(
   )
     label = `Correlation matrix ${spec.statistics.columns?.map((entry: any) => entry.column).join(", ") ?? ""}`;
   else if (action.kind === "dashboard" && spec.dashboard)
-    label = `Dashboard ${spec.dashboard.values?.map((entry: any) => entry.column).join("-") ?? sourceSheet} ${spec.dashboard.category?.column ?? sourceSheet}`;
+    // "Dashboard Sales by Region": the main measure only; the title on the sheet names them all.
+    label = `Dashboard ${spec.dashboard.values?.[0]?.column ?? sourceSheet} by ${spec.dashboard.category?.column ?? sourceSheet}`;
   else if (
     action.kind === "statistics" &&
     spec.statistics?.mode === "correlation"

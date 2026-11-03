@@ -104,9 +104,8 @@ const EN: WorkbookText = {
   missingMeasure: (name) =>
     `"${name}" is not a column in this data, so it is not on the dashboard. Add a ${name} column first (for example Sales minus Cost), then make the dashboard again.`,
   pivotRefresh:
-    "The PivotTable updates while VynorAI is open and when the workbook opens; otherwise use Data > Refresh All.",
-  chartOrder:
-    "The chart order is from when the dashboard was made; the figures stay live.",
+    "PivotTable updates while VynorAI is open; otherwise Data > Refresh All.",
+  chartOrder: "Chart order is fixed when made; figures stay live.",
   pivotFallback: (reason) =>
     `This Excel could not create a PivotTable here (${reason}), so the breakdown is a formula table; it still updates with the data.`,
   slicerFailed: (category) =>
@@ -163,9 +162,8 @@ const SI: WorkbookText = {
   missingMeasure: (name) =>
     `"${name}" මේ data වල column එකක් නොවේ, ඒ නිසා dashboard එකේ නැත. මුලින් ${name} column එකක් එකතු කර (උදා: Sales අඩු Cost), dashboard එක නැවත හදන්න.`,
   pivotRefresh:
-    "VynorAI විවෘතව ඇති විට සහ workbook එක විවෘත කරන විට PivotTable එක යාවත්කාලීන වේ; නැතිනම් Data > Refresh All භාවිත කරන්න.",
-  chartOrder:
-    "ප්‍රස්තාරයේ අනුපිළිවෙල dashboard එක සාදන විට තිබූ ලෙසයි; සංඛ්‍යා සජීවීව යාවත්කාලීන වේ.",
+    "VynorAI විවෘතව ඇති විට PivotTable යාවත්කාලීන වේ; නැතිනම් Data > Refresh All.",
+  chartOrder: "ප්‍රස්තාර අනුපිළිවෙල සාදන විටම ස්ථිරයි; සංඛ්‍යා සජීවීයි.",
   pivotFallback: (reason) =>
     `මෙම Excel හට මෙහි PivotTable එකක් සෑදිය නොහැකි විය (${reason}), එබැවින් විස්තරය සූත්‍ර වගුවකි; එය දත්ත සමඟ තවමත් යාවත්කාලීන වේ.`,
   slicerFailed: (category) =>
@@ -224,9 +222,8 @@ const TA: WorkbookText = {
   missingMeasure: (name) =>
     `"${name}" இந்தத் தரவில் ஒரு நெடுவரிசை இல்லை, எனவே dashboard-இல் இல்லை. முதலில் ${name} நெடுவரிசையைச் சேர்த்து (எ.கா. Sales கழித்தல் Cost) dashboard-ஐ மீண்டும் உருவாக்கவும்.`,
   pivotRefresh:
-    "VynorAI திறந்திருக்கும்போதும் workbook திறக்கப்படும்போதும் PivotTable புதுப்பிக்கப்படும்; இல்லையெனில் Data > Refresh All பயன்படுத்தவும்.",
-  chartOrder:
-    "வரைபட வரிசை dashboard உருவாக்கப்பட்ட நேரத்தில் இருந்தபடியே உள்ளது; எண்கள் நேரடியாகப் புதுப்பிக்கப்படுகின்றன.",
+    "VynorAI திறந்திருக்கும்போது PivotTable புதுப்பிக்கப்படும்; இல்லையெனில் Data > Refresh All.",
+  chartOrder: "வரைபட வரிசை உருவாக்கும்போதே நிலையானது; எண்கள் நேரடியானவை.",
   pivotFallback: (reason) =>
     `இந்த Excel இங்கு PivotTable ஐ உருவாக்க முடியவில்லை (${reason}), எனவே பிரிவு ஒரு சூத்திர அட்டவணையாக உள்ளது; அது தரவுடன் இன்னும் புதுப்பிக்கப்படுகிறது.`,
   slicerFailed: (category) =>

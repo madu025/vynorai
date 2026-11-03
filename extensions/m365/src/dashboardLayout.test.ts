@@ -309,7 +309,7 @@ test("a date column gives a monthly trend line of the first measure", () => {
   const formulas = layout.blocks
     .flatMap((block) => block.cells.flat())
     .map(text)
-    .filter((cell) => cell.includes("EDATE"));
+    .filter((cell) => cell.includes("EDATE") && cell.startsWith("=SUMIFS"));
   assert.equal(formulas.length, 3);
   assert.match(
     formulas[0],
@@ -448,4 +448,26 @@ test("the gap to target is never negative; the sub line says by how much it was 
     .map(text);
   assert.ok(cells.some((cell) => cell.startsWith("=MAX(0,100-")));
   assert.ok(cells.some((cell) => /reached \(\+"&TEXT\(/.test(cell)));
+});
+
+test("every value card, not only the first, compares the latest month with the one before", () => {
+  const layout = buildDashboardLayout(
+    base({
+      trend: {
+        name: "Order Date",
+        ref: "'Data'!$D$2:$D$7",
+        months: [45658, 45689, 45717],
+      },
+    }),
+  );
+  const subs = layout.blocks
+    .filter((block) => block.style === "kpi-sub")
+    .flatMap((block) => block.cells.flat())
+    .map(text)
+    .filter((cell) => cell.includes("vs previous month"));
+  assert.ok(subs.length >= 2, "more than one card has a change line");
+  assert.ok(
+    subs.some((cell) => cell.includes("SUMIFS(")),
+    "a later card adds up its own last two months",
+  );
 });

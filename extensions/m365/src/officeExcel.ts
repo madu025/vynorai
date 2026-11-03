@@ -2344,9 +2344,12 @@ export async function applyApprovedExcelPlan(
                     chart.axes.categoryAxis.format.font.color = DASHBOARD_MUTED;
                     chart.axes.categoryAxis.format.line.lineStyle = "None";
                   });
-                  if (plannedChart.kind === "bar")
+                  if (
+                    plannedChart.kind === "bar" ||
+                    plannedChart.kind === "column"
+                  )
                     await decorate(() => {
-                      // The series is grey and only the first (largest) bar carries the accent, so a
+                      // Bars and columns alike: the series is grey and only the first (largest) bar carries the accent, so a
                       // category added later is grey too, not the series colour (live run 2026-11-02).
                       series.format.fill.setSolidColor("#CBD5E1");
                       series.points

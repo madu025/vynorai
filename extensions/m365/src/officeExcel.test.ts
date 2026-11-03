@@ -1058,13 +1058,13 @@ test("a dashboard creates one result sheet with live KPIs, charts and a PivotTab
     report.results.map((result) => `${result.kind}:${result.status}`),
     ["dashboard:created"],
   );
-  assert.equal(report.results[0].targetSheet, "Dashboard Sales-Cost Region");
+  assert.equal(report.results[0].targetSheet, "Dashboard Sales by Region");
   assert.equal(report.results[0].createdSheet, true);
   assert.ok(excel.calls.includes("pivot.row Region"));
   assert.ok(excel.calls.includes("pivot.value Sales"));
   assert.ok(excel.calls.includes("pivot.value Cost"));
   assert.ok(
-    excel.calls.includes("mark Dashboard Sales-Cost Region vynorai=result"),
+    excel.calls.includes("mark Dashboard Sales by Region vynorai=result"),
   );
   // A few regions: their share as a doughnut, the second measure as columns.
   assert.deepEqual(
@@ -1075,14 +1075,14 @@ test("a dashboard creates one result sheet with live KPIs, charts and a PivotTab
   );
   assert.ok(
     excel.calls.some((call) =>
-      call.startsWith("formula Dashboard Sales-Cost Region!"),
+      call.startsWith("formula Dashboard Sales by Region!"),
     ),
   );
   assert.ok(!excel.calls.some((call) => call.startsWith("write Sales!")));
   assert.ok(!excel.calls.some((call) => call.startsWith("formula Sales!")));
   assert.deepEqual(
     rollbackItemsFromApplyReport("dashboard", report.results).sheets,
-    ["Dashboard Sales-Cost Region"],
+    ["Dashboard Sales by Region"],
   );
 });
 

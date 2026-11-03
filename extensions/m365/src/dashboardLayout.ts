@@ -508,6 +508,9 @@ export function buildDashboardLayout(
 
   // Month totals of the first measure (last two feed the first card's change line).
   let trendValues: string | undefined;
+  // The month column and date column, so every value card can compare its own last two months.
+  let monthsRef: string | undefined;
+  let trendDateRef: string | undefined;
   // Monthly trend of the first measure, as a line under the other charts.
   if (input.trend && input.trend.months.length >= 2 && values.length) {
     const col = HELPER_COLUMN + values.length * 3;
@@ -516,6 +519,10 @@ export function buildDashboardLayout(
     trendValues = input.live
       ? `${usageColumnLetter(col + 1)}3#`
       : `${usageColumnLetter(col + 1)}$3:${usageColumnLetter(col + 1)}${months.length + 2}`;
+    monthsRef = input.live
+      ? `${letter}3#`
+      : `${letter}$3:${letter}${months.length + 2}`;
+    trendDateRef = ref;
     const value = values[0];
     const monthCell = (row: number) => `${letter}${row + 3}`;
     const between = (row: number) =>
@@ -620,17 +627,29 @@ export function buildDashboardLayout(
       : `${input.totalCategories ?? input.categories.length}${text.categoryValues(input.categoryName)}`,
     format: "#,##0",
   };
-  // The first card says how the latest month compares with the one before: "▲ 12.5% vs previous
+  // Every value card says how the latest month compares with the one before: "▲ 12.5% vs previous
   // month"; with no usable trend (or a zero before) it keeps the average line.
   const valueSub = (index: number, value: { ref: string }): DashboardCell => {
     const average =
       aggregation === "sum"
         ? `"${text.averagePrefix}"&TEXT(IFERROR(AVERAGE(${value.ref}),0),"#,##0.00")`
         : '""';
-    if (index !== 0 || !trendValues || aggregation !== "sum")
+    if (!trendValues || !monthsRef || !trendDateRef || aggregation !== "sum")
       return aggregation === "sum" ? { f: `=${average}` } : "";
-    const last = `INDEX(${trendValues},ROWS(${trendValues}))`;
-    const before = `INDEX(${trendValues},ROWS(${trendValues})-1)`;
+    // The first measure reads its monthly totals from the chart table; the others add up their own
+    // last two months from the data.
+    const monthTotal = (at: string) =>
+      `SUMIFS(${value.ref},${trendDateRef},">="&${at},${trendDateRef},"<"&EDATE(${at},1))`;
+    const lastMonth = `INDEX(${monthsRef},ROWS(${monthsRef}))`;
+    const monthBefore = `INDEX(${monthsRef},ROWS(${monthsRef})-1)`;
+    const last =
+      index === 0
+        ? `INDEX(${trendValues},ROWS(${trendValues}))`
+        : monthTotal(lastMonth);
+    const before =
+      index === 0
+        ? `INDEX(${trendValues},ROWS(${trendValues})-1)`
+        : monthTotal(monthBefore);
     return {
       f: `=IFERROR(IF(${before}=0,${average},IF(${last}>=${before},"▲ ","▼ ")&TEXT(ABS(${last}/${before}-1),"0.0%")&" ${text.vsPreviousMonth}"),${average})`,
     };

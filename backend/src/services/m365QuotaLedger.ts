@@ -6,7 +6,11 @@ import {
 } from "./billingDb.js";
 import { getPlan } from "../config.js";
 import { isoDate } from "./billingPolicy.js";
-import { STALE_RESERVATION_MS, type QuotaReservation } from "./monthlyQuota.js";
+import {
+  STALE_RESERVATION_MS,
+  proportionalRequests,
+  type QuotaReservation,
+} from "./monthlyQuota.js";
 
 /**
  * Tenant-scoped quota ledger for Microsoft 365 requests.
@@ -155,6 +159,38 @@ export async function getOrInitM365Usage(
     row.max_tokens = maxTokens;
   }
   return row;
+}
+
+/**
+ * Admin top-up of the Microsoft 365 credits of one person: adds `tokens` (and the requests that go
+ * with them, in the plan's ratio, like `creditTopup`) to that person's active cycle rows. Usage is
+ * never reset or lowered, and a pooled organisation row is never touched, so one person's top-up
+ * cannot spend for or against anyone else. Returns what changed; zero rows means the person has no
+ * active M365 cycle yet (the first request opens one with the plan's full allowance).
+ */
+export async function addM365Credits(
+  userId: string,
+  tokens: number,
+): Promise<{ rows: number; tokens: number; requests: number }> {
+  if (!Number.isInteger(tokens) || tokens <= 0)
+    throw new Error("m365_topup_invalid_amount");
+  const rows = await dbAll<M365UsageRow>(
+    "SELECT * FROM m365_tenant_usage WHERE user_id = ? AND object_id <> '__organization__' AND period_end >= ?",
+    [userId, isoDate(new Date())],
+  );
+  let requests = 0;
+  for (const row of rows) {
+    const addedRequests = proportionalRequests(row.plan_name, tokens);
+    await dbRun(
+      `UPDATE m365_tenant_usage
+       SET max_tokens = max_tokens + ?, bonus_tokens = bonus_tokens + ?,
+           bonus_requests = bonus_requests + ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [tokens, tokens, addedRequests, row.id],
+    );
+    requests += addedRequests;
+  }
+  return { rows: rows.length, tokens: tokens * rows.length, requests };
 }
 
 /** A read-only summary for diagnostics and capabilities. Creates nothing. */

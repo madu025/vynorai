@@ -467,6 +467,7 @@ import {
 import { encryptCredential, maskApiKey } from "../services/credentialVault.js";
 import { invalidateAuthCache } from "../services/aiProxy.js";
 import { creditTopup, startPaidCycle } from "../services/monthlyQuota.js";
+import { addM365Credits } from "../services/m365QuotaLedger.js";
 import {
   DEEPSEEK_COST_METHOD,
   DEEPSEEK_PRICING_SOURCE_URL,
@@ -843,6 +844,48 @@ adminRouter.post(
       ok: true,
       message: `Added +${amt.toLocaleString()} tokens and +${requests.toLocaleString()} requests to ${user.email}`,
       requests,
+    });
+  },
+);
+
+/**
+ * POST /admin/users/:userId/add-m365-tokens
+ * Add credits to the person's Microsoft 365 (Excel) ledger. It is separate from the VS Code
+ * monthly quota that `add-tokens` changes; usage is never reset, only the allowance grows.
+ */
+adminRouter.post(
+  "/users/:userId/add-m365-tokens",
+  requireAdmin,
+  validateParams(AdminUserParamSchema),
+  validateBody(AdminAddTokensSchema),
+  async (req: Request, res: Response) => {
+    const userId = req.params["userId"] as string;
+    const amt = parseInt(req.body.tokens);
+    const user = await dbGet<any>("SELECT email FROM users WHERE id = ?", [
+      userId,
+    ]);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const added = await addM365Credits(userId, amt);
+    if (!added.rows)
+      return res.status(409).json({
+        error:
+          "No active Microsoft 365 cycle for this user. Open the Excel add-in once, then try again.",
+      });
+
+    await logSecurityEvent({
+      eventType: "ADMIN_M365_TOKEN_TOPUP",
+      severity: "INFO",
+      actor: adminActor(req),
+      target: `user:${userId}`,
+      details: `Admin added +${amt.toLocaleString()} M365 tokens and +${added.requests.toLocaleString()} requests to ${added.rows} active cycle row(s) of user ${userId}`,
+    });
+
+    res.json({
+      ok: true,
+      message: `Added +${amt.toLocaleString()} Microsoft 365 tokens to ${user.email}`,
+      rows: added.rows,
+      requests: added.requests,
     });
   },
 );

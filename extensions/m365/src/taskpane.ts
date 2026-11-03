@@ -305,10 +305,9 @@ import {
   shareOutcomeText,
 } from "./shareDelivery.js";
 import {
-  chooseSmartPath,
+  chooseRunPath,
   selectionBadges,
   suggestionsForSelection,
-  type SmartMode,
   type WorkspaceSchema,
   type WorkspaceSelection,
 } from "./smartWorkspace.js";
@@ -385,7 +384,6 @@ const signOut = document.querySelector<HTMLButtonElement>("#sign-out");
 const inspect = document.querySelector<HTMLButtonElement>("#inspect");
 const smartRun = document.querySelector<HTMLButtonElement>("#smart-run");
 const runGateMessage = document.querySelector<HTMLElement>("#run-gate");
-const runMode = document.querySelector<HTMLSelectElement>("#run-mode");
 const dupFix = document.querySelector<HTMLElement>("#dup-fix");
 const dupFixButton = document.querySelector<HTMLButtonElement>("#dup-fix-btn");
 let cleanFirstRequest = "";
@@ -968,7 +966,8 @@ function updateRunButtonState(): void {
     capabilityState,
     canInspect: capabilities?.excel.canInspect,
     blockedReason: capabilities?.blockedReason,
-    agentMode: runMode?.value === "agent",
+    // No mode to pick: every request goes to the agent, and an account without AI uses the built-in reader.
+    agentMode: false,
     aiAvailable: capabilities?.aiAnalysis !== false,
   });
   smartRun.disabled = !gate.enabled;
@@ -1276,7 +1275,6 @@ function updateAuthenticationUi(signedIn: boolean) {
   const agentRun = document.querySelector<HTMLButtonElement>("#agent-run");
   if (agentRun)
     agentRun.disabled = !signedIn || capabilities?.aiAnalysis === false;
-  if (runMode) runMode.disabled = !signedIn;
   updateEmailUi(signedIn);
   renderCommercialStatus(signedIn ? capabilities : undefined);
   document.body.dataset.auth = !signedIn
@@ -5793,41 +5791,10 @@ async function startAgentRun() {
   await agentLoop(request);
 }
 
-const RUN_MODE_KEY = "vynorai.m365.runMode";
-try {
-  const savedMode = localStorage.getItem(RUN_MODE_KEY);
-  if (runMode && ["smart", "local", "agent"].includes(savedMode ?? ""))
-    runMode.value = savedMode!;
-} catch {
-  // Smart remains the safe default when storage is unavailable.
-}
-runMode?.addEventListener("change", () => {
-  try {
-    localStorage.setItem(RUN_MODE_KEY, runMode.value);
-  } catch {
-    // The selected mode still applies to this session.
-  }
-  updateRunButtonState();
-});
 smartRun?.addEventListener("click", () => {
   const request = instruction?.value.trim() ?? "";
   if (!request) return setStatus("Describe what you want first.");
-  const mode = (runMode?.value || "smart") as SmartMode;
-  if (mode === "agent" && capabilities?.aiAnalysis === false) {
-    setStatus(
-      translate(
-        language,
-        "agent_unavailable",
-        "Agent workflow is not available for this account. Use local preview.",
-      ),
-    );
-    return;
-  }
-  const path = chooseSmartPath(
-    request,
-    mode,
-    capabilities?.aiAnalysis !== false,
-  );
+  const path = chooseRunPath(capabilities?.aiAnalysis !== false);
   if (path === "agent") void startAgent();
   else void inspect?.click();
 });

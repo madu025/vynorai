@@ -211,7 +211,7 @@ test("buttons, selects and text boxes never fall back to the browser's plain loo
   // Boxes the person types in must have a border of their own (the request box sits inside the
   // bordered composer, so it is the one exception).
   assert.match(html, /#share-paste,\s*#share-message \{[^}]*border: 1px solid/);
-  // The run-mode select and the chart tweaks keep room for their words in a narrow pane.
+  // The chart tweaks keep room for their words in a narrow pane.
   assert.match(html, /\.mode-control \{[^}]*flex: 1 1 120px/);
   assert.match(
     html,

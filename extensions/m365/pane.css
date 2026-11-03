@@ -6020,7 +6020,7 @@ body[data-auth="in"] .apply-dock {
   padding: 8px;
   gap: 6px;
 }
-body[data-auth="in"] :is(#smart-run, #run-mode) {
+body[data-auth="in"] #smart-run {
   min-height: 32px;
 }
 body[data-auth="in"] :is(#tab-work, #tab-results, #tab-share, #tab-explore) {

@@ -89,9 +89,9 @@ test("the layout has a title bar, KPI cards in one row and a breakdown under the
     text(cellAt(layout, 4, 9)!.cells[0][0]),
     '=IFERROR(INDEX($AO$3:$AO$5,MATCH(MAX($AP$3:$AP$5),$AP$3:$AP$5,0)),"")',
   );
-  // Charts two per row, then the breakdown and its slicer under them.
+  // Charts two per row, then the breakdown with its slicer right beside the PivotTable (one blank column).
   assert.equal(layout.pivotAnchor, "A27");
-  assert.equal(layout.slicerAnchor, "G27");
+  assert.equal(layout.slicerAnchor, "E27");
   assert.equal(layout.charts.length, 2);
   assert.deepEqual(
     layout.charts.map((chart) => [chart.from, chart.to]),

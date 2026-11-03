@@ -849,7 +849,7 @@ export function buildDashboardLayout(
     blocks,
     charts,
     pivotAnchor: `A${PIVOT_ROW + 1}`,
-    slicerAnchor: `${usageColumnLetter(Math.max(CHART_SPAN, values.length + 2))}${PIVOT_ROW + 1}`,
+    slicerAnchor: `${usageColumnLetter(values.length + 2)}${PIVOT_ROW + 1}`,
     fallbackBreakdown,
     columnWidths,
     titleWidth: GRID_COLUMNS,

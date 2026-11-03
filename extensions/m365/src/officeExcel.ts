@@ -2113,13 +2113,13 @@ export async function applyApprovedExcelPlan(
                         top.color = block.accent;
                       }
                     }
-                    // A soft lower edge stands in for a card shadow (Office.js has no shadows).
+                    // A thick, darker lower edge stands in for a card shadow (Office.js has no shadows).
                     if (block.style === "kpi-sub") {
                       const bottom =
                         styled.format.borders.getItem("EdgeBottom");
                       bottom.style = "Continuous";
-                      bottom.weight = "Medium";
-                      bottom.color = "#CBD5E1";
+                      bottom.weight = "Thick";
+                      bottom.color = "#A8B3C4";
                     }
                     // White edges between the cards read as gaps on the page colour.
                     if (block.style.startsWith("kpi-"))

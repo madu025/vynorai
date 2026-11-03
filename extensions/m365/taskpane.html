@@ -17,11 +17,11 @@
     </style>
     <link
       rel="stylesheet"
-      href="pane.css?v=20261102.37"
-      onerror="this.onerror=null;this.href='pane.css?v=20261102.37&amp;try=1'"
+      href="pane.css?v=20261102.38"
+      onerror="this.onerror=null;this.href='pane.css?v=20261102.38&amp;try=1'"
     />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261102.37" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261102.37" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261102.38" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261102.38" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -208,7 +208,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261102.37</p>
+          <p class="menu-version" id="build-id">Build 20261102.38</p>
         </div>
       </div>
       <div
@@ -874,6 +874,8 @@
                 type="button"
                 hidden
                 data-i18n="show_result"
+                data-i18n-title="show_result"
+                title="Show result"
               >
                 Show result
               </button>
@@ -883,6 +885,8 @@
                 type="button"
                 hidden
                 data-i18n="undo"
+                data-i18n-title="undo"
+                title="Undo"
               >
                 Undo
               </button>
@@ -894,6 +898,8 @@
                 type="button"
                 hidden
                 data-i18n="cleanup"
+                data-i18n-title="cleanup"
+                title="Remove older results"
               >
                 Remove older results
               </button>
@@ -1406,6 +1412,8 @@
                 type="button"
                 hidden
                 data-i18n="undo"
+                data-i18n-title="undo"
+                title="Undo"
               >
                 Undo
               </button>
@@ -1845,7 +1853,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261102.37";
+        var BUILD = "20261102.38";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");

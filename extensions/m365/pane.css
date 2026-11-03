@@ -6074,3 +6074,62 @@ body[data-auth="in"] .result-item-head span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* Applied result: small icon buttons instead of a dark bar of text buttons (owner feedback
+   2026-11-03: Copilot's pane is clear; ours spent a whole card on "Show result" and "Undo"). The
+   words stay in the button for screen readers and as the tooltip. */
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  .apply-dock {
+  display: flex;
+  justify-content: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  :is(#show-result, #rollback, #cleanup),
+body[data-auth="in"] #agent-undo {
+  position: relative;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-solid, #fff);
+  color: var(--ink);
+  font-size: 0;
+  line-height: 0;
+}
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  :is(#show-result, #rollback, #cleanup)::before,
+body[data-auth="in"] #agent-undo::before {
+  content: "↶";
+  display: block;
+  font-size: 16px;
+  line-height: 30px;
+  text-align: center;
+}
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  #show-result::before {
+  content: "↗";
+}
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  #cleanup::before {
+  content: "⌫";
+}
+body[data-auth="in"]
+  #result-card:has([data-i18n="preview_applied"])
+  .action-row {
+  display: contents;
+}

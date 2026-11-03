@@ -393,3 +393,40 @@ test("a code run's ranking and averages are drawn as tiles and a table, not pros
   assert.equal(card.table?.rows[0][0], "0342254775");
   assert.equal(card.fallbackText, undefined);
 });
+
+test("an unnamed ranking and unnamed numbers are named from the reply", () => {
+  const reply = [
+    "Top 5 circuits by cable length: 0342254775 1.297 km (34 Ea), 0112611742 1.045 km (86 Ea), 0912284744 1.028 km (41 Ea), 0112876217 0.992 km (73 Ea), 0372289969 0.931 km (67 Ea)",
+    "Average issued quantity per circuit across all 69,517 circuits is 14.86 Ea (median 12)",
+    "Those 5 heavy-cable circuits carry above-average quantities, so cable length and volume move together here",
+  ].join("\n");
+  const card = buildAnswerCard({
+    reply,
+    results: [
+      { values: [[34], [86], [41], [73], [67]] },
+      { values: [[14.8586915430758]] },
+      { values: [[12]] },
+    ],
+    question:
+      "Which 5 circuits used the most cable length, and what is the average issued quantity per circuit?",
+  });
+  assert.deepEqual(
+    card.tiles.map((t) => [t.label, t.value]),
+    [
+      ["Average issued quantity per circuit", "14.86"],
+      ["Median", "12"],
+    ],
+  );
+  assert.deepEqual(card.table?.headers, ["Circuit", "Cable length (km)", "Ea"]);
+  assert.deepEqual(card.table?.rows[0], ["0342254775", "1.297", "34"]);
+  assert.equal(card.table?.rows.length, 5);
+  assert.equal(card.title, "Top 5 circuits by cable length");
+  assert.ok(!card.more.some((line) => line.startsWith("Top 5 circuits")));
+});
+
+test("a sentence with a colon but no repeated items is not a table", () => {
+  const card = buildAnswerCard({
+    reply: "Note: the total is 5 items, 3 open",
+  });
+  assert.equal(card.table, undefined);
+});

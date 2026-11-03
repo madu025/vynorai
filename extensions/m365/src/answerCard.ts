@@ -253,6 +253,81 @@ function tileLabels(
   return undefined;
 }
 
+/** The words the reply puts in front of a number: "(median 12)" -> "Median", "Average x per y across all rows is 14.86" -> "Average x per y". */
+function labelFromSentences(
+  value: number,
+  sentences: string[],
+): string | undefined {
+  const shown = formatNumber(value).replace(/[.,]/g, "\\$&");
+  const pattern = new RegExp(`(?<![\\d.,])${shown}(?!\\d)`);
+  for (const sentence of sentences) {
+    const at = sentence.search(pattern);
+    if (at < 0) continue;
+    const before = sentence.slice(0, at);
+    const inBrackets = before.match(
+      /\(\s*([A-Za-z][A-Za-z ]{1,20}?)\s*[:=]?\s*$/,
+    );
+    const found = inBrackets
+      ? inBrackets[1]
+      : before
+          .replace(/\s*(?:is|was|are|were|=|at|of|:)\s*$/i, "")
+          .split(/\s+(?:across|over|in|for|among|from|of all)\b/i)[0]
+          .trim();
+    const count = found.split(/\s+/).filter(Boolean).length;
+    if (found && count <= 6 && (inBrackets || count >= 2))
+      return found.charAt(0).toUpperCase() + found.slice(1);
+  }
+  return undefined;
+}
+
+/** "Top 5 circuits by cable length: 0342254775 1.297 km (34 Ea), 0112611742 1.045 km (86 Ea), ..." as a table. */
+function rankingFromReply(
+  sentences: string[],
+): { title: string; table: AnswerCardData["table"] } | undefined {
+  for (const sentence of sentences) {
+    const colon = sentence.indexOf(": ");
+    if (colon < 0) continue;
+    const intro = sentence.slice(0, colon);
+    const parts = sentence
+      .slice(colon + 2)
+      .split(/,\s+(?![^(]*\))/)
+      .map((part) => part.trim().replace(/[.;]$/, ""));
+    if (parts.length < 3) continue;
+    const number = "(-?\\d[\\d,]*(?:\\.\\d+)?)";
+    const unit = "([A-Za-z%]{1,12})";
+    const item = new RegExp(
+      `^(\\S.{0,40}?)\\s+${number}(?:\\s*${unit})?(?:\\s*\\(\\s*${number}(?:\\s*${unit})?\\s*\\))?$`,
+    );
+    const matches = parts.map((part) => part.match(item));
+    if (matches.some((m) => !m)) continue;
+    const rows = matches as RegExpMatchArray[];
+    const second = Boolean(rows[0][4]);
+    if (rows.some((m) => Boolean(m[4]) !== second)) continue;
+    const noun = intro.match(/^top\s+\d+\s+(\w+?)s?\b/i)?.[1];
+    const measure = intro.match(/\bby\s+([A-Za-z][A-Za-z ]{1,30})$/i)?.[1];
+    const head = (text: string | undefined, unitText: string | undefined) => {
+      const name = text
+        ? text.charAt(0).toUpperCase() + text.slice(1)
+        : (unitText ?? "Value");
+      return text && unitText ? `${name} (${unitText})` : name;
+    };
+    const headers = [
+      noun ? noun.charAt(0).toUpperCase() + noun.slice(1) : "Item",
+      head(measure, rows[0][3]),
+      ...(second ? [head(undefined, rows[0][5])] : []),
+    ];
+    return {
+      title: intro,
+      table: {
+        headers,
+        // The reply's own digits: a 1.297 must not become 1.3.
+        rows: rows.map((m) => [m[1], m[2], ...(second ? [m[4]] : [])]),
+      },
+    };
+  }
+  return undefined;
+}
+
 function fromResult(
   result: CardResult,
   card: AnswerCardData,
@@ -274,7 +349,11 @@ function fromResult(
     const literal = [...(result.formula ?? "").matchAll(/"([^"]{2,30})"/g)]
       .map((m) => m[1].trim())
       .find((t) => /[A-Za-z]/.test(t) && !/^not found$/i.test(t));
-    const label = header?.[0] ?? literal ?? questionPhrase(question);
+    const label =
+      header?.[0] ??
+      literal ??
+      (questionPhrase(question) ||
+        labelFromSentences(data[0][0] as number, sentences));
     // A number with no name (a read-back check) means nothing on a card.
     if (!label) return false;
     card.tiles.push({ label, value: formatNumber(data[0][0] as number) });
@@ -388,6 +467,19 @@ export function buildAnswerCard(input: {
       all.map((l) => l.replace(BULLET, "")),
       input.question,
     );
+  }
+  if (input.results?.length && !card.bars.length && !card.table) {
+    // With calculations behind the reply, a ranking the model wrote as one sentence ("A 1.2 km (34 Ea), B ...") still becomes a table.
+    const ranked = rankingFromReply(plain);
+    if (ranked) {
+      card.table = ranked.table;
+      card.title = ranked.title;
+      titleFromBullet = false;
+      const at = plain.findIndex((line) =>
+        line.startsWith(`${ranked.title}: `),
+      );
+      if (at >= 0) plain.splice(at, 1);
+    }
   }
   card.tiles = card.tiles.slice(0, MAX_TILES);
   card.pills = card.pills.slice(0, 3);

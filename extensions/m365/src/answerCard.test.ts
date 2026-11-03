@@ -344,3 +344,52 @@ test("a number or table with no real names does not become a card", () => {
   });
   assert.equal(raw.table, undefined);
 });
+
+test("a code run's ranking and averages are drawn as tiles and a table, not prose", () => {
+  const messages = [
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        {
+          id: "c1",
+          type: "function",
+          function: { name: "run_code", arguments: "{}" },
+        },
+      ],
+    },
+    {
+      role: "tool",
+      tool_call_id: "c1",
+      content: JSON.stringify({
+        result: {
+          averageIssuedQty: 14.86,
+          averageCableKm: 0.1618,
+          top5: [
+            { circuitId: "0342254775", cableKm: 1.297, issuedEa: 34 },
+            { circuitId: "0112611742", cableKm: 1.045, issuedEa: 86 },
+            { circuitId: "0912284744", cableKm: 1.028, issuedEa: 41 },
+          ],
+        },
+      }),
+    },
+  ] as any;
+  const results = answerResults(messages);
+  assert.equal(results.length, 2);
+  const card = buildAnswerCard({
+    reply: "- Top 5 circuits by cable length listed below.",
+    results,
+    question: "Which 5 circuits used the most cable length?",
+  });
+  assert.deepEqual(
+    card.tiles.map((tile) => tile.label),
+    ["Average Issued Qty", "Average Cable Km"],
+  );
+  assert.deepEqual(card.table?.headers, [
+    "Circuit Id",
+    "Cable Km",
+    "Issued Ea",
+  ]);
+  assert.equal(card.table?.rows[0][0], "0342254775");
+  assert.equal(card.fallbackText, undefined);
+});

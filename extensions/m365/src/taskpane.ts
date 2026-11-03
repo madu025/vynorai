@@ -2757,33 +2757,34 @@ apply?.addEventListener("click", async () => {
       }
     }
     document.querySelector<HTMLElement>("#change-note")?.focus();
-    // A slow result says where the time went, so a big workbook never looks like a hang.
+    // How long it took belongs in Diagnostics, not in the chat (live run 2026-11-03: a technical
+    // "prepared in 3s, built in 633s" line was shown to the person).
     const slow = report.results.filter((entry) => (entry.ms ?? 0) >= 4000);
     const seconds = (from: number, to: number) =>
       from && to ? Math.round((to - from) / 1000) : 0;
-    const prepareSeconds = seconds(requestStartedAt, previewReadyAt);
-    const buildSeconds = seconds(applyStartedAt, Date.now());
-    const timing =
-      prepareSeconds + buildSeconds >= 8 || slow.length
-        ? ` (prepared in ${prepareSeconds}s, built in ${buildSeconds}s${slow.length ? `: ${slow.map((entry) => `${entry.kind} ${((entry.ms ?? 0) / 1000).toFixed(0)}s`).join(", ")}` : ""})`
-        : "";
-    renderConversation(
-      failed.length ? "error" : "assistant",
-      failed.length
-        ? `Applied ${done.length} of ${report.results.length} planned changes. ${failed
-            .map(
-              (entry) =>
-                `${entry.kind} failed: ${String(entry.error ?? "unknown error").slice(0, 240)}`,
-            )
-            .join(" ")}`
-        : doneSentence(
-            report.results,
-            report.sourceUnchangedAfterApply,
-            textLanguage(),
-          ) +
-            (replaced ? ` Removed ${replaced} older result sheet(s).` : "") +
-            timing,
-    );
+    log.record("apply:timing", "pass", {
+      prepareSeconds: seconds(requestStartedAt, previewReadyAt),
+      buildSeconds: seconds(applyStartedAt, Date.now()),
+      slow: slow.map(
+        (entry) => `${entry.kind} ${((entry.ms ?? 0) / 1000).toFixed(0)}s`,
+      ),
+    });
+    if (failed.length)
+      renderConversation(
+        "error",
+        `Applied ${done.length} of ${report.results.length} planned changes. ${failed
+          .map(
+            (entry) =>
+              `${entry.kind} failed: ${String(entry.error ?? "unknown error").slice(0, 240)}`,
+          )
+          .join(" ")}`,
+      );
+    else
+      // The result is drawn, not written out: the Results view shows what was made with its
+      // Show, Undo and Remove buttons, so a success adds no status paragraph to the chat.
+      document
+        .querySelector<HTMLButtonElement>('[data-workspace-target="results"]')
+        ?.click();
     setStatus(
       failed.length
         ? `Applied ${done.length} of ${report.results.length} actions. Failed: ${failed.map((result) => result.kind).join(", ")}. See Diagnostics.${auditWarning}`

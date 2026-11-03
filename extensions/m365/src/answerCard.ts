@@ -58,17 +58,31 @@ export function answerResults(
   restore: (text: string) => string = (text) => text,
 ): CardResult[] {
   const formulas = new Map<string, string>();
+  const codeCalls = new Set<string>();
   const results: CardResult[] = [];
   for (const message of messages) {
     if (message.role === "assistant" && message.tool_calls)
       for (const call of message.tool_calls)
-        if (call.function.name === "calculate")
+        if (call.function.name === "run_code") codeCalls.add(call.id);
+        else if (call.function.name === "calculate")
           try {
             const args = JSON.parse(call.function.arguments || "{}");
             formulas.set(call.id, restore(String(args.formula ?? "")));
           } catch {
             // A call that cannot be read has no result to show.
           }
+    if (message.role === "tool" && codeCalls.has(message.tool_call_id)) {
+      // What the code returned is drawn like a calculation: tiles for a few named numbers, a table
+      // for a list of records (a ranking, a grouping).
+      try {
+        results.push(
+          ...codeResults(JSON.parse(message.content)?.result, restore),
+        );
+      } catch {
+        // A result that cannot be read has nothing to show.
+      }
+      continue;
+    }
     if (message.role === "tool" && formulas.has(message.tool_call_id)) {
       let result: unknown;
       try {
@@ -89,6 +103,64 @@ export function answerResults(
     }
   }
   return results;
+}
+
+/** "avgIssuedQty" / "average_issued_quantity" -> "Avg Issued Qty" / "Average issued quantity". */
+function keyLabel(key: string): string {
+  const spaced = key
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+/** The value a sandbox code run returned, as grids with real column names (or none). */
+export function codeResults(
+  result: unknown,
+  restore: (text: string) => string = (text) => text,
+): CardResult[] {
+  const cell = (value: unknown): CardCell =>
+    isNum(value) ? value : restore(String(value ?? ""));
+  const table = (list: unknown[]): CardResult | undefined => {
+    const records = list.filter(isRecord).slice(0, 12);
+    if (!records.length) return undefined;
+    const keys = Object.keys(records[0])
+      .filter(
+        (key) => !isRecord(records[0][key]) && !Array.isArray(records[0][key]),
+      )
+      .slice(0, 6);
+    if (keys.length < 2) return undefined;
+    return {
+      values: [
+        keys.map(keyLabel),
+        ...records.map((record) => keys.map((key) => cell(record[key]))),
+      ],
+    };
+  };
+  if (isNum(result)) return [{ values: [[result]] }];
+  if (Array.isArray(result)) {
+    const grid = table(result);
+    return grid ? [grid] : [];
+  }
+  if (!isRecord(result)) return [];
+  const out: CardResult[] = [];
+  const numbers = Object.entries(result).filter(([, value]) => isNum(value));
+  if (numbers.length && numbers.length <= MAX_TILES)
+    out.push({
+      values: [
+        numbers.map(([key]) => keyLabel(key)),
+        numbers.map(([, value]) => value as number),
+      ],
+    });
+  for (const value of Object.values(result))
+    if (Array.isArray(value)) {
+      const grid = table(value);
+      if (grid) out.push(grid);
+    }
+  return out;
 }
 
 function toGrid(result: unknown): CardCell[][] | undefined {

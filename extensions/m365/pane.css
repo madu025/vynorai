@@ -6060,3 +6060,17 @@ body[data-auth="in"]
   :is(#apply, #cancel-result) {
   display: none;
 }
+
+/* Results Hub row: the kind ("dashboard") was squeezed until it broke mid-word (live run
+   2026-11-03). The kind keeps its width and the sheet name wraps onto its own line. */
+body[data-auth="in"] .result-item-head {
+  flex-wrap: wrap;
+}
+body[data-auth="in"] .result-item-head strong {
+  flex: none;
+  white-space: nowrap;
+}
+body[data-auth="in"] .result-item-head span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

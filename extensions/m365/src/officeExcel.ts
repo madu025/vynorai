@@ -2145,10 +2145,19 @@ export async function applyApprovedExcelPlan(
                     1,
                     1,
                   );
-                  for (const [mark, color] of [
-                    ["▲", "#059669"],
-                    ["▼", "#DC2626"],
-                  ] as const) {
+                  const first = block.cells[0]?.[0];
+                  const formula = typeof first === "object" ? first.f : "";
+                  // The bullet bar is green once the target is reached and amber while it is not.
+                  const marks = formula.includes('REPT("█"')
+                    ? ([
+                        ["██████████", "#059669"],
+                        ["░", "#D97706"],
+                      ] as const)
+                    : ([
+                        ["▲", "#059669"],
+                        ["▼", "#DC2626"],
+                      ] as const);
+                  for (const [mark, color] of marks) {
                     const rule = cell.conditionalFormats.add("ContainsText");
                     rule.textComparison.format.font.color = color;
                     rule.textComparison.format.font.bold = true;

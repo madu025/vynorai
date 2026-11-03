@@ -659,9 +659,10 @@ export function buildDashboardLayout(
     });
     targetCards.push({
       label: text.gapTo(input.target.label).toUpperCase(),
-      value: { f: `=${input.target.value}-${total}` },
+      // Past the target the gap is 0, not a negative number; the sub line says by how much.
+      value: { f: `=MAX(0,${input.target.value}-${total})` },
       sub: {
-        f: `=IF(${total}>=${input.target.value},"${text.reached(input.target.label).replace(/"/g, "'")}","${text.stillToGo}")`,
+        f: `=IF(${total}>=${input.target.value},"${text.reached(input.target.label).replace(/"/g, "'")} (+"&TEXT(${total}-${input.target.value},"#,##0")&")","${text.stillToGo}")`,
       },
       format: valueFormats[values.indexOf(value)] ?? "#,##0.00",
     });

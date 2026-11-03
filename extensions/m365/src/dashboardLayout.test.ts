@@ -437,3 +437,15 @@ test("the % of target card draws a bullet bar of ten blocks", () => {
   assert.ok(bar, "a bullet bar formula");
   assert.match(bar, /REPT\("░",10-ROUND/);
 });
+
+test("the gap to target is never negative; the sub line says by how much it was passed", () => {
+  const layout = buildDashboardLayout(
+    base({ target: { value: 100, label: "target" } }),
+  );
+  const cells = layout.blocks
+    .filter((block) => block.style === "kpi-value" || block.style === "kpi-sub")
+    .flatMap((block) => block.cells.flat())
+    .map(text);
+  assert.ok(cells.some((cell) => cell.startsWith("=MAX(0,100-")));
+  assert.ok(cells.some((cell) => /reached \(\+"&TEXT\(/.test(cell)));
+});

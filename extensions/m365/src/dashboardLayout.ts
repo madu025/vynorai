@@ -210,6 +210,8 @@ export interface DashboardLayout {
   valueFormats: string[];
   /** Plain-language notes shown on the sheet and in the result message. */
   notes: string[];
+  /** Notes that are always on the sheet (how the charts and PivotTable refresh): not repeated in chat. */
+  routineNotes: string[];
 }
 
 export interface DashboardLayoutInput {
@@ -378,6 +380,7 @@ export function buildDashboardLayout(
   const blocks: DashboardBlock[] = [];
   const charts: DashboardChartPlan[] = [];
   const notes: string[] = [];
+  const routineNotes: string[] = [];
   const { aggregation, values } = input;
   const text = workbookText(input.language);
   const label = text.aggregate(aggregation);
@@ -769,8 +772,12 @@ export function buildDashboardLayout(
   if (input.sampled) notes.push(text.largeData(shown, input.categoryName));
   for (const name of input.missing ?? []) notes.push(text.missingMeasure(name));
   // Spilled chart data follows new categories, so the order note applies only to fixed lists.
-  if (!spill && input.categories.length) notes.push(text.chartOrder);
+  if (!spill && input.categories.length) {
+    notes.push(text.chartOrder);
+    routineNotes.push(text.chartOrder);
+  }
   notes.push(text.pivotRefresh);
+  routineNotes.push(text.pivotRefresh);
 
   blocks.push({
     row: SECTION_ROW,
@@ -864,5 +871,6 @@ export function buildDashboardLayout(
     pageRows: Math.max(PIVOT_ROW + shown + 3, PIVOT_ROW + 14),
     valueFormats,
     notes,
+    routineNotes,
   };
 }

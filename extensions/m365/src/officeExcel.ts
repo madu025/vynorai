@@ -2521,7 +2521,11 @@ export async function applyApprovedExcelPlan(
                 DASHBOARD_STYLE.note(noteRange);
                 await context.sync();
               }
-              if (notes.length) result.notes = notes;
+              // The refresh notes are on the sheet; the chat only repeats what needs the person's attention.
+              const chatNotes = notes.filter(
+                (note) => !layout.routineNotes.includes(note),
+              );
+              if (chatNotes.length) result.notes = chatNotes;
             }
           } else if (
             action.kind === "chart" &&

@@ -1060,6 +1060,9 @@ test("a dashboard creates one result sheet with live KPIs, charts and a PivotTab
   );
   assert.equal(report.results[0].targetSheet, "Dashboard Sales by Region");
   assert.equal(report.results[0].createdSheet, true);
+  assert.ok(
+    !(report.results[0].notes ?? []).some((note) => /Refresh All/.test(note)),
+  );
   assert.ok(excel.calls.includes("pivot.row Region"));
   assert.ok(excel.calls.includes("pivot.value Sales"));
   assert.ok(excel.calls.includes("pivot.value Cost"));

@@ -471,3 +471,15 @@ test("every value card, not only the first, compares the latest month with the o
     "a later card adds up its own last two months",
   );
 });
+
+test("the refresh notes are marked routine, so the chat does not repeat what the sheet already says", () => {
+  const layout = buildDashboardLayout(base({}));
+  assert.ok(layout.routineNotes.length >= 1);
+  for (const note of layout.routineNotes)
+    assert.ok(layout.notes.includes(note), "a routine note is on the sheet");
+  const warned = buildDashboardLayout(base({ missing: ["Cost"] }));
+  assert.ok(
+    warned.notes.some((note) => !warned.routineNotes.includes(note)),
+    "a missing measure is not routine",
+  );
+});

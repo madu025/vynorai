@@ -99,7 +99,7 @@ export interface EconomicsEvent {
   promptFp?: string | null;
   toolFollowUp?: boolean;
   /** Control-plane requests are recorded separately from user chat. */
-  requestKind?: "chat" | "task_scope";
+  requestKind?: "chat" | "task_scope" | "m365";
   /** Whether response caches were eligible for this request. */
   cachePolicy?: "standard" | "bypass";
   /** Stable reason code when the response cache was intentionally bypassed. */

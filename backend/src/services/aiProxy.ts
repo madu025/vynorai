@@ -283,6 +283,8 @@ export async function handleChatCompletions(
   const isZkMode = Boolean(body.zkMode || body.store === false);
   const requestKind =
     body.request_kind === "task_scope" ? "task_scope" : "chat";
+  // The economics ledger separates Excel add-in requests from IDE chat; behaviour keeps `requestKind`.
+  const economicsKind = surface === "m365" ? "m365" : requestKind;
   const cachePolicy =
     body.cache_policy === "bypass" || requestKind === "task_scope"
       ? "bypass"
@@ -368,7 +370,7 @@ export async function handleChatCompletions(
           providerCostUsd: 0,
           costSource: "local-zero",
           cacheStatus: "hit",
-          requestKind,
+          requestKind: economicsKind,
           cachePolicy,
           cacheBypassReason,
           taskScope,
@@ -511,7 +513,7 @@ export async function handleChatCompletions(
           providerCostUsd: 0,
           costSource: "local-zero",
           cacheStatus: "bypass",
-          requestKind,
+          requestKind: economicsKind,
           cachePolicy,
           cacheBypassReason,
           taskScope,
@@ -702,7 +704,7 @@ export async function handleChatCompletions(
         providerCostUsd: 0,
         costSource: "local-zero",
         cacheStatus: "bypass",
-        requestKind,
+        requestKind: economicsKind,
         cachePolicy,
         cacheBypassReason,
         taskScope,
@@ -784,7 +786,7 @@ export async function handleChatCompletions(
         providerCostUsd: 0,
         costSource: "local-zero",
         cacheStatus: "bypass",
-        requestKind,
+        requestKind: economicsKind,
         cachePolicy,
         cacheBypassReason,
         taskScope,
@@ -1202,7 +1204,7 @@ export async function handleChatCompletions(
         costSource: dispatch.usage?.costSource ?? "unknown",
         cachedInputTokens: dispatch.usage?.cachedInputTokens ?? 0,
         cacheStatus: cacheBypassed ? "bypass" : "miss",
-        requestKind,
+        requestKind: economicsKind,
         cachePolicy,
         cacheBypassReason,
         taskScope,

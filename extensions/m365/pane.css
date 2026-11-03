@@ -6210,3 +6210,18 @@ body[data-auth="in"]
   margin: 0 6px 0 0;
   vertical-align: top;
 }
+
+/* Credits left: a quiet line under the chat; amber when less than 15% remains. */
+body[data-auth="in"] #credits-footer {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+body[data-auth="in"] #credits-footer strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+body[data-auth="in"] #credits-footer[data-low="1"] strong {
+  color: #b45309;
+}

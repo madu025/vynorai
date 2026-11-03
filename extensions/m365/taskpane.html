@@ -4,7 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>VynorAI</title>
-    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <!-- async: a slow Microsoft CDN used to leave the pane blank white for a minute (live run
+         2026-11-03); the bundle below waits for it before it starts. -->
+    <script
+      id="office-js"
+      async
+      src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
+    ></script>
     <style id="critical">
       :root {
         color-scheme: light dark;
@@ -17,11 +23,11 @@
     </style>
     <link
       rel="stylesheet"
-      href="pane.css?v=20261102.40"
-      onerror="this.onerror=null;this.href='pane.css?v=20261102.40&amp;try=1'"
+      href="pane.css?v=20261102.41"
+      onerror="this.onerror=null;this.href='pane.css?v=20261102.41&amp;try=1'"
     />
-    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261102.40" />
-    <link rel="preload" as="script" href="./runtime-config.js?v=20261102.40" />
+    <link rel="modulepreload" href="./dist/taskpane.bundle.js?v=20261102.41" />
+    <link rel="preload" as="script" href="./runtime-config.js?v=20261102.41" />
   </head>
   <body>
     <a class="skip-link" href="#instruction" data-i18n="skip_to_request"
@@ -208,7 +214,7 @@
           >
             Sign out
           </button>
-          <p class="menu-version" id="build-id">Build 20261102.40</p>
+          <p class="menu-version" id="build-id">Build 20261102.41</p>
         </div>
       </div>
       <div
@@ -839,7 +845,7 @@
                 ></label
               >
               <label class="compact-choice"
-                ><input id="replace-toggle" type="checkbox" /><span
+                ><input id="replace-toggle" type="checkbox" checked /><span
                   data-i18n="replace_toggle"
                   >Replace older VynorAI result sheets after applying</span
                 ></label
@@ -927,32 +933,6 @@
               </h2>
             </div>
             <div id="result-gallery-list"></div>
-          </section>
-          <section
-            id="operation-history"
-            class="card operation-history"
-            data-workspace-panel="results"
-            hidden
-            aria-labelledby="operation-history-heading"
-          >
-            <div class="card-head">
-              <h2 id="operation-history-heading" data-i18n="change_history">
-                Change history
-              </h2>
-              <span class="badge" data-i18n="workbook_log">workbook log</span>
-            </div>
-            <p data-i18n="change_history_note">
-              Applied and undone VynorAI changes are recorded in this workbook.
-              Original source data is not changed by result-sheet operations.
-            </p>
-            <button
-              id="open-change-log"
-              class="ghost"
-              type="button"
-              data-i18n="open_change_log"
-            >
-              Open VynorAI Log
-            </button>
           </section>
           <section
             id="share-card"
@@ -1527,7 +1507,7 @@
                 autocomplete="off"
             /></label>
             <label class="email-check"
-              ><input id="prefs-changelog" type="checkbox" checked /><span
+              ><input id="prefs-changelog" type="checkbox" /><span
                 data-i18n="log_changes"
                 >Record every change in a "VynorAI Log" sheet</span
               ></label
@@ -1674,6 +1654,10 @@
             </section>
           </section>
         </div>
+        <p id="credits-footer" class="saved-footer" role="note" hidden>
+          <span data-i18n="credits_left">Credits left</span>
+          <strong id="credits-left"></strong>
+        </p>
         <p id="saved-footer" class="saved-footer" role="note" hidden>
           <span id="saved-month"></span
           ><span id="saved-streak" class="saved-streak"></span>
@@ -1853,7 +1837,7 @@
     </script>
     <script>
       (function () {
-        var BUILD = "20261102.40";
+        var BUILD = "20261102.41";
         var openingId = Date.now().toString(36);
         function loading() {
           var status = document.getElementById("status-text");
@@ -1932,6 +1916,23 @@
           }
           attempt();
         }
+        // office.js loads without blocking the page; the bundle starts once it is there, or after fifteen
+        // seconds, or when it failed (the pane then says Excel is not available, as before).
+        function whenOffice(go) {
+          if (window.Office) return go();
+          var tag = document.getElementById("office-js");
+          var done = false;
+          function run() {
+            if (done) return;
+            done = true;
+            go();
+          }
+          if (tag) {
+            tag.addEventListener("load", run);
+            tag.addEventListener("error", run);
+          }
+          window.setTimeout(run, 15000);
+        }
         function config() {
           return window.__VYNORAI_M365_CONFIG__;
         }
@@ -1945,7 +1946,9 @@
           },
           3,
           function () {
-            loadBundle(suffix);
+            whenOffice(function () {
+              loadBundle(suffix);
+            });
           },
         );
       })();

@@ -1034,6 +1034,41 @@ export async function inspectSelectedExcelRange(
     } catch {
       // Older hosts: the selection stays as it is.
     }
+    // Trailing empty rows or columns in the selection (Ctrl+A, or a paste that was selected one
+    // row too far) are not data: they showed as "5 blank cells require review" (live run 2026-11-03).
+    // The used part of the selection is taken only when it starts in the same cell.
+    try {
+      if (
+        Number(selected.rowCount) * Number(selected.columnCount) > 1 &&
+        typeof selected.getUsedRangeOrNullObject === "function"
+      ) {
+        const used = selected.getUsedRangeOrNullObject(true);
+        used.load([
+          "address",
+          "rowCount",
+          "columnCount",
+          "rowIndex",
+          "columnIndex",
+          "isNullObject",
+        ]);
+        selected.load(["rowIndex", "columnIndex"]);
+        await context.sync();
+        if (
+          !used.isNullObject &&
+          Number(used.rowIndex) === Number(selected.rowIndex) &&
+          Number(used.columnIndex) === Number(selected.columnIndex) &&
+          Number(used.rowCount) >= 2 &&
+          (Number(used.rowCount) < Number(selected.rowCount) ||
+            Number(used.columnCount) < Number(selected.columnCount))
+        ) {
+          selected = used;
+          selected.worksheet.load("name");
+          await context.sync();
+        }
+      }
+    } catch {
+      // The selection stays as it is.
+    }
     // Nobody should have to drag-select first. A single clicked cell means "this table"; an empty
     // cell, a whole column or the whole sheet means "the data on this sheet".
     const cellCount = Number(selected.rowCount) * Number(selected.columnCount);

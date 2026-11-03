@@ -275,6 +275,9 @@ export async function diagnoseM365Identity(identity: M365Identity): Promise<{
         scope: quota.scope,
         plan: quota.planId,
         planSource: quota.planSource,
+        // The person's own ledger numbers, so the pane can say how much is left.
+        usedCredits: quota.usedCredits,
+        maxCredits: quota.maxCredits,
       },
     });
   } else {

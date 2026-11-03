@@ -22,12 +22,17 @@ interface FakeScript {
 }
 
 /** Runs the start-up loader against a fake page; `answer` decides what each requested file does. */
-function run(answer: (src: string, window: any) => "ok" | "error" | "stall") {
+function run(
+  answer: (src: string, window: any) => "ok" | "error" | "stall",
+  office = true,
+) {
   const timers: { at: number; fn: () => void }[] = [];
   let now = 0;
   const added: FakeScript[] = [];
   const status = { textContent: "Loading…" };
   const window: any = {
+    // office.js loads without blocking; the bundle waits for it (or for fifteen seconds).
+    ...(office ? { Office: {} } : {}),
     setTimeout: (fn: () => void, ms: number) => {
       timers.push({ at: now + ms, fn });
       return timers.length;
@@ -153,4 +158,15 @@ test("a stalled config does not leave the page without a bundle", () => {
   );
   page.tick(60_000);
   assert.ok(page.added.some((s) => s.src.includes("taskpane.bundle.js")));
+});
+
+test("the bundle waits for office.js, and starts after fifteen seconds without it", () => {
+  const page = run(healthy, false);
+  page.tick(5000);
+  assert.deepEqual(
+    page.added.map((s) => fileOf(s.src)),
+    ["runtime-config.js"],
+  );
+  page.tick(11000);
+  assert.ok(page.added.some((s) => fileOf(s.src) === "taskpane.bundle.js"));
 });

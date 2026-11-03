@@ -15,6 +15,7 @@ import {
   type AgentRun,
 } from "./agent.js";
 import { canAutoApprove } from "./agentAutoApprove.js";
+import { isOlderVersionOf } from "./resultSheetFamily.js";
 import { checkStepWith, runStepWith } from "./agentSteps.js";
 import { describeReview, runTeam } from "./agentReview.js";
 import { retryTransient } from "./retryTransient.js";
@@ -2729,8 +2730,10 @@ apply?.addEventListener("click", async () => {
     if (!failed.length && replaceOlder?.checked && lastRevealSheet) {
       try {
         // Only sheets with the Office custom property set by VynorAI are returned here.
-        const older = (await listVynorSheets(officeRuntime())).filter(
-          (sheet) => sheet !== lastRevealSheet,
+        // Only older versions of this same result go (the checkbox is on by default); another
+        // result of the person, such as a summary sheet, stays.
+        const older = (await listVynorSheets(officeRuntime())).filter((sheet) =>
+          isOlderVersionOf(sheet, lastRevealSheet),
         );
         if (older.length) {
           const removed = await rollbackCreatedItems(
@@ -2740,7 +2743,7 @@ apply?.addEventListener("click", async () => {
           );
           replaced = removed.removedSheets.length;
           galleryResults = galleryResults.filter(
-            (result) => result.targetSheet === lastRevealSheet,
+            (result) => !older.includes(result.targetSheet),
           );
           persistResultGallery();
           renderResultGallery();
@@ -6597,8 +6600,31 @@ function refreshSavedFooter() {
 function noteVerifiedApply(kinds: WorkKind[]) {
   recordVerifiedApply(browserStorage(), kinds);
   refreshSavedFooter();
+  void refreshCreditsFooter();
 }
 languageHooks.push(refreshSavedFooter);
 refreshSavedFooter();
 
+/** "Credits left 53,000 of 100,000" under the chat; refreshed after sign-in and after each result. */
+async function refreshCreditsFooter() {
+  const footer = document.querySelector<HTMLElement>("#credits-footer");
+  const value = document.querySelector<HTMLElement>("#credits-left");
+  if (!footer || !value || !accessToken) return;
+  try {
+    const report = await apiClient().diagnose();
+    const detail = report.stages.find((stage) => stage.name === "credits")
+      ?.detail as { usedCredits?: number; maxCredits?: number } | undefined;
+    const max = Number(detail?.maxCredits);
+    const used = Number(detail?.usedCredits);
+    if (!Number.isFinite(max) || !Number.isFinite(used) || max <= 0) return;
+    const left = Math.max(0, max - used);
+    value.textContent = `${left.toLocaleString("en-US")} / ${max.toLocaleString("en-US")}`;
+    footer.dataset.low = left / max < 0.15 ? "1" : "0";
+    footer.hidden = false;
+  } catch {
+    // The footer is a convenience; a failed check leaves it hidden.
+  }
+}
+
 void initialize();
+window.setTimeout(() => void refreshCreditsFooter(), 4000);

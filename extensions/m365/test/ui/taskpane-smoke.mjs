@@ -743,7 +743,6 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     const gallery = document.querySelector("#result-gallery");
     gallery.removeAttribute("hidden");
     document.querySelector("#verified-result-banner").removeAttribute("hidden");
-    document.querySelector("#operation-history").removeAttribute("hidden");
     document.querySelector("#result-gallery-list").innerHTML =
       '<article class="result-item"><div class="result-item-head"><strong>Chart</strong><span class="verified-badge">Verified · Net Amount by Category</span></div><p class="result-item-summary">Saved on Net Amount by Category. Verified by reading the result back from Excel.</p><div class="result-item-actions"><button class="result-primary-action">Show result</button><details class="result-more-actions"><summary>More actions</summary><div class="result-more-actions-list"><button>Email report</button><button>Refresh</button><button>Undo</button><button>Replace older</button></div></details></div><details class="result-evidence"><summary>Show evidence</summary><ul><li>Source: Orders!A1:K301</li><li>Result read back from Excel</li></ul></details></article>';
     const analysis = document.querySelector("#ai-result");
@@ -759,8 +758,6 @@ async function verifyViewport(browser, baseUrl, viewport, label) {
     gallery.scrollIntoView({ block: "start" });
   });
   await assertReachable(page, "#result-gallery");
-  await assertReachable(page, "#operation-history");
-  await assertReachable(page, "#open-change-log");
   await assertReachable(page, "#ai-result");
   await assertReachable(page, "#insights-card");
   await page.click(".result-more-actions > summary");

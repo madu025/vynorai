@@ -80,7 +80,9 @@ export function createWorkbookPreferencesController(
     if (currency) currency.value = preferences.currency ?? "";
     if (audience) audience.value = preferences.audience ?? "";
     if (prefix) prefix.value = preferences.resultSheetPrefix ?? "";
-    if (changeLog) changeLog.checked = preferences.changeLog !== false;
+    // The workbook log sheet is opt-in: it added a visible sheet to every workbook (owner decision
+    // 2026-11-03).
+    if (changeLog) changeLog.checked = preferences.changeLog === true;
   };
   const save = (next: WorkbookPreferences) => {
     const preferences = parsePreferences(next);
@@ -119,7 +121,7 @@ export function createWorkbookPreferencesController(
     save(next as WorkbookPreferences);
   };
   const logChanges = async (entry: ChangeLogEntry) => {
-    if (deps.getPreferences().changeLog === false) return;
+    if (deps.getPreferences().changeLog !== true) return;
     const ok = await appendChangeLog(
       deps.officeRuntime(),
       changeLogRows(entry),

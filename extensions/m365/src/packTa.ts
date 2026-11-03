@@ -186,6 +186,7 @@ registerLanguagePack("ta", {
     replace_toggle: "பயன்படுத்திய பின் பழைய VynorAI முடிவுத் தாள்களை மாற்று",
     preview_safe: "இன்னும் மாற்றங்கள் இல்லை",
     preview_applied: "பயன்படுத்தப்பட்டது",
+    credits_left: "மீதமுள்ள credits",
     tweak_chart: "விளக்கப்பட வகை",
     tweak_aggregation: "சுருக்கம்",
     tweak_category: "வகை",

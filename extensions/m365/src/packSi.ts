@@ -180,6 +180,7 @@ registerLanguagePack("si", {
       "යෙදීමෙන් පසු පැරණි VynorAI ප්‍රතිඵල පත්‍රිකා ප්‍රතිස්ථාපනය කරන්න",
     preview_safe: "තවම වෙනස්කම් නැත",
     preview_applied: "යොදන ලදී",
+    credits_left: "ඉතිරි credits",
     tweak_chart: "ප්‍රස්තාර වර්ගය",
     tweak_aggregation: "සාරාංශ කරන ආකාරය",
     tweak_category: "කාණ්ඩය",

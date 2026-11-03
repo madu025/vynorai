@@ -430,3 +430,37 @@ test("a sentence with a colon but no repeated items is not a table", () => {
   });
   assert.equal(card.table, undefined);
 });
+
+test("a named ranking and a named stats row from two calculations are both drawn", () => {
+  const card = buildAnswerCard({
+    reply:
+      "The five longest circuits are listed; the average is pulled up by a few long runs.",
+    results: [
+      {
+        values: [
+          ["Circuit", "Cable length (km)", "Issued qty (Ea)"],
+          ["0342254775", 1.297, 34],
+          ["0112611742", 1.045, 86],
+        ],
+      },
+      {
+        values: [
+          ["Average qty", "Median qty"],
+          [14.86, 12],
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(card.table?.headers, [
+    "Circuit",
+    "Cable length (km)",
+    "Issued qty (Ea)",
+  ]);
+  assert.deepEqual(
+    card.tiles.map((t) => [t.label, t.value]),
+    [
+      ["Average qty", "14.86"],
+      ["Median qty", "12"],
+    ],
+  );
+});

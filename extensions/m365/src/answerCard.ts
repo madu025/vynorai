@@ -333,6 +333,7 @@ function fromResult(
   card: AnswerCardData,
   sentences: string[],
   question?: string,
+  tilesOnly = false,
 ): boolean {
   let rows = result.values.filter((row) => row.length > 0);
   if (!rows.length) return false;
@@ -360,6 +361,7 @@ function fromResult(
     return true;
   }
   if (
+    !tilesOnly &&
     columns === 2 &&
     data.length >= 2 &&
     data.length <= MAX_BARS &&
@@ -402,7 +404,7 @@ function fromResult(
     );
     return true;
   }
-  if (columns >= 2) {
+  if (!tilesOnly && columns >= 2) {
     const head =
       header ??
       (data[0].every(isText) && data.length > 1
@@ -460,12 +462,13 @@ export function buildAnswerCard(input: {
     }
   }
   for (const result of input.results ?? []) {
-    if (card.bars.length || card.table) break;
+    // After a table or bars, later results can still add named tiles (an average beside a ranking).
     fromResult(
       result,
       card,
       all.map((l) => l.replace(BULLET, "")),
       input.question,
+      Boolean(card.bars.length || card.table),
     );
   }
   if (input.results?.length && !card.bars.length && !card.table) {

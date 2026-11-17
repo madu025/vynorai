@@ -925,7 +925,7 @@ function setStatus(message: string) {
   if (status) status.textContent = localizeMessage(language, message);
   const normalized = message.toLocaleLowerCase();
   const tone =
-    /failed|error|could not|unavailable|missing|expired|rejected|invalid|no credits|blocked/.test(
+    /failed|error|could not|did not|unavailable|missing|expired|rejected|invalid|no credits|blocked/.test(
       normalized,
     )
       ? "error"

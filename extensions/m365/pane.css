@@ -6262,3 +6262,36 @@ body[data-auth="in"] #credits-footer[data-low="1"] strong {
     box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
   }
 }
+
+/* Live check 2026-11-17: in a 320px pane the second column of a result table ("Total cost (LKR)",
+   "20,450,000") ran past the card edge because every cell was nowrap. Text cells and headers wrap;
+   numbers stay on one line, right-aligned, with a tighter cell padding. */
+.ac-table th,
+.ac-table td {
+  padding: 4px 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ac-table td.n {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Live check 2026-11-17: in the approve/undo dock the Undo button was a 32px square that showed the
+   word cut to "Und" under the arrow (a more specific dock rule restored its font size). Show it as
+   a normal labelled button there. */
+body[data-auth="in"] .apply-dock #agent-undo {
+  width: auto;
+  min-width: 64px;
+  height: auto;
+  padding: 0 14px;
+  overflow: visible;
+  font-size: 12.5px;
+  line-height: normal;
+  white-space: nowrap;
+}
+body[data-auth="in"] .apply-dock #agent-undo::before {
+  content: none;
+}

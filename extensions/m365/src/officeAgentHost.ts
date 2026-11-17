@@ -882,6 +882,19 @@ export async function applyAgentChanges(
             if (change.fillRange) target.copyFrom(first, "Formulas");
           }
           await context.sync();
+          // A new column's header must not be cut off ("Share of Grand Total" showed as "e of
+          // Grand" in a narrow column, live check 2026-11-17): widen to fit, never narrow.
+          if (header) {
+            header.format.load("columnWidth");
+            await context.sync();
+            const was = Number(header.format.columnWidth);
+            header.format.autofitColumns();
+            header.format.load("columnWidth");
+            await context.sync();
+            if (Number(header.format.columnWidth) < was)
+              header.format.columnWidth = was;
+            await context.sync();
+          }
           // What was written, for the agent to check: the first rows and any error value.
           const spill = target.getCell(0, 0).getSpillingToRangeOrNullObject();
           spill.load(["isNullObject", "address", "rowCount"]);

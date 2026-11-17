@@ -390,6 +390,60 @@ test("the loop stops at the turn limit", async () => {
   assert.equal(run.turns, 3);
 });
 
+test("with three turns left the agent is told once to stop reading and stage or answer", async () => {
+  const seen: string[][] = [];
+  let id = 0;
+  const run = await runAgent({
+    request: "bring the Description from Items into the detail report",
+    host: host(),
+    mask: new PersonalMask(),
+    maxTurns: 12,
+    model: async (messages) => {
+      seen.push(
+        messages.filter((m) => m.role === "user").map((m) => String(m.content)),
+      );
+      id += 1;
+      return {
+        content: "",
+        tool_calls: [call(`r${id}`, "get_workbook", {})],
+      };
+    },
+  });
+  assert.equal(run.stoppedAtLimit, true);
+  const notes = (turn: number) =>
+    (seen[turn - 1] ?? []).filter((text) => /3 turns are left/.test(text))
+      .length;
+  assert.equal(notes(9), 0, "not before the third-last turn");
+  assert.equal(notes(10), 1, "told after turn 9");
+  assert.equal(notes(12), 1, "told only once");
+  const note = seen[11].find((text) => /3 turns are left/.test(text)) ?? "";
+  assert.match(note, /^\[Report from the add-in, not from the person\]/);
+  assert.match(note, /combine_tables/);
+  assert.match(note, /edit_rows_columns/);
+});
+
+test("the turn-budget note is not sent for the add-in's own report", async () => {
+  let id = 0;
+  let told = false;
+  await runAgent({
+    request:
+      "[Report from the add-in, not from the person] The change was applied.",
+    host: host(),
+    mask: new PersonalMask(),
+    maxTurns: 12,
+    model: async (messages) => {
+      if (messages.some((m) => /3 turns are left/.test(String(m.content))))
+        told = true;
+      id += 1;
+      return {
+        content: "",
+        tool_calls: [call(`q${id}`, "get_workbook", {})],
+      };
+    },
+  });
+  assert.equal(told, false);
+});
+
 test("whole columns like A:B are accepted, and a read of them is bounded", () => {
   const change: any = stageChange(
     "format_range",

@@ -753,6 +753,7 @@ export async function runAgent(options: {
   let nudged = false;
   let askedForAnswer = false;
   let repeatedCalculationNudges = 0;
+  let budgetNoted = false;
   for (let turn = 1; turn <= maxTurns; turn += 1) {
     options.onPhase?.("planning");
     const answer = await model(messages);
@@ -873,6 +874,16 @@ export async function runAgent(options: {
           phase: "final",
         };
       }
+    }
+    // A long run of reading and calculating can use every turn and leave the person nothing. With
+    // three turns left, say so once: stage the change the request names, then answer.
+    if (fromPerson && !budgetNoted && maxTurns >= 8 && maxTurns - turn === 3) {
+      budgetNoted = true;
+      messages.push({
+        role: "user",
+        content:
+          "[Report from the add-in, not from the person] 3 turns are left. Stop reading and calculating. If the request asks for a change, stage it now (a join, stack or reconcile: combine_tables, which itself reports the rows with no partner; duplicates in the data: edit_rows_columns), then reply with what you found. If it is a question, answer it from what you already have.",
+      });
     }
     options.onPhase?.("verifying");
   }

@@ -6225,3 +6225,33 @@ body[data-auth="in"] #credits-footer strong {
 body[data-auth="in"] #credits-footer[data-low="1"] strong {
   color: #b45309;
 }
+
+/* Borderless pane: the 1px outlines and side gutters cost width in a narrow task pane. Cards keep
+   their soft shadow for separation; forced-colors (high contrast) keeps real borders. */
+@media (forced-colors: none) {
+  main {
+    padding-inline: clamp(4px, 1.5vw, 8px);
+  }
+  .card,
+  .composer,
+  .workspace-nav,
+  .commercial-status,
+  .context-chip,
+  .pill,
+  .tool-chip,
+  .ghost,
+  .noticed-tile,
+  .status-link-action,
+  .header-action,
+  .chat-history-popover {
+    border: 0;
+  }
+  .commercial-status {
+    margin-inline: 0;
+  }
+  .composer,
+  .card,
+  .workspace-nav {
+    box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+  }
+}

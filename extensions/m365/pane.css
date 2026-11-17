@@ -6230,7 +6230,14 @@ body[data-auth="in"] #credits-footer[data-low="1"] strong {
    their soft shadow for separation; forced-colors (high contrast) keeps real borders. */
 @media (forced-colors: none) {
   main {
-    padding-inline: clamp(4px, 1.5vw, 8px);
+    padding-inline: 2px;
+  }
+  /* The task pane's own frame is white; a tinted page background shows as a second frame. */
+  @media (prefers-color-scheme: light) {
+    html,
+    body {
+      background: #fff;
+    }
   }
   .card,
   .composer,

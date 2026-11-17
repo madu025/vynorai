@@ -13,24 +13,27 @@ export interface CleanCellProperties {
   clearFill: [number, number][];
 }
 
+/** Only a real empty string is invalid input; undefined means "set this back to unset". */
 function empty(value: unknown): boolean {
-  return value === undefined || value === null || value === "";
+  return value === "";
 }
 
 function cleanBorders(borders: Props): Props {
   const result: Props = {};
   for (const side of Object.keys(borders)) {
     const border = borders[side];
-    if (!border || typeof border !== "object") continue;
-    const style = border.style;
-    if (empty(style) || String(style) === "None") {
+    if (!border || typeof border !== "object") {
+      result[side] = border;
+      continue;
+    }
+    if (String(border.style) === "None") {
       // No border: only the style may be given; colour and weight are rejected with it.
       result[side] = { style: "None" };
       continue;
     }
-    const kept: Props = { style };
-    if (!empty(border.color)) kept.color = border.color;
-    if (!empty(border.weight)) kept.weight = border.weight;
+    const kept: Props = { ...border };
+    if (empty(kept.color)) delete kept.color;
+    if (empty(kept.weight)) delete kept.weight;
     result[side] = kept;
   }
   return result;
@@ -43,9 +46,9 @@ export function cleanCellProperties(cells: Props[][]): CleanCellProperties {
       const out: Props = {};
       for (const key of Object.keys(cell ?? {})) {
         const value = cell[key];
-        if (key === "fill") {
-          if (empty(value?.color)) clearFill.push([r, c]);
-          else out.fill = { color: value.color };
+        if (key === "fill" && value && typeof value === "object") {
+          if (empty(value.color)) clearFill.push([r, c]);
+          else out.fill = value;
         } else if (key === "font" && value && typeof value === "object") {
           const font: Props = {};
           for (const name of Object.keys(value))
@@ -61,4 +64,10 @@ export function cleanCellProperties(cells: Props[][]): CleanCellProperties {
     }),
   );
   return { cells: cleaned, clearFill };
+}
+
+/** A short reason from an Office.js error, kept to one line. */
+export function describeUndoError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.replace(/\s+/g, " ").slice(0, 120);
 }

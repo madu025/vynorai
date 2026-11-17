@@ -6,7 +6,10 @@
  * large range (sort, a big format) works on a hidden backup copy of the sheet made first.
  */
 import { percentMisfit, percentSampleBlocks } from "./formatGuard.js";
-import { cleanCellProperties } from "./cellPropertiesUndo.js";
+import {
+  cleanCellProperties,
+  describeUndoError,
+} from "./cellPropertiesUndo.js";
 import { resolveChartPosition } from "./chartPlacement.js";
 import { resolveChartSource } from "./chartSource.js";
 import {
@@ -1528,11 +1531,37 @@ async function undoPart(
           if (!sheet) return;
           const range = sheet.getRange(item.address);
           range.numberFormat = item.numberFormat;
-          const clean = cleanCellProperties(item.cells as any[][]);
-          range.setCellProperties(clean.cells as any);
-          for (const [row, column] of clean.clearFill)
-            range.getCell(row, column).format.fill.clear();
           await context.sync();
+          const clean = cleanCellProperties(item.cells as any[][]);
+          // The whole snapshot at once. When Excel rejects it, one property group at a time, so a
+          // single bad value cannot block the rest and the failure names the group.
+          const failed: string[] = [];
+          try {
+            range.setCellProperties(clean.cells as any);
+            await context.sync();
+          } catch (wholeError) {
+            for (const group of Object.keys(SNAPSHOT_FORMAT)) {
+              const only = clean.cells.map((row) =>
+                row.map((cell) =>
+                  group in cell ? { [group]: cell[group] } : {},
+                ),
+              );
+              try {
+                range.setCellProperties(only as any);
+                await context.sync();
+              } catch (error) {
+                failed.push(`${group}: ${describeUndoError(error)}`);
+              }
+            }
+          }
+          try {
+            for (const [row, column] of clean.clearFill)
+              range.getCell(row, column).format.fill.clear();
+            await context.sync();
+          } catch (error) {
+            failed.push(`fill clear: ${describeUndoError(error)}`);
+          }
+          if (failed.length) throw new Error(failed.join("; "));
         });
       for (const item of [...undo.backups].reverse())
         await attempt(`backup ${item.sheet}!${item.address}`, async () => {

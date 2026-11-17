@@ -3989,6 +3989,16 @@ body[data-auth="in"] .workspace {
     padding-block: 3px;
   }
 }
+/* medium-height panes (Excel desktop, about 580px): give the chat the room */
+@media (max-height: 780px) {
+  .workspace > .composer textarea {
+    min-height: 40px;
+    max-height: 56px;
+  }
+  .workspace > .saved-footer {
+    display: none;
+  }
+}
 /* answer cards: the agent answer as tiles, bars, a small table, pills and chips */
 .answer-card {
   display: grid;

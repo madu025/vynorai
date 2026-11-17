@@ -6,6 +6,7 @@
  * large range (sort, a big format) works on a hidden backup copy of the sheet made first.
  */
 import { percentMisfit, percentSampleBlocks } from "./formatGuard.js";
+import { cleanCellProperties } from "./cellPropertiesUndo.js";
 import { resolveChartPosition } from "./chartPlacement.js";
 import { resolveChartSource } from "./chartSource.js";
 import {
@@ -1527,7 +1528,10 @@ async function undoPart(
           if (!sheet) return;
           const range = sheet.getRange(item.address);
           range.numberFormat = item.numberFormat;
-          range.setCellProperties(item.cells);
+          const clean = cleanCellProperties(item.cells as any[][]);
+          range.setCellProperties(clean.cells as any);
+          for (const [row, column] of clean.clearFill)
+            range.getCell(row, column).format.fill.clear();
           await context.sync();
         });
       for (const item of [...undo.backups].reverse())
